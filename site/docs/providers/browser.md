@@ -42,7 +42,7 @@ The browser provider requires Playwright and related packages. These are optiona
 npm install playwright @playwright/browser-chromium @zorilla/playwright-extra @zorilla/puppeteer-extra-plugin-stealth
 ```
 
-Note: Currently, promptfoo's browser provider only supports Chromium-based browsers (Chrome, Edge). The provider uses Zorilla's Playwright Extra compatibility layer with the Chromium engine for enhanced stealth capabilities.
+Note: Currently, Promptfoo's browser provider only supports Chromium-based browsers (Chrome, Edge). The provider uses Zorilla's Playwright Extra compatibility layer with the Chromium engine for enhanced stealth capabilities.
 
 ## Configuration
 
