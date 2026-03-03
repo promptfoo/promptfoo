@@ -420,7 +420,7 @@ providers:
 
 ### GPT-5.3 Instant
 
-GPT-5.3 Instant is the latest chat-focused GPT-5 release and is exposed as `gpt-5.3-chat-latest`.
+GPT-5.3 Instant is a chat-focused model in the GPT-5.3 line and is exposed as `gpt-5.3-chat-latest`.
 
 #### Available Models
 
@@ -430,9 +430,8 @@ GPT-5.3 Instant is the latest chat-focused GPT-5 release and is exposed as `gpt-
 
 #### Key Specifications
 
-- **Context window**: 128,000 tokens
-- **Max output tokens**: 16,384 tokens
 - **Endpoint support**: Chat Completions API and Responses API
+- **Limits and pricing**: The `-latest` alias can move over time. Check [OpenAI model docs](https://platform.openai.com/docs/models) and [pricing](https://openai.com/pricing) for current context limits and rates.
 
 #### Usage Examples
 
