@@ -202,22 +202,6 @@ A few examples:
 
 Lower-risk formats get lighter analysis. The safetensors scanner validates structural integrity. The GGUF scanner inspects headers and metadata fields.
 
-### CVE detection
-
-ModelAudit includes targeted detection for 11 known CVEs. Each produces structured output with the CVE identifier, CVSS score, CWE mapping, a description of the vulnerability, and remediation steps.
-
-| CVE                                                                                                                                                                                   | Framework | CVSS | Description                                                                                                     |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ---- | --------------------------------------------------------------------------------------------------------------- |
-| [CVE-2025-32434](https://github.com/pytorch/pytorch/security/advisories/GHSA-53q9-r3pm-6pq6)                                                                                          | PyTorch   | 9.3  | `weights_only=True` bypass, RCE via `torch.load()`                                                              |
-| [CVE-2026-24747](https://nvd.nist.gov/vuln/detail/CVE-2026-24747)                                                                                                                     | PyTorch   | 8.8  | SETITEM/SETITEMS abuse + tensor metadata mismatch                                                               |
-| [CVE-2022-45907](https://nvd.nist.gov/vuln/detail/CVE-2022-45907)                                                                                                                     | PyTorch   | 9.8  | JIT `parse_type_line` unsafe `eval()` injection                                                                 |
-| [CVE-2024-5480](https://nvd.nist.gov/vuln/detail/CVE-2024-5480)                                                                                                                       | PyTorch   | 10.0 | RPC arbitrary function execution via PythonUDF                                                                  |
-| [CVE-2024-48063](https://nvd.nist.gov/vuln/detail/CVE-2024-48063)                                                                                                                     | PyTorch   | 9.8  | RemoteModule deserialization RCE (disputed — PyTorch considers this expected behavior in distributed computing) |
-| [CVE-2019-6446](https://nvd.nist.gov/vuln/detail/CVE-2019-6446)                                                                                                                       | NumPy     | 9.8  | Object-dtype array RCE via `allow_pickle=True`                                                                  |
-| [CVE-2025-23304](https://nvd.nist.gov/vuln/detail/CVE-2025-23304)                                                                                                                     | NeMo      | 7.8  | Hydra `_target_` injection in `.nemo` files                                                                     |
-| [CVE-2025-51480](https://security.snyk.io/vuln/SNYK-PYTHON-ONNX-10877916)                                                                                                             | ONNX      | 8.8  | `save_external_data` file overwrite via path traversal                                                          |
-| [CVE-2025-54412](https://nvd.nist.gov/vuln/detail/CVE-2025-54412), [54413](https://nvd.nist.gov/vuln/detail/CVE-2025-54413), [54886](https://nvd.nist.gov/vuln/detail/CVE-2025-54886) | Skops     | —    | Serialization vulnerabilities                                                                                   |
-
 ### Format coverage
 
 Scanner depth varies with risk. The pickle opcode analyzer runs thousands of lines of code. The safetensors scanner mostly validates integrity. The count includes archive and configuration scanners that apply across model formats.
