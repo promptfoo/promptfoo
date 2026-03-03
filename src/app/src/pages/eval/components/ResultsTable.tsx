@@ -674,7 +674,7 @@ function ResultsTable({
 
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
-  const { renderMarkdown } = useResultsViewSettingsStore();
+  const { renderMarkdown, prettifyJson } = useResultsViewSettingsStore();
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
@@ -802,11 +802,33 @@ function ResultsTable({
                     value = `\`\`\`json\n${value}\n\`\`\``;
                   }
                 }
+
+                let isJsonPrettified = false;
+                if (prettifyJson && typeof value === 'string') {
+                  try {
+                    const parsed = JSON.parse(value);
+                    if (typeof parsed === 'object' && parsed !== null) {
+                      value = JSON.stringify(parsed, null, 2);
+                      if (renderMarkdown) {
+                        value = `\`\`\`json\n${value}\n\`\`\``;
+                      } else {
+                        isJsonPrettified = true;
+                      }
+                    }
+                  } catch {
+                    // Not valid JSON, leave as-is
+                  }
+                }
+
                 // Use memoized VariableMarkdownCell to prevent re-renders when
                 // table layout changes (e.g., column visibility toggles).
                 // @see https://github.com/promptfoo/promptfoo/issues/969
                 const cellContent = renderMarkdown ? (
                   <VariableMarkdownCell value={value} maxTextLength={maxTextLength} />
+                ) : isJsonPrettified ? (
+                  <pre>
+                    <TruncatedText text={value} maxLength={maxTextLength} />
+                  </pre>
                 ) : (
                   <TruncatedText text={value} maxLength={maxTextLength} />
                 );
@@ -890,7 +912,7 @@ function ResultsTable({
       ];
     }
     return [];
-  }, [columnHelper, head, head.vars, maxTextLength, renderMarkdown, config]);
+  }, [columnHelper, head, head.vars, maxTextLength, renderMarkdown, prettifyJson, config]);
 
   // Extract transformDisplayVars from output metadata (used by per-turn layer transforms like indirect-web-pwn)
   const transformDisplayVarsColumns = React.useMemo(() => {
