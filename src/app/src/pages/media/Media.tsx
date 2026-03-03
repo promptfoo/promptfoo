@@ -41,12 +41,24 @@ import type { MediaItem, MediaSort, MediaTypeFilter } from './types';
 export default function Media() {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // URL state
+  // URL state — validate enum values to avoid sending invalid params to the backend
   const hashParam = searchParams.get('hash');
-  const typeParam = (searchParams.get('type') as MediaTypeFilter) || 'all';
+  const rawType = searchParams.get('type');
+  const typeParam: MediaTypeFilter =
+    rawType && ['all', 'image', 'video', 'audio', 'other'].includes(rawType)
+      ? (rawType as MediaTypeFilter)
+      : 'all';
   const evalParam = searchParams.get('evalId') || '';
-  const sortFieldParam = searchParams.get('sortField') as MediaSort['field'] | null;
-  const sortOrderParam = searchParams.get('sortOrder') as MediaSort['order'] | null;
+  const rawSortField = searchParams.get('sortField');
+  const sortFieldParam: MediaSort['field'] | null =
+    rawSortField && ['createdAt', 'sizeBytes'].includes(rawSortField)
+      ? (rawSortField as MediaSort['field'])
+      : null;
+  const rawSortOrder = searchParams.get('sortOrder');
+  const sortOrderParam: MediaSort['order'] | null =
+    rawSortOrder && ['asc', 'desc'].includes(rawSortOrder)
+      ? (rawSortOrder as MediaSort['order'])
+      : null;
 
   // Local state
   const [typeFilter, setTypeFilter] = useState<MediaTypeFilter>(typeParam);
@@ -62,7 +74,6 @@ export default function Media() {
     total: 0,
     currentFile: '',
   });
-  const [downloadErrors, setDownloadErrors] = useState<string[]>([]);
   const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
   const [isDeepLinkLoading, setIsDeepLinkLoading] = useState(false);
   const [showBulkDownloadConfirm, setShowBulkDownloadConfirm] = useState(false);
@@ -336,20 +347,19 @@ export default function Media() {
       count: itemsToDownload.length,
     });
 
-    // Cancel any existing download
+    // Cancel any in-progress download loop
     downloadAbortRef.current?.abort();
     downloadAbortRef.current = new AbortController();
     const signal = downloadAbortRef.current.signal;
 
     setIsDownloading(true);
     setDownloadProgress({ current: 0, total: itemsToDownload.length, currentFile: '' });
-    setDownloadErrors([]);
-
-    const errors: string[] = [];
 
     try {
-      // Download files one by one with progress
-      // TODO: Implement server-side ZIP creation for better UX with large batches
+      // Trigger browser downloads one by one via anchor elements.
+      // Anchor-based downloads handle presigned URL redirects (CORS-safe) but
+      // cannot report per-file errors — the browser manages each download.
+      const baseUrl = getApiBaseUrl();
       for (let i = 0; i < itemsToDownload.length; i++) {
         if (signal.aborted) {
           break;
@@ -360,30 +370,16 @@ export default function Media() {
 
         setDownloadProgress({ current: i, total: itemsToDownload.length, currentFile: filename });
 
-        try {
-          // Use anchor-based download to handle presigned URL redirects (CORS-safe)
-          const baseUrl = getApiBaseUrl();
-          const downloadUrl = `${baseUrl}/api/blobs/${item.hash}`;
-          downloadFile(downloadUrl, filename);
+        downloadFile(`${baseUrl}/api/blobs/${item.hash}`, filename);
 
-          setDownloadProgress({ current: i + 1, total: itemsToDownload.length, currentFile: '' });
+        setDownloadProgress({ current: i + 1, total: itemsToDownload.length, currentFile: '' });
 
-          // Delay between downloads to avoid overwhelming the browser
-          await new Promise((r) => setTimeout(r, 200));
-        } catch (err) {
-          if (err instanceof Error && err.name === 'AbortError') {
-            break;
-          }
-          const message = err instanceof Error ? err.message : 'Unknown error';
-          errors.push(`${filename}: ${message}`);
-        }
+        // Delay between downloads to avoid overwhelming the browser
+        await new Promise((r) => setTimeout(r, 200));
       }
     } finally {
       setIsDownloading(false);
       setDownloadProgress({ current: 0, total: 0, currentFile: '' });
-      if (errors.length > 0) {
-        setDownloadErrors(errors);
-      }
       // Exit selection mode after download
       if (isSelectionMode) {
         setIsSelectionMode(false);
@@ -567,23 +563,6 @@ export default function Media() {
                     setSearchParams(params, { replace: true });
                   }}
                 >
-                  <X className="h-4 w-4 mr-2" />
-                  Dismiss
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Download Errors */}
-          {downloadErrors.length > 0 && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="flex items-center justify-between">
-                <span>
-                  {downloadErrors.length} file{downloadErrors.length > 1 ? 's' : ''} failed to
-                  download
-                </span>
-                <Button variant="outline" size="sm" onClick={() => setDownloadErrors([])}>
                   <X className="h-4 w-4 mr-2" />
                   Dismiss
                 </Button>
