@@ -294,6 +294,10 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
         return;
       }
 
+      // Space on a focused button should activate the button natively,
+      // not be hijacked by the play/pause shortcut.
+      const isFocusedOnButton = target.tagName === 'BUTTON';
+
       switch (e.key) {
         case 'd':
         case 'D':
@@ -303,7 +307,7 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
           }
           break;
         case ' ':
-          if (item.kind === 'video' || item.kind === 'audio') {
+          if (!isFocusedOnButton && (item.kind === 'video' || item.kind === 'audio')) {
             e.preventDefault();
             const mediaEl = item.kind === 'video' ? videoRef.current : audioRef.current;
             if (mediaEl) {

@@ -153,6 +153,7 @@ export function MediaFilters({
               variant="outline"
               role="combobox"
               aria-expanded={evalSearchOpen}
+              aria-controls="eval-filter-listbox"
               className={cn(
                 'w-[160px] sm:w-[220px] h-9 justify-between font-normal bg-white dark:bg-zinc-900',
                 !evalFilter && 'text-muted-foreground',
@@ -182,10 +183,17 @@ export function MediaFilters({
                 </Button>
               )}
             </div>
-            <div className="max-h-[300px] overflow-y-auto p-1">
+            <div
+              id="eval-filter-listbox"
+              role="listbox"
+              aria-label="Evaluations"
+              className="max-h-[300px] overflow-y-auto p-1"
+            >
               {/* All Evaluations option */}
               <button
                 type="button"
+                role="option"
+                aria-selected={!evalFilter}
                 className={cn(
                   'relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 px-2 text-sm outline-none',
                   'hover:bg-accent hover:text-accent-foreground',
@@ -221,6 +229,8 @@ export function MediaFilters({
                   <button
                     key={e.evalId}
                     type="button"
+                    role="option"
+                    aria-selected={evalFilter === e.evalId}
                     className={cn(
                       'relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 px-2 text-sm outline-none',
                       'hover:bg-accent hover:text-accent-foreground',

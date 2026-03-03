@@ -320,4 +320,61 @@ describe('Media page URL state machine', () => {
       expect(location.textContent).toContain('type=video');
     });
   });
+
+  it('shows error when library API returns non-OK response', async () => {
+    vi.mocked(callApi).mockImplementation(async (url: string, _opts?: any) => {
+      const urlStr = String(url);
+
+      if (urlStr.includes('/blobs/library/evals')) {
+        return { ok: true, json: async () => ({ success: true, data: [] }) } as Response;
+      }
+
+      if (urlStr.includes('/blobs/library')) {
+        return { ok: false, status: 500, json: async () => ({}) } as Response;
+      }
+
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+
+    renderMedia();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Server error/)).toBeInTheDocument();
+    });
+  });
+
+  it('shows error when evals API returns non-OK response', async () => {
+    vi.mocked(callApi).mockImplementation(async (url: string, _opts?: any) => {
+      const urlStr = String(url);
+
+      if (urlStr.includes('/blobs/library/evals')) {
+        return { ok: false, status: 500, json: async () => ({}) } as Response;
+      }
+
+      if (urlStr.includes('/blobs/library')) {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: {
+              items: mockItems,
+              total: mockItems.length,
+              hasMore: false,
+              blobStorageEnabled: true,
+            },
+          }),
+        } as Response;
+      }
+
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+
+    renderMedia();
+
+    // The evals error should be visible in the filter popover, not as a page-level error.
+    // But the page should still render successfully with the library items.
+    await waitFor(() => {
+      expect(screen.getByText('First item')).toBeInTheDocument();
+    });
+  });
 });

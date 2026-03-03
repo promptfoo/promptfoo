@@ -226,16 +226,9 @@ describe('MediaFilters', () => {
       // Wait for popover to open
       await screen.findByPlaceholderText('Search evaluations...');
 
-      // Click "All Evaluations" option in the popover - it's a button
-      const allEvalsButtons = screen.getAllByRole('button');
-      const allEvalsOption = allEvalsButtons.find(
-        (btn) =>
-          btn.textContent === 'All Evaluations' &&
-          btn.closest('[data-radix-popper-content-wrapper]'),
-      );
-      if (allEvalsOption) {
-        await user.click(allEvalsOption);
-      }
+      // Click "All Evaluations" option in the listbox
+      const allEvalsOption = screen.getByRole('option', { name: 'All Evaluations' });
+      await user.click(allEvalsOption);
 
       expect(onEvalFilterChange).toHaveBeenCalledWith('');
     });
@@ -277,9 +270,8 @@ describe('MediaFilters', () => {
       const clearButton = clearButtons.find(
         (btn) => btn.querySelector('svg') && btn.classList.contains('h-6'),
       );
-      if (clearButton) {
-        await user.click(clearButton);
-      }
+      expect(clearButton).toBeInTheDocument();
+      await user.click(clearButton!);
 
       expect(onEvalSearchQueryChange).toHaveBeenCalledWith('');
     });

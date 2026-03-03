@@ -278,6 +278,9 @@ export default function Media() {
           setSelectedItem(result.item);
           setDeepLinkError(null);
         } else {
+          // Mark as resolved so later changes to `items` or `isLoading`
+          // don't re-fetch the same missing hash.
+          lastResolvedDeepLinkRef.current = hashParam;
           // Map error types to user-friendly messages
           const errorMessages = {
             not_found: `Media item not found. It may have been deleted or the link is invalid.`,
@@ -465,7 +468,11 @@ export default function Media() {
                   <div className="flex items-center gap-3 bg-muted/50 rounded-lg px-3 py-2">
                     <div className="flex flex-col gap-1">
                       <Progress
-                        value={(downloadProgress.current / downloadProgress.total) * 100}
+                        value={
+                          downloadProgress.total > 0
+                            ? (downloadProgress.current / downloadProgress.total) * 100
+                            : 0
+                        }
                         className="w-32 h-2"
                       />
                       {downloadProgress.currentFile && (

@@ -111,11 +111,14 @@ export function AudioPreviewButton({
         });
         setIsPlaying(true);
 
-        // Schedule fade out — track timeout for cleanup
+        // Schedule fade out — track timeout for cleanup.
+        // Guard against very short previewDuration values (≤500ms).
+        const fadeDelay =
+          previewDuration > 500 ? previewDuration - 500 : Math.max(previewDuration - 50, 0);
         fadeTimeoutRef.current = window.setTimeout(() => {
           fadeTimeoutRef.current = undefined;
           fadeOutAndStop();
-        }, previewDuration - 500); // Start fade 500ms before end
+        }, fadeDelay);
       }
     },
     [isPlaying, previewDuration, fadeOutAndStop],

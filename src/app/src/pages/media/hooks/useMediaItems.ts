@@ -82,6 +82,10 @@ export function useMediaItems({
           return;
         }
 
+        if (!response.ok) {
+          throw new Error(`Server error (${response.status})`);
+        }
+
         const data = await response.json();
 
         if (!data.success) {
@@ -231,6 +235,11 @@ export function useEvalsWithMedia(search?: string): UseEvalsWithMediaResult {
         const response = await callApi(`/blobs/library/evals?${params.toString()}`, {
           signal: controller.signal,
         });
+
+        if (!response.ok) {
+          throw new Error(`Server error (${response.status})`);
+        }
+
         const data = await response.json();
 
         if (!data.success) {
