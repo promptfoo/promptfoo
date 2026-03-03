@@ -322,8 +322,7 @@ jobs:
         run: npm install -g npm@latest
 
       - name: Install Dependencies
-        working-directory: site
-        run: npm install
+        run: npm ci
 
       - name: Type Check
         working-directory: site
@@ -388,8 +387,7 @@ jobs:
         run: npm install -g npm@latest
 
       - name: Install Dependencies
-        working-directory: site
-        run: npm install
+        run: npm ci
 
       - name: Run Site Tests
         working-directory: site
