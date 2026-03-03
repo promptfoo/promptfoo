@@ -13,6 +13,8 @@ const defaultProps = {
   sort: { field: 'createdAt', order: 'desc' } as MediaSort,
   onSortChange: vi.fn(),
   evals: [] as EvalOption[],
+  evalSearchQuery: '',
+  onEvalSearchQueryChange: vi.fn(),
   total: 0,
 };
 
@@ -157,31 +159,34 @@ describe('MediaFilters', () => {
       expect(await screen.findByPlaceholderText('Search evaluations...')).toBeInTheDocument();
     });
 
-    it('filters evaluations based on search query', async () => {
+    it('calls onEvalSearchQueryChange when typing in search', async () => {
       const user = userEvent.setup();
-      render(<MediaFilters {...defaultProps} evals={mockEvals} />);
+      const onEvalSearchQueryChange = vi.fn();
+      render(
+        <MediaFilters
+          {...defaultProps}
+          evals={mockEvals}
+          onEvalSearchQueryChange={onEvalSearchQueryChange}
+        />,
+      );
 
       await user.click(screen.getByText('All Evaluations'));
 
       const searchInput = await screen.findByPlaceholderText('Search evaluations...');
-      await user.type(searchInput, 'Second');
+      await user.type(searchInput, 'Sec');
 
-      // Should show "Second Evaluation" but not "First Evaluation" or "Third Test"
-      expect(screen.getByText('Second Evaluation')).toBeInTheDocument();
-      expect(screen.queryByText('First Evaluation')).not.toBeInTheDocument();
-      expect(screen.queryByText('Third Test')).not.toBeInTheDocument();
+      // Each keystroke fires onChange; since value is controlled and not updated
+      // in this test, each call receives just the typed character
+      expect(onEvalSearchQueryChange).toHaveBeenCalledTimes(3);
     });
 
-    it('shows "No evaluations found" when search has no matches', async () => {
+    it('shows "No evaluations found" when evals list is empty', async () => {
       const user = userEvent.setup();
-      render(<MediaFilters {...defaultProps} evals={mockEvals} />);
+      render(<MediaFilters {...defaultProps} evals={[]} />);
 
       await user.click(screen.getByText('All Evaluations'));
 
-      const searchInput = await screen.findByPlaceholderText('Search evaluations...');
-      await user.type(searchInput, 'nonexistent');
-
-      expect(screen.getByText('No evaluations found')).toBeInTheDocument();
+      expect(await screen.findByText('No evaluations found')).toBeInTheDocument();
     });
 
     it('calls onEvalFilterChange when an evaluation is selected', async () => {
@@ -255,18 +260,20 @@ describe('MediaFilters', () => {
 
     it('clears search query when clear button is clicked', async () => {
       const user = userEvent.setup();
-      render(<MediaFilters {...defaultProps} evals={mockEvals} />);
+      const onEvalSearchQueryChange = vi.fn();
+      render(
+        <MediaFilters
+          {...defaultProps}
+          evals={mockEvals}
+          evalSearchQuery="test query"
+          onEvalSearchQueryChange={onEvalSearchQueryChange}
+        />,
+      );
 
       await user.click(screen.getByText('All Evaluations'));
 
-      const searchInput = await screen.findByPlaceholderText('Search evaluations...');
-      await user.type(searchInput, 'test query');
-
-      expect(searchInput).toHaveValue('test query');
-
       // Find and click the clear button (X icon button near the search input)
       const clearButtons = screen.getAllByRole('button');
-      // Look for buttons with SVG icons that are small (clear button)
       const clearButton = clearButtons.find(
         (btn) => btn.querySelector('svg') && btn.classList.contains('h-6'),
       );
@@ -274,8 +281,7 @@ describe('MediaFilters', () => {
         await user.click(clearButton);
       }
 
-      // The search input should be cleared or show all options
-      expect(screen.getByText('First Evaluation')).toBeInTheDocument();
+      expect(onEvalSearchQueryChange).toHaveBeenCalledWith('');
     });
   });
 

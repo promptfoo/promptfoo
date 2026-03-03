@@ -201,40 +201,59 @@ interface UseEvalsWithMediaResult {
   evals: EvalOption[];
   isLoading: boolean;
   error: string | null;
-  /** True when the server returned exactly the max limit, indicating more may exist. */
+  /** True when the server returned more than the display limit, indicating more exist. */
   isTruncated: boolean;
 }
 
 const EVALS_FETCH_LIMIT = 500;
 
-export function useEvalsWithMedia(): UseEvalsWithMediaResult {
+export function useEvalsWithMedia(search?: string): UseEvalsWithMediaResult {
   const [evals, setEvals] = useState<EvalOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isTruncated, setIsTruncated] = useState(false);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     (async () => {
       setIsLoading(true);
       setError(null);
 
       try {
-        const response = await callApi('/blobs/library/evals');
+        const params = new URLSearchParams();
+        // Request one extra to detect whether there are more beyond the display limit
+        params.set('limit', String(EVALS_FETCH_LIMIT + 1));
+        if (search) {
+          params.set('search', search);
+        }
+
+        const response = await callApi(`/blobs/library/evals?${params.toString()}`, {
+          signal: controller.signal,
+        });
         const data = await response.json();
 
         if (!data.success) {
           throw new Error(data.error || 'Failed to load evals');
         }
 
-        setEvals(data.data);
-        setIsTruncated(data.data.length >= EVALS_FETCH_LIMIT);
+        const hasMore = data.data.length > EVALS_FETCH_LIMIT;
+        setEvals(hasMore ? data.data.slice(0, EVALS_FETCH_LIMIT) : data.data);
+        setIsTruncated(hasMore);
       } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          return;
+        }
         setError(err instanceof Error ? err.message : 'Failed to load evals');
       } finally {
-        setIsLoading(false);
+        if (!controller.signal.aborted) {
+          setIsLoading(false);
+        }
       }
     })();
-  }, []);
+
+    return () => controller.abort();
+  }, [search]);
 
   return { evals, isLoading, error, isTruncated };
 }

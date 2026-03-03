@@ -374,10 +374,18 @@ blobsRouter.get('/library/evals', async (req: Request, res: Response): Promise<v
     return;
   }
 
-  const { limit } = parseResult.data;
+  const { limit, search } = parseResult.data;
 
   try {
     const db = getDb();
+
+    const conditions = [];
+    if (search) {
+      const pattern = `%${search}%`;
+      conditions.push(
+        sql`(${evalsTable.description} LIKE ${pattern} OR ${blobReferencesTable.evalId} LIKE ${pattern})`,
+      );
+    }
 
     const evals = db
       .selectDistinct({
@@ -387,6 +395,7 @@ blobsRouter.get('/library/evals', async (req: Request, res: Response): Promise<v
       })
       .from(blobReferencesTable)
       .innerJoin(evalsTable, eq(blobReferencesTable.evalId, evalsTable.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(evalsTable.createdAt))
       .limit(limit)
       .all();

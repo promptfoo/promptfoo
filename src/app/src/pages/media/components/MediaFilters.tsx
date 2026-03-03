@@ -42,6 +42,9 @@ interface MediaFiltersProps {
   evalsLoading?: boolean;
   evalsError?: string | null;
   evalsTruncated?: boolean;
+  /** Controlled search query for the eval combobox (drives server-side search) */
+  evalSearchQuery: string;
+  onEvalSearchQueryChange: (query: string) => void;
   total: number;
 }
 
@@ -71,20 +74,12 @@ export function MediaFilters({
   evalsLoading = false,
   evalsError = null,
   evalsTruncated = false,
+  evalSearchQuery,
+  onEvalSearchQueryChange,
   total,
 }: MediaFiltersProps) {
   const [evalSearchOpen, setEvalSearchOpen] = useState(false);
-  const [evalSearchQuery, setEvalSearchQuery] = useState('');
   const currentSortValue = `${sort.field}:${sort.order}`;
-
-  // Filter evals based on search query
-  const filteredEvals = evals.filter(
-    (e) =>
-      e.evalId &&
-      (evalSearchQuery === '' ||
-        e.description?.toLowerCase().includes(evalSearchQuery.toLowerCase()) ||
-        e.evalId.toLowerCase().includes(evalSearchQuery.toLowerCase())),
-  );
 
   // Find selected eval for display
   const selectedEval = evals.find((e) => e.evalId === evalFilter);
@@ -167,7 +162,7 @@ export function MediaFilters({
               <Input
                 placeholder="Search evaluations..."
                 value={evalSearchQuery}
-                onChange={(e) => setEvalSearchQuery(e.target.value)}
+                onChange={(e) => onEvalSearchQueryChange(e.target.value)}
                 className="h-8 border-0 p-0 shadow-none focus-visible:ring-0"
               />
               {evalSearchQuery && (
@@ -175,7 +170,7 @@ export function MediaFilters({
                   variant="ghost"
                   size="sm"
                   className="h-6 w-6 p-0"
-                  onClick={() => setEvalSearchQuery('')}
+                  onClick={() => onEvalSearchQueryChange('')}
                 >
                   <X className="h-3.5 w-3.5" />
                 </Button>
@@ -193,7 +188,7 @@ export function MediaFilters({
                 onClick={() => {
                   onEvalFilterChange('');
                   setEvalSearchOpen(false);
-                  setEvalSearchQuery('');
+                  onEvalSearchQueryChange('');
                 }}
               >
                 <Check className={cn('mr-2 h-4 w-4', evalFilter ? 'opacity-0' : 'opacity-100')} />
@@ -211,12 +206,12 @@ export function MediaFilters({
                   <AlertCircle className="h-4 w-4" />
                   Failed to load evaluations
                 </div>
-              ) : filteredEvals.length === 0 ? (
+              ) : evals.length === 0 ? (
                 <div className="py-6 text-center text-sm text-muted-foreground">
                   No evaluations found
                 </div>
               ) : (
-                filteredEvals.map((e) => (
+                evals.map((e) => (
                   <button
                     key={e.evalId}
                     type="button"
@@ -228,7 +223,7 @@ export function MediaFilters({
                     onClick={() => {
                       onEvalFilterChange(e.evalId);
                       setEvalSearchOpen(false);
-                      setEvalSearchQuery('');
+                      onEvalSearchQueryChange('');
                     }}
                   >
                     <Check
@@ -243,7 +238,9 @@ export function MediaFilters({
               )}
               {evalsTruncated && !evalsLoading && !evalsError && (
                 <div className="border-t px-2 py-1.5 text-xs text-muted-foreground">
-                  Showing first {evals.length} evaluations
+                  {evalSearchQuery
+                    ? `Showing first ${evals.length} matches`
+                    : `Showing first ${evals.length} evaluations — type to search all`}
                 </div>
               )}
             </div>

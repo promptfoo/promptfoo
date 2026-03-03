@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react';
 
 import { PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
@@ -79,6 +79,10 @@ export default function Media() {
   const [showBulkDownloadConfirm, setShowBulkDownloadConfirm] = useState(false);
   const downloadAbortRef = useRef<AbortController | null>(null);
 
+  // Eval search state — lifted here so the server-side search can be debounced
+  const [evalSearchQuery, setEvalSearchQuery] = useState('');
+  const deferredEvalSearch = useDeferredValue(evalSearchQuery);
+
   // Selection state for bulk operations
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedHashes, setSelectedHashes] = useState<Set<string>>(new Set());
@@ -107,7 +111,7 @@ export default function Media() {
     isLoading: evalsLoading,
     error: evalsError,
     isTruncated: evalsTruncated,
-  } = useEvalsWithMedia();
+  } = useEvalsWithMedia(deferredEvalSearch || undefined);
 
   // Telemetry
   const { recordEvent } = useTelemetry();
@@ -340,6 +344,9 @@ export default function Media() {
 
   const handleModalNavigate = useCallback((item: MediaItem) => {
     lastInternalSelectionRef.current = item.hash;
+    // Clear so browser Back can re-resolve previously visited hashes
+    // instead of short-circuiting in the deep-link effect.
+    lastResolvedDeepLinkRef.current = null;
     setSelectedItem(item);
   }, []);
 
@@ -566,6 +573,8 @@ export default function Media() {
               evalsLoading={evalsLoading}
               evalsError={evalsError}
               evalsTruncated={evalsTruncated}
+              evalSearchQuery={evalSearchQuery}
+              onEvalSearchQueryChange={setEvalSearchQuery}
               total={total}
             />
           </Card>

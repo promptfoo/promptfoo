@@ -579,6 +579,7 @@ describe('Blobs Routes', () => {
         selectDistinct: vi.fn().mockReturnThis(),
         from: vi.fn().mockReturnThis(),
         innerJoin: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
         orderBy: vi.fn().mockReturnThis(),
         limit: vi.fn().mockReturnThis(),
         all: vi.fn().mockReturnValue(evals),
