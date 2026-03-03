@@ -810,18 +810,24 @@ function ResultsTable({
 
                 let isJsonPrettified = false;
                 if (prettifyJson && typeof value === 'string') {
-                  try {
-                    const parsed = JSON.parse(value);
-                    if (typeof parsed === 'object' && parsed !== null) {
-                      value = JSON.stringify(parsed, null, 2);
-                      if (renderMarkdown) {
-                        value = `\`\`\`json\n${value}\n\`\`\``;
-                      } else {
-                        isJsonPrettified = true;
+                  const trimmed = value.trim();
+                  const looksLikeJson =
+                    (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+                    (trimmed.startsWith('[') && trimmed.endsWith(']'));
+                  if (looksLikeJson) {
+                    try {
+                      const parsed = JSON.parse(value);
+                      if (typeof parsed === 'object' && parsed !== null) {
+                        value = JSON.stringify(parsed, null, 2);
+                        if (renderMarkdown) {
+                          value = `\`\`\`json\n${value}\n\`\`\``;
+                        } else {
+                          isJsonPrettified = true;
+                        }
                       }
+                    } catch {
+                      // Not valid JSON, leave as-is
                     }
-                  } catch {
-                    // Not valid JSON, leave as-is
                   }
                 }
 
