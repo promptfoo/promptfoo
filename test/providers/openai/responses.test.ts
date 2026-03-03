@@ -832,6 +832,62 @@ describe('OpenAiResponsesProvider', () => {
     expect(result.tokenUsage?.total).toBe(45);
   });
 
+  it('should force reasoning model behavior via config.isReasoningModel override', async () => {
+    const mockApiResponse = {
+      id: 'resp_xyz',
+      object: 'response',
+      created_at: 1234567890,
+      status: 'completed',
+      model: 'gpt-4o',
+      output: [
+        {
+          type: 'message',
+          id: 'msg_xyz',
+          status: 'completed',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Forced reasoning response' }],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+    };
+
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    // Non-reasoning model name forced into reasoning mode via config
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+        isReasoningModel: true,
+        reasoning_effort: 'high',
+      },
+    });
+
+    expect(provider['isReasoningModel']()).toBe(true);
+    expect(provider['supportsTemperature']()).toBe(false);
+
+    const result = await provider.callApi('Test prompt');
+
+    // Reasoning effort should be sent in the request body
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        body: expect.stringContaining('"reasoning":{"effort":"high"}'),
+      }),
+      expect.any(Number),
+      'json',
+      undefined,
+      undefined,
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Forced reasoning response');
+  });
+
   it('should handle API errors correctly', async () => {
     // Setup mock for fetchWithCache to return an error
     vi.mocked(cache.fetchWithCache).mockResolvedValue({

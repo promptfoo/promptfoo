@@ -143,6 +143,8 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   stop?: string[];
   seed?: number;
   passthrough?: object;
+  /** Force the provider to treat this deployment as a reasoning model regardless of its name. */
+  isReasoningModel?: boolean;
   reasoning_effort?: ReasoningEffort;
   reasoning?: Reasoning | GPT5Reasoning;
   service_tier?: ('auto' | 'default' | 'premium') | null;

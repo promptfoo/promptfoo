@@ -136,7 +136,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return this.modelName.startsWith('gpt-5') || this.modelName.includes('/gpt-5');
   }
 
-  protected isReasoningModel(): boolean {
+  protected isReasoningModel(config: OpenAiCompletionOptions = this.config): boolean {
+    // Honor explicit override (true/false)
+    if (config.isReasoningModel !== undefined) {
+      return config.isReasoningModel;
+    }
+
     return (
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
@@ -271,7 +276,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     // Handle reasoning parameters for o-series and gpt-5 models
     // Note: reasoning_effort is deprecated and has been moved to reasoning.effort
-    if (config.reasoning && this.isReasoningModel()) {
+    if (config.reasoning && isReasoningModel) {
       body.reasoning = config.reasoning;
     }
 

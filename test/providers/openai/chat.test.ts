@@ -1535,6 +1535,20 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(o4MiniProvider['isReasoningModel']()).toBe(true);
     });
 
+    it('should force reasoning model behavior via config.isReasoningModel override', () => {
+      // Non-reasoning model name, but forced to reasoning by config
+      const forcedProvider = new OpenAiChatCompletionProvider('gpt-4o', {
+        config: { isReasoningModel: true },
+      });
+      // Standard non-reasoning model without override
+      const normalProvider = new OpenAiChatCompletionProvider('gpt-4o');
+
+      expect(forcedProvider['isReasoningModel']()).toBe(true);
+      expect(forcedProvider['supportsTemperature']()).toBe(false);
+      expect(normalProvider['isReasoningModel']()).toBe(false);
+      expect(normalProvider['supportsTemperature']()).toBe(true);
+    });
+
     it('should identify GPT-5 models correctly including prefixed names', async () => {
       // Direct model names
       const gpt5Provider = new OpenAiChatCompletionProvider('gpt-5');
