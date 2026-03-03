@@ -39,11 +39,11 @@ prompts:
   - 'Respond to the following instruction: {{message}}'
 
 providers:
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:claude-sonnet-4-6
     label: claude-sonnet-lowtemp
     config:
       temperature: 0.2
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:claude-sonnet-4-6
     label: claude-sonnet-hightemp
     config:
       temperature: 0.9

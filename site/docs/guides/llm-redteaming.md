@@ -166,7 +166,7 @@ You should choose at least one target. If desired, set multiple in order to comp
 ```yaml
 targets:
   - openai:gpt-5
-  - anthropic:messages:claude-sonnet-4-6
+  - anthropic:claude-sonnet-4-6
   - ollama:chat:llama4:scout
 ```
 

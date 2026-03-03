@@ -41,7 +41,7 @@ Specify the models you want to compare under `providers`:
 ```yaml
 providers:
   - openai:gpt-5.2
-  - anthropic:messages:claude-sonnet-4-6
+  - anthropic:claude-sonnet-4-6
   - google:gemini-3.1-pro-preview
 ```
 
@@ -52,7 +52,7 @@ providers:
   - id: openai:gpt-5.2
     config:
       max_tokens: 1024
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:claude-sonnet-4-6
     config:
       temperature: 0.3
       max_tokens: 1024
@@ -106,7 +106,7 @@ providers:
   - id: openai:gpt-5.2
     prompts:
       - gpt_prompt
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:claude-sonnet-4-6
     prompts:
       - gpt_prompt
 ```
@@ -274,7 +274,7 @@ If you're working on an application that involves classifying images, you can se
 ```yaml title="promptfooconfig.yaml"
 providers:
   - openai:gpt-5.2
-  - anthropic:messages:claude-sonnet-4-6
+  - anthropic:claude-sonnet-4-6
   - google:gemini-3.1-pro-preview
 
 prompts:

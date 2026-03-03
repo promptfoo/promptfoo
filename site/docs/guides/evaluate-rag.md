@@ -265,7 +265,7 @@ Imagine we're exploring budget and want to compare the performance of GPT-4 vs L
 providers:
   - openai:gpt-5-mini
   - openai:gpt-5
-  - anthropic:messages:claude-sonnet-4-6
+  - anthropic:claude-sonnet-4-6
   - ollama:chat:llama4:scout
 ```
 
