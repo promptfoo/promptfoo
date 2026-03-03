@@ -561,7 +561,7 @@ describe('StrategyConfigDialog', () => {
 
     expect(screen.queryByLabelText('Max Backtracks')).not.toBeInTheDocument();
     const statefulSwitch = screen.getByRole('switch', {
-      name: /When enabled, Promptfoo should only send/,
+      name: /Enable when your target maintains server-side sessions/,
     });
     expect(statefulSwitch).not.toBeChecked();
   });
@@ -586,7 +586,7 @@ describe('StrategyConfigDialog', () => {
     fireEvent.change(maxTurnsInput, { target: { value: '15' } });
 
     const statefulSwitch = screen.getByRole('switch', {
-      name: /When enabled, Promptfoo should only send/,
+      name: /Enable when your target maintains server-side sessions/,
     });
     fireEvent.click(statefulSwitch);
 
