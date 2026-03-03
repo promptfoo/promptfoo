@@ -202,7 +202,15 @@ export default function Media() {
         params.set('hash', hashParam);
       }
     }
-    setSearchParams(params, { replace: true });
+    // Push history when the user opens or navigates to a media item so that
+    // the browser Back button closes the modal instead of leaving the page.
+    // Use replace for filter/sort changes, modal close, and deep-link resolution.
+    const isUserSelection =
+      hasSelectionChange &&
+      !!selectedItem &&
+      lastInternalSelectionRef.current === selectedItem.hash;
+
+    setSearchParams(params, { replace: !isUserSelection });
   }, [typeFilter, evalFilter, selectedItem, sort, setSearchParams, hashParam]);
 
   // Handle hash param for deep linking (external navigation)
