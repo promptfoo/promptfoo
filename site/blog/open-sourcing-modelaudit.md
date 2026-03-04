@@ -127,13 +127,13 @@ payload = pickle.dumps(Exploit())
 
 **[0xnu/mnist-ocr](https://huggingface.co/0xnu/mnist-ocr/)** — The `mnist_tokenizer.pkl` file contains `__main__.ImageTokenizer` instantiated via the `NEWOBJ` opcode, a deserialization vector that executes arbitrary code on load.
 
-<img src="/img/blog/open-sourcing-modelaudit/scanner-comparison-mnist.svg" alt="Scanner comparison for 0xnu/mnist-ocr: VirusTotal, JFrog, and ModelScan report No Issue. HF Picklescan flags suspicious imports (informational). ClamAV flags as Suspicious via signature match. ModelAudit reports CRITICAL." style={{maxWidth: '520px', width: '100%', margin: '1rem 0'}} />
+<img src="/img/blog/open-sourcing-modelaudit/scanner-comparison-mnist.svg" alt="Scanner comparison for 0xnu/mnist-ocr: VirusTotal, JFrog, and ModelScan report No Issue. HF Picklescan flags suspicious imports (informational). ClamAV flags as Suspicious via signature match. ModelAudit reports CRITICAL." style={{maxWidth: '520px', width: '100%', margin: '1rem auto', display: 'block'}} />
 
 Only ClamAV flags it, and only via signature matching, not structural analysis. VirusTotal, JFrog, and ModelScan all miss it.
 
 **[Rammadaeus/tflite-flex-bypass-poc](https://huggingface.co/Rammadaeus/tflite-flex-bypass-poc)** — A TFLite file with 4 malicious custom operators: `FlexWriteFile` (write arbitrary files), `FlexReadFile` (read arbitrary files), `FlexPrintV2` (output exfiltration), and `EagerPyFunc` (arbitrary Python execution).
 
-<img src="/img/blog/open-sourcing-modelaudit/scanner-comparison-tflite.svg" alt="Scanner comparison for Rammadaeus/tflite-flex-bypass-poc: VirusTotal, JFrog, and ClamAV report No Issue. HF Picklescan and ModelScan do not support TFLite. ModelAudit reports 4 CRITICAL findings." style={{maxWidth: '520px', width: '100%', margin: '1rem 0'}} />
+<img src="/img/blog/open-sourcing-modelaudit/scanner-comparison-tflite.svg" alt="Scanner comparison for Rammadaeus/tflite-flex-bypass-poc: VirusTotal, JFrog, and ClamAV report No Issue. HF Picklescan and ModelScan do not support TFLite. ModelAudit reports 4 CRITICAL findings." style={{maxWidth: '520px', width: '100%', margin: '1rem auto', display: 'block'}} />
 
 Every scanner in Hugging Face's pipeline misses this one — VirusTotal, JFrog, ClamAV report no issue, and picklescan and ModelScan don't support TFLite at all. ModelAudit catches all four malicious operators.
 

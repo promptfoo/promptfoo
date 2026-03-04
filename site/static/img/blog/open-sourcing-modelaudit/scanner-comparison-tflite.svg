@@ -22,8 +22,8 @@
   <!-- Header -->
   <rect x="10" y="6" width="520" height="38" rx="10" fill="url(#headerGrad)"/>
   <rect x="10" y="30" width="520" height="14" fill="url(#headerGrad)"/>
-  <text x="30" y="31" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="rgba(255,255,255,0.7)" letter-spacing="0.5">SCANNER</text>
-  <text x="380" y="31" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="rgba(255,255,255,0.7)" letter-spacing="0.5">RESULT</text>
+  <text x="30" y="31" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="white" fill-opacity="0.7" letter-spacing="0.5">SCANNER</text>
+  <text x="380" y="31" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="white" fill-opacity="0.7" letter-spacing="0.5">RESULT</text>
 
   <!-- Row 1: VirusTotal -->
   <g transform="translate(0, 50)">
@@ -43,13 +43,13 @@
     <text x="444" y="23" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#94a3b8">No Issue</text>
   </g>
 
-  <!-- Row 3: ClamAV -->
+  <!-- Row 3: Protect AI (ModelScan) -->
   <g transform="translate(0, 122)">
     <rect x="10" y="0" width="520" height="36" fill="white"/>
     <circle cx="30" cy="18" r="4" fill="#cbd5e1"/>
-    <text x="44" y="23" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="500" fill="#475569">ClamAV</text>
-    <rect x="370" y="8" width="148" height="22" rx="11" fill="#f1f5f9"/>
-    <text x="444" y="23" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#94a3b8">No Issue</text>
+    <text x="44" y="23" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="500" fill="#475569">Protect AI (ModelScan)</text>
+    <rect x="310" y="8" width="208" height="22" rx="11" fill="#f1f5f9"/>
+    <text x="414" y="23" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#94a3b8">Does not support TFLite</text>
   </g>
 
   <!-- Row 4: HF Picklescan -->
@@ -61,13 +61,13 @@
     <text x="424" y="23" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#94a3b8">Does not scan TFLite</text>
   </g>
 
-  <!-- Row 5: Protect AI (ModelScan) -->
+  <!-- Row 5: ClamAV -->
   <g transform="translate(0, 194)">
     <rect x="10" y="0" width="520" height="36" fill="white"/>
     <circle cx="30" cy="18" r="4" fill="#cbd5e1"/>
-    <text x="44" y="23" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="500" fill="#475569">Protect AI (ModelScan)</text>
-    <rect x="310" y="8" width="208" height="22" rx="11" fill="#f1f5f9"/>
-    <text x="414" y="23" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#94a3b8">Does not support TFLite</text>
+    <text x="44" y="23" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="500" fill="#475569">ClamAV</text>
+    <rect x="370" y="8" width="148" height="22" rx="11" fill="#f1f5f9"/>
+    <text x="444" y="23" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#94a3b8">No Issue</text>
   </g>
 
   <!-- Divider -->
@@ -75,7 +75,7 @@
 
   <!-- Row 6: ModelAudit (highlighted) -->
   <g transform="translate(0, 240)">
-    <rect x="10" y="0" width="520" height="40" rx="0 0 10 10" fill="#fef2f2" filter="url(#critShadow)"/>
+    <rect x="10" y="0" width="520" height="40" rx="0" fill="#fef2f2" filter="url(#critShadow)"/>
     <rect x="10" y="30" width="520" height="10" rx="10" fill="#fef2f2"/>
     <circle cx="30" cy="20" r="5" fill="url(#critGrad)"/>
     <text x="46" y="25" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="700" fill="#1e293b">ModelAudit</text>

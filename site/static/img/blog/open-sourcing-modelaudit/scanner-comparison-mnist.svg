@@ -22,8 +22,8 @@
   <!-- Header -->
   <rect x="10" y="6" width="520" height="38" rx="10" fill="url(#headerGrad)"/>
   <rect x="10" y="30" width="520" height="14" fill="url(#headerGrad)"/>
-  <text x="30" y="31" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="rgba(255,255,255,0.7)" letter-spacing="0.5">SCANNER</text>
-  <text x="380" y="31" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="rgba(255,255,255,0.7)" letter-spacing="0.5">RESULT</text>
+  <text x="30" y="31" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="white" fill-opacity="0.7" letter-spacing="0.5">SCANNER</text>
+  <text x="380" y="31" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="white" fill-opacity="0.7" letter-spacing="0.5">RESULT</text>
 
   <!-- Row 1: VirusTotal -->
   <g transform="translate(0, 50)">
@@ -75,7 +75,7 @@
 
   <!-- Row 6: ModelAudit (highlighted) -->
   <g transform="translate(0, 240)">
-    <rect x="10" y="0" width="520" height="40" rx="0 0 10 10" fill="#fef2f2" filter="url(#critShadow)"/>
+    <rect x="10" y="0" width="520" height="40" rx="0" fill="#fef2f2" filter="url(#critShadow)"/>
     <rect x="10" y="30" width="520" height="10" rx="10" fill="#fef2f2"/>
     <circle cx="30" cy="20" r="5" fill="url(#critGrad)"/>
     <text x="46" y="25" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="700" fill="#1e293b">ModelAudit</text>
