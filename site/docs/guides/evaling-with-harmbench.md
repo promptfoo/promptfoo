@@ -1,5 +1,5 @@
 ---
-sidebar_label: Evaluating LLM Safety with HarmBench
+sidebar_label: Evaluating LLM safety with HarmBench
 description: Assess LLM vulnerabilities against 400+ adversarial attacks using HarmBench benchmarks to identify and prevent harmful outputs across 6 risk categories
 ---
 
@@ -18,7 +18,7 @@ To help define a systematic way to assess potential risks and vulnerabilities in
 
 This guide will show you how to use Promptfoo to run HarmBench evaluations against your own LLMs or GenAI applications. Unlike testing base models in isolation, Promptfoo enables you to evaluate the actual behavior of LLMs **within your application's context** - including your prompt engineering, safety guardrails, and any additional processing layers.
 
-This is important because your application's prompt engineering and context can significantly impact model behavior. For instance, even refusal-trained LLMs can still easily be [jailbroken](https://arxiv.org/abs/2410.13886) when operating as an agent in a web browser. Testing has also shown that even the latest version of **GPT [still fails](https://www.promptfoo.app/eval/eval-hu9-2025-02-03T17:21:33) ~6% of HarmBench's attacks**.
+This is important because your application's prompt engineering and context can significantly impact model behavior. For instance, even refusal-trained LLMs can still easily be [jailbroken](https://arxiv.org/abs/2410.13886) when operating as an agent in a web browser.
 
 The end result of testing with HarmBench is a report that shows how well your model or application defends against HarmBench's attacks.
 ![harmbench evaluation results](/img/docs/harmbench-results.png)

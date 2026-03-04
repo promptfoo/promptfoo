@@ -25,7 +25,7 @@ Standard LLM evals test a function: given input X, does output Y meet criteria Z
 | Tier           | Example                                          | Can Do                                       | Cannot Do                |
 | -------------- | ------------------------------------------------ | -------------------------------------------- | ------------------------ |
 | **0: Text**    | `openai:gpt-5.1`, `anthropic:claude-sonnet-4-6`  | Generate code, discuss patterns, return JSON | Read files, execute code |
-| **1: Agentic** | `openai:codex-sdk`, `anthropic:claude-agent-sdk` | Read/write files, run commands, iterate      | (Full capabilities)      |
+| **1: Agentic** | `openai:codex-sdk`, `anthropic:claude-agent-sdk` | Read/write files, run commands, iterate      | -                        |
 
 The same underlying model behaves differently at each tier. A plain `claude-sonnet-4-6` call can't read your files; wrap it in Claude Agent SDK and it can.
 
