@@ -163,16 +163,26 @@ export async function checkEmailStatus(options?: {
     };
 
     if (options?.validate) {
-      const riskyStatuses: Set<EmailValidationStatus> = new Set([
+      const invalidStatuses: Set<EmailValidationStatus> = new Set([
         EmailValidationStatus.RISKY_EMAIL,
         EmailValidationStatus.DISPOSABLE_EMAIL,
+        EmailValidationStatus.EMAIL_VERIFICATION_REQUIRED,
       ]);
-      if (riskyStatuses.has(data.status)) {
+      if (invalidStatuses.has(data.status)) {
+        if (data.status === EmailValidationStatus.EMAIL_VERIFICATION_REQUIRED) {
+          setUserEmailValidated(false);
+          setUserEmailNeedsValidation(true);
+        }
         // Tracking filtered emails via this telemetry endpoint for now to guage sensitivity of validation
         // We should take it out once we're happy with the sensitivity
-        await telemetry.saveConsent(userEmail, {
-          source: 'filteredInvalidEmail',
-        });
+        if (
+          data.status === EmailValidationStatus.RISKY_EMAIL ||
+          data.status === EmailValidationStatus.DISPOSABLE_EMAIL
+        ) {
+          await telemetry.saveConsent(userEmail, {
+            source: 'filteredInvalidEmail',
+          });
+        }
       } else {
         setUserEmailValidated(true);
         // Track the validated email via telemetry
@@ -184,7 +194,7 @@ export async function checkEmailStatus(options?: {
 
     return {
       status: data.status,
-      message: data.message,
+      message: data.message ?? data.error,
       email: userEmail,
       hasEmail: true,
     };
@@ -271,6 +281,16 @@ export async function checkEmailStatusAndMaybeExit(options?: {
   if (result.status === EmailValidationStatus.EXCEEDED_LIMIT) {
     logger.error(
       'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
+    );
+    process.exit(1);
+  }
+
+  if (result.status === EmailValidationStatus.EMAIL_VERIFICATION_REQUIRED) {
+    setUserEmailNeedsValidation(true);
+    setUserEmailValidated(false);
+    logger.error(
+      result.message ||
+        'Your email address is not verified. Check your inbox for a verification link, then rerun the command.',
     );
     process.exit(1);
   }

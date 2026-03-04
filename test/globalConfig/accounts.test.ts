@@ -377,6 +377,31 @@ describe('accounts', () => {
       );
     });
 
+    it('should exit if email verification is required', async () => {
+      vi.mocked(isCI).mockReturnValue(false);
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'test@example.com' },
+      });
+
+      const mockResponse = new Response(
+        JSON.stringify({
+          status: 'email_verification_required',
+          error: 'Please verify your email address and try again.',
+        }),
+        {
+          status: 200,
+          statusText: 'OK',
+        },
+      );
+      vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+
+      await checkEmailStatusAndMaybeExit();
+
+      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(logger.error).toHaveBeenCalledWith('Please verify your email address and try again.');
+    });
+
     it('should display warning message when status is show_usage_warning', async () => {
       vi.mocked(isCI).mockReturnValue(false);
       vi.mocked(readGlobalConfig).mockReturnValue({
@@ -582,6 +607,30 @@ describe('accounts', () => {
         expect(telemetry.saveConsent).toHaveBeenCalledWith('test@example.com', {
           source: 'filteredInvalidEmail',
         });
+      });
+
+      it('should not mark email as validated when verification is required', async () => {
+        const mockResponse = new Response(
+          JSON.stringify({
+            status: 'email_verification_required',
+            error: 'Please verify your email address and try again.',
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+          },
+        );
+        vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+
+        const result = await checkEmailStatus({ validate: true });
+
+        expect(result).toEqual({
+          status: 'email_verification_required',
+          hasEmail: true,
+          email: 'test@example.com',
+          message: 'Please verify your email address and try again.',
+        });
+        expect(telemetry.saveConsent).not.toHaveBeenCalled();
       });
 
       it('should not call saveConsent when validate is not provided', async () => {

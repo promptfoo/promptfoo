@@ -6,6 +6,7 @@ export const EmailStatusEnum = z.enum([
   'ok',
   'exceeded_limit',
   'show_usage_warning',
+  'email_verification_required',
   'no_email',
   'risky_email',
   'disposable_email',
