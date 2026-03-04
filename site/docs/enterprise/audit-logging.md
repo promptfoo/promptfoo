@@ -7,7 +7,7 @@ keywords: [audit, logging, security, compliance, enterprise, forensics, admin op
 
 # Audit Logging
 
-Audit Logging is a feature of promptfoo Enterprise that provides forensic access information at the organization level, user level, team level, and service account level.
+Audit Logging is a feature of [Promptfoo Enterprise](/docs/enterprise/) that provides forensic access information at the organization level, user level, team level, and service account level.
 
 Audit Logging answers "who, when, and what" questions about promptfoo resources. These answers can help you evaluate the security of your organization, and they can provide information that you need to satisfy audit and compliance requirements.
 

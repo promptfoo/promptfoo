@@ -94,11 +94,15 @@ function TabsTrigger({
   children,
   icon,
   iconPosition = 'start',
+  style,
   ...props
 }: TabsTriggerProps) {
+  const triggerStyle = props.disabled ? style : { ...style, cursor: 'pointer' };
+
   return (
     <TabsPrimitive.Trigger
       ref={ref}
+      style={triggerStyle}
       className={cn(
         // Base styles
         'inline-flex cursor-pointer items-center whitespace-nowrap text-sm font-medium transition-all',
