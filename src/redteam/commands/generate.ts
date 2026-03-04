@@ -168,7 +168,7 @@ export async function doGenerateRedteam(
 
       You've used ${chalk.bold(probeLimitResult.used.toLocaleString())} of your ${chalk.bold(MONTHLY_PROBE_LIMIT.toLocaleString())} free monthly probes.
 
-      To unlock unlimited scans, log in to Promptfoo Cloud:
+      To continue, please log in to Promptfoo Cloud:
 
         ${chalk.cyan('promptfoo auth login')}
 
