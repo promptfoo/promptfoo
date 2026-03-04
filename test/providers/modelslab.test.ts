@@ -22,8 +22,13 @@ vi.mock(import('../../src/envars'), async (importOriginal) => {
 
 const mockedFetchWithCache = vi.mocked(fetchWithCache);
 
-function mockResponse(data: Record<string, unknown>, status = 200, statusText = 'OK') {
-  return { data, cached: false, status, statusText };
+function mockResponse(
+  data: Record<string, unknown>,
+  status = 200,
+  statusText = 'OK',
+  cached = false,
+) {
+  return { data, cached, status, statusText, deleteFromCache: vi.fn() };
 }
 
 describe('ModelsLabImageProvider', () => {
@@ -82,6 +87,47 @@ describe('ModelsLabImageProvider', () => {
       'json',
       false,
     );
+  });
+
+  it('propagates cached flag from fetchWithCache response', async () => {
+    mockedFetchWithCache.mockResolvedValue(
+      mockResponse(
+        { status: 'success', output: ['https://modelslab.com/output/cached.jpg'] },
+        200,
+        'OK',
+        true,
+      ),
+    );
+
+    const provider = new ModelsLabImageProvider('flux', { config: { apiKey: mockApiKey } });
+    const result = await provider.callApi('Test');
+
+    expect(result.cached).toBe(true);
+  });
+
+  it('evicts cached processing response and sets cached to false after polling', async () => {
+    const processingResponse = mockResponse({
+      status: 'processing',
+      id: 1,
+      request_id: 'req_evict',
+      fetch_result: '',
+      eta: 5,
+    });
+    mockedFetchWithCache.mockResolvedValueOnce(processingResponse).mockResolvedValueOnce(
+      mockResponse({
+        status: 'success',
+        output: ['https://modelslab.com/output/evicted.jpg'],
+      }),
+    );
+
+    const provider = new ModelsLabImageProvider('flux', { config: { apiKey: mockApiKey } });
+    const resultPromise = provider.callApi('Evict test');
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(processingResponse.deleteFromCache).toHaveBeenCalled();
+    expect(result.cached).toBe(false);
+    expect(result.output).toContain('evicted.jpg');
   });
 
   it('merges per-prompt config overrides from context', async () => {

@@ -768,6 +768,22 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('replicate:foo/bar:abc123');
   });
 
+  it('loadApiProvider with modelslab:image:modelName', async () => {
+    const provider = await loadApiProvider('modelslab:image:flux');
+    expect(provider.id()).toBe('modelslab:image:flux');
+  });
+
+  it('loadApiProvider with modelslab:image: throws for empty model name', async () => {
+    await expect(loadApiProvider('modelslab:image:')).rejects.toThrow(/Model name is required/);
+  });
+
+  it('loadApiProvider with modelslab:image passes provider-level env', async () => {
+    const provider = await loadApiProvider('modelslab:image:flux', {
+      env: { MODELSLAB_API_KEY: 'provider-key' },
+    });
+    expect((provider as any).apiKey).toBe('provider-key');
+  });
+
   it('loadApiProvider with file://*.py', async () => {
     const provider = await loadApiProvider('file://script.py:function_name');
     expect(provider).toBeInstanceOf(PythonProvider);

@@ -151,18 +151,22 @@ export class ModelsLabImageProvider implements ApiProvider {
       );
 
       let data = response.data as ModelsLabResponse;
+      let cached = response.cached;
 
       if (data.status === 'processing') {
+        await response.deleteFromCache?.();
         const requestId = data.request_id ?? String(data.id);
         logger.debug('[ModelsLab] Image is processing, polling for result', {
           model: this.modelName,
           requestId,
         });
         data = await this.pollForCompletion(requestId);
+        cached = false;
       }
 
       if (data.status === 'error') {
         return {
+          cached,
           error: `ModelsLab API error: ${data.message || 'Unknown error'}`,
         };
       }
@@ -179,6 +183,7 @@ export class ModelsLabImageProvider implements ApiProvider {
           .replace(/\]/g, ')');
         return {
           output: `![${ellipsize(sanitizedPrompt, 50)}](${resolvedUrl})`,
+          cached,
           ...(blobRef && {
             metadata: { blobRef, blobHash: blobRef.hash },
           }),
