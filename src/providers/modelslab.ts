@@ -11,7 +11,7 @@
  */
 
 import { isBlobStorageEnabled } from '../blobs/extractor';
-import { storeBlob } from '../blobs/index';
+import { type BlobRef, storeBlob } from '../blobs/index';
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -174,13 +174,16 @@ export class ModelsLabImageProvider implements ApiProvider {
           return { error: 'ModelsLab returned no image URLs' };
         }
         const imageUrl = output[0];
-        const resolvedUrl = await this.maybeDownloadToBlob(imageUrl);
+        const { url: resolvedUrl, blobRef } = await this.maybeDownloadToBlob(imageUrl);
         const sanitizedPrompt = prompt
           .replace(/\r?\n|\r/g, ' ')
           .replace(/\[/g, '(')
           .replace(/\]/g, ')');
         return {
           output: `![${ellipsize(sanitizedPrompt, 50)}](${resolvedUrl})`,
+          ...(blobRef && {
+            metadata: { blobRef, blobHash: blobRef.hash },
+          }),
         };
       }
 
@@ -192,9 +195,9 @@ export class ModelsLabImageProvider implements ApiProvider {
     }
   }
 
-  private async maybeDownloadToBlob(imageUrl: string): Promise<string> {
+  private async maybeDownloadToBlob(imageUrl: string): Promise<{ url: string; blobRef?: BlobRef }> {
     if (!isBlobStorageEnabled()) {
-      return imageUrl;
+      return { url: imageUrl };
     }
 
     try {
@@ -204,7 +207,7 @@ export class ModelsLabImageProvider implements ApiProvider {
           url: imageUrl,
           status: response.status,
         });
-        return imageUrl;
+        return { url: imageUrl };
       }
 
       const buffer = Buffer.from(await response.arrayBuffer());
@@ -213,13 +216,13 @@ export class ModelsLabImageProvider implements ApiProvider {
         location: 'response.output',
         kind: 'image',
       });
-      return ref.uri;
+      return { url: ref.uri, blobRef: ref };
     } catch (error) {
       logger.warn('[ModelsLab] Failed to store image as blob, using URL', {
         url: imageUrl,
         error: String(error),
       });
-      return imageUrl;
+      return { url: imageUrl };
     }
   }
 

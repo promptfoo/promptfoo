@@ -282,6 +282,12 @@ describe('ModelsLabImageProvider', () => {
     const result = await provider.callApi('Blob test');
 
     expect(result.output).toContain('promptfoo://blob/abc123');
+    expect(result.metadata).toEqual(
+      expect.objectContaining({
+        blobRef: expect.objectContaining({ uri: 'promptfoo://blob/abc123', hash: 'abc123' }),
+        blobHash: 'abc123',
+      }),
+    );
     expect(fetchWithProxy).toHaveBeenCalledWith('https://modelslab.com/output/blob-test.jpg');
     expect(storeBlob).toHaveBeenCalledWith(
       expect.any(Buffer),
