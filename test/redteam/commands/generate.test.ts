@@ -3247,7 +3247,7 @@ describe('target ID extraction for retry strategy', () => {
       expect(result).toBeNull();
       expect(process.exitCode).toBe(1);
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Monthly red team probe limit reached'),
+        expect.stringContaining('Monthly probe limit reached'),
       );
       expect(synthesize).not.toHaveBeenCalled();
 
@@ -3283,7 +3283,7 @@ describe('target ID extraction for retry strategy', () => {
       // The function proceeds past the probe limit check (doesn't return null with exitCode=1)
       expect(checkRedteamProbeLimit).toHaveBeenCalled();
       expect(logger.error).not.toHaveBeenCalledWith(
-        expect.stringContaining('Monthly red team probe limit reached'),
+        expect.stringContaining('Monthly probe limit reached'),
       );
 
       // Restore default mock

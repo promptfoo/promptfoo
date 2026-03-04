@@ -163,18 +163,17 @@ export async function doGenerateRedteam(
   // Check monthly probe limit for non-cloud users
   const probeLimitResult = checkRedteamProbeLimit();
   if (!probeLimitResult.withinLimit) {
-    logger.error(
-      chalk.red(
-        dedent`
-          Monthly red team probe limit reached (${MONTHLY_PROBE_LIMIT.toLocaleString()} probes/month).
+    logger.error(dedent`
+      ${chalk.red.bold('Monthly probe limit reached')}
 
-          You have used ${probeLimitResult.used.toLocaleString()} probes this month.
+      You've used ${chalk.bold(probeLimitResult.used.toLocaleString())} of your ${chalk.bold(MONTHLY_PROBE_LIMIT.toLocaleString())} free monthly probes.
 
-          To continue running red team scans, sign up for Promptfoo Cloud:
-            ${chalk.bold('promptfoo auth login')}
-        `,
-      ),
-    );
+      To unlock unlimited scans, log in to Promptfoo Cloud:
+
+        ${chalk.cyan('promptfoo auth login')}
+
+      For enterprise plans, contact ${chalk.cyan('inquiries@promptfoo.dev')}
+    `);
     process.exitCode = 1;
     return null;
   }
