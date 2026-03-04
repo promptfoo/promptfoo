@@ -554,9 +554,11 @@ tests:
 Environment variables are resolved at config load time (not runtime) and can control file paths and API keys—only use them in trusted environments.
 
 :::warning
+
 Avoid copying secrets into `config.env` with templates like `ANTHROPIC_API_KEY: '{{ env.ANTHROPIC_API_KEY }}'`. This resolves the secret into the eval config object and may appear in exported results.
 
 If a secret is already present in your shell environment (or loaded via `--env-file`), prefer reading it directly from process env and keep `config.env` for non-sensitive flags.
+
 :::
 
 ## Tools and Functions

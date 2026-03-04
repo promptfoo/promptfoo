@@ -200,7 +200,9 @@ All formats include:
 | `stats`     | Summary statistics           |
 
 :::warning
-`json`, `yaml`, `yml`, `txt`, `html`, and `xml` outputs include the eval `config`. Sensitive fields are redacted using promptfoo's sanitizer rules on a best-effort basis (not comprehensive). Non-sensitive `config.env` values may still appear in exports.
+
+`json`, `yaml`, `yml`, `txt`, `html`, and `xml` outputs include the eval `config`. Sensitive fields are redacted using Promptfoo's sanitizer rules on a best-effort basis (not comprehensive). Non-sensitive `config.env` values may still appear in exports.
+
 :::
 
 ### Detailed Metrics
