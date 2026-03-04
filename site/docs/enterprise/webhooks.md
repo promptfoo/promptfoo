@@ -5,7 +5,7 @@ description: Integrate real-time issue notifications with external systems using
 
 # Webhook Integration
 
-Promptfoo Enterprise provides webhooks to notify external systems when security vulnerabilities (issues) are created or updated.
+[Promptfoo Enterprise](/docs/enterprise/) provides webhooks to notify external systems when security vulnerabilities (issues) are created or updated.
 
 ## What is an Issue?
 

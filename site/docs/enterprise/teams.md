@@ -8,7 +8,7 @@ keywords: [roles, teams, permissions, users, organizations, rbac, access control
 
 # Managing Roles and Teams
 
-Promptfoo Enterprise supports a flexible role-based access control (RBAC) system that allows you to manage user access to your organization's resources.
+[Promptfoo Enterprise](/docs/enterprise/) supports a flexible role-based access control (RBAC) system that allows you to manage user access to your organization's resources.
 
 ## Creating Teams
 

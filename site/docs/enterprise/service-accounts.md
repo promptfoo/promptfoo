@@ -8,7 +8,7 @@ keywords: [service accounts, api keys, programmatic access, ci/cd integration, a
 
 # Service Accounts
 
-Service accounts allow you to create API keys for programmatic access to Promptfoo Enterprise. These are useful for CI/CD pipelines and automated testing.
+Service accounts allow you to create API keys for programmatic access to [Promptfoo Enterprise](/docs/enterprise/). These are useful for CI/CD pipelines and automated testing.
 
 :::note
 Only global system admins can create and assign service accounts.
