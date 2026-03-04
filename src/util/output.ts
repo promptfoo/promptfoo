@@ -44,7 +44,10 @@ const outputToSimpleString = (output: EvaluateTableOutput) => {
 };
 
 function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
-  return sanitizeObject(config, { context: 'output config' }) as OutputFile['config'];
+  return sanitizeObject(config, {
+    context: 'output config',
+    throwOnError: true,
+  }) as OutputFile['config'];
 }
 
 export function createOutputMetadata(evalRecord: Eval) {
