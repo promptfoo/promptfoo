@@ -33,6 +33,7 @@ import {
   Send,
   Trash2,
 } from 'lucide-react';
+import StatefulnessRadioGroup, { STATEFULNESS_QUESTION } from '../../StatefulnessRadioGroup';
 import VariableSelectionDialog from './VariableSelectionDialog';
 import type { Message } from '@app/pages/eval/components/ChatMessages';
 
@@ -386,52 +387,15 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
     <div className="space-y-5">
       {/* Stateful Configuration Section */}
       <div>
-        <p className="mb-0.5 text-sm font-medium">Does your system maintain conversation state?</p>
-        <p className="mb-3 text-sm text-muted-foreground">
-          This determines whether your application remembers context from previous messages in a
-          conversation.
-        </p>
+        <p className="mb-3 text-sm font-medium">{STATEFULNESS_QUESTION}</p>
 
-        <div className="space-y-1">
-          <label className="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50">
-            <input
-              type="radio"
-              name="stateful"
-              value="true"
-              checked={String(selectedTarget.config?.stateful ?? false) === 'true'}
-              onChange={(e) => {
-                updateCustomTarget('stateful', e.target.value === 'true');
-                setTestResult(null);
-              }}
-              className="mt-0.5"
-            />
-            <div>
-              <p className="text-sm">Yes - my system is stateful</p>
-              <p className="text-xs text-muted-foreground">
-                The system maintains conversation history and context across messages
-              </p>
-            </div>
-          </label>
-          <label className="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50">
-            <input
-              type="radio"
-              name="stateful"
-              value="false"
-              checked={String(selectedTarget.config?.stateful ?? false) === 'false'}
-              onChange={(e) => {
-                updateCustomTarget('stateful', e.target.value === 'true');
-                setTestResult(null);
-              }}
-              className="mt-0.5"
-            />
-            <div>
-              <p className="text-sm">No - my system is not stateful</p>
-              <p className="text-xs text-muted-foreground">
-                The full conversation history must be sent with every request
-              </p>
-            </div>
-          </label>
-        </div>
+        <StatefulnessRadioGroup
+          value={String(selectedTarget.config?.stateful ?? false)}
+          onValueChange={(value) => {
+            updateCustomTarget('stateful', value === 'true');
+            setTestResult(null);
+          }}
+        />
 
         {/* Info alert when system is not stateful */}
         {selectedTarget.config?.stateful === false && (

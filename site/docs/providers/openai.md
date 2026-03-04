@@ -458,8 +458,6 @@ providers:
 
   - id: openai:responses:gpt-5.3-chat-latest
     config:
-      reasoning:
-        effort: 'medium'
       max_output_tokens: 2048
 ```
 
