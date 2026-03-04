@@ -479,6 +479,14 @@ export async function createIterationContext({
   return iterationContext;
 }
 
+type SharedBacktrackingStopReason =
+  | 'Grader failed'
+  | 'Max backtracks reached'
+  | 'Target ended conversation';
+
+export type RoundBacktrackingStopReason = SharedBacktrackingStopReason | 'Max rounds reached';
+export type TurnBacktrackingStopReason = SharedBacktrackingStopReason | 'Max turns reached';
+
 /**
  * Base metadata interface shared by all redteam providers
  */

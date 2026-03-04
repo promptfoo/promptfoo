@@ -35,6 +35,7 @@ import {
   isValidChatMessageArray,
   type Message,
   type TargetResponse,
+  type TurnBacktrackingStopReason,
 } from '../shared';
 import { formatTraceForMetadata, formatTraceSummary } from '../traceFormatting';
 import { resolveTracingOptions } from '../tracingOptions';
@@ -60,11 +61,7 @@ interface HydraMetadata extends BaseRedteamMetadata {
   hydraRoundsCompleted: number;
   hydraBacktrackCount: number;
   hydraResult: boolean;
-  stopReason:
-    | 'Grader failed'
-    | 'Max turns reached'
-    | 'Max backtracks reached'
-    | 'Target ended conversation';
+  stopReason: TurnBacktrackingStopReason;
   successfulAttacks?: Array<{
     turn: number;
     message: string;
@@ -271,11 +268,7 @@ export class HydraProvider implements ApiProvider {
     const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
 
     let vulnerabilityAchieved = false;
-    let stopReason:
-      | 'Grader failed'
-      | 'Max turns reached'
-      | 'Max backtracks reached'
-      | 'Target ended conversation' = 'Max turns reached';
+    let stopReason: TurnBacktrackingStopReason = 'Max turns reached';
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let backtrackCount = 0;

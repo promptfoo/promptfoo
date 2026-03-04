@@ -36,6 +36,7 @@ import {
   isConversationEndedResponse,
   isValidChatMessageArray,
   redteamProviderManager,
+  type RoundBacktrackingStopReason,
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
@@ -66,12 +67,6 @@ import type { Message } from '../shared';
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
 
-type StopReason =
-  | 'Grader failed'
-  | 'Max rounds reached'
-  | 'Max backtracks reached'
-  | 'Target ended conversation';
-
 /**
  * Represents metadata for the Crescendo conversation process.
  */
@@ -80,7 +75,7 @@ interface CrescendoMetadata extends BaseRedteamMetadata {
   crescendoBacktrackCount: number;
   crescendoResult: boolean;
   crescendoConfidence: number | null;
-  stopReason: StopReason;
+  stopReason: RoundBacktrackingStopReason;
   successfulAttacks?: Array<{
     turn: number;
     prompt: string;
@@ -293,7 +288,7 @@ export class CrescendoProvider implements ApiProvider {
     let objectiveScore: { value: number; rationale: string } | undefined;
     let storedGraderResult: any = undefined;
 
-    let exitReason: StopReason = 'Max rounds reached';
+    let exitReason: RoundBacktrackingStopReason = 'Max rounds reached';
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
