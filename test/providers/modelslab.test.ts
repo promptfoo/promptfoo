@@ -85,7 +85,7 @@ describe('ModelsLabImageProvider', () => {
       }),
       expect.any(Number),
       'json',
-      false,
+      true,
     );
   });
 
@@ -105,29 +105,31 @@ describe('ModelsLabImageProvider', () => {
     expect(result.cached).toBe(true);
   });
 
-  it('evicts cached processing response and sets cached to false after polling', async () => {
-    const processingResponse = mockResponse({
-      status: 'processing',
-      id: 1,
-      request_id: 'req_evict',
-      fetch_result: '',
-      eta: 5,
-    });
-    mockedFetchWithCache.mockResolvedValueOnce(processingResponse).mockResolvedValueOnce(
-      mockResponse({
-        status: 'success',
-        output: ['https://modelslab.com/output/evicted.jpg'],
-      }),
-    );
+  it('sets cached to false after polling completes', async () => {
+    mockedFetchWithCache
+      .mockResolvedValueOnce(
+        mockResponse({
+          status: 'processing',
+          id: 1,
+          request_id: 'req_poll',
+          fetch_result: '',
+          eta: 5,
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockResponse({
+          status: 'success',
+          output: ['https://modelslab.com/output/polled.jpg'],
+        }),
+      );
 
     const provider = new ModelsLabImageProvider('flux', { config: { apiKey: mockApiKey } });
-    const resultPromise = provider.callApi('Evict test');
+    const resultPromise = provider.callApi('Poll test');
     await vi.runAllTimersAsync();
     const result = await resultPromise;
 
-    expect(processingResponse.deleteFromCache).toHaveBeenCalled();
     expect(result.cached).toBe(false);
-    expect(result.output).toContain('evicted.jpg');
+    expect(result.output).toContain('polled.jpg');
   });
 
   it('merges per-prompt config overrides from context', async () => {

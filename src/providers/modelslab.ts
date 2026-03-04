@@ -147,14 +147,13 @@ export class ModelsLabImageProvider implements ApiProvider {
         },
         REQUEST_TIMEOUT_MS,
         'json',
-        false,
+        true,
       );
 
       let data = response.data as ModelsLabResponse;
       let cached = response.cached;
 
       if (data.status === 'processing') {
-        await response.deleteFromCache?.();
         const requestId = data.request_id ?? String(data.id);
         logger.debug('[ModelsLab] Image is processing, polling for result', {
           model: this.modelName,
