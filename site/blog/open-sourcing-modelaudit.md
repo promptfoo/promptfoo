@@ -199,7 +199,7 @@ The maturity milestone: 200+ models scanned across 14 formats, 5,000+ security c
 
 **ONNX (14):** Xenova/distilbert-base-uncased-finetuned-sst-2-english, Xenova/bert-base-NER, Xenova/e5-small-v2, Xenova/clip-vit-base-patch32, Xenova/dinov2-small, Xenova/toxic-bert, Xenova/slimsam-77-uniform, Xenova/ms-marco-MiniLM-L-6-v2, Xenova/bge-small-en-v1.5, onnx-internal-testing/tiny-random-Data2VecAudioModel-ONNX, Xenova/all-MiniLM-L6-v2, Xenova/whisper-tiny.en, sentence-transformers/all-MiniLM-L6-v2
 
-**GGUF (10):** ggml-org/tinygemma3-GGUF, HuggingFaceTB/smollm-135M-instruct-v0.2-Q8\_0-GGUF, PrunaAI/gpt2-GGUF-smashed, mradermacher/gpt2-alpaca-gpt4-GGUF, mradermacher/jina-reranker-v1-tiny-en-GGUF, second-state/All-MiniLM-L6-v2-Embedding-GGUF, RichardErkhov/distilbert\_-\_distilgpt2-gguf, M4-ai/TinyMistral-248M-v2-Instruct-GGUF, Felladrin/gguf-smollm-360M-instruct-add-basics
+**GGUF (10):** ggml-org/tinygemma3-GGUF, HuggingFaceTB/smollm-135M-instruct-v0.2-Q8_0-GGUF, PrunaAI/gpt2-GGUF-smashed, mradermacher/gpt2-alpaca-gpt4-GGUF, mradermacher/jina-reranker-v1-tiny-en-GGUF, second-state/All-MiniLM-L6-v2-Embedding-GGUF, RichardErkhov/distilbert\_-_distilgpt2-gguf, M4-ai/TinyMistral-248M-v2-Instruct-GGUF, Felladrin/gguf-smollm-360M-instruct-add-basics
 
 **TFLite (10):** bbouffaut/bert_base_uncase_tflite, nyadla-sys/whisper-tiny.en.tflite, SamMorgan/yolo_v4_tflite, tflite-hub/conformer-lang-id, axtonyao/gpt2-fp16-tflite, Nihal2000/all-MiniLM-L6-v2-quant.tflite, ColdSlim/ASL-TFLite-Edge, byoussef/MobileNetV4_Conv_Medium_TFLite_256, Ashish094562/plant-model-float32-tflite, qualcomm/MobileNet-v2
 
@@ -239,54 +239,54 @@ Where ModelAudit fits: it is the widest-coverage open-source scanner available, 
 
 The most meaningful way to compare scanners is format by format. Here is what each open-source tool covers (March 2026; see each project's repository for current status):
 
-| Format | picklescan | Fickling | ModelScan | **ModelAudit** |
-|--------|:----------:|:--------:|:---------:|:--------------:|
-| Pickle (.pkl) | Yes | Yes | Yes | **Yes** |
-| PyTorch (.pt/.pth/.bin) | — | — | Yes | **Yes** |
-| Joblib (.joblib) | — | — | — | **Yes** |
-| Skops (.skops) | — | — | — | **Yes** |
-| NumPy (.npy/.npz) | — | — | — | **Yes** |
-| Keras H5 (.h5) | — | — | Yes | **Yes** |
-| Keras ZIP (.keras) | — | — | — | **Yes** |
-| TensorFlow SavedModel | — | — | Yes | **Yes** |
-| TF MetaGraph (.meta) | — | — | — | **Yes** |
-| ONNX (.onnx) | — | — | — | **Yes** |
-| SafeTensors | — | — | — | **Yes** |
-| GGUF/GGML | — | — | — | **Yes** |
-| JAX/Flax (.msgpack) | — | — | — | **Yes** |
-| TFLite (.tflite) | — | — | — | **Yes** |
-| ExecuTorch (.pte) | — | — | — | **Yes** |
-| TensorRT (.plan/.engine) | — | — | — | **Yes** |
-| PaddlePaddle (.pdmodel) | — | — | — | **Yes** |
-| OpenVINO (.xml/.bin) | — | — | — | **Yes** |
-| CoreML (.mlmodel/.mlpackage) | — | — | — | **Yes** |
-| MXNet (.params/-symbol.json) | — | — | — | **Yes** |
-| CatBoost (.cbm) | — | — | — | **Yes** |
-| LightGBM (.lgb/.txt/.model) | — | — | — | **Yes** |
-| XGBoost (.xgb/.model) | — | — | — | **Yes** |
-| RKNN (.rknn) | — | — | — | **Yes** |
-| Torch7 (.t7/.th) | — | — | — | **Yes** |
-| Llamafile (.llamafile) | — | — | — | **Yes** |
-| R Serialized (.rds/.rda) | — | — | — | **Yes** |
-| CNTK (.cntk/.dnn) | — | — | — | **Yes** |
-| NeMo (.nemo) | — | — | — | **Yes** |
-| PMML (.pmml) | — | — | — | **Yes** |
-| TorchServe MAR (.mar) | — | — | — | **Yes** |
-| Compressed (.gz/.bz2/.xz/.zst) | — | — | — | **Yes** |
-| ZIP/TAR/7-Zip archives | — | — | Yes | **Yes** |
-| Config (JSON/YAML/XML) | — | — | — | **Yes** |
-| **Total formats** | **1** | **1** | **~5** | **42+** |
+| Format                         | picklescan | Fickling | ModelScan | **ModelAudit** |
+| ------------------------------ | :--------: | :------: | :-------: | :------------: |
+| Pickle (.pkl)                  |    Yes     |   Yes    |    Yes    |    **Yes**     |
+| PyTorch (.pt/.pth/.bin)        |     —      |    —     |    Yes    |    **Yes**     |
+| Joblib (.joblib)               |     —      |    —     |     —     |    **Yes**     |
+| Skops (.skops)                 |     —      |    —     |     —     |    **Yes**     |
+| NumPy (.npy/.npz)              |     —      |    —     |     —     |    **Yes**     |
+| Keras H5 (.h5)                 |     —      |    —     |    Yes    |    **Yes**     |
+| Keras ZIP (.keras)             |     —      |    —     |     —     |    **Yes**     |
+| TensorFlow SavedModel          |     —      |    —     |    Yes    |    **Yes**     |
+| TF MetaGraph (.meta)           |     —      |    —     |     —     |    **Yes**     |
+| ONNX (.onnx)                   |     —      |    —     |     —     |    **Yes**     |
+| SafeTensors                    |     —      |    —     |     —     |    **Yes**     |
+| GGUF/GGML                      |     —      |    —     |     —     |    **Yes**     |
+| JAX/Flax (.msgpack)            |     —      |    —     |     —     |    **Yes**     |
+| TFLite (.tflite)               |     —      |    —     |     —     |    **Yes**     |
+| ExecuTorch (.pte)              |     —      |    —     |     —     |    **Yes**     |
+| TensorRT (.plan/.engine)       |     —      |    —     |     —     |    **Yes**     |
+| PaddlePaddle (.pdmodel)        |     —      |    —     |     —     |    **Yes**     |
+| OpenVINO (.xml/.bin)           |     —      |    —     |     —     |    **Yes**     |
+| CoreML (.mlmodel/.mlpackage)   |     —      |    —     |     —     |    **Yes**     |
+| MXNet (.params/-symbol.json)   |     —      |    —     |     —     |    **Yes**     |
+| CatBoost (.cbm)                |     —      |    —     |     —     |    **Yes**     |
+| LightGBM (.lgb/.txt/.model)    |     —      |    —     |     —     |    **Yes**     |
+| XGBoost (.xgb/.model)          |     —      |    —     |     —     |    **Yes**     |
+| RKNN (.rknn)                   |     —      |    —     |     —     |    **Yes**     |
+| Torch7 (.t7/.th)               |     —      |    —     |     —     |    **Yes**     |
+| Llamafile (.llamafile)         |     —      |    —     |     —     |    **Yes**     |
+| R Serialized (.rds/.rda)       |     —      |    —     |     —     |    **Yes**     |
+| CNTK (.cntk/.dnn)              |     —      |    —     |     —     |    **Yes**     |
+| NeMo (.nemo)                   |     —      |    —     |     —     |    **Yes**     |
+| PMML (.pmml)                   |     —      |    —     |     —     |    **Yes**     |
+| TorchServe MAR (.mar)          |     —      |    —     |     —     |    **Yes**     |
+| Compressed (.gz/.bz2/.xz/.zst) |     —      |    —     |     —     |    **Yes**     |
+| ZIP/TAR/7-Zip archives         |     —      |    —     |    Yes    |    **Yes**     |
+| Config (JSON/YAML/XML)         |     —      |    —     |     —     |    **Yes**     |
+| **Total formats**              |   **1**    |  **1**   |  **~5**   |    **42+**     |
 
-| Capability | picklescan | Fickling | ModelScan | **ModelAudit** |
-|------------|:----------:|:--------:|:---------:|:--------------:|
-| CVE detection rules | No | No | No | **Yes** |
-| SARIF output | No | No | No | **Yes** |
-| SBOM generation | No | No | No | **Yes** |
-| Secret scanning | No | No | No | **Yes** |
-| License detection | No | No | No | **Yes** |
-| Remote pulls (S3/GCS/HF) | No | No | No | **Yes** |
-| Allowlist approach | No | Yes | No | **Yes** |
-| No ML framework deps | Yes | No | No | **Yes** |
+| Capability               | picklescan | Fickling | ModelScan | **ModelAudit** |
+| ------------------------ | :--------: | :------: | :-------: | :------------: |
+| CVE detection rules      |     No     |    No    |    No     |    **Yes**     |
+| SARIF output             |     No     |    No    |    No     |    **Yes**     |
+| SBOM generation          |     No     |    No    |    No     |    **Yes**     |
+| Secret scanning          |     No     |    No    |    No     |    **Yes**     |
+| License detection        |     No     |    No    |    No     |    **Yes**     |
+| Remote pulls (S3/GCS/HF) |     No     |    No    |    No     |    **Yes**     |
+| Allowlist approach       |     No     |   Yes    |    No     |    **Yes**     |
+| No ML framework deps     |    Yes     |    No    |    No     |    **Yes**     |
 
 ModelAudit is not a replacement for these tools — they've all contributed to making this space better. Teams already using picklescan or ModelScan can run ModelAudit alongside them. SARIF results from multiple scanners aggregate in the same CI pipeline.
 
@@ -421,13 +421,13 @@ Scanner depth varies with risk. The pickle opcode analyzer is the deepest; the s
 
 Risk level here reflects likelihood of code execution or file system impact during loading:
 
-| Risk Level  | Formats                                                                                                              |
-| ----------- | -------------------------------------------------------------------------------------------------------------------- |
-| **High**    | Pickle, PyTorch (.pt/.pth/.ckpt/.bin), Joblib, NumPy, Skops, Torch7, Llamafile                                        |
-| **Medium**  | TensorFlow SavedModel, TF MetaGraph, Keras (.h5/.keras), ONNX, XGBoost, LightGBM, CatBoost, TorchServe MAR, NeMo     |
+| Risk Level  | Formats                                                                                                                               |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| **High**    | Pickle, PyTorch (.pt/.pth/.ckpt/.bin), Joblib, NumPy, Skops, Torch7, Llamafile                                                        |
+| **Medium**  | TensorFlow SavedModel, TF MetaGraph, Keras (.h5/.keras), ONNX, XGBoost, LightGBM, CatBoost, TorchServe MAR, NeMo                      |
 | **Low**     | SafeTensors, GGUF/GGML, JAX/Flax, TFLite, ExecuTorch, TensorRT, PaddlePaddle, OpenVINO, CoreML, MXNet, RKNN, CNTK, R Serialized, PMML |
-| **Archive** | ZIP, TAR, 7-Zip, OCI layers, Compressed (.gz/.bz2/.xz/.zst)                                                          |
-| **Config**  | Manifests, Jinja2 templates, metadata files                                                                           |
+| **Archive** | ZIP, TAR, 7-Zip, OCI layers, Compressed (.gz/.bz2/.xz/.zst)                                                                           |
+| **Config**  | Manifests, Jinja2 templates, metadata files                                                                                           |
 
 Some "low" risk formats carry higher risk in practice. NeMo files have a known configuration injection vector (CVE-2025-23304). Others increase in risk when wrapped in archives or consumed by buggy loaders.
 
