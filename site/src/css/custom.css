@@ -366,16 +366,22 @@ html:not(.docs-wrapper) .DocSearch {
   background: rgba(201, 42, 42, 0.08);
 }
 
-/* Add breathing room between content and TOC, and widen it slightly */
+/* Add breathing room between content and TOC */
 .theme-doc-toc-desktop {
   padding-left: 1.5rem;
-  min-width: 280px;
 }
 
 /* Constrain doc content area for readability */
 [class*='docMainContainer'] > .container {
   max-width: 1040px;
   margin: 0 auto;
+}
+
+/* When the TOC is hidden (handled in DocItem/Layout), let content fill the space */
+@media (max-width: 1279px) {
+  [class*='docMainContainer'] > .container {
+    max-width: 100%;
+  }
 }
 
 /* Remove pill background from active breadcrumb item */
