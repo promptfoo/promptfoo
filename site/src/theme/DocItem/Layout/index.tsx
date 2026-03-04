@@ -17,9 +17,7 @@ import type { Props } from '@theme/DocItem/Layout';
 const TOC_MIN_WIDTH = 1280;
 
 function useIsWideViewport(): boolean {
-  const [isWide, setIsWide] = React.useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth >= TOC_MIN_WIDTH : true,
-  );
+  const [isWide, setIsWide] = React.useState(true);
 
   React.useEffect(() => {
     const mql = window.matchMedia(`(min-width: ${TOC_MIN_WIDTH}px)`);
