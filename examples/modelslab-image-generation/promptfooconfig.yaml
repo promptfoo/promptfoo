@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare image generation models on ModelsLab
+
+prompts:
+  - 'Generate an image: {{imagePrompt}}'
+
+providers:
+  # Flux - High quality generation
+  - id: modelslab:image:flux
+    config:
+      width: 1024
+      height: 1024
+      num_inference_steps: 30
+      guidance_scale: 7.5
+
+  # SDXL
+  - id: modelslab:image:sdxl
+    config:
+      width: 1024
+      height: 1024
+      num_inference_steps: 25
+      guidance_scale: 7.5
+
+tests:
+  - vars:
+      imagePrompt: 'Professional headshot of a confident business woman, natural lighting, shallow depth of field'
+    assert:
+      - type: contains
+        value: '!['
+      - type: contains
+        value: ']('
+
+  - vars:
+      imagePrompt: 'Majestic mountain landscape at golden hour, dramatic clouds, oil painting style'
+    assert:
+      - type: contains
+        value: '!['
+      - type: contains
+        value: ']('
+
+  - vars:
+      imagePrompt: 'Futuristic cyberpunk cityscape at night, neon lights reflecting on wet streets'
+    assert:
+      - type: contains
+        value: '!['
+      - type: contains
+        value: ']('

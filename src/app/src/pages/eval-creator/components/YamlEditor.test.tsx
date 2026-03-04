@@ -73,6 +73,9 @@ vi.mock('@mui/icons-material/Upload', () => ({
 describe('YamlEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    global.URL.createObjectURL = vi.fn(() => 'blob:yaml-editor-test');
+    global.URL.revokeObjectURL = vi.fn();
+
     // Reset mock to default return value
     mockGetTestSuite.mockReturnValue({
       description: 'Test suite',
@@ -91,9 +94,24 @@ describe('YamlEditor', () => {
 
     expect(screen.getByRole('button', { name: /Save/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Discard Changes/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Download YAML/ })).toBeInTheDocument();
+    expect(screen.getByText('Run in CLI')).toBeInTheDocument();
+    expect(screen.getByText('promptfoo eval -c promptfooconfig.yaml')).toBeInTheDocument();
 
     const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
     expect(editor.disabled).toBe(false);
+  });
+
+  it('downloads the current YAML when Download YAML is clicked', () => {
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    render(<YamlEditorComponent />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Download YAML/ }));
+
+    expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(clickSpy).toHaveBeenCalled();
+    expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:yaml-editor-test');
+    expect(mockShowToast).toHaveBeenCalledWith('Downloaded promptfooconfig.yaml', 'success');
   });
 
   it.skip('switches to edit mode when Edit button is clicked', () => {
@@ -243,6 +261,8 @@ describe('YamlEditor', () => {
     // Action bar should be hidden when readOnly is true
     expect(screen.queryByRole('button', { name: /Save/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Discard Changes/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Download YAML/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Run in CLI')).not.toBeInTheDocument();
 
     // Editor should still be rendered
     const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;

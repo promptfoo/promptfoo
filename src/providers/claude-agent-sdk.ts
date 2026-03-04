@@ -932,6 +932,11 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               sessionId,
               metadata: {
                 toolCalls: toolCallsArray,
+                numTurns: msg.num_turns,
+                durationMs: msg.duration_ms,
+                durationApiMs: msg.duration_api_ms,
+                modelUsage: msg.modelUsage,
+                permissionDenials: msg.permission_denials,
                 ...(msg.structured_output !== undefined
                   ? { structuredOutput: msg.structured_output }
                   : {}),
@@ -948,7 +953,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               cost,
               raw,
               sessionId,
-              metadata: { toolCalls: toolCallsArray },
+              metadata: {
+                toolCalls: toolCallsArray,
+                numTurns: msg.num_turns,
+                durationMs: msg.duration_ms,
+                durationApiMs: msg.duration_api_ms,
+                modelUsage: msg.modelUsage,
+                permissionDenials: msg.permission_denials,
+              },
             };
           }
         }
