@@ -4306,6 +4306,56 @@ describe('runEval', () => {
     expect(context.prompt.config).toEqual({ temperature: 0.9, max_tokens: 100 });
   });
 
+  it('should not leak dynamic prompt config across runEval calls for a shared prompt object', async () => {
+    const promptWithFunction: Prompt = {
+      raw: 'Dynamic prompt {{mode}}',
+      label: 'dynamic-label',
+      config: { top_p: 0.9 },
+      function: async ({ vars }) => ({
+        prompt: `Rendered dynamic prompt for ${vars.mode}`,
+        config:
+          vars.mode === 'first'
+            ? { temperature: 0.5, response_format: { type: 'json_object' } }
+            : { max_tokens: 100 },
+      }),
+    };
+
+    await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: promptWithFunction,
+      test: { vars: { mode: 'first' } },
+      conversations: {},
+      registers: {},
+    });
+
+    await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: promptWithFunction,
+      test: { vars: { mode: 'second' } },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
+
+    const firstCallContext = mockProvider.callApi.mock.calls[0][1];
+    const secondCallContext = mockProvider.callApi.mock.calls[1][1];
+    expect(firstCallContext.prompt.config).toEqual({
+      top_p: 0.9,
+      temperature: 0.5,
+      response_format: { type: 'json_object' },
+    });
+    expect(secondCallContext.prompt.config).toEqual({
+      top_p: 0.9,
+      max_tokens: 100,
+    });
+
+    // The original shared prompt object should remain unchanged.
+    expect(promptWithFunction.config).toEqual({ top_p: 0.9 });
+  });
+
   it('should handle conversation history', async () => {
     const conversations = {} as Record<string, any>;
 

@@ -338,12 +338,26 @@ export async function runEval({
   // Overwrite vars with any saved register values
   Object.assign(vars, registers);
 
-  // Initialize these outside try block so they're in scope for the catch
-  // Merge test.options into prompt.config (test options override prompt config)
-  let mergedPromptConfig = {
-    ...(prompt.config ?? {}),
-    ...(test.options ?? {}),
+  // Prompt functions in renderPrompt can mutate prompt.config. Clone prompt so dynamic
+  // config changes stay scoped to this run and do not leak across test cases.
+  const promptForRender = {
+    ...prompt,
+    config:
+      prompt.config && typeof prompt.config === 'object'
+        ? Array.isArray(prompt.config)
+          ? [...prompt.config]
+          : { ...prompt.config }
+        : prompt.config,
   };
+
+  const getMergedPromptConfig = () => ({
+    ...(promptForRender.config ?? {}),
+    ...(test.options ?? {}),
+  });
+
+  // Initialize these outside try block so they're in scope for the catch.
+  // This is a pre-render fallback used for error paths.
+  let mergedPromptConfig = getMergedPromptConfig();
   const setup = {
     provider: {
       id: provider.id(),
@@ -365,12 +379,15 @@ export async function runEval({
     // For redteam tests, skip rendering the inject variable to prevent double-rendering of
     // attack payloads that may contain template syntax (e.g., {{purpose | trim}})
     const skipRenderVars = isRedteam ? [testSuite?.redteam?.injectVar ?? 'prompt'] : undefined;
-    const renderedPrompt = await renderPrompt(prompt, vars, filters, provider, skipRenderVars);
-    // Prompt functions can mutate prompt.config during render; recompute merged config afterwards.
-    mergedPromptConfig = {
-      ...(prompt.config ?? {}),
-      ...(test.options ?? {}),
-    };
+    const renderedPrompt = await renderPrompt(
+      promptForRender,
+      vars,
+      filters,
+      provider,
+      skipRenderVars,
+    );
+    // Prompt functions may update promptForRender.config during render.
+    mergedPromptConfig = getMergedPromptConfig();
     setup.prompt.config = mergedPromptConfig;
     let renderedJson = undefined;
     try {
@@ -404,7 +421,7 @@ export async function runEval({
       // Create a prompt object with merged config for the provider
       // This allows test.options to override prompt.config for per-test structured output
       const promptWithMergedConfig = {
-        ...prompt,
+        ...promptForRender,
         config: mergedPromptConfig,
       };
       const callApiContext: CallApiContextParams = {
