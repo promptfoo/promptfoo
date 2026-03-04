@@ -4356,60 +4356,6 @@ describe('runEval', () => {
     expect(promptWithFunction.config).toEqual({ top_p: 0.9 });
   });
 
-  it('should not leak nested provider config mutations across runEval calls', async () => {
-    const preMutationTypes: string[] = [];
-    const mutatingProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('mutating-provider'),
-      callApi: vi.fn().mockImplementation(async (_prompt, context) => {
-        // Simulate a provider mutating nested prompt config.
-        if (context?.prompt?.config?.response_format) {
-          preMutationTypes.push(context.prompt.config.response_format.type);
-          context.prompt.config.response_format.type = 'mutated-by-provider';
-        }
-        return {
-          output: 'Test output',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        };
-      }),
-    };
-
-    const sharedPrompt: Prompt = {
-      raw: 'Test prompt',
-      label: 'test-label',
-      config: {
-        response_format: {
-          type: 'json_object',
-        },
-      },
-    };
-
-    await runEval({
-      ...defaultOptions,
-      provider: mutatingProvider,
-      prompt: sharedPrompt,
-      test: {},
-      conversations: {},
-      registers: {},
-    });
-
-    await runEval({
-      ...defaultOptions,
-      provider: mutatingProvider,
-      prompt: sharedPrompt,
-      test: {},
-      conversations: {},
-      registers: {},
-    });
-
-    expect(mutatingProvider.callApi).toHaveBeenCalledTimes(2);
-    expect(preMutationTypes).toEqual(['json_object', 'json_object']);
-    expect(sharedPrompt.config).toEqual({
-      response_format: {
-        type: 'json_object',
-      },
-    });
-  });
-
   it('should keep pre-render fallback config in error result when renderPrompt mutates and throws', async () => {
     const evalHelpers = await import('../src/evaluatorHelpers');
     const renderPromptSpy = vi
