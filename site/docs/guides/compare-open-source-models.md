@@ -243,10 +243,10 @@ After running the evaluation, look for patterns in the results:
 
 Here are a few observations from our tests:
 
-- Gemma tends to respond verbosely and include markdown formatting
-- Llama has a habit of roleplaying (e.g. `*adjusts glasses*`) and prefacing responses with "Of course!"
-- Mistral is less prone to hallucination and less likely to over-censor its outputs
-- Smaller models (7B–8B) are competitive on simple tasks, but larger models (Mixtral, Llama 70B+) pull ahead on reasoning
+- All models handled simple greetings and factual questions well, but diverged on hallucination-prone queries (e.g. hippo swimming ability, Henry VIII's grandchildren)
+- Mistral Nemo hallucinated confidently on the weather question, while Gemma and Llama correctly declined to answer
+- Gemma and Mixtral used heavier markdown formatting (bold headers, nested bullet points), while Mistral Nemo was more concise
+- Mixtral produced the most detailed responses overall, often adding numbered lists and sub-sections unprompted
 
 ## Running Locally with Ollama
 
