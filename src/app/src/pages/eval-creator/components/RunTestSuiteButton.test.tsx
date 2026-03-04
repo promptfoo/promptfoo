@@ -101,7 +101,10 @@ describe('RunTestSuiteButton', () => {
       await vi.advanceTimersByTimeAsync(1500);
     });
 
-    expect(mockShowToast).toHaveBeenCalledWith('An error occurred: HTTP error! status: 500', 'error');
+    expect(mockShowToast).toHaveBeenCalledWith(
+      'An error occurred: HTTP error! status: 500',
+      'error',
+    );
     expect(screen.getByRole('alert')).toHaveTextContent('HTTP error! status: 500');
   });
 
