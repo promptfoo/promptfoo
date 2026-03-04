@@ -95,9 +95,7 @@ tests:
 
 This assertion will use a language model to determine whether the LLM output adheres to the criteria.
 
-In the above example comparing different temperatures, we notice that the model actually _hallucinates_ an incorrect answer to the question about Henry VIII's grandchildren. It gets it correct with low temperature, but incorrect with high temperature:
-
-![GPT model hallucinating incorrect answer at high temperature setting](/img/docs/gpt-temperature-hallucination.png)
+In our tests, the model confidently states that Henry VIII had grandchildren at both temperature settings — which is incorrect. This demonstrates why automated assertions are valuable: they catch factual errors you might miss when manually reviewing outputs. Without the `llm-rubric` check, this hallucination would have gone unnoticed regardless of temperature.
 
 There are many other [assertion types](/docs/configuration/expected-outputs). For example, we can check that the answer to the "space mission risks" question includes all of the following terms:
 
@@ -112,10 +110,6 @@ tests:
         - 'isolation'
         - 'environment'
 ```
-
-In this case, a higher temperature leads to more creative results, but also leads to a mention of "as an AI language model":
-
-![Side-by-side comparison of LLM outputs at different temperature settings in promptfoo web viewer](/img/docs/llm-temperature-comparison-webview.png)
 
 It's worth spending a few minutes to set up these automated checks. They help streamline the evaluation process and quickly identify bad outputs.
 
