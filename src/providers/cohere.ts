@@ -82,6 +82,14 @@ export class CohereChatCompletionProvider implements ApiProvider {
     return `cohere:${this.modelName}`;
   }
 
+  getApiKey(): string | undefined {
+    return this.apiKey || undefined;
+  }
+
+  requiresApiKey(): boolean {
+    return true;
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Merge configs from the provider and the prompt
     const config = {
