@@ -312,6 +312,11 @@ const redTeamSidebar = [
       },
       {
         type: 'doc',
+        label: 'Multi-Input Testing',
+        id: 'red-team/multi-input',
+      },
+      {
+        type: 'doc',
         label: 'Multi-Modal Red Teaming',
         id: 'guides/multimodal-red-team',
       },

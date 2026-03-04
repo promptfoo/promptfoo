@@ -37,6 +37,10 @@ The red team configuration uses the following YAML structure:
 targets:
   - id: openai:gpt-5
     label: customer-service-agent
+    # Multi-input mode: define inputs on the target
+    inputs:
+      user_id: 'The user making the request'
+      message: 'The user message to process'
 
 redteam:
   plugins: Array<string | { id: string, numTests?: number, config?: Record<string, any> }>
