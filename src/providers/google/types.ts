@@ -399,6 +399,7 @@ export interface ClaudeRequest {
   temperature?: number;
   top_p?: number;
   top_k?: number;
+  system?: Array<{ type: string; text: string }>;
   messages: ClaudeMessage[];
 }
 

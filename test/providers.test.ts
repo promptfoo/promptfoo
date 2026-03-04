@@ -484,6 +484,18 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
+  it('should load OpenAI chat provider with model from config when ID has no model', async () => {
+    const provider = await loadApiProvider('openai:chat', {
+      options: {
+        config: {
+          model: 'DeepSeek-R1',
+        },
+      },
+    });
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('DeepSeek-R1', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
   it('should load OpenAI embedding provider', async () => {
     const provider = await loadApiProvider('openai:embedding');
     expect(OpenAiEmbeddingProvider).toHaveBeenCalledWith(
