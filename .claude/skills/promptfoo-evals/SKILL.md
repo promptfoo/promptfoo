@@ -75,6 +75,14 @@ config:
 
 Use file-based tests so they scale: `tests: file://tests/*.yaml`
 
+For larger suites, use dataset-backed tests:
+
+```yaml
+tests: file://tests.csv
+# or
+tests: file://generate_tests.py:create_tests
+```
+
 Every test should have:
 
 - `description` - short, specific
@@ -94,8 +102,26 @@ output format compliance.
 `llm-rubric`, `factuality`, `answer-relevance`, `context-faithfulness`
 
 Assertions support optional `weight` (for scoring relative importance) and
-`threshold` (minimum score to pass, 0-1). Use `metric` to name a custom metric
-for reporting.
+`metric` (named score in reports). `threshold` is assertion-specific: for
+graded assertions it is usually a minimum score (0-1), while for assertions
+like `cost`/`latency` it is a maximum allowed value.
+
+For model-graded assertions, explicitly set the grader provider so grading is
+stable across runs:
+
+```yaml
+defaultTest:
+  options:
+    provider: openai:gpt-5-mini
+
+tests:
+  - description: 'Model-graded quality check'
+    assert:
+      - type: llm-rubric
+        value: 'Accurate and concise'
+        # Optional per-assertion override:
+        # provider: anthropic:messages:claude-sonnet-4-6
+```
 
 **Hallucination / faithfulness pattern:**
 When checking that output is grounded in source material, include the source in
@@ -143,8 +169,21 @@ available and safe to call.
 ```bash
 npx promptfoo@latest validate -c <config>
 npx promptfoo@latest eval -c <config> --no-cache
+npx promptfoo@latest eval -c <config> -o output.json --no-cache
 npx promptfoo@latest view
 ```
+
+For CI/non-UI workflows, prefer the `-o output.json` command and inspect
+`success`, `score`, and `error` fields.
+
+If working in the promptfoo repo itself, prefer the local build:
+
+```bash
+npm run local -- validate -c <config>
+npm run local -- eval -c <config> --no-cache --env-file .env
+```
+
+Do not run `npm run local -- view` unless explicitly asked.
 
 ## Common mistakes
 

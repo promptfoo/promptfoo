@@ -73,8 +73,11 @@ The skill encodes these promptfoo best practices:
 
 - **Deterministic assertions first.** Use `contains`, `is-json`, `javascript` before reaching for `llm-rubric`. Deterministic checks are fast, free, and reproducible.
 - **File-based test organization.** Tests go in `tests/*.yaml` files loaded via `file://tests/*.yaml` glob, keeping configs clean as test count grows.
+- **Dataset-driven scaling.** For larger suites, use `tests: file://tests.csv` or script-generated tests like `file://generate_tests.py:create_tests`.
 - **Faithfulness checks done right.** When using `llm-rubric` to check for hallucination, the source material must be inlined in the rubric via `{{variable}}` so the grader can actually compare.
+- **Pinned grader provider.** Model-graded assertions should explicitly set a grading provider (`defaultTest.options.provider` or `assertion.provider`) for stable scoring.
 - **Environment variables.** Use Nunjucks syntax `'{{env.API_KEY}}'` in YAML configs, not shell syntax.
+- **CI-friendly runs.** Use `promptfoo eval -o output.json --no-cache` and inspect `success`, `score`, and `error`.
 - **Config field ordering.** description, env, prompts, providers, defaultTest, scenarios, tests.
 
 ## Example output

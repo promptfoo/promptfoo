@@ -117,8 +117,26 @@ assert:
   - type: icontains
     value: 'expected text'
     weight: 2 # relative importance for scoring (default: 1)
-    threshold: 0.8 # minimum score to pass, 0-1 (for graded assertions)
+    threshold: 0.8 # assertion-specific (e.g. min score for graded; max for cost/latency)
     metric: 'relevance' # custom metric name for reporting
+```
+
+### Model-graded provider selection
+
+Pin the grader model/provider explicitly for stable scoring:
+
+```yaml
+defaultTest:
+  options:
+    provider: openai:gpt-5-mini
+
+tests:
+  - description: 'Quality check'
+    assert:
+      - type: llm-rubric
+        value: 'Accurate and concise'
+        # Optional per-assertion override:
+        # provider: anthropic:messages:claude-sonnet-4-6
 ```
 
 ## Provider patterns
@@ -276,6 +294,16 @@ When models wrap JSON in markdown fences or add extra text:
     - type: is-json
 ````
 
+### Dataset-driven tests (scale)
+
+```yaml
+# CSV/JSONL/XLSX datasets
+tests: file://tests.csv
+
+# Script-generated tests
+tests: file://generate_tests.py:create_tests
+```
+
 ### Reusable assertion templates
 
 ```yaml
@@ -332,5 +360,18 @@ Always use `--no-cache` during development to avoid stale results.
 ```bash
 npx promptfoo@latest validate -c path/to/promptfooconfig.yaml
 npx promptfoo@latest eval -c path/to/promptfooconfig.yaml --no-cache
+npx promptfoo@latest eval -c path/to/promptfooconfig.yaml -o output.json --no-cache
 npx promptfoo@latest view
 ```
+
+For CI/non-UI workflows, use `-o output.json` and check `success`, `score`, and
+`error` fields.
+
+Inside the promptfoo repo, use the local build:
+
+```bash
+npm run local -- validate -c path/to/promptfooconfig.yaml
+npm run local -- eval -c path/to/promptfooconfig.yaml --no-cache --env-file .env
+```
+
+Do not run `npm run local -- view` unless explicitly asked.
