@@ -135,7 +135,7 @@ describe('ModelsLabImageProvider', () => {
     expect(result.output).toContain('processed-image.jpg');
     expect(mockedFetchWithCache).toHaveBeenCalledTimes(2);
 
-    // Verify poll request uses correct URL and sends API key
+    // Verify poll request uses correct URL, sends API key, and busts cache
     expect(mockedFetchWithCache).toHaveBeenNthCalledWith(
       2,
       'https://modelslab.com/api/v6/images/fetch/req_abc123',
@@ -145,7 +145,7 @@ describe('ModelsLabImageProvider', () => {
       }),
       expect.any(Number),
       'json',
-      false,
+      true,
     );
   });
 

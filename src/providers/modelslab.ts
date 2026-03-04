@@ -244,7 +244,7 @@ export class ModelsLabImageProvider implements ApiProvider {
           },
           REQUEST_TIMEOUT_MS,
           'json',
-          false,
+          true,
         );
 
         const data = pollResponse.data as ModelsLabResponse;

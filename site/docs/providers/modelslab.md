@@ -33,15 +33,9 @@ modelslab:image:<model_name>
 - `modelslab:image:flux` - Flux, high-quality image generation
 - `modelslab:image:sdxl` - Stable Diffusion XL
 
-**Image Editing:**
-
-- `modelslab:image:nano-banana-2-edit` - Google Nano Banana 2 image editor
-- `modelslab:image:seedream-5.0-lite-edit` - Bytedance Seedream 5.0 Lite editor
-- `modelslab:image:grok-imagine-edit` - xAI Grok Imagine image editor
-
 :::info
 
-Browse the full [model catalog](https://modelslab.com/models) for 700+ models including community fine-tunes, video generation, audio, and 3D models.
+Browse the full [model catalog](https://modelslab.com/models) for 700+ models including community fine-tunes.
 
 :::
 

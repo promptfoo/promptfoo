@@ -1048,9 +1048,14 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
       if (modelType === 'image') {
+        if (!modelName) {
+          throw new Error(
+            `Invalid modelslab provider path: ${providerPath}. Model name is required. Use: modelslab:image:<model_name>`,
+          );
+        }
         return new ModelsLabImageProvider(modelName, {
           ...providerOptions,
-          env: context.env,
+          env: providerOptions.env ?? context.env,
         });
       }
       throw new Error(
