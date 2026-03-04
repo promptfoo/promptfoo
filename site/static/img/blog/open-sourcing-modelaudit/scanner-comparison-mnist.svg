@@ -23,7 +23,7 @@
   <rect x="10" y="6" width="520" height="38" rx="10" fill="url(#headerGrad)"/>
   <rect x="10" y="30" width="520" height="14" fill="url(#headerGrad)"/>
   <text x="30" y="31" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="white" fill-opacity="0.7" letter-spacing="0.5">SCANNER</text>
-  <text x="380" y="31" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="white" fill-opacity="0.7" letter-spacing="0.5">RESULT</text>
+  <text x="516" y="31" text-anchor="end" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="white" fill-opacity="0.7" letter-spacing="0.5">RESULT</text>
 
   <!-- Row 1: VirusTotal -->
   <g transform="translate(0, 50)">
