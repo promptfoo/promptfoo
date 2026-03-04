@@ -340,7 +340,7 @@ export async function runEval({
 
   // Initialize these outside try block so they're in scope for the catch
   // Merge test.options into prompt.config (test options override prompt config)
-  const mergedPromptConfig = {
+  let mergedPromptConfig = {
     ...(prompt.config ?? {}),
     ...(test.options ?? {}),
   };
@@ -366,6 +366,12 @@ export async function runEval({
     // attack payloads that may contain template syntax (e.g., {{purpose | trim}})
     const skipRenderVars = isRedteam ? [testSuite?.redteam?.injectVar ?? 'prompt'] : undefined;
     const renderedPrompt = await renderPrompt(prompt, vars, filters, provider, skipRenderVars);
+    // Prompt functions can mutate prompt.config during render; recompute merged config afterwards.
+    mergedPromptConfig = {
+      ...(prompt.config ?? {}),
+      ...(test.options ?? {}),
+    };
+    setup.prompt.config = mergedPromptConfig;
     let renderedJson = undefined;
     try {
       renderedJson = JSON.parse(renderedPrompt);
