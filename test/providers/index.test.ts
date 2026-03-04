@@ -777,9 +777,10 @@ describe('loadApiProvider', () => {
     await expect(loadApiProvider('modelslab:image:')).rejects.toThrow(/Model name is required/);
   });
 
-  it('loadApiProvider with modelslab:image passes provider-level env', async () => {
+  it('loadApiProvider with modelslab:image prefers provider-level env over context env', async () => {
     const provider = await loadApiProvider('modelslab:image:flux', {
-      env: { MODELSLAB_API_KEY: 'provider-key' },
+      options: { env: { MODELSLAB_API_KEY: 'provider-key' } },
+      env: { MODELSLAB_API_KEY: 'context-key' } as any,
     });
     expect((provider as any).apiKey).toBe('provider-key');
   });

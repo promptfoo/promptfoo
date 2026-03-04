@@ -35,7 +35,7 @@ modelslab:image:<model_name>
 
 :::info
 
-Browse the full [model catalog](https://modelslab.com/models) for 700+ models including community fine-tunes.
+Browse the full [model catalog](https://modelslab.com/models) for community fine-tunes and additional models.
 
 :::
 
