@@ -162,7 +162,7 @@ _Note: We build Promptfoo. We include competitors and link to their docs for bal
 - CLI and polished web interface with model-agnostic testing
 - Deep Python integration alongside JavaScript/TypeScript support
 - Flexible YAML/JSON configuration with programmatic APIs
-- [Agent tracing and debugging capabilities](https://www.promptfoo.dev/docs/guides/agent-eval/) for complex workflows
+- [Agent tracing and debugging capabilities](https://www.promptfoo.dev/docs/guides/evaluate-coding-agents/) for complex workflows
 - [Multi-turn testing via plugins](https://www.promptfoo.dev/docs/red-team/strategies/multi-turn/) and attack strategies
 - **Adaptive red teaming**: Smart AI agents generate context-specific attacks from the start, not static prompt lists
 - Active community with extensive plugin ecosystem

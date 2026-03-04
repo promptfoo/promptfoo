@@ -1,19 +1,20 @@
 ---
-sidebar_label: 'gpt-5 vs o1'
-description: 'Benchmark OpenAI o1 reasoning models against GPT-4 for cost, latency, and accuracy to optimize model selection decisions'
+sidebar_label: 'GPT-5.2 vs o3'
+description: 'Benchmark OpenAI o3 reasoning model against GPT-5.2 for cost, latency, and accuracy to optimize model selection decisions'
+slug: gpt-vs-reasoning-model
 ---
 
-# gpt-5 vs o1: Benchmark on Your Own Data
+# GPT-5.2 vs o3: Benchmark on Your Own Data
 
-OpenAI has released a new model series called o1 designed to spend more time thinking before responding and excel at complex reasoning tasks.
+OpenAI's o3 is a reasoning model designed to spend more time thinking before responding, excelling at complex math and logic tasks.
 
-While it scores higher on generic benchmarks, there are many real-world cases where gpt-5 is still the better choice.
+GPT-5.2 outperforms o3 on most general benchmarks, but o3 still leads on deep reasoning tasks like advanced math and multi-step logic problems.
 
-This guide describes through how to compare `o1-preview` and `o1-mini` against `gpt-5` using promptfoo, with a focus on performance, cost, and latency.
+This guide describes how to compare `o3` against `gpt-5.2` using promptfoo, with a focus on performance, cost, and latency.
 
 The end result will be a side-by-side comparison that looks similar to this:
 
-![o1 vs gpt-5 comparison](/img/docs/o1-vs-gpt.png)
+![o3 vs gpt-5.2 comparison](/img/docs/o1-vs-gpt.jpg)
 
 ## Prerequisites
 
@@ -27,12 +28,13 @@ Before we begin, you'll need:
 Create a new directory for your comparison project:
 
 ```sh
-npx promptfoo@latest init openai-o1-comparison
+mkdir openai-o3-comparison
+cd openai-o3-comparison
 ```
 
 ## Step 2: Configure the Comparison
 
-Edit the `promptfooconfig.yaml` file to define your comparison.
+Create a `promptfooconfig.yaml` file to define your comparison.
 
 1. **Prompts**:
    Define the prompt template that will be used for all test cases. In this example, we're using riddles:
@@ -45,16 +47,16 @@ Edit the `promptfooconfig.yaml` file to define your comparison.
    The `{{riddle}}` placeholder will be replaced with specific riddles in each test case.
 
 1. **Providers**:
-   Specify the models you want to compare. In this case, we're comparing gpt-5 and o1-preview:
+   Specify the models you want to compare. In this case, we're comparing gpt-5.2 and o3:
 
    ```yaml
    providers:
-     - openai:gpt-5
-     - openai:o1-preview
+     - openai:gpt-5.2
+     - openai:o3
    ```
 
 1. **Default Test Assertions**:
-   Set up default assertions that will apply to all test cases. Given the cost and speed of o1, we're setting thresholds for cost and latency:
+   Set up default assertions that will apply to all test cases. Given the cost and speed of o3, we're setting thresholds for cost and latency:
 
    ```yaml
    defaultTest:
@@ -94,12 +96,12 @@ Edit the `promptfooconfig.yaml` file to define your comparison.
 Now, let's put it all together in the final configuration:
 
 ```yaml title="promptfooconfig.yaml"
-description: 'GPT 4o vs o1 comparison'
+description: 'GPT-5.2 vs o3 comparison'
 prompts:
   - 'Solve this riddle: {{riddle}}'
 providers:
-  - openai:gpt-5
-  - openai:o1-preview
+  - openai:gpt-5.2
+  - openai:o3
 defaultTest:
   assert:
     # Inference should always cost less than this (USD)
@@ -131,7 +133,7 @@ tests:
         value: "output must state that the surgeon is the boy's father"
 ```
 
-This configuration sets up a comprehensive comparison between gpt-5 and o1-preview using a variety of riddles, with cost and latency requirements. We strongly encourage you to revise this with your own test cases and assertions!
+This configuration sets up a comprehensive comparison between gpt-5.2 and o3 using a variety of riddles, with cost and latency requirements. We strongly encourage you to revise this with your own test cases and assertions!
 
 ## Step 3: Run the Comparison
 
@@ -149,12 +151,12 @@ To view the results in a web interface, run:
 npx promptfoo@latest view
 ```
 
-![o1 vs gpt-5 comparison](/img/docs/o1-vs-gpt.png)
+![o3 vs gpt-5.2 comparison](/img/docs/o1-vs-gpt.jpg)
 
 ## What's next?
 
-By running this comparison, you'll gain insights into how the o1-class models perform against gpt-5 on tasks requiring logical reasoning and problem-solving. You'll also see the trade-offs in terms of cost and latency.
+By running this comparison, you'll gain insights into how o3 performs against gpt-5.2 on tasks requiring logical reasoning and problem-solving. You'll also see the trade-offs in terms of cost and latency.
 
-In this case, gpt-5 outperforms o1 because answering a simple riddle in some cases costs over 4 cents! This limits its viability for production use cases, but we're sure that OpenAI will continue to slash inference costs in the future.
+Reasoning models like o3 excel at complex multi-step problems, but for simpler tasks the extra thinking time and cost may not be worth it. GPT-5.2 is often the better choice when speed and cost matter more than deep reasoning.
 
 Ultimately, the best model is going to depend a lot on your application. There's no substitute for testing these models on your own data, rather than relying on general-purpose benchmarks.
