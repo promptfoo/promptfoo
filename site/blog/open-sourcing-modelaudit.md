@@ -271,12 +271,12 @@ Lower-risk formats get lighter analysis. The safetensors scanner validates struc
 
 ### Coverage by risk level
 
-Scanner depth varies with risk. The pickle opcode analyzer is the deepest; the safetensors scanner mostly validates integrity.
+Scanner depth varies with risk. The pickle opcode analyzer is the deepest; the safetensors scanner mostly validates integrity. Risk level reflects likelihood of code execution or file system impact during loading:
 
 | Risk Level  | Formats                                                                                                                               |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | **High**    | Pickle, PyTorch (.pt/.pth/.ckpt/.bin), Joblib, NumPy, Skops, Torch7, Llamafile                                                        |
-| **Medium**  | TensorFlow SavedModel, TF MetaGraph, Keras (.h5/.keras), ONNX, XGBoost, LightGBM, CatBoost, TorchServe MAR, NeMo                      |
+| **Medium**  | TensorFlow SavedModel, TF MetaGraph, Keras (.h5/.keras), ONNX, XGBoost, LightGBM, CatBoost, TorchServe MAR                            |
 | **Low**     | SafeTensors, GGUF/GGML, JAX/Flax, TFLite, ExecuTorch, TensorRT, PaddlePaddle, OpenVINO, CoreML, MXNet, RKNN, CNTK, R Serialized, PMML |
 | **Archive** | ZIP, TAR, 7-Zip, OCI layers, Compressed (.gz/.bz2/.xz/.zst)                                                                           |
 | **Config**  | Manifests, Jinja2 templates, metadata files                                                                                           |
