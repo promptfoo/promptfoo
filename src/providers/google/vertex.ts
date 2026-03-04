@@ -267,8 +267,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
       messages: extractedMessages as ClaudeRequest['messages'],
     };
 
+    const showThinking = this.config.showThinking ?? isThinkingEnabled;
+
     const cache = await getCache();
-    const cacheKey = `vertex:claude:${this.modelName}:${JSON.stringify(body)}`;
+    const cacheKey = `vertex:claude:${this.modelName}:showThinking=${showThinking}:${JSON.stringify(body)}`;
 
     let cachedResponse;
     if (isCacheEnabled()) {
@@ -316,7 +318,6 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     try {
-      const showThinking = this.config.showThinking ?? isThinkingEnabled;
       const output = outputFromMessage(data as any, showThinking);
 
       if (!output) {
