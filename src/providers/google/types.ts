@@ -110,7 +110,7 @@ export interface Tool {
 }
 
 export interface ClaudeThinkingConfig {
-  type: string;
+  type: 'enabled' | 'disabled';
   budget_tokens?: number;
 }
 
@@ -149,6 +149,7 @@ export interface CompletionOptions {
   topK?: number;
   top_k?: number; // Alternative format for Claude models
   thinking?: ClaudeThinkingConfig; // Extended thinking for Claude models
+  showThinking?: boolean; // Whether to include thinking output for Claude models
 
   // Imagen image generation options
   n?: number; // Number of images to generate
@@ -423,10 +424,7 @@ export interface ClaudeResponse {
   type: string;
   role: string;
   model: string;
-  content: Array<{
-    type: string;
-    text: string;
-  }>;
+  content: ClaudeContentBlock[];
   stop_reason: string;
   stop_sequence: string | null;
   usage: {

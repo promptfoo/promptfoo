@@ -11,7 +11,12 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
-import { calculateAnthropicCost, getTokenUsage, parseMessages } from '../anthropic/util';
+import {
+  calculateAnthropicCost,
+  getTokenUsage,
+  outputFromMessage,
+  parseMessages,
+} from '../anthropic/util';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
@@ -34,7 +39,7 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/index';
-import type { ClaudeRequest, ClaudeResponse } from './types';
+import type { ClaudeRequest, ClaudeResponse, ClaudeThinkingConfig } from './types';
 import type {
   GeminiApiResponse,
   GeminiErrorResponse,
@@ -220,14 +225,23 @@ export class VertexChatProvider extends GoogleGenericProvider {
   async callClaudeApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
     const { system, extractedMessages, thinking } = parseMessages(prompt);
 
-    const thinkingConfig = this.config.thinking || thinking;
+    const thinkingConfig: ClaudeThinkingConfig | undefined =
+      this.config.thinking || (thinking as ClaudeThinkingConfig | undefined);
+
+    let maxTokens = this.config.max_tokens || this.config.maxOutputTokens || 0;
+    if (!maxTokens) {
+      maxTokens = thinkingConfig ? 2048 : 512;
+    }
+    // Claude requires max_tokens >= budget_tokens when thinking is enabled
+    if (thinkingConfig?.budget_tokens && maxTokens < thinkingConfig.budget_tokens) {
+      maxTokens = thinkingConfig.budget_tokens + 1024;
+    }
 
     const body: ClaudeRequest = {
       anthropic_version:
         this.config.anthropicVersion || this.config.anthropic_version || 'vertex-2023-10-16',
       stream: false,
-      max_tokens:
-        this.config.max_tokens || this.config.maxOutputTokens || (thinkingConfig ? 2048 : 512),
+      max_tokens: maxTokens,
       temperature: this.config.temperature,
       top_p: this.config.top_p || this.config.topP,
       top_k: this.config.top_k || this.config.topK,
@@ -285,10 +299,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     try {
-      const output = (data.content ?? [])
-        .filter((part) => part.type === 'text')
-        .map((part) => part.text)
-        .join('');
+      const showThinking = this.config.showThinking ?? !!thinkingConfig;
+      const output = outputFromMessage(data as any, showThinking);
 
       if (!output) {
         return {
@@ -301,12 +313,15 @@ export class VertexChatProvider extends GoogleGenericProvider {
         numRequests: 1,
       };
 
+      // Normalize Vertex model names (e.g. claude-3-5-sonnet-v2@20241022 → claude-3-5-sonnet-20241022)
+      const normalizedModelName = this.modelName.replace(/-v\d+@/, '-').replace('@', '-');
+
       const response = {
         cached: false,
         output,
         tokenUsage,
         cost: calculateAnthropicCost(
-          this.modelName,
+          normalizedModelName,
           this.config,
           data.usage?.input_tokens,
           data.usage?.output_tokens,

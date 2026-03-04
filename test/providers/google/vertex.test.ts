@@ -2193,7 +2193,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       ]);
     });
 
-    it('should forward thinking config from prompt', async () => {
+    it('should forward thinking config from prompt and not leak metadata into messages', async () => {
       await provider.callClaudeApi(
         JSON.stringify([
           { role: 'user', content: 'Solve this step by step' },
@@ -2203,7 +2203,12 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
 
       const requestData = getRequestData();
       expect(requestData.thinking).toEqual({ type: 'enabled', budget_tokens: 5000 });
-      expect(requestData.max_tokens).toBe(2048);
+      // max_tokens must be >= budget_tokens
+      expect(requestData.max_tokens).toBe(6024);
+      // Metadata entries (no role) must not leak into messages
+      expect(requestData.messages).toEqual([
+        { role: 'user', content: [{ type: 'text', text: 'Solve this step by step' }] },
+      ]);
     });
 
     it('should prefer config thinking over prompt thinking', async () => {
@@ -2221,10 +2226,13 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         ]),
       );
 
-      expect(getRequestData().thinking).toEqual({ type: 'enabled', budget_tokens: 10000 });
+      const requestData = getRequestData();
+      expect(requestData.thinking).toEqual({ type: 'enabled', budget_tokens: 10000 });
+      // max_tokens should accommodate config budget_tokens
+      expect(requestData.max_tokens).toBe(11024);
     });
 
-    it('should increase default max_tokens when thinking is enabled', async () => {
+    it('should ensure max_tokens >= budget_tokens when thinking is enabled', async () => {
       provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
         config: {
           thinking: { type: 'enabled', budget_tokens: 5000 },
@@ -2234,13 +2242,70 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
 
       await provider.callClaudeApi('Hello');
 
-      expect(getRequestData().max_tokens).toBe(2048);
+      // Default would be 2048 but budget_tokens is 5000, so it must be bumped
+      expect(getRequestData().max_tokens).toBe(6024);
+    });
+
+    it('should use explicit max_tokens when it exceeds budget_tokens', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+          max_tokens: 16384,
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      expect(getRequestData().max_tokens).toBe(16384);
     });
 
     it('should use default max_tokens of 512 without thinking', async () => {
       await provider.callClaudeApi('Hello');
 
       expect(getRequestData().max_tokens).toBe(512);
+    });
+
+    it('should include thinking output in response when thinking is enabled', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: { thinking: { type: 'enabled', budget_tokens: 5000 } },
+      });
+      setupClaudeMocks();
+
+      // Override mock response AFTER setupClaudeMocks creates the new mockRequest
+      mockRequest.mockResolvedValue({
+        data: {
+          id: 'test-id',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude-3-5-sonnet-v2@20241022',
+          content: [
+            { type: 'thinking', thinking: 'Let me think...', signature: 'sig123' },
+            { type: 'text', text: 'The answer is 42' },
+          ],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: {
+            input_tokens: 20,
+            output_tokens: 50,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+          },
+        },
+      });
+
+      const result = await provider.callClaudeApi('Think about this');
+
+      expect(result.output).toContain('Thinking: Let me think...');
+      expect(result.output).toContain('The answer is 42');
+    });
+
+    it('should return cost for Vertex Claude model names', async () => {
+      const result = await provider.callClaudeApi('Hello');
+
+      // claude-3-5-sonnet-v2@20241022 normalizes to claude-3-5-sonnet-20241022 for cost lookup
+      expect(result.cost).toBeDefined();
+      expect(result.cost).toBeGreaterThan(0);
     });
   });
 
