@@ -3,7 +3,7 @@ description: 'GPT vs Claude vs Gemini comparison'
 
 providers:
   - openai:gpt-5.2
-  - anthropic:messages:claude-sonnet-4-6
+  - anthropic:claude-sonnet-4-6
   - google:gemini-3.1-pro-preview
 
 prompts:
