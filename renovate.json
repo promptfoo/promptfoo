@@ -214,6 +214,11 @@
       "groupName": "undici"
     },
     {
+      "description": "Keep dedent in sync across all workspaces",
+      "matchPackageNames": ["dedent"],
+      "groupName": "dedent"
+    },
+    {
       "description": "Group all @types packages together",
       "matchPackagePatterns": ["^@types/"],
       "groupName": "Type definitions",

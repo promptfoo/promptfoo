@@ -10,12 +10,20 @@ const renderWithProvider = (ui: React.ReactElement) => {
   return render(<EvalHistoryProvider>{ui}</EvalHistoryProvider>);
 };
 
+const mockShowToast = vi.fn();
+
 vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
 }));
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+}));
+
+vi.mock('@app/hooks/useToast', () => ({
+  useToast: () => ({
+    showToast: mockShowToast,
+  }),
 }));
 
 describe('RunTestSuiteButton', () => {
@@ -64,7 +72,6 @@ describe('RunTestSuiteButton', () => {
   it('should handle progress API failure after job creation', async () => {
     const mockJobId = '123';
     const mockCallApi = vi.mocked(callApi);
-    const mockAlert = vi.spyOn(window, 'alert').mockImplementation(() => {});
 
     mockCallApi
       .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockJobId }) } as any)
@@ -94,15 +101,15 @@ describe('RunTestSuiteButton', () => {
       await vi.advanceTimersByTimeAsync(1500);
     });
 
-    expect(mockAlert).toHaveBeenCalledWith(`An error occurred: HTTP error! status: 500`);
-
-    mockAlert.mockRestore();
+    expect(mockShowToast).toHaveBeenCalledWith(
+      'An error occurred: HTTP error! status: 500',
+      'error',
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('HTTP error! status: 500');
   });
 
   it('should revert to non-running state and display an error message when the initial API call fails', async () => {
     const errorMessage = 'Failed to submit test suite';
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
 
     // Mock callApi to reject with an error
     vi.mocked(callApi).mockRejectedValue(new Error(errorMessage));
@@ -120,15 +127,14 @@ describe('RunTestSuiteButton', () => {
     vi.useRealTimers();
     await userEvent.click(button);
 
-    // Wait for the alert to be called
+    // Wait for toast + inline error to update
     await waitFor(() => {
-      expect(alertMock).toHaveBeenCalledWith(`An error occurred: ${errorMessage}`);
+      expect(mockShowToast).toHaveBeenCalledWith(`An error occurred: ${errorMessage}`, 'error');
+      expect(screen.getByRole('alert')).toHaveTextContent(errorMessage);
     });
 
     expect(screen.getByRole('button', { name: 'Run Eval' })).toBeInTheDocument();
 
-    alertMock.mockRestore();
-    consoleErrorSpy.mockRestore();
     vi.useFakeTimers();
   });
 });
