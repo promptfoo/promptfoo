@@ -436,7 +436,7 @@ The VLGuard plugin provides an alternative dataset for multi-modal safety testin
 description: VLGuard Multi-Modal Model Evaluation
 
 targets:
-  - id: openai:gpt-4o
+  - id: openai:gpt-5
     label: multimodal-model
 
 prompts:

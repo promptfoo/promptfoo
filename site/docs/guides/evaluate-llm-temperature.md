@@ -28,29 +28,23 @@ By running a temperature eval, you can make data-driven decisions that balance t
 
 ## Prerequisites
 
-Before setting up an evaluation to compare the performance of your LLM at different temperatures, you'll need to initialize a configuration file. Run the following command to create a `promptfooconfig.yaml` file:
-
-```sh
-npx promptfoo@latest init
-```
-
-This command sets up a basic configuration file in your current directory, which you can then customize for your evaluation needs. For more information on getting started with promptfoo, refer to the [getting started guide](/docs/getting-started).
+Before setting up an evaluation, create a new directory and a `promptfooconfig.yaml` file. For more information on getting started with promptfoo, refer to the [getting started guide](/docs/getting-started).
 
 ## Evaluating
 
-Here's an example configuration that compares the outputs of gpt-5-mini at a low temperature (0.2) and a high temperature (0.9):
+Here's an example configuration that compares the outputs of Claude Sonnet 4.6 at a low temperature (0.2) and a high temperature (0.9):
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
   - 'Respond to the following instruction: {{message}}'
 
 providers:
-  - id: openai:gpt-5-mini
-    label: openai-gpt-5-mini-lowtemp
+  - id: anthropic:claude-sonnet-4-6
+    label: claude-sonnet-lowtemp
     config:
       temperature: 0.2
-  - id: openai:gpt-5-mini
-    label: openai-gpt-5-mini-hightemp
+  - id: anthropic:claude-sonnet-4-6
+    label: claude-sonnet-hightemp
     config:
       temperature: 0.9
 
@@ -67,7 +61,7 @@ tests:
 
 In the above configuration, we just use a boilerplate prompt because we're more interested in comparing the different models.
 
-We define two providers that call the same model (gpt-5-mini) with different temperature settings. The `id` field helps us distinguish between the two when reviewing the results.
+We define two providers that call the same model (Claude Sonnet 4.6) with different temperature settings. The `label` field helps us distinguish between the two when reviewing the results.
 
 The `tests` section includes our test cases that will be run against both temperature settings.
 
@@ -101,9 +95,7 @@ tests:
 
 This assertion will use a language model to determine whether the LLM output adheres to the criteria.
 
-In the above example comparing different temperatures, we notice that gpt-5-mini actually _hallucinates_ an incorrect answer to the question about Henry VIII's grandchildren. It gets it correct with low temperature, but incorrect with high temperature:
-
-![GPT model hallucinating incorrect answer at high temperature setting](/img/docs/gpt-temperature-hallucination.png)
+In our tests, the model confidently states that Henry VIII had grandchildren at both temperature settings — which is incorrect. This demonstrates why automated assertions are valuable: they catch factual errors you might miss when manually reviewing outputs. Without the `llm-rubric` check, this hallucination would have gone unnoticed regardless of temperature.
 
 There are many other [assertion types](/docs/configuration/expected-outputs). For example, we can check that the answer to the "space mission risks" question includes all of the following terms:
 
@@ -119,10 +111,6 @@ tests:
         - 'environment'
 ```
 
-In this case, a higher temperature leads to more creative results, but also leads to a mention of "as an AI language model":
-
-![Side-by-side comparison of LLM outputs at different temperature settings in promptfoo web viewer](/img/docs/llm-temperature-comparison-webview.png)
-
 It's worth spending a few minutes to set up these automated checks. They help streamline the evaluation process and quickly identify bad outputs.
 
 After the evaluation is complete, you can use the web viewer to review the outputs and compare the performance at different temperatures:
@@ -133,27 +121,9 @@ npx promptfoo@latest view
 
 ## Evaluating randomness
 
-LLMs are inherently nondeterministic, which means their outputs will vary with each call at nonzero temperatures (and sometimes even at zero temperature). OpenAI introduced the `seed` variable to improve reproducibility of outputs, and other providers will probably follow suit.
+LLMs are inherently nondeterministic, which means their outputs will vary with each call at nonzero temperatures (and sometimes even at zero temperature).
 
-Set a constant seed in the provider config:
-
-```yaml
-providers:
-  - id: openai:gpt-5-mini
-    label: openai-gpt-5-mini-lowtemp
-    config:
-      temperature: 0.2
-      // highlight-next-line
-      seed: 0
-  - id: openai:gpt-5-mini
-    label: openai-gpt-5-mini-hightemp
-    config:
-      temperature: 0.9
-      // highlight-next-line
-      seed: 0
-```
-
-The `eval` command also has a parameter, `repeat`, which runs each test multiple times:
+The `eval` command has a parameter, `repeat`, which runs each test multiple times:
 
 ```
 promptfoo eval --repeat 3

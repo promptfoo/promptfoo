@@ -51,7 +51,7 @@ npx promptfoo@latest eval -c promptfooconfig.yaml
 - Validates models don't refuse legitimate queries
 - Demonstrates prompt format differences (Llama vs OpenAI)
 
-**Tutorial**: See the accompanying guide at https://promptfoo.dev/docs/guides/llama2-uncensored-benchmark-ollama/
+**Tutorial**: See the accompanying guide at https://promptfoo.dev/docs/guides/censored-vs-uncensored-ollama/
 
 ### 2. Function Calling
 
