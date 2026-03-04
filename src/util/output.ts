@@ -12,6 +12,7 @@ import logger from '../logger';
 import { streamEvalCsv } from '../server/utils/evalTableUtils';
 import { type CsvRow, type OutputFile, OutputFileExtension, ResultFailureReason } from '../types';
 import invariant from './invariant';
+import { sanitizeObject } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
@@ -41,6 +42,10 @@ const outputToSimpleString = (output: EvaluateTableOutput) => {
       ${gradingResultText}
     `.trim();
 };
+
+function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
+  return sanitizeObject(config, { context: 'output config' }) as OutputFile['config'];
+}
 
 export function createOutputMetadata(evalRecord: Eval) {
   let evaluationCreatedAt: string | undefined;
@@ -77,10 +82,11 @@ async function writeJsonOutputSafely(
 
   try {
     const summary = await evalRecord.toEvaluateSummary();
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
     const outputData: OutputFile = {
       evalId: evalRecord.id,
       results: summary,
-      config: evalRecord.config,
+      config: redactedConfig,
       shareableUrl,
       metadata,
     };
@@ -144,6 +150,7 @@ export async function writeOutput(
   await fsPromises.mkdir(outputDir, { recursive: true });
 
   const metadata = createOutputMetadata(evalRecord);
+  const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
 
   if (outputExtension === 'csv') {
     // Use streamEvalCsv for memory-efficient CSV generation
@@ -168,7 +175,7 @@ export async function writeOutput(
       yaml.dump({
         evalId: evalRecord.id,
         results: summary,
-        config: evalRecord.config,
+        config: redactedConfig,
         shareableUrl,
         metadata,
       } as OutputFile),
@@ -189,7 +196,7 @@ export async function writeOutput(
       ...table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
     ];
     const htmlOutput = getNunjucksEngine().renderString(template, {
-      config: evalRecord.config,
+      config: redactedConfig,
       table: htmlTable,
       results: summary,
     });
@@ -238,7 +245,7 @@ export async function writeOutput(
       promptfoo: {
         evalId: evalRecord.id,
         results: sanitizeForXml(summary),
-        config: sanitizeForXml(evalRecord.config),
+        config: sanitizeForXml(redactedConfig),
         shareableUrl: shareableUrl || '',
       },
     });

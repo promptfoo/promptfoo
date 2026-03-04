@@ -37,6 +37,8 @@ export const SECRET_FIELD_NAMES = new Set([
   'authtoken',
   'clientsecret',
   'webhooksecret',
+  'anthropicapikey',
+  'awsbearertokenbedrock',
   'authorization',
   'auth',
   'bearer',

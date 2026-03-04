@@ -553,6 +553,12 @@ tests:
 
 Environment variables are resolved at config load time (not runtime) and can control file paths and API keys—only use them in trusted environments.
 
+:::warning
+Avoid copying secrets into `config.env` with templates like `ANTHROPIC_API_KEY: '{{ env.ANTHROPIC_API_KEY }}'`. This resolves the secret into the eval config object and may appear in exported results.
+
+If a secret is already present in your shell environment (or loaded via `--env-file`), prefer reading it directly from process env and keep `config.env` for non-sensitive flags.
+:::
+
 ## Tools and Functions
 
 promptfoo supports tool use and function calling with Google, OpenAI and Anthropic models, as well as other provider-specific configurations like temperature and number of tokens. For more information on defining functions and tools, see the [Google Vertex provider docs](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider docs](/docs/providers/google/#tool-calling), [Google Live provider docs](/docs/providers/google#function-calling-example), [OpenAI provider docs](/docs/providers/openai#using-tools) and the [Anthropic provider docs](/docs/providers/anthropic#tool-calling).
