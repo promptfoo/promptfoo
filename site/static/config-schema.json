@@ -347,6 +347,9 @@
         "MISTRAL_API_KEY": {
           "type": "string"
         },
+        "MODELSLAB_API_KEY": {
+          "type": "string"
+        },
         "NSCALE_SERVICE_TOKEN": {
           "type": "string"
         },
@@ -1630,6 +1633,9 @@
                       "type": "string"
                     },
                     "MISTRAL_API_KEY": {
+                      "type": "string"
+                    },
+                    "MODELSLAB_API_KEY": {
                       "type": "string"
                     },
                     "NSCALE_SERVICE_TOKEN": {
