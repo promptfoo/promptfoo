@@ -71,10 +71,10 @@ describe('shouldShareResults', () => {
       expect(shouldShareResults({})).toBe(false);
     });
 
-    it('should return false when cloud is enabled but sharing is undefined', () => {
+    it('should return true when cloud is enabled but sharing is undefined (pre-migration backward compat)', () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(cloudConfig.getSharing).mockReturnValue(undefined);
-      expect(shouldShareResults({})).toBe(false);
+      expect(shouldShareResults({})).toBe(true);
     });
 
     it('should return false when cloud is enabled but sharing is false', () => {

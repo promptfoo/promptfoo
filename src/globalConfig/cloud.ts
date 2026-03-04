@@ -120,6 +120,11 @@ export class CloudConfig {
     return this.config.sharing;
   }
 
+  /**
+   * Sets the sharing preference. Note: this value is only updated at authentication time
+   * (via `validateAndSetApiToken`) and may become stale if the user's license status
+   * changes between re-authentications.
+   */
   setSharing(sharing: boolean): void {
     this.config.sharing = sharing;
     this.saveConfig();
