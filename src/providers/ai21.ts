@@ -107,6 +107,10 @@ export class AI21ChatCompletionProvider implements ApiProvider {
     );
   }
 
+  requiresApiKey(): boolean {
+    return true;
+  }
+
   getApiKey(): string | undefined {
     logger.debug(`AI21 apiKeyenvar: ${this.config.apiKeyEnvar}`);
     return (
