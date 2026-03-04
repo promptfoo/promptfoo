@@ -43,18 +43,19 @@ HLE addresses benchmark saturation - the phenomenon where advanced models achiev
 - Questions resist simple web search solutions
 - Focuses on verifiable, closed-ended problems
 
-**Current model performance:**
+**Current model performance (from the [Scale AI leaderboard](https://scale.com/leaderboard/humanitys_last_exam)):**
 
-| Model                | Accuracy | Notes                      |
-| -------------------- | -------- | -------------------------- |
-| OpenAI Deep Research | 26.6%    | With search capabilities   |
-| o4-mini              | ~13%     | Official benchmark results |
-| DeepSeek-R1          | 8.5%     | Text-only evaluation       |
-| o3                   | ~9%      | Reasoning model            |
-| Gemini 2.0 Flash     | 6.6%     | Multimodal support         |
-| Claude Sonnet 4.6    | ~5%      | Latest Claude model        |
-
-_Official model performance on full HLE dataset_
+| Model                          | Accuracy | Notes                  |
+| ------------------------------ | -------- | ---------------------- |
+| Gemini 3 Pro Preview           | 37.5%    | Current leader         |
+| Claude Opus 4.6 (Thinking Max) | 34.4%    | Extended thinking mode |
+| GPT-5 Pro                      | 31.6%    | Reasoning model        |
+| GPT-5.2                        | 27.8%    | Standard model         |
+| o3 (high)                      | 20.3%    | Reasoning model        |
+| o4-mini (high)                 | 18.1%    | Reasoning model        |
+| DeepSeek-R1                    | 9.4%     | Text-only evaluation   |
+| Gemini 2.0 Flash Thinking      | 6.6%     | Multimodal support     |
+| Claude Sonnet 4                | 5.5%     | Non-thinking mode      |
 
 ## Running the Eval
 

@@ -162,6 +162,6 @@ npx promptfoo@latest eval -o results.csv
 
 The comparison will provide you with a side-by-side performance view of Mixtral, GPT-5-mini, and GPT-5 based on your test cases. Use this data to make informed decisions about which LLM best suits your application.
 
-While public benchmarks like [Chatbot Arena](https://lmarena.ai/) tell you how these models perform on _generic_ tasks, they are no substitute for running a benchmark on your _own_ data and use cases.
+While public benchmarks like [Arena](https://lmarena.ai/) tell you how these models perform on _generic_ tasks, they are no substitute for running a benchmark on your _own_ data and use cases.
 
 The examples above highlighted a few cases where GPT outperforms Mixtral: notably, GPT-5 was better at following JSON output instructions. But, GPT-5-mini had the highest eval score because of the latency requirements that we added to one of the test cases. Overall, the best choice is going to depend largely on the test cases that you construct and your own application constraints.

@@ -184,4 +184,4 @@ npx promptfoo@latest eval -o results.csv
 
 The comparison will provide you with a side-by-side performance view of Qwen, GPT-5, and Llama based on your customer support chatbot test cases. Use this data to make informed decisions about which LLM best suits your application.
 
-While public benchmarks like [Chatbot Arena](https://lmarena.ai/?leaderboard) tell you how these models perform on generic tasks, they are no substitute for running a benchmark on your own data and use cases. The best choice will depend largely on the specific requirements and constraints of your application.
+While public benchmarks like [Arena](https://lmarena.ai/?leaderboard) tell you how these models perform on generic tasks, they are no substitute for running a benchmark on your own data and use cases. The best choice will depend largely on the specific requirements and constraints of your application.
