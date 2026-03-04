@@ -35,7 +35,21 @@ export default function EstimatedProbesDisplay({
           <TooltipTrigger asChild>
             <Info className="size-4 cursor-help text-muted-foreground" />
           </TooltipTrigger>
-          <TooltipContent>{tooltipContent}</TooltipContent>
+          <TooltipContent className="max-w-sm text-sm">
+            <div className="space-y-2">
+              <p>{tooltipContent}</p>
+              {estimateDrivers.length > 0 && (
+                <div>
+                  <p className="font-medium">Estimate drivers:</p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                    {estimateDrivers.map((driver, index) => (
+                      <li key={`${driver}-${index}`}>{driver}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </TooltipContent>
         </Tooltip>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
@@ -43,16 +57,6 @@ export default function EstimatedProbesDisplay({
         {probeEstimate.min.toLocaleString()} - {probeEstimate.max.toLocaleString()} | Ceiling:{' '}
         {probeEstimate.ceiling.toLocaleString()}
       </p>
-      {estimateDrivers.length > 0 && (
-        <div className="mt-1">
-          <p className="text-xs font-medium text-muted-foreground">Estimate drivers:</p>
-          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">
-            {estimateDrivers.map((driver, index) => (
-              <li key={`${driver}-${index}`}>{driver}</li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }

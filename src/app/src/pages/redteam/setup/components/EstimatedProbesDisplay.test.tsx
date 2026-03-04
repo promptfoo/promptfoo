@@ -74,8 +74,8 @@ describe('EstimatedProbesDisplay', () => {
       expect(screen.getByText('Estimated Probes:')).toBeInTheDocument();
       expect(screen.getByText(/Range: 120 - 180/)).toBeInTheDocument();
       expect(screen.getByText(/Ceiling: 220/)).toBeInTheDocument();
-      expect(screen.getByText('Estimate drivers:')).toBeInTheDocument();
-      expect(screen.getByText(/Assumption/)).toBeInTheDocument();
+      expect(screen.queryByText('Estimate drivers:')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Assumption/)).not.toBeInTheDocument();
     });
 
     it('displays the probe count value', () => {
@@ -218,6 +218,8 @@ describe('EstimatedProbesDisplay', () => {
             'Probes are the number of requests to the target application. ' +
               'This is calculated based on your selected plugins, strategies, and number of test cases.',
           );
+          expect(tooltip).toHaveTextContent('Estimate drivers:');
+          expect(tooltip).toHaveTextContent('Assumption');
         });
       }
     });
@@ -337,9 +339,9 @@ describe('EstimatedProbesDisplay', () => {
       expect(outerBox).toBeInTheDocument();
       expect(outerBox?.tagName).toBe('DIV');
 
-      // Check for inner structure - label, value, and tooltip icon
+      // Check for inner structure - header row and summary text.
       const innerElements = outerBox?.children;
-      expect(innerElements?.length).toBeGreaterThanOrEqual(3);
+      expect(innerElements?.length).toBeGreaterThanOrEqual(2);
     });
   });
 
