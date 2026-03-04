@@ -141,7 +141,7 @@ assert:
 - google:gemini-2.0-flash
 
 # AWS Bedrock
-- bedrock:anthropic.claude-sonnet-4-6-20250514-v1:0
+- bedrock:anthropic.claude-sonnet-4-6
 - bedrock:anthropic.claude-haiku-4-5-20251001-v1:0
 
 # Other

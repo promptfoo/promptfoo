@@ -12,7 +12,18 @@ When installed, the agent knows how to scaffold configs, write test cases with a
 
 ## Install
 
-Clone or download the skill directory from the [promptfoo repo](https://github.com/promptfoo/promptfoo/tree/main/.claude/skills/promptfoo-evals), then copy it to the correct location for your tool:
+### Via Claude Code marketplace
+
+Add the promptfoo marketplace and install the plugin:
+
+```
+/plugin marketplace add promptfoo/promptfoo
+/plugin install promptfoo-evals@promptfoo
+```
+
+### Manual install
+
+Download the [skill directory](https://github.com/promptfoo/promptfoo/tree/main/.claude/skills/promptfoo-evals) and copy it to the correct location for your tool:
 
 **Claude Code** (project-level — recommended for teams):
 
@@ -36,7 +47,7 @@ The skill contains two files:
 
 | File                       | Purpose                                                 |
 | -------------------------- | ------------------------------------------------------- |
-| `skill.md`                 | Workflow instructions the agent follows                 |
+| `SKILL.md`                 | Workflow instructions the agent follows                 |
 | `references/cheatsheet.md` | Assertion types, provider patterns, and config examples |
 
 ## Usage
