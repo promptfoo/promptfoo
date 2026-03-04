@@ -373,15 +373,8 @@ html:not(.docs-wrapper) .DocSearch {
 
 /* Constrain doc content area for readability */
 [class*='docMainContainer'] > .container {
-  max-width: 1040px;
+  max-width: 1280px;
   margin: 0 auto;
-}
-
-/* When the TOC is hidden (handled in DocItem/Layout), let content fill the space */
-@media (max-width: 1279px) {
-  [class*='docMainContainer'] > .container {
-    max-width: 100%;
-  }
 }
 
 /* Remove pill background from active breadcrumb item */
