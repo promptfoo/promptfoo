@@ -1060,6 +1060,33 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('modelslab:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { ModelsLabImageProvider } = await import('./modelslab');
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const modelName = splits.slice(2).join(':');
+      if (modelType === 'image') {
+        if (!modelName) {
+          throw new Error(
+            `Invalid modelslab provider path: ${providerPath}. Model name is required. Use: modelslab:image:<model_name>`,
+          );
+        }
+        return new ModelsLabImageProvider(modelName, {
+          ...providerOptions,
+          env: providerOptions.env ?? context.env,
+        });
+      }
+      throw new Error(
+        `Invalid modelslab provider path: ${providerPath}. Use: modelslab:image:<model_name>`,
+      );
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('togetherai:'),
     create: async (
       providerPath: string,
