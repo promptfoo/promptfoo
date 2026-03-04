@@ -1975,6 +1975,11 @@ describe('ResultsView Duration Display', () => {
     vi.clearAllMocks();
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
 
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
       columnStates: {},
@@ -2020,8 +2025,9 @@ describe('ResultsView Duration Display', () => {
     );
 
     // Should display formatted duration (45000ms = 45.0s)
+    // Duration appears in both the interactive chips and the print-only property grid
     await waitFor(() => {
-      expect(screen.getByText('45.0s')).toBeInTheDocument();
+      expect(screen.getAllByText('45.0s').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2089,9 +2095,9 @@ describe('ResultsView Duration Display', () => {
       />,
     );
 
-    // Should display 500ms
+    // Should display 500ms (appears in both chip and print-only grid)
     await waitFor(() => {
-      expect(screen.getByText('500ms')).toBeInTheDocument();
+      expect(screen.getAllByText('500ms').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2127,7 +2133,7 @@ describe('ResultsView Duration Display', () => {
 
     // Should display 2m 5s (125000ms)
     await waitFor(() => {
-      expect(screen.getByText('2m 5s')).toBeInTheDocument();
+      expect(screen.getAllByText('2m 5s').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2164,7 +2170,7 @@ describe('ResultsView Duration Display', () => {
 
     // Should display 2m (not "1m 60s")
     await waitFor(() => {
-      expect(screen.getByText('2m')).toBeInTheDocument();
+      expect(screen.getAllByText('2m').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2200,7 +2206,7 @@ describe('ResultsView Duration Display', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('1h 1m')).toBeInTheDocument();
+      expect(screen.getAllByText('1h 1m').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2235,7 +2241,7 @@ describe('ResultsView Duration Display', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('0ms')).toBeInTheDocument();
+      expect(screen.getAllByText('0ms').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2308,7 +2314,7 @@ describe('ResultsView Duration Display', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('2h')).toBeInTheDocument();
+      expect(screen.getAllByText('2h').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2352,7 +2358,7 @@ describe('ResultsView Duration Display', () => {
 
     // Badge shows total duration (600000ms = 10m)
     await waitFor(() => {
-      expect(screen.getByText('10m')).toBeInTheDocument();
+      expect(screen.getAllByText('10m').length).toBeGreaterThanOrEqual(1);
     });
   });
 });

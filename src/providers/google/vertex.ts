@@ -11,6 +11,7 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
+import { parseMessages } from '../anthropic/util';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
@@ -20,6 +21,7 @@ import {
   getGoogleClient,
   loadCredentials,
   mergeParts,
+  normalizeSafetySettings,
   resolveProjectId,
 } from './util';
 
@@ -216,17 +218,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
   }
 
   async callClaudeApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
-    const messages = parseChatPrompt(prompt, [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: prompt,
-          },
-        ],
-      },
-    ]);
+    const { system, extractedMessages } = parseMessages(prompt);
 
     const body: ClaudeRequest = {
       anthropic_version:
@@ -236,7 +228,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
       temperature: this.config.temperature,
       top_p: this.config.top_p || this.config.topP,
       top_k: this.config.top_k || this.config.topK,
-      messages,
+      ...(system ? { system } : {}),
+      messages: extractedMessages as ClaudeRequest['messages'],
     };
 
     const cache = await getCache();
@@ -393,7 +386,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
         topK: config.topK,
         ...config.generationConfig,
       },
-      ...(config.safetySettings ? { safetySettings: config.safetySettings } : {}),
+      ...(config.safetySettings
+        ? { safetySettings: normalizeSafetySettings(config.safetySettings) }
+        : {}),
       ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
@@ -750,7 +745,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       parameters: {
         context: this.config.context,
         examples: this.config.examples,
-        safetySettings: this.config.safetySettings,
+        safetySettings: normalizeSafetySettings(this.config.safetySettings),
         stopSequences: this.config.stopSequences,
         temperature: this.config.temperature,
         maxOutputTokens: this.config.maxOutputTokens,

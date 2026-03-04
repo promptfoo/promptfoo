@@ -184,7 +184,7 @@ function FileGroup({
         )}
       >
         {/* File Header */}
-        <div className={cn('p-4 border-b', headerConfig.headerBg)}>
+        <div className={cn('p-4 border-b border-border', headerConfig.headerBg)}>
           <div className="flex items-center gap-3">
             <FileIcon className={cn('size-5', headerConfig.iconColor)} />
             <div className="flex-1 min-w-0">

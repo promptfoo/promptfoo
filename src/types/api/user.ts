@@ -46,6 +46,15 @@ export type UpdateUserResponse = z.infer<typeof UpdateUserResponseSchema>;
 
 // GET /api/user/email-status
 
+export const GetEmailStatusQuerySchema = z.object({
+  validate: z
+    .unknown()
+    .optional()
+    .transform((v) => v === 'true'),
+});
+
+export type GetEmailStatusQuery = z.infer<typeof GetEmailStatusQuerySchema>;
+
 export const GetEmailStatusResponseSchema = z.object({
   hasEmail: z.boolean(),
   email: EmailSchema.optional(),
@@ -116,6 +125,7 @@ export const UserSchemas = {
     Response: UpdateUserResponseSchema,
   },
   EmailStatus: {
+    Query: GetEmailStatusQuerySchema,
     Response: GetEmailStatusResponseSchema,
   },
   Login: {

@@ -134,7 +134,7 @@ export interface CompletionOptions {
   // https://ai.google.dev/api/rest/v1beta/models/streamGenerateContent#request-body
   context?: string;
   examples?: { input: string; output: string }[];
-  safetySettings?: { category: string; probability: string }[];
+  safetySettings?: { category: string; threshold?: string; probability?: string }[];
   stopSequences?: string[];
   temperature?: number;
   maxOutputTokens?: number;
@@ -399,6 +399,7 @@ export interface ClaudeRequest {
   temperature?: number;
   top_p?: number;
   top_k?: number;
+  system?: Array<{ type: string; text: string }>;
   messages: ClaudeMessage[];
 }
 

@@ -61,6 +61,11 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
           resolution: result.response.video.resolution,
         }
       : undefined,
+    images: result.response?.images?.map((img) => ({
+      data: img.data,
+      blobRef: img.blobRef,
+      mimeType: img.mimeType,
+    })),
   };
 }
 

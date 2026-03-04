@@ -664,14 +664,10 @@ export default function StrategyConfigDialog({
               onCheckedChange={(checked) => setLocalConfig({ ...localConfig, stateful: checked })}
               className="mt-0.5"
             />
-            <div className="space-y-0.5">
-              <Label htmlFor="custom-stateful" className="text-sm font-normal">
-                Stateful
-              </Label>
-              <span className="ml-1 text-sm text-muted-foreground">
-                - Enable to maintain conversation history (recommended)
-              </span>
-            </div>
+            <Label htmlFor="custom-stateful" className="text-sm font-normal">
+              When enabled, Promptfoo should only send the current request and assume your system
+              remembers interaction history
+            </Label>
           </div>
         </div>
       );
@@ -713,15 +709,10 @@ export default function StrategyConfigDialog({
               onCheckedChange={(checked) => setLocalConfig({ ...localConfig, stateful: checked })}
               className="mt-0.5"
             />
-            <div className="space-y-0.5">
-              <Label htmlFor="hydra-stateful" className="text-sm font-normal">
-                Stateful
-              </Label>
-              <span className="ml-1 text-sm text-muted-foreground">
-                - Enable when your target maintains server-side sessions and expects a session ID
-                per turn.
-              </span>
-            </div>
+            <Label htmlFor="hydra-stateful" className="text-sm font-normal">
+              Enable when your target maintains server-side sessions and expects a session ID per
+              turn.
+            </Label>
           </div>
 
           <p className="text-xs text-muted-foreground">
@@ -767,14 +758,10 @@ export default function StrategyConfigDialog({
               onCheckedChange={(checked) => setLocalConfig({ ...localConfig, stateful: checked })}
               className="mt-0.5"
             />
-            <div className="space-y-0.5">
-              <Label htmlFor="multi-turn-stateful" className="text-sm font-normal">
-                Stateful
-              </Label>
-              <span className="ml-1 text-sm text-muted-foreground">
-                - Enable to maintain conversation history (recommended)
-              </span>
-            </div>
+            <Label htmlFor="multi-turn-stateful" className="text-sm font-normal">
+              When enabled, Promptfoo should only send the current request and assume your system
+              remembers interaction history
+            </Label>
           </div>
         </div>
       );
