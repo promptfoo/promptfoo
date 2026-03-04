@@ -152,7 +152,139 @@ Hugging Face hosts over two million models. Most organizations pull from public 
 
 The common weakness across blocklist-based scanners is architectural: maintain a list of known-dangerous functions and allow everything else through. An attacker only needs to find one function _not_ on the list. Fickling has [10 published GHSAs](https://github.com/trailofbits/fickling/security/advisories). Picklescan has [40+](https://github.com/mmaitre314/picklescan/security/advisories). JFrog found [3 zero-day bypasses in picklescan](https://jfrog.com/blog/unveiling-3-zero-day-vulnerabilities-in-picklescan/) (CVE-2025-10155/10156/10157, CVSS 9.3 each). Sonatype found [4 more](https://www.sonatype.com/blog/picklescan-bypasses) (CVE-2025-1716, CVE-2025-1889, CVE-2025-1944, CVE-2025-1945). We reported six of our own.
 
-ModelAudit is the widest-coverage open-source scanner available, with format-specific analysis across 42+ formats, built-in CVE detection rules, and SARIF output for CI/CD integration. In a [head-to-head comparison](/blog/modelaudit-vs-modelscan) against ModelScan, ModelAudit detected 16 issues across 11 test files vs ModelScan's 3. Teams already using picklescan or ModelScan can run ModelAudit alongside them; SARIF results from multiple scanners aggregate in the same CI pipeline.
+That work taught me how these scanners are built from the inside, and where they break. The most common weakness was the blocklist approach: maintain a list of known-dangerous functions and allow everything else through. An attacker only needs to find one function _not_ on the list. The allowlist approach — deny by default, explicitly approve known-safe functions — is architecturally stronger, but harder to maintain because of the false positive surface.
+
+### Building at Promptfoo
+
+When I joined Promptfoo, the team was building [AI red teaming](https://www.promptfoo.dev/docs/red-team/) and [code scanning](https://www.promptfoo.dev/code-scanning/) capabilities. We could test how an LLM application _behaves_ at runtime, but had no visibility into whether the models themselves were safe to load. If a model file triggers code execution on deserialization, runtime defenses don't matter. The compromise happens before the application starts.
+
+Working with Michael D'Angelo and Ian Webster, I started implementing the scanner architecture I'd been refining since Databricks. Michael contributed deep work on opcode-level bypasses. Ian pushed format coverage across the 42+ formats we support today. The goal was a modern, lightweight scanner with no ML framework dependencies — something you could drop into any CI pipeline without pulling in PyTorch or TensorFlow.
+
+### The false positive problem
+
+Different ML libraries serialize models differently. The same scikit-learn RandomForest saved with `joblib` vs `pickle` vs `skops` produces different opcode sequences. Upgrading Python or library versions changes which opcodes appear. An allowlist-based scanner that works on Python 3.10 might flag clean models on 3.13.
+
+We ran 5+ rounds of false positive elimination against real Hugging Face models. Each round surfaced new edge cases: numpy's `_reconstruct` method, scipy sparse matrix construction via `NEWOBJ_EX`, sklearn tree ensembles generating hundreds of `REDUCE` opcodes in normal operation. We fixed them all.
+
+The maturity milestone: 200+ models scanned across 14 formats, 5,000+ security checks, zero false positives on the final 100-model regression run. Since then, we've expanded to 42+ formats with 12 new scanners and validated against an additional 50+ models — all clean. That result triggered the open-source decision.
+
+<details>
+<summary>Full list of models tested (175+ HuggingFace repos across 26 formats)</summary>
+
+**Pickle/Joblib (30+):** scikit-learn/tabular-playground, sklearn-docs/anomaly-detection, dvgodoy/sklearn-mpg, drewmee/sklearn-model, samarthahm/sentiment-sklearn, danupurnomo/dummy-titanic, julien-c/wine-quality, rajistics/california_housing, merve/20newsgroups, BenjaminB/plain-sklearn, julien-c/skops-digits, hibaraliyyah/emotion-recognition-sklearn, waseemrazakhan/sklearn-sentiment-pipelines, waseemrazakhan/tfidf-lr-sentiment-mc, cis5190/random_forest_model, Tuana/eigenfaces-sklearn-lfw, electricweegie/mlewp-sklearn-wine, nhull/random-forest-model, nestauk/multiskill-classifier, pppereira3/hw4_mnar25_classifier_mean, kantundpeterpan/frugalai-tfidf-rfc-tuned, opentargets/l2g_xgboost_777, risingodegua/wine-quality-model, nateraw/iris-svc, scikit-learn/skops-blog-example, kushkul/rf_model_skops, hf-internal-testing/tiny-random-bert, hf-internal-testing/tiny-random-distilbert, hf-internal-testing/tiny-random-gpt2, lysandre/tiny-vit-random, hf-internal-testing/tiny-random-xlnet
+
+**PyTorch (10):** prajjwal1/bert-tiny, google/mobilebert-uncased, albert/albert-base-v2, distilbert/distilgpt2, huggingface/CodeBERTa-small-v1, microsoft/resnet-18, facebook/opt-125m, openai/clip-vit-base-patch16, xlnet/xlnet-base-cased, squeezebert/squeezebert-uncased
+
+**SafeTensors (10):** sentence-transformers/all-MiniLM-L6-v2, BAAI/bge-small-en-v1.5, Snowflake/snowflake-arctic-embed-xs, intfloat/e5-small-v2, thenlper/gte-small, TaylorAI/gte-tiny, jinaai/jina-reranker-v1-tiny-en, mixedbread-ai/mxbai-embed-xsmall-v1, sentence-transformers/paraphrase-MiniLM-L3-v2, Qwen/Qwen2.5-0.5B
+
+**Keras (20):** keras/bert_tiny_en_uncased, keras/resnet_18_imagenet, keras/mit_b0_cityscapes_1024, Redgerd/XceptionNet-Keras, nixsng/benign_keras, VickiPol/binary_models_keras_format, diyorarti/hate-speech-attn-bigru-keras, osanseviero/keras-conv-mnist, keras-io/lowlight-enhance-mirnet, Kaludi/food-category-classification-v2.0, Akshay-Dongare/kerasVggSigFeatures.h5, manufy/mnist_model_keras, mkiani/keras-unsafe-models, daksheshgandhe/pokemon_mobilenetv2.keras, meetran/painting-classifier-keras-v1, upendrareddy1/face-emotion-keras, marince73/multimodal-colon-cancer-diagnosis-keras, Senuda2004/plant-whisperer-keras, fbadine/image-spam-detection-keras2
+
+**TensorFlow SavedModel (10):** keras-io/monocular-depth-estimation, keras-io/bert-semantic-similarity, keras-io/semantic-image-clustering, keras-io/structured-data-classification, keras-io/timeseries-anomaly-detection, keras-io/text-classification-with-transformer, keras-io/super-resolution, keras-io/image-captioning, google/bit-50, merve/deeplab-v3
+
+**ONNX (14):** Xenova/distilbert-base-uncased-finetuned-sst-2-english, Xenova/bert-base-NER, Xenova/e5-small-v2, Xenova/clip-vit-base-patch32, Xenova/dinov2-small, Xenova/toxic-bert, Xenova/slimsam-77-uniform, Xenova/ms-marco-MiniLM-L-6-v2, Xenova/bge-small-en-v1.5, onnx-internal-testing/tiny-random-Data2VecAudioModel-ONNX, Xenova/all-MiniLM-L6-v2, Xenova/whisper-tiny.en, sentence-transformers/all-MiniLM-L6-v2
+
+**GGUF (10):** ggml-org/tinygemma3-GGUF, HuggingFaceTB/smollm-135M-instruct-v0.2-Q8_0-GGUF, PrunaAI/gpt2-GGUF-smashed, mradermacher/gpt2-alpaca-gpt4-GGUF, mradermacher/jina-reranker-v1-tiny-en-GGUF, second-state/All-MiniLM-L6-v2-Embedding-GGUF, RichardErkhov/distilbert\_-_distilgpt2-gguf, M4-ai/TinyMistral-248M-v2-Instruct-GGUF, Felladrin/gguf-smollm-360M-instruct-add-basics
+
+**TFLite (10):** bbouffaut/bert_base_uncase_tflite, nyadla-sys/whisper-tiny.en.tflite, SamMorgan/yolo_v4_tflite, tflite-hub/conformer-lang-id, axtonyao/gpt2-fp16-tflite, Nihal2000/all-MiniLM-L6-v2-quant.tflite, ColdSlim/ASL-TFLite-Edge, byoussef/MobileNetV4_Conv_Medium_TFLite_256, Ashish094562/plant-model-float32-tflite, qualcomm/MobileNet-v2
+
+**OpenVINO (10):** OpenVINO/Phi-3-mini-4k-instruct-int4-ov, OpenVINO/TinyLlama-1.1B-Chat-v1.0-int4-ov, OpenVINO/whisper-base-int8-ov, OpenVINO/bge-base-en-v1.5-fp16-ov, OpenVINO/Qwen3-Embedding-0.6B-int8-ov, echarlaix/distilbert-base-uncased-finetuned-sst-2-english-openvino, echarlaix/t5-small-openvino, echarlaix/SmolVLM2-256M-Video-Instruct-openvino, sentence-transformers-testing/stsb-bert-tiny-openvino, optimum-internal-testing/tiny-random-SpeechT5ForTextToSpeech-openvino
+
+**Flax (13):** ArthurZ/tiny-random-bert-flax-only, sanchit-gandhi/tiny-random-flax-bert, sshleifer/tiny-gpt2, sshleifer/tiny-distilbert-base-cased, sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english, phmd/TinyStories-SRL-5M, jcopo/mnist, ArthurZ/flax-tiny-random-bert-sharded, lysandre/tiny-bert-random, hf-internal-testing/tiny-bert-flax-only, patrickvonplaten/t5-tiny-random, julien-c/dummy-unknown, jcopo/flux_jax
+
+**PaddlePaddle (10):** PaddleOCR ch_PP-OCRv4_det/rec, ch_PP-OCRv3_det/rec, ch_PP-OCRv2_det, ch_ppocr_mobile_v2.0_cls, ch_ppstructure_mobile_v2.0_SLANet, en_PP-OCRv3_rec, picodet_s_320_coco_lcnet, MobileNetV3_small_x1_0
+
+**NumPy (10):** pual/MNIST_NUMPY_WEIGHTS, nickosn/olmo_pretrain_numpy, plus 8 locally generated test arrays (float32/float64/float16/int32/bool/complex64, .npy and .npz)
+
+**CoreML (5):** zimageapp/CoreML-Models (Fast-SRGAN, realesrganAnime512), apple/coreml-resnet-50, apple/coreml-depth-anything-v2-small, FluidInference/silero-vad-coreml
+
+**CatBoost (5):** M0nteCarl0/Yandex-Catboost-network-anomalies-classification, SirineA/catboost-ddos-detector, artemgoncarov/catboost_models, moneco/catboost, Deepaksai1/catboost-fraud-detector
+
+**RKNN (5):** csukuangfj/sherpa-onnx-rknn-models (Silero VAD v4 rk3562/rk3566/rk3568), devinzhang91/immch_rknn, happyme531/wd-convnext-tagger-v3-RKNN2
+
+**LightGBM (5):** noisebop/lightgbm_model, irfankarim/fraud-detection-lightgbm-v1, Sant0s3/lightgbm-models
+
+**MXNet (5):** public-data/insightface (genderage_v1, arcface_r100_v1, retinaface_r50_v1)
+
+**R Serialized (5):** zinken7/movie_models_rds (lr_aic, lr_auc, tree_aic, tree_auc, master_df)
+
+**Llamafile (1):** mozilla-ai/TinyLlama-1.1B-Chat-v1.0-llamafile
+
+</details>
+
+ModelAudit started as an internal capability within the Promptfoo platform ([promptfoo.dev/model-security](https://www.promptfoo.dev/model-security/)). Today's release is the standalone extraction of that scanning engine.
+
+## The landscape
+
+Several good tools exist in this space, and each has pushed the field forward. [picklescan](https://github.com/mmaitre314/picklescan) is [integrated into Hugging Face's scanning pipeline](https://huggingface.co/docs/hub/en/security-pickle) and is fast and practical at scale. [Fickling](https://github.com/trailofbits/fickling) by Trail of Bits can decompile pickle streams into readable Python and recently added an [allowlist-based scanner](https://blog.trailofbits.com/2025/09/16/ficklings-new-ai/ml-pickle-file-scanner/). [ModelScan](https://github.com/protectai/modelscan) by ProtectAI covers Pickle, PyTorch, Keras (H5 and V3), TensorFlow SavedModel, NumPy, and Joblib; ProtectAI's commercial [Guardian](https://protectai.com/guardian) extends to 35+ formats. [Safetensors](https://github.com/huggingface/safetensors) takes the strongest approach: eliminate executable code from the format entirely. If you can use safetensors, you should. But [roughly 45% of popular Hugging Face models still use pickle](https://cs.brown.edu/~vpk/papers/pickleball.ccs25.pdf) (CCS 2025), and the [conversion pipeline itself can be a target](https://hiddenlayer.com/innovation-hub/silent-sabotage/).
+
+ModelAudit is the widest-coverage open-source scanner available, with format-specific analysis across 42+ formats, built-in CVE detection rules, and SARIF output for CI/CD integration. In a [head-to-head comparison](/blog/modelaudit-vs-modelscan) against ModelScan, ModelAudit detected 16 issues across 11 test files vs ModelScan's 3. Our team has contributed [6 GHSAs across fickling and picklescan](#what-we-found-along-the-way).
+
+### Format coverage comparison
+
+The most meaningful way to compare scanners is format by format. Here is what each open-source tool covers (March 2026; see each project's repository for current status):
+
+| Format                         | picklescan | Fickling | ModelScan | **ModelAudit** |
+| ------------------------------ | :--------: | :------: | :-------: | :------------: |
+| Pickle (.pkl/.pickle)          |    Yes     |   Yes    |    Yes    |    **Yes**     |
+| Dill (.dill)                   |     —      |    —     |    Yes    |    **Yes**     |
+| PyTorch (.pt/.pth/.bin)        |    Yes     | .pt/.pth |    Yes    |    **Yes**     |
+| Joblib (.joblib)               |    Yes     |    —     |    Yes    |    **Yes**     |
+| Skops (.skops)                 |     —      |    —     |     —     |    **Yes**     |
+| NumPy (.npy/.npz)              |    Yes     |    —     | .npy only |    **Yes**     |
+| Keras H5 (.h5/.hdf5)           |     —      |    —     |    Yes    |    **Yes**     |
+| Keras ZIP (.keras)             |     —      |    —     |    Yes    |    **Yes**     |
+| TensorFlow SavedModel (.pb)    |     —      |    —     |    Yes    |    **Yes**     |
+| TF MetaGraph (.meta)           |     —      |    —     |     —     |    **Yes**     |
+| ONNX (.onnx)                   |     —      |    —     |     —     |    **Yes**     |
+| SafeTensors (.safetensors)     |     —      |    —     |     —     |    **Yes**     |
+| GGUF/GGML                      |     —      |    —     |     —     |    **Yes**     |
+| JAX/Flax (.msgpack/.orbax)     |     —      |    —     |     —     |    **Yes**     |
+| JAX Checkpoint (.ckpt)         |     —      |    —     |     —     |    **Yes**     |
+| TFLite (.tflite)               |     —      |    —     |     —     |    **Yes**     |
+| ExecuTorch (.pte)              |     —      |    —     |     —     |    **Yes**     |
+| TensorRT (.plan/.engine)       |     —      |    —     |     —     |    **Yes**     |
+| PaddlePaddle (.pdmodel)        |     —      |    —     |     —     |    **Yes**     |
+| OpenVINO (.xml/.bin)           |     —      |    —     |     —     |    **Yes**     |
+| CoreML (.mlmodel/.mlpackage)   |     —      |    —     |     —     |    **Yes**     |
+| MXNet (.params/-symbol.json)   |     —      |    —     |     —     |    **Yes**     |
+| CatBoost (.cbm)                |     —      |    —     |     —     |    **Yes**     |
+| LightGBM (.lgb/.txt/.model)    |     —      |    —     |     —     |    **Yes**     |
+| XGBoost (.bst/.model/.ubj)     |     —      |    —     |     —     |    **Yes**     |
+| RKNN (.rknn)                   |     —      |    —     |     —     |    **Yes**     |
+| Torch7 (.t7/.th)               |     —      |    —     |     —     |    **Yes**     |
+| Llamafile (.llamafile)         |     —      |    —     |     —     |    **Yes**     |
+| R Serialized (.rds/.rda)       |     —      |    —     |     —     |    **Yes**     |
+| CNTK (.cntk/.dnn)              |     —      |    —     |     —     |    **Yes**     |
+| PMML (.pmml)                   |     —      |    —     |     —     |    **Yes**     |
+| TorchServe MAR (.mar)          |     —      |    —     |     —     |    **Yes**     |
+| Jinja2 Templates (.jinja/.j2)  |     —      |    —     |     —     |    **Yes**     |
+| OCI/Docker Layers (.manifest)  |     —      |    —     |     —     |    **Yes**     |
+| Weight Distribution Analysis   |     —      |    —     |     —     |    **Yes**     |
+| Compressed (.gz/.bz2/.xz/.zst) |     —      |    —     |     —     |    **Yes**     |
+| ZIP archives (.zip/.npz)       |    Yes     |    —     |    Yes    |    **Yes**     |
+| TAR archives (.tar/.tar.gz)    |     —      |    —     |     —     |    **Yes**     |
+| 7-Zip archives (.7z)           |  Optional  |    —     |     —     |    **Yes**     |
+| Config (JSON/YAML/XML/TOML)    |     —      |    —     |     —     |    **Yes**     |
+| **Total format categories**    |   **~4**   |  **~2**  |  **~8**   |    **42+**     |
+
+_picklescan counts: Pickle, PyTorch, NumPy, Joblib, plus archive support. Fickling counts: Pickle, PyTorch (.pt/.pth only — does not scan .bin files). ModelScan counts: Pickle/Dill, PyTorch, Keras H5, Keras V3, TF SavedModel, NumPy (.npy only — .npz not yet implemented), Joblib, plus ZIP support. Counts reflect distinct model format categories, not file extensions. All three tools are open source — see each repository for current status._
+
+| Capability               | picklescan | Fickling | ModelScan |        **ModelAudit**         |
+| ------------------------ | :--------: | :------: | :-------: | :---------------------------: |
+| CVE detection rules      |     No     |    No    |    No     |            **Yes**            |
+| SARIF output             |     No     |    No    |    No     |            **Yes**            |
+| SBOM generation          |     No     |    No    |    No     |            **Yes**            |
+| Secret scanning          |     No     |    No    |    No     |            **Yes**            |
+| License detection        |     No     |    No    |    No     |            **Yes**            |
+| Remote pulls (S3/GCS/HF) |   HF/URL   |    No    |    No     | **Yes (S3/GCS/HF/R2/MLflow)** |
+| Allowlist approach       |  Partial   |   Yes    |    No     |            **Yes**            |
+| No ML framework deps     |    Yes     |   Yes    |    No     |            **Yes**            |
+
+ModelAudit is not a replacement for these tools — they've all contributed to making this space better. Teams already using picklescan or ModelScan can run ModelAudit alongside them. SARIF results from multiple scanners aggregate in the same CI pipeline.
+
+## What we found along the way
+
+Building ModelAudit meant studying the pickle VM closely: how its ~30 opcodes chain together, how function calls get resolved, and where the gaps are in static analysis. That work kept turning up bypasses in existing scanners.
 
 ### Fickling bypasses
 
@@ -275,21 +407,17 @@ Lower-risk formats get lighter analysis. The safetensors scanner validates struc
 
 ### Coverage by risk level
 
-Scanner depth varies with risk. The pickle opcode analyzer is the deepest; the safetensors scanner mostly validates integrity.
+Scanner depth varies with risk. The pickle opcode analyzer is the deepest; the safetensors scanner mostly validates integrity. Risk level reflects likelihood of code execution or file system impact during loading:
 
 | Risk Level  | Formats                                                                                                                               |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | **High**    | Pickle, PyTorch (.pt/.pth/.ckpt/.bin), Joblib, NumPy, Skops, Torch7, Llamafile                                                        |
-| **Medium**  | TensorFlow SavedModel, TF MetaGraph, Keras (.h5/.keras), ONNX, XGBoost, LightGBM, CatBoost, TorchServe MAR, NeMo                      |
+| **Medium**  | TensorFlow SavedModel, TF MetaGraph, Keras (.h5/.keras), ONNX, XGBoost, LightGBM, CatBoost, TorchServe MAR                            |
 | **Low**     | SafeTensors, GGUF/GGML, JAX/Flax, TFLite, ExecuTorch, TensorRT, PaddlePaddle, OpenVINO, CoreML, MXNet, RKNN, CNTK, R Serialized, PMML |
 | **Archive** | ZIP, TAR, 7-Zip, OCI layers, Compressed (.gz/.bz2/.xz/.zst)                                                                           |
 | **Config**  | Manifests, Jinja2 templates, metadata files                                                                                           |
 
-Some "low" risk formats carry higher risk in practice: NeMo files have a known configuration injection vector (CVE-2025-23304), and others become riskier when wrapped in archives or consumed by buggy loaders.
-
-### Compared to other scanners
-
-Picklescan and fickling scan pickle files only. ModelScan adds PyTorch, Keras H5, TF SavedModel, and archives (~5 formats). ModelAudit covers all of these plus ONNX, GGUF, TFLite, CoreML, NeMo, and [34+ more](/docs/model-audit/scanners/) — 42+ formats total. It is the only open-source scanner with built-in CVE detection rules, SARIF output for CI/CD, SBOM generation, secret scanning, and remote pulls from S3, GCS, and Hugging Face Hub. Teams already using picklescan or ModelScan can run ModelAudit alongside them; SARIF results from multiple scanners aggregate in the same CI pipeline.
+Some "low" risk formats carry higher risk in practice. Formats increase in risk when wrapped in archives or consumed by buggy loaders.
 
 ### Performance
 
