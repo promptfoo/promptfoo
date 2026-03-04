@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 
 import { Command } from 'commander';
@@ -24,6 +25,7 @@ import {
   checkCloudPermissions,
   getEvalConfigFromCloud,
 } from '../../src/util/cloud';
+import { loadDefaultConfig } from '../../src/util/config/default';
 import { resolveConfigs } from '../../src/util/config/load';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
@@ -64,6 +66,7 @@ vi.mock('path', async () => {
     ...actualPath,
   };
 });
+vi.mock('../../src/util/config/default');
 vi.mock('../../src/util/config/load');
 vi.mock('../../src/util/tokenUsage');
 vi.mock('../../src/database/index', async (importOriginal) => {
@@ -91,6 +94,17 @@ vi.mock('../../src/database/index', async (importOriginal) => {
   };
 });
 
+const setDefaultConfigPathMocks = () => {
+  vi.mocked(loadDefaultConfig).mockResolvedValue({
+    defaultConfig: {},
+    defaultConfigPath: undefined,
+  });
+  vi.mocked(fs.existsSync).mockReturnValue(false);
+  vi.mocked(fs.statSync).mockReturnValue({
+    isDirectory: () => false,
+  } as unknown as fs.Stats);
+};
+
 describe('evalCommand', () => {
   let program: Command;
   const defaultConfig = {} as UnifiedConfig;
@@ -99,6 +113,8 @@ describe('evalCommand', () => {
   beforeEach(() => {
     program = new Command();
     vi.clearAllMocks();
+    process.exitCode = 0;
+    setDefaultConfigPathMocks();
     vi.mocked(getEvalConfigFromCloud).mockReset();
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: defaultConfig,
@@ -174,6 +190,49 @@ describe('evalCommand', () => {
       'Cloud config UUID mode supports exactly one -c value. Use: promptfoo eval -c <cloud-config-uuid>',
     );
     expect(getEvalConfigFromCloud).not.toHaveBeenCalled();
+  });
+
+  it('should skip directory config paths without promptfooconfig and continue with remaining configs', async () => {
+    const missingDir = './missing-dir';
+    const validConfigPath = './promptfooconfig.yaml';
+    const cmdObj = { config: [missingDir, validConfigPath] };
+
+    vi.mocked(fs.existsSync).mockImplementation((value) => String(value) === missingDir);
+    vi.mocked(fs.statSync).mockReturnValue({
+      isDirectory: () => true,
+    } as unknown as fs.Stats);
+    vi.mocked(loadDefaultConfig).mockResolvedValue({
+      defaultConfig: { sharing: true },
+      defaultConfigPath: undefined,
+    });
+
+    await doEval(cmdObj, defaultConfig, undefined, {});
+
+    expect(cmdObj.config).toEqual([validConfigPath]);
+    expect(resolveConfigs).toHaveBeenCalledWith(
+      expect.objectContaining({ config: [validConfigPath] }),
+      {},
+    );
+  });
+
+  it('should fail early when all directory config paths are missing promptfooconfig files', async () => {
+    const missingDir = './missing-dir';
+    const cmdObj = { config: [missingDir] };
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.statSync).mockReturnValue({
+      isDirectory: () => true,
+    } as unknown as fs.Stats);
+    vi.mocked(loadDefaultConfig).mockResolvedValue({
+      defaultConfig: {},
+      defaultConfigPath: undefined,
+    });
+
+    await doEval(cmdObj, defaultConfig, undefined, {});
+
+    expect(process.exitCode).toBe(1);
+    expect(resolveConfigs).not.toHaveBeenCalled();
+    expect(evaluate).not.toHaveBeenCalled();
   });
 
   it('should fail when --watch is used with cloud config UUID mode', async () => {
@@ -474,6 +533,7 @@ describe('checkCloudPermissions', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    setDefaultConfigPathMocks();
     vi.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
     vi.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
   });
@@ -719,6 +779,7 @@ describe('doEval with external defaultTest', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    setDefaultConfigPathMocks();
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: defaultConfig,
       testSuite: {
@@ -888,6 +949,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    setDefaultConfigPathMocks();
 
     // Set up TokenUsageTracker mock - required by generateEvalSummary
     mockTokenUsageTracker = {
