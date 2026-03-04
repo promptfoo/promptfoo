@@ -92,7 +92,7 @@ A good report helps us triage and fix issues faster. Please include:
 | Fix (Medium, 4.0–6.9)    | 60 calendar days |
 | Fix (Low, 0.1–3.9)       | Best effort      |
 
-Severity is assessed using [CVSS v3.1](https://www.first.org/cvss/v3.1/specification-document). We may adjust timelines if a fix requires significant architectural changes and will communicate any delays.
+Severity is assessed using [CVSS v4.0](https://www.first.org/cvss/v4.0/specification-document). We may adjust timelines if a fix requires significant architectural changes and **will communicate any delays**.
 
 **Promptfoo-specific severity factors:**
 
@@ -106,11 +106,11 @@ Severity is assessed using [CVSS v3.1](https://www.first.org/cvss/v3.1/specifica
 
 We ask reporters to keep vulnerability details confidential until a fix is available:
 
-| Severity        | Embargo Period      |
-| --------------- | ------------------- |
-| Critical / High | 90 days from report |
-| Medium          | Until next release  |
-| Low             | No formal embargo   |
+| Severity        | Embargo Period                                       |
+| --------------- | ---------------------------------------------------- |
+| Critical / High | 90 days from report                                  |
+| Medium          | Until next release or 90 days, whichever comes first |
+| Low             | No formal embargo                                    |
 
 If we are unable to deliver a fix within the embargo window, we will negotiate a revised timeline with the reporter. After the embargo period expires, reporters are free to disclose.
 
@@ -143,7 +143,7 @@ We consider security research conducted in good faith to be authorized and will 
 - Do not access or modify other users' data
 - Report vulnerabilities promptly and do not exploit them beyond what is necessary to demonstrate the issue
 
-This safe harbor applies to activities conducted under this policy. For the full legal terms, see our [Responsible Disclosure Policy](https://www.promptfoo.dev/responsible-disclosure-policy/).
+This safe harbor applies to activities conducted under this policy. For the full legal terms, see our [Responsible Disclosure Policy](https://www.promptfoo.dev/responsible-disclosure-policy/). In case of conflict, the Responsible Disclosure Policy governs.
 
 ## Coordinated Disclosure
 
