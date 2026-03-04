@@ -127,13 +127,13 @@ payload = pickle.dumps(Exploit())
 
 **Example: [0xnu/mnist-ocr](https://huggingface.co/0xnu/mnist-ocr/)** — The `mnist_tokenizer.pkl` file contains `__main__.ImageTokenizer` instantiated via the `NEWOBJ` opcode, a deserialization vector that executes arbitrary code on load.
 
-<img src="/img/blog/open-sourcing-modelaudit/scanner-comparison-mnist.svg" alt="Scanner comparison for 0xnu/mnist-ocr: VirusTotal, JFrog, and ModelScan report No Issue. HF Picklescan flags suspicious imports (informational). ClamAV flags as Suspicious via signature match. ModelAudit reports CRITICAL." style={{maxWidth: '520px', width: '100%', margin: '1rem 0'}} />
+<img src="/img/blog/open-sourcing-modelaudit/scanner-comparison-mnist.svg" alt="Scanner comparison for 0xnu/mnist-ocr: VirusTotal, JFrog, and ModelScan report No Issue. HF Picklescan flags suspicious imports (informational). ClamAV flags as Suspicious via signature match. ModelAudit reports CRITICAL." style={{maxWidth: '520px', width: '100%', margin: '1rem auto', display: 'block'}} />
 
-Only ClamAV flags it, and only via signature matching, not structural analysis.
+Picklescan flags suspicious imports at an informational level but doesn't block the model. ClamAV flags it via signature matching. Neither performs structural analysis of the deserialization vector.
 
 **Example: [Rammadaeus/tflite-flex-bypass-poc](https://huggingface.co/Rammadaeus/tflite-flex-bypass-poc)** — A TFLite file with 4 malicious custom operators: `FlexWriteFile` (write arbitrary files), `FlexReadFile` (read arbitrary files), `FlexPrintV2` (output exfiltration), and `EagerPyFunc` (arbitrary Python execution).
 
-<img src="/img/blog/open-sourcing-modelaudit/scanner-comparison-tflite.svg" alt="Scanner comparison for Rammadaeus/tflite-flex-bypass-poc: VirusTotal, JFrog, and ClamAV report No Issue. HF Picklescan and ModelScan do not support TFLite. ModelAudit reports 4 CRITICAL findings." style={{maxWidth: '520px', width: '100%', margin: '1rem 0'}} />
+<img src="/img/blog/open-sourcing-modelaudit/scanner-comparison-tflite.svg" alt="Scanner comparison for Rammadaeus/tflite-flex-bypass-poc: VirusTotal, JFrog, and ClamAV report No Issue. HF Picklescan and ModelScan do not support TFLite. ModelAudit reports 4 CRITICAL findings." style={{maxWidth: '520px', width: '100%', margin: '1rem auto', display: 'block'}} />
 
 Every scanner in Hugging Face's pipeline misses it.
 
@@ -152,7 +152,7 @@ Hugging Face hosts over two million models. Most organizations pull from public 
 
 The common weakness across blocklist-based scanners is architectural: maintain a list of known-dangerous functions and allow everything else through. An attacker only needs to find one function _not_ on the list. Fickling has [10 published GHSAs](https://github.com/trailofbits/fickling/security/advisories). Picklescan has [40+](https://github.com/mmaitre314/picklescan/security/advisories). JFrog found [3 zero-day bypasses in picklescan](https://jfrog.com/blog/unveiling-3-zero-day-vulnerabilities-in-picklescan/) (CVE-2025-10155/10156/10157, CVSS 9.3 each). Sonatype found [4 more](https://www.sonatype.com/blog/picklescan-bypasses) (CVE-2025-1716, CVE-2025-1889, CVE-2025-1944, CVE-2025-1945). We reported six of our own.
 
-ModelAudit is the widest-coverage open-source scanner available, with format-specific analysis across 42+ formats, built-in CVE detection rules, and SARIF output for CI/CD integration. In a [head-to-head comparison](/blog/modelaudit-vs-modelscan) against ModelScan, ModelAudit detected 16 issues across 11 test files vs ModelScan's 3. Teams already using picklescan or ModelScan can run ModelAudit alongside them; SARIF results from multiple scanners aggregate in the same CI pipeline.
+In a [head-to-head comparison](/blog/modelaudit-vs-modelscan) against ModelScan, ModelAudit detected 16 issues across 11 test files vs ModelScan's 3.
 
 ### Fickling bypasses
 
@@ -236,15 +236,13 @@ REDUCE                               # profile.run("os.system('id')") → exec()
 # picklescan result: CLEAN
 ```
 
-Each gap existed because the blocklist hadn't enumerated that specific entry yet. This is what it means for blocklist-based scanning to be reactive.
-
-Trail of Bits and the picklescan maintainers fixed these quickly. The pickle VM is adversarial territory, and every scanner that operates there will have gaps. During development, we created 36 proof-of-concept bypass exploits across 4 generations to test scanner resilience. 15/15 POCs tested against fickling returned `LIKELY_SAFE`; ModelAudit catches all of them. We follow coordinated disclosure for all findings and publish POCs as test cases, not weaponized attacks.
+Trail of Bits and the picklescan maintainers fixed these quickly. During development, we created 36 proof-of-concept bypass exploits across 4 generations to test scanner resilience. 15/15 POCs tested against fickling returned `LIKELY_SAFE`; ModelAudit catches all of them. We follow coordinated disclosure for all findings and publish POCs as test cases, not weaponized attacks.
 
 ## Allowlist by default
 
 _Scanner internals. Skip to [Get started](#get-started) if you just want to install it._
 
-Working with [Michael D'Angelo](https://www.linkedin.com/in/michaelldangelo/) and [Ian Webster](https://www.linkedin.com/in/ianww/), I built ModelAudit on the opposite principle: deny by default, explicitly approve known-safe functions. We've scanned thousands of models across 42+ formats with zero false positives.
+Working with [Michael D'Angelo](https://www.linkedin.com/in/michaelldangelo/) and [Ian Webster](https://www.linkedin.com/in/ianww/), I built ModelAudit on the opposite principle: deny by default, explicitly approve known-safe functions. We've scanned thousands of real models with zero false positives.
 
 ModelAudit started as an internal capability within the Promptfoo platform ([promptfoo.dev/model-security](https://www.promptfoo.dev/model-security/)). This release is the standalone extraction of that scanning engine.
 
@@ -257,8 +255,6 @@ The pickle scanner uses a five-layer classification pipeline. Dangerous checks r
 3. **ML_SAFE_GLOBALS (~1,500 explicit entries, no wildcards)** — Individually vetted function entries for PyTorch, TensorFlow, scikit-learn, NumPy, SciPy, and other ML frameworks. Every entry is tested against real models. No wildcard patterns — each entry is a specific `module.function` pair.
 4. **SUSPICIOUS_GLOBALS** — Contextual flagging for ambiguous patterns that don't match the allowlist but aren't in the known-dangerous lists.
 5. **Symbolic stack simulation** — Full pickle VM simulation that tracks values through the entire opcode stream. Unlike fixed lookback windows, this eliminates evasion via opcode separation — no matter how many dummy operations an attacker inserts between a string push and a function call, the simulator traces the full chain.
-
-The architectural difference from blocklist scanners: ModelAudit checks dangerous functions _first_ (layers 1-2), then checks the allowlist (layer 3). Anything not explicitly allowed is flagged. Blocklist scanners check their blocklist and allow everything else, so any missing entry is a bypass.
 
 ### Format-specific parsing
 
@@ -285,11 +281,21 @@ Scanner depth varies with risk. The pickle opcode analyzer is the deepest; the s
 | **Archive** | ZIP, TAR, 7-Zip, OCI layers, Compressed (.gz/.bz2/.xz/.zst)                                                                           |
 | **Config**  | Manifests, Jinja2 templates, metadata files                                                                                           |
 
-Some "low" risk formats carry higher risk in practice: NeMo files have a known configuration injection vector (CVE-2025-23304), and others become riskier when wrapped in archives or consumed by buggy loaders.
+Risk level reflects the format's inherent attack surface, not necessarily real-world exposure. NeMo files are classified as medium but have a known configuration injection vector (CVE-2025-23304). Other formats become riskier when wrapped in archives or consumed by buggy loaders.
 
 ### Compared to other scanners
 
-Picklescan and fickling scan pickle files only. ModelScan adds PyTorch, Keras H5, TF SavedModel, and archives (~5 formats). ModelAudit covers all of these plus ONNX, GGUF, TFLite, CoreML, NeMo, and [34+ more](/docs/model-audit/scanners/) — 42+ formats total. It is the only open-source scanner with built-in CVE detection rules, SARIF output for CI/CD, SBOM generation, secret scanning, and remote pulls from S3, GCS, and Hugging Face Hub. Teams already using picklescan or ModelScan can run ModelAudit alongside them; SARIF results from multiple scanners aggregate in the same CI pipeline.
+Picklescan and fickling scan pickle files only. ModelScan adds PyTorch, Keras H5, TF SavedModel, and archives (~5 formats). ModelAudit covers all of these plus ONNX, GGUF, TFLite, CoreML, NeMo, and [34+ more](/docs/model-audit/scanners/) — 42+ formats total.
+
+ModelAudit is also the only open-source scanner with:
+
+- Built-in CVE detection rules
+- SARIF output for CI/CD integration
+- SBOM generation, secret scanning, and license detection
+- Remote pulls from S3, GCS, and Hugging Face Hub
+- No ML framework dependencies
+
+Teams already using picklescan or ModelScan can run ModelAudit alongside them; SARIF results from multiple scanners aggregate in the same CI pipeline.
 
 ### Performance
 
