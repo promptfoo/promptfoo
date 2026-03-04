@@ -26,7 +26,7 @@ export interface ShouldShareOptions {
  * 2. Explicit enable (CLI --share)
  * 3. Config file commandLineOptions.share
  * 4. Config file sharing setting
- * 5. Default: auto-share when cloud is enabled
+ * 5. Default: auto-share when cloud is enabled and user has an active license
  *
  * @param opts - Options containing CLI flags and config values
  * @returns true if results should be shared, false otherwise
@@ -55,6 +55,6 @@ export function shouldShareResults(opts: ShouldShareOptions): boolean {
     return Boolean(opts.configSharing);
   }
 
-  // Default: auto-share when cloud is enabled
-  return cloudConfig.isEnabled();
+  // Default: auto-share only when cloud is enabled and user has an active license
+  return cloudConfig.isEnabled() && cloudConfig.getSharing() === true;
 }

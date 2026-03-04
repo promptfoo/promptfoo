@@ -39,6 +39,7 @@ export class CloudConfig {
     appUrl: string;
     apiHost?: string;
     apiKey?: string;
+    sharing?: boolean;
     currentOrganizationId?: string;
     currentTeamId?: string;
     teams?: {
@@ -60,6 +61,7 @@ export class CloudConfig {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
       apiHost: savedConfig.apiHost,
       apiKey: savedConfig.apiKey,
+      sharing: savedConfig.sharing,
       currentOrganizationId: savedConfig.currentOrganizationId,
       currentTeamId: savedConfig.currentTeamId,
       teams: savedConfig.teams,
@@ -114,6 +116,15 @@ export class CloudConfig {
     return this.config.appUrl;
   }
 
+  getSharing(): boolean | undefined {
+    return this.config.sharing;
+  }
+
+  setSharing(sharing: boolean): void {
+    this.config.sharing = sharing;
+    this.saveConfig();
+  }
+
   delete(): void {
     writeGlobalConfigPartial({ cloud: {} });
   }
@@ -129,6 +140,7 @@ export class CloudConfig {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
       apiHost: savedConfig.apiHost,
       apiKey: savedConfig.apiKey,
+      sharing: savedConfig.sharing,
       currentOrganizationId: savedConfig.currentOrganizationId,
       currentTeamId: savedConfig.currentTeamId,
       teams: savedConfig.teams,
@@ -138,7 +150,12 @@ export class CloudConfig {
   async validateAndSetApiToken(
     token: string,
     apiHost: string,
-  ): Promise<{ user: CloudUser; organization: CloudOrganization; app: CloudApp }> {
+  ): Promise<{
+    user: CloudUser;
+    organization: CloudOrganization;
+    app: CloudApp;
+    hasActiveLicense: boolean;
+  }> {
     try {
       const { fetchWithProxy } = await import('../util/fetch');
       const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
@@ -155,15 +172,17 @@ export class CloudConfig {
         throw new Error('Failed to validate API token: ' + response.statusText);
       }
 
-      const { user, organization, app } = await response.json();
+      const { user, organization, app, hasActiveLicense } = await response.json();
       this.setApiKey(token);
       this.setApiHost(apiHost);
       this.setAppUrl(app.url);
+      this.setSharing(!!hasActiveLicense);
 
       return {
         user,
         organization,
         app,
+        hasActiveLicense: !!hasActiveLicense,
       };
     } catch (err) {
       const error = err as Error & { cause?: string };

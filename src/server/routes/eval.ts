@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
+import { cloudConfig } from '../../globalConfig/cloud';
 import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
@@ -67,7 +68,7 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
     .evaluate(
       Object.assign({}, testSuite as EvaluateTestSuite, {
         writeLatestResults: true,
-        sharing: testSuite.sharing ?? true,
+        sharing: testSuite.sharing ?? cloudConfig.getSharing() ?? false,
       }),
       Object.assign({}, evaluateOptions, {
         eventSource: 'web',

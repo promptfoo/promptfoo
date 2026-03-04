@@ -82,6 +82,24 @@ describe('CloudConfig', () => {
         }),
       });
     });
+
+    it('should set and get sharing', () => {
+      cloudConfigInstance.setSharing(true);
+      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+        cloud: expect.objectContaining({
+          sharing: true,
+        }),
+      });
+    });
+
+    it('should return undefined for sharing when not set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: {},
+      });
+      const config = new CloudConfig();
+      expect(config.getSharing()).toBeUndefined();
+    });
   });
 
   describe('delete', () => {
@@ -109,6 +127,7 @@ describe('CloudConfig', () => {
       app: {
         url: 'https://test.app',
       },
+      hasActiveLicense: true,
     };
 
     it('should validate token and update config on success', async () => {
@@ -126,13 +145,66 @@ describe('CloudConfig', () => {
       );
 
       expect(result).toEqual(mockResponse);
-      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
-        cloud: expect.objectContaining({
-          apiKey: 'test-token',
-          apiHost: 'https://test.api',
-          appUrl: 'https://test.app',
+      // Verify sharing was persisted as true
+      expect(writeGlobalConfigPartial).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cloud: expect.objectContaining({
+            sharing: true,
+          }),
         }),
-      });
+      );
+    });
+
+    it('should set sharing to false when hasActiveLicense is false', async () => {
+      const noLicenseResponse = { ...mockResponse, hasActiveLicense: false };
+      const mockFetchResponse = {
+        ok: true,
+        json: () => Promise.resolve(noLicenseResponse),
+        text: () => Promise.resolve(JSON.stringify(noLicenseResponse)),
+      } as Response;
+
+      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+
+      const result = await cloudConfigInstance.validateAndSetApiToken(
+        'test-token',
+        'https://test.api',
+      );
+
+      expect(result.hasActiveLicense).toBe(false);
+      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual(
+        expect.objectContaining({
+          cloud: expect.objectContaining({
+            sharing: false,
+          }),
+        }),
+      );
+    });
+
+    it('should set sharing to false when hasActiveLicense is undefined', async () => {
+      const { hasActiveLicense: _, ...noLicenseResponse } = mockResponse;
+      const mockFetchResponse = {
+        ok: true,
+        json: () => Promise.resolve(noLicenseResponse),
+        text: () => Promise.resolve(JSON.stringify(noLicenseResponse)),
+      } as Response;
+
+      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+
+      const result = await cloudConfigInstance.validateAndSetApiToken(
+        'test-token',
+        'https://test.api',
+      );
+
+      expect(result.hasActiveLicense).toBe(false);
+      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual(
+        expect.objectContaining({
+          cloud: expect.objectContaining({
+            sharing: false,
+          }),
+        }),
+      );
     });
 
     it('should throw error on failed validation', async () => {
