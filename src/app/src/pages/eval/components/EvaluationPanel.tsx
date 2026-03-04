@@ -13,7 +13,16 @@ import type { GradingResult } from '@promptfoo/types';
 
 const COPY_FEEDBACK_DURATION_MS = 2000;
 
-function getValue(result: GradingResult): string {
+interface AssertionDisplayValue {
+  value: string;
+  templateValue?: string;
+}
+
+function stringifyAssertionValue(value: unknown): string {
+  return typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+}
+
+function getDisplayValue(result: GradingResult): AssertionDisplayValue {
   // For context-related assertions, read the context value from metadata, if it exists
   // These assertions require special handling and should always use metadata.context
   if (
@@ -24,20 +33,30 @@ function getValue(result: GradingResult): string {
     result.metadata?.context
   ) {
     const context = result.metadata.context;
-    return Array.isArray(context) ? context.join('\n') : context;
+    return { value: Array.isArray(context) ? context.join('\n') : context };
   }
 
   // Prefer rendered assertion value with substituted variables over raw template
   if (result.metadata?.renderedAssertionValue !== undefined) {
-    return result.metadata.renderedAssertionValue;
+    const renderedValue = String(result.metadata.renderedAssertionValue);
+    const rawAssertionValue =
+      result.assertion?.value !== undefined
+        ? stringifyAssertionValue(result.assertion.value)
+        : undefined;
+    const templateValue =
+      rawAssertionValue && rawAssertionValue !== renderedValue ? rawAssertionValue : undefined;
+
+    return {
+      value: renderedValue,
+      templateValue,
+    };
   }
 
   // Otherwise, return the assertion value
-  return result.assertion?.value
-    ? typeof result.assertion.value === 'object'
-      ? JSON.stringify(result.assertion.value, null, 2)
-      : String(result.assertion.value)
-    : '-';
+  return {
+    value:
+      result.assertion?.value !== undefined ? stringifyAssertionValue(result.assertion.value) : '-',
+  };
 }
 
 function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
@@ -84,8 +103,13 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
               return null;
             }
 
-            const value = getValue(result);
+            const displayValue = getDisplayValue(result);
+            const value = displayValue.value;
+            const templateValue = displayValue.templateValue;
             const truncatedValue = ellipsize(value, 300);
+            const truncatedTemplateValue = templateValue
+              ? ellipsize(templateValue, 160)
+              : undefined;
             const isExpanded = expandedValues[i] || false;
             const valueKey = `value-${i}`;
 
@@ -108,6 +132,14 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                   onMouseLeave={() => setHoveredAssertion(null)}
                 >
                   <span className="break-words">{isExpanded ? value : truncatedValue}</span>
+                  {templateValue && (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      <span className="font-medium">Template:</span>{' '}
+                      <span className="break-words">
+                        {isExpanded ? templateValue : truncatedTemplateValue}
+                      </span>
+                    </div>
+                  )}
                   {(hoveredAssertion === valueKey || copiedAssertions[valueKey]) && (
                     <Button
                       variant="ghost"

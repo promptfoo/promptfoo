@@ -36,6 +36,51 @@ describe('EvaluationPanel', () => {
     expect(screen.getByText('Test passed')).toBeInTheDocument();
   });
 
+  it('shows rendered assertion value and original template when both are present', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Rendered correctly',
+        assertion: {
+          type: 'llm-rubric',
+          value: 'Does the output match {{myVar}}?',
+        },
+        metadata: {
+          renderedAssertionValue: 'Does the output match hello world?',
+        },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    expect(screen.getByText('Does the output match hello world?')).toBeInTheDocument();
+    expect(screen.getByText('Template:')).toBeInTheDocument();
+    expect(screen.getByText('Does the output match {{myVar}}?')).toBeInTheDocument();
+  });
+
+  it('does not show template line when rendered value matches assertion value', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'No template delta',
+        assertion: {
+          type: 'contains',
+          value: 'Hello world',
+        },
+        metadata: {
+          renderedAssertionValue: 'Hello world',
+        },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    expect(screen.getByText('Hello world')).toBeInTheDocument();
+    expect(screen.queryByText('Template:')).not.toBeInTheDocument();
+  });
+
   it('renders grading prompts section when renderedGradingPrompt is present', () => {
     const gradingResults: GradingResult[] = [
       {

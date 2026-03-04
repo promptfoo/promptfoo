@@ -674,7 +674,7 @@ function EvalOutputCell({
     return output.gradingResult.componentResults
       .map((result, index) => {
         const displayName = result.assertion?.metric || result.assertion?.type || 'unknown';
-        const value = result.assertion?.value || '';
+        const value = result.metadata?.renderedAssertionValue ?? result.assertion?.value ?? '';
         return `Assertion ${index + 1} (${displayName}): ${value}`;
       })
       .join('\n\n');
