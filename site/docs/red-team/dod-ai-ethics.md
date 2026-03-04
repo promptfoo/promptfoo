@@ -1,4 +1,5 @@
 ---
+title: DoD AI Ethical Principles
 sidebar_position: 27
 description: Red team LLM applications against U.S. DoD AI ethical principles to test accountability, fairness, traceability, reliability, and governability
 ---
