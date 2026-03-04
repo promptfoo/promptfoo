@@ -288,10 +288,10 @@ export async function checkEmailStatusAndMaybeExit(options?: {
   if (result.status === EmailValidationStatus.EMAIL_VERIFICATION_REQUIRED) {
     setUserEmailNeedsValidation(true);
     setUserEmailValidated(false);
-    logger.error({
-      message:
-        result.message ||
-        'Your email address is not verified. Check your inbox for a verification link, then rerun the command.',
+    const message =
+      result.message ||
+      'Your email address is not verified. Check your inbox for a verification link, then rerun the command.';
+    logger.error(message, {
       status: result.status,
       hasEmail: result.hasEmail,
     });

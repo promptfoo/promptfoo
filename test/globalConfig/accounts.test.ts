@@ -400,8 +400,8 @@ describe('accounts', () => {
 
       expect(mockExit).toHaveBeenCalledWith(1);
       expect(logger.error).toHaveBeenCalledWith(
+        'Please verify your email address and try again.',
         expect.objectContaining({
-          message: 'Please verify your email address and try again.',
           status: 'email_verification_required',
           hasEmail: true,
         }),
