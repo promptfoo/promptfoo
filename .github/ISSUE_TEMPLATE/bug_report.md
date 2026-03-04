@@ -6,6 +6,8 @@ labels: ''
 assignees: ''
 ---
 
+> **Security vulnerabilities:** Do not open a public issue. Report privately via [GitHub Security Advisories](https://github.com/promptfoo/promptfoo/security/advisories/new) or email security@promptfoo.dev. See [SECURITY.md](https://github.com/promptfoo/promptfoo/security/policy).
+
 **Describe the bug**
 A clear and concise description of what the bug is.
 
@@ -31,7 +33,3 @@ If possible, please output the results of `promptfoo debug` and paste the output
 
 **Additional context**
 Add any other context about the problem here.
-
----
-
-**Security vulnerabilities:** Do not open a public issue. Report privately via [GitHub Security Advisories](https://github.com/promptfoo/promptfoo/security/advisories/new) or email security@promptfoo.dev. See [SECURITY.md](https://github.com/promptfoo/promptfoo/security/policy).

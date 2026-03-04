@@ -47,13 +47,13 @@ If you run Promptfoo in higher-risk contexts (CI, shared machines, third-party c
 
 ## Supported Versions
 
-| Version                  | Supported        |
-| ------------------------ | ---------------- |
-| Latest published release | ✅               |
-| `main` branch            | ✅ (best effort) |
-| Older releases           | ❌               |
+| Version                               | Supported        |
+| ------------------------------------- | ---------------- |
+| Latest published release (npm/Docker) | ✅               |
+| `main` branch (unreleased fixes)      | ✅ (best effort) |
+| Any prior release                     | ❌               |
 
-We do not backport security fixes to older releases. Upgrade to the latest version to receive all security patches.
+We do not backport security fixes. "Prior release" means anything other than the latest published version. Upgrade to the latest version to receive all security patches.
 
 ## Reporting a Vulnerability
 
@@ -61,8 +61,10 @@ We do not backport security fixes to older releases. Upgrade to the latest versi
 
 Report privately via:
 
-- **GitHub Security Advisories:** "Report a vulnerability" button (preferred)
+- **GitHub Security Advisories:** [Report a vulnerability](https://github.com/promptfoo/promptfoo/security/advisories/new) (preferred — this is a secure channel)
 - **Email:** security@promptfoo.dev (fallback: support@promptfoo.dev)
+
+Email is not encrypted by default. For sensitive details (exploit code, PoC artifacts), use GitHub Security Advisories or wait until we establish a secure channel.
 
 We will acknowledge your report within **1 business day**.
 
@@ -79,28 +81,28 @@ A good report helps us triage and fix issues faster. Please include:
 - **Affected surface** — CLI, web UI, or library/SDK
 - **Model provider** in use, if relevant to the issue
 
-**For email reports:** Describe the issue and its impact first. Do not attach exploit code, PoC artifacts, or malicious model files until we establish a secure channel.
-
 ## Response Timeline
+
+All targets are measured from the date we confirm severity.
 
 | Stage                    | Target           |
 | ------------------------ | ---------------- |
-| Acknowledgement          | 1 business day   |
+| Acknowledgment           | 1 business day   |
 | Initial assessment       | 5 business days  |
 | Fix (Critical, 9.0–10.0) | 14 calendar days |
 | Fix (High, 7.0–8.9)      | 30 calendar days |
 | Fix (Medium, 4.0–6.9)    | 60 calendar days |
 | Fix (Low, 0.1–3.9)       | Best effort      |
 
-Severity is assessed using [CVSS v4.0](https://www.first.org/cvss/v4.0/specification-document). We may adjust timelines if a fix requires significant architectural changes and **will communicate any delays**.
+Severity is assessed using [CVSS v4.0](https://www.first.org/cvss/v4.0/specification-document). We may ship mitigations or workarounds before a full fix is available. We may adjust timelines if a fix requires significant architectural changes and **will communicate any delays**.
 
 **Promptfoo-specific severity factors:**
 
-- Untrusted data input → code execution (e.g., prompt injection triggering `eval`): **Critical**
-- CSRF bypass enabling cross-site code execution via the local server: **High**
+- Untrusted input leading to arbitrary code execution: **Critical**
+- CSRF bypass enabling arbitrary command execution or file write via the local server: **High**
 - Secret or credential leakage to unconfigured destinations: **High**
 - Algorithmic DoS in CI pipelines causing resource exhaustion: **Medium–High**
-- Web UI XSS with limited impact (e.g., self-XSS requiring user action): **Low–Medium**
+- Web UI XSS requiring user interaction (e.g., pasting a payload): **Low** (see Scope for self-XSS)
 
 ## Embargo and Non-Disclosure
 
@@ -114,25 +116,30 @@ We ask reporters to keep vulnerability details confidential until a fix is avail
 
 If we are unable to deliver a fix within the embargo window, we will negotiate a revised timeline with the reporter. After the embargo period expires, reporters are free to disclose.
 
-## When We Issue CVEs
+## CVE Policy
 
-**CVE issued:**
+We request CVEs through GitHub Security Advisories. CVE assignment is subject to CNA policies and availability.
+
+**CVE requested:**
 
 - Remote code execution from untrusted inputs (prompts, test cases, model outputs)
-- CSRF bypass enabling cross-site code execution on the local server
+- CSRF bypass enabling arbitrary command execution or file write on the local server
 - Secret or credential leakage to unconfigured or unintended destinations
 - Supply chain compromise (malicious dependencies, build artifacts)
 
 **CVE-eligible (case-by-case):**
 
 - Algorithmic DoS in CI pipelines with significant resource impact
-- Web UI XSS with limited exploitability
+- Web UI XSS with demonstrable impact beyond self-XSS
 
 **No CVE:**
 
 - Issues in explicitly configured custom code (JS assertions, providers, transforms)
 - Local API access issues within the documented trust model
+- Self-XSS requiring the user to paste payloads into their own console or UI
 - Quality, UX, or non-security functional bugs
+
+We may still fix issues in the "No CVE" category; this classification only affects whether we publish a formal advisory.
 
 ## Safe Harbor
 
@@ -142,6 +149,8 @@ We consider security research conducted in good faith to be authorized and will 
 - Avoid privacy violations, data destruction, and service disruption
 - Do not access or modify other users' data
 - Report vulnerabilities promptly and do not exploit them beyond what is necessary to demonstrate the issue
+- Limit testing to Promptfoo-owned assets (do not test third-party services, infrastructure, or other users' accounts)
+- Do not perform social engineering, phishing, physical attacks, or volumetric denial-of-service testing
 
 This safe harbor applies to activities conducted under this policy. For the full legal terms, see our [Responsible Disclosure Policy](https://www.promptfoo.dev/responsible-disclosure-policy/). In case of conflict, the Responsible Disclosure Policy governs.
 
