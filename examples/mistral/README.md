@@ -103,6 +103,5 @@ npx promptfoo@latest eval -c promptfooconfig.comparison.yaml  # Model comparison
 
 ## Additional Resources
 
-- **[Magistral AIME2024 Reasoning Guide](/docs/guides/mistral-magistral-aime2024)** - Comprehensive guide to mathematical reasoning evaluation
 - **[Mistral Provider Documentation](/docs/providers/mistral)** - Complete API reference and configuration options
 - **[Mistral Magistral Announcement](https://mistral.ai/news/magistral/)** - Official announcement and technical details

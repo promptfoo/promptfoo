@@ -84,7 +84,10 @@ export const PluginConfigSchema = z.object({
   // CyberSecEval
   multilingual: z.boolean().optional(),
 
+  // Indirect Prompt Injection
   indirectInjectionVar: z.string().optional(),
+  // RAG Poisoning
+  intendedResults: z.array(z.string()).optional(),
   intent: z.union([z.string(), z.array(z.union([z.string(), z.array(z.string())]))]).optional(),
   policy: z.union([z.string(), PolicyObjectSchema]).optional(),
   systemPrompt: z.string().optional(),

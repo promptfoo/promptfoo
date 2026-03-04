@@ -44,9 +44,7 @@ describe('RecommendedOptions', () => {
   it('should call onStatefulChange with the correct boolean value when a radio button is selected in the stateful options', () => {
     render(<RecommendedOptions {...defaultProps} isMultiTurnEnabled={true} />);
 
-    const yesRadioButton = screen.getByLabelText(
-      'Yes - my system is stateful and maintains conversation history',
-    );
+    const yesRadioButton = screen.getByLabelText(/Yes – Promptfoo should only send/);
 
     fireEvent.click(yesRadioButton);
 
@@ -64,9 +62,7 @@ describe('RecommendedOptions', () => {
       />,
     );
 
-    const noRadioButton = screen.getByLabelText(
-      'No - my system is not stateful, the full conversation history must be sent on every request',
-    );
+    const noRadioButton = screen.getByLabelText(/No – Promptfoo should resend/);
 
     fireEvent.click(noRadioButton);
 
