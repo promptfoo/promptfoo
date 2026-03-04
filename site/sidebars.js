@@ -239,6 +239,7 @@ const redTeamSidebar = [
     collapsed: true,
     items: [
       'red-team/nist-ai-rmf',
+      'red-team/dod-ai-ethics',
       'red-team/owasp-llm-top-10',
       'red-team/owasp-agentic-ai',
       'red-team/owasp-api-top-10',

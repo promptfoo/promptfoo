@@ -45,7 +45,7 @@
     "@vitest/coverage-v8": "^4.0.18",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
-    "dedent": "^1.7.1",
+    "dedent": "^1.7.2",
     "docusaurus-plugin-image-zoom": "^3.0.1",
     "framer-motion": "^12.34.3",
     "gray-matter": "^4.0.3",
@@ -54,7 +54,7 @@
     "prism-react-renderer": "^2.4.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "satori": "^0.19.2",
+    "satori": "^0.21.0",
     "sharp": "^0.34.5",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
