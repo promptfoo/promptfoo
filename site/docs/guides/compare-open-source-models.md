@@ -1,5 +1,5 @@
 ---
-sidebar_label: 'Comparing Open-Source Models'
+sidebar_label: 'Comparing open-source models'
 description: 'Compare Mistral, Mixtral, Gemma, Llama, and Phi performance on your custom datasets using automated benchmarks to select the best open-source model for your use case'
 ---
 
