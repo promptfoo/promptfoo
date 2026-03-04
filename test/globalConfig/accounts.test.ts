@@ -399,7 +399,13 @@ describe('accounts', () => {
       await checkEmailStatusAndMaybeExit();
 
       expect(mockExit).toHaveBeenCalledWith(1);
-      expect(logger.error).toHaveBeenCalledWith('Please verify your email address and try again.');
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Please verify your email address and try again.',
+          status: 'email_verification_required',
+          hasEmail: true,
+        }),
+      );
     });
 
     it('should display warning message when status is show_usage_warning', async () => {
