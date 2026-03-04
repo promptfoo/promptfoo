@@ -132,6 +132,7 @@ export class CloudConfig {
 
   delete(): void {
     writeGlobalConfigPartial({ cloud: {} });
+    this.reload();
   }
 
   private saveConfig(): void {
@@ -181,7 +182,9 @@ export class CloudConfig {
       this.setApiKey(token);
       this.setApiHost(apiHost);
       this.setAppUrl(app.url);
-      this.setSharing(!!hasActiveLicense);
+      if (typeof hasActiveLicense === 'boolean') {
+        this.setSharing(hasActiveLicense);
+      }
 
       return {
         user,

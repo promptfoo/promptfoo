@@ -107,6 +107,17 @@ describe('CloudConfig', () => {
       cloudConfigInstance.delete();
       expect(writeGlobalConfigPartial).toHaveBeenCalledWith({ cloud: {} });
     });
+
+    it('should reset in-memory state after delete', () => {
+      // After delete, readGlobalConfig returns empty cloud config
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: {},
+      });
+      cloudConfigInstance.delete();
+      expect(cloudConfigInstance.getSharing()).toBeUndefined();
+      expect(cloudConfigInstance.getApiKey()).toBeUndefined();
+    });
   });
 
   describe('validateAndSetApiToken', () => {
@@ -181,7 +192,19 @@ describe('CloudConfig', () => {
       );
     });
 
-    it('should set sharing to false when hasActiveLicense is undefined', async () => {
+    it('should preserve existing sharing value when hasActiveLicense is undefined', async () => {
+      // Pre-set sharing to true to verify it is preserved
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: {
+          appUrl: 'https://test.app',
+          apiHost: 'https://test.api',
+          apiKey: 'test-key',
+          sharing: true,
+        },
+      });
+      cloudConfigInstance = new CloudConfig();
+
       const { hasActiveLicense: _, ...noLicenseResponse } = mockResponse;
       const mockFetchResponse = {
         ok: true,
@@ -190,6 +213,7 @@ describe('CloudConfig', () => {
       } as Response;
 
       vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+      const setSharingSpy = vi.spyOn(cloudConfigInstance, 'setSharing');
 
       const result = await cloudConfigInstance.validateAndSetApiToken(
         'test-token',
@@ -197,14 +221,10 @@ describe('CloudConfig', () => {
       );
 
       expect(result.hasActiveLicense).toBe(false);
-      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
-      expect(lastCall).toEqual(
-        expect.objectContaining({
-          cloud: expect.objectContaining({
-            sharing: false,
-          }),
-        }),
-      );
+      // setSharing should NOT have been called when hasActiveLicense is undefined
+      expect(setSharingSpy).not.toHaveBeenCalled();
+      // The existing sharing value should be preserved
+      expect(cloudConfigInstance.getSharing()).toBe(true);
     });
 
     it('should throw error on failed validation', async () => {

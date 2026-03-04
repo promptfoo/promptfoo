@@ -39,6 +39,7 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
     cloudConfig: {
       isEnabled: vi.fn().mockReturnValue(false),
       getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
+      getSharing: vi.fn().mockReturnValue(undefined),
     },
   };
 });
