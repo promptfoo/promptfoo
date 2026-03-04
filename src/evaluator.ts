@@ -338,26 +338,33 @@ export async function runEval({
   // Overwrite vars with any saved register values
   Object.assign(vars, registers);
 
-  // Prompt functions in renderPrompt can mutate prompt.config. Clone prompt so dynamic
-  // config changes stay scoped to this run and do not leak across test cases.
-  const promptForRender = {
-    ...prompt,
-    config:
-      prompt.config && typeof prompt.config === 'object'
-        ? Array.isArray(prompt.config)
-          ? [...prompt.config]
-          : { ...prompt.config }
-        : prompt.config,
+  const clonePromptConfig = <T>(config: T): T => {
+    if (config == null || typeof config !== 'object') {
+      return config;
+    }
+    try {
+      return structuredClone(config);
+    } catch {
+      // Best-effort fallback for non-cloneable values (e.g. functions).
+      return (
+        Array.isArray(config) ? [...config] : { ...(config as Record<string, unknown>) }
+      ) as T;
+    }
   };
 
-  const getMergedPromptConfig = () => ({
-    ...(promptForRender.config ?? {}),
-    ...(test.options ?? {}),
+  // Clone prompt so renderPrompt's mutation of prompt.config doesn't leak across test cases.
+  const promptForRender = {
+    ...prompt,
+    config: clonePromptConfig(prompt.config),
+  };
+
+  const buildMergedPromptConfig = () => ({
+    ...(clonePromptConfig(promptForRender.config) ?? {}),
+    ...(clonePromptConfig(test.options) ?? {}),
   });
 
-  // Initialize these outside try block so they're in scope for the catch.
-  // This is a pre-render fallback used for error paths.
-  let mergedPromptConfig = getMergedPromptConfig();
+  // Pre-render fallback used for error paths; recomputed after renderPrompt.
+  let mergedPromptConfig = buildMergedPromptConfig();
   const setup = {
     provider: {
       id: provider.id(),
@@ -386,8 +393,8 @@ export async function runEval({
       provider,
       skipRenderVars,
     );
-    // Prompt functions may update promptForRender.config during render.
-    mergedPromptConfig = getMergedPromptConfig();
+    // Prompt functions may have updated promptForRender.config during render.
+    mergedPromptConfig = buildMergedPromptConfig();
     setup.prompt.config = mergedPromptConfig;
     let renderedJson = undefined;
     try {
@@ -422,7 +429,8 @@ export async function runEval({
       // This allows test.options to override prompt.config for per-test structured output
       const promptWithMergedConfig = {
         ...promptForRender,
-        config: mergedPromptConfig,
+        // Isolate provider-side mutations from setup/result state.
+        config: clonePromptConfig(mergedPromptConfig),
       };
       const callApiContext: CallApiContextParams = {
         // Always included
