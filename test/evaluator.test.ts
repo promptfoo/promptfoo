@@ -4274,9 +4274,12 @@ describe('runEval', () => {
     expect(result.success).toBe(true);
 
     // Verify the provider received the dynamic config
-    const callApiArgs = mockProvider.callApi.mock.calls[0];
-    const context = callApiArgs[1];
-    expect(context.prompt.config).toEqual(dynamicConfig);
+    const callApiMock = vi.mocked(mockProvider.callApi);
+    const callApiArgs = callApiMock.mock.calls[0];
+    expect(callApiArgs).toBeDefined();
+    const context = callApiArgs![1];
+    expect(context).toBeDefined();
+    expect(context!.prompt.config).toEqual(dynamicConfig);
   });
 
   it('should merge dynamic prompt config with test.options (test.options takes precedence)', async () => {
@@ -4301,9 +4304,12 @@ describe('runEval', () => {
     expect(result.success).toBe(true);
 
     // test.options should override dynamic config
-    const callApiArgs = mockProvider.callApi.mock.calls[0];
-    const context = callApiArgs[1];
-    expect(context.prompt.config).toEqual({ temperature: 0.9, max_tokens: 100 });
+    const callApiMock = vi.mocked(mockProvider.callApi);
+    const callApiArgs = callApiMock.mock.calls[0];
+    expect(callApiArgs).toBeDefined();
+    const context = callApiArgs![1];
+    expect(context).toBeDefined();
+    expect(context!.prompt.config).toEqual({ temperature: 0.9, max_tokens: 100 });
   });
 
   it('should not leak dynamic prompt config across runEval calls for a shared prompt object', async () => {
@@ -4339,15 +4345,22 @@ describe('runEval', () => {
     });
 
     expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
+    const callApiMock = vi.mocked(mockProvider.callApi);
 
-    const firstCallContext = mockProvider.callApi.mock.calls[0][1];
-    const secondCallContext = mockProvider.callApi.mock.calls[1][1];
-    expect(firstCallContext.prompt.config).toEqual({
+    const firstCallArgs = callApiMock.mock.calls[0];
+    const secondCallArgs = callApiMock.mock.calls[1];
+    expect(firstCallArgs).toBeDefined();
+    expect(secondCallArgs).toBeDefined();
+    const firstCallContext = firstCallArgs![1];
+    const secondCallContext = secondCallArgs![1];
+    expect(firstCallContext).toBeDefined();
+    expect(secondCallContext).toBeDefined();
+    expect(firstCallContext!.prompt.config).toEqual({
       top_p: 0.9,
       temperature: 0.5,
       response_format: { type: 'json_object' },
     });
-    expect(secondCallContext.prompt.config).toEqual({
+    expect(secondCallContext!.prompt.config).toEqual({
       top_p: 0.9,
       max_tokens: 100,
     });
