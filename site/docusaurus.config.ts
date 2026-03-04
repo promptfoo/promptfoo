@@ -51,8 +51,7 @@ const config: Config = {
       {
         docs: {
           sidebarPath: require.resolve('./sidebars.js'),
-          // Remove this to remove the "edit this page" links.
-          editUrl: 'https://github.com/promptfoo/promptfoo/tree/main/site',
+          editUrl: undefined,
           sidebarCollapsed: false,
           showLastUpdateAuthor: true,
           showLastUpdateTime: true,
@@ -467,6 +466,10 @@ const config: Config = {
           {
             from: '/docs/guides/prevent-llm-hallucations',
             to: '/docs/guides/prevent-llm-hallucinations',
+          },
+          {
+            from: '/docs/red-team/guardrails',
+            to: '/docs/enterprise/guardrails',
           },
         ],
       },

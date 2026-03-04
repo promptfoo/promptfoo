@@ -630,6 +630,14 @@ export class HydraProvider implements ApiProvider {
       if (this.stateful && targetResponse.sessionId) {
         this.sessionId = targetResponse.sessionId;
         sessionIds.push(targetResponse.sessionId);
+        vars['sessionId'] = targetResponse.sessionId;
+        if (!context) {
+          context = {
+            vars: { ...vars, sessionId: targetResponse.sessionId },
+            prompt,
+          };
+        }
+        context.vars['sessionId'] = targetResponse.sessionId;
       }
 
       // Externalize blobs to avoid token bloat in Hydra/meta prompts
