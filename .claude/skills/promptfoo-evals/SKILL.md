@@ -31,7 +31,7 @@ or any `promptfoo`/`evals` folder. Extend existing suites when possible.
 
 For new suites, use this layout (unless the repo uses another convention):
 
-```
+```text
 evals/<suite-name>/
   promptfooconfig.yaml
   prompts/

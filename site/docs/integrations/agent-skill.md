@@ -1,12 +1,13 @@
 ---
 title: Agent Skill for Writing Evals
-description: Install an agent skill that teaches Claude Code and OpenAI Codex to create promptfoo eval suites automatically.
+description: Install an agent skill that teaches Claude Code and OpenAI Codex to create Promptfoo eval suites automatically with best-practice assertions.
 sidebar_label: Agent Skill
+sidebar_position: 99
 ---
 
 # Agent Skill for Writing Evals
 
-The `promptfoo-evals` agent skill teaches AI coding agents how to create and maintain promptfoo evaluation suites. It works with [Claude Code](https://code.claude.com), [OpenAI Codex](https://openai.com/index/codex), and any tool that supports the [Agent Skills](https://agentskills.io) standard.
+The `promptfoo-evals` agent skill teaches AI coding agents how to create and maintain Promptfoo eval suites. It works with [Claude Code](https://code.claude.com), [OpenAI Codex](https://openai.com/index/codex), and any tool that supports the [Agent Skills](https://agentskills.io) standard.
 
 When installed, the agent knows how to scaffold configs, write test cases with appropriate assertions, choose providers, and validate the result — following promptfoo conventions.
 
@@ -16,7 +17,7 @@ When installed, the agent knows how to scaffold configs, write test cases with a
 
 Add the promptfoo marketplace and install the plugin:
 
-```
+```bash
 /plugin marketplace add promptfoo/promptfoo
 /plugin install promptfoo-evals@promptfoo
 ```
@@ -54,7 +55,7 @@ The skill contains two files:
 
 Once installed, the agent activates automatically when you ask it to create or update eval coverage. You can also invoke it directly:
 
-```
+```bash
 /promptfoo-evals Create an eval suite for my summarization prompt
 ```
 
