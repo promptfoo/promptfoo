@@ -35,8 +35,8 @@ import {
   getTargetResponse,
   isConversationEndedResponse,
   isValidChatMessageArray,
-  redteamProviderManager,
   type RoundBacktrackingStopReason,
+  redteamProviderManager,
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
