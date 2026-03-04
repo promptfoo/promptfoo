@@ -1,12 +1,12 @@
-# openai-gpt-4.1-vs-gpt-4o-mmlu (GPT-4.1 vs GPT-4o MMLU Comparison)
+# openai-gpt-5-vs-gpt-5-mini-mmlu (GPT-5 vs GPT-5-mini MMLU Comparison)
 
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example openai-gpt-4.1-vs-gpt-4o-mmlu
+npx promptfoo@latest init --example openai-gpt-5-vs-gpt-5-mini-mmlu
 ```
 
-This example demonstrates how to benchmark OpenAI's GPT-4.1 against GPT-4o using the Massive Multitask Language Understanding (MMLU) benchmark, focusing on reasoning-heavy academic subjects.
+This example demonstrates how to benchmark OpenAI's GPT-5 against GPT-5-mini using the Massive Multitask Language Understanding (MMLU) benchmark, focusing on reasoning-heavy academic subjects.
 
 ## Prerequisites
 
@@ -39,13 +39,13 @@ To access the MMLU dataset, you'll need to authenticate with Hugging Face:
    You can clone this repository and from the root directory run:
 
    ```bash
-   cd examples/openai-gpt-4.1-vs-gpt-4o-mmlu
+   cd examples/openai-gpt-5-vs-gpt-5-mini-mmlu
    ```
 
    or you can get the example with:
 
    ```bash
-   promptfoo init --example openai-gpt-4.1-vs-gpt-4o-mmlu
+   promptfoo init --example openai-gpt-5-vs-gpt-5-mini-mmlu
    ```
 
 2. Run the evaluation:
@@ -71,13 +71,7 @@ Each subject uses 10 questions to keep the test manageable. You can edit this in
 
 ## Expected Results
 
-Based on OpenAI's benchmark results, you should observe:
-
-- **GPT-4.1**: 90.2% overall MMLU accuracy
-- **GPT-4o**: 85.7% overall MMLU accuracy
-- **Improvement**: 4.5 percentage point gain with GPT-4.1
-
-GPT-4.1 should demonstrate superior performance in:
+GPT-5 should demonstrate superior performance in:
 
 - Mathematical reasoning tasks
 - Logical analysis and formal logic
@@ -165,7 +159,7 @@ You can modify the test by editing `promptfooconfig.yaml`:
 
    ```yaml
    providers:
-     - id: openai:gpt-4.1
+     - id: openai:gpt-5
        config:
          temperature: 0.0 # Even more deterministic
          max_tokens: 1000 # Allow longer explanations
@@ -191,24 +185,15 @@ You can modify the test by editing `promptfooconfig.yaml`:
 - **Format Compliance**: Adherence to requested answer format
 - **Reasoning Quality**: Clarity and correctness of step-by-step explanations
 
-### Key Improvements in GPT-4.1
+### Key Improvements in GPT-5
 
 - **Enhanced Mathematical Reasoning**: Better handling of abstract algebra and calculus
 - **Improved Instruction Following**: More consistent format compliance
 - **Reduced Hallucination**: Less tendency to provide confident but incorrect answers
 - **Better Long Context**: Improved handling of complex, multi-part questions
 
-### Cost Analysis
-
-GPT-4.1 offers better performance at lower cost:
-
-- 26% less expensive than GPT-4o for median queries
-- 75% prompt caching discount for repeated context
-- Improved efficiency with higher accuracy per dollar spent
-
 ## Additional Resources
 
-- [GPT-4.1 vs GPT-4o MMLU Guide](/docs/guides/gpt-4.1-vs-gpt-4o-mmlu)
+- [GPT-5 vs GPT-5-mini MMLU Guide](/docs/guides/gpt-mmlu-comparison)
 - [OpenAI provider documentation](https://promptfoo.dev/docs/providers/openai)
 - [MMLU benchmark details](https://huggingface.co/datasets/cais/mmlu)
-- [GPT-4.1 announcement](https://openai.com/index/introducing-gpt-4-1-in-the-api/)
