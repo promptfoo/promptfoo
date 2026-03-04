@@ -153,8 +153,7 @@ export class ModelsLabImageProvider implements ApiProvider {
       let data = response.data as ModelsLabResponse;
 
       if (data.status === 'processing') {
-        const processingData = data as ModelsLabProcessingResponse;
-        const requestId = processingData.request_id ?? String(processingData.id);
+        const requestId = data.request_id ?? String(data.id);
         logger.debug('[ModelsLab] Image is processing, polling for result', {
           model: this.modelName,
           requestId,
@@ -164,16 +163,15 @@ export class ModelsLabImageProvider implements ApiProvider {
 
       if (data.status === 'error') {
         return {
-          error: `ModelsLab API error: ${(data as ModelsLabErrorResponse).message || 'Unknown error'}`,
+          error: `ModelsLab API error: ${data.message || 'Unknown error'}`,
         };
       }
 
       if (data.status === 'success') {
-        const output = (data as ModelsLabSuccessResponse).output;
-        if (!output || output.length === 0) {
+        if (!data.output || data.output.length === 0) {
           return { error: 'ModelsLab returned no image URLs' };
         }
-        const imageUrl = output[0];
+        const imageUrl = data.output[0];
         const { url: resolvedUrl, blobRef } = await this.maybeDownloadToBlob(imageUrl);
         const sanitizedPrompt = prompt
           .replace(/\r?\n|\r/g, ' ')
@@ -188,7 +186,7 @@ export class ModelsLabImageProvider implements ApiProvider {
       }
 
       return {
-        error: `Unexpected ModelsLab response status: ${(data as Record<string, unknown>).status}`,
+        error: `Unexpected ModelsLab response status: ${(data as ModelsLabResponse).status}`,
       };
     } catch (err) {
       return { error: `ModelsLab API call error: ${String(err)}` };
