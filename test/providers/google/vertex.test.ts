@@ -2307,6 +2307,55 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       expect(result.cost).toBeDefined();
       expect(result.cost).toBeGreaterThan(0);
     });
+
+    it('should use default max_tokens of 512 when thinking is disabled', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          thinking: { type: 'disabled' },
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      const requestData = getRequestData();
+      expect(requestData.max_tokens).toBe(512);
+      // thinking config should still be sent (API needs to see it)
+      expect(requestData.thinking).toEqual({ type: 'disabled' });
+    });
+
+    it('should not show thinking output when thinking is disabled', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          thinking: { type: 'disabled' },
+        },
+      });
+      setupClaudeMocks();
+
+      const result = await provider.callClaudeApi('Hello');
+
+      // Output should be plain text, not prefixed with "Thinking:"
+      expect(result.output).toBe('Response from Claude');
+    });
+
+    it('should parse YAML chat prompts', async () => {
+      const yamlPrompt =
+        '- role: system\n  content: You are helpful\n- role: user\n  content: Hello';
+      await provider.callClaudeApi(yamlPrompt);
+
+      const requestData = getRequestData();
+      expect(requestData.system).toEqual([{ type: 'text', text: 'You are helpful' }]);
+      expect(requestData.messages).toEqual([
+        { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
+      ]);
+    });
+
+    it('should return error for invalid YAML prompts', async () => {
+      const invalidYaml = '- role: system\n  content: test\n- invalid: {{{';
+      const result = await provider.callClaudeApi(invalidYaml);
+
+      expect(result.error).toContain('YAML');
+    });
   });
 
   describe('responseSchema handling', () => {

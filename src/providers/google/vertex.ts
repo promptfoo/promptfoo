@@ -223,17 +223,34 @@ export class VertexChatProvider extends GoogleGenericProvider {
   }
 
   async callClaudeApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
-    const { system, extractedMessages, thinking } = parseMessages(prompt);
+    // Support YAML chat prompts (legacy format used by parseChatPrompt)
+    let normalizedPrompt = prompt;
+    if (prompt.trim().startsWith('- role:')) {
+      try {
+        const yaml = await import('js-yaml');
+        const parsed = yaml.default.load(prompt);
+        normalizedPrompt = JSON.stringify(parsed);
+      } catch (err) {
+        return { error: `Chat Completion prompt is not a valid YAML string: ${err}` };
+      }
+    }
+
+    const { system, extractedMessages, thinking } = parseMessages(normalizedPrompt);
 
     const thinkingConfig: ClaudeThinkingConfig | undefined =
       this.config.thinking || (thinking as ClaudeThinkingConfig | undefined);
+    const isThinkingEnabled = thinkingConfig?.type === 'enabled';
 
     let maxTokens = this.config.max_tokens || this.config.maxOutputTokens || 0;
     if (!maxTokens) {
-      maxTokens = thinkingConfig ? 2048 : 512;
+      maxTokens = isThinkingEnabled ? 2048 : 512;
     }
     // Claude requires max_tokens >= budget_tokens when thinking is enabled
-    if (thinkingConfig?.budget_tokens && maxTokens < thinkingConfig.budget_tokens) {
+    if (
+      isThinkingEnabled &&
+      thinkingConfig?.budget_tokens &&
+      maxTokens < thinkingConfig.budget_tokens
+    ) {
       maxTokens = thinkingConfig.budget_tokens + 1024;
     }
 
@@ -299,7 +316,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     try {
-      const showThinking = this.config.showThinking ?? !!thinkingConfig;
+      const showThinking = this.config.showThinking ?? isThinkingEnabled;
       const output = outputFromMessage(data as any, showThinking);
 
       if (!output) {
