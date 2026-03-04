@@ -65,6 +65,7 @@ providers:
 | [LiteLLM](./litellm.md)                             | Unified interface for 400+ LLMs with embedding support       | `litellm:gpt-5`, `litellm:embedding:text-embedding-3-small`                     |
 | [Llama API](./llamaApi.md)                          | Meta's hosted Llama models with multimodal capabilities      | `llamaapi:Llama-4-Maverick-17B-128E-Instruct-FP8`                               |
 | [Mistral AI](./mistral.md)                          | Mistral's language models                                    | `mistral:magistral-medium-latest`                                               |
+| [ModelsLab](./modelslab.md)                         | Text-to-image generation with Flux, SDXL, and 200+ models    | `modelslab:image:flux`                                                          |
 | [Nscale](./nscale.md)                               | Cost-effective serverless AI inference with zero rate limits | `nscale:openai/gpt-oss-120b`                                                    |
 | [OpenClaw](./openclaw.md)                           | Personal AI assistant framework with agent tools             | `openclaw:main`                                                                 |
 | [OpenLLM](./openllm.md)                             | BentoML's model serving framework                            | Compatible with OpenAI syntax                                                   |

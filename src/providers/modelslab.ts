@@ -1,24 +1,31 @@
 /**
- * ModelsLab provider for promptfoo.
+ * ModelsLab provider for text-to-image generation.
  *
- * Supports text-to-image generation via the ModelsLab API.
- * Handles the async pattern: initial response may be {status: "processing"},
- * in which case the provider polls the fetch endpoint until completion.
+ * Handles async polling: initial response may return {status: "processing"},
+ * in which case we poll the fetch endpoint until completion.
  *
  * API docs: https://docs.modelslab.com
  *
  * NOTE: ModelsLab uses key-in-body authentication (not Bearer header).
- * The API key appears in the request body as the "key" field.
+ * The API key is sent as the "key" field in the JSON request body.
  */
 
+import { isBlobStorageEnabled } from '../blobs/extractor';
+import { storeBlob } from '../blobs/index';
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { REQUEST_TIMEOUT_MS } from '../providers/shared';
+import { fetchWithProxy } from '../util/fetch';
 import { ellipsize } from '../util/text';
+import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../types/index';
 
 const MODELSLAB_BASE_URL = 'https://modelslab.com/api/v6';
 const POLL_INTERVAL_MS = 3000;
@@ -35,7 +42,6 @@ interface ModelsLabConfig {
   seed?: number;
   safety_checker?: 'yes' | 'no';
   enhance_prompt?: 'yes' | 'no';
-  [key: string]: any;
 }
 
 interface ModelsLabSuccessResponse {
@@ -44,7 +50,7 @@ interface ModelsLabSuccessResponse {
   id: number;
   output: string[];
   nsfw_content_detected?: string[] | null;
-  meta: Record<string, any>;
+  meta: Record<string, unknown>;
 }
 
 interface ModelsLabProcessingResponse {
@@ -62,6 +68,11 @@ interface ModelsLabErrorResponse {
   message: string;
 }
 
+type ModelsLabResponse =
+  | ModelsLabSuccessResponse
+  | ModelsLabProcessingResponse
+  | ModelsLabErrorResponse;
+
 export class ModelsLabImageProvider implements ApiProvider {
   modelName: string;
   apiKey?: string;
@@ -73,28 +84,23 @@ export class ModelsLabImageProvider implements ApiProvider {
   ) {
     const { config, id, env } = options;
     this.modelName = modelName;
-    this.apiKey =
-      config?.apiKey ||
-      env?.MODELSLAB_API_KEY ||
-      getEnvString('MODELSLAB_API_KEY');
+    this.apiKey = config?.apiKey || env?.MODELSLAB_API_KEY || getEnvString('MODELSLAB_API_KEY');
     const { apiKey: _apiKey, ...restConfig } = config ?? {};
     this.config = restConfig;
-    if (id) {
-      this.id = () => id;
-    }
+    this.id = id ? () => id : this.id;
   }
 
   id(): string {
-    return 'modelslab:image:' + this.modelName;
+    return `modelslab:image:${this.modelName}`;
   }
 
   toString(): string {
-    return '[ModelsLab Image Provider ' + this.modelName + ']';
+    return `[ModelsLab Image Provider ${this.modelName}]`;
   }
 
   async callApi(
     prompt: string,
-    _context?: CallApiContextParams,
+    context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (!this.apiKey) {
@@ -104,36 +110,36 @@ export class ModelsLabImageProvider implements ApiProvider {
       };
     }
 
-    const requestBody: Record<string, any> = {
+    const config = { ...this.config, ...context?.prompt?.config } as ModelsLabConfig;
+
+    const requestBody: Record<string, unknown> = {
       key: this.apiKey,
       model_id: this.modelName,
       prompt,
-      width: this.config.width ?? 512,
-      height: this.config.height ?? 512,
-      num_inference_steps: this.config.num_inference_steps ?? 30,
-      guidance_scale: this.config.guidance_scale ?? 7.5,
-      samples: this.config.samples ?? 1,
-      safety_checker: this.config.safety_checker ?? 'no',
-      enhance_prompt: this.config.enhance_prompt ?? 'no',
+      width: config.width ?? 512,
+      height: config.height ?? 512,
+      num_inference_steps: config.num_inference_steps ?? 30,
+      guidance_scale: config.guidance_scale ?? 7.5,
+      samples: config.samples ?? 1,
+      safety_checker: config.safety_checker ?? 'no',
+      enhance_prompt: config.enhance_prompt ?? 'no',
     };
 
-    if (this.config.negative_prompt) {
-      requestBody.negative_prompt = this.config.negative_prompt;
+    if (config.negative_prompt) {
+      requestBody.negative_prompt = config.negative_prompt;
     }
-    if (this.config.seed !== undefined) {
-      requestBody.seed = this.config.seed;
-    }
-    for (const [key, val] of Object.entries(this.config)) {
-      if (!(key in requestBody)) {
-        requestBody[key] = val;
-      }
+    if (config.seed !== undefined) {
+      requestBody.seed = config.seed;
     }
 
     try {
-      logger.debug('ModelsLab image generation request', { component: 'ModelsLab', model: this.modelName, prompt: ellipsize(prompt, 50) });
+      logger.debug('[ModelsLab] Image generation request', {
+        model: this.modelName,
+        prompt: ellipsize(prompt, 50),
+      });
 
       const response = await fetchWithCache(
-        MODELSLAB_BASE_URL + '/images/text2img',
+        `${MODELSLAB_BASE_URL}/images/text2img`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -144,18 +150,22 @@ export class ModelsLabImageProvider implements ApiProvider {
         false,
       );
 
-      let data = response.data as ModelsLabSuccessResponse | ModelsLabProcessingResponse | ModelsLabErrorResponse;
+      let data = response.data as ModelsLabResponse;
 
       if (data.status === 'processing') {
-        const requestId = (data as ModelsLabProcessingResponse).request_id
-          ?? String((data as ModelsLabProcessingResponse).id);
-        logger.debug('ModelsLab image is processing, polling for result', { component: 'ModelsLab', model: this.modelName, requestId });
+        const processingData = data as ModelsLabProcessingResponse;
+        const requestId = processingData.request_id ?? String(processingData.id);
+        logger.debug('[ModelsLab] Image is processing, polling for result', {
+          model: this.modelName,
+          requestId,
+        });
         data = await this.pollForCompletion(requestId);
       }
 
       if (data.status === 'error') {
-        const message = (data as ModelsLabErrorResponse).message || 'Unknown error';
-        return { error: 'ModelsLab API error: ' + message };
+        return {
+          error: `ModelsLab API error: ${(data as ModelsLabErrorResponse).message || 'Unknown error'}`,
+        };
       }
 
       if (data.status === 'success') {
@@ -164,23 +174,59 @@ export class ModelsLabImageProvider implements ApiProvider {
           return { error: 'ModelsLab returned no image URLs' };
         }
         const imageUrl = output[0];
+        const resolvedUrl = await this.maybeDownloadToBlob(imageUrl);
         const sanitizedPrompt = prompt
           .replace(/\r?\n|\r/g, ' ')
           .replace(/\[/g, '(')
           .replace(/\]/g, ')');
         return {
-          output: '![' + ellipsize(sanitizedPrompt, 50) + '](' + imageUrl + ')',
+          output: `![${ellipsize(sanitizedPrompt, 50)}](${resolvedUrl})`,
         };
       }
 
-      return { error: 'Unexpected ModelsLab response status: ' + (data as any).status };
+      return {
+        error: `Unexpected ModelsLab response status: ${(data as Record<string, unknown>).status}`,
+      };
     } catch (err) {
-      return { error: 'ModelsLab API call error: ' + String(err) };
+      return { error: `ModelsLab API call error: ${String(err)}` };
     }
   }
 
-  private async pollForCompletion(requestId: string): Promise<ModelsLabSuccessResponse | ModelsLabErrorResponse> {
-    const fetchUrl = MODELSLAB_BASE_URL + '/images/fetch/' + requestId;
+  private async maybeDownloadToBlob(imageUrl: string): Promise<string> {
+    if (!isBlobStorageEnabled()) {
+      return imageUrl;
+    }
+
+    try {
+      const response = await fetchWithProxy(imageUrl);
+      if (!response.ok) {
+        logger.warn('[ModelsLab] Failed to download image for blob storage', {
+          url: imageUrl,
+          status: response.status,
+        });
+        return imageUrl;
+      }
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const mimeType = response.headers.get('content-type')?.split(';')[0] || 'image/png';
+      const { ref } = await storeBlob(buffer, mimeType, {
+        location: 'response.output',
+        kind: 'image',
+      });
+      return ref.uri;
+    } catch (error) {
+      logger.warn('[ModelsLab] Failed to store image as blob, using URL', {
+        url: imageUrl,
+        error: String(error),
+      });
+      return imageUrl;
+    }
+  }
+
+  private async pollForCompletion(
+    requestId: string,
+  ): Promise<ModelsLabSuccessResponse | ModelsLabErrorResponse> {
+    const fetchUrl = `${MODELSLAB_BASE_URL}/images/fetch/${requestId}`;
 
     for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
@@ -198,24 +244,29 @@ export class ModelsLabImageProvider implements ApiProvider {
           false,
         );
 
-        const data = pollResponse.data as
-          | ModelsLabSuccessResponse
-          | ModelsLabProcessingResponse
-          | ModelsLabErrorResponse;
+        const data = pollResponse.data as ModelsLabResponse;
 
-        logger.debug('ModelsLab poll', { component: 'ModelsLab', attempt: attempt + 1, requestId, status: data.status });
+        logger.debug('[ModelsLab] Poll attempt', {
+          attempt: attempt + 1,
+          requestId,
+          status: data.status,
+        });
 
         if (data.status === 'success' || data.status === 'error') {
           return data;
         }
       } catch (error) {
-        logger.warn('ModelsLab poll attempt failed', { component: 'ModelsLab', attempt: attempt + 1, requestId, error: String(error) });
+        logger.warn('[ModelsLab] Poll attempt failed', {
+          attempt: attempt + 1,
+          requestId,
+          error: String(error),
+        });
       }
     }
 
     return {
       status: 'error',
-      message: 'ModelsLab image generation timed out after ' + ((MAX_POLL_ATTEMPTS * POLL_INTERVAL_MS) / 1000) + 's',
+      message: `ModelsLab image generation timed out after ${(MAX_POLL_ATTEMPTS * POLL_INTERVAL_MS) / 1000}s`,
     };
   }
 }

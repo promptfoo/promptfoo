@@ -101,7 +101,6 @@ import {
   ReplicateModerationProvider,
   ReplicateProvider,
 } from './replicate';
-import { ModelsLabImageProvider } from './modelslab';
 import { RubyProvider } from './rubyCompletion';
 import { createScriptBasedProviderFactory } from './scriptBasedProvider';
 import { ScriptCompletionProvider } from './scriptCompletion';
@@ -1042,13 +1041,17 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
+      context: LoadApiProviderContext,
     ) => {
+      const { ModelsLabImageProvider } = await import('./modelslab');
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
       if (modelType === 'image') {
-        return new ModelsLabImageProvider(modelName, providerOptions);
+        return new ModelsLabImageProvider(modelName, {
+          ...providerOptions,
+          env: context.env,
+        });
       }
       throw new Error(
         `Invalid modelslab provider path: ${providerPath}. Use: modelslab:image:<model_name>`,
