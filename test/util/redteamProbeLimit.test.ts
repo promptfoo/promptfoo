@@ -38,7 +38,7 @@ function insertRedteamEval(opts: {
     .values({
       id: evalId,
       createdAt,
-      config: { redteam: { plugins: [], strategies: [] } },
+      config: { redteam: { plugins: [], strategies: [] } } as any,
       results: {},
       isRedteam: true,
     })
@@ -87,7 +87,7 @@ function insertNonRedteamEval(opts?: { createdAt?: number; numResults?: number }
     .values({
       id: evalId,
       createdAt,
-      config: { providers: ['test'] },
+      config: { providers: ['test'] } as any,
       results: {},
       isRedteam: false,
     })
@@ -231,7 +231,7 @@ describe('redteamProbeLimit', () => {
         .values({
           id: evalId,
           createdAt: now,
-          config: { redteam: { plugins: ['harmful'] } },
+          config: { redteam: { plugins: ['harmful'] } } as any,
           results: {},
           isRedteam: false,
         })
