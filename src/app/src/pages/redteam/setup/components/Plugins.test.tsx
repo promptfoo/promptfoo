@@ -61,10 +61,10 @@ const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
 const mockUseRecentlyUsedPlugins = useRecentlyUsedPlugins as unknown as Mock;
 
 // Helper function for rendering with providers
-const renderWithProviders = (ui: React.ReactNode) => {
+const renderWithProviders = (ui: React.ReactNode, initialEntries: string[] = ['/']) => {
   const redTeamConfig = mockUseRedTeamConfig();
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <TooltipProvider>
         <ToastProvider>
           <TestCaseGenerationProvider redTeamConfig={redTeamConfig}>
@@ -142,6 +142,14 @@ describe('Plugins', () => {
     expect(screen.getByText('MITRE')).toBeInTheDocument();
     expect(screen.getByText('EU AI Act')).toBeInTheDocument();
     expect(screen.getByText('ISO 42001')).toBeInTheDocument();
+    expect(screen.queryByText('DoD AI Ethical Principles')).not.toBeInTheDocument();
+  });
+
+  it('should render the DoD preset when showEnterpriseMappings=1 is set', async () => {
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />, [
+      '/?showEnterpriseMappings=1',
+    ]);
+
     expect(screen.getByText('DoD AI Ethical Principles')).toBeInTheDocument();
   });
 
@@ -354,6 +362,18 @@ describe('Plugins', () => {
       expect(screen.getByRole('tab', { name: /Plugins/ })).toBeInTheDocument();
       expect(screen.getByRole('tab', { name: /Custom Intents/ })).toBeInTheDocument();
       expect(screen.getByRole('tab', { name: /Custom Policies/ })).toBeInTheDocument();
+    });
+
+    it('should use pointer cursor styles on tab triggers', () => {
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      expect(screen.getByRole('tab', { name: /Plugins/ })).toHaveStyle({ cursor: 'pointer' });
+      expect(screen.getByRole('tab', { name: /Custom Intents/ })).toHaveStyle({
+        cursor: 'pointer',
+      });
+      expect(screen.getByRole('tab', { name: /Custom Policies/ })).toHaveStyle({
+        cursor: 'pointer',
+      });
     });
 
     it('should have the Plugins tab selected by default', () => {

@@ -421,9 +421,7 @@ const sidebars = {
     {
       type: 'category',
       label: 'Red teaming',
-      link: {
-        type: 'generated-index',
-      },
+      collapsed: true,
       items: redTeamSidebar,
     },
     {
@@ -452,10 +450,6 @@ const sidebars = {
     {
       type: 'category',
       label: 'Enterprise',
-      link: {
-        type: 'doc',
-        id: 'enterprise/index',
-      },
       collapsed: true,
       items: [
         { type: 'doc', id: 'enterprise/index' },
@@ -492,29 +486,6 @@ const sidebars = {
       id: 'releases',
     },
   ],
-  // Within enterprise docs, show only the following sidebar
-  enterprise: [
-    {
-      type: 'doc',
-      id: 'enterprise/index',
-    },
-    { type: 'doc', id: 'enterprise/authentication' },
-    { type: 'doc', id: 'enterprise/service-accounts' },
-    { type: 'doc', id: 'enterprise/teams' },
-    { type: 'doc', id: 'enterprise/red-teams' },
-    { type: 'doc', id: 'enterprise/findings' },
-    { type: 'doc', id: 'enterprise/guardrails' },
-    { type: 'doc', id: 'enterprise/remediation-reports' },
-    { type: 'doc', id: 'enterprise/webhooks' },
-    { type: 'doc', id: 'enterprise/audit-logging' },
-    {
-      type: 'link',
-      label: 'API Reference',
-      href: '/docs/api-reference',
-    },
-  ],
-  // Within red team docs, show only the following sidebar
-  redTeamSidebar,
 };
 
 module.exports = sidebars;

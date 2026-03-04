@@ -114,9 +114,9 @@ vi.mock('./CustomPoliciesTab', () => ({
  * Renders the actual Plugins component which connects to the real Zustand store.
  * This tests the full integration path: store -> Plugins -> PluginsTab -> store update.
  */
-const renderComponent = () => {
+const renderComponent = ({ initialEntries = ['/'] }: { initialEntries?: string[] } = {}) => {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <TooltipProvider>
         <ToastProvider>
           <Plugins onNext={vi.fn()} onBack={vi.fn()} />
@@ -227,6 +227,20 @@ describe('PluginsTab', () => {
         expect(screen.getByTestId(`plugin-list-item-${compliancePlugins[0]}`)).toBeInTheDocument();
         expect(screen.getByTestId(`plugin-list-item-${trustSafetyPlugins[0]}`)).toBeInTheDocument();
         expect(screen.getByTestId(`plugin-list-item-${brandPlugins[0]}`)).toBeInTheDocument();
+      });
+
+      test('Category filter tabs use pointer cursor', async () => {
+        renderComponent();
+
+        expect(screen.getByRole('button', { name: 'All' })).toHaveClass('cursor-pointer');
+        expect(screen.getByRole('button', { name: /Security & Access Control/i })).toHaveClass(
+          'cursor-pointer',
+        );
+        expect(screen.getByRole('button', { name: /Compliance & Legal/i })).toHaveClass(
+          'cursor-pointer',
+        );
+        expect(screen.getByRole('button', { name: 'Select all' })).toHaveClass('cursor-pointer');
+        expect(screen.getByRole('button', { name: 'Select none' })).toHaveClass('cursor-pointer');
       });
 
       test('Selecting "All" renders correct plugins', async () => {
@@ -1006,7 +1020,7 @@ describe('PluginsTab', () => {
 
           expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
 
-          renderComponent();
+          renderComponent({ initialEntries: ['/?showEnterpriseMappings=1'] });
 
           const presetCard = screen.getByTestId('preset-card-dod-ai-ethical-principles');
           await user.click(presetCard);
@@ -1022,6 +1036,14 @@ describe('PluginsTab', () => {
           for (const expectedPlugin of expectedPlugins) {
             expect(pluginIds.has(expectedPlugin)).toBe(true);
           }
+        });
+
+        test('Hides the "DoD AI Ethical Principles" preset by default', async () => {
+          renderComponent();
+
+          expect(
+            screen.queryByTestId('preset-card-dod-ai-ethical-principles'),
+          ).not.toBeInTheDocument();
         });
       });
 

@@ -164,18 +164,19 @@ The `approval_policy` parameter controls when user approval is required:
 
 ## Models
 
-The SDK supports various OpenAI models. Use `gpt-5.1-codex` for code generation tasks:
+The SDK supports various OpenAI models. Use `gpt-5.3-codex` for current code generation tasks:
 
 ```yaml
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.1-codex # Recommended for code tasks
+      model: gpt-5.3-codex # Recommended for code tasks
 ```
 
 Supported models include:
 
-- **GPT-5.2** - Latest frontier model with improved knowledge and reasoning
+- **GPT-5.3 Codex** - Latest codex generation (`gpt-5.3-codex`, `gpt-5.3-codex-spark`)
+- **GPT-5.2** - Current GPT-5.2 line (`gpt-5.2`, `gpt-5.2-codex`)
 - **GPT-5.1 Codex** - Optimized for code generation (`gpt-5.1-codex`, `gpt-5.1-codex-max`, `gpt-5.1-codex-mini`)
 - **GPT-5 Codex** - Previous generation (`gpt-5-codex`, `gpt-5-codex-mini`)
 - **GPT-5** - Base GPT-5 model (`gpt-5`)
