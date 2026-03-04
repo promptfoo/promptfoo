@@ -12,6 +12,7 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { ToastProvider } from '@app/contexts/ToastContext';
 import {
   DEFAULT_PLUGINS,
+  DOD_AI_ETHICS_MAPPING,
   EU_AI_ACT_MAPPING,
   FOUNDATION_PLUGINS,
   GDPR_MAPPING,
@@ -113,9 +114,9 @@ vi.mock('./CustomPoliciesTab', () => ({
  * Renders the actual Plugins component which connects to the real Zustand store.
  * This tests the full integration path: store -> Plugins -> PluginsTab -> store update.
  */
-const renderComponent = () => {
+const renderComponent = ({ initialEntries = ['/'] }: { initialEntries?: string[] } = {}) => {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <TooltipProvider>
         <ToastProvider>
           <Plugins onNext={vi.fn()} onBack={vi.fn()} />
@@ -1009,6 +1010,40 @@ describe('PluginsTab', () => {
           for (const expectedPlugin of expectedPlugins) {
             expect(pluginIds.has(expectedPlugin)).toBe(true);
           }
+        });
+
+        test('Selecting the "DoD AI Ethical Principles" preset', async () => {
+          const user = userEvent.setup();
+          const expectedPlugins = new Set(
+            Object.values(DOD_AI_ETHICS_MAPPING).flatMap((v) => v.plugins),
+          );
+
+          expect(useRedTeamConfig.getState().config.plugins).toHaveLength(0);
+
+          renderComponent({ initialEntries: ['/?showEnterpriseMappings=1'] });
+
+          const presetCard = screen.getByTestId('preset-card-dod-ai-ethical-principles');
+          await user.click(presetCard);
+
+          await waitFor(() => {
+            const storePlugins = useRedTeamConfig.getState().config.plugins;
+            expect(storePlugins.length).toBe(expectedPlugins.size);
+          });
+
+          const storePlugins = useRedTeamConfig.getState().config.plugins;
+          const pluginIds = new Set(storePlugins.map((p) => (typeof p === 'string' ? p : p.id)));
+
+          for (const expectedPlugin of expectedPlugins) {
+            expect(pluginIds.has(expectedPlugin)).toBe(true);
+          }
+        });
+
+        test('Hides the "DoD AI Ethical Principles" preset by default', async () => {
+          renderComponent();
+
+          expect(
+            screen.queryByTestId('preset-card-dod-ai-ethical-principles'),
+          ).not.toBeInTheDocument();
         });
       });
 
