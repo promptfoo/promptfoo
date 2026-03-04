@@ -13,6 +13,7 @@ import { cn } from '@app/lib/utils';
 import {
   categoryAliases,
   DEFAULT_PLUGINS,
+  DOD_AI_ETHICS_MAPPING,
   displayNameOverrides,
   EU_AI_ACT_MAPPING,
   FOUNDATION_PLUGINS,
@@ -45,6 +46,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
+import { useSearchParams } from 'react-router-dom';
 import { requiresPluginConfig } from '../constants';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
@@ -116,6 +118,8 @@ export default function PluginsTab({
   // Check if user has enterprise access (cloud enabled)
   const { data: cloudConfig } = useCloudConfig();
   const hasEnterpriseAccess = cloudConfig?.isEnabled ?? false;
+  const [searchParams] = useSearchParams();
+  const showEnterpriseMappings = searchParams.get('showEnterpriseMappings') === '1';
 
   // Test case generation state - now from context
   const {
@@ -128,8 +132,11 @@ export default function PluginsTab({
   const presets: {
     name: keyof typeof PLUGIN_PRESET_DESCRIPTIONS;
     plugins: Set<Plugin> | ReadonlySet<Plugin>;
-  }[] = useMemo(
-    () => [
+  }[] = useMemo(() => {
+    const availablePresets: {
+      name: keyof typeof PLUGIN_PRESET_DESCRIPTIONS;
+      plugins: Set<Plugin> | ReadonlySet<Plugin>;
+    }[] = [
       {
         name: 'Recommended',
         plugins: DEFAULT_PLUGINS,
@@ -194,9 +201,17 @@ export default function PluginsTab({
         name: 'GDPR',
         plugins: new Set(Object.values(GDPR_MAPPING).flatMap((v) => v.plugins)),
       },
-    ],
-    [],
-  );
+    ];
+
+    if (showEnterpriseMappings) {
+      availablePresets.push({
+        name: 'DoD AI Ethical Principles',
+        plugins: new Set(Object.values(DOD_AI_ETHICS_MAPPING).flatMap((v) => v.plugins)),
+      });
+    }
+
+    return availablePresets;
+  }, [showEnterpriseMappings]);
 
   // Helper functions
   const isPluginConfigured = useCallback(

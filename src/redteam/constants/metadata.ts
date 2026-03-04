@@ -1253,6 +1253,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   Custom: 'Choose your own plugins',
+  'DoD AI Ethical Principles': 'DoD AI ethical principles framework',
   'EU AI Act': 'Prohibited & high-risk requirements',
   Foundation: 'Pre-deployment model risks',
   GDPR: 'Data protection and privacy',
@@ -1261,7 +1262,7 @@ export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   'ISO 42001': 'AI management system requirements',
   'Minimal Test': 'Validate your setup quickly',
   MITRE: 'ATLAS framework coverage',
-  NIST: 'AI Risk Management Framework',
+  NIST: 'NIST AI Risk Management Framework',
   'OWASP Top 10 for Agentic Applications': 'Agentic security risks',
   'OWASP API Top 10': 'API security vulnerabilities',
   'OWASP Gen AI Red Team': 'Red teaming best practices',
