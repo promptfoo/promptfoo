@@ -427,43 +427,41 @@ providers:
 
 ### GPT-5.3 Instant
 
-GPT-5.3 Instant (API model: `gpt-5.3-chat-latest`) is OpenAI's updated everyday conversational model. It delivers more accurate answers, reduces unnecessary refusals and caveats, and provides more direct, helpful responses. Promptfoo also supports GPT-5.3 coding variants for agentic/code workflows.
+GPT-5.3 Instant is exposed as `gpt-5.3-chat-latest`. Promptfoo also supports GPT-5.3 coding variants for agentic/code workflows.
 
 #### Available Models
 
 | Model               | Description                          | Pricing (Input / Output)  |
 | ------------------- | ------------------------------------ | ------------------------- |
-| gpt-5.3-chat-latest | Chat-optimized instant model         | $1.75 / $14 per 1M tokens |
+| gpt-5.3-chat-latest | Chat-optimized alias                 | $1.75 / $14 per 1M tokens |
 | gpt-5.3-codex       | GPT-5.3 coding model                 | $1.75 / $14 per 1M tokens |
 | gpt-5.3-codex-spark | Faster/cost-efficient coding variant | $0.50 / $4 per 1M tokens  |
 
-#### Key Features
+#### Key Specifications
 
-- **Reduced unnecessary refusals**: Provides useful answers directly when appropriate
-- **Better web-contextualized results**: More effectively balances web search results with its own knowledge
-- **Less defensive phrasing**: Tones down overly cautious preambles and caveats
-- **Fixed reasoning**: `gpt-5.3-chat-latest` only supports `medium` reasoning effort
+- **Endpoint support**: Chat Completions API and Responses API
+- **Limits and pricing**: The `-latest` alias can move over time. Check [OpenAI model docs](https://platform.openai.com/docs/models) and [pricing](https://openai.com/pricing) for current context limits and rates.
 
 #### Usage Examples
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:gpt-5.3-chat-latest
+  - id: openai:chat:gpt-5.3-chat-latest
     config:
-      reasoning:
-        effort: 'medium' # Only supported reasoning effort for chat-latest
-      max_output_tokens: 4096
+      max_completion_tokens: 2048
 
   - id: openai:responses:gpt-5.3-codex
     config:
       reasoning:
         effort: 'high'
       max_output_tokens: 4096
-```
 
-:::note
-GPT-5.3 Instant (`gpt-5.3-chat-latest`) only supports `medium` reasoning effort. It does not support `temperature`, `top_p`, or a real system role.
-:::
+  - id: openai:responses:gpt-5.3-chat-latest
+    config:
+      reasoning:
+        effort: 'medium'
+      max_output_tokens: 2048
+```
 
 ### Reasoning Models (o1, o3, o3-pro, o3-mini, o4-mini)
 
