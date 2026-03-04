@@ -35,7 +35,15 @@ import {
   subCategoryDescriptions,
   UI_DISABLED_WHEN_REMOTE_UNAVAILABLE,
 } from '@promptfoo/redteam/constants';
-import { AlertCircle, HelpCircle, Minus, Search, Settings } from 'lucide-react';
+import {
+  AlertCircle,
+  ChevronDown,
+  ChevronRight,
+  HelpCircle,
+  Minus,
+  Search,
+  Settings,
+} from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { requiresPluginConfig } from '../constants';
 import PluginConfigDialog from './PluginConfigDialog';
@@ -99,6 +107,7 @@ export default function PluginsTab({
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
   const [isCustomMode, setIsCustomMode] = useState(true);
+  const [presetsExpanded, setPresetsExpanded] = useState(true);
 
   const {
     data: { status: apiHealthStatus },
@@ -239,10 +248,7 @@ export default function PluginsTab({
   );
 
   // Check if we're showing domain-specific category
-  const showingDomainSpecific = useMemo(
-    () => selectedCategory === 'Domain-Specific Risks',
-    [selectedCategory],
-  );
+  const showingDomainSpecific = selectedCategory === 'Domain-Specific Risks';
 
   // Get all plugins with categories
   const allPluginsWithCategories = useMemo(() => {
@@ -410,27 +416,46 @@ export default function PluginsTab({
       <div className="flex w-full items-start gap-6" data-testid="plugins-tab-container">
         {/* Main content */}
         <div className="min-w-0 flex-1">
-          {/* Presets section */}
+          {/* Presets section - collapsible */}
           <div className="mb-6">
-            <h3 className="mb-4 text-lg font-semibold">Presets</h3>
+            <button
+              type="button"
+              onClick={() => setPresetsExpanded((prev) => !prev)}
+              aria-expanded={presetsExpanded}
+              className="mb-3 flex w-full cursor-pointer items-center gap-2 text-left"
+            >
+              {presetsExpanded ? (
+                <ChevronDown className="size-4 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="size-4 text-muted-foreground" />
+              )}
+              <h3 className="text-lg font-semibold">Presets</h3>
+              {!presetsExpanded && currentlySelectedPreset && (
+                <Badge variant="secondary">
+                  {currentlySelectedPreset.name} ({currentlySelectedPreset.plugins.size} plugins)
+                </Badge>
+              )}
+            </button>
 
-            <div className="mb-6 grid auto-rows-fr grid-cols-[repeat(auto-fill,230px)] gap-3">
-              {presets.map((preset) => {
-                const isSelected =
-                  preset.name === 'Custom'
-                    ? isCustomMode
-                    : preset.name === currentlySelectedPreset?.name;
-                return (
-                  <PresetCard
-                    key={preset.name}
-                    name={preset.name}
-                    description={PLUGIN_PRESET_DESCRIPTIONS[preset.name] || ''}
-                    isSelected={isSelected}
-                    onClick={() => handlePresetSelect(preset)}
-                  />
-                );
-              })}
-            </div>
+            {presetsExpanded && (
+              <div className="grid auto-rows-fr grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
+                {presets.map((preset) => {
+                  const isSelected =
+                    preset.name === 'Custom'
+                      ? isCustomMode
+                      : preset.name === currentlySelectedPreset?.name;
+                  return (
+                    <PresetCard
+                      key={preset.name}
+                      name={preset.name}
+                      description={PLUGIN_PRESET_DESCRIPTIONS[preset.name] || ''}
+                      isSelected={isSelected}
+                      onClick={() => handlePresetSelect(preset)}
+                    />
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Filter by category */}
@@ -476,9 +501,9 @@ export default function PluginsTab({
             </div>
           </div>
 
-          {/* Search */}
-          <div className="mb-6">
-            <div className="relative max-w-sm">
+          {/* Search and bulk selection */}
+          <div className="mb-6 flex items-center gap-4">
+            <div className="relative max-w-sm flex-1">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 data-testid="plugin-search-input"
@@ -488,39 +513,35 @@ export default function PluginsTab({
                 className="pl-9"
               />
             </div>
+            {!showingDomainSpecific && (
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  className="cursor-pointer text-sm text-primary hover:underline"
+                  onClick={() => {
+                    setSelectedPlugins(
+                      new Set([...selectedPlugins, ...filteredPlugins.map(({ plugin }) => plugin)]),
+                    );
+                  }}
+                >
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  className="cursor-pointer text-sm text-primary hover:underline"
+                  onClick={() => {
+                    const filteredPluginIds = new Set(filteredPlugins.map((p) => p.plugin));
+                    const newSelected = new Set(
+                      [...selectedPlugins].filter((p) => !filteredPluginIds.has(p)),
+                    );
+                    setSelectedPlugins(newSelected);
+                  }}
+                >
+                  Select none
+                </button>
+              </div>
+            )}
           </div>
-
-          {/* Bulk selection actions - hide for domain-specific view */}
-          {!showingDomainSpecific && (
-            <div className="mb-4 flex justify-end gap-4">
-              <button
-                type="button"
-                className="cursor-pointer text-sm text-primary hover:underline"
-                onClick={() => {
-                  // Collect all filtered plugins and merge with existing selection
-                  setSelectedPlugins(
-                    new Set([...selectedPlugins, ...filteredPlugins.map(({ plugin }) => plugin)]),
-                  );
-                }}
-              >
-                Select all
-              </button>
-              <button
-                type="button"
-                className="cursor-pointer text-sm text-primary hover:underline"
-                onClick={() => {
-                  // Remove only the filtered plugins from selection
-                  const filteredPluginIds = new Set(filteredPlugins.map((p) => p.plugin));
-                  const newSelected = new Set(
-                    [...selectedPlugins].filter((p) => !filteredPluginIds.has(p)),
-                  );
-                  setSelectedPlugins(newSelected);
-                }}
-              >
-                Select none
-              </button>
-            </div>
-          )}
 
           {/* Domain-Specific Vertical Suites */}
           {showingDomainSpecific && (
