@@ -114,42 +114,40 @@ export abstract class AwsBedrockGenericProvider {
     if (!this.bedrock) {
       let handler;
       const apiKey = this.getApiKey();
+      const hasProxy = Boolean(getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY'));
 
-      // Create request handler for proxy or API key scenarios
-      if (getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY') || apiKey) {
-        try {
-          const { NodeHttpHandler } = await import('@smithy/node-http-handler');
+      try {
+        const { NodeHttpHandler } = await import('@smithy/node-http-handler');
+        let proxyAgent: Agent | undefined;
+        if (hasProxy) {
           const { ProxyAgent } = await import('proxy-agent');
-
-          // Create handler with proxy support if needed
-          const proxyAgent =
-            getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY')
-              ? new ProxyAgent()
-              : undefined;
-
-          handler = new NodeHttpHandler({
-            ...(proxyAgent ? { httpsAgent: proxyAgent as unknown as Agent } : {}),
-            requestTimeout: 300000, // 5 minutes
-          });
-
-          // Add Bearer token middleware for API key authentication
-          if (apiKey) {
-            const originalHandle = handler.handle.bind(handler);
-            handler.handle = async (request: any, options?: any) => {
-              // Add Authorization header with Bearer token
-              request.headers = {
-                ...request.headers,
-                Authorization: `Bearer ${apiKey}`,
-              };
-              return originalHandle(request, options);
-            };
-          }
-        } catch {
-          const reason = apiKey
-            ? 'API key authentication requires the @smithy/node-http-handler package'
-            : 'Proxy configuration requires the @smithy/node-http-handler package';
-          throw new Error(`${reason}. Please install it in your project or globally.`);
+          proxyAgent = new ProxyAgent() as unknown as Agent;
         }
+
+        handler = new NodeHttpHandler({
+          ...(proxyAgent ? { httpsAgent: proxyAgent } : {}),
+          requestTimeout: 300000, // 5 minutes
+        });
+
+        // Add Bearer token middleware for API key authentication
+        if (apiKey) {
+          const originalHandle = handler.handle.bind(handler);
+          handler.handle = async (request: any, options?: any) => {
+            // Add Authorization header with Bearer token
+            request.headers = {
+              ...request.headers,
+              Authorization: `Bearer ${apiKey}`,
+            };
+            return originalHandle(request, options);
+          };
+        }
+      } catch {
+        const reason = apiKey
+          ? 'API key authentication requires the @smithy/node-http-handler package'
+          : hasProxy
+            ? 'Proxy configuration requires the @smithy/node-http-handler package'
+            : 'Bedrock provider requires the @smithy/node-http-handler package for HTTP/1.1 transport';
+        throw new Error(`${reason}. Please install it in your project or globally.`);
       }
 
       try {
