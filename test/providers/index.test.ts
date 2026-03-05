@@ -490,11 +490,25 @@ describe('loadApiProvider', () => {
   });
 
   afterEach(() => {
-    // Clean up any env vars leaked by tests that set process.env directly
-    for (const key of Object.keys(process.env)) {
-      if (key.startsWith('TEST_') && key.includes('7079')) {
-        delete process.env[key];
-      }
+    // Clean up env vars set by #7079 regression tests (explicit list to avoid
+    // accidentally deleting pre-existing env vars with a broad pattern match)
+    const keysToClean = [
+      'TEST_TENANT_7079',
+      'TEST_APPLICATION_7079',
+      'TEST_BASE_URL_7079',
+      'TEST_SERVICE_7079',
+      'TEST_VERSION_7079',
+      'TEST_APP_7079_RESOLVED',
+      'TEST_URL_7079_RESOLVED',
+      'TEST_APP_7079_HTTP',
+      'TEST_BASE_7079_HTTP',
+      'TEST_SVC_7079_HTTP',
+      'TEST_VER_7079_HTTP',
+      'TEST_SESSION_7079_HTTP',
+      'TEST_MISSING_VAR_7079',
+    ];
+    for (const key of keysToClean) {
+      delete process.env[key];
     }
   });
 
