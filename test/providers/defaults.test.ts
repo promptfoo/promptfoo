@@ -12,6 +12,7 @@ import {
   DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
   DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
 } from '../../src/providers/google/ai.studio';
+import { hasGoogleDefaultCredentials } from '../../src/providers/google/util';
 import { DefaultEmbeddingProvider as GeminiEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
@@ -55,17 +56,22 @@ describe('Provider override tests', () => {
     process.env = { ...originalEnv };
     setDefaultCompletionProviders(undefined as any);
     setDefaultEmbeddingProviders(undefined as any);
+    vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.MISTRAL_API_KEY;
     delete process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_API_KEY;
     delete process.env.PALM_API_KEY;
+    delete process.env.AZURE_OPENAI_API_KEY;
+    delete process.env.AZURE_API_KEY;
+    delete process.env.AZURE_DEPLOYMENT_NAME;
+    delete process.env.AZURE_OPENAI_DEPLOYMENT_NAME;
   });
 
   afterEach(() => {
     process.env = originalEnv;
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should override all completion providers when setDefaultCompletionProviders is called', async () => {
@@ -170,6 +176,24 @@ describe('Provider override tests', () => {
     expect(providers.gradingProvider).toBe(MistralGradingProvider);
     expect(providers.suggestionsProvider).toBe(MistralSuggestionsProvider);
     expect(providers.synthesizeProvider).toBe(MistralSynthesizeProvider);
+  });
+
+  it('should probe Google default credentials once per provider resolution', async () => {
+    vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
+
+    await getDefaultProviders();
+
+    expect(hasGoogleDefaultCredentials).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not probe Google default credentials when Azure is preferred', async () => {
+    process.env.AZURE_OPENAI_API_KEY = 'azure-key';
+    process.env.AZURE_DEPLOYMENT_NAME = 'azure-chat';
+    process.env.AZURE_OPENAI_DEPLOYMENT_NAME = 'azure-chat';
+
+    await getDefaultProviders();
+
+    expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
   });
 
   it('should use Mistral providers when provided via env overrides', async () => {

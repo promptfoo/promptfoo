@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 290">
+  <defs>
+    <linearGradient id="critGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#dc2626"/>
+      <stop offset="100%" style="stop-color:#ef4444"/>
+    </linearGradient>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#1e293b"/>
+      <stop offset="100%" style="stop-color:#334155"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-4%" y="-3%" width="108%" height="110%">
+      <feDropShadow dx="0" dy="2" stdDeviation="6" flood-opacity="0.08"/>
+    </filter>
+    <filter id="critShadow" x="-4%" y="-10%" width="108%" height="130%">
+      <feDropShadow dx="0" dy="1" stdDeviation="3" flood-color="#dc2626" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+
+  <!-- Card container -->
+  <rect x="10" y="6" width="520" height="274" rx="10" fill="white" filter="url(#cardShadow)" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Header -->
+  <rect x="10" y="6" width="520" height="38" rx="10" fill="url(#headerGrad)"/>
+  <rect x="10" y="30" width="520" height="14" fill="url(#headerGrad)"/>
+  <text x="30" y="31" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="white" fill-opacity="0.7" letter-spacing="0.5">SCANNER</text>
+  <text x="516" y="31" text-anchor="end" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="white" fill-opacity="0.7" letter-spacing="0.5">RESULT</text>
+
+  <!-- Row 1: VirusTotal -->
+  <g transform="translate(0, 50)">
+    <rect x="10" y="0" width="520" height="36" fill="white"/>
+    <circle cx="30" cy="18" r="4" fill="#cbd5e1"/>
+    <text x="44" y="23" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="500" fill="#475569">VirusTotal</text>
+    <rect x="370" y="8" width="148" height="22" rx="11" fill="#f1f5f9"/>
+    <text x="444" y="23" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#94a3b8">No Issue</text>
+  </g>
+
+  <!-- Row 2: JFrog -->
+  <g transform="translate(0, 86)">
+    <rect x="10" y="0" width="520" height="36" fill="#fafbfc"/>
+    <circle cx="30" cy="18" r="4" fill="#cbd5e1"/>
+    <text x="44" y="23" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="500" fill="#475569">JFrog</text>
+    <rect x="370" y="8" width="148" height="22" rx="11" fill="#f1f5f9"/>
+    <text x="444" y="23" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#94a3b8">No Issue</text>
+  </g>
+
+  <!-- Row 3: Protect AI (ModelScan) — does not support format -->
+  <g transform="translate(0, 122)">
+    <rect x="10" y="0" width="520" height="36" fill="white"/>
+    <circle cx="30" cy="18" r="4" fill="#cbd5e1"/>
+    <text x="44" y="23" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="500" fill="#475569">Protect AI (ModelScan)</text>
+    <text x="516" y="23" text-anchor="end" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="400" font-style="italic" fill="#b4bcc8">Not supported</text>
+  </g>
+
+  <!-- Row 4: HF Picklescan — does not support format -->
+  <g transform="translate(0, 158)">
+    <rect x="10" y="0" width="520" height="36" fill="#fafbfc"/>
+    <circle cx="30" cy="18" r="4" fill="#cbd5e1"/>
+    <text x="44" y="23" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="500" fill="#475569">HF Picklescan</text>
+    <text x="516" y="23" text-anchor="end" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="400" font-style="italic" fill="#b4bcc8">Not supported</text>
+  </g>
+
+  <!-- Row 5: ClamAV -->
+  <g transform="translate(0, 194)">
+    <rect x="10" y="0" width="520" height="36" fill="white"/>
+    <circle cx="30" cy="18" r="4" fill="#cbd5e1"/>
+    <text x="44" y="23" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="500" fill="#475569">ClamAV</text>
+    <rect x="370" y="8" width="148" height="22" rx="11" fill="#f1f5f9"/>
+    <text x="444" y="23" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#94a3b8">No Issue</text>
+  </g>
+
+  <!-- Divider -->
+  <line x1="26" y1="234" x2="514" y2="234" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Row 6: ModelAudit (highlighted) -->
+  <g transform="translate(0, 240)">
+    <rect x="10" y="0" width="520" height="40" rx="0" fill="#fef2f2" filter="url(#critShadow)"/>
+    <rect x="10" y="30" width="520" height="10" rx="10" fill="#fef2f2"/>
+    <circle cx="30" cy="20" r="5" fill="url(#critGrad)"/>
+    <text x="46" y="25" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="700" fill="#1e293b">ModelAudit</text>
+    <rect x="350" y="9" width="168" height="24" rx="12" fill="url(#critGrad)"/>
+    <text x="434" y="25" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="700" fill="#ffffff">4 CRITICAL findings</text>
+  </g>
+</svg>

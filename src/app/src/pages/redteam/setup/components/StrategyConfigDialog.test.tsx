@@ -513,7 +513,9 @@ describe('StrategyConfigDialog', () => {
     fireEvent.change(customMaxTurnsInput, { target: { value: '12' } });
     expect(customMaxTurnsInput).toHaveValue(12);
 
-    const customStatefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    const customStatefulSwitch = screen.getByRole('switch', {
+      name: /When enabled, Promptfoo should only send/,
+    });
     expect(customStatefulSwitch).toBeChecked();
 
     rerender(
@@ -530,7 +532,9 @@ describe('StrategyConfigDialog', () => {
     const goatMaxTurnsInput = screen.getByLabelText('Max Turns');
     expect(goatMaxTurnsInput).toHaveValue(3);
 
-    const goatStatefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    const goatStatefulSwitch = screen.getByRole('switch', {
+      name: /When enabled, Promptfoo should only send/,
+    });
     expect(goatStatefulSwitch).not.toBeChecked();
   });
 
@@ -556,7 +560,9 @@ describe('StrategyConfigDialog', () => {
     expect(maxTurnsInput).toHaveValue(10);
 
     expect(screen.queryByLabelText('Max Backtracks')).not.toBeInTheDocument();
-    const statefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    const statefulSwitch = screen.getByRole('switch', {
+      name: /Enable when your target maintains server-side sessions/,
+    });
     expect(statefulSwitch).not.toBeChecked();
   });
 
@@ -579,7 +585,9 @@ describe('StrategyConfigDialog', () => {
     const maxTurnsInput = screen.getByLabelText('Max Turns');
     fireEvent.change(maxTurnsInput, { target: { value: '15' } });
 
-    const statefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    const statefulSwitch = screen.getByRole('switch', {
+      name: /Enable when your target maintains server-side sessions/,
+    });
     fireEvent.click(statefulSwitch);
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
@@ -647,7 +655,9 @@ describe('StrategyConfigDialog', () => {
     const maxTurnsInput = screen.queryByLabelText('Max Turns');
     expect(maxTurnsInput).toBeNull();
 
-    const statefulSwitch = screen.queryByRole('switch', { name: /Stateful/ });
+    const statefulSwitch = screen.queryByRole('switch', {
+      name: /When enabled, Promptfoo should only send/,
+    });
     expect(statefulSwitch).toBeNull();
 
     const noConfigMessage = screen.queryByText(
