@@ -5,14 +5,14 @@ prompts:
   - 'Solve this riddle: {{riddle}}'
 
 providers:
+  - openai:gpt-5.4
   - openai:gpt-5.3-chat-latest
-  - openai:gpt-5.2-chat-latest
 
 defaultTest:
   assert:
     # Inference should always cost less than this (USD)
     - type: cost
-      threshold: 0.005
+      threshold: 0.01
     # Inference should always be faster than this (milliseconds)
     - type: latency
       threshold: 10000

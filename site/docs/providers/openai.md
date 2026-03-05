@@ -1,6 +1,6 @@
 ---
 sidebar_position: 1
-description: 'Configure OpenAI models including GPT-5.4, GPT-4.1, o-series reasoning, embeddings, and assistants for comprehensive AI evals'
+description: 'Configure OpenAI models including GPT-5.4, GPT-5.3, GPT-4.1, o-series reasoning, embeddings, and assistants for comprehensive AI evals'
 ---
 
 # OpenAI
@@ -157,6 +157,20 @@ interface OpenAiConfig {
   maxRetries?: number;
 }
 ```
+
+### Generating Multiple Responses
+
+Use `passthrough` to set OpenAI's `n` parameter for generating multiple responses in a single request:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4o
+    config:
+      passthrough:
+        n: 3 # Generate 3 responses
+```
+
+When `n > 1`, the primary `output` contains the first choice's content, and all generated choices are available in the response metadata under `metadata.choices`. Each choice includes the full response object with `message`, `finish_reason`, and `index`.
 
 ## Models
 
@@ -463,7 +477,7 @@ providers:
 
 ### GPT-5.4
 
-GPT-5.4 is a GPT-5 family model with a 1M+ token context window. Available in standard and pro variants.
+GPT-5.4 is a GPT-5 family model for complex professional work, combining advanced reasoning with agentic coding capabilities.
 
 #### Available Models
 
@@ -474,15 +488,13 @@ GPT-5.4 is a GPT-5 family model with a 1M+ token context window. Available in st
 | gpt-5.4-pro            | Premium GPT-5.4 pro model     | $30.00 / $180 per 1M tokens |
 | gpt-5.4-pro-2026-03-05 | Dated snapshot of gpt-5.4-pro | $30.00 / $180 per 1M tokens |
 
-Pricing notes:
+#### Key Specifications
 
-- `gpt-5.4` cached input tokens: $0.25 per 1M tokens
-- `gpt-5.4-pro` has no discounted cached-input rate
-
-#### Reasoning Effort
-
-- `gpt-5.4` supports: `none`, `low`, `medium`, `high`, `xhigh`
-- `gpt-5.4-pro` supports: `medium`, `high`, `xhigh`
+- **Context window**: 1,050,000 tokens
+- **Max output tokens**: 128,000 tokens
+- **Reasoning effort**: `gpt-5.4` supports `none`, `low`, `medium`, `high`, `xhigh`. `gpt-5.4-pro` supports `medium`, `high`, `xhigh`.
+- **Endpoint support**: Chat Completions API, Responses API, and Codex SDK
+- **Cached input**: `gpt-5.4` cached input tokens $0.25 per 1M. `gpt-5.4-pro` has no cached-input discount.
 
 #### Usage Examples
 

@@ -69,7 +69,7 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * - 'low': Light reasoning, faster responses
  * - 'medium': Balanced (default)
  * - 'high': Thorough reasoning for complex tasks
- * - 'xhigh': Maximum reasoning depth (gpt-5.2, gpt-5.1-codex-max)
+ * - 'xhigh': Maximum reasoning depth (gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
  */
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
@@ -112,7 +112,7 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini')
+   * Model to use (e.g., 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini')
    */
   model?: string;
 
