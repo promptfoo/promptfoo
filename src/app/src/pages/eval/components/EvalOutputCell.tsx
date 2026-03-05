@@ -433,10 +433,14 @@ function EvalOutputCell({
   }
 
   // Append structured images (e.g. from Gemini text+image responses)
+  // Filter out any image already displayed via the text/output field to avoid duplicates
   if (output.images?.length) {
     const imageElements = output.images.map((img: ImageOutput, idx: number) => {
       const src = resolveImageSource(img);
-      return src ? (
+      if (!src || src === inlineImageSrc) {
+        return null;
+      }
+      return (
         <img
           key={`img-${idx}`}
           src={src}
@@ -445,7 +449,7 @@ function EvalOutputCell({
           style={{ width: '100%', cursor: 'pointer' }}
           onClick={() => toggleLightbox(src)}
         />
-      ) : null;
+      );
     });
     node = node ? (
       <>
