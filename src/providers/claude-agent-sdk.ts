@@ -122,6 +122,78 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
   }
 }
 
+function buildResourceAttributeString(
+  existingAttributes: string | undefined,
+  additions: string[],
+): string | undefined {
+  const segments = [existingAttributes, ...additions].filter(
+    (segment): segment is string => typeof segment === 'string' && segment.length > 0,
+  );
+
+  return segments.length > 0 ? segments.join(',') : undefined;
+}
+
+function injectDeepTracingEnv(
+  env: Record<string, string>,
+  currentTraceparent: string | undefined,
+  context: CallApiContextParams | undefined,
+): void {
+  const userConfigured = {
+    endpoint: !!env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    protocol: !!env.OTEL_EXPORTER_OTLP_PROTOCOL,
+    serviceName: !!env.OTEL_SERVICE_NAME,
+    resourceAttributes: !!env.OTEL_RESOURCE_ATTRIBUTES,
+  };
+  const otelDefaults: Record<string, string> = {
+    CLAUDE_CODE_ENABLE_TELEMETRY: '1',
+    OTEL_LOGS_EXPORTER: 'otlp',
+    OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:4318',
+    OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json',
+    OTEL_SERVICE_NAME: 'claude-agent-sdk',
+  };
+
+  for (const [key, value] of Object.entries(otelDefaults)) {
+    if (!env[key]) {
+      env[key] = value;
+    }
+  }
+
+  if (currentTraceparent) {
+    env.TRACEPARENT = currentTraceparent;
+  } else {
+    delete env.TRACEPARENT;
+  }
+
+  const resourceAttrs: string[] = [];
+  if (currentTraceparent) {
+    const parts = currentTraceparent.split('-');
+    if (parts.length >= 3) {
+      resourceAttrs.push(`promptfoo.trace_id=${parts[1]}`);
+      resourceAttrs.push(`promptfoo.parent_span_id=${parts[2]}`);
+    }
+  }
+  if (context?.evaluationId) {
+    resourceAttrs.push(`evaluation.id=${context.evaluationId}`);
+  }
+  if (context?.testCaseId) {
+    resourceAttrs.push(`test.case.id=${context.testCaseId}`);
+  }
+
+  const mergedResourceAttrs = buildResourceAttributeString(
+    env.OTEL_RESOURCE_ATTRIBUTES,
+    resourceAttrs,
+  );
+  if (mergedResourceAttrs) {
+    env.OTEL_RESOURCE_ATTRIBUTES = mergedResourceAttrs;
+  }
+
+  logger.debug('[ClaudeAgentSDK] Injecting OTEL config for deep tracing', {
+    traceparent: currentTraceparent || '(none - SDK will start own trace)',
+    endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    userConfigured,
+  });
+}
+
 export interface ClaudeCodeOptions {
   apiKey?: string;
 
@@ -685,63 +757,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       env.ANTHROPIC_API_KEY = this.apiKey;
     }
 
-    // Get traceparent for trace context propagation
-    // First try to get from context (passed from evaluator), then fall back to active OTEL context
-    const traceparent = context?.traceparent || getTraceparent();
-
-    // Inject OpenTelemetry configuration for deep tracing
-    // This allows the Claude Agent SDK to export its internal events to our OTLP receiver
-    // Without deep_tracing, we still capture spans at the provider level but don't
-    // inject OTEL vars into SDK (which would cause export errors if no collector)
-    if (config.deep_tracing) {
-      // Apply OTEL defaults only if not already set by user env overrides.
-      // Claude Code exports events as OTEL logs (not traces) to our OTLP receiver.
-      const otelDefaults: Record<string, string> = {
-        CLAUDE_CODE_ENABLE_TELEMETRY: '1',
-        OTEL_LOGS_EXPORTER: 'otlp',
-        OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:4318',
-        OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json',
-        OTEL_SERVICE_NAME: 'claude-agent-sdk',
-      };
-      for (const [key, value] of Object.entries(otelDefaults)) {
-        if (!env[key]) {
-          env[key] = value;
-        }
-      }
-      // W3C Trace Context - only set if we have a traceparent for proper parent-child linking
-      if (traceparent) {
-        env.TRACEPARENT = traceparent;
-      }
-      // Pass evaluation context as OTEL resource attributes so the receiver
-      // can link orphan SDK logs back to the correct trace/evaluation.
-      // The SDK's bundled @opentelemetry/resources envDetector reads this.
-      const resourceAttrs: string[] = [];
-      if (traceparent) {
-        const parts = traceparent.split('-');
-        if (parts.length >= 3) {
-          resourceAttrs.push(`promptfoo.trace_id=${parts[1]}`);
-          resourceAttrs.push(`promptfoo.parent_span_id=${parts[2]}`);
-        }
-      }
-      if (context?.evaluationId) {
-        resourceAttrs.push(`evaluation.id=${context.evaluationId}`);
-      }
-      if (context?.testCaseId) {
-        resourceAttrs.push(`test.case.id=${context.testCaseId}`);
-      }
-      if (resourceAttrs.length > 0) {
-        env.OTEL_RESOURCE_ATTRIBUTES = resourceAttrs.join(',');
-      }
-      logger.debug('[ClaudeAgentSDK] Injecting OTEL config for deep tracing', {
-        traceparent: traceparent || '(none - SDK will start own trace)',
-        endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
-        userConfigured: {
-          endpoint: !!this.env?.OTEL_EXPORTER_OTLP_ENDPOINT,
-          protocol: !!this.env?.OTEL_EXPORTER_OTLP_PROTOCOL,
-          serviceName: !!this.env?.OTEL_SERVICE_NAME,
-        },
-      });
-    } else {
+    if (!config.deep_tracing) {
       // When deep_tracing is disabled, remove any inherited TRACEPARENT
       // to prevent accidental trace linking from parent processes
       delete env.TRACEPARENT;
@@ -877,6 +893,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       {
         prompt,
         cacheKeyQueryOptions,
+        deepTracing: config.deep_tracing ?? false,
       },
     );
 
@@ -933,20 +950,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       spawnClaudeCodeProcess: config.spawn_claude_code_process,
       canUseTool,
     };
-    const queryParams = { prompt, options };
-
-    // Log the query params for debugging
-    logger.debug(
-      `Calling Claude Agent SDK: ${JSON.stringify({
-        prompt,
-        options: {
-          ...options,
-          // overwrite with metadata instead of the full objects to avoid logging secrets
-          mcpServers: options.mcpServers ? Object.keys(options.mcpServers) : undefined,
-          env: Object.keys(env).length > 0 ? Object.keys(env) : undefined,
-        },
-      })}`,
-    );
 
     // Wrap the SDK call in a GenAI span for observability
     const modelName = config.model || 'default';
@@ -955,9 +958,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       operationName: 'agent' as const,
       model: modelName,
       providerId: this.providerId,
-      traceparent,
+      traceparent: context?.traceparent,
       maxTokens: config.max_thinking_tokens,
-      evalId: context?.originalProvider?.id(),
+      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
       requestBody: JSON.stringify({ prompt: prompt.substring(0, 500) }),
     };
 
@@ -965,6 +968,31 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       return await withGenAISpan(
         spanContext,
         async () => {
+          const queryEnv = { ...env };
+          if (config.deep_tracing) {
+            // Pull the trace context from the active provider span so SDK events become its children.
+            injectDeepTracingEnv(queryEnv, getTraceparent(), context);
+          }
+
+          const queryOptions: QueryOptions = {
+            ...options,
+            env: queryEnv,
+          };
+          const queryParams = { prompt, options: queryOptions };
+
+          logger.debug(
+            `Calling Claude Agent SDK: ${JSON.stringify({
+              prompt,
+              options: {
+                ...queryOptions,
+                mcpServers: queryOptions.mcpServers
+                  ? Object.keys(queryOptions.mcpServers)
+                  : undefined,
+                env: Object.keys(queryEnv).length > 0 ? Object.keys(queryEnv) : undefined,
+              },
+            })}`,
+          );
+
           // Dynamically import the ESM module once and cache it
           if (!this.claudeCodeModule) {
             this.claudeCodeModule = await loadClaudeCodeSDK();

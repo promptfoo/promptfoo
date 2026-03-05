@@ -534,6 +534,46 @@ describe('OTLPReceiver', () => {
       expect(response.body).toEqual({ error: 'Internal server error' });
     });
 
+    it('should fail when trace record creation fails', async () => {
+      mockTraceStore.createTrace.mockRejectedValueOnce(new Error('Trace creation failed'));
+
+      const otlpRequest = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: Buffer.from('dddddddddddddddddddddddddddddddd', 'hex').toString(
+                      'base64',
+                    ),
+                    spanId: Buffer.from('5555555555555555', 'hex').toString('base64'),
+                    name: 'span-with-eval-id',
+                    startTimeUnixNano: '1000000000',
+                    attributes: [
+                      {
+                        key: 'evaluation.id',
+                        value: { stringValue: 'eval-123' },
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const response = await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send(otlpRequest)
+        .expect(500);
+
+      expect(response.body).toEqual({ error: 'Internal server error' });
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+    });
+
     it('should skip trace creation for spans without evaluationId and use skipTraceCheck=true for spans with evaluationId', async () => {
       const otlpRequest = {
         resourceSpans: [
@@ -752,6 +792,56 @@ describe('OTLPReceiver', () => {
       );
     });
 
+    it('should parse JSON AnyValue bodies and infer span names from event attributes', async () => {
+      (receiver as any).traceStore = mockTraceStore;
+
+      const otlpLogsRequest = {
+        resourceLogs: [
+          {
+            scopeLogs: [
+              {
+                logRecords: [
+                  {
+                    timeUnixNano: '1700000000000000000',
+                    severityText: 'INFO',
+                    body: {
+                      intValue: '42',
+                    },
+                    attributes: [
+                      { key: 'event.name', value: { stringValue: 'tool_result' } },
+                      { key: 'payload', value: { bytesValue: 'AQI=' } },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const response = await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(otlpLogsRequest)
+        .expect(200);
+
+      expect(response.body).toEqual({ partialSuccess: {} });
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'tool_result',
+            attributes: expect.objectContaining({
+              'event.name': 'tool_result',
+              payload: 'AQI=',
+              'log.body': 42,
+            }),
+          }),
+        ]),
+        { skipTraceCheck: false },
+      );
+    });
+
     it('should handle logs without trace context by generating IDs', async () => {
       // Manually override the traceStore property for this test
       (receiver as any).traceStore = mockTraceStore;
@@ -795,6 +885,50 @@ describe('OTLPReceiver', () => {
         ]),
         { skipTraceCheck: false },
       );
+    });
+
+    it('should return partial success when log-derived spans cannot be stored', async () => {
+      (receiver as any).traceStore = mockTraceStore;
+      mockTraceStore.addSpans.mockImplementationOnce(
+        async () =>
+          ({
+            stored: false,
+            reason: 'Trace missing',
+          }) as any,
+      );
+
+      const otlpLogsRequest = {
+        resourceLogs: [
+          {
+            scopeLogs: [
+              {
+                logRecords: [
+                  {
+                    timeUnixNano: '1700000000000000000',
+                    eventName: 'orphan_event',
+                    body: {
+                      stringValue: 'An orphan log event',
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const response = await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(otlpLogsRequest)
+        .expect(200);
+
+      expect(response.body).toEqual({
+        partialSuccess: {
+          rejectedLogRecords: 1,
+          errorMessage: 'Trace missing',
+        },
+      });
     });
 
     it('should accept valid OTLP protobuf logs', async () => {

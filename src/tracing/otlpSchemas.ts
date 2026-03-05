@@ -6,6 +6,7 @@ const OTLPAttributeValueSchema: z.ZodType<{
   intValue?: string | number;
   doubleValue?: number;
   boolValue?: boolean;
+  bytesValue?: string;
   arrayValue?: { values: any[] };
   kvlistValue?: { values: any[] };
 }> = z.lazy(() =>
@@ -14,6 +15,7 @@ const OTLPAttributeValueSchema: z.ZodType<{
     intValue: z.union([z.string(), z.number()]).optional(),
     doubleValue: z.number().optional(),
     boolValue: z.boolean().optional(),
+    bytesValue: z.string().optional(),
     arrayValue: z.object({ values: z.array(z.any()) }).optional(),
     kvlistValue: z.object({ values: z.array(OTLPAttributeSchema) }).optional(),
   }),
@@ -77,12 +79,8 @@ export const OTLPTraceRequestSchema = z.object({
 
 export type OTLPTraceRequest = z.infer<typeof OTLPTraceRequestSchema>;
 
-// OTLP Log Record body schema
-const OTLPLogBodySchema = z.object({
-  stringValue: z.string().optional(),
-  kvlistValue: z.object({ values: z.array(OTLPAttributeSchema) }).optional(),
-  arrayValue: z.object({ values: z.array(z.any()) }).optional(),
-});
+// OTLP Log Record body uses the same AnyValue shape as OTLP attributes
+const OTLPLogBodySchema = OTLPAttributeValueSchema;
 
 // OTLP Log Record schema
 const OTLPLogRecordSchema = z.object({

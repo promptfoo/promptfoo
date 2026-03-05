@@ -9,6 +9,7 @@ import {
   FS_READONLY_ALLOWED_TOOLS,
 } from '../../src/providers/claude-agent-sdk';
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
+import * as genaiTracer from '../../src/tracing/genaiTracer';
 import type { NonNullableUsage, Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { MockInstance } from 'vitest';
 
@@ -415,6 +416,83 @@ describe('ClaudeCodeSDKProvider', () => {
         const provider = new ClaudeCodeSDKProvider();
         await expect(provider.callApi('Test prompt')).rejects.toThrow(
           /Anthropic API key is not set/,
+        );
+      });
+
+      it('should inject deep tracing env using the provider span context and preserve resource attributes', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Traced response'));
+
+        const evaluatorTraceparent = '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01';
+        const providerTraceparent = '00-11111111111111111111111111111111-2222222222222222-01';
+        const traceparentSpy = vi
+          .spyOn(genaiTracer, 'getTraceparent')
+          .mockReturnValue(providerTraceparent);
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: {
+            deep_tracing: true,
+          },
+          env: {
+            ANTHROPIC_API_KEY: 'test-api-key',
+            OTEL_RESOURCE_ATTRIBUTES: 'service.namespace=agents',
+          },
+        });
+
+        await provider.callApi('Test prompt', {
+          evaluationId: 'eval-123',
+          testCaseId: 'tc-456',
+          traceparent: evaluatorTraceparent,
+          prompt: { raw: 'Test prompt', label: 'test' },
+          vars: {},
+        });
+
+        expect(traceparentSpy).toHaveBeenCalled();
+
+        const env = mockQuery.mock.calls[0][0].options.env;
+        expect(env.TRACEPARENT).toBe(providerTraceparent);
+        expect(env.CLAUDE_CODE_ENABLE_TELEMETRY).toBe('1');
+        expect(env.OTEL_LOGS_EXPORTER).toBe('otlp');
+        expect(env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe('http://127.0.0.1:4318');
+        expect(env.OTEL_EXPORTER_OTLP_PROTOCOL).toBe('http/json');
+        expect(env.OTEL_SERVICE_NAME).toBe('claude-agent-sdk');
+        expect(env.OTEL_RESOURCE_ATTRIBUTES).toContain('service.namespace=agents');
+        expect(env.OTEL_RESOURCE_ATTRIBUTES).toContain(
+          'promptfoo.trace_id=11111111111111111111111111111111',
+        );
+        expect(env.OTEL_RESOURCE_ATTRIBUTES).toContain('promptfoo.parent_span_id=2222222222222222');
+        expect(env.OTEL_RESOURCE_ATTRIBUTES).toContain('evaluation.id=eval-123');
+        expect(env.OTEL_RESOURCE_ATTRIBUTES).toContain('test.case.id=tc-456');
+      });
+
+      it('should pass evaluationId into the provider span context', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Spanned response'));
+
+        const spanSpy = vi
+          .spyOn(genaiTracer, 'withGenAISpan')
+          .mockImplementation(async (_ctx, fn) =>
+            fn({
+              end: vi.fn(),
+              setStatus: vi.fn(),
+              recordException: vi.fn(),
+            } as any),
+          );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt', {
+          evaluationId: 'eval-789',
+          prompt: { raw: 'Test prompt', label: 'test' },
+          vars: {},
+        });
+
+        expect(spanSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            evalId: 'eval-789',
+          }),
+          expect.any(Function),
+          expect.any(Function),
         );
       });
 

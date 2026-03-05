@@ -26,6 +26,7 @@ interface OTLPAttribute {
     intValue?: string | number;
     doubleValue?: number;
     boolValue?: boolean;
+    bytesValue?: string;
     arrayValue?: { values: any[] };
     kvlistValue?: { values: OTLPAttribute[] };
   };
@@ -41,6 +42,10 @@ interface OTLPLogRecord {
   severityText?: string;
   body?: {
     stringValue?: string;
+    intValue?: string | number;
+    doubleValue?: number;
+    boolValue?: boolean;
+    bytesValue?: string;
     kvlistValue?: { values: OTLPAttribute[] };
     arrayValue?: { values: any[] };
   };
@@ -132,10 +137,18 @@ export class OTLPReceiver {
         }
         logger.debug(`[OtlpReceiver] Parsed ${traces.length} traces from request`);
 
-        await this.groupAndStoreSpans(traces, 'spans');
+        const result = await this.groupAndStoreSpans(traces, 'spans');
 
         // OTLP success response
-        res.status(200).json({ partialSuccess: {} });
+        res.status(200).json({
+          partialSuccess:
+            result.rejectedCount > 0
+              ? {
+                  rejectedSpans: result.rejectedCount,
+                  errorMessage: result.reasons.join('; '),
+                }
+              : {},
+        });
         logger.debug('[OtlpReceiver] Successfully processed traces');
       } catch (error) {
         logger.error(`[OtlpReceiver] Failed to process OTLP traces: ${error}`);
@@ -197,10 +210,18 @@ export class OTLPReceiver {
         }
         logger.debug(`[OtlpReceiver] Converted ${traces.length} log events to spans`);
 
-        await this.groupAndStoreSpans(traces, 'log-derived spans');
+        const result = await this.groupAndStoreSpans(traces, 'log-derived spans');
 
         // OTLP logs success response
-        res.status(200).json({ partialSuccess: {} });
+        res.status(200).json({
+          partialSuccess:
+            result.rejectedCount > 0
+              ? {
+                  rejectedLogRecords: result.rejectedCount,
+                  errorMessage: result.reasons.join('; '),
+                }
+              : {},
+        });
         logger.debug('[OtlpReceiver] Successfully processed logs');
       } catch (error) {
         logger.error(`[OtlpReceiver] Failed to process OTLP logs: ${error}`);
@@ -273,7 +294,10 @@ export class OTLPReceiver {
    * Group parsed traces by trace ID, create trace records where needed, and store spans.
    * Shared between the /v1/traces and /v1/logs endpoints.
    */
-  private async groupAndStoreSpans(traces: ParsedTrace[], label: string): Promise<void> {
+  private async groupAndStoreSpans(
+    traces: ParsedTrace[],
+    label: string,
+  ): Promise<{ rejectedCount: number; reasons: string[] }> {
     const spansByTrace = new Map<string, SpanData[]>();
     const traceInfoById = new Map<string, { evaluationId?: string; testCaseId?: string }>();
 
@@ -325,11 +349,13 @@ export class OTLPReceiver {
         });
         tracesWithKnownRecords.add(traceId);
       } catch (error) {
-        // Trace might already exist (onConflictDoNothing), which is fine
-        tracesWithKnownRecords.add(traceId);
-        logger.debug(`[OtlpReceiver] Trace ${traceId} may already exist: ${error}`);
+        logger.error(`[OtlpReceiver] Failed to create trace record for ${traceId}: ${error}`);
+        throw error;
       }
     }
+
+    let rejectedCount = 0;
+    const reasons = new Set<string>();
 
     // Store spans for each trace.
     // For traces we created/confirmed above, skip the existence check.
@@ -346,8 +372,17 @@ export class OTLPReceiver {
       });
       if (!result.stored) {
         logger.warn(`[OtlpReceiver] ${label} not stored for trace ${traceId}: ${result.reason}`);
+        rejectedCount += spans.length;
+        if (result.reason) {
+          reasons.add(result.reason);
+        }
       }
     }
+
+    return {
+      rejectedCount,
+      reasons: Array.from(reasons),
+    };
   }
 
   private parseOTLPJSONRequest(body: OTLPTraceRequest): ParsedTrace[] {
@@ -627,6 +662,36 @@ export class OTLPReceiver {
     };
   }
 
+  private parseLogBodyValue(value?: OTLPLogRecord['body']): any {
+    return value ? this.parseAttributeValue(value) : undefined;
+  }
+
+  private getLogSpanName(params: {
+    eventName?: string;
+    severityText?: string;
+    bodyValue: unknown;
+    logAttributes: Record<string, any>;
+  }): string {
+    if (params.eventName) {
+      return params.eventName;
+    }
+
+    if (
+      typeof params.bodyValue === 'string' &&
+      params.bodyValue.startsWith('claude_code.') &&
+      !params.bodyValue.includes(' ')
+    ) {
+      return params.bodyValue;
+    }
+
+    const attributeEventName = params.logAttributes['event.name'];
+    if (typeof attributeEventName === 'string' && attributeEventName) {
+      return attributeEventName;
+    }
+
+    return params.severityText || 'log_event';
+  }
+
   /**
    * Convert a JSON OTLP log event to a span.
    * Each log event becomes a zero-duration span with the event data as attributes.
@@ -646,22 +711,14 @@ export class OTLPReceiver {
     );
 
     const timeMs = Number(logRecord.timeUnixNano) / 1_000_000;
-    const spanName = logRecord.eventName || logRecord.severityText || 'log_event';
-
-    // Parse body value
-    let bodyValue: any;
-    if (logRecord.body) {
-      if (logRecord.body.stringValue !== undefined) {
-        bodyValue = logRecord.body.stringValue;
-      } else if (logRecord.body.kvlistValue?.values) {
-        bodyValue = {};
-        for (const kv of logRecord.body.kvlistValue.values) {
-          bodyValue[kv.key] = this.parseAttributeValue(kv.value);
-        }
-      } else if (logRecord.body.arrayValue?.values) {
-        bodyValue = logRecord.body.arrayValue.values.map((v) => this.parseAttributeValue(v));
-      }
-    }
+    const logAttributes = this.parseAttributes(logRecord.attributes);
+    const bodyValue = this.parseLogBodyValue(logRecord.body);
+    const spanName = this.getLogSpanName({
+      eventName: logRecord.eventName,
+      severityText: logRecord.severityText,
+      bodyValue,
+      logAttributes,
+    });
 
     return this.buildLogSpan({
       traceId,
@@ -670,7 +727,7 @@ export class OTLPReceiver {
       timeMs,
       spanName,
       resourceAttributes,
-      logAttributes: this.parseAttributes(logRecord.attributes),
+      logAttributes,
       scopeName,
       scopeVersion,
       severityNumber: logRecord.severityNumber,
@@ -702,9 +759,14 @@ export class OTLPReceiver {
         ? logRecord.timeUnixNano
         : Number(logRecord.timeUnixNano);
     const timeMs = timeNano / 1_000_000;
-    const spanName = logRecord.eventName || logRecord.severityText || 'log_event';
-
+    const logAttributes = this.parseDecodedAttributes(logRecord.attributes);
     const bodyValue = logRecord.body ? this.parseDecodedAttributeValue(logRecord.body) : undefined;
+    const spanName = this.getLogSpanName({
+      eventName: logRecord.eventName,
+      severityText: logRecord.severityText,
+      bodyValue,
+      logAttributes,
+    });
 
     return this.buildLogSpan({
       traceId,
@@ -713,7 +775,7 @@ export class OTLPReceiver {
       timeMs,
       spanName,
       resourceAttributes,
-      logAttributes: this.parseDecodedAttributes(logRecord.attributes),
+      logAttributes,
       scopeName,
       scopeVersion,
       severityNumber: logRecord.severityNumber,
@@ -801,6 +863,9 @@ export class OTLPReceiver {
     }
     if (value.boolValue !== undefined) {
       return value.boolValue;
+    }
+    if (value.bytesValue !== undefined) {
+      return value.bytesValue;
     }
     if (value.arrayValue?.values) {
       return value.arrayValue.values.map((v) => this.parseAttributeValue(v));

@@ -684,7 +684,7 @@ When `deep_tracing` is enabled:
 
 1. A root span is created for each agent execution using OpenTelemetry GenAI semantic conventions
 2. Claude Agent SDK is configured to export its internal events to Promptfoo's OTLP receiver
-3. All child events (tool calls, API requests, etc.) are linked to the root span via W3C trace context
+3. Promptfoo propagates trace context and OTEL resource attributes so SDK events are attached to the active provider span
 
 ### Viewing Traces
 
@@ -713,14 +713,15 @@ Deep tracing captures:
 
 When `deep_tracing` is enabled, the provider automatically sets these environment variables for Claude Agent SDK (unless already set):
 
-| Variable                       | Value                   | Description                                |
-| ------------------------------ | ----------------------- | ------------------------------------------ |
-| `CLAUDE_CODE_ENABLE_TELEMETRY` | `1`                     | Enables telemetry in Claude Agent SDK      |
-| `OTEL_LOGS_EXPORTER`           | `otlp`                  | Exports events via OTLP                    |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`  | `http://127.0.0.1:4318` | Local OTLP receiver endpoint               |
-| `OTEL_EXPORTER_OTLP_PROTOCOL`  | `http/json`             | Uses JSON format for OTLP                  |
-| `OTEL_SERVICE_NAME`            | `claude-agent-sdk`      | Service name for traces                    |
-| `TRACEPARENT`                  | (generated)             | W3C trace context for parent-child linking |
+| Variable                       | Value                   | Description                                                                     |
+| ------------------------------ | ----------------------- | ------------------------------------------------------------------------------- |
+| `CLAUDE_CODE_ENABLE_TELEMETRY` | `1`                     | Enables telemetry in Claude Agent SDK                                           |
+| `OTEL_LOGS_EXPORTER`           | `otlp`                  | Exports events via OTLP                                                         |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`  | `http://127.0.0.1:4318` | Local OTLP receiver endpoint                                                    |
+| `OTEL_EXPORTER_OTLP_PROTOCOL`  | `http/json`             | Uses JSON format for OTLP                                                       |
+| `OTEL_SERVICE_NAME`            | `claude-agent-sdk`      | Service name for Claude Agent SDK telemetry                                     |
+| `OTEL_RESOURCE_ATTRIBUTES`     | (merged)                | Adds Promptfoo trace/evaluation metadata without discarding existing attributes |
+| `TRACEPARENT`                  | (generated)             | Trace context for compatible OpenTelemetry components                           |
 
 You can override any of these by setting them in your environment before running the eval.
 
