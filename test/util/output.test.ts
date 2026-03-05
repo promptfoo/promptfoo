@@ -178,14 +178,20 @@ describe('writeOutput', () => {
   it('preserves deep non-secret config fields in JSON output', async () => {
     const outputPath = 'output.json';
     const eval_ = new Eval({
-      l1: {
-        l2: {
-          l3: {
-            l4: {
-              l5: {
-                l6: {
-                  value: 'deep-public-value',
-                  apiKey: 'sk-secret-value',
+      defaultTest: {
+        options: {
+          deepConfig: {
+            l1: {
+              l2: {
+                l3: {
+                  l4: {
+                    l5: {
+                      l6: {
+                        value: 'deep-public-value',
+                        apiKey: 'sk-secret-value',
+                      },
+                    },
+                  },
                 },
               },
             },
@@ -199,8 +205,12 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
     const outputJson = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
     const parsed = JSON.parse(outputJson);
-    expect(parsed.config.l1.l2.l3.l4.l5.l6.value).toBe('deep-public-value');
-    expect(parsed.config.l1.l2.l3.l4.l5.l6.apiKey).toBe('[REDACTED]');
+    expect(parsed.config.defaultTest.options.deepConfig.l1.l2.l3.l4.l5.l6.value).toBe(
+      'deep-public-value',
+    );
+    expect(parsed.config.defaultTest.options.deepConfig.l1.l2.l3.l4.l5.l6.apiKey).toBe(
+      '[REDACTED]',
+    );
   });
 
   it('writeOutput with YAML output', async () => {
