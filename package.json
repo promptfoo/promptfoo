@@ -113,7 +113,7 @@
     "minimatch@<=3.1.3": "3.1.5"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.63",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.64",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.990.0",
     "@aws-sdk/client-bedrock-runtime": "^3.990.0",
     "@aws-sdk/client-s3": "^3.990.0",
@@ -174,7 +174,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.63",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.64",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.990.0",
     "@aws-sdk/client-bedrock-runtime": "^3.990.0",
     "@aws-sdk/client-s3": "^3.990.0",
@@ -182,7 +182,7 @@
     "@aws-sdk/credential-provider-sso": "^3.972.8",
     "@azure/ai-projects": "^1.0.1",
     "@azure/identity": "^4.13.0",
-    "@azure/msal-node": "^5.0.5",
+    "@azure/msal-node": "^5.0.6",
     "@azure/openai-assistants": "^1.0.0-beta.6",
     "@fal-ai/client": "~1.9.4",
     "@huggingface/transformers": "^3.8.1",

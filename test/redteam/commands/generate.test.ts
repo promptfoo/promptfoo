@@ -12,6 +12,7 @@ import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/
 import { Severity } from '../../../src/redteam/constants';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
 import { synthesize } from '../../../src/redteam/index';
+import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { PartialGenerationError } from '../../../src/redteam/types';
 import {
   ConfigPermissionError,
@@ -23,6 +24,7 @@ import * as configModule from '../../../src/util/config/load';
 import { readConfig } from '../../../src/util/config/load';
 import { writePromptfooConfig } from '../../../src/util/config/writer';
 import { getCustomPolicies } from '../../../src/util/generation';
+import { checkRedteamProbeLimit } from '../../../src/util/redteamProbeLimit';
 
 import type {
   FailedPluginInfo,
@@ -154,6 +156,18 @@ vi.mock('../../../src/globalConfig/cloud', async (importOriginal) => {
       isEnabled: vi.fn().mockReturnValue(false),
       getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
     },
+  };
+});
+
+vi.mock('../../../src/util/redteamProbeLimit', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    checkRedteamProbeLimit: vi.fn().mockReturnValue({
+      withinLimit: true,
+      used: 0,
+      limit: 100_000,
+      remaining: 100_000,
+    }),
   };
 });
 
@@ -3212,5 +3226,68 @@ describe('target ID extraction for retry strategy', () => {
         targetIds: ['openai:gpt-4o-mini', 'openai:gpt-4o'],
       }),
     );
+  });
+
+  describe('probe limit enforcement', () => {
+    it('should block generation when probe limit is exceeded', async () => {
+      vi.mocked(checkRedteamProbeLimit).mockReturnValue({
+        withinLimit: false,
+        used: 100_001,
+        limit: 100_000,
+        remaining: 0,
+      });
+
+      const result = await doGenerateRedteam({
+        config: 'test-config.yaml',
+        output: 'output.yaml',
+        cache: true,
+        force: true,
+      });
+
+      expect(result).toBeNull();
+      expect(process.exitCode).toBe(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Monthly probe limit reached'),
+      );
+      expect(synthesize).not.toHaveBeenCalled();
+
+      // Reset
+      process.exitCode = 0;
+      vi.mocked(checkRedteamProbeLimit).mockReturnValue({
+        withinLimit: true,
+        used: 0,
+        limit: 100_000,
+        remaining: 100_000,
+      });
+    });
+
+    it('should not block generation when within probe limit', async () => {
+      vi.mocked(checkRedteamProbeLimit).mockReturnValue({
+        withinLimit: true,
+        used: 500,
+        limit: 100_000,
+        remaining: 99_500,
+      });
+
+      // Skip email validation by pretending we never generate remotely
+      vi.mocked(neverGenerateRemote).mockReturnValue(true);
+
+      // Use purpose-only mode (no config file) so we don't need resolveConfigs
+      await doGenerateRedteam({
+        purpose: 'test purpose',
+        output: 'output.yaml',
+        cache: true,
+        force: true,
+      });
+
+      // The function proceeds past the probe limit check (doesn't return null with exitCode=1)
+      expect(checkRedteamProbeLimit).toHaveBeenCalled();
+      expect(logger.error).not.toHaveBeenCalledWith(
+        expect.stringContaining('Monthly probe limit reached'),
+      );
+
+      // Restore default mock
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+    });
   });
 });
