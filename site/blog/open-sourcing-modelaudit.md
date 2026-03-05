@@ -47,7 +47,7 @@ pip install modelaudit
 modelaudit scan your_model.pkl
 ```
 
-The scanning engine runs entirely offline — it never loads or executes the model.
+The scanning engine runs entirely offline - it never loads or executes the model.
 
 <details>
 <summary>Example output</summary>
@@ -123,26 +123,33 @@ class Exploit(object):
 payload = pickle.dumps(Exploit())
 ```
 
-[JFrog found roughly 100 models](https://jfrog.com/blog/data-scientists-targeted-by-malicious-hugging-face-ml-models-with-silent-backdoor/) on Hugging Face containing similar payloads. Those were the obvious ones — flagged and removed. But while building ModelAudit, we stumbled across models that slip past every scanner in Hugging Face's pipeline today.
+[JFrog found roughly 100 models](https://jfrog.com/blog/data-scientists-targeted-by-malicious-hugging-face-ml-models-with-silent-backdoor/) on Hugging Face containing similar payloads. Those were the obvious ones - flagged and removed.
 
-**[0xnu/mnist-ocr](https://huggingface.co/0xnu/mnist-ocr/)** — The `mnist_tokenizer.pkl` file contains `__main__.ImageTokenizer` instantiated via the `NEWOBJ` opcode, a deserialization vector that executes arbitrary code on load.
+During our last batch of refinement for ModelAudit, we stumbled across models that we caught true positives on that bypass every other scanner in Hugging Face's pipeline:
+
+**[Rammadaeus/tflite-flex-bypass-poc](https://huggingface.co/Rammadaeus/tflite-flex-bypass-poc)** - A TFLite file with 4 malicious custom operators: `FlexWriteFile` (write arbitrary files), `FlexReadFile` (read arbitrary files), `FlexPrintV2` (output exfiltration), and `EagerPyFunc` (arbitrary Python execution).
+
+<img src="/img/blog/open-sourcing-modelaudit/scanner-comparison-tflite.svg" alt="Scanner comparison for Rammadaeus/tflite-flex-bypass-poc: VirusTotal, JFrog, and ClamAV report No Issue. HF Picklescan and ModelScan do not support TFLite. ModelAudit reports 4 CRITICAL findings." style={{maxWidth: '520px', width: '100%', margin: '1rem auto', display: 'block'}} />
+
+Every scanner in Hugging Face's pipeline misses this one - VirusTotal, JFrog, ClamAV report no issue, and picklescan and ModelScan don't support TFLite at all. ModelAudit catches all four malicious operators.
+
+**[0xnu/mnist-ocr](https://huggingface.co/0xnu/mnist-ocr/)** - The `mnist_tokenizer.pkl` file contains `__main__.ImageTokenizer` instantiated via the `NEWOBJ` opcode, a deserialization vector that executes arbitrary code on load.
 
 <img src="/img/blog/open-sourcing-modelaudit/scanner-comparison-mnist.svg" alt="Scanner comparison for 0xnu/mnist-ocr: VirusTotal, JFrog, and ModelScan report No Issue. HF Picklescan flags suspicious imports (informational). ClamAV flags as Suspicious via signature match. ModelAudit reports CRITICAL." style={{maxWidth: '520px', width: '100%', margin: '1rem auto', display: 'block'}} />
 
 Only ClamAV flags it, and only via signature matching, not structural analysis. VirusTotal, JFrog, and ModelScan all miss it.
 
-**[Rammadaeus/tflite-flex-bypass-poc](https://huggingface.co/Rammadaeus/tflite-flex-bypass-poc)** — A TFLite file with 4 malicious custom operators: `FlexWriteFile` (write arbitrary files), `FlexReadFile` (read arbitrary files), `FlexPrintV2` (output exfiltration), and `EagerPyFunc` (arbitrary Python execution).
+**[NewstaR/GPTagalog](https://huggingface.co/NewstaR/GPTagalog)** - A 396 MB GPT model for Tagalog. The `model-01.pkl` file uses `torch.storage._load_from_bytes` via the `REDUCE` opcode (21 instances) and loads classes from `__main__` scope - the same deserialization pattern used in pickle-based attacks.
 
-<img src="/img/blog/open-sourcing-modelaudit/scanner-comparison-tflite.svg" alt="Scanner comparison for Rammadaeus/tflite-flex-bypass-poc: VirusTotal, JFrog, and ClamAV report No Issue. HF Picklescan and ModelScan do not support TFLite. ModelAudit reports 4 CRITICAL findings." style={{maxWidth: '520px', width: '100%', margin: '1rem auto', display: 'block'}} />
+<img src="/img/blog/open-sourcing-modelaudit/scanner-comparison-gptagalog.svg" alt="Scanner comparison for NewstaR/GPTagalog: VirusTotal, JFrog, and Protect AI (ModelScan) report No Issue. ClamAV flags as Suspicious via signature match. ModelAudit reports CRITICAL." style={{maxWidth: '520px', width: '100%', margin: '1rem auto', display: 'block'}} />
 
-Every scanner in Hugging Face's pipeline misses this one — VirusTotal, JFrog, ClamAV report no issue, and picklescan and ModelScan don't support TFLite at all. ModelAudit catches all four malicious operators.
+VirusTotal, JFrog, and ModelScan all miss it. Only ClamAV flags it via signature matching - not structural analysis. ModelAudit catches the dangerous deserialization pattern.
 
-Pickle is just one format:
+**[Freakhobbies/Model-01.pkl](https://huggingface.co/Freakhobbies/Model-01.pkl)** - A 7.6 MB PyTorch GPT model with the same pattern: `torch.storage._load_from_bytes` via `REDUCE` and `__main__` class references.
 
-- **PyTorch:** [CVE-2025-32434](https://github.com/pytorch/pytorch/security/advisories/GHSA-53q9-r3pm-6pq6) (CVSS 9.3). `weights_only=True`, the recommended mitigation, could be bypassed for remote code execution.
-- **Keras:** [CVE-2025-1550](https://nvd.nist.gov/vuln/detail/CVE-2025-1550) (CVSS 9.8). `safe_mode=True` could be circumvented via a [crafted config within the archive](https://jfrog.com/blog/keras-safe_mode-bypass-vulnerability/).
-- **ONNX:** [CVE-2025-51480](https://security.snyk.io/vuln/SNYK-PYTHON-ONNX-10877916) (CVSS 8.8). Path traversal in external data references can overwrite arbitrary files.
-- **Supply chain:** [Palo Alto Unit42](https://unit42.paloaltonetworks.com/model-namespace-reuse/) documented attackers re-registering abandoned model namespaces to distribute malicious models under trusted names.
+<img src="/img/blog/open-sourcing-modelaudit/scanner-comparison-freakhobbies.svg" alt="Scanner comparison for Freakhobbies/Model-01.pkl: VirusTotal Queued. JFrog and Protect AI (ModelScan) report No Issue. HF Picklescan flags suspicious imports (informational). ClamAV flags as Suspicious via signature match. ModelAudit reports CRITICAL." style={{maxWidth: '520px', width: '100%', margin: '1rem auto', display: 'block'}} />
+
+JFrog and ModelScan report no issue. Picklescan flags suspicious imports but only as informational. ClamAV catches it via signature. ModelAudit reports CRITICAL.
 
 Hugging Face hosts over two million models. Most organizations pull from public registries without scanning what they download.
 
@@ -152,15 +159,15 @@ Hugging Face hosts over two million models. Most organizations pull from public 
 
 When I joined Promptfoo, the team was building [AI red teaming](https://www.promptfoo.dev/docs/red-team/) and [code scanning](https://www.promptfoo.dev/code-scanning/) capabilities. We could test how an LLM application _behaves_ at runtime, but had no visibility into whether the models themselves were safe to load. If a model file triggers code execution on deserialization, runtime defenses don't matter. The compromise happens before the application starts.
 
-Michael D'Angelo and Ian Webster had already built a basic scanner with the core architecture in place. When I joined, we worked together to expand it — Michael contributed deep work on opcode-level bypasses, Ian pushed format coverage across the 42+ formats we support today, and I brought the allowlist-first approach and false positive elimination from my Databricks experience. The goal was a modern, lightweight scanner with no ML framework dependencies — something you could drop into any CI pipeline without pulling in PyTorch or TensorFlow.
+Michael D'Angelo and Ian Webster had already built a basic scanner with the core architecture in place. When I joined, we worked together to expand it - Michael contributed deep work on opcode-level bypasses, Ian pushed format coverage across the 42+ formats we support today, and I brought the allowlist-first approach and false positive elimination from my Databricks experience. The goal was a modern, lightweight scanner with no ML framework dependencies - something you could drop into any CI pipeline without pulling in PyTorch or TensorFlow.
 
 ### The false positive problem
 
-Every ML framework serializes models differently. The same scikit-learn RandomForest saved with `joblib` vs `pickle` vs `skops` produces different opcode sequences. Upgrading Python or library versions changes which opcodes appear. An allowlist-based scanner that works on Python 3.10 might flag clean models on 3.13. And that's just pickle — every format we added had its own version of this problem: ONNX models with legitimate external data references tripping path traversal checks, Keras archives with custom layer configs that look like code injection, GGUF metadata fields that resemble suspicious strings.
+Every ML framework serializes models differently. The same scikit-learn RandomForest saved with `joblib` vs `pickle` vs `skops` produces different opcode sequences. Upgrading Python or library versions changes which opcodes appear. An allowlist-based scanner that works on Python 3.10 might flag clean models on 3.13. And that's just pickle - every format we added had its own version of this problem: ONNX models with legitimate external data references tripping path traversal checks, Keras archives with custom layer configs that look like code injection, GGUF metadata fields that resemble suspicious strings.
 
-We ran several rounds of false positive elimination against real Hugging Face models across every supported format. Each round surfaced new edge cases — legitimate patterns that looked suspicious to heuristic checks. We fixed them all.
+We ran several rounds of false positive elimination against real Hugging Face models across every supported format. Each round surfaced new edge cases - legitimate patterns that looked suspicious to heuristic checks. We fixed them all.
 
-The maturity milestone: 1,000+ models scanned across 14 formats, 5,000+ security checks, zero false positives on the final 100-model regression run. Since then, we've expanded to 42+ formats with 12 new scanners and validated against an additional 200+ models — all clean. That result triggered the open-source decision.
+The maturity milestone: 1,000+ models scanned across 14 formats, 5,000+ security checks, zero false positives on the final 100-model regression run. Since then, we've expanded to 42+ formats with 12 new scanners and validated against an additional 200+ models - all clean. That result triggered the open-source decision.
 
 ModelAudit started as an internal capability within the Promptfoo platform ([promptfoo.dev/model-security](https://www.promptfoo.dev/model-security/)). Today's release is the standalone extraction of that scanning engine.
 
@@ -176,7 +183,7 @@ Building ModelAudit meant studying the pickle VM closely: how its ~68 opcodes ch
 
 We reported three GHSAs against fickling, all fixed by Trail of Bits.
 
-**[CVE-2026-22609](https://github.com/advisories/GHSA-q5qq-mvfm-j35x) — Missing unsafe imports.** My teammate [Michael D'Angelo](https://www.linkedin.com/in/michaelldangelo/) found that fickling's unsafe-imports list was missing high-risk standard library modules including `ctypes`, `importlib`, and `multiprocessing`. A pickle importing `ctypes.CDLL` to load a shared library passed as safe:
+**[CVE-2026-22609](https://github.com/advisories/GHSA-q5qq-mvfm-j35x) - Missing unsafe imports.** My teammate [Michael D'Angelo](https://www.linkedin.com/in/michaelldangelo/) found that fickling's unsafe-imports list was missing high-risk standard library modules including `ctypes`, `importlib`, and `multiprocessing`. A pickle importing `ctypes.CDLL` to load a shared library passed as safe:
 
 ```python
 # Pickle opcodes (simplified):
@@ -190,7 +197,7 @@ REDUCE                             # ctypes.CDLL("./payload.so") → loads and e
 
 Trail of Bits patched this in fickling 0.1.7.
 
-**[GHSA-mxhj-88fx-4pcv](https://github.com/advisories/GHSA-mxhj-88fx-4pcv) (CVSS 8.6) — `OBJ` opcode invisibility.** Fickling's `OBJ` opcode handler pushed function calls onto the interpreter stack without saving them to the AST. Discard the result with `POP` and the call vanishes from fickling's analysis entirely:
+**[GHSA-mxhj-88fx-4pcv](https://github.com/advisories/GHSA-mxhj-88fx-4pcv) (CVSS 8.6) - `OBJ` opcode invisibility.** Fickling's `OBJ` opcode handler pushed function calls onto the interpreter stack without saving them to the AST. Discard the result with `POP` and the call vanishes from fickling's analysis entirely:
 
 ```python
 # Pickle opcodes:
@@ -201,11 +208,11 @@ POP                                        # result discarded from stack
 
 A pickle could spawn a reverse shell and fickling would report `LIKELY_SAFE`.
 
-**[GHSA-mhc9-48gj-9gp3](https://github.com/advisories/GHSA-mhc9-48gj-9gp3) — `REDUCE`+`BUILD` bypass.** Appending a `BUILD` opcode after `REDUCE` exploited how fickling classifies stdlib imports as safe and excludes `__setstate__` calls from analysis:
+**[GHSA-mhc9-48gj-9gp3](https://github.com/advisories/GHSA-mhc9-48gj-9gp3) - `REDUCE`+`BUILD` bypass.** Appending a `BUILD` opcode after `REDUCE` exploited how fickling classifies stdlib imports as safe and excludes `__setstate__` calls from analysis:
 
 ```python
 # Pickle opcodes:
-REDUCE(io.BytesIO, b"")           # "safe" stdlib call — fickling trusts io.BytesIO
+REDUCE(io.BytesIO, b"")           # "safe" stdlib call - fickling trusts io.BytesIO
 BUILD({__setstate__: <payload>})   # injects dangerous __setstate__ handler
 # → fickling skips __setstate__ analysis, full bypass of all 5 safety interfaces
 ```
@@ -216,7 +223,7 @@ Trail of Bits fixed both in fickling 0.1.8.
 
 On March 3, 2026, we published three GHSAs against picklescan.
 
-**[GHSA-vvpj-8cmc-gx39](https://github.com/advisories/GHSA-vvpj-8cmc-gx39) (CVSS 10.0) — `pkgutil.resolve_name` universal blocklist bypass.** `pkgutil.resolve_name()` is a Python stdlib function that resolves any `"module:attribute"` string to the actual Python object at runtime. A malicious pickle uses it as the `REDUCE` callable to obtain a reference to _any_ blocked function — `os.system`, `builtins.exec`, anything — without that function's name appearing in the pickle opcodes:
+**[GHSA-vvpj-8cmc-gx39](https://github.com/advisories/GHSA-vvpj-8cmc-gx39) (CVSS 10.0) - `pkgutil.resolve_name` universal blocklist bypass.** `pkgutil.resolve_name()` is a Python stdlib function that resolves any `"module:attribute"` string to the actual Python object at runtime. A malicious pickle uses it as the `REDUCE` callable to obtain a reference to _any_ blocked function - `os.system`, `builtins.exec`, anything - without that function's name appearing in the pickle opcodes:
 
 ```python
 # Pickle opcodes (simplified):
@@ -231,7 +238,7 @@ REDUCE                           # pkgutil.resolve_name("os:system") → os.syst
 
 The blocklist never sees `os.system`. It only sees `pkgutil.resolve_name`, which is not blocked. One opcode sequence bypasses the entire blocklist.
 
-**[GHSA-g38g-8gr9-h9xp](https://github.com/advisories/GHSA-g38g-8gr9-h9xp) (CVSS 9.8) — Multiple stdlib modules with direct RCE not in blocklist.** At least 7 Python stdlib modules that provide direct command execution or code evaluation were not blocked: `codeop`, `code`, `compileall`, `py_compile`, `runpy`, `profile`, and `pdb`. A malicious pickle importing any of these modules reports 0 issues:
+**[GHSA-g38g-8gr9-h9xp](https://github.com/advisories/GHSA-g38g-8gr9-h9xp) (CVSS 9.8) - Multiple stdlib modules with direct RCE not in blocklist.** At least 7 Python stdlib modules that provide direct command execution or code evaluation were not blocked: `codeop`, `code`, `compileall`, `py_compile`, `runpy`, `profile`, and `pdb`. A malicious pickle importing any of these modules reports 0 issues:
 
 ```python
 # Pickle opcodes:
@@ -243,7 +250,7 @@ REDUCE
 # picklescan: CLEAN (codeop not in blocklist)
 ```
 
-**[GHSA-7wx9-6375-f5wh](https://github.com/advisories/GHSA-7wx9-6375-f5wh) (CVSS 9.8) — `profile.run()` blocklist mismatch.** Picklescan blocks `profile.Profile.run` and `profile.Profile.runctx` but _not_ the module-level `profile.run()` function. The blocklist entry `"Profile.run"` doesn't match the pickle global name `"run"`. `profile.run(statement)` calls `exec()` internally:
+**[GHSA-7wx9-6375-f5wh](https://github.com/advisories/GHSA-7wx9-6375-f5wh) (CVSS 9.8) - `profile.run()` blocklist mismatch.** Picklescan blocks `profile.Profile.run` and `profile.Profile.runctx` but _not_ the module-level `profile.run()` function. The blocklist entry `"Profile.run"` doesn't match the pickle global name `"run"`. `profile.run(statement)` calls `exec()` internally:
 
 ```python
 # Pickle opcodes:
@@ -269,48 +276,48 @@ The most meaningful way to compare scanners is format by format. Here is what ea
 | Format                         | picklescan | Fickling | ModelScan | **ModelAudit** |
 | ------------------------------ | :--------: | :------: | :-------: | :------------: |
 | Pickle (.pkl/.pickle)          |    Yes     |   Yes    |    Yes    |    **Yes**     |
-| Dill (.dill)                   |     —      |    —     |    Yes    |    **Yes**     |
+| Dill (.dill)                   |     -      |    -     |    Yes    |    **Yes**     |
 | PyTorch (.pt/.pth/.bin)        |    Yes     | .pt/.pth |    Yes    |    **Yes**     |
-| Joblib (.joblib)               |    Yes     |    —     |    Yes    |    **Yes**     |
-| Skops (.skops)                 |     —      |    —     |     —     |    **Yes**     |
-| NumPy (.npy/.npz)              |    Yes     |    —     | .npy only |    **Yes**     |
-| Keras H5 (.h5/.hdf5)           |     —      |    —     |    Yes    |    **Yes**     |
-| Keras ZIP (.keras)             |     —      |    —     |    Yes    |    **Yes**     |
-| TensorFlow SavedModel (.pb)    |     —      |    —     |    Yes    |    **Yes**     |
-| TF MetaGraph (.meta)           |     —      |    —     |     —     |    **Yes**     |
-| ONNX (.onnx)                   |     —      |    —     |     —     |    **Yes**     |
-| SafeTensors (.safetensors)     |     —      |    —     |     —     |    **Yes**     |
-| GGUF/GGML                      |     —      |    —     |     —     |    **Yes**     |
-| JAX/Flax (.msgpack/.orbax)     |     —      |    —     |     —     |    **Yes**     |
-| JAX Checkpoint (.ckpt)         |     —      |    —     |     —     |    **Yes**     |
-| TFLite (.tflite)               |     —      |    —     |     —     |    **Yes**     |
-| ExecuTorch (.pte)              |     —      |    —     |     —     |    **Yes**     |
-| TensorRT (.plan/.engine)       |     —      |    —     |     —     |    **Yes**     |
-| PaddlePaddle (.pdmodel)        |     —      |    —     |     —     |    **Yes**     |
-| OpenVINO (.xml/.bin)           |     —      |    —     |     —     |    **Yes**     |
-| CoreML (.mlmodel/.mlpackage)   |     —      |    —     |     —     |    **Yes**     |
-| MXNet (.params/-symbol.json)   |     —      |    —     |     —     |    **Yes**     |
-| CatBoost (.cbm)                |     —      |    —     |     —     |    **Yes**     |
-| LightGBM (.lgb/.txt/.model)    |     —      |    —     |     —     |    **Yes**     |
-| XGBoost (.bst/.model/.ubj)     |     —      |    —     |     —     |    **Yes**     |
-| RKNN (.rknn)                   |     —      |    —     |     —     |    **Yes**     |
-| Torch7 (.t7/.th)               |     —      |    —     |     —     |    **Yes**     |
-| Llamafile (.llamafile)         |     —      |    —     |     —     |    **Yes**     |
-| R Serialized (.rds/.rda)       |     —      |    —     |     —     |    **Yes**     |
-| CNTK (.cntk/.dnn)              |     —      |    —     |     —     |    **Yes**     |
-| PMML (.pmml)                   |     —      |    —     |     —     |    **Yes**     |
-| TorchServe MAR (.mar)          |     —      |    —     |     —     |    **Yes**     |
-| Jinja2 Templates (.jinja/.j2)  |     —      |    —     |     —     |    **Yes**     |
-| OCI/Docker Layers (.manifest)  |     —      |    —     |     —     |    **Yes**     |
-| Weight Distribution Analysis   |     —      |    —     |     —     |    **Yes**     |
-| Compressed (.gz/.bz2/.xz/.zst) |     —      |    —     |     —     |    **Yes**     |
-| ZIP archives (.zip/.npz)       |    Yes     |    —     |    Yes    |    **Yes**     |
-| TAR archives (.tar/.tar.gz)    |     —      |    —     |     —     |    **Yes**     |
-| 7-Zip archives (.7z)           |  Optional  |    —     |     —     |    **Yes**     |
-| Config (JSON/YAML/XML/TOML)    |     —      |    —     |     —     |    **Yes**     |
+| Joblib (.joblib)               |    Yes     |    -     |    Yes    |    **Yes**     |
+| Skops (.skops)                 |     -      |    -     |     -     |    **Yes**     |
+| NumPy (.npy/.npz)              |    Yes     |    -     | .npy only |    **Yes**     |
+| Keras H5 (.h5/.hdf5)           |     -      |    -     |    Yes    |    **Yes**     |
+| Keras ZIP (.keras)             |     -      |    -     |    Yes    |    **Yes**     |
+| TensorFlow SavedModel (.pb)    |     -      |    -     |    Yes    |    **Yes**     |
+| TF MetaGraph (.meta)           |     -      |    -     |     -     |    **Yes**     |
+| ONNX (.onnx)                   |     -      |    -     |     -     |    **Yes**     |
+| SafeTensors (.safetensors)     |     -      |    -     |     -     |    **Yes**     |
+| GGUF/GGML                      |     -      |    -     |     -     |    **Yes**     |
+| JAX/Flax (.msgpack/.orbax)     |     -      |    -     |     -     |    **Yes**     |
+| JAX Checkpoint (.ckpt)         |     -      |    -     |     -     |    **Yes**     |
+| TFLite (.tflite)               |     -      |    -     |     -     |    **Yes**     |
+| ExecuTorch (.pte)              |     -      |    -     |     -     |    **Yes**     |
+| TensorRT (.plan/.engine)       |     -      |    -     |     -     |    **Yes**     |
+| PaddlePaddle (.pdmodel)        |     -      |    -     |     -     |    **Yes**     |
+| OpenVINO (.xml/.bin)           |     -      |    -     |     -     |    **Yes**     |
+| CoreML (.mlmodel/.mlpackage)   |     -      |    -     |     -     |    **Yes**     |
+| MXNet (.params/-symbol.json)   |     -      |    -     |     -     |    **Yes**     |
+| CatBoost (.cbm)                |     -      |    -     |     -     |    **Yes**     |
+| LightGBM (.lgb/.txt/.model)    |     -      |    -     |     -     |    **Yes**     |
+| XGBoost (.bst/.model/.ubj)     |     -      |    -     |     -     |    **Yes**     |
+| RKNN (.rknn)                   |     -      |    -     |     -     |    **Yes**     |
+| Torch7 (.t7/.th)               |     -      |    -     |     -     |    **Yes**     |
+| Llamafile (.llamafile)         |     -      |    -     |     -     |    **Yes**     |
+| R Serialized (.rds/.rda)       |     -      |    -     |     -     |    **Yes**     |
+| CNTK (.cntk/.dnn)              |     -      |    -     |     -     |    **Yes**     |
+| PMML (.pmml)                   |     -      |    -     |     -     |    **Yes**     |
+| TorchServe MAR (.mar)          |     -      |    -     |     -     |    **Yes**     |
+| Jinja2 Templates (.jinja/.j2)  |     -      |    -     |     -     |    **Yes**     |
+| OCI/Docker Layers (.manifest)  |     -      |    -     |     -     |    **Yes**     |
+| Weight Distribution Analysis   |     -      |    -     |     -     |    **Yes**     |
+| Compressed (.gz/.bz2/.xz/.zst) |     -      |    -     |     -     |    **Yes**     |
+| ZIP archives (.zip/.npz)       |    Yes     |    -     |    Yes    |    **Yes**     |
+| TAR archives (.tar/.tar.gz)    |     -      |    -     |     -     |    **Yes**     |
+| 7-Zip archives (.7z)           |  Optional  |    -     |     -     |    **Yes**     |
+| Config (JSON/YAML/XML/TOML)    |     -      |    -     |     -     |    **Yes**     |
 | **Total format categories**    |   **~4**   |  **~2**  |  **~8**   |    **42+**     |
 
-_picklescan counts: Pickle, PyTorch, NumPy, Joblib, plus archive support. Fickling counts: Pickle, PyTorch (.pt/.pth only — does not scan .bin files). ModelScan counts: Pickle/Dill, PyTorch, Keras H5, Keras V3, TF SavedModel, NumPy (.npy only — .npz not yet implemented), Joblib, plus ZIP support. Counts reflect distinct model format categories, not file extensions. All three tools are open source — see each repository for current status._
+_picklescan counts: Pickle, PyTorch, NumPy, Joblib, plus archive support. Fickling counts: Pickle, PyTorch (.pt/.pth only - does not scan .bin files). ModelScan counts: Pickle/Dill, PyTorch, Keras H5, Keras V3, TF SavedModel, NumPy (.npy only - .npz not yet implemented), Joblib, plus ZIP support. Counts reflect distinct model format categories, not file extensions. All three tools are open source - see each repository for current status._
 
 | Capability               | picklescan | Fickling | ModelScan |        **ModelAudit**         |
 | ------------------------ | :--------: | :------: | :-------: | :---------------------------: |
@@ -323,44 +330,7 @@ _picklescan counts: Pickle, PyTorch, NumPy, Joblib, plus archive support. Fickli
 | Allowlist approach       |  Partial   |   Yes    |    No     |            **Yes**            |
 | No ML framework deps     |    Yes     |   Yes    |    No     |            **Yes**            |
 
-ModelAudit is not a replacement for these tools — they've all contributed to making this space better.
-
-## Allowlist by default
-
-_Scanner internals. Skip to [Get started](#get-started) if you just want to install it._
-
-Working with [Michael D'Angelo](https://www.linkedin.com/in/michaelldangelo/) and [Ian Webster](https://www.linkedin.com/in/ianww/), I built ModelAudit on the opposite principle: deny by default, explicitly approve known-safe functions. We've scanned thousands of models across 42+ formats with zero false positives.
-
-ModelAudit started as an internal capability within the Promptfoo platform ([promptfoo.dev/model-security](https://www.promptfoo.dev/model-security/)). This release is the standalone extraction of that scanning engine.
-
-### The pickle classification pipeline
-
-The pickle scanner uses a five-layer classification pipeline. Dangerous checks run first, before anything can be allowlisted:
-
-1. **ALWAYS_DANGEROUS_FUNCTIONS (61 entries)** — Functions like `os.system`, `subprocess.call`, `eval`, `exec`, and `pkgutil.resolve_name` can never be allowlisted regardless of context. These are checked first and cannot be overridden.
-2. **ALWAYS_DANGEROUS_MODULES (~70 entries)** — Module-level blocking for categories like `ctypes`, `importlib`, network modules (`socket`, `http`, `smtplib`), and pickle recursion (`pickle`, `_pickle`, `cloudpickle`).
-3. **ML_SAFE_GLOBALS (~1,500 explicit entries, no wildcards)** — Individually vetted function entries for PyTorch, TensorFlow, scikit-learn, NumPy, SciPy, and other ML frameworks. Every entry is tested against real models. No wildcard patterns — each entry is a specific `module.function` pair.
-4. **SUSPICIOUS_GLOBALS** — Contextual flagging for ambiguous patterns that don't match the allowlist but aren't in the known-dangerous lists.
-5. **Symbolic stack simulation** — Full pickle VM simulation that tracks values through the entire opcode stream. Unlike fixed lookback windows, this eliminates evasion via opcode separation — no matter how many dummy operations an attacker inserts between a string push and a function call, the simulator traces the full chain.
-
-The architectural difference from blocklist scanners: ModelAudit checks dangerous functions _first_ (layers 1-2), then checks the allowlist (layer 3). Anything not explicitly allowed is flagged. Blocklist scanners check their blocklist and allow everything else, so any missing entry is a bypass.
-
-### Format-specific parsing
-
-Each scanner parses its format natively and checks invariants specific to that format's threat model. Some use allowlisting, some use structural analysis, all include targeted CVE detection:
-
-- **Pickle:** Walks the opcode stream, reconstructs `STACK_GLOBAL` targets (which have `arg=None` in pickletools; the module and class must be resolved from preceding `SHORT_BINUNICODE`/`BINUNICODE` ops), tracks memoized references through `BINGET`/`LONG_BINGET`, and maps `REDUCE` calls to their actual callable targets.
-- **ONNX:** Parses the protobuf graph structure, normalizes external data paths to detect path traversal ([CVE-2025-51480](https://security.snyk.io/vuln/SNYK-PYTHON-ONNX-10877916)), and inspects custom operator definitions for suspicious patterns.
-- **Keras:** Examines both H5 and ZIP archive variants. Checks archive members for embedded executables and configuration files for unsafe layer types (Lambda layers, custom objects). Extension checks are case-insensitive to catch renamed payloads.
-- **NeMo:** Recursively inspects Hydra `_target_` configurations for callable injection ([CVE-2025-23304](https://nvd.nist.gov/vuln/detail/CVE-2025-23304)), checking against known-dangerous targets like `os.system`, `subprocess.call`, and `importlib.import_module`.
-- **PyTorch ZIP:** Extracts pickle files from ZIP archives, runs the pickle scanner on each, then cross-references PyTorch version metadata against known vulnerable versions.
-- **Archives (ZIP, TAR, 7-Zip):** Checks for path traversal in member names, symlink attacks, and decompression bombs. Bounds member reads to 10 MB by default.
-
-### Performance
-
-ModelAudit scans local files in under a second for single models under 1 GB. Streaming analysis bounds memory usage for larger files. Remote scanning speed depends on download bandwidth.
-
-Formal benchmarks are coming in a future release. If you have representative model types and sizes you'd like included, [open an issue](https://github.com/promptfoo/modelaudit/issues).
+ModelAudit is not a replacement for these tools - they've all contributed to making this space better.
 
 ## Get started
 
