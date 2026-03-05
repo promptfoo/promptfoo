@@ -1102,6 +1102,37 @@ describe('OpenAICodexSDKProvider', () => {
       });
     });
 
+    describe('GPT-5.4 models', () => {
+      it('should recognize gpt-5.4 as a known model', () => {
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.4' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        expect(provider.config.model).toBe('gpt-5.4');
+      });
+
+      it('should calculate cost for gpt-5.4 model', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 1000,
+            cached_input_tokens: 0,
+            output_tokens: 500,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.4' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.4: $2.5/1M input, $15/1M output
+        // Cost = (1000 * 2.5/1000000) + (500 * 15/1000000) = 0.0025 + 0.0075 = 0.01
+        expect(result.cost).toBeCloseTo(0.01, 6);
+      });
+    });
+
     describe('streaming events', () => {
       it('should handle item.updated events', async () => {
         const mockEvents = async function* () {

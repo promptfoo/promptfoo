@@ -111,7 +111,7 @@ describe('FoundationModelConfiguration', () => {
     const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openai:gpt-5.2, openai:gpt-5.3-chat-latest, openai:gpt-5-mini',
+      'openai:gpt-5.4, openai:gpt-5.3-chat-latest, openai:gpt-5-mini',
     );
 
     const documentationLink = screen.getByRole('link', { name: /OpenAI documentation/ });
@@ -212,7 +212,7 @@ describe('FoundationModelConfiguration', () => {
     let modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openai:gpt-5.2, openai:gpt-5.3-chat-latest, openai:gpt-5-mini',
+      'openai:gpt-5.4, openai:gpt-5.3-chat-latest, openai:gpt-5-mini',
     );
     let documentationLink = screen.getByRole('link', { name: /OpenAI documentation/ });
     expect(documentationLink).toHaveAttribute(
