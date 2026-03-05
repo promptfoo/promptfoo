@@ -472,6 +472,7 @@ async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration,
   perTurnLayers = [],
   inputs,
+  treeParams,
 }: {
   context: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
