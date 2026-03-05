@@ -5,6 +5,7 @@ import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { getProviderFromCloud } from '../../src/util/cloud';
 import { resolveConfigs } from '../../src/util/config/load';
+import { getOrDownloadProviderFile } from '../../src/util/providerFileCache';
 import { testProviderConnectivity, testProviderSession } from '../../src/validators/testProvider';
 
 import type { UnifiedConfig } from '../../src/types/index';
@@ -15,6 +16,7 @@ vi.mock('../../src/util/config/load');
 vi.mock('../../src/providers/index');
 vi.mock('../../src/validators/testProvider');
 vi.mock('../../src/util/cloud');
+vi.mock('../../src/util/providerFileCache');
 vi.mock('../../src/telemetry', () => ({
   default: {
     record: vi.fn(),
@@ -201,6 +203,94 @@ describe('Validate Command Provider Tests', () => {
       // Verify provider info is logged during testing
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Provider:'));
       expect(mockOpenAIProvider.callApi).toHaveBeenCalled();
+    });
+
+    it('should download and use cached provider file when cloud provider has providerFile', async () => {
+      const cloudUUID = '12345678-1234-1234-1234-123456789abc';
+      const mockProviderOptions = {
+        id: 'file://original-path.py',
+        config: {},
+      };
+      const mockProviderFile = {
+        filename: 'custom_provider.py',
+        checksum: 'abc123',
+        language: 'python',
+      };
+
+      vi.mocked(getProviderFromCloud).mockResolvedValue({
+        provider: mockProviderOptions,
+        providerFile: mockProviderFile,
+      } as any);
+      vi.mocked(getOrDownloadProviderFile).mockResolvedValue(
+        '/home/user/.promptfoo/provider-files/abc123.py',
+      );
+      vi.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
+
+      await doValidateTarget({ target: cloudUUID }, defaultConfig);
+
+      expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID);
+      expect(getOrDownloadProviderFile).toHaveBeenCalledWith(cloudUUID, mockProviderFile);
+      expect(loadApiProvider).toHaveBeenCalledWith(
+        'file:///home/user/.promptfoo/provider-files/abc123.py',
+        expect.objectContaining({
+          options: mockProviderOptions,
+        }),
+      );
+    });
+
+    it('should use original provider id when providerFile download returns null', async () => {
+      const cloudUUID = '12345678-1234-1234-1234-123456789abc';
+      const mockProviderOptions = {
+        id: 'file://original-path.py',
+        config: {},
+      };
+      const mockProviderFile = {
+        filename: 'custom_provider.py',
+        checksum: 'abc123',
+        language: 'python',
+      };
+
+      vi.mocked(getProviderFromCloud).mockResolvedValue({
+        provider: mockProviderOptions,
+        providerFile: mockProviderFile,
+      } as any);
+      vi.mocked(getOrDownloadProviderFile).mockResolvedValue(null);
+      vi.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
+
+      await doValidateTarget({ target: cloudUUID }, defaultConfig);
+
+      expect(getOrDownloadProviderFile).toHaveBeenCalledWith(cloudUUID, mockProviderFile);
+      // Falls back to original id when download returns null
+      expect(loadApiProvider).toHaveBeenCalledWith(
+        'file://original-path.py',
+        expect.objectContaining({
+          options: mockProviderOptions,
+        }),
+      );
+    });
+
+    it('should not call getOrDownloadProviderFile when providerFile is null', async () => {
+      const cloudUUID = '12345678-1234-1234-1234-123456789abc';
+      const mockProviderOptions = {
+        id: 'openai:gpt-4',
+        config: {},
+      };
+
+      vi.mocked(getProviderFromCloud).mockResolvedValue({
+        provider: mockProviderOptions,
+        providerFile: null,
+      } as any);
+      vi.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
+
+      await doValidateTarget({ target: cloudUUID }, defaultConfig);
+
+      expect(getOrDownloadProviderFile).not.toHaveBeenCalled();
+      expect(loadApiProvider).toHaveBeenCalledWith(
+        'openai:gpt-4',
+        expect.objectContaining({
+          options: mockProviderOptions,
+        }),
+      );
     });
   });
 
