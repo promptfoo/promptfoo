@@ -587,6 +587,59 @@ describe('EvalOutputCell', () => {
     expect(imgElement.getAttribute('src')).toMatch(/^data:image\/svg\+xml;base64,/);
   });
 
+  it('deduplicates markdown main image from structured images list', () => {
+    const propsWithMarkdownImageAndStructuredImages: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        text: '![Main image](https://example.com/main.png)',
+        images: [
+          { data: 'https://example.com/main.png', mimeType: 'image/png' },
+          { data: 'https://example.com/secondary.png', mimeType: 'image/png' },
+        ],
+      },
+    };
+
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...propsWithMarkdownImageAndStructuredImages} />,
+    );
+
+    const renderedSources = [...container.querySelectorAll('img')]
+      .map((img) => img.getAttribute('src'))
+      .filter((src): src is string => Boolean(src));
+
+    expect(renderedSources).toEqual([
+      'https://example.com/main.png',
+      'https://example.com/secondary.png',
+    ]);
+  });
+
+  it('deduplicates inline image from structured images list', () => {
+    const dataUri =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const propsWithInlineAndStructuredImages: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        text: dataUri,
+        images: [
+          { data: dataUri, mimeType: 'image/png' },
+          { data: 'https://example.com/secondary-inline.png', mimeType: 'image/png' },
+        ],
+      },
+    };
+
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...propsWithInlineAndStructuredImages} />,
+    );
+
+    const renderedSources = [...container.querySelectorAll('img')]
+      .map((img) => img.getAttribute('src'))
+      .filter((src): src is string => Boolean(src));
+
+    expect(renderedSources).toEqual([dataUri, 'https://example.com/secondary-inline.png']);
+  });
+
   it('allows copying row link to clipboard', async () => {
     const originalClipboard = navigator.clipboard;
     const mockClipboard = {

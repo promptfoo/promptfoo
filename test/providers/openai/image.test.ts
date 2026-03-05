@@ -90,6 +90,36 @@ describe('OpenAiImageProvider', () => {
       });
     });
 
+    it('should include all generated URL images in images array', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key', n: 2 },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          data: [
+            { url: 'https://example.com/image-1.png' },
+            { url: 'https://example.com/image-2.png' },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        output: '![test prompt](https://example.com/image-1.png)',
+        images: [
+          { data: 'https://example.com/image-1.png', mimeType: 'image/png' },
+          { data: 'https://example.com/image-2.png', mimeType: 'image/png' },
+        ],
+        cached: false,
+        cost: 0.08, // DALL-E 3 standard 1024x1024 with n=2
+      });
+    });
+
     it('should sanitize prompt text', async () => {
       const provider = new OpenAiImageProvider('dall-e-3', {
         config: { apiKey: 'test-key' },

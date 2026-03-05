@@ -87,6 +87,46 @@ export function isVideoProvider(provider: string | undefined): boolean {
   return provider.includes(':video:');
 }
 
+function normalizeImageSrcForComparison(src: string): string {
+  const normalized = normalizeMediaText(src.trim());
+  return resolveImageSource(normalized) || normalized;
+}
+
+function extractMarkdownImageSources(markdown: string): string[] {
+  const sources = new Set<string>();
+
+  const markdownImageRegex = /!\[[^\]]*]\((<[^>]+>|[^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
+  const htmlImageRegex = /<img[^>]*\ssrc=["']([^"']+)["'][^>]*>/gi;
+
+  for (const match of markdown.matchAll(markdownImageRegex)) {
+    const candidate = match[1]?.trim();
+    if (!candidate) {
+      continue;
+    }
+    const unwrapped =
+      candidate.startsWith('<') && candidate.endsWith('>') ? candidate.slice(1, -1) : candidate;
+    sources.add(normalizeImageSrcForComparison(unwrapped));
+  }
+
+  for (const match of markdown.matchAll(htmlImageRegex)) {
+    const candidate = match[1]?.trim();
+    if (!candidate) {
+      continue;
+    }
+    sources.add(normalizeImageSrcForComparison(candidate));
+  }
+
+  return [...sources];
+}
+
+function resolveEvalImageOutputSource(image: ImageOutput): string | undefined {
+  if (typeof image.data === 'string' && /^https?:\/\//.test(image.data)) {
+    return image.data;
+  }
+
+  return resolveImageSource(image);
+}
+
 export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
   maxTextLength: number;
@@ -230,6 +270,7 @@ function EvalOutputCell({
   const inlineImageSrc = resolveImageSource(text);
   const outputAudioSource = resolveAudioSource(output.audio);
   let node: React.ReactNode | undefined;
+  let renderedMarkdownOutput = false;
   let failReasons: string[] = [];
   let passReasons: string[] = [];
 
@@ -417,6 +458,7 @@ function EvalOutputCell({
       }
     }
     if (!isJsonHandled && renderMarkdown) {
+      renderedMarkdownOutput = true;
       // Use stable constants and memoized components to prevent unnecessary
       // re-renders when parent re-renders due to layout changes.
       // @see https://github.com/promptfoo/promptfoo/issues/969
@@ -433,10 +475,19 @@ function EvalOutputCell({
   }
 
   if (output.images?.length) {
+    const renderedImageSrcs = new Set<string>();
+    if (inlineImageSrc) {
+      renderedImageSrcs.add(normalizeImageSrcForComparison(inlineImageSrc));
+    }
+    if (renderedMarkdownOutput) {
+      for (const source of extractMarkdownImageSources(normalizedText)) {
+        renderedImageSrcs.add(source);
+      }
+    }
+
     const imageElements = output.images.map((img: ImageOutput, idx: number) => {
-      const src = resolveImageSource(img);
-      // Skip if this image is already rendered as the main output (e.g. image-only Gemini responses)
-      if (!src || src === inlineImageSrc) {
+      const src = resolveEvalImageOutputSource(img);
+      if (!src || renderedImageSrcs.has(normalizeImageSrcForComparison(src))) {
         return null;
       }
       return (

@@ -81,7 +81,7 @@ describe('OpenAI Image Provider Functions', () => {
       };
       const result = formatOutput(mockData, 'prompt', 'b64_json');
       expect(typeof result).toBe('string');
-      expect(result).toBe(JSON.stringify(mockData));
+      expect(result).toBe('data:image/png;base64,base64encodeddata');
     });
 
     it('should return error when URL is missing', () => {
