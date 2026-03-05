@@ -1040,6 +1040,33 @@ describe('loadApiProvider', () => {
     delete process.env.TEST_URL_7079_RESOLVED;
   });
 
+  it('resolves env templates in HTTP provider URL and config from file reference (#7079)', async () => {
+    process.env.TEST_APP_7079_HTTP = 'myapp';
+    process.env.TEST_BASE_7079_HTTP = 'example.com';
+    process.env.TEST_SVC_7079_HTTP = 'users';
+    process.env.TEST_VER_7079_HTTP = 'v3';
+    process.env.TEST_SESSION_7079_HTTP = 'abc123';
+
+    const mockYamlContent = dedent`
+      id: 'https://{{env.TEST_APP_7079_HTTP}}.{{env.TEST_BASE_7079_HTTP}}/api/{{env.TEST_SVC_7079_HTTP}}/{{env.TEST_VER_7079_HTTP}}'
+      config:
+        method: 'GET'
+        headers:
+          Cookie: 'SESSION={{env.TEST_SESSION_7079_HTTP}}'
+    `;
+    mockFsReadFileSync.mockReturnValue(mockYamlContent);
+
+    const provider = await loadApiProvider('file://path/to/provider.yaml');
+    expect(provider.id()).toBe('https://myapp.example.com/api/users/v3');
+    expect(provider.config.headers?.Cookie).toBe('SESSION=abc123');
+
+    delete process.env.TEST_APP_7079_HTTP;
+    delete process.env.TEST_BASE_7079_HTTP;
+    delete process.env.TEST_SVC_7079_HTTP;
+    delete process.env.TEST_VER_7079_HTTP;
+    delete process.env.TEST_SESSION_7079_HTTP;
+  });
+
   it('uses provider env overrides when rendering provider config', async () => {
     const provider = await loadApiProvider('echo', {
       options: {
