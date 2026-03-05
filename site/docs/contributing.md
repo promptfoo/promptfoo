@@ -356,7 +356,7 @@ To test the entire thing end-to-end, build the project and run it:
 ```bash
 npm run build
 promptfoo view
-# Or: npm run local -- view
+# Or: npm run dev
 ```
 
 :::note
