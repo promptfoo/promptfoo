@@ -66,6 +66,22 @@ export const ProbeResultSchema = z.object({
   tokenUsage: TokenUsageSchema.optional(),
 });
 
+// ─── HTTP Error Categories ───────────────────────────────
+
+export const HTTP_ERROR_CATEGORIES = [
+  'auth',
+  'dns',
+  'tls',
+  'timeout',
+  'connection_refused',
+  'client_error',
+  'server_error',
+  'parse',
+  'unknown',
+] as const;
+
+export type HttpErrorCategory = (typeof HTTP_ERROR_CATEGORIES)[number];
+
 // ─── HTTP Probe Schemas (setup agent) ────────────────────
 
 export const ProbeHttpRequestSchema = z.object({
@@ -85,7 +101,7 @@ export const ProbeHttpResultSchema = z.object({
   headers: z.record(z.string(), z.string()).optional(),
   rawResponse: z.string().optional(),
   error: z.string().optional(),
-  errorCategory: z.string().optional(),
+  errorCategory: z.enum(HTTP_ERROR_CATEGORIES).optional(),
   latencyMs: z.number().optional(),
   tls: z
     .object({

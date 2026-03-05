@@ -13,6 +13,7 @@ import { fetchWithProxy } from '../fetch';
 
 import type { ApiProvider } from '../../types/providers';
 import type {
+  HttpErrorCategory,
   ProbeHttpRequest,
   ProbeHttpResult,
   ProbeRequest,
@@ -178,23 +179,48 @@ async function followRedirects(
   return { response, redirects, currentUrl };
 }
 
-function classifyHttpError(error: unknown): string {
-  const code = (error as { code?: string }).code;
+/**
+ * Classify a fetch/HTTP error into a category for the setup agent.
+ *
+ * Undici's fetch wraps real errors in TypeError("fetch failed") with the actual
+ * error in `.cause` — we unwrap to get the real error code for classification.
+ */
+export function classifyHttpError(error: unknown): HttpErrorCategory {
+  // Unwrap undici's TypeError("fetch failed") wrapper
+  const cause = (error as { cause?: unknown }).cause;
+  const realError = cause && typeof cause === 'object' ? cause : error;
+  const code = (realError as { code?: string }).code ?? (error as { code?: string }).code;
+  const message =
+    ((realError as { message?: string }).message ?? '') +
+    ' ' +
+    ((error as { message?: string }).message ?? '');
+
   if (code === 'ENOTFOUND') {
     return 'dns';
   }
   if (code === 'ECONNREFUSED') {
     return 'connection_refused';
   }
-  if (code === 'ETIMEDOUT' || code === 'ESOCKETTIMEDOUT') {
+  if (code === 'ETIMEDOUT' || code === 'ESOCKETTIMEDOUT' || code === 'UND_ERR_CONNECT_TIMEOUT') {
     return 'timeout';
   }
   if (
     code === 'SELF_SIGNED_CERT_IN_CHAIN' ||
     code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
     code === 'CERT_HAS_EXPIRED' ||
-    code === 'ERR_TLS_CERT_ALTNAME_INVALID'
+    code === 'ERR_TLS_CERT_ALTNAME_INVALID' ||
+    code === 'DEPTH_ZERO_SELF_SIGNED_CERT' ||
+    // mTLS / SSL handshake failures (server requires client cert)
+    code === 'ERR_SSL_TLSV1_ALERT_CERTIFICATE_REQUIRED' ||
+    code === 'ERR_SSL_SSLV3_ALERT_HANDSHAKE_FAILURE' ||
+    code === 'ERR_SSL_SSLV3_ALERT_BAD_CERTIFICATE' ||
+    code?.startsWith('ERR_SSL_') ||
+    code?.startsWith('ERR_TLS_')
   ) {
+    return 'tls';
+  }
+  // ECONNRESET during TLS handshake (common mTLS failure mode)
+  if (code === 'ECONNRESET' && message.toLowerCase().includes('ssl')) {
     return 'tls';
   }
   if (error instanceof Error && error.name === 'AbortError') {
