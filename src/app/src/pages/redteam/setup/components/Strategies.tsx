@@ -12,7 +12,6 @@ import { useToast } from '@app/hooks/useToast';
 import {
   AGENTIC_STRATEGIES_SET,
   ALL_STRATEGIES,
-  DEFAULT_STRATEGIES_SET,
   MULTI_MODAL_STRATEGIES_SET,
   MULTI_TURN_STRATEGIES,
   MULTI_TURN_STRATEGY_SET,
@@ -131,7 +130,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     // Strategies not in any special category
     const other = nonHeroStrategies.filter(
       (s) =>
-        !DEFAULT_STRATEGIES_SET.has(s.id) &&
+        s.id !== 'basic' &&
         !AGENTIC_STRATEGIES_SET.has(s.id) &&
         !MULTI_MODAL_STRATEGIES_SET.has(s.id),
     );
