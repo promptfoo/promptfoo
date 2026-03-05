@@ -12,6 +12,7 @@ import {
   DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
   DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
 } from '../../src/providers/google/ai.studio';
+import { hasGoogleDefaultCredentials } from '../../src/providers/google/util';
 import { DefaultEmbeddingProvider as GeminiEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
@@ -170,6 +171,14 @@ describe('Provider override tests', () => {
     expect(providers.gradingProvider).toBe(MistralGradingProvider);
     expect(providers.suggestionsProvider).toBe(MistralSuggestionsProvider);
     expect(providers.synthesizeProvider).toBe(MistralSynthesizeProvider);
+  });
+
+  it('should probe Google default credentials once per provider resolution', async () => {
+    vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
+
+    await getDefaultProviders();
+
+    expect(hasGoogleDefaultCredentials).toHaveBeenCalledTimes(1);
   });
 
   it('should use Mistral providers when provided via env overrides', async () => {

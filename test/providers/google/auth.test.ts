@@ -504,6 +504,45 @@ describe('GoogleAuthManager', () => {
     });
   });
 
+  describe('hasDefaultCredentials', () => {
+    it('should cache successful default credential probes', async () => {
+      const getOAuthClientSpy = vi
+        .spyOn(GoogleAuthManager, 'getOAuthClient')
+        .mockResolvedValue({ client: {}, projectId: 'detected-project' });
+
+      await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(true);
+      await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(true);
+
+      expect(getOAuthClientSpy).toHaveBeenCalledTimes(1);
+      getOAuthClientSpy.mockRestore();
+    });
+
+    it('should cache failed default credential probes', async () => {
+      const getOAuthClientSpy = vi
+        .spyOn(GoogleAuthManager, 'getOAuthClient')
+        .mockRejectedValue(new Error('no default credentials'));
+
+      await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+      await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+
+      expect(getOAuthClientSpy).toHaveBeenCalledTimes(1);
+      getOAuthClientSpy.mockRestore();
+    });
+
+    it('should clear cached default credential probe results', async () => {
+      const getOAuthClientSpy = vi
+        .spyOn(GoogleAuthManager, 'getOAuthClient')
+        .mockRejectedValue(new Error('no default credentials'));
+
+      await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+      GoogleAuthManager.clearCache();
+      await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+
+      expect(getOAuthClientSpy).toHaveBeenCalledTimes(2);
+      getOAuthClientSpy.mockRestore();
+    });
+  });
+
   describe('loadCredentials', () => {
     it('should return undefined for undefined input', () => {
       expect(GoogleAuthManager.loadCredentials(undefined)).toBeUndefined();
@@ -566,9 +605,7 @@ describe('GoogleAuthManager', () => {
   // See: test/providers/google/vertex.test.ts for integration coverage
 
   describe('clearCache', () => {
-    it('should reset cachedAuth to undefined', () => {
-      // clearCache is a simple function that can be tested in isolation
-      // The actual caching behavior is tested in integration tests
+    it('should clear internal credential detection caches', () => {
       expect(() => GoogleAuthManager.clearCache()).not.toThrow();
     });
   });
