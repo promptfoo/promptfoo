@@ -113,13 +113,11 @@ export default function EvalsTable({
   const rows = useMemo(() => {
     let rows_ = evals;
 
-    if (focusedEvalId && rows_.length > 0) {
+    if (filterByDatasetId && focusedEvalId && rows_.length > 0) {
       const focusedEval = rows_.find(({ evalId }) => evalId === focusedEvalId);
       invariant(focusedEval, 'focusedEvalId is not a valid eval ID');
 
-      if (filterByDatasetId) {
-        rows_ = rows_.filter(({ datasetId }) => datasetId === focusedEval.datasetId);
-      }
+      rows_ = rows_.filter(({ datasetId }) => datasetId === focusedEval.datasetId);
     }
 
     return rows_;

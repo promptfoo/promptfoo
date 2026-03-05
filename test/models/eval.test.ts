@@ -78,9 +78,24 @@ describe('evaluator', () => {
     });
 
     it('should return evaluations in descending order by createdAt', async () => {
-      const eval1 = await EvalFactory.create();
-      const eval2 = await EvalFactory.create();
-      const eval3 = await EvalFactory.create();
+      const config = {
+        providers: [{ id: 'test-provider' }],
+        prompts: ['Test prompt'],
+        tests: [],
+      };
+      const renderedPrompts = [{ raw: 'Test prompt', label: 'Test prompt' }] as Prompt[];
+      const eval1 = await Eval.create(config, renderedPrompts, {
+        id: 'older-eval',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      });
+      const eval2 = await Eval.create(config, renderedPrompts, {
+        id: 'middle-eval',
+        createdAt: new Date('2026-01-01T00:00:01.000Z'),
+      });
+      const eval3 = await Eval.create(config, renderedPrompts, {
+        id: 'newer-eval',
+        createdAt: new Date('2026-01-01T00:00:02.000Z'),
+      });
 
       const evaluations = await getEvalSummaries();
 
@@ -88,6 +103,36 @@ describe('evaluator', () => {
       expect(evaluations[0].evalId).toBe(eval3.id);
       expect(evaluations[1].evalId).toBe(eval2.id);
       expect(evaluations[2].evalId).toBe(eval1.id);
+    });
+
+    it('should use evalId as a deterministic tie-breaker when createdAt values match', async () => {
+      const createdAt = new Date('2026-01-01T00:00:00.000Z');
+      const config = {
+        providers: [{ id: 'test-provider' }],
+        prompts: ['Test prompt'],
+        tests: [],
+      };
+      const renderedPrompts = [{ raw: 'Test prompt', label: 'Test prompt' }] as Prompt[];
+
+      await Eval.create(config, renderedPrompts, { id: 'eval-a', createdAt });
+      await Eval.create(config, renderedPrompts, { id: 'eval-b', createdAt });
+      await Eval.create(config, renderedPrompts, { id: 'eval-c', createdAt });
+
+      const evaluations = await getEvalSummaries();
+      const paginatedEvaluations = await getEvalSummaries(undefined, undefined, false, {
+        limit: 2,
+        offset: 1,
+      });
+
+      expect(evaluations.map((evaluation) => evaluation.evalId)).toEqual([
+        'eval-c',
+        'eval-b',
+        'eval-a',
+      ]);
+      expect(paginatedEvaluations.map((evaluation) => evaluation.evalId)).toEqual([
+        'eval-b',
+        'eval-a',
+      ]);
     });
 
     it('should paginate evaluations using limit and offset', async () => {

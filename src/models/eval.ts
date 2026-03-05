@@ -1575,7 +1575,7 @@ export async function getEvalSummaries(
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
     .where(and(...whereClauses))
-    .orderBy(desc(evalsTable.createdAt));
+    .orderBy(desc(evalsTable.createdAt), desc(evalsTable.id));
 
   const results = pagination
     ? query.limit(pagination.limit).offset(pagination.offset).all()

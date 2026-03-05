@@ -22,6 +22,7 @@ import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry, { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
+import { EvalSchemas } from '../types/api/eval';
 import { checkRemoteHealth } from '../util/apiHealth';
 import {
   getPrompts,
@@ -55,32 +56,6 @@ const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 
 // Express middleware limits
 const REQUEST_SIZE_LIMIT = '100mb';
-
-const BooleanQueryParamSchema = z.preprocess((value) => {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (value === true || value === 'true') {
-    return true;
-  }
-  if (value === false || value === 'false') {
-    return false;
-  }
-  return value;
-}, z.boolean().optional());
-
-const ResultsQuerySchema = z
-  .object({
-    datasetId: z.string().optional(),
-    type: z.enum(['redteam', 'eval']).optional(),
-    includeProviders: BooleanQueryParamSchema,
-    limit: z.coerce.number().int().min(1).max(500).optional(),
-    offset: z.coerce.number().int().min(0).optional(),
-  })
-  .refine((value) => value.offset === undefined || value.limit !== undefined, {
-    path: ['offset'],
-    message: 'offset requires limit',
-  });
 
 /**
  * Middleware to set proper MIME types for JavaScript files.
@@ -172,7 +147,7 @@ export function createApp() {
    * Fetches summaries of all evals, optionally for a given dataset.
    */
   app.get('/api/results', async (req: Request, res: Response): Promise<void> => {
-    const queryResult = ResultsQuerySchema.safeParse(req.query);
+    const queryResult = EvalSchemas.Results.Query.safeParse(req.query);
     if (!queryResult.success) {
       res.status(400).json({ error: z.prettifyError(queryResult.error) });
       return;

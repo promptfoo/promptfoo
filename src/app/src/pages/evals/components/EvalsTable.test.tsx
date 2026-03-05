@@ -144,6 +144,7 @@ const mockEvalsWithMultipleDatasets = [
 describe('EvalsTable', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(callApi).mockReset();
   });
 
   it('should fetch data on initial mount', async () => {
@@ -248,6 +249,29 @@ describe('EvalsTable', () => {
       expect(screen.getByTestId('row-eval-1')).toBeInTheDocument();
       expect(screen.getByTestId('row-eval-2')).toBeInTheDocument();
       expect(screen.queryByTestId('row-eval-3')).toBeNull();
+    });
+  });
+
+  it('should not crash when the focused eval is not on the current server-side page', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        data: mockEvals,
+        pagination: { totalCount: 200, limit: 50, offset: 50 },
+      }),
+    };
+    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsTable onEvalSelected={vi.fn()} focusedEvalId="eval-not-on-page" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('data-table')).toBeInTheDocument();
+      expect(screen.getByTestId('row-eval-1')).toBeInTheDocument();
+      expect(screen.getByTestId('row-eval-2')).toBeInTheDocument();
     });
   });
 
