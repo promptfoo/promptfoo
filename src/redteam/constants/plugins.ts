@@ -249,6 +249,7 @@ export const FINANCIAL_PLUGINS = [
   'financial:hallucination',
   'financial:impartiality',
   'financial:misconduct',
+  'financial:sox-compliance',
   'financial:sycophancy',
 ] as const;
 
@@ -336,6 +337,7 @@ export const ADDITIONAL_PLUGINS = [
   'imitation',
   'indirect-prompt-injection',
   'mcp',
+  'model-identification',
   'medical:anchoring-bias',
   'medical:hallucination',
   'medical:incorrect-knowledge',
@@ -351,6 +353,7 @@ export const ADDITIONAL_PLUGINS = [
   'financial:hallucination',
   'financial:impartiality',
   'financial:misconduct',
+  'financial:sox-compliance',
   'financial:sycophancy',
   'ecommerce:compliance-bypass',
   'ecommerce:order-fraud',
@@ -522,6 +525,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   'hijacking',
   'indirect-prompt-injection',
   'mcp',
+  'model-identification',
   'off-topic',
   'rag-document-exfiltration',
   'rag-poisoning',

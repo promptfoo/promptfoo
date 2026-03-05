@@ -96,16 +96,25 @@ module.exports = class OpenAIProvider {
 
 ### Context Parameter
 
-The `context` parameter contains:
+The `context` parameter provides test case information and utility objects:
 
 ```javascript
 {
-  vars: {}, // Test case variables
-  prompt: {}, // Original prompt template
-  originalProvider: {}, // Used when provider is overridden
-  logger: {} // Winston logger instance
+  vars: {},              // Test case variables
+  prompt: {},            // Prompt template (raw, label, config)
+  test: {                // Full test case object
+    vars: {},
+    metadata: {
+      pluginId: '...',   // Redteam plugin (e.g. "promptfoo:redteam:harmful:hate")
+      strategyId: '...',  // Redteam strategy (e.g. "jailbreak", "prompt-injection")
+    },
+  },
+  originalProvider: {},  // Original provider when overridden
+  logger: {},            // Winston logger instance
 }
 ```
+
+For redteam evals, use `context.test.metadata.pluginId` and `context.test.metadata.strategyId` to identify which plugin and strategy generated the test case.
 
 ### Reporting the Actual Prompt
 

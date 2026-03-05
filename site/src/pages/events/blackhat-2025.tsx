@@ -7,25 +7,20 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import SecurityIcon from '@mui/icons-material/Security';
 import SpeedIcon from '@mui/icons-material/Speed';
+import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
 import styles from './blackhat-2025.module.css';
 
 export default function BlackHat2025(): React.ReactElement {
-  useEffect(() => {
-    // Force dark theme for this page
-    document.documentElement.setAttribute('data-theme', 'dark');
+  useForcedTheme('dark');
 
+  useEffect(() => {
     // Cal.com setup
     (async function () {
       const cal = await getCalApi({ namespace: 'promptfoo-at-blackhat' });
       cal('ui', { hideEventTypeDetails: false, layout: 'month_view' });
     })();
-
-    // Cleanup on unmount
-    return () => {
-      document.documentElement.removeAttribute('data-theme');
-    };
   }, []);
 
   const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {

@@ -24,6 +24,10 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
     return `voyage:${this.modelName}`;
   }
 
+  requiresApiKey(): boolean {
+    return true;
+  }
+
   getApiKey(): string | undefined {
     const apiKeyCandidate =
       this.config?.apiKey ||

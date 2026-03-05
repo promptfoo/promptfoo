@@ -34,7 +34,7 @@ export function InfoBox({ children, variant = 'info', className }: InfoBoxProps)
   return (
     <div
       className={cn(
-        'rounded-lg border p-4 flex gap-3',
+        'rounded-lg border border-border p-4 flex gap-3',
         styles.bg,
         styles.border,
         styles.text,

@@ -307,7 +307,7 @@ describe('init command', () => {
       const initCmd = program.commands.find((cmd) => cmd.name() === 'init');
       expect(initCmd).toBeDefined();
       expect(initCmd?.description()).toBe(
-        'Initialize project with dummy files or download an example',
+        'Set up a new promptfoo project with prompts, providers, and test cases',
       );
       expect(initCmd?.options).toHaveLength(2);
     });

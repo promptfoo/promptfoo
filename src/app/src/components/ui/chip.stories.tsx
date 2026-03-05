@@ -112,6 +112,15 @@ export const InContext: Story = {
   ),
 };
 
+// As link
+export const AsLink: Story = {
+  args: {
+    label: 'TARGET',
+    children: 'my-target',
+    href: 'https://example.com',
+  },
+};
+
 // All states
 export const AllStates: Story = {
   render: () => (
@@ -136,6 +145,12 @@ export const AllStates: Story = {
         <span className="text-sm w-24">Disabled:</span>
         <Chip label="LABEL" disabled>
           Content
+        </Chip>
+      </div>
+      <div className="flex items-center gap-4">
+        <span className="text-sm w-24">Link:</span>
+        <Chip label="TARGET" href="https://example.com">
+          example.com
         </Chip>
       </div>
     </div>

@@ -190,7 +190,7 @@ describe('AIStudioChatProvider', () => {
       const providerWithSafety = new AIStudioChatProvider('gemini-pro', {
         config: {
           safetySettings: [
-            { category: 'HARM_CATEGORY_HARASSMENT', probability: 'BLOCK_MEDIUM_AND_ABOVE' },
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
           ],
         },
       });

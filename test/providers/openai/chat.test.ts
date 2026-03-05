@@ -116,6 +116,55 @@ describe('OpenAI Provider', () => {
       expect(result.metadata?.http?.headers).toEqual(mockHeaders);
     });
 
+    it('should include all choices in metadata when n > 1', async () => {
+      const mockChoices = [
+        { message: { content: 'First response' }, index: 0 },
+        { message: { content: 'Second response' }, index: 1 },
+        { message: { content: 'Third response' }, index: 2 },
+      ];
+      const mockResponse = {
+        data: {
+          choices: mockChoices,
+          usage: { total_tokens: 30, prompt_tokens: 10, completion_tokens: 20 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      );
+
+      expect(result.output).toBe('First response');
+      expect(result.metadata?.choices).toBeDefined();
+      expect(result.metadata?.choices).toHaveLength(3);
+      expect(result.metadata?.choices).toEqual(mockChoices);
+    });
+
+    it('should not include choices in metadata when n = 1', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Single response' }, index: 0 }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      );
+
+      expect(result.output).toBe('Single response');
+      expect(result.metadata?.choices).toBeUndefined();
+    });
+
     it('should include HTTP metadata in error response', async () => {
       const mockResponse = {
         data: { error: { message: 'Rate limit exceeded' } },

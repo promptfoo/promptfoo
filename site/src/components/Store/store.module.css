@@ -53,15 +53,15 @@
   min-width: 32px;
   height: 32px;
   border-radius: 0;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--ifm-color-emphasis-300);
   transition:
     border-color 0.2s,
     background-color 0.2s;
 }
 
 .quantityButton:hover:not(:disabled) {
-  border-color: #1a1a2e;
-  background-color: #f5f5f5;
+  border-color: var(--ifm-color-primary-dark);
+  background-color: var(--ifm-background-surface-color);
 }
 
 /* Skeleton loading pulse */
@@ -81,7 +81,7 @@
 
 /* Focus styles for accessibility */
 .focusVisible:focus-visible {
-  outline: 2px solid #1a1a2e;
+  outline: 2px solid var(--ifm-color-primary);
   outline-offset: 2px;
 }
 
@@ -90,7 +90,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: rgba(0, 0, 0, 0.3);
+  background-color: var(--ifm-color-emphasis-400);
   cursor: pointer;
   transition:
     background-color 0.2s,
@@ -102,7 +102,7 @@
 }
 
 .carouselDotActive {
-  background-color: #000;
+  background-color: var(--ifm-color-primary-darkest);
 }
 
 /* Mobile-specific adjustments */

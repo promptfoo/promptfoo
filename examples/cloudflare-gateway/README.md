@@ -31,7 +31,7 @@ npx promptfoo eval -c examples/cloudflare-gateway/promptfooconfig.yaml
 The configuration compares responses from three different providers, all routed through Cloudflare AI Gateway:
 
 - **OpenAI** (gpt-4o-mini)
-- **Anthropic** (claude-3-5-haiku-latest)
+- **Anthropic** (claude-haiku-4-5-20251001)
 - **Groq** (llama-3.1-8b-instant)
 
 Each provider answers questions about technical topics, and the assertions verify that responses contain relevant keywords.
