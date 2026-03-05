@@ -7,6 +7,7 @@ import {
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
 import { useApiHealth } from '@app/hooks/useApiHealth';
+import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import {
@@ -75,6 +76,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const {
     data: { status: apiHealthStatus },
   } = useApiHealth();
+  const { data: cloudConfig } = useCloudConfig();
+  const isCloudEnabled = cloudConfig?.isEnabled ?? false;
 
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
 
@@ -89,11 +92,20 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
 
+  /** Strategies that require authentication to use */
+  const STRATEGIES_REQUIRING_AUTH = useMemo(() => new Set(['gcg']), []);
+
   const isStrategyDisabled = useCallback(
     (strategyId: string) => {
-      return isRemoteGenerationDisabled && STRATEGIES_REQUIRING_REMOTE_SET.has(strategyId);
+      if (isRemoteGenerationDisabled && STRATEGIES_REQUIRING_REMOTE_SET.has(strategyId)) {
+        return true;
+      }
+      if (!isCloudEnabled && STRATEGIES_REQUIRING_AUTH.has(strategyId)) {
+        return true;
+      }
+      return false;
     },
-    [isRemoteGenerationDisabled],
+    [isRemoteGenerationDisabled, isCloudEnabled, STRATEGIES_REQUIRING_AUTH],
   );
 
   const selectedStrategyIds = useMemo(() => {
@@ -147,10 +159,17 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const handleStrategyToggle = useCallback(
     (strategyId: string) => {
       if (isStrategyDisabled(strategyId)) {
-        toast.showToast(
-          'This strategy requires remote generation to be enabled. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION.',
-          'error',
-        );
+        if (!isCloudEnabled && STRATEGIES_REQUIRING_AUTH.has(strategyId)) {
+          toast.showToast(
+            'This strategy requires authentication. Run `promptfoo auth login` to use it.',
+            'error',
+          );
+        } else {
+          toast.showToast(
+            'This strategy requires remote generation to be enabled. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION.',
+            'error',
+          );
+        }
         return;
       }
 

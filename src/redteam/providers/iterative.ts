@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
+import { isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
@@ -782,6 +783,12 @@ class RedteamIterativeProvider implements ApiProvider {
 
     this.numIterations =
       Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
+
+    // Cap iterations for unauthenticated users
+    if (!isLoggedIntoCloud()) {
+      this.numIterations = Math.min(this.numIterations, 10);
+    }
+
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );

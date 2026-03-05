@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { renderPrompt } from '../../../evaluatorHelpers';
+import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import invariant from '../../../util/invariant';
@@ -187,6 +188,12 @@ export class CustomProvider implements ApiProvider {
     this.config = { ...config };
     this.maxTurns = config.maxTurns || DEFAULT_MAX_TURNS;
     this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
+
+    // Cap turns for unauthenticated users
+    if (!isLoggedIntoCloud()) {
+      this.maxTurns = Math.min(this.maxTurns, 10);
+    }
+
     this.nunjucks = getNunjucksEngine();
     this.memory = new MemorySystem();
     this.targetConversationId = crypto.randomUUID();
