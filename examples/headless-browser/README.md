@@ -24,7 +24,7 @@ Ensure you have Python 3 and Node.js installed on your system.
 1. **Install Node.js dependencies**:
 
 ```bash
-npm install playwright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth
+npm install playwright @playwright/browser-chromium @zorilla/playwright-extra @zorilla/puppeteer-extra-plugin-stealth
 ```
 
 2. **Install Python dependencies** (for the demo application):

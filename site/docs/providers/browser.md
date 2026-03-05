@@ -39,10 +39,10 @@ When using browser automation:
 The browser provider requires Playwright and related packages. These are optional dependencies, so you'll need to install them:
 
 ```bash
-npm install playwright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth
+npm install playwright @playwright/browser-chromium @zorilla/playwright-extra @zorilla/puppeteer-extra-plugin-stealth
 ```
 
-Note: Currently, promptfoo's browser provider only supports Chromium-based browsers (Chrome, Edge). The provider uses `playwright-extra` with the Chromium engine for enhanced stealth capabilities.
+Note: Currently, Promptfoo's browser provider only supports Chromium-based browsers (Chrome, Edge). The provider uses Zorilla's Playwright Extra compatibility layer with the Chromium engine for enhanced stealth capabilities.
 
 ## Configuration
 
@@ -341,7 +341,7 @@ While Playwright supports multiple browsers (Chromium, Firefox, and WebKit), pro
 - **Edge** - Microsoft's Chromium-based browser
 - **Chromium** - Open-source browser project
 
-The implementation uses `playwright-extra` with the Chromium engine for enhanced stealth capabilities to avoid detection.
+The implementation uses Zorilla's Playwright Extra compatibility layer with the Chromium engine for enhanced stealth capabilities to avoid detection.
 
 ### Supported Browser Actions
 
@@ -510,7 +510,7 @@ providers:
 **Tips for avoiding detection:**
 
 - Randomize delays between actions (1-3 seconds)
-- Use the stealth plugin (included with playwright-extra)
+- Use the stealth plugin from Zorilla's Playwright Extra stack
 - Avoid patterns that look automated
 - Consider using different user agents
 - Respect robots.txt and rate limits
