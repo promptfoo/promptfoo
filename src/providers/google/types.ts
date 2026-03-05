@@ -109,6 +109,11 @@ export interface Tool {
   // google_search?: object;
 }
 
+export interface ClaudeThinkingConfig {
+  type: 'enabled' | 'disabled';
+  budget_tokens?: number;
+}
+
 export interface CompletionOptions {
   apiKey?: string;
   apiHost?: string;
@@ -143,6 +148,8 @@ export interface CompletionOptions {
   top_p?: number; // Alternative format for Claude models
   topK?: number;
   top_k?: number; // Alternative format for Claude models
+  thinking?: ClaudeThinkingConfig; // Extended thinking for Claude models
+  showThinking?: boolean; // Whether to include thinking output for Claude models
 
   // Imagen image generation options
   n?: number; // Number of images to generate
@@ -384,12 +391,20 @@ export interface GoogleProviderConfig extends CompletionOptions {
 }
 
 // Claude API interfaces
+interface ClaudeContentBlock {
+  type: string;
+  text?: string;
+  source?: {
+    type: string;
+    media_type?: string;
+    data?: string;
+  };
+  [key: string]: unknown;
+}
+
 interface ClaudeMessage {
   role: string;
-  content: Array<{
-    type: string;
-    text: string;
-  }>;
+  content: ClaudeContentBlock[];
 }
 
 export interface ClaudeRequest {
@@ -400,6 +415,7 @@ export interface ClaudeRequest {
   top_p?: number;
   top_k?: number;
   system?: Array<{ type: string; text: string }>;
+  thinking?: ClaudeThinkingConfig;
   messages: ClaudeMessage[];
 }
 
@@ -408,10 +424,7 @@ export interface ClaudeResponse {
   type: string;
   role: string;
   model: string;
-  content: Array<{
-    type: string;
-    text: string;
-  }>;
+  content: ClaudeContentBlock[];
   stop_reason: string;
   stop_sequence: string | null;
   usage: {

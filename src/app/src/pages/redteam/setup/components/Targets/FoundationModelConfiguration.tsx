@@ -34,8 +34,8 @@ const FoundationModelConfiguration = ({
     const providerConfigs = {
       openai: {
         name: 'OpenAI',
-        defaultModel: 'openai:gpt-5.2',
-        placeholder: 'openai:gpt-5.2, openai:gpt-5.3-chat-latest, openai:gpt-5-mini',
+        defaultModel: 'openai:gpt-5.4',
+        placeholder: 'openai:gpt-5.4, openai:gpt-5.3-chat-latest, openai:gpt-5-mini',
         docUrl: 'https://www.promptfoo.dev/docs/providers/openai',
         envVar: 'OPENAI_API_KEY',
       },

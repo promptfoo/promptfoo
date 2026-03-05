@@ -81,8 +81,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       getEnvString('PALM_API_KEY') ||
       env?.PALM_API_KEY,
   );
-  // Note: preferGitHub condition is evaluated inline below due to async hasGoogleDefaultCredentials()
-
   const hasAzureApiKey =
     getEnvString('AZURE_OPENAI_API_KEY') ||
     env?.AZURE_OPENAI_API_KEY ||
@@ -99,6 +97,14 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     (hasAzureApiKey || hasAzureClientCreds) &&
     (getEnvString('AZURE_DEPLOYMENT_NAME') || env?.AZURE_DEPLOYMENT_NAME) &&
     (getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME);
+  const shouldCheckGoogleDefaultCredentials =
+    !preferAzure &&
+    !hasOpenAiCredentials &&
+    !hasAnthropicCredentials &&
+    !hasGoogleAiStudioCredentials;
+  const hasGoogleVertexDefaultCredentials = shouldCheckGoogleDefaultCredentials
+    ? await hasGoogleDefaultCredentials()
+    : false;
 
   let providers: Pick<DefaultProviders, keyof DefaultProviders>;
 
@@ -158,7 +164,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     !hasOpenAiCredentials &&
     !hasAnthropicCredentials &&
     !hasGoogleAiStudioCredentials &&
-    (await hasGoogleDefaultCredentials())
+    hasGoogleVertexDefaultCredentials
   ) {
     logger.debug('Using Google Vertex default providers');
     providers = {
@@ -173,7 +179,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     !hasOpenAiCredentials &&
     !hasAnthropicCredentials &&
     !hasGoogleAiStudioCredentials &&
-    !(await hasGoogleDefaultCredentials()) &&
+    !hasGoogleVertexDefaultCredentials &&
     (getEnvString('MISTRAL_API_KEY') || env?.MISTRAL_API_KEY)
   ) {
     logger.debug('Using Mistral default providers');
@@ -190,7 +196,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     !hasOpenAiCredentials &&
     !hasAnthropicCredentials &&
     !hasGoogleAiStudioCredentials &&
-    !(await hasGoogleDefaultCredentials()) &&
+    !hasGoogleVertexDefaultCredentials &&
     !(getEnvString('MISTRAL_API_KEY') || env?.MISTRAL_API_KEY) &&
     hasGitHubCredentials
   ) {

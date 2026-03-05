@@ -54,7 +54,7 @@
     "prism-react-renderer": "^2.4.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "satori": "^0.21.0",
+    "satori": "^0.24.1",
     "sharp": "^0.34.5",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
@@ -72,7 +72,7 @@
     ]
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.20.1"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
