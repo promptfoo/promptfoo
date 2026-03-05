@@ -9,6 +9,7 @@ import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
+  ImageOutput,
   ProviderResponse,
 } from '../../types/index';
 import type { OpenAiSharedOptions } from './types';
@@ -187,7 +188,7 @@ export function formatOutput(
       return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
     }
 
-    return JSON.stringify(data);
+    return `data:image/png;base64,${b64Json}`;
   } else {
     const url = data.data[0].url;
     if (!url) {
@@ -342,8 +343,25 @@ export async function processApiResponse(
 
     const cost = cached ? 0 : calculateImageCost(model, size, quality, n);
 
+    // Build structured images array from all returned images
+    const images: ImageOutput[] | undefined =
+      Array.isArray(data.data) && data.data.length > 0
+        ? data.data
+            .map((item: any): ImageOutput | null => {
+              if (item.b64_json) {
+                return { data: `data:image/png;base64,${item.b64_json}`, mimeType: 'image/png' };
+              }
+              if (item.url) {
+                return { data: item.url, mimeType: 'image/png' };
+              }
+              return null;
+            })
+            .filter(Boolean)
+        : undefined;
+
     return {
       output: formattedOutput,
+      images,
       cached,
       latencyMs,
       cost,

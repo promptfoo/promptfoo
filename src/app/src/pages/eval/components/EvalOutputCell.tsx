@@ -432,11 +432,10 @@ function EvalOutputCell({
     }
   }
 
-  // Append structured images (e.g. from Gemini text+image responses)
-  // Filter out any image already displayed via the text/output field to avoid duplicates
   if (output.images?.length) {
     const imageElements = output.images.map((img: ImageOutput, idx: number) => {
       const src = resolveImageSource(img);
+      // Skip if this image is already rendered as the main output (e.g. image-only Gemini responses)
       if (!src || src === inlineImageSrc) {
         return null;
       }
