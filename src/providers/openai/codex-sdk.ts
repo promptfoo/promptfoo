@@ -261,8 +261,9 @@ async function loadCodexSDK(): Promise<any> {
 // See: https://openai.com/pricing
 const CODEX_MODEL_PRICING: Record<string, { input: number; output: number; cache_read: number }> = {
   // GPT-5.4 models
-  'gpt-5.4': { input: 2.0, output: 16.0, cache_read: 0.5 },
-  'gpt-5.4-pro': { input: 20.0, output: 160.0, cache_read: 5.0 },
+  'gpt-5.4': { input: 2.5, output: 15.0, cache_read: 0.25 },
+  // gpt-5.4-pro does not have discounted cached-input pricing.
+  'gpt-5.4-pro': { input: 30.0, output: 180.0, cache_read: 30.0 },
   // GPT-5.3 Codex models
   'gpt-5.3-codex': { input: 1.75, output: 14.0, cache_read: 0.175 },
   'gpt-5.3-codex-spark': { input: 0.5, output: 4.0, cache_read: 0.05 },
@@ -1219,7 +1220,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       if (tokenUsage && config.model) {
         const pricing = CODEX_MODEL_PRICING[config.model];
         if (pricing) {
-          // Pricing is per 1M tokens; cached input tokens are charged at a 90% discount
+          // Pricing is per 1M tokens. Some models have discounted cached input pricing.
           const cachedTokens = tokenUsage.cached || 0;
           const uncachedInputTokens = (tokenUsage.prompt || 0) - cachedTokens;
           const inputCost = uncachedInputTokens * (pricing.input / 1_000_000);

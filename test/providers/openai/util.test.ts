@@ -227,7 +227,7 @@ describe('calculateOpenAICost', () => {
 
   it('should calculate cost correctly for gpt-5.4', () => {
     const cost = calculateOpenAICost('gpt-5.4', {}, 1000, 500);
-    expect(cost).toBeCloseTo((1000 * 2 + 500 * 16) / 1e6, 6);
+    expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 15) / 1e6, 6);
   });
 
   it('should calculate cost correctly for gpt-5.2-codex', () => {
@@ -242,7 +242,7 @@ describe('calculateOpenAICost', () => {
 
   it('should calculate cost correctly for gpt-5.4-pro', () => {
     const cost = calculateOpenAICost('gpt-5.4-pro', {}, 1000, 500);
-    expect(cost).toBeCloseTo((1000 * 20 + 500 * 160) / 1e6, 6);
+    expect(cost).toBeCloseTo((1000 * 30 + 500 * 180) / 1e6, 6);
   });
 
   it('should calculate cost correctly for gpt-5-nano', () => {

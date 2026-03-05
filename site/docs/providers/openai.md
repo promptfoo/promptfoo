@@ -469,8 +469,13 @@ GPT-5.4 is OpenAI's latest GPT-5 family model and is available in standard and p
 
 | Model       | Description               | Pricing (Input / Output)    |
 | ----------- | ------------------------- | --------------------------- |
-| gpt-5.4     | Standard GPT-5.4 model    | $2.00 / $16 per 1M tokens   |
-| gpt-5.4-pro | Premium GPT-5.4 pro model | $20.00 / $160 per 1M tokens |
+| gpt-5.4     | Standard GPT-5.4 model    | $2.50 / $15 per 1M tokens   |
+| gpt-5.4-pro | Premium GPT-5.4 pro model | $30.00 / $180 per 1M tokens |
+
+Pricing notes:
+
+- `gpt-5.4` cached input tokens: $0.25 per 1M tokens
+- `gpt-5.4-pro` has no discounted cached-input rate
 
 #### Usage Examples
 
@@ -1735,8 +1740,8 @@ OpenAI's Responses API is the most advanced interface for generating model respo
 
 The Responses API supports a wide range of models, including:
 
-- `gpt-5.4` - Latest GPT-5 family model ($2/$16 per 1M tokens)
-- `gpt-5.4-pro` - Premium GPT-5.4 model ($20/$160 per 1M tokens)
+- `gpt-5.4` - Latest GPT-5 family model ($2.50/$15 per 1M tokens)
+- `gpt-5.4-pro` - Premium GPT-5.4 model ($30/$180 per 1M tokens)
 - `gpt-5` - OpenAI's most capable vision model
 - `gpt-5-chat` - GPT-5 chat alias
 - `gpt-5.1` - GPT-5.1 flagship model

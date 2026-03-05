@@ -1023,9 +1023,32 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        // gpt-5.4: $2/1M input, $16/1M output
-        // Cost = (1000 * 2/1000000) + (500 * 16/1000000) = 0.002 + 0.008 = 0.01
+        // gpt-5.4: $2.5/1M input, $15/1M output
+        // Cost = (1000 * 2.5/1000000) + (500 * 15/1000000) = 0.0025 + 0.0075 = 0.01
         expect(result.cost).toBeCloseTo(0.01, 6);
+      });
+
+      it('should calculate cost for gpt-5.4 model with cached input tokens', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.4' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.4: $2.5/1M input, $0.25/1M cache_read, $15/1M output
+        // uncached input = 2000 - 500 = 1500, cached = 500
+        // Cost = (1500 * 2.5/1000000) + (500 * 0.25/1000000) + (1000 * 15/1000000)
+        //      = 0.00375 + 0.000125 + 0.015 = 0.018875
+        expect(result.cost).toBeCloseTo(0.018875, 6);
       });
 
       it('should calculate cost for gpt-5.4-pro model', async () => {
@@ -1044,9 +1067,32 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        // gpt-5.4-pro: $20/1M input, $160/1M output
-        // Cost = (1000 * 20/1000000) + (500 * 160/1000000) = 0.02 + 0.08 = 0.1
-        expect(result.cost).toBeCloseTo(0.1, 6);
+        // gpt-5.4-pro: $30/1M input, $180/1M output
+        // Cost = (1000 * 30/1000000) + (500 * 180/1000000) = 0.03 + 0.09 = 0.12
+        expect(result.cost).toBeCloseTo(0.12, 6);
+      });
+
+      it('should calculate cost for gpt-5.4-pro model without cache discount', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.4-pro' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.4-pro has no discounted cached-input pricing.
+        // uncached input = 2000 - 500 = 1500, cached = 500, both billed at $30/1M.
+        // Cost = (1500 * 30/1000000) + (500 * 30/1000000) + (1000 * 180/1000000)
+        //      = 0.045 + 0.015 + 0.18 = 0.24
+        expect(result.cost).toBeCloseTo(0.24, 6);
       });
 
       it('should recognize gpt-5.2-codex as a known model', () => {
