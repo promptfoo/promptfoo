@@ -3,7 +3,7 @@
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example eval-assertion-scoring-override
+npx promptfoo@latest init --example eval-assertions-generate
 ```
 
 This example demonstrates valid configs for assertion generation in promptfoo.
@@ -18,11 +18,11 @@ Try the following options:
 Generate initial set of assertions (for a config that has none)
 
 ```bash
-promptfoo generate assertions --config examples/assertions-generate/promptfooconfig-minimal.yaml -o test.yaml --type llm-rubric
+promptfoo generate assertions --config examples/eval-assertions-generate/promptfooconfig-minimal.yaml -o test.yaml --type llm-rubric
 ```
 
 Generate missing llm-rubric assertions (for a config that already has some)
 
 ```bash
-promptfoo generate assertions --config examples/assertions-generate/promptfooconfig.yaml -o test.yaml --type llm-rubric
+promptfoo generate assertions --config examples/eval-assertions-generate/promptfooconfig.yaml -o test.yaml --type llm-rubric
 ```
