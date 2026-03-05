@@ -8,6 +8,7 @@ import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
+  ImageOutput,
   ProviderResponse,
 } from '../../types/index';
 import type { ApiProvider } from '../../types/providers';
@@ -107,8 +108,9 @@ export class XAIImageProvider extends OpenAiImageProvider {
 
     let data: any, status: number, statusText: string;
     let cached = false;
+    let latencyMs: number | undefined;
     try {
-      ({ data, cached, status, statusText } = await callOpenAiImageApi(
+      ({ data, cached, status, statusText, latencyMs } = await callOpenAiImageApi(
         `${this.getApiUrl()}${endpoint}`,
         body,
         headers,
@@ -141,10 +143,26 @@ export class XAIImageProvider extends OpenAiImageProvider {
       }
 
       const cost = cached ? 0 : this.calculateImageCost(config.n || 1);
+      const images: ImageOutput[] | undefined =
+        Array.isArray(data.data) && data.data.length > 0
+          ? data.data
+              .map((item: any): ImageOutput | null => {
+                if (item.b64_json) {
+                  return { data: `data:image/png;base64,${item.b64_json}`, mimeType: 'image/png' };
+                }
+                if (item.url) {
+                  return { data: item.url, mimeType: 'image/png' };
+                }
+                return null;
+              })
+              .filter((item: ImageOutput | null): item is ImageOutput => item !== null)
+          : undefined;
 
       return {
         output: formattedOutput,
+        images,
         cached,
+        latencyMs,
         cost,
         ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
       };

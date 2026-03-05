@@ -356,7 +356,7 @@ export async function processApiResponse(
               }
               return null;
             })
-            .filter(Boolean)
+            .filter((item: ImageOutput | null): item is ImageOutput => item !== null)
         : undefined;
 
     return {
