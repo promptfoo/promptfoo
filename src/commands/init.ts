@@ -11,11 +11,10 @@ import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
 import { fetchWithProxy } from '../util/fetch/index';
 import { promptfooCommand } from '../util/promptfooCommand';
+import { EXAMPLE_ALIASES } from './exampleAliases';
 import type { Command } from 'commander';
 
 const GITHUB_API_BASE = 'https://api.github.com';
-
-import { EXAMPLE_ALIASES } from './exampleAliases';
 
 export async function downloadFile(url: string, filePath: string): Promise<void> {
   const response = await fetchWithProxy(url);
