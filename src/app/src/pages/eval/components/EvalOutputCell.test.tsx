@@ -640,6 +640,24 @@ describe('EvalOutputCell', () => {
     expect(renderedSources).toEqual([dataUri, 'https://example.com/secondary-inline.png']);
   });
 
+  it('falls back to text when all structured images are invalid/skipped', () => {
+    const propsWithInvalidStructuredImages: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        text: 'Fallback text should still render',
+        images: [{}, {}],
+      },
+    };
+
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...propsWithInvalidStructuredImages} />,
+    );
+
+    expect(screen.getByText('Fallback text should still render')).toBeInTheDocument();
+    expect(container.querySelectorAll('img')).toHaveLength(0);
+  });
+
   it('allows copying row link to clipboard', async () => {
     const originalClipboard = navigator.clipboard;
     const mockClipboard = {

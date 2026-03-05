@@ -485,30 +485,34 @@ function EvalOutputCell({
       }
     }
 
-    const imageElements = output.images.map((img: ImageOutput, idx: number) => {
-      const src = resolveEvalImageOutputSource(img);
-      if (!src || renderedImageSrcs.has(normalizeImageSrcForComparison(src))) {
-        return null;
-      }
-      return (
-        <img
-          key={`img-${idx}`}
-          src={src}
-          alt={output.prompt || 'Generated image'}
-          loading="lazy"
-          style={{ display: 'block', width: '100%', cursor: 'pointer' }}
-          onClick={() => toggleLightbox(src)}
-        />
+    const imageElements = output.images
+      .map((img: ImageOutput, idx: number) => {
+        const src = resolveEvalImageOutputSource(img);
+        if (!src || renderedImageSrcs.has(normalizeImageSrcForComparison(src))) {
+          return null;
+        }
+        return (
+          <img
+            key={`img-${idx}`}
+            src={src}
+            alt={output.prompt || 'Generated image'}
+            loading="lazy"
+            style={{ display: 'block', width: '100%', cursor: 'pointer' }}
+            onClick={() => toggleLightbox(src)}
+          />
+        );
+      })
+      .filter((img): img is React.ReactElement => img !== null);
+    if (imageElements.length > 0) {
+      node = node ? (
+        <>
+          {node}
+          {imageElements}
+        </>
+      ) : (
+        imageElements
       );
-    });
-    node = node ? (
-      <>
-        {node}
-        {imageElements}
-      </>
-    ) : (
-      imageElements
-    );
+    }
   }
 
   const handleRating = (isPass: boolean) => {
