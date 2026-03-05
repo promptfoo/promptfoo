@@ -82,6 +82,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
   'insurance:coverage-discrimination':
     'Tests for discriminatory coverage decisions based on protected characteristics (age, disability, race, etc.)',
+  'insurance:data-disclosure':
+    'Tests for unauthorized disclosure of protected policyholder data including claims history, property details, driving records, and financial information',
   'insurance:network-misinformation': 'Tests for inaccurate provider network information',
   'insurance:phi-disclosure':
     'Tests for unauthorized disclosure of Protected Health Information in violation of HIPAA privacy regulations',
@@ -195,7 +197,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   bias: 'Bias detection across protected characteristics',
   medical: 'Medical AI safety testing across healthcare vulnerabilities',
   pharmacy: 'Pharmacy AI safety testing across pharmaceutical vulnerabilities',
-  insurance: 'Insurance AI safety testing across healthcare coverage vulnerabilities',
+  insurance: 'Insurance AI safety testing across all insurance types',
   financial: 'Financial AI safety testing across financial services vulnerabilities',
   ecommerce:
     'E-commerce AI safety testing across payment security and transaction integrity vulnerabilities',
@@ -338,6 +340,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   imitation: 'Entity Impersonation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
   'insurance:coverage-discrimination': 'Coverage Discrimination',
+  'insurance:data-disclosure': 'Data Disclosure',
   'insurance:network-misinformation': 'Network Misinformation',
   'insurance:phi-disclosure': 'PHI Disclosure',
   'ecommerce:pci-dss': 'PCI DSS Compliance',
@@ -539,6 +542,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   imitation: Severity.Low,
   'indirect-prompt-injection': Severity.High,
   'insurance:coverage-discrimination': Severity.Critical,
+  'insurance:data-disclosure': Severity.Critical,
   'insurance:network-misinformation': Severity.High,
   'insurance:phi-disclosure': Severity.Critical,
   'ecommerce:pci-dss': Severity.Critical,
@@ -626,6 +630,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'data-exfil',
     'divergent-repetition',
     'harmful:privacy',
+    'insurance:data-disclosure',
     'insurance:phi-disclosure',
     'pii:api-db',
     'pii:direct',
@@ -901,6 +906,7 @@ export const categoryAliases: Record<Plugin, string> = {
   imitation: 'Imitation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
   'insurance:coverage-discrimination': 'InsuranceCoverageDiscrimination',
+  'insurance:data-disclosure': 'InsuranceDataDisclosure',
   'insurance:network-misinformation': 'InsuranceNetworkMisinformation',
   'insurance:phi-disclosure': 'InsurancePhiDisclosure',
   intent: 'Intent',
@@ -987,7 +993,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   pharmacy:
     'Comprehensive pharmacy AI safety testing for pharmaceutical vulnerabilities including drug interactions, dosage calculations, and controlled substance compliance',
   insurance:
-    'Comprehensive insurance AI safety testing for healthcare coverage vulnerabilities including coverage discrimination, network misinformation, and PHI disclosure',
+    'Comprehensive insurance AI safety testing across all insurance types including coverage discrimination, network misinformation, PHI disclosure, and policyholder data disclosure',
   financial:
     'Comprehensive financial AI safety testing for financial services vulnerabilities including calculation errors, compliance violations, hallucination, and data leakage',
   ecommerce:
@@ -1065,9 +1071,11 @@ export const pluginDescriptions: Record<Plugin, string> = {
   hijacking: 'Assesses protection against unauthorized resource usage and purpose deviation',
   imitation: 'Tests safeguards against unauthorized entity impersonation attempts',
   'insurance:coverage-discrimination':
-    'Tests for discriminatory coverage or benefit determinations based on protected characteristics (age, disability, race, genetic information, sex) in violation of federal civil rights laws including ADA, Section 1557, GINA, and age discrimination statutes',
+    'Tests for discriminatory coverage, underwriting, or claims determinations based on protected characteristics (age, disability, race, genetic information, sex) in violation of federal civil rights laws including ADA, Section 1557, GINA, Fair Housing Act, ECOA, and state unfair trade practices acts',
+  'insurance:data-disclosure':
+    'Tests for unauthorized disclosure of protected policyholder data including claims history, property details, driving records, beneficiary information, and business data in violation of GLBA, FCRA, DPPA, and state insurance privacy laws',
   'insurance:network-misinformation':
-    'Tests for inaccurate provider network information including wrong network status, terminated contracts, ghost networks, and outdated provider data that could expose members to surprise medical bills and balance billing',
+    'Tests for inaccurate provider or vendor network information including wrong network status, terminated contracts, ghost networks, and outdated provider data that could expose policyholders to unexpected costs, voided warranties, or inadequate service',
   'insurance:phi-disclosure':
     'Tests for unauthorized disclosure of Protected Health Information in violation of HIPAA privacy regulations including cross-member PHI leakage, inadequate authentication, and disclosure to unauthorized third parties',
   'ecommerce:pci-dss':
