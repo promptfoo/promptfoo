@@ -205,6 +205,16 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 1.25 + 500 * 10) / 1e6, 6);
   });
 
+  it('should calculate cost correctly for gpt-5-chat', () => {
+    const cost = calculateOpenAICost('gpt-5-chat', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 1.25 + 500 * 10) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for gpt-5.1-chat-latest', () => {
+    const cost = calculateOpenAICost('gpt-5.1-chat-latest', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 1.25 + 500 * 10) / 1e6, 6);
+  });
+
   it('should calculate cost correctly for gpt-5.2-chat-latest', () => {
     const cost = calculateOpenAICost('gpt-5.2-chat-latest', {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * 1.75 + 500 * 14) / 1e6, 6);
@@ -215,6 +225,11 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 1.75 + 500 * 14) / 1e6, 6);
   });
 
+  it('should calculate cost correctly for gpt-5.4', () => {
+    const cost = calculateOpenAICost('gpt-5.4', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 2 + 500 * 16) / 1e6, 6);
+  });
+
   it('should calculate cost correctly for gpt-5.2-codex', () => {
     const cost = calculateOpenAICost('gpt-5.2-codex', {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * 1.75 + 500 * 14) / 1e6, 6);
@@ -223,6 +238,11 @@ describe('calculateOpenAICost', () => {
   it('should calculate cost correctly for gpt-5.2-pro', () => {
     const cost = calculateOpenAICost('gpt-5.2-pro', {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * 15 + 500 * 120) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for gpt-5.4-pro', () => {
+    const cost = calculateOpenAICost('gpt-5.4-pro', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 20 + 500 * 160) / 1e6, 6);
   });
 
   it('should calculate cost correctly for gpt-5-nano', () => {

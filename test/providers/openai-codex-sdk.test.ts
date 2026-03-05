@@ -990,7 +990,65 @@ describe('OpenAICodexSDKProvider', () => {
       });
     });
 
-    describe('GPT-5.2 and GPT-5.3 models', () => {
+    describe('GPT-5.2, GPT-5.3, and GPT-5.4 models', () => {
+      it('should recognize gpt-5.4 as a known model', () => {
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.4' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        expect(provider.config.model).toBe('gpt-5.4');
+      });
+
+      it('should recognize gpt-5.4-pro as a known model', () => {
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.4-pro' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        expect(provider.config.model).toBe('gpt-5.4-pro');
+      });
+
+      it('should calculate cost for gpt-5.4 model', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 1000,
+            cached_input_tokens: 0,
+            output_tokens: 500,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.4' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.4: $2/1M input, $16/1M output
+        // Cost = (1000 * 2/1000000) + (500 * 16/1000000) = 0.002 + 0.008 = 0.01
+        expect(result.cost).toBeCloseTo(0.01, 6);
+      });
+
+      it('should calculate cost for gpt-5.4-pro model', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 1000,
+            cached_input_tokens: 0,
+            output_tokens: 500,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.4-pro' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.4-pro: $20/1M input, $160/1M output
+        // Cost = (1000 * 20/1000000) + (500 * 160/1000000) = 0.02 + 0.08 = 0.1
+        expect(result.cost).toBeCloseTo(0.1, 6);
+      });
+
       it('should recognize gpt-5.2-codex as a known model', () => {
         const provider = new OpenAICodexSDKProvider({
           config: { model: 'gpt-5.2-codex' },
