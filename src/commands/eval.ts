@@ -32,6 +32,7 @@ import { maybeLoadFromExternalFile } from '../util/file';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
 import { promptfooCommand } from '../util/promptfooCommand';
+import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -439,6 +440,23 @@ export async function doEval(
         testSuite.providers,
         cmdObj.filterProviders || cmdObj.filterTargets,
       );
+    }
+
+    // Check for missing API keys after provider filtering
+    const missingApiKeys = checkProviderApiKeys(testSuite.providers);
+
+    if (missingApiKeys.size > 0) {
+      for (const [envVar, providerIds] of missingApiKeys) {
+        logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerIds.join(', ')})`));
+      }
+      logger.error('');
+      logger.error(`To fix, set the environment variable or use ${chalk.bold('--env-file')}:`);
+      for (const envVar of missingApiKeys.keys()) {
+        logger.error(`    export ${envVar}=your-api-key-here`);
+      }
+      logger.error('');
+      process.exitCode = 1;
+      return new Eval({}, { persisted: false });
     }
 
     await checkCloudPermissions(config as UnifiedConfig);
