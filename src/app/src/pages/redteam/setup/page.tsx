@@ -20,7 +20,7 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
-import { DEFAULT_STRATEGIES_SET, REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import yaml from 'js-yaml';
 import {
@@ -428,11 +428,11 @@ export default function RedTeamSetupPage() {
   };
 
   // Calculate active strategy count shown in the sidebar.
-  // Exclude hidden default strategies (e.g. "basic") and explicitly disabled entries.
+  // Exclude hidden basic strategy and explicitly disabled entries.
   const activeStrategyCount = useMemo(() => {
     return config.strategies.filter((strategy) => {
       const id = typeof strategy === 'string' ? strategy : strategy.id;
-      if (DEFAULT_STRATEGIES_SET.has(id)) {
+      if (id === 'basic') {
         return false;
       }
       if (typeof strategy === 'object' && strategy.config?.enabled === false) {
