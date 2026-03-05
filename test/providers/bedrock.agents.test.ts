@@ -3,13 +3,37 @@ import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
 
 // Hoisted mocks for AWS SDK
 const mockSend = vi.hoisted(() => vi.fn());
-const MockBedrockAgentRuntimeClient = vi.hoisted(() => vi.fn(() => ({ send: mockSend })));
+const MockBedrockAgentRuntimeClient = vi.hoisted(() =>
+  vi.fn(function MockBedrockAgentRuntimeClient() {
+    return { send: mockSend };
+  }),
+);
 const MockInvokeAgentCommand = vi.hoisted(() => vi.fn((input: any) => input));
+const NodeHttpHandlerMock = vi.hoisted(() =>
+  vi.fn(function NodeHttpHandlerMock() {
+    return {
+      handle: vi.fn(),
+    };
+  }),
+);
+const ProxyAgentMock = vi.hoisted(() => vi.fn(function ProxyAgentMock() {}));
 
 // Mock AWS SDK modules - don't use importOriginal to avoid module resolution issues
 vi.mock('@aws-sdk/client-bedrock-agent-runtime', () => ({
   BedrockAgentRuntimeClient: MockBedrockAgentRuntimeClient,
   InvokeAgentCommand: MockInvokeAgentCommand,
+}));
+
+vi.mock('@smithy/node-http-handler', () => ({
+  __esModule: true,
+  NodeHttpHandler: NodeHttpHandlerMock,
+  default: NodeHttpHandlerMock,
+}));
+
+vi.mock('proxy-agent', () => ({
+  __esModule: true,
+  ProxyAgent: ProxyAgentMock,
+  default: ProxyAgentMock,
 }));
 
 vi.mock('../../src/cache', async (importOriginal) => {
@@ -27,9 +51,23 @@ vi.mock('../../src/cache', async (importOriginal) => {
   };
 });
 
+const ORIGINAL_HTTP_PROXY = process.env.HTTP_PROXY;
+const ORIGINAL_HTTPS_PROXY = process.env.HTTPS_PROXY;
+
 describe('AwsBedrockAgentsProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.HTTP_PROXY;
+    delete process.env.HTTPS_PROXY;
+    process.env.HTTP_PROXY = '';
+    process.env.HTTPS_PROXY = '';
+    NodeHttpHandlerMock.mockClear();
+    ProxyAgentMock.mockClear();
+  });
+
+  afterEach(() => {
+    process.env.HTTP_PROXY = ORIGINAL_HTTP_PROXY;
+    process.env.HTTPS_PROXY = ORIGINAL_HTTPS_PROXY;
   });
 
   describe('constructor', () => {
@@ -78,6 +116,31 @@ describe('AwsBedrockAgentsProvider', () => {
       const provider = new AwsBedrockAgentsProvider('', { config });
       // Provider adds default timeout and maxRetries
       expect(provider.config).toMatchObject(config);
+    });
+  });
+
+  describe('getAgentRuntimeClient', () => {
+    it('should create runtime client with node request handler by default', async () => {
+      const provider = new AwsBedrockAgentsProvider('test-agent-123', {
+        config: {
+          agentId: 'test-agent-123',
+          agentAliasId: 'test-alias',
+          region: 'us-east-1',
+        },
+      });
+
+      await provider.getAgentRuntimeClient();
+
+      expect(NodeHttpHandlerMock).toHaveBeenCalledWith({
+        requestTimeout: 300000,
+      });
+      const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
+      expect(MockBedrockAgentRuntimeClient).toHaveBeenCalledWith({
+        region: 'us-east-1',
+        retryMode: 'adaptive',
+        maxAttempts: 10,
+        requestHandler,
+      });
     });
   });
 
