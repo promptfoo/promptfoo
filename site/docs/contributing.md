@@ -219,8 +219,6 @@ npm run local -- eval --no-cache --verbose  # Correct
 npm run local eval --no-cache               # Wrong - flags go to npm
 ```
 
-We recommend running `npm run build:watch` in a separate terminal while you are working on the CLI. This will automatically rebuild when you make changes.
-
 When working on a new feature, we recommend setting up a local `promptfooconfig.yaml` that tests your feature. Think of this as an end-to-end test for your feature.
 
 Here's a simple example:
