@@ -10,6 +10,7 @@ import { getProviderFromCloud } from '../util/cloud';
 import { resolveConfigs } from '../util/config/load';
 import { isHttpProvider, patchHttpConfigForValidation } from '../util/httpProvider';
 import { setupEnv } from '../util/index';
+import { getOrDownloadProviderFile } from '../util/providerFileCache';
 import { isUuid } from '../util/uuid';
 import { testProviderConnectivity, testProviderSession } from '../validators/testProvider';
 import type { Command } from 'commander';
@@ -218,11 +219,18 @@ async function loadProvidersForTesting(
 
     // Cloud target
     if (isUuid(target)) {
-      const { provider: providerOptions } = await getProviderFromCloud(target);
+      const { provider: providerOptions, providerFile } = await getProviderFromCloud(target);
       const patchedOptions = isHttpProvider(providerOptions)
         ? patchHttpConfigForValidation(providerOptions)
         : providerOptions;
-      provider = await loadApiProvider(patchedOptions.id, {
+      let resolvedId = patchedOptions.id;
+      if (providerFile) {
+        const cachedPath = await getOrDownloadProviderFile(target, providerFile);
+        if (cachedPath) {
+          resolvedId = `file://${cachedPath}`;
+        }
+      }
+      provider = await loadApiProvider(resolvedId, {
         options: patchedOptions,
         basePath: cliState.basePath,
       });
