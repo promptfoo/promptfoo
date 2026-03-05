@@ -148,11 +148,12 @@ describe('AwsBedrockGenericProvider', () => {
     await provider.getBedrockInstance();
 
     expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
-      requestHandler: expect.any(Object),
+      requestHandler,
     });
   });
 
@@ -171,11 +172,12 @@ describe('AwsBedrockGenericProvider', () => {
     await provider.getBedrockInstance();
 
     expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
-      requestHandler: expect.any(Object),
+      requestHandler,
       credentials: {
         accessKeyId: 'test-access-key',
         secretAccessKey: 'test-secret-key',
@@ -192,11 +194,12 @@ describe('AwsBedrockGenericProvider', () => {
     await provider.getBedrockInstance();
 
     expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
-      requestHandler: expect.any(Object),
+      requestHandler,
     });
     expect(BedrockRuntimeMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ credentials: expect.anything() }),
@@ -213,11 +216,12 @@ describe('AwsBedrockGenericProvider', () => {
     await provider.getBedrockInstance();
 
     expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
-      requestHandler: expect.any(Object),
+      requestHandler,
     });
   });
 
@@ -243,11 +247,12 @@ describe('AwsBedrockGenericProvider', () => {
     await provider.getBedrockInstance();
 
     expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
-      requestHandler: expect.any(Object),
+      requestHandler,
     });
   });
 
@@ -269,11 +274,12 @@ describe('AwsBedrockGenericProvider', () => {
     await provider.getBedrockInstance();
 
     expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
-      requestHandler: expect.any(Object),
+      requestHandler,
     });
 
     delete process.env.AWS_BEARER_TOKEN_BEDROCK;

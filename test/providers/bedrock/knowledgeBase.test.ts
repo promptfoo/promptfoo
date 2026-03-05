@@ -1,3 +1,4 @@
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
 import { createEmptyTokenUsage } from '../../../src/util/tokenUsageUtils';
@@ -24,6 +25,7 @@ vi.mock('@aws-sdk/client-bedrock-agent-runtime', async (importOriginal) => {
 // Module imports - loaded in beforeAll
 let BedrockAgentRuntimeClient: typeof import('@aws-sdk/client-bedrock-agent-runtime').BedrockAgentRuntimeClient;
 let RetrieveAndGenerateCommand: typeof import('@aws-sdk/client-bedrock-agent-runtime').RetrieveAndGenerateCommand;
+const NodeHttpHandlerMock = vi.mocked(NodeHttpHandler);
 
 // Mock @smithy/node-http-handler with ESM-compatible exports
 vi.mock('@smithy/node-http-handler', () => ({
@@ -139,10 +141,13 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     await provider.getKnowledgeBaseClient();
 
+    expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
+      requestHandler,
     });
   });
 
@@ -161,10 +166,13 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     await provider.getKnowledgeBaseClient();
 
+    expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
+      requestHandler,
       credentials: {
         accessKeyId: 'test-access-key',
         secretAccessKey: 'test-secret-key',
@@ -186,10 +194,13 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     await provider.getKnowledgeBaseClient();
 
+    expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 5,
+      requestHandler,
     });
   });
 
