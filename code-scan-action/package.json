@@ -15,7 +15,7 @@
     "tsc:watch": "tsc --noEmit --watch"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.20.1"
   },
   "dependencies": {
     "@actions/core": "^3.0.0",
