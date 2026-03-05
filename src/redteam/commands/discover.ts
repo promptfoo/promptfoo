@@ -11,7 +11,8 @@
 import * as path from 'node:path';
 
 import chalk from 'chalk';
-import logger from '../../logger';
+import ora from 'ora';
+import logger, { isDebugEnabled } from '../../logger';
 import { loadApiProviders } from '../../providers/index';
 import telemetry from '../../telemetry';
 import { createAgentClient } from '../../util/agent/agentClient';
@@ -38,9 +39,11 @@ export function discoverCommand(program: Command) {
 
         const rootDir = process.cwd();
 
-        logger.info(chalk.blue('Connecting to target setup session...'));
-        logger.info(chalk.dim(`  Session: ${cmdObj.sessionId}`));
-        logger.info(chalk.dim(`  Root dir: ${rootDir}`));
+        // Skip spinners when verbose/debug logging is enabled so logs are visible
+        const useSpinner = !isDebugEnabled();
+        const connectSpinner = useSpinner
+          ? ora({ text: 'Connecting...', color: 'cyan' }).start()
+          : null;
 
         try {
           const client = await createAgentClient({
@@ -49,6 +52,15 @@ export function discoverCommand(program: Command) {
             ...(cmdObj.host && { host: cmdObj.host }),
           });
 
+          if (connectSpinner) {
+            connectSpinner.stop();
+          }
+
+          logger.info('');
+          logger.info(chalk.green('✓ Discovery started'));
+          logger.info(chalk.dim('  Follow detailed progress in the UI'));
+          logger.info('');
+
           // Track provider files written by the setup agent's compile_pipeline tool
           const writtenProviderFiles: string[] = [];
 
@@ -56,8 +68,8 @@ export function discoverCommand(program: Command) {
           attachTargetLinkFs(client, rootDir, {
             onFileWritten: (absolutePath) => {
               writtenProviderFiles.push(absolutePath);
-              logger.info(
-                chalk.dim(`  Provider file written: ${path.relative(rootDir, absolutePath)}`),
+              logger.debug(
+                `[TargetLink] Provider file written: ${path.relative(rootDir, absolutePath)}`,
               );
             },
           });
@@ -75,8 +87,8 @@ export function discoverCommand(program: Command) {
                       'No provider file available. The setup agent must compile a pipeline first.',
                   };
                 }
-                logger.info(
-                  chalk.dim(`  Loading provider from ${path.relative(rootDir, providerFile)}...`),
+                logger.debug(
+                  `[TargetLink] Loading provider from ${path.relative(rootDir, providerFile)}`,
                 );
                 const providers = await loadApiProviders([`file://${providerFile}`], {
                   basePath: rootDir,
@@ -96,42 +108,78 @@ export function discoverCommand(program: Command) {
             capabilities: ['probe', 'fs'],
           });
 
-          logger.info(chalk.green('Connected! Providing local access to the setup agent.'));
-          logger.info(chalk.dim('Press Ctrl+C to disconnect.'));
+          const spinner = useSpinner
+            ? ora({ text: 'Probing target...', color: 'green' }).start()
+            : null;
+
+          // Register cleanup on signals
+          const signalHandler = () => {
+            if (spinner) {
+              spinner.stop();
+            }
+            logger.info(chalk.yellow('\n\nCancelling discovery...'));
+            client.disconnect();
+          };
+
+          process.on('SIGINT', signalHandler);
+          process.on('SIGTERM', signalHandler);
 
           // Wait for session end or disconnect
           await new Promise<void>((resolve) => {
             client.onComplete(() => {
-              logger.info(chalk.green('Session completed.'));
+              if (spinner) {
+                spinner.stop();
+              }
+              logger.info('');
+              logger.info(chalk.green('✓ Discovery complete'));
+              logger.info('');
+              logger.info(chalk.bold('Return to the UI to see detailed results.'));
               resolve();
             });
 
             client.onError((error) => {
-              logger.error(`Session error: ${error.message}`);
+              if (spinner) {
+                spinner.stop();
+              }
+              logger.info('');
+              logger.info(chalk.red(`✗ Discovery failed: ${error.message}`));
               resolve();
             });
 
             client.onCancelled(() => {
-              logger.info('Session cancelled.');
+              if (spinner) {
+                spinner.stop();
+              }
+              logger.info('');
+              logger.info(chalk.yellow('Auto-discovery was cancelled from the UI.'));
               resolve();
             });
 
             client.socket.on('disconnect', () => {
-              logger.info('Disconnected from server.');
+              if (spinner) {
+                spinner.stop();
+              }
+              logger.info('');
+              logger.info(chalk.dim('Disconnected from server.'));
               resolve();
             });
 
             process.on('SIGINT', () => {
-              logger.info('\nDisconnecting...');
-              client.disconnect();
               resolve();
             });
           });
 
+          process.removeListener('SIGINT', signalHandler);
+          process.removeListener('SIGTERM', signalHandler);
           client.disconnect();
         } catch (error) {
-          logger.error(
-            `Failed to connect: ${error instanceof Error ? error.message : String(error)}`,
+          if (connectSpinner) {
+            connectSpinner.stop();
+          }
+          logger.info(
+            chalk.red(
+              `✗ Failed to connect: ${error instanceof Error ? error.message : String(error)}`,
+            ),
           );
           process.exitCode = 1;
         }
