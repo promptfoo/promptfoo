@@ -180,7 +180,7 @@ export function parseMessages(messages: string): {
       const thinking = parsed.find((msg) => msg.thinking)?.thinking;
       return {
         extractedMessages: parsed
-          .filter((msg) => msg.role !== 'system')
+          .filter((msg) => msg.role && msg.role !== 'system')
           .map((msg) => ({
             role: msg.role,
             content: Array.isArray(msg.content)
