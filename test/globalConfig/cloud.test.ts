@@ -192,7 +192,7 @@ describe('CloudConfig', () => {
       );
     });
 
-    it('should preserve existing sharing value when hasActiveLicense is undefined', async () => {
+    it('should preserve existing sharing value when hasActiveLicense is omitted from response', async () => {
       // Pre-set sharing to true to verify it is preserved
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
