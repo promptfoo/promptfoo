@@ -15,6 +15,11 @@ import { getProviderFileFromCloud, type ProviderFileMetadata } from './cloud';
 import { getConfigDirectoryPath } from './config/manage';
 
 const PROVIDER_FILES_CACHE_DIR = 'provider-files';
+const HEX_PATTERN = /^[0-9a-f]+$/i;
+const ALLOWED_EXTENSIONS: Record<string, string> = {
+  python: 'py',
+  javascript: 'js',
+};
 
 /**
  * Gets the provider files cache directory path, creating it if necessary.
@@ -29,23 +34,34 @@ function getProviderFilesCacheDir(): string {
 
 /**
  * Gets the file extension for a provider file based on its language.
+ * Only allows known safe extensions to prevent path traversal.
  */
 function getFileExtension(language: string): string {
-  switch (language) {
-    case 'python':
-      return 'py';
-    case 'javascript':
-      return 'js';
-    default:
-      return language;
+  const ext = ALLOWED_EXTENSIONS[language];
+  if (!ext) {
+    throw new Error(`Unsupported provider file language: ${language}`);
   }
+  return ext;
+}
+
+/**
+ * Validates a checksum string contains only hex characters.
+ */
+function validateChecksum(checksum: string): string {
+  if (!checksum || !HEX_PATTERN.test(checksum)) {
+    throw new Error(`Invalid checksum format: expected hex string`);
+  }
+  return checksum;
 }
 
 /**
  * Gets the cached file path for a provider file based on its checksum.
+ * Validates inputs to prevent path traversal.
  */
 function getCachedFilePath(checksum: string, extension: string): string {
-  return path.join(getProviderFilesCacheDir(), `${checksum}.${extension}`);
+  const safeChecksum = validateChecksum(checksum);
+  const filename = `${safeChecksum}.${extension}`;
+  return path.join(getProviderFilesCacheDir(), filename);
 }
 
 /**
