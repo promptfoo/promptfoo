@@ -158,6 +158,20 @@ interface OpenAiConfig {
 }
 ```
 
+### Generating Multiple Responses
+
+Use `passthrough` to set OpenAI's `n` parameter for generating multiple responses in a single request:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4o
+    config:
+      passthrough:
+        n: 3 # Generate 3 responses
+```
+
+When `n > 1`, the primary `output` contains the first choice's content, and all generated choices are available in the response metadata under `metadata.choices`. Each choice includes the full response object with `message`, `finish_reason`, and `index`.
+
 ## Models
 
 ### GPT-4.1
