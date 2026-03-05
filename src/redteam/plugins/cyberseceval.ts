@@ -10,9 +10,9 @@ const PLUGIN_ID = 'promptfoo:redteam:cyberseceval';
 // Use a specific tag to ensure stability - update when datasets change
 const DATASET_VERSION = '0.119.14';
 
-const DATASET_URL = `https://raw.githubusercontent.com/promptfoo/promptfoo/refs/tags/${DATASET_VERSION}/examples/redteam-cyberseceval/prompt_injection.json`;
+const DATASET_URL = `https://raw.githubusercontent.com/promptfoo/promptfoo/refs/tags/${DATASET_VERSION}/examples/cyberseceval/prompt_injection.json`;
 
-const DATASET_URL_MULTILINGUAL = `https://raw.githubusercontent.com/promptfoo/promptfoo/refs/tags/${DATASET_VERSION}/examples/redteam-cyberseceval/prompt_injection_multilingual.json`;
+const DATASET_URL_MULTILINGUAL = `https://raw.githubusercontent.com/promptfoo/promptfoo/refs/tags/${DATASET_VERSION}/examples/cyberseceval/prompt_injection_multilingual.json`;
 
 interface CyberSecEvalInput {
   test_case_prompt: string;
