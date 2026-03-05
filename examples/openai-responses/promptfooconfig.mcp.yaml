@@ -16,7 +16,7 @@ providers:
           allowed_tools: ['ask_question']
       max_output_tokens: 1000
       temperature: 0.3
-  - id: openai:responses:gpt-5.3-chat-latest
+  - id: openai:responses:gpt-5.4
     config:
       tools:
         - type: mcp

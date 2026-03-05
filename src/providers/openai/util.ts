@@ -345,6 +345,21 @@ export const OPENAI_CHAT_MODELS = [
       output: 4 / 1e6,
     },
   })),
+  // GPT-5.4 models
+  ...['gpt-5.4', 'gpt-5.4-2026-03-05'].map((model) => ({
+    id: model,
+    cost: {
+      input: 2.5 / 1e6,
+      output: 15 / 1e6,
+    },
+  })),
+  ...['gpt-5.4-pro'].map((model) => ({
+    id: model,
+    cost: {
+      input: 30 / 1e6,
+      output: 180 / 1e6,
+    },
+  })),
   // gpt-audio models
   ...['gpt-audio', 'gpt-audio-2025-08-28'].map((model) => ({
     id: model,
