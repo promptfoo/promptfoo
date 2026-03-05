@@ -175,6 +175,34 @@ describe('writeOutput', () => {
     expect(parsed.config.description).toBe('Test config');
   });
 
+  it('preserves deep non-secret config fields in JSON output', async () => {
+    const outputPath = 'output.json';
+    const eval_ = new Eval({
+      l1: {
+        l2: {
+          l3: {
+            l4: {
+              l5: {
+                l6: {
+                  value: 'deep-public-value',
+                  apiKey: 'sk-secret-value',
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    await writeOutput(outputPath, eval_, null);
+
+    expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
+    const outputJson = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = JSON.parse(outputJson);
+    expect(parsed.config.l1.l2.l3.l4.l5.l6.value).toBe('deep-public-value');
+    expect(parsed.config.l1.l2.l3.l4.l5.l6.apiKey).toBe('[REDACTED]');
+  });
+
   it('writeOutput with YAML output', async () => {
     const outputPath = 'output.yaml';
     const eval_ = new Eval({});
@@ -217,6 +245,62 @@ describe('writeOutput', () => {
     await writeOutput(outputPath, eval_, null);
 
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not sanitize config for CSV output', async () => {
+    const outputPath = 'output.csv';
+    // @ts-ignore
+    vi.mocked(getDb).mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
+        }),
+      }),
+      insert: vi.fn().mockReturnValue({
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([]),
+        }),
+      }),
+    });
+    const config: Record<string, unknown> = {};
+    Object.defineProperty(config, 'bad', {
+      enumerable: true,
+      get() {
+        throw new Error('getter boom');
+      },
+    });
+
+    const eval_ = new Eval(config);
+    await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
+    expect(fsPromises.open).toHaveBeenCalledWith(outputPath, 'w');
+  });
+
+  it('does not sanitize config for JSONL output', async () => {
+    const outputPath = 'output.jsonl';
+    // @ts-ignore
+    vi.mocked(getDb).mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
+        }),
+      }),
+      insert: vi.fn().mockReturnValue({
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([]),
+        }),
+      }),
+    });
+    const config: Record<string, unknown> = {};
+    Object.defineProperty(config, 'bad', {
+      enumerable: true,
+      get() {
+        throw new Error('getter boom');
+      },
+    });
+
+    const eval_ = new Eval(config);
+    await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
+    expect(fsPromises.writeFile).toHaveBeenCalledWith(outputPath, '');
   });
 
   it('writeOutput with json and txt output', async () => {

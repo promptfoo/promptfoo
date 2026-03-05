@@ -47,6 +47,7 @@ function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
   return sanitizeObject(config, {
     context: 'output config',
     throwOnError: true,
+    maxDepth: Number.POSITIVE_INFINITY,
   }) as OutputFile['config'];
 }
 
@@ -153,7 +154,6 @@ export async function writeOutput(
   await fsPromises.mkdir(outputDir, { recursive: true });
 
   const metadata = createOutputMetadata(evalRecord);
-  const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
 
   if (outputExtension === 'csv') {
     // Use streamEvalCsv for memory-efficient CSV generation
@@ -173,6 +173,7 @@ export async function writeOutput(
     await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl);
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
     const summary = await evalRecord.toEvaluateSummary();
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
     await fsPromises.writeFile(
       outputPath,
       yaml.dump({
@@ -187,6 +188,7 @@ export async function writeOutput(
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');
     const summary = await evalRecord.toEvaluateSummary();
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
     const template = await fsPromises.readFile(
       path.join(getDirectory(), 'tableOutput.html'),
       'utf-8',
@@ -213,6 +215,7 @@ export async function writeOutput(
     }
   } else if (outputExtension === 'xml') {
     const summary = await evalRecord.toEvaluateSummary();
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
 
     // Sanitize data for XML builder to prevent textValue.replace errors
     const sanitizeForXml = (obj: any): any => {

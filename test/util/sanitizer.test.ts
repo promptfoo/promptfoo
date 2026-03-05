@@ -460,6 +460,28 @@ describe('sanitizeObject', () => {
       expect(result.l1.l2.l3.l4.l5).toBe('[...]');
     });
 
+    it('should allow overriding max depth limit', () => {
+      const input = {
+        l1: {
+          l2: {
+            l3: {
+              l4: {
+                l5: {
+                  l6: {
+                    data: 'reachable',
+                    token: 'secret',
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+      const result = sanitizeObject(input, { maxDepth: Number.POSITIVE_INFINITY });
+      expect(result.l1.l2.l3.l4.l5.l6.data).toBe('reachable');
+      expect(result.l1.l2.l3.l4.l5.l6.token).toBe('[REDACTED]');
+    });
+
     it('should sanitize at all depth levels within limit', () => {
       const input = {
         password: 'level0',
