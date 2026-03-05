@@ -78,7 +78,7 @@ providers:
 Run the Converse API example with:
 
 ```bash
-promptfoo eval -c examples/amazon-bedrock/promptfooconfig.converse.yaml
+promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.converse.yaml
 ```
 
 ## Knowledge Base Example
@@ -159,7 +159,7 @@ We provide two inference profile examples:
 1. **Comprehensive Example** (`promptfooconfig.inference-profiles.yaml`):
 
    ```bash
-   promptfoo eval -c examples/amazon-bedrock/promptfooconfig.inference-profiles.yaml
+   promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.inference-profiles.yaml
    ```
 
    This includes:
@@ -170,7 +170,7 @@ We provide two inference profile examples:
 
 2. **Simple Production Example** (`promptfooconfig.inference-profiles-simple.yaml`):
    ```bash
-   promptfoo eval -c examples/amazon-bedrock/promptfooconfig.inference-profiles-simple.yaml
+   promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.inference-profiles-simple.yaml
    ```
    This demonstrates:
    - A realistic customer support use case
@@ -196,7 +196,7 @@ The OpenAI example (`promptfooconfig.openai.yaml`) demonstrates OpenAI's GPT-OSS
 Run the OpenAI example with:
 
 ```bash
-promptfoo eval -c examples/amazon-bedrock/promptfooconfig.openai.yaml
+promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.openai.yaml
 ```
 
 ## New Converse API Features (SDK 3.943+)
