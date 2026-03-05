@@ -56,6 +56,7 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
+ * - gpt-5.4: 'none', 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex-spark: 'low', 'medium', 'high'
  * - gpt-5.2 / gpt-5.2-codex: 'low', 'medium', 'high', 'xhigh'
@@ -67,7 +68,7 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * - 'low': Light reasoning, faster responses
  * - 'medium': Balanced (default)
  * - 'high': Thorough reasoning for complex tasks
- * - 'xhigh': Maximum reasoning depth (gpt-5.2, gpt-5.1-codex-max)
+ * - 'xhigh': Maximum reasoning depth (gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
  */
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
@@ -110,7 +111,7 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini')
+   * Model to use (e.g., 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini')
    */
   model?: string;
 
@@ -258,6 +259,8 @@ async function loadCodexSDK(): Promise<any> {
 // Pricing per 1M tokens
 // See: https://openai.com/pricing
 const CODEX_MODEL_PRICING: Record<string, { input: number; output: number; cache_read: number }> = {
+  // GPT-5.4 models
+  'gpt-5.4': { input: 2.5, output: 15.0, cache_read: 0.25 },
   // GPT-5.3 Codex models
   'gpt-5.3-codex': { input: 1.75, output: 14.0, cache_read: 0.175 },
   'gpt-5.3-codex-spark': { input: 0.5, output: 4.0, cache_read: 0.05 },
@@ -276,6 +279,8 @@ const CODEX_MODEL_PRICING: Record<string, { input: number; output: number; cache
 
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
+    // GPT-5.4 models
+    'gpt-5.4',
     // GPT-5.3 Codex models
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
