@@ -108,6 +108,12 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [isRemoteGenerationDisabled, isCloudEnabled, STRATEGIES_REQUIRING_AUTH],
   );
 
+  /** Whether a strategy is disabled specifically because it requires enterprise auth */
+  const isStrategyAuthGated = useCallback(
+    (strategyId: string) => !isCloudEnabled && STRATEGIES_REQUIRING_AUTH.has(strategyId),
+    [isCloudEnabled, STRATEGIES_REQUIRING_AUTH],
+  );
+
   const selectedStrategyIds = useMemo(() => {
     return config.strategies
       .filter((s) => {
@@ -510,6 +516,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                   onSelectNone={handleSelectNoneInSection}
                   isStrategyDisabled={isStrategyDisabled}
                   isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+                  isStrategyAuthGated={isStrategyAuthGated}
                   isStrategyConfigured={isStrategyConfiguredById}
                 />
               )}
@@ -526,6 +533,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                   onSelectNone={handleSelectNoneInSection}
                   isStrategyDisabled={isStrategyDisabled}
                   isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+                  isStrategyAuthGated={isStrategyAuthGated}
                   isStrategyConfigured={isStrategyConfiguredById}
                 />
               )}
@@ -542,6 +550,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                   onSelectNone={handleSelectNoneInSection}
                   isStrategyDisabled={isStrategyDisabled}
                   isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+                  isStrategyAuthGated={isStrategyAuthGated}
                   isStrategyConfigured={isStrategyConfiguredById}
                 />
               )}
