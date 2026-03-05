@@ -521,6 +521,7 @@ export default class Eval {
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
           prompts: opts?.completedPrompts || [],
+          isRedteam: Boolean(config.redteam),
         })
         .run();
 
