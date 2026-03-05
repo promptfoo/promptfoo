@@ -61,6 +61,10 @@ export abstract class AwsBedrockGenericProvider {
     return `[Amazon Bedrock Provider ${this.modelName}]`;
   }
 
+  requiresApiKey(): boolean {
+    return false;
+  }
+
   protected getApiKey(): string | undefined {
     return this.config.apiKey || getEnvString('AWS_BEARER_TOKEN_BEDROCK');
   }

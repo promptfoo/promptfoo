@@ -805,6 +805,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             statusText,
             headers: responseHeaders ?? {},
           },
+          // Include all choices for multi-response requests (n > 1)
+          ...(data.choices.length > 1 && { choices: data.choices }),
         },
       };
     } catch (err) {
