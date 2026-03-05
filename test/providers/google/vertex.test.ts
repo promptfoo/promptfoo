@@ -545,6 +545,12 @@ describe('VertexChatProvider.callGeminiApi', () => {
         prompt: 10,
         completion: 5,
       },
+      cost: 0.00045,
+      metadata: {
+        groundingMetadata: {
+          test: true,
+        },
+      },
     };
 
     mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
@@ -583,6 +589,53 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
     expect(result.output).toBe('Sunny, 25°C');
     expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
+    expect(result.cost).toBe(0.00045);
+    expect(result.metadata).toEqual({
+      groundingMetadata: {
+        test: true,
+      },
+    });
+  });
+
+  it('should return undefined cost when Gemini omits usage metadata', async () => {
+    const mockResponse = {
+      data: [
+        {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+        },
+      ],
+    };
+
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: {
+        request: mockRequest,
+      } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
+      return creds;
+    });
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    const response = await provider.callGeminiApi('test prompt');
+
+    expect(response).toEqual({
+      cached: false,
+      output: 'response text',
+      tokenUsage: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+      },
+      cost: undefined,
+      metadata: {},
+    });
   });
 
   it('should handle errors in function tool callbacks', async () => {
