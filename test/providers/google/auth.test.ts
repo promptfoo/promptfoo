@@ -559,6 +559,30 @@ describe('GoogleAuthManager', () => {
       expect(getOAuthClientSpy).toHaveBeenCalledTimes(1);
       getOAuthClientSpy.mockRestore();
     });
+
+    it('should not allow a stale probe to overwrite cache after clearCache', async () => {
+      let rejectFirstProbe!: (reason?: unknown) => void;
+      const firstProbeAuthCall = new Promise((_, reject) => {
+        rejectFirstProbe = reject;
+      });
+
+      const getOAuthClientSpy = vi.spyOn(GoogleAuthManager, 'getOAuthClient');
+      getOAuthClientSpy
+        .mockImplementationOnce(() => firstProbeAuthCall as Promise<any>)
+        .mockResolvedValueOnce({ client: {}, projectId: 'detected-project' });
+
+      const firstProbe = GoogleAuthManager.hasDefaultCredentials();
+      GoogleAuthManager.clearCache();
+
+      await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(true);
+
+      rejectFirstProbe(new Error('first probe failed'));
+      await expect(firstProbe).resolves.toBe(false);
+
+      await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(true);
+      expect(getOAuthClientSpy).toHaveBeenCalledTimes(2);
+      getOAuthClientSpy.mockRestore();
+    });
   });
 
   describe('loadCredentials', () => {

@@ -517,20 +517,27 @@ export class GoogleAuthManager {
     }
 
     if (!this.pendingHasDefaultCredentials) {
-      this.pendingHasDefaultCredentials = (async () => {
+      const probe = (async () => {
         try {
           await this.getOAuthClient();
           return true;
         } catch {
           return false;
         }
-      })()
+      })();
+      this.pendingHasDefaultCredentials = probe;
+
+      void probe
         .then((result) => {
-          this.cachedHasDefaultCredentials = result;
+          if (this.pendingHasDefaultCredentials === probe) {
+            this.cachedHasDefaultCredentials = result;
+          }
           return result;
         })
         .finally(() => {
-          this.pendingHasDefaultCredentials = undefined;
+          if (this.pendingHasDefaultCredentials === probe) {
+            this.pendingHasDefaultCredentials = undefined;
+          }
         });
     }
 

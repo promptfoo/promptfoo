@@ -56,6 +56,7 @@ describe('Provider override tests', () => {
     process.env = { ...originalEnv };
     setDefaultCompletionProviders(undefined as any);
     setDefaultEmbeddingProviders(undefined as any);
+    vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.MISTRAL_API_KEY;
@@ -70,7 +71,7 @@ describe('Provider override tests', () => {
 
   afterEach(() => {
     process.env = originalEnv;
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should override all completion providers when setDefaultCompletionProviders is called', async () => {
