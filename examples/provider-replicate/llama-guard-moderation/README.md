@@ -1,4 +1,4 @@
-# replicate/llama-guard-moderation (LlamaGuard Content Moderation)
+# provider-replicate/llama-guard-moderation (LlamaGuard Content Moderation)
 
 This example demonstrates how to use Meta's LlamaGuard models for content moderation in promptfoo.
 

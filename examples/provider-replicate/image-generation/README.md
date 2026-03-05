@@ -1,9 +1,9 @@
-# replicate/image-generation (State-of-the-Art Image Generation)
+# provider-replicate/image-generation (State-of-the-Art Image Generation)
 
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example replicate/image-generation
+npx promptfoo@latest init --example provider-replicate/image-generation
 ```
 
 This example demonstrates state-of-the-art image generation using Replicate's latest models, particularly the FLUX family from Black Forest Labs.

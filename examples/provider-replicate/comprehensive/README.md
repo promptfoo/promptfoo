@@ -3,7 +3,7 @@
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example replicate/comprehensive
+npx promptfoo@latest init --example provider-replicate/comprehensive
 ```
 
 This example demonstrates the full capabilities of the Replicate provider in promptfoo, including text generation and image generation.

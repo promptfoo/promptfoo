@@ -1,9 +1,9 @@
-# replicate/lifeboat (Replicate Lifeboat)
+# provider-replicate/lifeboat (Replicate Lifeboat)
 
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example replicate/lifeboat
+npx promptfoo@latest init --example provider-replicate/lifeboat
 ```
 
 To get started, set your OpenAI and Replicate API tokens in promptfooconfig.yaml.

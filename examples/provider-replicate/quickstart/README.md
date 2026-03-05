@@ -1,9 +1,9 @@
-# replicate/quickstart (Replicate Quick Start)
+# provider-replicate/quickstart (Replicate Quick Start)
 
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example replicate/quickstart
+npx promptfoo@latest init --example provider-replicate/quickstart
 ```
 
 This is a minimal example to test the Replicate provider with promptfoo.
@@ -41,9 +41,9 @@ Once this works, try:
    - `replicate:image:stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc` - For image generation (or use latest version from Replicate)
 
 2. **More Examples**: Check out:
-   - `replicate-llama4-scout` - Advanced text generation with Llama 4
-   - `replicate-comprehensive` - All provider features
-   - `replicate-image-generation` - State-of-the-art image generation
+   - `provider-replicate/llama4-scout` - Advanced text generation with Llama 4
+   - `provider-replicate/comprehensive` - All provider features
+   - `provider-replicate/image-generation` - State-of-the-art image generation
 
 ## Troubleshooting
 
