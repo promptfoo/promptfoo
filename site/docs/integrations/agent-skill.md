@@ -66,11 +66,13 @@ The core skill consists of two files:
 
 ## Usage
 
-Once installed, the agent activates automatically when you ask it to create or update eval coverage. You can also invoke it directly:
+Once installed, the agent activates automatically when you ask it to create or update eval coverage. In Claude Code, you can also invoke it directly with a slash command:
 
 ```text
 /promptfoo-evals Create an eval suite for my summarization prompt
 ```
+
+In Codex and other Agent Skills tools, simply ask the agent to create an eval — the skill activates based on the task context.
 
 The agent will:
 
