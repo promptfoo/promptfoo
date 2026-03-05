@@ -481,11 +481,11 @@ GPT-5.4 is OpenAI's frontier model for complex professional work, combining adva
 
 #### Available Models
 
-| Model              | Description                  | Pricing (Input / Output)    |
-| ------------------ | ---------------------------- | --------------------------- |
-| gpt-5.4            | Standard GPT-5.4 model       | $2.50 / $15 per 1M tokens  |
-| gpt-5.4-2026-03-05 | Snapshot version             | $2.50 / $15 per 1M tokens  |
-| gpt-5.4-pro        | Premium GPT-5.4 model        | $30 / $180 per 1M tokens   |
+| Model              | Description            | Pricing (Input / Output)  |
+| ------------------ | ---------------------- | ------------------------- |
+| gpt-5.4            | Standard GPT-5.4 model | $2.50 / $15 per 1M tokens |
+| gpt-5.4-2026-03-05 | Snapshot version       | $2.50 / $15 per 1M tokens |
+| gpt-5.4-pro        | Premium GPT-5.4 model  | $30 / $180 per 1M tokens  |
 
 #### Key Specifications
 

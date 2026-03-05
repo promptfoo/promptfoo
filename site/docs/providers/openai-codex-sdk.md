@@ -450,13 +450,13 @@ providers:
 
 Available levels vary by model:
 
-| Level     | Description                          | Supported Models           |
-| --------- | ------------------------------------ | -------------------------- |
-| `none`    | No reasoning overhead                | gpt-5.4, gpt-5.2            |
-| `minimal` | SDK alias for minimal reasoning      | All models                   |
-| `low`     | Light reasoning, faster responses    | All models                   |
-| `medium`  | Balanced (default)                   | All models                   |
-| `high`    | Thorough reasoning for complex tasks | All models                   |
+| Level     | Description                          | Supported Models                    |
+| --------- | ------------------------------------ | ----------------------------------- |
+| `none`    | No reasoning overhead                | gpt-5.4, gpt-5.2                    |
+| `minimal` | SDK alias for minimal reasoning      | All models                          |
+| `low`     | Light reasoning, faster responses    | All models                          |
+| `medium`  | Balanced (default)                   | All models                          |
+| `high`    | Thorough reasoning for complex tasks | All models                          |
 | `xhigh`   | Maximum reasoning depth              | gpt-5.4, gpt-5.2, gpt-5.1-codex-max |
 
 ## Additional Directories
