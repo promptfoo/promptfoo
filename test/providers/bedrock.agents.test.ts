@@ -57,12 +57,8 @@ const ORIGINAL_HTTPS_PROXY = process.env.HTTPS_PROXY;
 describe('AwsBedrockAgentsProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.HTTP_PROXY;
-    delete process.env.HTTPS_PROXY;
     process.env.HTTP_PROXY = '';
     process.env.HTTPS_PROXY = '';
-    NodeHttpHandlerMock.mockClear();
-    ProxyAgentMock.mockClear();
   });
 
   afterEach(() => {
@@ -132,6 +128,33 @@ describe('AwsBedrockAgentsProvider', () => {
       await provider.getAgentRuntimeClient();
 
       expect(NodeHttpHandlerMock).toHaveBeenCalledWith({
+        requestTimeout: 300000,
+      });
+      const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
+      expect(MockBedrockAgentRuntimeClient).toHaveBeenCalledWith({
+        region: 'us-east-1',
+        retryMode: 'adaptive',
+        maxAttempts: 10,
+        requestHandler,
+      });
+    });
+
+    it('should create runtime client with proxy agent when proxy is configured', async () => {
+      process.env.HTTPS_PROXY = 'http://proxy.example:8080';
+
+      const provider = new AwsBedrockAgentsProvider('test-agent-123', {
+        config: {
+          agentId: 'test-agent-123',
+          agentAliasId: 'test-alias',
+          region: 'us-east-1',
+        },
+      });
+
+      await provider.getAgentRuntimeClient();
+
+      expect(ProxyAgentMock).toHaveBeenCalled();
+      expect(NodeHttpHandlerMock).toHaveBeenCalledWith({
+        httpsAgent: expect.any(Object),
         requestTimeout: 300000,
       });
       const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
