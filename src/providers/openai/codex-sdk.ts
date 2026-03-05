@@ -56,8 +56,8 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
- * - gpt-5.4: 'minimal', 'low', 'medium', 'high'
- * - gpt-5.4-pro: 'low', 'medium', 'high'
+ * - gpt-5.4: 'none', 'low', 'medium', 'high', 'xhigh'
+ * - gpt-5.4-pro: 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex-spark: 'low', 'medium', 'high'
  * - gpt-5.2 / gpt-5.2-codex: 'low', 'medium', 'high', 'xhigh'

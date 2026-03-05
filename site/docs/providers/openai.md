@@ -463,19 +463,26 @@ providers:
 
 ### GPT-5.4
 
-GPT-5.4 is OpenAI's latest GPT-5 family model and is available in standard and pro variants.
+GPT-5.4 is a GPT-5 family model with a 1M+ token context window. Available in standard and pro variants.
 
 #### Available Models
 
-| Model       | Description               | Pricing (Input / Output)    |
-| ----------- | ------------------------- | --------------------------- |
-| gpt-5.4     | Standard GPT-5.4 model    | $2.50 / $15 per 1M tokens   |
-| gpt-5.4-pro | Premium GPT-5.4 pro model | $30.00 / $180 per 1M tokens |
+| Model                  | Description                   | Pricing (Input / Output)    |
+| ---------------------- | ----------------------------- | --------------------------- |
+| gpt-5.4                | Standard GPT-5.4 model        | $2.50 / $15 per 1M tokens   |
+| gpt-5.4-2026-03-05     | Dated snapshot of gpt-5.4     | $2.50 / $15 per 1M tokens   |
+| gpt-5.4-pro            | Premium GPT-5.4 pro model     | $30.00 / $180 per 1M tokens |
+| gpt-5.4-pro-2026-03-05 | Dated snapshot of gpt-5.4-pro | $30.00 / $180 per 1M tokens |
 
 Pricing notes:
 
 - `gpt-5.4` cached input tokens: $0.25 per 1M tokens
 - `gpt-5.4-pro` has no discounted cached-input rate
+
+#### Reasoning Effort
+
+- `gpt-5.4` supports: `none`, `low`, `medium`, `high`, `xhigh`
+- `gpt-5.4-pro` supports: `medium`, `high`, `xhigh`
 
 #### Usage Examples
 
@@ -484,7 +491,7 @@ providers:
   - id: openai:chat:gpt-5.4
     config:
       max_completion_tokens: 4096
-      reasoning_effort: 'minimal'
+      reasoning_effort: 'low'
 
   - id: openai:responses:gpt-5.4
     config:
@@ -495,7 +502,7 @@ providers:
   - id: openai:responses:gpt-5.4-pro
     config:
       reasoning:
-        effort: 'high'
+        effort: 'xhigh'
       max_output_tokens: 8192
 ```
 
@@ -1740,8 +1747,10 @@ OpenAI's Responses API is the most advanced interface for generating model respo
 
 The Responses API supports a wide range of models, including:
 
-- `gpt-5.4` - Latest GPT-5 family model ($2.50/$15 per 1M tokens)
+- `gpt-5.4` - GPT-5.4 model ($2.50/$15 per 1M tokens)
+- `gpt-5.4-2026-03-05` - Dated snapshot of gpt-5.4
 - `gpt-5.4-pro` - Premium GPT-5.4 model ($30/$180 per 1M tokens)
+- `gpt-5.4-pro-2026-03-05` - Dated snapshot of gpt-5.4-pro
 - `gpt-5` - OpenAI's most capable vision model
 - `gpt-5-chat` - GPT-5 chat alias
 - `gpt-5.1` - GPT-5.1 flagship model

@@ -39,7 +39,7 @@ export interface OpenAiSharedOptions {
   maxRetries?: number;
 }
 
-export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | null;
+export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | null;
 
 /**
  * **o-series models only**
@@ -53,9 +53,9 @@ export interface Reasoning {
    *
    * Constraints effort on reasoning for
    * [reasoning models](https://platform.openai.com/docs/guides/reasoning). Supported
-   * values vary by model family and may include `none`, `minimal`, `low`, `medium`,
-   * and `high`. Reducing reasoning effort can result in faster responses and fewer
-   * tokens used on reasoning in a response.
+   * values are `low`, `medium`, and `high` for o-series models. GPT-5 models may
+   * also support `none`, `minimal`, and `xhigh`. Reducing reasoning effort can
+   * result in faster responses and fewer tokens used on reasoning in a response.
    */
   effort?: ReasoningEffort;
 
@@ -67,7 +67,7 @@ export interface Reasoning {
   summary?: 'auto' | 'concise' | 'detailed' | null;
 }
 
-export type GPT5ReasoningEffort = Exclude<ReasoningEffort, null> | 'xhigh';
+export type GPT5ReasoningEffort = Exclude<ReasoningEffort, null> | 'minimal' | 'xhigh';
 
 export type GPT5Reasoning = Omit<Reasoning, 'effort'> & {
   effort?: GPT5ReasoningEffort;
