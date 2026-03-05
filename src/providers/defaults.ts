@@ -81,11 +81,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       getEnvString('PALM_API_KEY') ||
       env?.PALM_API_KEY,
   );
-  const shouldCheckGoogleDefaultCredentials =
-    !hasOpenAiCredentials && !hasAnthropicCredentials && !hasGoogleAiStudioCredentials;
-  const hasGoogleVertexDefaultCredentials = shouldCheckGoogleDefaultCredentials
-    ? await hasGoogleDefaultCredentials()
-    : false;
   const hasAzureApiKey =
     getEnvString('AZURE_OPENAI_API_KEY') ||
     env?.AZURE_OPENAI_API_KEY ||
@@ -102,6 +97,14 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     (hasAzureApiKey || hasAzureClientCreds) &&
     (getEnvString('AZURE_DEPLOYMENT_NAME') || env?.AZURE_DEPLOYMENT_NAME) &&
     (getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME);
+  const shouldCheckGoogleDefaultCredentials =
+    !preferAzure &&
+    !hasOpenAiCredentials &&
+    !hasAnthropicCredentials &&
+    !hasGoogleAiStudioCredentials;
+  const hasGoogleVertexDefaultCredentials = shouldCheckGoogleDefaultCredentials
+    ? await hasGoogleDefaultCredentials()
+    : false;
 
   let providers: Pick<DefaultProviders, keyof DefaultProviders>;
 

@@ -181,6 +181,16 @@ describe('Provider override tests', () => {
     expect(hasGoogleDefaultCredentials).toHaveBeenCalledTimes(1);
   });
 
+  it('should not probe Google default credentials when Azure is preferred', async () => {
+    process.env.AZURE_OPENAI_API_KEY = 'azure-key';
+    process.env.AZURE_DEPLOYMENT_NAME = 'azure-chat';
+    process.env.AZURE_OPENAI_DEPLOYMENT_NAME = 'azure-chat';
+
+    await getDefaultProviders();
+
+    expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+  });
+
   it('should use Mistral providers when provided via env overrides', async () => {
     const envOverrides: EnvOverrides = {
       MISTRAL_API_KEY: 'test-key',
