@@ -81,8 +81,11 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       getEnvString('PALM_API_KEY') ||
       env?.PALM_API_KEY,
   );
-  // Note: preferGitHub condition is evaluated inline below due to async hasGoogleDefaultCredentials()
-
+  const shouldCheckGoogleDefaultCredentials =
+    !hasOpenAiCredentials && !hasAnthropicCredentials && !hasGoogleAiStudioCredentials;
+  const hasGoogleVertexDefaultCredentials = shouldCheckGoogleDefaultCredentials
+    ? await hasGoogleDefaultCredentials()
+    : false;
   const hasAzureApiKey =
     getEnvString('AZURE_OPENAI_API_KEY') ||
     env?.AZURE_OPENAI_API_KEY ||
@@ -158,7 +161,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     !hasOpenAiCredentials &&
     !hasAnthropicCredentials &&
     !hasGoogleAiStudioCredentials &&
-    (await hasGoogleDefaultCredentials())
+    hasGoogleVertexDefaultCredentials
   ) {
     logger.debug('Using Google Vertex default providers');
     providers = {
@@ -173,7 +176,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     !hasOpenAiCredentials &&
     !hasAnthropicCredentials &&
     !hasGoogleAiStudioCredentials &&
-    !(await hasGoogleDefaultCredentials()) &&
+    !hasGoogleVertexDefaultCredentials &&
     (getEnvString('MISTRAL_API_KEY') || env?.MISTRAL_API_KEY)
   ) {
     logger.debug('Using Mistral default providers');
@@ -190,7 +193,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     !hasOpenAiCredentials &&
     !hasAnthropicCredentials &&
     !hasGoogleAiStudioCredentials &&
-    !(await hasGoogleDefaultCredentials()) &&
+    !hasGoogleVertexDefaultCredentials &&
     !(getEnvString('MISTRAL_API_KEY') || env?.MISTRAL_API_KEY) &&
     hasGitHubCredentials
   ) {
