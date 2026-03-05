@@ -62,6 +62,10 @@ describe('Provider override tests', () => {
     delete process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_API_KEY;
     delete process.env.PALM_API_KEY;
+    delete process.env.AZURE_OPENAI_API_KEY;
+    delete process.env.AZURE_API_KEY;
+    delete process.env.AZURE_DEPLOYMENT_NAME;
+    delete process.env.AZURE_OPENAI_DEPLOYMENT_NAME;
   });
 
   afterEach(() => {

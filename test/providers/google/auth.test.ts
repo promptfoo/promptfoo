@@ -541,6 +541,24 @@ describe('GoogleAuthManager', () => {
       expect(getOAuthClientSpy).toHaveBeenCalledTimes(2);
       getOAuthClientSpy.mockRestore();
     });
+
+    it('should deduplicate concurrent default credential probes', async () => {
+      const getOAuthClientSpy = vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(() => resolve({ client: {}, projectId: 'detected-project' }), 0);
+          }),
+      );
+
+      const firstProbe = GoogleAuthManager.hasDefaultCredentials();
+      const secondProbe = GoogleAuthManager.hasDefaultCredentials();
+      const [firstResult, secondResult] = await Promise.all([firstProbe, secondProbe]);
+
+      expect(firstResult).toBe(true);
+      expect(secondResult).toBe(true);
+      expect(getOAuthClientSpy).toHaveBeenCalledTimes(1);
+      getOAuthClientSpy.mockRestore();
+    });
   });
 
   describe('loadCredentials', () => {
