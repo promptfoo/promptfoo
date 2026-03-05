@@ -87,12 +87,12 @@ export function isVideoProvider(provider: string | undefined): boolean {
   return provider.includes(':video:');
 }
 
-function normalizeImageSrcForComparison(src: string): string {
+export function normalizeImageSrcForComparison(src: string): string {
   const normalized = normalizeMediaText(src.trim());
   return resolveImageSource(normalized) || normalized;
 }
 
-function extractMarkdownImageSources(markdown: string): string[] {
+export function extractMarkdownImageSources(markdown: string): string[] {
   const sources = new Set<string>();
 
   const markdownImageRegex = /!\[[^\]]*]\((<[^>]+>|[^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
@@ -119,7 +119,7 @@ function extractMarkdownImageSources(markdown: string): string[] {
   return [...sources];
 }
 
-function resolveEvalImageOutputSource(image: ImageOutput): string | undefined {
+export function resolveEvalImageOutputSource(image: ImageOutput): string | undefined {
   if (typeof image.data === 'string' && /^https?:\/\//.test(image.data)) {
     return image.data;
   }
