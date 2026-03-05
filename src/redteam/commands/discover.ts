@@ -8,33 +8,19 @@
  *   promptfoo redteam discover --session-id <id>
  */
 
+import * as path from 'node:path';
+
 import chalk from 'chalk';
 import logger from '../../logger';
+import { loadApiProviders } from '../../providers/index';
 import telemetry from '../../telemetry';
-import { TargetLinkEvents } from '../../types/targetLink';
 import { createAgentClient } from '../../util/agent/agentClient';
+import { attachTargetLink } from '../../util/agent/targetLink';
 import { attachTargetLinkFs } from '../../util/agent/targetLinkFs';
 import { setupEnv } from '../../util/index';
 import type { Command } from 'commander';
 
-import type { ReadyPayload } from '../../types/targetLink';
-
-// ========================================================
-// Re-exports for backward compatibility
-// ========================================================
-// These are used by the OSS server routes and UI components.
-
-export {
-  doTargetPurposeDiscovery,
-  normalizeTargetPurposeDiscoveryResult,
-  TargetPurposeDiscoveryRequestSchema,
-  type TargetPurposeDiscoveryResult,
-  TargetPurposeDiscoveryTaskResponseSchema,
-} from './targetPurposeDiscovery';
-
-// ========================================================
-// Command
-// ========================================================
+import type { ApiProvider } from '../../types/index';
 
 export function discoverCommand(program: Command) {
   program
@@ -63,15 +49,52 @@ export function discoverCommand(program: Command) {
             ...(cmdObj.host && { host: cmdObj.host }),
           });
 
-          // Wire filesystem handlers for codebase recon
-          attachTargetLinkFs(client, rootDir);
+          // Track provider files written by the setup agent's compile_pipeline tool
+          const writtenProviderFiles: string[] = [];
 
-          // Signal ready with probe + fs capabilities
-          const readyPayload: ReadyPayload = {
+          // Wire filesystem handlers with write tracking
+          attachTargetLinkFs(client, rootDir, {
+            onFileWritten: (absolutePath) => {
+              writtenProviderFiles.push(absolutePath);
+              logger.info(
+                chalk.dim(`  Provider file written: ${path.relative(rootDir, absolutePath)}`),
+              );
+            },
+          });
+
+          // Lazy provider that loads the compiled JS file on first PROBE
+          let cachedProvider: ApiProvider | null = null;
+          const lazyProvider: ApiProvider = {
+            id: () => 'discover-session',
+            callApi: async (prompt, context, options) => {
+              if (!cachedProvider) {
+                const providerFile = writtenProviderFiles[writtenProviderFiles.length - 1];
+                if (!providerFile) {
+                  return {
+                    error:
+                      'No provider file available. The setup agent must compile a pipeline first.',
+                  };
+                }
+                logger.info(
+                  chalk.dim(`  Loading provider from ${path.relative(rootDir, providerFile)}...`),
+                );
+                const providers = await loadApiProviders([`file://${providerFile}`], {
+                  basePath: rootDir,
+                });
+                if (!providers.length) {
+                  return { error: `Failed to load provider from ${providerFile}` };
+                }
+                cachedProvider = providers[0];
+              }
+              return cachedProvider.callApi(prompt, context, options);
+            },
+          };
+
+          // Wire probe handlers (PROBE + PROBE_HTTP) and signal ready
+          attachTargetLink(client, lazyProvider, {
             clientName: 'discover',
             capabilities: ['probe', 'fs'],
-          };
-          client.emit(TargetLinkEvents.READY, readyPayload);
+          });
 
           logger.info(chalk.green('Connected! Providing local access to the setup agent.'));
           logger.info(chalk.dim('Press Ctrl+C to disconnect.'));

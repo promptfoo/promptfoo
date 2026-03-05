@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   doTargetPurposeDiscovery,
   normalizeTargetPurposeDiscoveryResult,
-} from '../../../src/redteam/commands/discover';
+} from '../../../src/redteam/commands/targetPurposeDiscovery';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 vi.mock('../../../src/util/fetch');

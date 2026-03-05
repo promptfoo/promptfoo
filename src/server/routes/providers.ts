@@ -7,7 +7,7 @@ import { loadApiProvider } from '../../providers/index';
 import {
   doTargetPurposeDiscovery,
   type TargetPurposeDiscoveryResult,
-} from '../../redteam/commands/discover';
+} from '../../redteam/commands/targetPurposeDiscovery';
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
 import { fetchWithProxy } from '../../util/fetch/index';

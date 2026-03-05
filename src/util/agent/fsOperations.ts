@@ -11,6 +11,7 @@ import * as path from 'node:path';
 
 const MAX_FILE_SIZE = 100_000; // 100KB
 const MAX_GREP_MATCHES = 100;
+const ALLOWED_WRITE_EXTENSIONS = ['.js', '.mjs'];
 
 /**
  * Resolve a requested path relative to rootDir, rejecting traversal.
@@ -20,6 +21,29 @@ function safePath(requested: string, rootDir: string): string {
   if (!resolved.startsWith(rootDir + path.sep) && resolved !== rootDir) {
     throw new Error(`Path traversal rejected: ${requested}`);
   }
+  return resolved;
+}
+
+/**
+ * Write a file relative to rootDir.
+ * Only allows writing files with extensions in ALLOWED_WRITE_EXTENSIONS.
+ * Creates parent directories if needed.
+ * Returns the absolute path of the written file.
+ */
+export async function writeFile(
+  filePath: string,
+  content: string,
+  rootDir: string,
+): Promise<string> {
+  const resolved = safePath(filePath, rootDir);
+  const ext = path.extname(resolved).toLowerCase();
+  if (!ALLOWED_WRITE_EXTENSIONS.includes(ext)) {
+    throw new Error(
+      `Write rejected: only ${ALLOWED_WRITE_EXTENSIONS.join(', ')} files are allowed`,
+    );
+  }
+  await fs.mkdir(path.dirname(resolved), { recursive: true });
+  await fs.writeFile(resolved, content, 'utf-8');
   return resolved;
 }
 

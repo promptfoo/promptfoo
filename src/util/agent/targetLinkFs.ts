@@ -1,24 +1,39 @@
 /**
  * CLI-side filesystem event handlers for recon.
  *
- * Wire onto an AgentClient to handle FS_READ, FS_LIST, FS_GREP
+ * Wire onto an AgentClient to handle FS_READ, FS_LIST, FS_GREP, FS_WRITE
  * events from the server and respond with results.
  */
 
 import logger from '../../logger';
 import { TargetLinkEvents } from '../../types/targetLink';
-import { grepFiles, listDirectory, readFile } from './fsOperations';
+import { grepFiles, listDirectory, readFile, writeFile } from './fsOperations';
 
-import type { FsGrepRequest, FsListRequest, FsReadRequest } from '../../types/targetLink';
+import type {
+  FsGrepRequest,
+  FsListRequest,
+  FsReadRequest,
+  FsWriteRequest,
+} from '../../types/targetLink';
 import type { AgentClient } from './agentClient';
+
+export interface AttachTargetLinkFsOptions {
+  /** Called after a file is successfully written, with the absolute path. */
+  onFileWritten?: (absolutePath: string) => void;
+}
 
 /**
  * Attach filesystem handlers to an AgentClient.
  *
  * @param client - The connected AgentClient
  * @param rootDir - The root directory for filesystem operations
+ * @param options - Optional callbacks
  */
-export function attachTargetLinkFs(client: AgentClient, rootDir: string): void {
+export function attachTargetLinkFs(
+  client: AgentClient,
+  rootDir: string,
+  options?: AttachTargetLinkFsOptions,
+): void {
   client.on(TargetLinkEvents.FS_READ, (payload: FsReadRequest) => {
     void (async () => {
       const { requestId, path: filePath } = payload;
@@ -71,6 +86,29 @@ export function attachTargetLinkFs(client: AgentClient, rootDir: string): void {
       } catch (error) {
         client.emit(TargetLinkEvents.FS_GREP_RESULT, {
           requestId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    })();
+  });
+
+  client.on(TargetLinkEvents.FS_WRITE, (payload: FsWriteRequest) => {
+    void (async () => {
+      const { requestId, path: filePath } = payload;
+      logger.debug('[TargetLink] Received fs_write request', { requestId, path: filePath });
+
+      try {
+        const writtenPath = await writeFile(filePath, payload.content, rootDir);
+        options?.onFileWritten?.(writtenPath);
+        client.emit(TargetLinkEvents.FS_WRITE_RESULT, {
+          requestId,
+          success: true,
+          writtenPath,
+        });
+      } catch (error) {
+        client.emit(TargetLinkEvents.FS_WRITE_RESULT, {
+          requestId,
+          success: false,
           error: error instanceof Error ? error.message : String(error),
         });
       }
