@@ -1,21 +1,30 @@
 ---
 title: Agent Skill for Writing Evals
-description: Install an agent skill that teaches Claude Code and OpenAI Codex to create Promptfoo eval suites automatically with best-practice assertions.
+description: Install an agent skill that teaches AI coding agents to create Promptfoo eval suites with best-practice assertions, provider configs, and test organization.
 sidebar_label: Agent Skill
 sidebar_position: 99
 ---
 
 # Agent Skill for Writing Evals
 
-The `promptfoo-evals` agent skill teaches AI coding agents how to create and maintain Promptfoo eval suites. It works with [Claude Code](https://code.claude.com), [OpenAI Codex](https://openai.com/index/codex), and any tool that supports the [Agent Skills](https://agentskills.io) standard.
+AI coding agents can write promptfoo configs, but they often get the details wrong — shell-style env vars that don't work, hallucination rubrics that can't see the source material, tests dumped inline instead of in files. The `promptfoo-evals` skill fixes this by teaching your agent promptfoo's conventions and common pitfalls.
 
-When installed, the agent knows how to scaffold configs, write test cases with appropriate assertions, choose providers, and validate the result — following promptfoo conventions.
+It follows the [Agent Skills](https://agentskills.io) standard, so it works with any compatible tool: [Claude Code](https://code.claude.com), [OpenAI Codex](https://openai.com/index/codex), [Cursor](https://cursor.com), [Windsurf](https://windsurf.com), [Gemini CLI](https://github.com/google-gemini/gemini-cli), and others.
+
+## Why use a skill?
+
+Without the skill, agents frequently:
+
+- Use `$ENV_VAR` syntax in YAML configs (doesn't work — promptfoo uses Nunjucks `'{{env.VAR}}'`)
+- Write `llm-rubric` assertions that reference "the article" but don't inline the source, so the grader can't actually compare
+- Dump all tests inline in the config instead of using `file://tests/*.yaml`
+- Reach for `llm-rubric` when `contains` or `is-json` would be faster, free, and deterministic
+
+The skill encodes these patterns so the agent gets them right the first time.
 
 ## Install
 
 ### Via Claude Code marketplace
-
-Add the promptfoo marketplace and install the plugin:
 
 ```bash
 /plugin marketplace add promptfoo/promptfoo
@@ -38,11 +47,15 @@ cp -r promptfoo-evals your-project/.claude/skills/
 cp -r promptfoo-evals ~/.claude/skills/
 ```
 
-**OpenAI Codex**:
+**OpenAI Codex / other Agent Skills tools**:
 
 ```bash
 cp -r promptfoo-evals your-project/.agents/skills/
 ```
+
+:::note
+For team adoption, commit the skill to your repo's `.claude/skills/` directory. Every developer's agent picks it up automatically — no per-person install needed.
+:::
 
 The skill contains two files:
 
@@ -67,9 +80,11 @@ The agent will:
 4. Validate the config with `promptfoo validate`
 5. Provide run commands
 
-## What the skill teaches
+:::note
+New to promptfoo? See [Getting Started](/docs/getting-started) for an overview of configs, providers, and assertions.
+:::
 
-The skill encodes these promptfoo best practices:
+## What the skill teaches
 
 - **Deterministic assertions first.** Use `contains`, `is-json`, `javascript` before reaching for `llm-rubric`. Deterministic checks are fast, free, and reproducible.
 - **File-based test organization.** Tests go in `tests/*.yaml` files loaded via `file://tests/*.yaml` glob, keeping configs clean as test count grows.
@@ -132,6 +147,7 @@ The skill is just markdown files — edit them to match your team's conventions:
 
 ## Related
 
+- [Getting Started](/docs/getting-started) — promptfoo overview for newcomers
 - [Configuration Reference](/docs/configuration/guide) — full config schema documentation
 - [Assertions Reference](/docs/configuration/expected-outputs) — complete list of assertion types
 - [Custom Providers](/docs/providers/custom-api) — building Python, JavaScript, and HTTP providers
