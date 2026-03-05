@@ -183,7 +183,10 @@ describe('Validate Command Provider Tests', () => {
         config: {},
       };
 
-      vi.mocked(getProviderFromCloud).mockResolvedValue(mockProviderOptions as any);
+      vi.mocked(getProviderFromCloud).mockResolvedValue({
+        provider: mockProviderOptions,
+        providerFile: null,
+      } as any);
       vi.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
@@ -364,7 +367,10 @@ describe('Validate Command Provider Tests', () => {
         config: {},
       };
 
-      vi.mocked(getProviderFromCloud).mockResolvedValue(mockProviderOptions as any);
+      vi.mocked(getProviderFromCloud).mockResolvedValue({
+        provider: mockProviderOptions,
+        providerFile: null,
+      } as any);
       vi.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
