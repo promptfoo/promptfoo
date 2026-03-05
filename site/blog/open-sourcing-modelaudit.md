@@ -156,7 +156,7 @@ Michael D'Angelo and Ian Webster had already built a basic scanner with the core
 
 ### The false positive problem
 
-Every ML framework serializes models differently, and the same model saved with different libraries or library versions can produce different internal structures. A scanner that works on one version might flag clean models on another.
+Every ML framework serializes models differently. The same scikit-learn RandomForest saved with `joblib` vs `pickle` vs `skops` produces different opcode sequences. Upgrading Python or library versions changes which opcodes appear. An allowlist-based scanner that works on Python 3.10 might flag clean models on 3.13. And that's just pickle — every format we added had its own version of this problem: ONNX models with legitimate external data references tripping path traversal checks, Keras archives with custom layer configs that look like code injection, GGUF metadata fields that resemble suspicious strings.
 
 We ran several rounds of false positive elimination against real Hugging Face models across every supported format. Each round surfaced new edge cases — legitimate patterns that looked suspicious to heuristic checks. We fixed them all.
 
