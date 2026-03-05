@@ -1,6 +1,6 @@
 ---
 sidebar_position: 1
-description: 'Configure OpenAI models including GPT-5.3, GPT-4.1, o-series reasoning, embeddings, and assistants for comprehensive AI evals'
+description: 'Configure OpenAI models including GPT-5.4, GPT-5.3, GPT-4.1, o-series reasoning, embeddings, and assistants for comprehensive AI evals'
 ---
 
 # OpenAI
@@ -473,6 +473,44 @@ providers:
   - id: openai:responses:gpt-5.3-chat-latest
     config:
       max_output_tokens: 2048
+```
+
+### GPT-5.4
+
+GPT-5.4 is OpenAI's frontier model for complex professional work, combining advanced reasoning with agentic coding capabilities.
+
+#### Available Models
+
+| Model              | Description            | Pricing (Input / Output)  |
+| ------------------ | ---------------------- | ------------------------- |
+| gpt-5.4            | Standard GPT-5.4 model | $2.50 / $15 per 1M tokens |
+| gpt-5.4-2026-03-05 | Snapshot version       | $2.50 / $15 per 1M tokens |
+| gpt-5.4-pro        | Premium GPT-5.4 model  | $30 / $180 per 1M tokens  |
+
+#### Key Specifications
+
+- **Context window**: 1,050,000 tokens
+- **Max output tokens**: 128,000 tokens
+- **Reasoning support**: Full reasoning token support with configurable effort levels (`none`, `low`, `medium`, `high`, `xhigh`)
+- **Endpoint support**: Chat Completions API, Responses API, and Codex SDK
+
+#### Usage Examples
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-5.4
+    config:
+      reasoning:
+        effort: 'high'
+      max_output_tokens: 4096
+
+  - id: openai:chat:gpt-5.4
+    config:
+      reasoning_effort: 'medium'
+
+  - id: openai:responses:gpt-5.4-pro
+    config:
+      max_output_tokens: 8192
 ```
 
 ### Reasoning Models (o1, o3, o3-pro, o3-mini, o4-mini)
@@ -1716,6 +1754,8 @@ OpenAI's Responses API is the most advanced interface for generating model respo
 
 The Responses API supports a wide range of models, including:
 
+- `gpt-5.4` - OpenAI's frontier model for professional work ($2.50/$15 per 1M tokens)
+- `gpt-5.4-pro` - Premium GPT-5.4 model with highest reasoning capability ($30/$180 per 1M tokens)
 - `gpt-5` - OpenAI's most capable vision model
 - `gpt-5.3-chat-latest` - Latest chat-focused GPT-5.3 Instant alias
 - `gpt-5.2-chat-latest` - GPT-5.2 chat-optimized alias
@@ -2060,7 +2100,7 @@ The `web_search_preview` tool is **required** for deep research models. The prov
 
 ### GPT-5 Pro Timeout Configuration
 
-`gpt-5-pro` and `gpt-5.2-pro` are long-running models that often require extended timeouts due to advanced reasoning. Like deep research models, these variants **automatically** receive a 10-minute timeout (600,000ms) instead of the standard 5-minute timeout.
+`gpt-5-pro`, `gpt-5.2-pro`, and `gpt-5.4-pro` are long-running models that often require extended timeouts due to advanced reasoning. Like deep research models, these variants **automatically** receive a 10-minute timeout (600,000ms) instead of the standard 5-minute timeout.
 
 **Automatic timeout behavior:**
 
