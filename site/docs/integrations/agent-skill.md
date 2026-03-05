@@ -9,7 +9,7 @@ sidebar_position: 99
 
 AI coding agents can write promptfoo configs, but they often get the details wrong — shell-style env vars that don't work, hallucination rubrics that can't see the source material, tests dumped inline instead of in files. The `promptfoo-evals` skill fixes this by teaching your agent promptfoo's conventions and common pitfalls.
 
-It follows the [Agent Skills](https://agentskills.io) standard, so it works with any compatible tool: [Claude Code](https://code.claude.com), [OpenAI Codex](https://openai.com/index/codex), [Cursor](https://cursor.com), [Windsurf](https://windsurf.com), [Gemini CLI](https://github.com/google-gemini/gemini-cli), and others.
+It works with [Claude Code](https://code.claude.com) and [OpenAI Codex](https://openai.com/index/codex). Because it follows the open [Agent Skills](https://agentskills.io) standard, it should also work with other compatible tools.
 
 ## Why use a skill?
 
@@ -54,10 +54,10 @@ cp -r promptfoo-evals your-project/.agents/skills/
 ```
 
 :::note
-For team adoption, commit the skill to your repo's `.claude/skills/` directory. Every developer's agent picks it up automatically — no per-person install needed.
+For team adoption, commit the skill to your repo's skill directory (`.claude/skills/` for Claude Code, `.agents/skills/` for Codex). Every developer's agent picks it up automatically — no per-person install needed.
 :::
 
-The skill contains two files:
+The core skill consists of two files:
 
 | File                       | Purpose                                                 |
 | -------------------------- | ------------------------------------------------------- |
@@ -68,7 +68,7 @@ The skill contains two files:
 
 Once installed, the agent activates automatically when you ask it to create or update eval coverage. You can also invoke it directly:
 
-```bash
+```text
 /promptfoo-evals Create an eval suite for my summarization prompt
 ```
 
