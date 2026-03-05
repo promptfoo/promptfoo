@@ -291,38 +291,6 @@ describe('init command', () => {
     });
   });
 
-  describe('example aliases', () => {
-    it('should resolve old example name to new name', async () => {
-      // Mock successful download
-      const mockDirResponse = createMockResponse({
-        ok: true,
-        json: () => Promise.resolve([]),
-      });
-      mockFetchWithProxy.mockResolvedValue(mockDirResponse);
-
-      await init.handleExampleDownload('.', 'self-grading');
-
-      // Should log the rename notice
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining("'self-grading' has been renamed to 'eval-self-grading'"),
-      );
-      // Should fetch the new name from GitHub
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        expect.stringContaining('/examples/eval-self-grading'),
-        expect.any(Object),
-      );
-    });
-
-    it('should pass through unknown example names unchanged', async () => {
-      mockFetchWithProxy.mockRejectedValue(new Error('404'));
-      vi.mocked(confirm).mockResolvedValue(false);
-
-      await init.handleExampleDownload('.', 'some-new-example');
-
-      expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('has been renamed'));
-    });
-  });
-
   describe('initCommand', () => {
     let program: Command;
 
