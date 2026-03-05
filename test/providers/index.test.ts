@@ -489,6 +489,15 @@ describe('loadApiProvider', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    // Clean up any env vars leaked by tests that set process.env directly
+    for (const key of Object.keys(process.env)) {
+      if (key.startsWith('TEST_') && key.includes('7079')) {
+        delete process.env[key];
+      }
+    }
+  });
+
   it('loadApiProvider with yaml filepath', async () => {
     const mockYamlContent = dedent`
     id: 'openai:gpt-5.1-mini'
