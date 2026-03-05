@@ -329,7 +329,7 @@ describe('XAI Image Provider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        output: JSON.stringify(mockBase64Response.data),
+        output: 'data:image/png;base64,base64EncodedImageData',
         cached: false,
         isBase64: true,
         format: 'json',

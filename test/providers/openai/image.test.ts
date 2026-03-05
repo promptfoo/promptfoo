@@ -64,6 +64,7 @@ describe('OpenAiImageProvider', () => {
 
       expect(result).toEqual({
         output: '![Generate a cat](https://example.com/image.png)',
+        images: [{ data: 'https://example.com/image.png', mimeType: 'image/png' }],
         cached: false,
         cost: 0.04, // Default cost for DALL-E 3 standard 1024x1024
       });
@@ -83,6 +84,7 @@ describe('OpenAiImageProvider', () => {
 
       expect(result).toEqual({
         output: '![test prompt](https://example.com/image.png)',
+        images: [{ data: 'https://example.com/image.png', mimeType: 'image/png' }],
         cached: true,
         cost: 0, // Cost is 0 for cached responses
       });
@@ -269,7 +271,8 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        output: JSON.stringify(mockBase64Response.data),
+        output: 'data:image/png;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/png;base64,base64EncodedImageData', mimeType: 'image/png' }],
         cached: false,
         isBase64: true,
         format: 'json',
@@ -520,7 +523,8 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        output: JSON.stringify(mockGptImage1Response.data),
+        output: 'data:image/png;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/png;base64,base64EncodedImageData', mimeType: 'image/png' }],
         cached: false,
         isBase64: true,
         format: 'json',
@@ -691,7 +695,8 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        output: JSON.stringify(mockGptImage1MiniResponse.data),
+        output: 'data:image/png;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/png;base64,base64EncodedImageData', mimeType: 'image/png' }],
         cached: false,
         isBase64: true,
         format: 'json',
@@ -822,7 +827,8 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        output: JSON.stringify(mockGptImage15Response.data),
+        output: 'data:image/png;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/png;base64,base64EncodedImageData', mimeType: 'image/png' }],
         cached: false,
         isBase64: true,
         format: 'json',
