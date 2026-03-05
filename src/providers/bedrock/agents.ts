@@ -227,20 +227,25 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
   async getAgentRuntimeClient(): Promise<BedrockAgentRuntimeClient> {
     if (!this.agentRuntimeClient) {
       let handler;
+      const hasProxy = Boolean(getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY'));
 
-      // Configure proxy if needed
-      if (getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY')) {
-        try {
-          const { NodeHttpHandler } = await import('@smithy/node-http-handler');
+      try {
+        const { NodeHttpHandler } = await import('@smithy/node-http-handler');
+        let proxyAgent: Agent | undefined;
+        if (hasProxy) {
           const { ProxyAgent } = await import('proxy-agent');
-          handler = new NodeHttpHandler({
-            httpsAgent: new ProxyAgent() as unknown as Agent,
-          });
-        } catch {
-          throw new Error(
-            'The @smithy/node-http-handler package is required for proxy support. Please install it.',
-          );
+          proxyAgent = new ProxyAgent() as unknown as Agent;
         }
+
+        handler = new NodeHttpHandler({
+          ...(proxyAgent ? { httpsAgent: proxyAgent } : {}),
+          requestTimeout: 300000, // 5 minutes
+        });
+      } catch {
+        const reason = hasProxy
+          ? 'Proxy configuration requires the @smithy/node-http-handler package'
+          : 'Bedrock Agents provider requires the @smithy/node-http-handler package';
+        throw new Error(`${reason}. Please install it in your project or globally.`);
       }
 
       try {
@@ -251,8 +256,8 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
           region: this.getRegion(),
           maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
+          requestHandler: handler,
           ...(credentials ? { credentials } : {}),
-          ...(handler ? { requestHandler: handler } : {}),
         });
       } catch (err) {
         logger.error(`Error creating BedrockAgentRuntimeClient: ${err}`);

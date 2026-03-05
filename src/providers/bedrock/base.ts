@@ -146,7 +146,7 @@ export abstract class AwsBedrockGenericProvider {
           ? 'API key authentication requires the @smithy/node-http-handler package'
           : hasProxy
             ? 'Proxy configuration requires the @smithy/node-http-handler package'
-            : 'Bedrock provider requires the @smithy/node-http-handler package for HTTP/1.1 transport';
+            : 'Bedrock provider requires the @smithy/node-http-handler package';
         throw new Error(`${reason}. Please install it in your project or globally.`);
       }
 
@@ -158,8 +158,8 @@ export abstract class AwsBedrockGenericProvider {
           region: this.getRegion(),
           maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
+          requestHandler: handler,
           ...(credentials ? { credentials } : {}),
-          ...(handler ? { requestHandler: handler } : {}),
           ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
         });
 
