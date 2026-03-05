@@ -143,6 +143,7 @@ export default function AddProviderDialog({
                   setError={setError}
                   validateAll={false}
                   providerType={providerType}
+                  mode="eval"
                 />
               )
             )}
