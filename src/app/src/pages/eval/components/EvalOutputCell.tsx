@@ -445,7 +445,7 @@ function EvalOutputCell({
           src={src}
           alt={output.prompt || 'Generated image'}
           loading="lazy"
-          style={{ width: '100%', cursor: 'pointer' }}
+          style={{ display: 'block', width: '100%', cursor: 'pointer' }}
           onClick={() => toggleLightbox(src)}
         />
       );
