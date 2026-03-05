@@ -135,8 +135,16 @@ describe('AwsBedrockGenericProvider', () => {
   afterEach(() => {
     vi.clearAllMocks();
     delete process.env.AWS_BEARER_TOKEN_BEDROCK;
-    process.env.HTTP_PROXY = ORIGINAL_HTTP_PROXY;
-    process.env.HTTPS_PROXY = ORIGINAL_HTTPS_PROXY;
+    if (ORIGINAL_HTTP_PROXY === undefined) {
+      delete process.env.HTTP_PROXY;
+    } else {
+      process.env.HTTP_PROXY = ORIGINAL_HTTP_PROXY;
+    }
+    if (ORIGINAL_HTTPS_PROXY === undefined) {
+      delete process.env.HTTPS_PROXY;
+    } else {
+      process.env.HTTPS_PROXY = ORIGINAL_HTTPS_PROXY;
+    }
   });
 
   it('should create Bedrock instance without proxy settings', async () => {

@@ -141,13 +141,13 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     await provider.getKnowledgeBaseClient();
 
-    expect(NodeHttpHandlerMock).toHaveBeenCalled();
-    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
+    // client-bedrock-agent-runtime already defaults to HTTP/1.1,
+    // so no custom handler is needed without proxy or apiKey
+    expect(NodeHttpHandlerMock).not.toHaveBeenCalled();
     expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
-      requestHandler,
     });
   });
 
@@ -166,13 +166,11 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     await provider.getKnowledgeBaseClient();
 
-    expect(NodeHttpHandlerMock).toHaveBeenCalled();
-    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
+    expect(NodeHttpHandlerMock).not.toHaveBeenCalled();
     expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
-      requestHandler,
       credentials: {
         accessKeyId: 'test-access-key',
         secretAccessKey: 'test-secret-key',
@@ -194,13 +192,11 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     await provider.getKnowledgeBaseClient();
 
-    expect(NodeHttpHandlerMock).toHaveBeenCalled();
-    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
+    expect(NodeHttpHandlerMock).not.toHaveBeenCalled();
     expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 5,
-      requestHandler,
     });
   });
 

@@ -1,10 +1,9 @@
-import type { Agent } from 'http';
-
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvInt, getEnvString } from '../../envars';
+import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { AwsBedrockGenericProvider } from './base';
+import { createBedrockRequestHandler, hasProxyEnv } from './util';
 import type {
   BedrockAgentRuntimeClient,
   InferenceConfig,
@@ -226,27 +225,9 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
    */
   async getAgentRuntimeClient(): Promise<BedrockAgentRuntimeClient> {
     if (!this.agentRuntimeClient) {
-      let handler;
-      const hasProxy = Boolean(getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY'));
-
-      try {
-        const { NodeHttpHandler } = await import('@smithy/node-http-handler');
-        let proxyAgent: Agent | undefined;
-        if (hasProxy) {
-          const { ProxyAgent } = await import('proxy-agent');
-          proxyAgent = new ProxyAgent() as unknown as Agent;
-        }
-
-        handler = new NodeHttpHandler({
-          ...(proxyAgent ? { httpsAgent: proxyAgent } : {}),
-          requestTimeout: 300000, // 5 minutes
-        });
-      } catch {
-        const reason = hasProxy
-          ? 'Proxy configuration requires the @smithy/node-http-handler package'
-          : 'Bedrock Agents provider requires the @smithy/node-http-handler package';
-        throw new Error(`${reason}. Please install it in your project or globally.`);
-      }
+      // client-bedrock-agent-runtime already defaults to HTTP/1.1, so we only
+      // need a custom handler for proxy support.
+      const handler = hasProxyEnv() ? await createBedrockRequestHandler() : undefined;
 
       try {
         const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
@@ -256,7 +237,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
           region: this.getRegion(),
           maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
-          requestHandler: handler,
+          ...(handler ? { requestHandler: handler } : {}),
           ...(credentials ? { credentials } : {}),
         });
       } catch (err) {

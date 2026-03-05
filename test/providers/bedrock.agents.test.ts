@@ -62,8 +62,16 @@ describe('AwsBedrockAgentsProvider', () => {
   });
 
   afterEach(() => {
-    process.env.HTTP_PROXY = ORIGINAL_HTTP_PROXY;
-    process.env.HTTPS_PROXY = ORIGINAL_HTTPS_PROXY;
+    if (ORIGINAL_HTTP_PROXY === undefined) {
+      delete process.env.HTTP_PROXY;
+    } else {
+      process.env.HTTP_PROXY = ORIGINAL_HTTP_PROXY;
+    }
+    if (ORIGINAL_HTTPS_PROXY === undefined) {
+      delete process.env.HTTPS_PROXY;
+    } else {
+      process.env.HTTPS_PROXY = ORIGINAL_HTTPS_PROXY;
+    }
   });
 
   describe('constructor', () => {
@@ -116,7 +124,7 @@ describe('AwsBedrockAgentsProvider', () => {
   });
 
   describe('getAgentRuntimeClient', () => {
-    it('should create runtime client with node request handler by default', async () => {
+    it('should create runtime client without custom handler by default', async () => {
       const provider = new AwsBedrockAgentsProvider('test-agent-123', {
         config: {
           agentId: 'test-agent-123',
@@ -127,15 +135,13 @@ describe('AwsBedrockAgentsProvider', () => {
 
       await provider.getAgentRuntimeClient();
 
-      expect(NodeHttpHandlerMock).toHaveBeenCalledWith({
-        requestTimeout: 300000,
-      });
-      const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
+      // client-bedrock-agent-runtime already defaults to HTTP/1.1,
+      // so no custom handler is needed without proxy
+      expect(NodeHttpHandlerMock).not.toHaveBeenCalled();
       expect(MockBedrockAgentRuntimeClient).toHaveBeenCalledWith({
         region: 'us-east-1',
         retryMode: 'adaptive',
         maxAttempts: 10,
-        requestHandler,
       });
     });
 
