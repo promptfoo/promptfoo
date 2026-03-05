@@ -250,7 +250,7 @@ REDUCE
 # picklescan: CLEAN (codeop not in blocklist)
 ```
 
-**[GHSA-7wx9-6375-f5wh](https://github.com/advisories/GHSA-7wx9-6375-f5wh) (CVSS 9.8) - `profile.run()` blocklist mismatch.** Picklescan blocks `profile.Profile.run` and `profile.Profile.runctx` but _not_ the module-level `profile.run()` function. The blocklist entry `"Profile.run"` doesn't match the pickle global name `"run"`. `profile.run(statement)` calls `exec()` internally:
+**[GHSA-7wx9-6375-f5wh](https://github.com/advisories/GHSA-7wx9-6375-f5wh) (CVSS 9.8) - `profile.run()` blocklist mismatch.** Picklescan blocks `profile.Profile.run` and `profile.Profile.runctx` but _not_ the module-level `profile.run()` function. The blocklist entry `Profile.run` doesn't match the pickle global name `run`. `profile.run(statement)` calls `exec()` internally:
 
 ```python
 # Pickle opcodes:
@@ -317,7 +317,11 @@ The most meaningful way to compare scanners is format by format. Here is what ea
 | Config (JSON/YAML/XML/TOML)    |     -      |    -     |     -     |    **Yes**     |
 | **Total format categories**    |   **~4**   |  **~2**  |  **~8**   |    **42+**     |
 
-_picklescan counts: Pickle, PyTorch, NumPy, Joblib, plus archive support. Fickling counts: Pickle, PyTorch (.pt/.pth only - does not scan .bin files). ModelScan counts: Pickle/Dill, PyTorch, Keras H5, Keras V3, TF SavedModel, NumPy (.npy only - .npz not yet implemented), Joblib, plus ZIP support. Counts reflect distinct model format categories, not file extensions. All three tools are open source - see each repository for current status._
+_Counts reflect distinct model format categories, not file extensions. All three tools are open source - see each repository for current status._
+
+- _**picklescan:** Pickle, PyTorch, NumPy, Joblib, plus archive support_
+- _**Fickling:** Pickle, PyTorch (extension-agnostic, operates on pickle byte streams)_
+- _**ModelScan:** Pickle/Dill/Cloudpickle, PyTorch, Keras H5, Keras V3, TF SavedModel, NumPy (.npy only - .npz not yet implemented), Joblib, plus ZIP support_
 
 | Capability               | picklescan | Fickling | ModelScan |        **ModelAudit**         |
 | ------------------------ | :--------: | :------: | :-------: | :---------------------------: |
