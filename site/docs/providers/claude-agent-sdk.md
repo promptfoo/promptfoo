@@ -132,8 +132,14 @@ prompts:
 | `max_turns`                          | number       | Maximum conversation turns                                                                                   | Claude Agent SDK default |
 | `max_thinking_tokens`                | number       | Maximum tokens for thinking                                                                                  | Claude Agent SDK default |
 | `max_budget_usd`                     | number       | Maximum cost budget in USD for the agent execution                                                           | None                     |
-| `permission_mode`                    | string       | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk`, `delegate`                | `default`                |
+| `permission_mode`                    | string       | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk`                            | `default`                |
 | `allow_dangerously_skip_permissions` | boolean      | Required safety flag when using `bypassPermissions` mode                                                     | false                    |
+| `thinking`                           | object       | Thinking config: `{type: 'adaptive'}`, `{type: 'enabled', budgetTokens: N}`, or `{type: 'disabled'}`         | Model default            |
+| `effort`                             | string       | Response effort level: `low`, `medium`, `high`, `max`                                                        | `high`                   |
+| `agent`                              | string       | Named agent for the main thread (must be defined in `agents` or settings)                                    | None                     |
+| `session_id`                         | string       | Custom session UUID (cannot be used with `continue`/`resume` unless `fork_session` is set)                   | Auto-generated           |
+| `debug`                              | boolean      | Enable verbose debug logging                                                                                 | false                    |
+| `debug_file`                         | string       | Write debug logs to this file path (implicitly enables debug)                                                | None                     |
 | `betas`                              | string[]     | Enable beta features (e.g., `['context-1m-2025-08-07']` for 1M context)                                      | None                     |
 | `custom_system_prompt`               | string       | Replace default system prompt                                                                                | None                     |
 | `append_system_prompt`               | string       | Append to default system prompt                                                                              | None                     |
@@ -221,7 +227,6 @@ Control Claude Agent SDK's permissions for modifying files and running system co
 | `acceptEdits`       | Allow file modifications                                              |
 | `bypassPermissions` | No restrictions (requires `allow_dangerously_skip_permissions: true`) |
 | `dontAsk`           | Deny permissions that aren't pre-approved (no prompts)                |
-| `delegate`          | Delegate mode, restricts agent to only Teammate and Task tools        |
 
 :::warning
 Using `bypassPermissions` requires setting `allow_dangerously_skip_permissions: true` as a safety measure:
@@ -338,6 +343,132 @@ Available values:
 - `user` - User-level settings
 - `project` - Project-level settings
 - `local` - Local directory settings
+
+## Testing Skills
+
+[Agent Skills](https://platform.claude.com/docs/en/agent-sdk/skills) are reusable capabilities that extend Claude's functionality. They are defined as `SKILL.md` files in `.claude/skills/` directories and can be tested using the Claude Agent SDK provider.
+
+### Enabling Skills
+
+To test skills, you need to configure both `setting_sources` (to load skills from the filesystem) and include `Skill` in the allowed tools:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./my-project
+      setting_sources: ['project'] # Load skills from .claude/skills/
+      append_allowed_tools: ['Skill']
+```
+
+### How Skills Are Discovered
+
+Skills are automatically discovered at startup from the configured `setting_sources` directories. The SDK scans for `SKILL.md` files in subdirectories of `.claude/skills/`:
+
+```text
+my-project/
+└── .claude/
+    └── skills/
+        ├── code-review/
+        │   └── SKILL.md
+        └── test-generator/
+            └── SKILL.md
+```
+
+Claude automatically invokes the relevant skill when a task matches the skill's description in its frontmatter.
+
+### Testing Skill Invocation
+
+You can test that skills are properly invoked by checking [tool calls](#tool-call-tracking). The Skill tool's input includes `skill` (the skill name) and optional `args`:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./my-project
+      setting_sources: ['project']
+      append_allowed_tools: ['Skill', 'Read', 'Write']
+
+prompts:
+  - 'Review the authentication module for security issues'
+
+tests:
+  - assert:
+      # Check that the Skill tool was called
+      - type: javascript
+        value: |
+          const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
+          return toolCalls.some(t => t.name === 'Skill');
+      # Check that a specific skill was invoked
+      - type: javascript
+        value: |
+          const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
+          const skillCalls = toolCalls.filter(t => t.name === 'Skill');
+          return skillCalls.some(t => t.input?.skill === 'code-review');
+```
+
+### Checking Available Skills
+
+You can verify skills are loaded by asking Claude to list them. Note that this relies on Claude's free-text response, so use a flexible assertion:
+
+```yaml
+prompts:
+  - 'List all available skills by name'
+
+tests:
+  - assert:
+      - type: icontains
+        value: 'code-review' # Expected skill name
+```
+
+:::note
+Because the response is free-text, `contains` assertions may be fragile. For more reliable testing, check tool calls instead (see [Testing Skill Invocation](#testing-skill-invocation)).
+:::
+
+### Testing Restrictions for CI
+
+For consistent testing in CI/CD environments, restrict to project-level skills only:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./my-project
+      setting_sources: ['project'] # Only team-shared skills, exclude personal
+      append_allowed_tools: ['Skill', 'Read', 'Bash']
+      permission_mode: 'acceptEdits'
+```
+
+This ensures tests don't depend on user-specific skills that may not be present in CI.
+
+### Example: Complete Skills Testing Configuration
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./my-project
+      setting_sources: ['project']
+      append_allowed_tools: ['Skill', 'Read', 'Write', 'Bash']
+      permission_mode: 'acceptEdits'
+
+prompts:
+  - 'Generate unit tests for the UserService class'
+
+tests:
+  - assert:
+      # Verify the test-generator skill was invoked
+      - type: javascript
+        value: |
+          const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
+          const skillCalls = toolCalls.filter(t => t.name === 'Skill');
+          return skillCalls.some(t => t.input?.skill === 'test-generator');
+      # Verify tests were generated
+      - type: icontains
+        value: 'describe('
+```
+
+For more information about creating skills, see the [Claude Code skills documentation](https://code.claude.com/docs/en/skills).
 
 ## Budget Control
 
@@ -643,6 +774,56 @@ See the [Claude Agent SDK permissions documentation](https://platform.claude.com
 If you're testing scenarios where the agent asks questions, consider what answer would lead to the most interesting test case. Using `random` behavior can help discover edge cases.
 :::
 
+## Tool Call Tracking
+
+The Claude Agent SDK provider captures all tool calls made during the agentic session and exposes them in `response.metadata.toolCalls`. This allows you to assert on tool usage in your evaluations.
+
+Each tool call entry contains:
+
+| Field             | Type           | Description                                                  |
+| ----------------- | -------------- | ------------------------------------------------------------ |
+| `id`              | string         | Unique tool call ID                                          |
+| `name`            | string         | Tool name (e.g., `Read`, `Bash`, `Grep`)                     |
+| `input`           | unknown        | Arguments passed to the tool                                 |
+| `output`          | unknown        | Tool result content (undefined if not available)             |
+| `is_error`        | boolean        | Whether the tool call resulted in an error                   |
+| `parentToolUseId` | string \| null | Parent tool use ID for sub-agent calls, `null` for top-level |
+
+### Asserting on Tool Usage
+
+Use JavaScript assertions to check which tools were called:
+
+```yaml
+assert:
+  - type: javascript
+    value: |
+      const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
+      const readCalls = toolCalls.filter(t => t.name === 'Read');
+      return readCalls.length > 0;
+```
+
+Check that a specific command was run:
+
+```yaml
+assert:
+  - type: javascript
+    value: |
+      const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
+      const bashCalls = toolCalls.filter(t => t.name === 'Bash');
+      return bashCalls.some(t => t.input?.command?.includes('npm test'));
+```
+
+Verify tool output content:
+
+```yaml
+assert:
+  - type: javascript
+    value: |
+      const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
+      const grepCall = toolCalls.find(t => t.name === 'Grep');
+      return grepCall?.output?.includes('expected match');
+```
+
 ## Caching Behavior
 
 This provider automatically caches responses, and will read from the cache if the prompt, configuration, and files in the working directory (if `working_dir` is set) are the same as a previous run.
@@ -695,8 +876,11 @@ Here are a few complete example implementations:
 - [Structured output](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#structured-output) - JSON schema validation for agent responses
 - [Advanced options](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#advanced-options) - Sandbox, runtime configuration, and CLI arguments
 - [AskUserQuestion handling](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#askuserquestion-handling) - Automated handling of user questions in evaluations
+- [Skills testing](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#skills-testing) - Testing Agent Skills with the SDK
 
 ## See Also
 
 - [Claude Agent SDK documentation](https://docs.claude.com/en/api/agent-sdk)
+- [Agent Skills in the SDK](https://platform.claude.com/docs/en/agent-sdk/skills) - Testing and using skills with the SDK
+- [Claude Code skills documentation](https://code.claude.com/docs/en/skills) - Creating custom skills
 - [Standard Anthropic provider](/docs/providers/anthropic/) - For text-only interactions

@@ -12,6 +12,7 @@ import logger from '../logger';
 import { streamEvalCsv } from '../server/utils/evalTableUtils';
 import { type CsvRow, type OutputFile, OutputFileExtension, ResultFailureReason } from '../types';
 import invariant from './invariant';
+import { sanitizeObject } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
@@ -41,6 +42,14 @@ const outputToSimpleString = (output: EvaluateTableOutput) => {
       ${gradingResultText}
     `.trim();
 };
+
+function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
+  return sanitizeObject(config, {
+    context: 'output config',
+    throwOnError: true,
+    maxDepth: Number.POSITIVE_INFINITY,
+  }) as OutputFile['config'];
+}
 
 export function createOutputMetadata(evalRecord: Eval) {
   let evaluationCreatedAt: string | undefined;
@@ -77,10 +86,11 @@ async function writeJsonOutputSafely(
 
   try {
     const summary = await evalRecord.toEvaluateSummary();
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
     const outputData: OutputFile = {
       evalId: evalRecord.id,
       results: summary,
-      config: evalRecord.config,
+      config: redactedConfig,
       shareableUrl,
       metadata,
     };
@@ -163,12 +173,13 @@ export async function writeOutput(
     await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl);
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
     const summary = await evalRecord.toEvaluateSummary();
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
     await fsPromises.writeFile(
       outputPath,
       yaml.dump({
         evalId: evalRecord.id,
         results: summary,
-        config: evalRecord.config,
+        config: redactedConfig,
         shareableUrl,
         metadata,
       } as OutputFile),
@@ -177,6 +188,7 @@ export async function writeOutput(
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');
     const summary = await evalRecord.toEvaluateSummary();
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
     const template = await fsPromises.readFile(
       path.join(getDirectory(), 'tableOutput.html'),
       'utf-8',
@@ -189,7 +201,7 @@ export async function writeOutput(
       ...table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
     ];
     const htmlOutput = getNunjucksEngine().renderString(template, {
-      config: evalRecord.config,
+      config: redactedConfig,
       table: htmlTable,
       results: summary,
     });
@@ -203,6 +215,7 @@ export async function writeOutput(
     }
   } else if (outputExtension === 'xml') {
     const summary = await evalRecord.toEvaluateSummary();
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
 
     // Sanitize data for XML builder to prevent textValue.replace errors
     const sanitizeForXml = (obj: any): any => {
@@ -238,7 +251,7 @@ export async function writeOutput(
       promptfoo: {
         evalId: evalRecord.id,
         results: sanitizeForXml(summary),
-        config: sanitizeForXml(evalRecord.config),
+        config: sanitizeForXml(redactedConfig),
         shareableUrl: shareableUrl || '',
       },
     });

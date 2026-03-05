@@ -347,6 +347,9 @@
         "MISTRAL_API_KEY": {
           "type": "string"
         },
+        "MODELSLAB_API_KEY": {
+          "type": "string"
+        },
         "NSCALE_SERVICE_TOKEN": {
           "type": "string"
         },
@@ -375,6 +378,12 @@
           "type": "string"
         },
         "CODEX_API_KEY": {
+          "type": "string"
+        },
+        "OPENCLAW_GATEWAY_TOKEN": {
+          "type": "string"
+        },
+        "OPENCLAW_GATEWAY_URL": {
           "type": "string"
         },
         "PALM_API_HOST": {
@@ -1626,6 +1635,9 @@
                     "MISTRAL_API_KEY": {
                       "type": "string"
                     },
+                    "MODELSLAB_API_KEY": {
+                      "type": "string"
+                    },
                     "NSCALE_SERVICE_TOKEN": {
                       "type": "string"
                     },
@@ -1654,6 +1666,12 @@
                       "type": "string"
                     },
                     "CODEX_API_KEY": {
+                      "type": "string"
+                    },
+                    "OPENCLAW_GATEWAY_TOKEN": {
+                      "type": "string"
+                    },
+                    "OPENCLAW_GATEWAY_URL": {
                       "type": "string"
                     },
                     "PALM_API_HOST": {
@@ -1838,7 +1856,8 @@
               "owasp:agentic",
               "eu:ai-act",
               "iso:42001",
-              "gdpr"
+              "gdpr",
+              "dod:ai:ethics"
             ]
           }
         },
@@ -1908,6 +1927,12 @@
                       "debug-access",
                       "default",
                       "divergent-repetition",
+                      "dod:ai:ethics",
+                      "dod:ai:ethics:01",
+                      "dod:ai:ethics:02",
+                      "dod:ai:ethics:03",
+                      "dod:ai:ethics:04",
+                      "dod:ai:ethics:05",
                       "donotanswer",
                       "ecommerce",
                       "ecommerce:compliance-bypass",
@@ -1941,6 +1966,7 @@
                       "financial:hallucination",
                       "financial:impartiality",
                       "financial:misconduct",
+                      "financial:sox-compliance",
                       "financial:sycophancy",
                       "foundation",
                       "gdpr",
@@ -2015,6 +2041,7 @@
                       "mitre:atlas:ml-attack-staging",
                       "mitre:atlas:reconnaissance",
                       "mitre:atlas:resource-development",
+                      "model-identification",
                       "nist:ai",
                       "nist:ai:measure",
                       "nist:ai:measure:1.1",
@@ -2171,6 +2198,12 @@
                           "debug-access",
                           "default",
                           "divergent-repetition",
+                          "dod:ai:ethics",
+                          "dod:ai:ethics:01",
+                          "dod:ai:ethics:02",
+                          "dod:ai:ethics:03",
+                          "dod:ai:ethics:04",
+                          "dod:ai:ethics:05",
                           "donotanswer",
                           "ecommerce",
                           "ecommerce:compliance-bypass",
@@ -2204,6 +2237,7 @@
                           "financial:hallucination",
                           "financial:impartiality",
                           "financial:misconduct",
+                          "financial:sox-compliance",
                           "financial:sycophancy",
                           "foundation",
                           "gdpr",
@@ -2278,6 +2312,7 @@
                           "mitre:atlas:ml-attack-staging",
                           "mitre:atlas:reconnaissance",
                           "mitre:atlas:resource-development",
+                          "model-identification",
                           "nist:ai",
                           "nist:ai:measure",
                           "nist:ai:measure:1.1",

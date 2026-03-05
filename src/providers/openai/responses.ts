@@ -71,6 +71,19 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // GPT-5.2 models
     'gpt-5.2',
     'gpt-5.2-2025-12-11',
+    'gpt-5.2-chat-latest',
+    'gpt-5.2-codex',
+    'gpt-5.2-pro',
+    'gpt-5.2-pro-2025-12-11',
+    // GPT-5.3 models
+    'gpt-5.3-chat-latest',
+    'gpt-5.3-codex',
+    'gpt-5.3-codex-spark',
+    // GPT-5.4 models
+    'gpt-5.4',
+    'gpt-5.4-2026-03-05',
+    'gpt-5.4-pro',
+    'gpt-5.4-pro-2026-03-05',
     // Audio models
     'gpt-audio',
     'gpt-audio-2025-08-28',
@@ -245,7 +258,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature !== undefined ? { temperature } : {}),
       ...(instructions ? { instructions } : {}),
-      ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
+      ...((!reasoningEffort || reasoningEffort === 'none') &&
+      (config.top_p !== undefined || getEnvString('OPENAI_TOP_P'))
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
       ...(loadedTools ? { tools: loadedTools } : {}),
@@ -318,9 +332,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
     }
 
-    // Calculate timeout for long-running models (deep research and gpt-5-pro)
+    // Calculate timeout for long-running models (deep research and GPT-5-pro variants)
     let timeout = REQUEST_TIMEOUT_MS;
-    const isLongRunningModel = isDeepResearchModel || this.modelName.includes('gpt-5-pro');
+    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(this.modelName);
+    const isLongRunningModel = isDeepResearchModel || isGpt5ProModel;
     if (isLongRunningModel) {
       const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
       timeout = evalTimeout > 0 ? evalTimeout : LONG_RUNNING_MODEL_TIMEOUT_MS;

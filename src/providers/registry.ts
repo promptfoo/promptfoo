@@ -133,6 +133,13 @@ interface ProviderFactory {
   ) => Promise<ApiProvider>;
 }
 
+function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | undefined {
+  const configuredModel = providerOptions.config?.model;
+  return typeof configuredModel === 'string' && configuredModel.trim().length > 0
+    ? configuredModel
+    : undefined;
+}
+
 export const providerMap: ProviderFactory[] = [
   createScriptBasedProviderFactory('exec', null, ScriptCompletionProvider),
   createScriptBasedProviderFactory('golang', 'go', GolangProvider),
@@ -198,6 +205,18 @@ export const providerMap: ProviderFactory[] = [
         config: providerOptions.config,
         env: context.env,
       });
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath.startsWith('openclaw:') || providerPath === 'openclaw',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createOpenClawProvider } = await import('./openclaw');
+      return createOpenClawProvider(providerPath, providerOptions, context.env);
     },
   },
   {
@@ -869,6 +888,7 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
+      const configuredModel = getConfiguredOpenAiModel(providerOptions);
 
       // Codex SDK providers (openai:codex-sdk or openai:codex)
       if (modelType === 'codex-sdk' || modelType === 'codex') {
@@ -879,30 +899,45 @@ export const providerMap: ProviderFactory[] = [
         });
       }
       if (modelType === 'chat') {
-        return new OpenAiChatCompletionProvider(modelName || 'gpt-4.1-2025-04-14', providerOptions);
+        return new OpenAiChatCompletionProvider(
+          modelName || configuredModel || 'gpt-4.1-2025-04-14',
+          providerOptions,
+        );
       }
       if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new OpenAiEmbeddingProvider(modelName || 'text-embedding-3-large', providerOptions);
+        return new OpenAiEmbeddingProvider(
+          modelName || configuredModel || 'text-embedding-3-large',
+          providerOptions,
+        );
       }
       if (modelType === 'completion') {
-        return new OpenAiCompletionProvider(modelName || 'gpt-3.5-turbo-instruct', providerOptions);
+        return new OpenAiCompletionProvider(
+          modelName || configuredModel || 'gpt-3.5-turbo-instruct',
+          providerOptions,
+        );
       }
       if (modelType === 'moderation') {
-        return new OpenAiModerationProvider(modelName || 'omni-moderation-latest', providerOptions);
+        return new OpenAiModerationProvider(
+          modelName || configuredModel || 'omni-moderation-latest',
+          providerOptions,
+        );
       }
       if (modelType === 'realtime') {
         return new OpenAiRealtimeProvider(
-          modelName || 'gpt-4o-realtime-preview-2024-12-17',
+          modelName || configuredModel || 'gpt-4o-realtime-preview-2024-12-17',
           providerOptions,
         );
       }
       if (modelType === 'responses') {
-        return new OpenAiResponsesProvider(modelName || 'gpt-4.1-2025-04-14', providerOptions);
+        return new OpenAiResponsesProvider(
+          modelName || configuredModel || 'gpt-4.1-2025-04-14',
+          providerOptions,
+        );
       }
       if (modelType === 'transcription') {
         const { OpenAiTranscriptionProvider } = await import('./openai/transcription');
         return new OpenAiTranscriptionProvider(
-          modelName || 'gpt-4o-transcribe-diarize',
+          modelName || configuredModel || 'gpt-4o-transcribe-diarize',
           providerOptions,
         );
       }
@@ -1021,6 +1056,33 @@ export const providerMap: ProviderFactory[] = [
       return new ReplicateProvider(
         modelName ? modelType + ':' + modelName : modelType,
         providerOptions,
+      );
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('modelslab:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { ModelsLabImageProvider } = await import('./modelslab');
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const modelName = splits.slice(2).join(':');
+      if (modelType === 'image') {
+        if (!modelName) {
+          throw new Error(
+            `Invalid modelslab provider path: ${providerPath}. Model name is required. Use: modelslab:image:<model_name>`,
+          );
+        }
+        return new ModelsLabImageProvider(modelName, {
+          ...providerOptions,
+          env: providerOptions.env ?? context.env,
+        });
+      }
+      throw new Error(
+        `Invalid modelslab provider path: ${providerPath}. Use: modelslab:image:<model_name>`,
       );
     },
   },

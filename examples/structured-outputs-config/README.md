@@ -57,7 +57,7 @@ Anthropic uses `output_format` at the provider level:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-4-6
     config:
       output_format:
         type: json_schema

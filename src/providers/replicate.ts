@@ -88,6 +88,14 @@ export class ReplicateProvider implements ApiProvider {
     return `[Replicate Provider ${this.modelName}]`;
   }
 
+  getApiKey(): string | undefined {
+    return this.apiKey;
+  }
+
+  requiresApiKey(): boolean {
+    return true;
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Set up tracing context
     const spanContext: GenAISpanContext = {

@@ -1,6 +1,6 @@
 # OpenAI Model Comparison
 
-This example compares OpenAI's latest flagship model with its smaller variant across various riddles and reasoning tasks.
+This example compares OpenAI's `gpt-5.4` with `gpt-5.3-chat-latest` across various riddles and reasoning tasks.
 
 You can run this example with:
 
@@ -52,9 +52,9 @@ npx promptfoo@latest init --example openai-model-comparison
 
 ## What this example demonstrates
 
-This example compares OpenAI's current flagship model with its smaller variant across various riddles and puzzles. It demonstrates:
+This example compares OpenAI's GPT-5.4 with GPT-5.3 chat alias across various riddles and puzzles. It demonstrates:
 
-- **Model comparison**: Side-by-side evaluation of flagship vs mini models
+- **Model comparison**: Side-by-side evaluation of `gpt-5.4` vs `gpt-5.3-chat-latest`
 - **Cost and latency assertions**: Ensuring responses meet performance thresholds
 - **Content validation**: Using `contains` assertions to verify specific answers
 - **LLM-based grading**: Using `llm-rubric` assertions for nuanced evaluation criteria

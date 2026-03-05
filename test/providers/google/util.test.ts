@@ -19,6 +19,7 @@ import {
   geminiFormatAndSystemInstructions,
   loadFile,
   maybeCoerceToGeminiFormat,
+  normalizeSafetySettings,
   normalizeTools,
   parseStringObject,
   resolveProjectId,
@@ -2593,6 +2594,18 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.00155, 10);
     });
 
+    it('should apply tiered pricing for gemini-3.1-pro-preview when above threshold', () => {
+      // gemini-3.1-pro-preview: base input=2.0/1M, output=12.0/1M
+      // tiered (>200k): input=4.0/1M, output=18.0/1M
+      const costBelowThreshold = calculateGoogleCost('gemini-3.1-pro-preview', {}, 100000, 50000);
+      // Expected (below 200k): (100000 * 2.0 + 50000 * 12.0) / 1M = 0.8
+      expect(costBelowThreshold).toBeCloseTo(0.8, 10);
+
+      const costAboveThreshold = calculateGoogleCost('gemini-3.1-pro-preview', {}, 250000, 50000);
+      // Expected (above 200k): (250000 * 4.0 + 50000 * 18.0) / 1M = 1.9
+      expect(costAboveThreshold).toBeCloseTo(1.9, 10);
+    });
+
     it('should apply tiered pricing for gemini-2.5-pro when above threshold', () => {
       // gemini-2.5-pro: base input=1.25/1M, output=10.0/1M
       // tiered (>200k): input=2.5/1M, output=15.0/1M
@@ -2696,6 +2709,54 @@ describe('util', () => {
       const aiStudioCost = calculateGoogleCost('gemini-2.5-flash', {}, 1000, 500);
       const vertexCost = calculateGoogleCost('gemini-2.5-flash', {}, 1000, 500, true);
       expect(vertexCost).toBeCloseTo(aiStudioCost!, 10);
+    });
+  });
+
+  describe('normalizeSafetySettings', () => {
+    it('should return undefined when given undefined', () => {
+      expect(normalizeSafetySettings(undefined)).toBeUndefined();
+    });
+
+    it('should pass through threshold field as-is', () => {
+      const result = normalizeSafetySettings([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+      ]);
+      expect(result).toEqual([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+      ]);
+    });
+
+    it('should map legacy probability field to threshold', () => {
+      const result = normalizeSafetySettings([
+        { category: 'HARM_CATEGORY_HARASSMENT', probability: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ]);
+      expect(result).toEqual([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ]);
+    });
+
+    it('should prefer threshold over probability when both are set', () => {
+      const result = normalizeSafetySettings([
+        {
+          category: 'HARM_CATEGORY_HARASSMENT',
+          threshold: 'BLOCK_ONLY_HIGH',
+          probability: 'BLOCK_MEDIUM_AND_ABOVE',
+        },
+      ]);
+      expect(result).toEqual([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+      ]);
+    });
+
+    it('should handle multiple safety settings', () => {
+      const result = normalizeSafetySettings([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', probability: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ]);
+      expect(result).toEqual([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ]);
     });
   });
 });

@@ -22,14 +22,14 @@ providers:
       temperature: 1
       max_tokens: 2048
       region: us-west-2
-  - id: bedrock:anthropic.claude-haiku-4-5-20251001-v1:0
+  - id: bedrock:us.anthropic.claude-haiku-4-5-20251001-v1:0
     label: Claude Haiku 4.5
     config:
       temperature: 1
       max_tokens: 2048
       region: us-west-2
-  - id: bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0
-    label: Claude Sonnet 4.5 with Thinking
+  - id: bedrock:us.anthropic.claude-sonnet-4-6
+    label: Claude Sonnet 4.6 with Thinking
     config:
       temperature: 1
       max_tokens: 2048
@@ -38,8 +38,8 @@ providers:
       thinking:
         type: enabled
         budget_tokens: 1024
-  - id: bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0
-    label: Claude 3.7 Sonnet
+  - id: bedrock:us.anthropic.claude-opus-4-6-v1
+    label: Claude Opus 4.6 (inference profile)
     config:
       temperature: 1
       max_tokens: 2048

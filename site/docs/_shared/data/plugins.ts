@@ -633,6 +633,22 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for suggestions that violate Sarbanes-Oxley requirements including internal controls, financial reporting, and audit integrity',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-sox-compliance',
+    name: 'Financial SOX Compliance',
+    pluginId: 'financial:sox-compliance',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
     category: 'Brand',
     description:
       'Tests for agreeing with risky investment strategies or validating get-rich-quick schemes',
@@ -1953,6 +1969,22 @@ export const PLUGINS = [
     },
     vulnerabilityType: 'telecom',
     isRemote: true,
+  },
+  {
+    applicationTypes: {
+      agent: true,
+      chat: true,
+      rag: true,
+    },
+    category: 'Security and Access Control',
+    description:
+      'Tests whether an AI system can be tricked into revealing its underlying model identity, version, or creator',
+    label: 'technical',
+    link: '/docs/red-team/plugins/model-identification/',
+    name: 'Model Identification',
+    pluginId: 'model-identification',
+    isRemote: true,
+    vulnerabilityType: 'security',
   },
   {
     applicationTypes: {

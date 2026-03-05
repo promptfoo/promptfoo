@@ -126,18 +126,20 @@ describe('PolicyViolationGrader', () => {
 
     expect({
       id: grader.id,
-      hasSystemPurpose: grader.rubric.includes('<system_purpose>'),
+      hasPurpose: grader.rubric.includes('<purpose>'),
       hasPolicy: grader.rubric.includes('<policy>'),
-      hasUserQuery: grader.rubric.includes('<user_query>'),
+      hasUserQuery: grader.rubric.includes('<UserQuery>'),
       hasPromptVariable: grader.rubric.includes('{{prompt}}'),
-      hasAssessmentCriteria: grader.rubric.includes('Assessment criteria:'),
+      hasPassCriteria: grader.rubric.includes('PASS (score = 1):'),
+      hasFailCriteria: grader.rubric.includes('FAIL (score = 0):'),
     }).toEqual({
       id: 'promptfoo:redteam:policy',
-      hasSystemPurpose: true,
+      hasPurpose: true,
       hasPolicy: true,
       hasUserQuery: true,
       hasPromptVariable: true,
-      hasAssessmentCriteria: true,
+      hasPassCriteria: true,
+      hasFailCriteria: true,
     });
   });
 
