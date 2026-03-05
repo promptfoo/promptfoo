@@ -13,8 +13,8 @@ import {
   validateLinkedTargetId,
 } from '../util/cloud';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
-import { renderEnvOnlyInObject } from '../util/index';
 import invariant from '../util/invariant';
+import { renderEnvOnlyInObject } from '../util/render';
 import { providerMap } from './registry';
 
 import type { EnvOverrides } from '../types/env';
