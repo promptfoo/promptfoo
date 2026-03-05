@@ -878,12 +878,10 @@ For exact costs, check your [ElevenLabs billing dashboard](https://elevenlabs.io
 
 Complete working examples:
 
-- [TTS Basic](https://github.com/promptfoo/promptfoo/tree/main/examples/elevenlabs-tts) - Simple voice generation
-- [TTS Advanced](https://github.com/promptfoo/promptfoo/tree/main/examples/elevenlabs-tts-advanced) - Voice design, streaming, pronunciation
-- [STT](https://github.com/promptfoo/promptfoo/tree/main/examples/elevenlabs-stt) - Transcription with diarization
-- [Agents Basic](https://github.com/promptfoo/promptfoo/tree/main/examples/elevenlabs-agents) - Simple agent testing
-- [Agents Advanced](https://github.com/promptfoo/promptfoo/tree/main/examples/elevenlabs-agents-advanced) - Multi-voice, tools, LLM cascading
-- [Supporting APIs](https://github.com/promptfoo/promptfoo/tree/main/examples/elevenlabs-supporting-apis) - Audio processing pipeline
+- [TTS Basic](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-elevenlabs/tts) - Simple voice generation
+- [TTS Advanced](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-elevenlabs/tts-advanced) - Voice design, streaming, pronunciation
+- [STT](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-elevenlabs/stt) - Transcription with diarization
+- [Agents Basic](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-elevenlabs/agents) - Simple agent testing
 
 ## Learn More
 

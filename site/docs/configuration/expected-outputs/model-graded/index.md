@@ -107,7 +107,7 @@ This produces German reasoning: `{"reason": "Die Antwort ist hilfreich und klar.
 
 For more language options and alternative approaches, see the [llm-rubric language guide](/docs/configuration/expected-outputs/model-graded/llm-rubric#non-english-evaluation).
 
-Here's an example output that indicates PASS/FAIL based on LLM assessment ([see example setup and outputs](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading)):
+Here's an example output that indicates PASS/FAIL based on LLM assessment ([see example setup and outputs](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-self-grading)):
 
 [![LLM prompt quality evaluation with PASS/FAIL expectations](https://user-images.githubusercontent.com/310310/236690475-b05205e8-483e-4a6d-bb84-41c2b06a1247.png)](https://user-images.githubusercontent.com/310310/236690475-b05205e8-483e-4a6d-bb84-41c2b06a1247.png)
 
@@ -292,7 +292,7 @@ defaultTest:
       ]
 ```
 
-See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples/custom-grading-prompt/promptfooconfig.yaml).
+See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples/eval-custom-grading-prompt/promptfooconfig.yaml).
 
 ### Image-based rubric prompts
 

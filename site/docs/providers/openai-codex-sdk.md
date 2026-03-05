@@ -651,7 +651,7 @@ Choose based on your use case:
 See the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk) for complete implementations:
 
 - [Basic usage](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/basic) - Simple code generation
-- [Agentic SDK comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/agentic-sdk-comparison) - Side-by-side comparison with Claude Agent SDK
+- [Agentic SDK comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-agentic-sdks) - Side-by-side comparison with Claude Agent SDK
 
 ## See Also
 

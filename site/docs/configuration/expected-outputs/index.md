@@ -283,7 +283,7 @@ type ScoringFunction = (
 };
 ```
 
-See the [custom assertion scoring example](https://github.com/promptfoo/promptfoo/tree/main/examples/assertion-scoring-override) for complete implementations in JavaScript and Python.
+See the [custom assertion scoring example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-assertion-scoring-override) for complete implementations in JavaScript and Python.
 
 ## Load assertions from external file
 
@@ -490,7 +490,7 @@ These metrics will be shown in the UI:
 
 ![llm eval metrics](/img/docs/named-metrics.png)
 
-See [named metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/named-metrics).
+See [named metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-named-metrics).
 
 ## Creating derived metrics
 
@@ -630,8 +630,8 @@ Derived metrics appear in all outputs alongside regular metrics - in the web UI 
 
 See also:
 
-- [Named metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/named-metrics) - Basic named metrics usage
-- [F-score example](https://github.com/promptfoo/promptfoo/tree/main/examples/f-score) - Complete F1 score implementation
+- [Named metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-named-metrics) - Basic named metrics usage
+- [F-score example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-f-score) - Complete F1 score implementation
 - [MathJS documentation](https://mathjs.org/docs/expressions/syntax.html) - Expression syntax reference
 
 ## Running assertions directly on outputs

@@ -62,12 +62,12 @@ HLE addresses benchmark saturation - the phenomenon where advanced models achiev
 Set up your HLE eval with these commands:
 
 ```bash
-npx promptfoo@latest init --example huggingface-hle
-cd huggingface-hle
+npx promptfoo@latest init --example huggingface/hle
+cd huggingface/hle
 npx promptfoo@latest eval
 ```
 
-See the complete example at [examples/huggingface-hle](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface-hle) for all configuration files and implementation details.
+See the complete example at [examples/huggingface/hle](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface/hle) for all configuration files and implementation details.
 
 Set these API keys before running:
 

@@ -211,7 +211,7 @@ We recommend running `npm run build:watch` in a separate terminal while you are 
 Alternatively, you can run the CLI directly:
 
 ```bash
-npm run local -- eval --config examples/cloudflare-ai/chat_config.yaml
+npm run local -- eval --config examples/provider-cloudflare/ai/chat_config.yaml
 ```
 
 When working on a new feature, we recommend setting up a local `promptfooconfig.yaml` that tests your feature. Think of this as an end-to-end test for your feature.

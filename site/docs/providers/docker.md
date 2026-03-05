@@ -20,10 +20,10 @@ docker model pull ai/llama3.2:3B-Q4_K_M
 3. Test your setup with working examples:
 
 ```bash
-npx promptfoo@latest eval -c https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/docker/promptfooconfig.comparison.simple.yaml
+npx promptfoo@latest eval -c https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-docker/basic/promptfooconfig.comparison.simple.yaml
 ```
 
-For an eval comparing several models with `llm-rubric` and `similar` assertions , see https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/docker/promptfooconfig.comparison.advanced.yaml.
+For an eval comparing several models with `llm-rubric` and `similar` assertions , see https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-docker/basic/promptfooconfig.comparison.advanced.yaml.
 
 ## Models
 

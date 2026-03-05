@@ -237,7 +237,7 @@ module.exports = async function (varName, prompt, otherVars, provider) {
 };
 ```
 
-See the [dynamic-var example](https://github.com/promptfoo/promptfoo/tree/main/examples/dynamic-var) for a complete working example.
+See the [dynamic-var example](https://github.com/promptfoo/promptfoo/tree/main/examples/config-dynamic-var) for a complete working example.
 
 ### Python variables
 
@@ -865,6 +865,6 @@ providers:
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 ```
 
-Here's a [full example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-sheets).
+Here's a [full example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-google-sheets).
 
 See [Google Sheets integration](/docs/integrations/google-sheets) for details on how to set up promptfoo to access a private spreadsheet.

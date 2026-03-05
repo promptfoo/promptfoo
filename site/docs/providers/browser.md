@@ -669,4 +669,4 @@ providers:
 
 ---
 
-For more examples, check out the [headless-browser example](https://github.com/promptfoo/promptfoo/tree/main/examples/headless-browser) in our GitHub repository.
+For more examples, check out the [headless-browser example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-browser/headless) in our GitHub repository.
