@@ -212,12 +212,7 @@ Alternatively, you can use `npm run local` to run your local build directly:
 npm run local -- eval --config examples/cloudflare-ai/chat_config.yaml
 ```
 
-**Important:** When using `npm run local`, always use `--` before flags so they're passed to promptfoo, not npm:
-
-```bash
-npm run local -- eval --no-cache --verbose  # Correct
-npm run local eval --no-cache               # Wrong - flags go to npm
-```
+**Important:** Always use `--` before flags so they're passed to promptfoo, not npm.
 
 When working on a new feature, we recommend setting up a local `promptfooconfig.yaml` that tests your feature. Think of this as an end-to-end test for your feature.
 
