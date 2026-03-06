@@ -186,6 +186,9 @@ vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => {
     getAuthor: vi.fn(),
     getUserEmail: vi.fn(),
     getUserId: vi.fn().mockReturnValue('test-id'),
+    // Avoid interactive prompts in tests.
+    promptForEmailUnverified: vi.fn().mockResolvedValue({ emailNeedsValidation: false }),
+    checkEmailStatusAndMaybeExit: vi.fn().mockResolvedValue('ok'),
   };
 });
 vi.mock('../../../src/providers', async (importOriginal) => {
