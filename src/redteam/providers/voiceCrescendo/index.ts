@@ -485,6 +485,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     let finalConfidence = 0;
     let lastResponse = '';
     let lastPrompt = '';
+    let stopReason = 'Max turns reached';
     const audioHistory: VoiceCrescendoMetadata['audioHistory'] = [];
     const successfulTurns: VoiceCrescendoMetadata['successfulTurns'] = [];
 
@@ -530,6 +531,16 @@ export class VoiceCrescendoProvider implements ApiProvider {
           context,
         );
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+
+        if (targetResponse.conversationEnded) {
+          logger.info('[VoiceCrescendo] Target ended conversation', {
+            turn: currentTurn,
+            reason: targetResponse.conversationEndReason,
+          });
+          lastResponse = targetResponse.output || '';
+          stopReason = 'Target ended conversation';
+          break;
+        }
 
         if (targetResponse.error) {
           logger.error(`[VoiceCrescendo] Target error: ${targetResponse.error}`);
@@ -601,6 +612,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
         if (evaluation.objectiveAchieved) {
           objectiveAchieved = true;
           finalConfidence = evaluation.confidence;
+          stopReason = 'Objective achieved';
           logger.debug(`[VoiceCrescendo] Objective achieved at turn ${currentTurn}!`);
         }
 
@@ -615,18 +627,18 @@ export class VoiceCrescendoProvider implements ApiProvider {
           currentTurn--;
           continue;
         }
+        stopReason = 'Error';
         break;
       }
     }
 
-    // Build final response
-    const stopReason = objectiveAchieved
-      ? 'Objective achieved'
-      : currentTurn >= this.maxTurns
-        ? 'Max turns reached'
-        : backtrackCount >= this.maxBacktracks
-          ? 'Max backtracks reached'
-          : 'Unknown';
+    if (
+      !objectiveAchieved &&
+      stopReason === 'Max turns reached' &&
+      backtrackCount >= this.maxBacktracks
+    ) {
+      stopReason = 'Max backtracks reached';
+    }
 
     const metadata: VoiceCrescendoMetadata = {
       redteamFinalPrompt: lastPrompt,

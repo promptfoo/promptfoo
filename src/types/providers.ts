@@ -186,6 +186,16 @@ export interface ProviderResponse {
   providerTransformedOutput?: string | any;
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
+  /**
+   * Indicates the target intentionally ended the active conversation/session.
+   * Multi-turn redteam strategies can use this to stop probing gracefully.
+   */
+  conversationEnded?: boolean;
+  /**
+   * Optional machine-readable reason explaining why the conversation ended.
+   * Example: `thread_closed`.
+   */
+  conversationEndReason?: string;
   sessionId?: string;
   guardrails?: GuardrailResponse;
   finishReason?: string;
