@@ -1,14 +1,13 @@
 import React, { useEffect } from 'react';
 
-import { useConsentGate } from '../hooks/useConsentGate';
 import styles from './NewsletterForm.module.css';
+import ThirdPartyContentGate from './ThirdPartyContentGate';
 
 const NewsletterForm: React.FC = () => {
   const containerRef = React.useRef<HTMLDivElement>(null);
-  const marketingAllowed = useConsentGate('marketing');
 
   useEffect(() => {
-    if (!marketingAllowed || !containerRef.current) {
+    if (!containerRef.current) {
       return;
     }
 
@@ -23,12 +22,18 @@ const NewsletterForm: React.FC = () => {
         containerRef.current.removeChild(script);
       }
     };
-  }, [marketingAllowed]);
+  }, []);
 
   return (
-    <div className={styles.container} ref={containerRef}>
-      {/* The form will be injected here by the external script */}
-    </div>
+    <ThirdPartyContentGate
+      className={styles.container}
+      description="Load the hosted newsletter signup form when you are ready to subscribe."
+      loadLabel="Load newsletter signup"
+      serviceName="EmailOctopus"
+      title="Newsletter Signup"
+    >
+      <div ref={containerRef}>{/* The form will be injected here by the external script */}</div>
+    </ThirdPartyContentGate>
   );
 };
 

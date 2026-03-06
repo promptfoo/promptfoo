@@ -280,9 +280,9 @@
     var consent = parseConsent(getCookie(COOKIE));
     var region = getRegion();
 
-    // Default toggles to ON — "Reject All" is one click away for opt-out
-    var analyticsDefault = 1;
-    var marketingDefault = 1;
+    // Opt-in regions must start from an unselected state.
+    var analyticsDefault = region === 'opt_in' ? 0 : 1;
+    var marketingDefault = region === 'opt_in' ? 0 : 1;
     // GPC: marketing defaults OFF
     if (navigator.globalPrivacyControl) {
       marketingDefault = 0;
@@ -455,6 +455,7 @@
 
   function init() {
     var region = getRegion();
+    window.__pf_privacy_region = region;
     var consent = migrateIfNeeded();
 
     if (region === 'opt_in') {

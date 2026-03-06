@@ -81,6 +81,7 @@ Examples of allowed framework IDs:
 - `eu:ai-act`
 - `iso:42001`
 - `gdpr`
+- `dod:ai:ethics`
 
 ```yaml
 redteam:

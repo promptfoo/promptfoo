@@ -39,6 +39,7 @@ function resetGlobals() {
   (window as any).__pf_marketing_loaded = false;
   (window as any).__pf_gtag_loaded = false;
   (window as any).__pf_manage_cookies = undefined;
+  (window as any).__pf_privacy_region = undefined;
 }
 
 describe('consent.js', () => {
@@ -217,8 +218,9 @@ describe('consent.js', () => {
       runConsent();
       document.getElementById('cc-manage')!.click();
 
-      // Both default to on; turn marketing off for analytics-only
+      const analyticsToggle = document.getElementById('cc-analytics') as HTMLInputElement;
       const marketingToggle = document.getElementById('cc-marketing') as HTMLInputElement;
+      analyticsToggle.checked = true;
       marketingToggle.checked = false;
 
       document.getElementById('cc-save')!.click();
@@ -332,6 +334,17 @@ describe('consent.js', () => {
       const a = document.getElementById('cc-analytics') as HTMLInputElement;
       const m = document.getElementById('cc-marketing') as HTMLInputElement;
       expect(a.checked).toBe(true);
+      expect(m.checked).toBe(false);
+    });
+
+    it('starts with toggles off in opt-in regions before consent', () => {
+      setCookie('pf_country', 'DE');
+      runConsent();
+      document.getElementById('cc-manage')!.click();
+
+      const a = document.getElementById('cc-analytics') as HTMLInputElement;
+      const m = document.getElementById('cc-marketing') as HTMLInputElement;
+      expect(a.checked).toBe(false);
       expect(m.checked).toBe(false);
     });
 
@@ -868,30 +881,15 @@ describe('consent.js', () => {
     });
   });
 
-  // ── Consent gating of third-party embeds ──
+  // ── Third-party marketing form gating ──
 
-  describe('third-party embeds use consent gates', () => {
-    const gatedComponents = [
-      { file: '../../src/components/NewsletterForm.tsx', name: 'NewsletterForm.tsx' },
-      { file: '../../src/pages/feedback.tsx', name: 'feedback.tsx' },
-    ];
-
-    it.each(gatedComponents)('$name imports useConsentGate', ({ file }) => {
-      const source = fs.readFileSync(path.resolve(__dirname, file), 'utf-8');
-      expect(source).toContain('useConsentGate');
-    });
-
-    // Ashby job board and Scalar API docs are functional content, not tracking —
-    // they should load without requiring consent
-    const ungatedComponents = [
-      { file: '../../src/pages/careers.tsx', name: 'careers.tsx' },
-      { file: '../../src/pages/docs/api-reference.tsx', name: 'api-reference.tsx' },
-    ];
-
-    it.each(ungatedComponents)('$name does NOT require consent (functional content)', ({
-      file,
-    }) => {
-      const source = fs.readFileSync(path.resolve(__dirname, file), 'utf-8');
+  describe('newsletter form loading', () => {
+    it('uses the dedicated third-party gate instead of analytics or marketing consent hooks', () => {
+      const source = fs.readFileSync(
+        path.resolve(__dirname, '../../src/components/NewsletterForm.tsx'),
+        'utf-8',
+      );
+      expect(source).toContain('ThirdPartyContentGate');
       expect(source).not.toContain('useConsentGate');
     });
   });
@@ -921,9 +919,4 @@ describe('consent.js', () => {
       expect((window as any).__pf_marketing_loaded).toBe(false);
     });
   });
-
-  // ── Blog iframes note ──
-  // site/blog/hacker-summer-camp.md embeds cal.com and lu.ma iframes directly
-  // in markdown. These are scheduling/event embeds and cannot be consent-gated
-  // without a custom MDX component. They are functional content, not tracking.
 });

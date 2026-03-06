@@ -223,7 +223,7 @@ The prompt inserts the previous conversation into the test case, creating a full
 
 ![multiple turn conversation eval](https://github.com/promptfoo/promptfoo/assets/310310/70048ae5-34ce-46f0-bd28-42d3aa96f03e)
 
-Try it yourself by using the [full example config](https://github.com/promptfoo/promptfoo/tree/main/examples/multiple-turn-conversation).
+Try it yourself by using the [full example config](https://github.com/promptfoo/promptfoo/tree/main/examples/config-multi-turn).
 
 :::info
 When the `_conversation` variable is present, the eval will run single-threaded (concurrency of 1).
@@ -361,4 +361,4 @@ Transforms can be Javascript snippets or they can be entire separate Python or J
 - [Test Configuration](/docs/configuration/guide) - Complete guide to setting up test configurations
 - [Transformer Functions](/docs/configuration/guide/#transforming-outputs) - How to transform outputs between test cases
 - [Nunjucks Templates](https://mozilla.github.io/nunjucks/templating.html) - Documentation for the template language used in prompt files
-- [Multi-turn Conversation Example](https://github.com/promptfoo/promptfoo/tree/main/examples/multiple-turn-conversation) - Complete example of multi-turn conversations
+- [Multi-turn Conversation Example](https://github.com/promptfoo/promptfoo/tree/main/examples/config-multi-turn) - Complete example of multi-turn conversations

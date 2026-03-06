@@ -22,12 +22,12 @@ Standard LLM evals test a function: given input X, does output Y meet criteria Z
 
 ## Capability tiers
 
-| Tier           | Example                                                  | Can Do                                       | Cannot Do                |
-| -------------- | -------------------------------------------------------- | -------------------------------------------- | ------------------------ |
-| **0: Text**    | `openai:gpt-5.1`, `anthropic:claude-sonnet-4-5-20250929` | Generate code, discuss patterns, return JSON | Read files, execute code |
-| **1: Agentic** | `openai:codex-sdk`, `anthropic:claude-agent-sdk`         | Read/write files, run commands, iterate      | (Full capabilities)      |
+| Tier           | Example                                          | Can Do                                       | Cannot Do                |
+| -------------- | ------------------------------------------------ | -------------------------------------------- | ------------------------ |
+| **0: Text**    | `openai:gpt-5.1`, `anthropic:claude-sonnet-4-6`  | Generate code, discuss patterns, return JSON | Read files, execute code |
+| **1: Agentic** | `openai:codex-sdk`, `anthropic:claude-agent-sdk` | Read/write files, run commands, iterate      | -                        |
 
-The same underlying model behaves differently at each tier. A plain `claude-sonnet-4-5-20250929` call can't read your files; wrap it in Claude Agent SDK and it can.
+The same underlying model behaves differently at each tier. A plain `claude-sonnet-4-6` call can't read your files; wrap it in Claude Agent SDK and it can.
 
 Both agentic providers have similar capabilities. The differences are in defaults and ecosystem:
 
@@ -137,7 +137,7 @@ prompts:
 providers:
   - id: anthropic:claude-agent-sdk
     config:
-      model: claude-sonnet-4-5-20250929
+      model: claude-sonnet-4-6
       working_dir: ./user-service
       append_allowed_tools: ['Write', 'Edit', 'MultiEdit', 'Bash']
       permission_mode: acceptEdits
@@ -183,7 +183,7 @@ prompts:
 providers:
   - id: anthropic:claude-agent-sdk
     config:
-      model: claude-sonnet-4-5-20250929
+      model: claude-sonnet-4-6
       working_dir: ./flask-api
       append_allowed_tools: ['Write', 'Edit', 'MultiEdit']
       permission_mode: acceptEdits
@@ -295,6 +295,6 @@ See [Sandboxed code evals](/docs/guides/sandboxed-code-evals) for container-base
 
 - [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk)
 - [Claude Agent SDK provider](/docs/providers/claude-agent-sdk)
-- [Agentic SDK comparison example](https://github.com/promptfoo/promptfoo/tree/main/examples/agentic-sdk-comparison)
+- [Agentic SDK comparison example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-agentic-sdks)
 - [Sandboxed code evals](/docs/guides/sandboxed-code-evals)
 - [Tracing](/docs/tracing/)

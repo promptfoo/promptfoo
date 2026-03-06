@@ -1,5 +1,5 @@
 ---
-title: Getting Started
+title: Getting started
 description: Learn how to set up your first promptfoo config file, create prompts, configure providers, and run your first LLM evaluation.
 keywords: [getting started, setup, configuration, prompts, providers, evaluation, llm testing]
 sidebar_position: 5
@@ -122,6 +122,7 @@ This opens a browser-based setup flow that walks you through creating prompts, c
 <div style={{ textAlign: 'center' }}>   
   <img src="/img/docs/eval-setup.png" alt="Promptfoo eval setup Web UI" style={{ width: '80%' }} />
 </div>
+
 ## Configuration
 
 To configure your evaluation:
@@ -233,24 +234,24 @@ See the [Configuration docs](/docs/configuration/guide) for a detailed guide.
 
 ### Prompt quality
 
-In [this example](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading), we evaluate whether adding adjectives to the personality of an assistant bot affects the responses.
+In [this example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-self-grading), we evaluate whether adding adjectives to the personality of an assistant bot affects the responses.
 
 You can quickly set up this example by running:
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
     ```bash
-    npx promptfoo@latest init --example self-grading
+    npx promptfoo@latest init --example eval-self-grading
     ```
   </TabItem>
   <TabItem value="npm" label="npm">
     ```bash
-    promptfoo init --example self-grading
+    promptfoo init --example eval-self-grading
     ```
   </TabItem>
   <TabItem value="brew" label="brew">
     ```bash
-    promptfoo init --example self-grading
+    promptfoo init --example eval-self-grading
     ```
   </TabItem>
 </Tabs>
@@ -319,24 +320,24 @@ You can also output a [spreadsheet](https://docs.google.com/spreadsheets/d/1nano
 
 ### Model quality
 
-In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-model-comparison), we evaluate the difference between GPT-5 and GPT-5.2 outputs for a given prompt:
+In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-openai-models), we evaluate the difference between GPT-5 and GPT-5.2 outputs for a given prompt:
 
 You can quickly set up this example by running:
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
     ```bash
-    npx promptfoo@latest init --example openai-model-comparison
+    npx promptfoo@latest init --example compare-openai-models
     ```
   </TabItem>
   <TabItem value="npm" label="npm">
     ```bash
-    promptfoo init --example openai-model-comparison
+    promptfoo init --example compare-openai-models
     ```
   </TabItem>
   <TabItem value="brew" label="brew">
     ```bash
-    promptfoo init --example openai-model-comparison
+    promptfoo init --example compare-openai-models
     ```
   </TabItem>
 </Tabs>
@@ -456,13 +457,26 @@ It produces the following table, with Gemini models replacing the GPT models in 
 
 A similar approach can be used to run other model comparisons. For example, you can:
 
-- Compare models with different temperatures (see [GPT temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-temperature-comparison))
-- Compare Llama vs. GPT (see [Llama vs GPT benchmark](/docs/guides/compare-llama2-vs-gpt))
+- Compare models with different temperatures (see [GPT temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-gpt-temperature))
+- Compare open-source models (see [Comparing Open-Source Models](/docs/guides/compare-open-source-models))
 - Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT-4 (see [LangChain example](/docs/configuration/testing-llm-chains))
 
 ## Next steps
 
-[&raquo; Configuration guide](/docs/configuration/guide) for detailed setup instructions  
-[&raquo; Providers documentation](/docs/providers) for all supported AI models and services  
-[&raquo; Assertions & Metrics](/docs/configuration/expected-outputs) for automatically grading outputs on a pass/fail basis  
-[&raquo; More examples](https://github.com/promptfoo/promptfoo/tree/main/examples) in our GitHub repository
+Now that you've run your first eval, here are some ways to go deeper:
+
+**Customize your setup:**
+
+- [Configuration guide](/docs/configuration/guide) - Detailed walkthrough of all config options
+- [Providers documentation](/docs/providers) - All 60+ supported AI models and services
+- [Assertions & Metrics](/docs/configuration/expected-outputs) - Automatically grade outputs on a pass/fail basis
+
+**Explore use cases:**
+
+- [RAG evaluation](/docs/guides/evaluate-rag) - Test retrieval-augmented generation pipelines
+- [Red teaming quickstart](/docs/red-team/quickstart) - Scan your LLM app for security vulnerabilities
+- [CI/CD integration](/docs/integrations/github-action) - Run evals automatically on every PR
+
+**Learn from examples:**
+
+- [More examples](https://github.com/promptfoo/promptfoo/tree/main/examples) in our GitHub repository

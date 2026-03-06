@@ -1,10 +1,9 @@
-import type { Agent } from 'http';
-
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvInt, getEnvString } from '../../envars';
+import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { AwsBedrockGenericProvider } from './base';
+import { createBedrockRequestHandler, hasProxyEnv } from './util';
 import type {
   BedrockAgentRuntimeClient,
   InferenceConfig,
@@ -226,22 +225,9 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
    */
   async getAgentRuntimeClient(): Promise<BedrockAgentRuntimeClient> {
     if (!this.agentRuntimeClient) {
-      let handler;
-
-      // Configure proxy if needed
-      if (getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY')) {
-        try {
-          const { NodeHttpHandler } = await import('@smithy/node-http-handler');
-          const { ProxyAgent } = await import('proxy-agent');
-          handler = new NodeHttpHandler({
-            httpsAgent: new ProxyAgent() as unknown as Agent,
-          });
-        } catch {
-          throw new Error(
-            'The @smithy/node-http-handler package is required for proxy support. Please install it.',
-          );
-        }
-      }
+      // client-bedrock-agent-runtime already defaults to HTTP/1.1, so we only
+      // need a custom handler for proxy support.
+      const handler = hasProxyEnv() ? await createBedrockRequestHandler() : undefined;
 
       try {
         const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
@@ -251,8 +237,8 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
           region: this.getRegion(),
           maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
-          ...(credentials ? { credentials } : {}),
           ...(handler ? { requestHandler: handler } : {}),
+          ...(credentials ? { credentials } : {}),
         });
       } catch (err) {
         logger.error(`Error creating BedrockAgentRuntimeClient: ${err}`);

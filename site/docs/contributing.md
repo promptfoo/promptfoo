@@ -189,7 +189,7 @@ To build the project:
 npm run build
 ```
 
-For continuous building of the api during development:
+For continuous building of the API during development:
 
 ```bash
 npm run build:watch
@@ -199,20 +199,20 @@ npm run build:watch
 
 ### Running the CLI During Development
 
-We recommend using `npm link` to link your local `promptfoo` package to the global `promptfoo` package:
+We recommend using `npm link` to link your local `promptfoo` package to the global `promptfoo` command:
 
 ```bash
 npm link
-promptfoo --help
+promptfoo eval --config examples/provider-cloudflare/ai/chat_config.yaml
 ```
 
-We recommend running `npm run build:watch` in a separate terminal while you are working on the CLI. This will automatically build the CLI when you make changes.
-
-Alternatively, you can run the CLI directly:
+Alternatively, you can use `npm run local` to run your local build directly:
 
 ```bash
-npm run local -- eval --config examples/cloudflare-ai/chat_config.yaml
+npm run local -- eval --config examples/provider-cloudflare/ai/chat_config.yaml
 ```
+
+**Important:** Always use `--` before flags so they're passed to promptfoo, not npm.
 
 When working on a new feature, we recommend setting up a local `promptfooconfig.yaml` that tests your feature. Think of this as an end-to-end test for your feature.
 
@@ -344,11 +344,12 @@ This will host the web UI at http://localhost:3000. This allows you to hack on t
 npm run dev:app
 ```
 
-To test the entire thing end-to-end, we recommend building the entire project and linking it to promptfoo:
+To test the entire thing end-to-end, build the project and run it:
 
 ```bash
 npm run build
 promptfoo view
+# Or: npm run dev
 ```
 
 :::note

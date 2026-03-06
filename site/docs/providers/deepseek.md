@@ -109,7 +109,7 @@ Thinking: <reasoning content>
 
 When set to `false`, only the final answer is included in the output. This is useful when you want better reasoning quality but don't want to expose the reasoning process to end users or in your assertions.
 
-See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/deepseek-r1-vs-openai-o1) that benchmarks it against OpenAI's o1 model on the MMLU reasoning tasks.
+See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-deepseek-r1-vs-openai-o1) that benchmarks it against OpenAI's o1 model on the MMLU reasoning tasks.
 
 ## API Details
 
@@ -120,4 +120,4 @@ See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/exam
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai/) - Compatible configuration options
-- [Complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/deepseek-r1-vs-openai-o1) - Benchmark against OpenAI's o1 model
+- [Complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-deepseek-r1-vs-openai-o1) - Benchmark against OpenAI's o1 model

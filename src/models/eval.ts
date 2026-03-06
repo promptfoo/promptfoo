@@ -38,6 +38,7 @@ import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
+import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -520,6 +521,7 @@ export default class Eval {
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
           prompts: opts?.completedPrompts || [],
+          isRedteam: Boolean(config.redteam),
         })
         .run();
 
@@ -772,6 +774,61 @@ export default class Eval {
    */
   async getTotalResultRowCount(): Promise<number> {
     return getTotalResultRowCount(this.id);
+  }
+
+  /**
+   * Find a non-transient HTTP error status from evaluation results.
+   * Returns the first non-transient status (401, 403, 404, 500, 501) found, or undefined.
+   *
+   * For persisted evals: Uses efficient O(1) database query with LIMIT 1.
+   * For non-persisted evals: Falls back to scanning in-memory results.
+   */
+  async findTargetErrorStatus(): Promise<number | undefined> {
+    // Helper to scan in-memory results
+    const scanInMemory = (): number | undefined => {
+      for (const result of this.results) {
+        const status = result.response?.metadata?.http?.status;
+        if (typeof status === 'number' && isNonTransientHttpStatus(status)) {
+          return status;
+        }
+      }
+      return undefined;
+    };
+
+    // For non-persisted evals, scan in-memory results
+    if (!this.persisted) {
+      return scanInMemory();
+    }
+
+    // For persisted evals, use efficient database query
+    try {
+      const db = getDb();
+
+      // Query for any result with a non-transient HTTP status
+      // Uses json_extract to access nested metadata.http.status field
+      const result = db
+        .select({
+          httpStatus: sql<number>`CAST(json_extract(${evalResultsTable.response}, '$.metadata.http.status') AS INTEGER)`,
+        })
+        .from(evalResultsTable)
+        .where(
+          and(
+            eq(evalResultsTable.evalId, this.id),
+            sql`json_extract(${evalResultsTable.response}, '$.metadata.http.status') IN (${sql.join(
+              NON_TRANSIENT_HTTP_STATUSES.map((s) => sql`${s}`),
+              sql`, `,
+            )})`,
+          ),
+        )
+        .limit(1)
+        .get();
+
+      return result?.httpStatus ?? undefined;
+    } catch {
+      // Fall back to in-memory scan if database query fails
+      // This handles edge cases like mocked databases in tests
+      return scanInMemory();
+    }
   }
 
   async fetchResultsByTestIdx(testIdx: number) {

@@ -1,18 +1,14 @@
 import React from 'react';
 
 import { useColorMode } from '@docusaurus/theme-common';
-import useIsBrowser from '@docusaurus/useIsBrowser';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import Layout from '@theme/Layout';
-import { useConsentGate } from '../hooks/useConsentGate';
 
 const FeedbackPageContent = () => {
-  const isBrowser = useIsBrowser();
   const { colorMode } = useColorMode();
-  const analyticsAllowed = useConsentGate('analytics');
 
   const theme = React.useMemo(
     () =>
@@ -62,23 +58,16 @@ const FeedbackPageContent = () => {
             mb: 4,
           }}
         >
-          {analyticsAllowed ? (
-            <iframe
-              src="https://docs.google.com/forms/d/e/1FAIpQLScAnqlqX-ep-aOn6umjXXDVafc1sLTOEd5W6rMAPKllLk0CIA/viewform?embedded=1"
-              title="PromptFoo Feedback Form"
-              sandbox="allow-scripts allow-forms allow-same-origin"
-              style={iframeStyle}
-              loading="lazy"
-              scrolling="no"
-            >
-              Loading…
-            </iframe>
-          ) : (
-            <Typography color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
-              Please accept analytics cookies to load the feedback form.{' '}
-              <a href="#manage-cookies">Manage cookie preferences</a>
-            </Typography>
-          )}
+          <iframe
+            src="https://docs.google.com/forms/d/e/1FAIpQLScAnqlqX-ep-aOn6umjXXDVafc1sLTOEd5W6rMAPKllLk0CIA/viewform?embedded=1"
+            title="PromptFoo Feedback Form"
+            sandbox="allow-scripts allow-forms allow-same-origin"
+            style={iframeStyle}
+            loading="lazy"
+            scrolling="no"
+          >
+            Loading…
+          </iframe>
         </Box>
       </Container>
     </ThemeProvider>
