@@ -271,7 +271,7 @@ describe('VLGuardPlugin', () => {
       expect(tests[0].metadata?.category).toBe('Deception'); // Normalized to title case
     });
 
-    it('should throw error when no records are found', async () => {
+    it('should return empty array when no records are found', async () => {
       mockFetchWithCache.mockImplementation(async function (url: any) {
         if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 200, data: [], cached: false } as any;
@@ -284,10 +284,12 @@ describe('VLGuardPlugin', () => {
 
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', { split: 'train' });
 
-      await expect(plugin.generateTests(5)).rejects.toThrow('Failed to generate tests');
+      // Should return empty array instead of throwing (graceful degradation)
+      const result = await plugin.generateTests(5);
+      expect(result).toEqual([]);
     });
 
-    it('should throw error when metadata fetch fails', async () => {
+    it('should return empty array when metadata fetch fails', async () => {
       mockFetchWithCache.mockImplementation(async function (url: any) {
         if (url.includes('.json') && url.includes('VLGuard')) {
           return { status: 401, statusText: 'Unauthorized', data: null, cached: false } as any;
@@ -297,7 +299,60 @@ describe('VLGuardPlugin', () => {
 
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', { split: 'train' });
 
-      await expect(plugin.generateTests(5)).rejects.toThrow('Failed to generate tests');
+      // Should return empty array instead of throwing (graceful degradation)
+      const result = await plugin.generateTests(5);
+      expect(result).toEqual([]);
+    });
+
+    it('should show helpful error message for gated dataset 401/403 errors', async () => {
+      mockFetchWithCache.mockImplementation(async function (url: any) {
+        if (url.includes('.json') && url.includes('VLGuard')) {
+          return { status: 401, statusText: 'Unauthorized', data: null, cached: false } as any;
+        }
+        return { status: 404, data: null, cached: false } as any;
+      });
+
+      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', { split: 'train' });
+      await plugin.generateTests(5);
+
+      // Should log warning with helpful message about gated dataset access (using warn consistently)
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('VLGuard dataset requires access approval'),
+      );
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('https://huggingface.co/datasets/ys-zong/VLGuard'),
+      );
+    });
+
+    it('should show helpful error message for gated dataset 403 errors on image fetch', async () => {
+      const mockMetadata = createMockMetadata([
+        {
+          id: 'test_1',
+          image: 'bad_ads/test1.png',
+          safe: false,
+          harmful_category: 'deception',
+          harmful_subcategory: 'disinformation',
+          'instr-resp': [{ instruction: 'test question 1' }],
+        },
+      ]);
+
+      mockFetchWithCache.mockImplementation(async function (url: any) {
+        if (url.includes('.json') && url.includes('VLGuard')) {
+          return { status: 200, data: mockMetadata, cached: false } as any;
+        }
+        if (url.includes('datasets-server')) {
+          return { status: 403, statusText: 'Forbidden', data: null, cached: false } as any;
+        }
+        return { status: 404, data: null, cached: false } as any;
+      });
+
+      const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', { split: 'train' });
+      await plugin.generateTests(5);
+
+      // Should log warning with helpful message about gated dataset access
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('VLGuard dataset requires access approval'),
+      );
     });
 
     it('should warn when fewer records are available than requested', async () => {
