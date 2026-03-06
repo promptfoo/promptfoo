@@ -1,4 +1,4 @@
-# config-csv-metadata (# CSV Metadata Example)
+# config-csv-metadata (CSV Metadata Example)
 
 You can run this example with:
 

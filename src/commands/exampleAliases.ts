@@ -2,6 +2,7 @@
 // This ensures `npx promptfoo init --example <old-name>` still works.
 export const EXAMPLE_ALIASES: Record<string, string> = {
   'agentic-sdk-comparison': 'compare-agentic-sdks',
+  'amazon-bedrock': 'amazon-bedrock/models',
   'amazon-sagemaker': 'provider-amazon-sagemaker',
   'assertion-scoring-override': 'eval-assertion-scoring-override',
   'assertions-generate': 'eval-assertions-generate',
@@ -58,6 +59,7 @@ export const EXAMPLE_ALIASES: Record<string, string> = {
   'google-sheets': 'integration-google-sheets',
   'gpt-4o-temperature-comparison': 'compare-gpt-temperature',
   'gpt-4o-vs-4o-mini': 'compare-gpt-4o-vs-4o-mini',
+  'gpt-vs-claude-vs-gemini': 'compare-gpt-vs-claude-vs-gemini',
   'grok-4-political-bias': 'redteam-grok-4-political-bias',
   groq: 'provider-groq',
   harmbench: 'redteam-harmbench',
@@ -110,7 +112,10 @@ export const EXAMPLE_ALIASES: Record<string, string> = {
   'openai-gpt-5-vs-gpt-5-mini-mmlu': 'compare-gpt-5-vs-gpt-5-mini-mmlu',
   'openai-model-comparison': 'compare-openai-models',
   openclaw: 'provider-openclaw',
-  'opencode-sdk': 'provider-opencode-sdk',
+  'opencode-sdk': 'provider-opencode-sdk/basic',
+  'opencode-sdk/basic': 'provider-opencode-sdk/basic',
+  'open-source-comparison': 'compare-open-source-models',
+  'provider-opencode-sdk': 'provider-opencode-sdk/basic',
   'opentelemetry-tracing': 'integration-opentelemetry/javascript',
   'opentelemetry-tracing-python': 'integration-opentelemetry/python',
   'otel-tracing': 'integration-opentelemetry/built-in',
@@ -168,6 +173,7 @@ export const EXAMPLE_ALIASES: Record<string, string> = {
   'websockets-streaming': 'config-websockets/streaming',
   'xai-video': 'xai/video',
   'xai-voice': 'xai/voice',
+  xai: 'xai/chat',
   xstest: 'redteam-xstest',
 };
 

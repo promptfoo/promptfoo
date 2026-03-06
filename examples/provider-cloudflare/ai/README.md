@@ -90,4 +90,4 @@ npm run local -- eval -c examples/provider-cloudflare/ai/chat_config.yaml
 - [Cloudflare Workers AI Models](https://developers.cloudflare.com/workers-ai/models/) - Complete model catalog
 - [Cloudflare Workers AI Documentation](https://developers.cloudflare.com/workers-ai/) - Platform overview
 - [OpenAI Compatibility](https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility/) - API details
-- [promptfoo Cloudflare AI Provider](../../site/docs/providers/cloudflare-ai.md) - Provider documentation
+- [promptfoo Cloudflare AI Provider](../../../site/docs/providers/cloudflare-ai.md) - Provider documentation

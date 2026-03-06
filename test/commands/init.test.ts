@@ -299,6 +299,21 @@ describe('init command', () => {
         expect(result).toEqual('provider-custom/basic');
       });
 
+      it('should map legacy root slugs to runnable subdirectory examples', async () => {
+        mockFetchWithProxy.mockRejectedValue(new Error('404 Not Found'));
+        vi.mocked(confirm).mockResolvedValue(false);
+
+        const amazonBedrockResult = await init.handleExampleDownload('.', 'amazon-bedrock');
+        const xaiResult = await init.handleExampleDownload('.', 'xai');
+        const openSourceResult = await init.handleExampleDownload('.', 'open-source-comparison');
+        const opencodeResult = await init.handleExampleDownload('.', 'opencode-sdk');
+
+        expect(amazonBedrockResult).toEqual('amazon-bedrock/models');
+        expect(xaiResult).toEqual('xai/chat');
+        expect(openSourceResult).toEqual('compare-open-source-models');
+        expect(opencodeResult).toEqual('provider-opencode-sdk/basic');
+      });
+
       it('should use legacy ref for removed examples', async () => {
         const mockFailure = createMockResponse({
           ok: false,
@@ -363,6 +378,56 @@ describe('init command', () => {
         );
         expect(mockFetchWithProxy.mock.calls[3][0]).toContain(
           '/contents/examples/provider-http/basic?ref=main',
+        );
+      });
+
+      it('should provide docs URL when selected subdirectory example has no local readme', async () => {
+        const mockTreeResponse = createMockResponse({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              tree: [
+                { path: 'examples/provider-opencode-sdk/basic/promptfooconfig.yaml', type: 'blob' },
+              ],
+            }),
+        });
+        const mockDirectoryResponse = createMockResponse({
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                download_url: 'https://example.com/promptfooconfig.yaml',
+                name: 'promptfooconfig.yaml',
+                type: 'file',
+              },
+            ]),
+        });
+        const mockFileResponse = createMockResponse({
+          ok: true,
+          text: () => Promise.resolve('description: test'),
+        });
+
+        mockFetchWithProxy
+          .mockResolvedValueOnce(mockTreeResponse)
+          .mockResolvedValueOnce(mockDirectoryResponse)
+          .mockResolvedValueOnce(mockFileResponse);
+
+        vi.mocked(select).mockResolvedValue('provider-opencode-sdk/basic');
+        vi.spyOn(fs, 'readdir').mockResolvedValue(['promptfooconfig.yaml']);
+        vi.spyOn(fs, 'access').mockImplementation(async (targetPath) => {
+          if (targetPath.toString().endsWith('README.md')) {
+            throw new Error('ENOENT');
+          }
+        });
+
+        await init.handleExampleDownload('.', true);
+
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Example docs:'));
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.stringContaining(
+            'https://github.com/promptfoo/promptfoo/tree/main/examples/provider-opencode-sdk/basic',
+          ),
         );
       });
     });

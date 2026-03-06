@@ -90,6 +90,20 @@ async function hasRootPromptfooConfig(exampleDir: string): Promise<boolean> {
   }
 }
 
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getExampleDocsUrl(exampleName: string, refs: string[]): string {
+  const docsRef = isLegacyRefs(refs) ? refs[0] : 'main';
+  return `https://github.com/promptfoo/promptfoo/tree/${docsRef}/examples/${exampleName}`;
+}
+
 async function fetchExampleDirectoryContents(
   dirPath: string,
   refs: string[],
@@ -231,6 +245,64 @@ function resolveExampleSelection(example: string): ExampleDownloadSelection {
   };
 }
 
+async function logExampleInstructions(
+  exampleName: string,
+  directory: string | null,
+  refs: string[],
+) {
+  const examplePath = path.join(directory || '.', exampleName);
+  const readmePath = path.join(examplePath, 'README.md');
+  const readmeExists = await pathExists(readmePath);
+  const docsUrl = getExampleDocsUrl(exampleName, refs);
+  const cdCommand = `cd ${examplePath}`;
+  const isRunnableFromRoot = await hasRootPromptfooConfig(examplePath);
+
+  if (exampleName.includes('redteam') || !isRunnableFromRoot) {
+    if (readmeExists) {
+      logger.info(
+        dedent`
+
+        View the README file at ${chalk.bold(readmePath)} to get started!
+        `,
+      );
+    } else {
+      logger.info(
+        dedent`
+
+        View the example at ${chalk.bold(docsUrl)} to get started!
+        `,
+      );
+    }
+    return;
+  }
+
+  const runCommand = promptfooCommand('eval');
+  if (readmeExists) {
+    logger.info(
+      dedent`
+
+      View the README at ${chalk.bold(readmePath)} or run:
+
+      \`${chalk.bold(`${cdCommand} && ${runCommand}`)}\`
+
+      to get started!
+      `,
+    );
+  } else {
+    logger.info(
+      dedent`
+
+      Run:
+
+      \`${chalk.bold(`${cdCommand} && ${runCommand}`)}\`
+
+      to get started.
+      Example docs: ${chalk.bold(docsUrl)}
+      `,
+    );
+  }
+}
+
 async function selectExample(): Promise<string> {
   const examples = await getExamplesList();
   const choices = [
@@ -302,31 +374,7 @@ export async function handleExampleDownload(
     return;
   }
 
-  const examplePath = path.join(directory || '.', exampleName);
-  const readmePath = path.join(examplePath, 'README.md');
-  const cdCommand = `cd ${examplePath}`;
-  const isRunnableFromRoot = await hasRootPromptfooConfig(examplePath);
-
-  if (exampleName.includes('redteam') || !isRunnableFromRoot) {
-    logger.info(
-      dedent`
-
-      View the README file at ${chalk.bold(readmePath)} to get started!
-      `,
-    );
-  } else {
-    const runCommand = promptfooCommand('eval');
-    logger.info(
-      dedent`
-
-      View the README at ${chalk.bold(readmePath)} or run:
-
-      \`${chalk.bold(`${cdCommand} && ${runCommand}`)}\`
-
-      to get started!
-      `,
-    );
-  }
+  await logExampleInstructions(exampleName, directory, downloadRefs);
 
   return exampleName;
 }
