@@ -140,11 +140,11 @@ env:
 
 ## Example projects
 
-| Example                                                                                                  | Use Case          | Key Features         |
-| -------------------------------------------------------------------------------------------------------- | ----------------- | -------------------- |
-| [Basic Setup](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface-dataset)             | Simple evaluation | Default parameters   |
-| [MMLU Comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-gpt-5-vs-gpt-4o-mmlu) | Query parameters  | Split, subset, limit |
-| [Red Team Safety](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-beavertails)         | Safety testing    | BeaverTails dataset  |
+| Example                                                                                                       | Use Case          | Key Features         |
+| ------------------------------------------------------------------------------------------------------------- | ----------------- | -------------------- |
+| [Basic Setup](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface/dataset)                  | Simple evaluation | Default parameters   |
+| [MMLU Comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-gpt-5-vs-gpt-5-mini-mmlu) | Query parameters  | Split, subset, limit |
+| [Red Team Safety](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-beavertails)              | Safety testing    | BeaverTails dataset  |
 
 ## Troubleshooting
 

@@ -463,6 +463,12 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
+  it('should load OpenAI GPT-5.4 chat provider', async () => {
+    const provider = await loadApiProvider('openai:chat:gpt-5.4');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5.4', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
   it('should load OpenAI GPT-5 nano chat provider', async () => {
     const provider = await loadApiProvider('openai:chat:gpt-5-nano');
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5-nano', expect.any(Object));
@@ -481,6 +487,18 @@ describe('loadApiProvider', () => {
       'gpt-4.1-2025-04-14',
       expect.any(Object),
     );
+    expect(provider).toBeDefined();
+  });
+
+  it('should load OpenAI chat provider with model from config when ID has no model', async () => {
+    const provider = await loadApiProvider('openai:chat', {
+      options: {
+        config: {
+          model: 'DeepSeek-R1',
+        },
+      },
+    });
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('DeepSeek-R1', expect.any(Object));
     expect(provider).toBeDefined();
   });
 

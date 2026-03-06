@@ -1,6 +1,6 @@
 ---
 sidebar_position: 1
-description: 'Configure OpenAI models including GPT-5.3, GPT-4.1, o-series reasoning, embeddings, and assistants for comprehensive AI evals'
+description: 'Configure OpenAI models including GPT-5.4, GPT-5.3, GPT-4.1, o-series reasoning, embeddings, and assistants for comprehensive AI evals'
 ---
 
 # OpenAI
@@ -157,6 +157,20 @@ interface OpenAiConfig {
   maxRetries?: number;
 }
 ```
+
+### Generating Multiple Responses
+
+Use `passthrough` to set OpenAI's `n` parameter for generating multiple responses in a single request:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4o
+    config:
+      passthrough:
+        n: 3 # Generate 3 responses
+```
+
+When `n > 1`, the primary `output` contains the first choice's content, and all generated choices are available in the response metadata under `metadata.choices`. Each choice includes the full response object with `message`, `finish_reason`, and `index`.
 
 ## Models
 
@@ -458,9 +472,50 @@ providers:
 
   - id: openai:responses:gpt-5.3-chat-latest
     config:
-      reasoning:
-        effort: 'medium'
       max_output_tokens: 2048
+```
+
+### GPT-5.4
+
+GPT-5.4 is a GPT-5 family model for complex professional work, combining advanced reasoning with agentic coding capabilities.
+
+#### Available Models
+
+| Model                  | Description                   | Pricing (Input / Output)    |
+| ---------------------- | ----------------------------- | --------------------------- |
+| gpt-5.4                | Standard GPT-5.4 model        | $2.50 / $15 per 1M tokens   |
+| gpt-5.4-2026-03-05     | Dated snapshot of gpt-5.4     | $2.50 / $15 per 1M tokens   |
+| gpt-5.4-pro            | Premium GPT-5.4 pro model     | $30.00 / $180 per 1M tokens |
+| gpt-5.4-pro-2026-03-05 | Dated snapshot of gpt-5.4-pro | $30.00 / $180 per 1M tokens |
+
+#### Key Specifications
+
+- **Context window**: 1,050,000 tokens
+- **Max output tokens**: 128,000 tokens
+- **Reasoning effort**: `gpt-5.4` supports `none`, `low`, `medium`, `high`, `xhigh`. `gpt-5.4-pro` supports `medium`, `high`, `xhigh`.
+- **Endpoint support**: Chat Completions API, Responses API, and Codex SDK
+- **Cached input**: `gpt-5.4` cached input tokens $0.25 per 1M. `gpt-5.4-pro` has no cached-input discount.
+
+#### Usage Examples
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:gpt-5.4
+    config:
+      max_completion_tokens: 4096
+      reasoning_effort: 'low'
+
+  - id: openai:responses:gpt-5.4
+    config:
+      reasoning:
+        effort: 'high'
+      max_output_tokens: 4096
+
+  - id: openai:responses:gpt-5.4-pro
+    config:
+      reasoning:
+        effort: 'xhigh'
+      max_output_tokens: 8192
 ```
 
 ### Reasoning Models (o1, o3, o3-pro, o3-mini, o4-mini)
@@ -1704,7 +1759,14 @@ OpenAI's Responses API is the most advanced interface for generating model respo
 
 The Responses API supports a wide range of models, including:
 
+- `gpt-5.4` - GPT-5.4 model ($2.50/$15 per 1M tokens)
+- `gpt-5.4-2026-03-05` - Dated snapshot of gpt-5.4
+- `gpt-5.4-pro` - Premium GPT-5.4 model ($30/$180 per 1M tokens)
+- `gpt-5.4-pro-2026-03-05` - Dated snapshot of gpt-5.4-pro
 - `gpt-5` - OpenAI's most capable vision model
+- `gpt-5-chat` - GPT-5 chat alias
+- `gpt-5.1` - GPT-5.1 flagship model
+- `gpt-5.1-chat-latest` - GPT-5.1 chat alias
 - `gpt-5.3-chat-latest` - Latest chat-focused GPT-5.3 Instant alias
 - `gpt-5.2-chat-latest` - GPT-5.2 chat-optimized alias
 - `gpt-5.2-codex` - GPT-5.2 coding variant
@@ -2048,7 +2110,7 @@ The `web_search_preview` tool is **required** for deep research models. The prov
 
 ### GPT-5 Pro Timeout Configuration
 
-`gpt-5-pro` and `gpt-5.2-pro` are long-running models that often require extended timeouts due to advanced reasoning. Like deep research models, these variants **automatically** receive a 10-minute timeout (600,000ms) instead of the standard 5-minute timeout.
+`gpt-5-pro`, `gpt-5.2-pro`, and `gpt-5.4-pro` are long-running models that often require extended timeouts due to advanced reasoning. Like deep research models, these variants **automatically** receive a 10-minute timeout (600,000ms) instead of the standard 5-minute timeout.
 
 **Automatic timeout behavior:**
 
@@ -2195,13 +2257,13 @@ See the [OpenAI Agents documentation](/docs/providers/openai-agents) for full co
 
 ### Codex SDK
 
-For agentic coding tasks with working directory access and structured JSON output, use the [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk). This provider supports `gpt-5.1-codex` models optimized for code generation:
+For agentic coding tasks with working directory access and structured JSON output, use the [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk). This provider supports GPT-5.4 and Codex-optimized GPT-5 models for code generation:
 
 ```yaml
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.1-codex
+      model: gpt-5.4
       working_dir: ./src
       output_schema:
         type: object

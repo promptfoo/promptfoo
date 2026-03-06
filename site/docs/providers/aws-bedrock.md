@@ -1180,7 +1180,7 @@ The prompt file (`nova_multimodal_prompt.json`) should be structured to include 
 ]
 ```
 
-See [Github](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/promptfooconfig.nova.multimodal.yaml) for a runnable example.
+See [Github](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/models/promptfooconfig.nova.multimodal.yaml) for a runnable example.
 
 When loading image files as variables, Promptfoo automatically converts them to the appropriate format for the model. The supported image formats include:
 

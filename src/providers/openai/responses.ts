@@ -79,6 +79,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.3-chat-latest',
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
+    // GPT-5.4 models
+    'gpt-5.4',
+    'gpt-5.4-2026-03-05',
+    'gpt-5.4-pro',
+    'gpt-5.4-pro-2026-03-05',
     // Audio models
     'gpt-audio',
     'gpt-audio-2025-08-28',
@@ -253,7 +258,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature !== undefined ? { temperature } : {}),
       ...(instructions ? { instructions } : {}),
-      ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
+      ...((!reasoningEffort || reasoningEffort === 'none') &&
+      (config.top_p !== undefined || getEnvString('OPENAI_TOP_P'))
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
       ...(loadedTools ? { tools: loadedTools } : {}),

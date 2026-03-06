@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.4/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.5/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -22,7 +22,7 @@
       "!!**/dist",
       "!!**/build",
       "!!**/public",
-      "!!examples/multiple-turn-conversation/prompt.json",
+      "!!examples/config-multi-turn/prompt.json",
       "!!examples/openai-chat-history/prompt.json",
       "!!test/fixtures/rubric-json-template/**/*.json",
       // Excluded due to stack overflow crash in biome - see https://github.com/biomejs/biome/issues/8783
@@ -40,6 +40,7 @@
   "assist": {
     "actions": {
       "source": {
+        "noDuplicateClasses": "on",
         "organizeImports": {
           "level": "on",
           "options": {
@@ -222,7 +223,7 @@
   "overrides": [
     {
       "includes": [
-        "examples/multiple-turn-conversation/prompt.json",
+        "examples/config-multi-turn/prompt.json",
         "examples/openai-chat-history/prompt.json"
       ],
       "linter": {
@@ -233,7 +234,7 @@
       }
     },
     {
-      "includes": ["examples/custom-provider/vercelAiSdkExample.js"],
+      "includes": ["examples/provider-custom/basic/vercelAiSdkExample.js"],
       "linter": {
         "enabled": false
       },

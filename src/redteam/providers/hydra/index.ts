@@ -1,6 +1,7 @@
 import { isBlobStorageEnabled } from '../../../blobs/extractor';
 import { shouldAttemptRemoteBlobUpload } from '../../../blobs/remoteUpload';
 import { renderPrompt } from '../../../evaluatorHelpers';
+import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import {
@@ -144,8 +145,10 @@ export class HydraProvider implements ApiProvider {
     this.config = config;
     this.scanId = config.scanId; // Use scanId from config if provided
     this.injectVar = config.injectVar;
-    this.maxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
+    const configuredMaxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
+    this.maxTurns = isLoggedIntoCloud() ? configuredMaxTurns : Math.min(configuredMaxTurns, 10);
     this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
+
     this.stateful = config.stateful ?? false;
     this.excludeTargetOutputFromAgenticAttackGeneration =
       config.excludeTargetOutputFromAgenticAttackGeneration ?? false;
