@@ -1,6 +1,7 @@
 import type {
   ColumnDef,
   ColumnFiltersState,
+  ExpandedState,
   Row,
   RowSelectionState,
   SortingState,
@@ -41,6 +42,9 @@ interface DataTablePropsBase<TData, TValue = unknown> {
   rowSelection?: RowSelectionState;
   onRowSelectionChange?: (selection: RowSelectionState) => void;
   getRowId?: (row: TData) => string;
+  expanded?: ExpandedState;
+  onExpandedChange?: (expanded: ExpandedState) => void;
+  expandedRowClassName?: string;
   // Custom toolbar actions
   toolbarActions?: React.ReactNode;
   // Fixed height with scroll
