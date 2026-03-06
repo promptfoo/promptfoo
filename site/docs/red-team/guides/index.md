@@ -10,22 +10,22 @@ Practical tutorials for finding vulnerabilities in LLM applications before deplo
 
 ## Getting Started
 
-- [How to Red Team LLM Applications](/docs/red-team/guides/llm-redteaming) — End-to-end guide to adversarial testing
-- [Testing Guardrails](/docs/red-team/guides/testing-guardrails) — Evaluate content safety guardrails
+- [How to Red Team LLM Applications](/docs/guides/llm-redteaming) — End-to-end guide to adversarial testing
+- [Testing Guardrails](/docs/guides/testing-guardrails) — Evaluate content safety guardrails
 
 ## By Application Type
 
 - [RAG Red Teaming](/docs/red-team/rag) — Test retrieval-augmented generation for prompt injection, context manipulation, and data poisoning
 - [Agent Red Teaming](/docs/red-team/agents) — Test LLM agents for privilege escalation, context poisoning, and memory manipulation
 - [MCP Security Testing](/docs/red-team/mcp-security-testing) — Secure Model Context Protocol servers through red teaming and tool poisoning tests
-- [Red Teaming a Chatbase Chatbot](/docs/red-team/guides/chatbase-redteam) — Security test a production chatbot
+- [Red Teaming a Chatbase Chatbot](/docs/guides/chatbase-redteam) — Security test a production chatbot
 
 ## Specialized Testing
 
-- [Multi-Modal Red Teaming](/docs/red-team/guides/multimodal-red-team) — Test image and multi-modal AI systems
+- [Multi-Modal Red Teaming](/docs/guides/multimodal-red-team) — Test image and multi-modal AI systems
 - [Foundation Model Red Teaming](/docs/red-team/foundation-models) — Assess foundation model security risks through red teaming and static scanning
-- [Evaluating Safety with HarmBench](/docs/red-team/guides/evaling-with-harmbench) — Benchmark LLM safety using HarmBench
-- [Testing Google Cloud Model Armor](/docs/red-team/guides/google-cloud-model-armor) — Assess Google Cloud's AI safety layer
+- [Evaluating Safety with HarmBench](/docs/guides/evaling-with-harmbench) — Benchmark LLM safety using HarmBench
+- [Testing Google Cloud Model Armor](/docs/guides/google-cloud-model-armor) — Assess Google Cloud's AI safety layer
 
 ## Ongoing Security
 

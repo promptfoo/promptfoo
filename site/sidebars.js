@@ -347,10 +347,10 @@ const sidebars = {
       type: 'category',
       label: 'Evals',
       link: {
-        type: 'generated-index',
+        type: 'doc',
+        id: 'getting-started',
       },
       items: [
-        { type: 'doc', id: 'getting-started' },
         {
           type: 'category',
           label: 'Configuration',
