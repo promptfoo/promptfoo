@@ -1,6 +1,6 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvString, isCI } from '../../src/envars';
 import {
   checkEmailStatus,
@@ -47,9 +47,21 @@ vi.mock('../../src/globalConfig/globalConfig');
 vi.mock('../../src/util');
 vi.mock('../../src/logger');
 
+const originalPromptfooApiKey = process.env.PROMPTFOO_API_KEY;
+
 describe('accounts', () => {
   beforeEach(() => {
+    delete process.env.PROMPTFOO_API_KEY;
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+    if (originalPromptfooApiKey === undefined) {
+      delete process.env.PROMPTFOO_API_KEY;
+    } else {
+      process.env.PROMPTFOO_API_KEY = originalPromptfooApiKey;
+    }
   });
 
   describe('getUserId', () => {
@@ -344,10 +356,11 @@ describe('accounts', () => {
   });
 
   describe('checkEmailStatusAndMaybeExit', () => {
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    let mockExit: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
       vi.clearAllMocks();
+      mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     });
 
     it('should use CI email when in CI environment', async () => {

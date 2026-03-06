@@ -42,6 +42,10 @@ describe('evaluator', () => {
     await db.run('DELETE FROM evals');
   });
 
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   describe('summaryResults', () => {
     it('should return all evaluations', async () => {
       const eval1 = await EvalFactory.create();

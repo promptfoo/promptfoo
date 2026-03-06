@@ -11,7 +11,11 @@ import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { evaluate } from '../evaluator';
-import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../globalConfig/accounts';
+import {
+  checkEmailStatusAndMaybeExit,
+  getAuthor,
+  promptForEmailUnverified,
+} from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -32,6 +36,7 @@ import { maybeLoadFromExternalFile } from '../util/file';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
 import { promptfooCommand } from '../util/promptfooCommand';
+import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -441,6 +446,23 @@ export async function doEval(
       );
     }
 
+    // Check for missing API keys after provider filtering
+    const missingApiKeys = checkProviderApiKeys(testSuite.providers);
+
+    if (missingApiKeys.size > 0) {
+      for (const [envVar, providerIds] of missingApiKeys) {
+        logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerIds.join(', ')})`));
+      }
+      logger.error('');
+      logger.error(`To fix, set the environment variable or use ${chalk.bold('--env-file')}:`);
+      for (const envVar of missingApiKeys.keys()) {
+        logger.error(`    export ${envVar}=your-api-key-here`);
+      }
+      logger.error('');
+      process.exitCode = 1;
+      return new Eval({}, { persisted: false });
+    }
+
     await checkCloudPermissions(config as UnifiedConfig);
 
     const options: EvaluateOptions = {
@@ -514,11 +536,12 @@ export async function doEval(
     }
 
     // Create or load eval record
+    const author = getAuthor();
     const evalRecord = resumeEval
       ? resumeEval
       : cmdObj.write
-        ? await Eval.create(config, testSuite.prompts, { runtimeOptions: options })
-        : new Eval(config, { runtimeOptions: options });
+        ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions: options })
+        : new Eval(config, { author, runtimeOptions: options });
 
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();
@@ -711,6 +734,9 @@ export async function doEval(
     const duration = Math.round((Date.now() - startTime) / 1000);
     const tracker = TokenUsageTracker.getInstance();
 
+    // Check if scan was aborted due to target error (efficient DB query, not loading all results)
+    const targetErrorStatus = await evalRecord.findTargetErrorStatus();
+
     // Generate and display summary immediately (before share completes)
     const summaryLines = generateEvalSummary({
       evalId: evalRecord.id,
@@ -728,6 +754,7 @@ export async function doEval(
       duration,
       maxConcurrency,
       tracker,
+      targetErrorStatus,
     });
 
     // Special case: show cloud signup instructions when user wants to share but can't
@@ -815,7 +842,11 @@ export async function doEval(
       if (initialization) {
         const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
         if (!configPaths.length) {
-          logger.error('Could not locate config file(s) to watch');
+          logger.error(
+            `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
+              ',',
+            )}}.`,
+          );
           process.exitCode = 1;
           return ret;
         }
@@ -1091,7 +1122,9 @@ export function evalCommand(
           evalCmd.help();
           return;
         }
-        logger.warn(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
+        logger.error(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
+        process.exitCode = 1;
+        return;
       }
 
       if (validatedOpts.help) {

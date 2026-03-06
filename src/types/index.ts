@@ -23,6 +23,7 @@ import type { Prompt, PromptFunction } from './prompts';
 import type {
   ApiProvider,
   CallApiContextParams,
+  ImageOutput,
   ProviderOptions,
   ProviderResponse,
 } from './providers';
@@ -386,6 +387,7 @@ export interface EvaluateTableOutput {
     aspectRatio?: string; // '16:9' or '9:16' (Veo)
     resolution?: string; // '720p' or '1080p' (Veo)
   };
+  images?: ImageOutput[];
 }
 
 export interface EvaluateTableRow {
@@ -1246,7 +1248,11 @@ export interface EvalWithMetadata {
 export type EvaluateTestSuite = {
   prompts: (string | object | PromptFunction)[];
   writeLatestResults?: boolean;
-  /** Author to attribute the evaluation to. Falls back to user email, then PROMPTFOO_AUTHOR env var. */
+  /**
+   * Author to attribute the evaluation to.
+   * When cloud auth is enabled, the authenticated identity takes precedence.
+   * Otherwise falls back to user email, then PROMPTFOO_AUTHOR.
+   */
   author?: string;
 } & Omit<TestSuiteConfig, 'prompts'>;
 

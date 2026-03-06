@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getAuthor, getUserEmail, setUserEmail } from '../src/globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../src/globalConfig/globalConfig';
 
@@ -8,12 +8,30 @@ vi.mock('../src/globalConfig/globalConfig', () => ({
   writeGlobalConfigPartial: vi.fn(),
 }));
 
+const originalPromptfooApiKey = process.env.PROMPTFOO_API_KEY;
+const originalPromptfooAuthor = process.env.PROMPTFOO_AUTHOR;
+
 describe('accounts module', () => {
   beforeEach(() => {
+    delete process.env.PROMPTFOO_API_KEY;
     delete process.env.PROMPTFOO_AUTHOR;
     vi.resetModules();
     vi.clearAllMocks();
     vi.mocked(readGlobalConfig).mockReset();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+    if (originalPromptfooApiKey === undefined) {
+      delete process.env.PROMPTFOO_API_KEY;
+    } else {
+      process.env.PROMPTFOO_API_KEY = originalPromptfooApiKey;
+    }
+    if (originalPromptfooAuthor === undefined) {
+      delete process.env.PROMPTFOO_AUTHOR;
+    } else {
+      process.env.PROMPTFOO_AUTHOR = originalPromptfooAuthor;
+    }
   });
 
   describe('getUserEmail', () => {

@@ -38,6 +38,7 @@ import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
+import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -317,7 +318,7 @@ export class EvalQueries {
 export default class Eval {
   id: string;
   createdAt: number;
-  author?: string;
+  author: string | null;
   description?: string;
   config: Partial<UnifiedConfig>;
   // If these are empty, you need to call loadResults(). We don't load them by default to save memory.
@@ -402,7 +403,7 @@ export default class Eval {
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,
       createdAt: new Date(eval_.createdAt),
-      author: eval_.author || undefined,
+      author: eval_.author,
       description: eval_.description || undefined,
       prompts: eval_.prompts || [],
       datasetId,
@@ -440,7 +441,7 @@ export default class Eval {
         new Eval(e.config, {
           id: e.id,
           createdAt: new Date(e.createdAt),
-          author: e.author || undefined,
+          author: e.author,
           description: e.description || undefined,
           prompts: e.prompts || [],
           persisted: true,
@@ -470,7 +471,7 @@ export default class Eval {
         new Eval(e.config, {
           id: e.id,
           createdAt: new Date(e.createdAt),
-          author: e.author || undefined,
+          author: e.author,
           description: e.description || undefined,
           prompts: e.prompts || [],
           persisted: true,
@@ -493,7 +494,7 @@ export default class Eval {
     opts?: {
       id?: string;
       createdAt?: Date;
-      author?: string;
+      author?: string | null;
       // Be wary, this is EvalResult[] and not EvaluateResult[]
       results?: EvalResult[];
       vars?: string[];
@@ -520,6 +521,7 @@ export default class Eval {
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
           prompts: opts?.completedPrompts || [],
+          isRedteam: Boolean(config.redteam),
         })
         .run();
 
@@ -600,7 +602,7 @@ export default class Eval {
 
     return new Eval(config, {
       id: evalId,
-      author: author ?? undefined,
+      author,
       createdAt,
       persisted: true,
       runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
@@ -612,7 +614,7 @@ export default class Eval {
     opts?: {
       id?: string;
       createdAt?: Date;
-      author?: string;
+      author?: string | null;
       description?: string;
       prompts?: CompletedPrompt[];
       datasetId?: string;
@@ -627,7 +629,7 @@ export default class Eval {
     const createdAt = opts?.createdAt || new Date();
     this.createdAt = createdAt.getTime();
     this.id = opts?.id || createEvalId(createdAt);
-    this.author = opts?.author;
+    this.author = opts?.author ?? null;
     this.config = config;
     this.results = [];
     this.prompts = opts?.prompts || [];
@@ -772,6 +774,61 @@ export default class Eval {
    */
   async getTotalResultRowCount(): Promise<number> {
     return getTotalResultRowCount(this.id);
+  }
+
+  /**
+   * Find a non-transient HTTP error status from evaluation results.
+   * Returns the first non-transient status (401, 403, 404, 500, 501) found, or undefined.
+   *
+   * For persisted evals: Uses efficient O(1) database query with LIMIT 1.
+   * For non-persisted evals: Falls back to scanning in-memory results.
+   */
+  async findTargetErrorStatus(): Promise<number | undefined> {
+    // Helper to scan in-memory results
+    const scanInMemory = (): number | undefined => {
+      for (const result of this.results) {
+        const status = result.response?.metadata?.http?.status;
+        if (typeof status === 'number' && isNonTransientHttpStatus(status)) {
+          return status;
+        }
+      }
+      return undefined;
+    };
+
+    // For non-persisted evals, scan in-memory results
+    if (!this.persisted) {
+      return scanInMemory();
+    }
+
+    // For persisted evals, use efficient database query
+    try {
+      const db = getDb();
+
+      // Query for any result with a non-transient HTTP status
+      // Uses json_extract to access nested metadata.http.status field
+      const result = db
+        .select({
+          httpStatus: sql<number>`CAST(json_extract(${evalResultsTable.response}, '$.metadata.http.status') AS INTEGER)`,
+        })
+        .from(evalResultsTable)
+        .where(
+          and(
+            eq(evalResultsTable.evalId, this.id),
+            sql`json_extract(${evalResultsTable.response}, '$.metadata.http.status') IN (${sql.join(
+              NON_TRANSIENT_HTTP_STATUSES.map((s) => sql`${s}`),
+              sql`, `,
+            )})`,
+          ),
+        )
+        .limit(1)
+        .get();
+
+      return result?.httpStatus ?? undefined;
+    } catch {
+      // Fall back to in-memory scan if database query fails
+      // This handles edge cases like mocked databases in tests
+      return scanInMemory();
+    }
   }
 
   async fetchResultsByTestIdx(testIdx: number) {

@@ -130,7 +130,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 
   const parsedProviderPromptMap = readProviderPromptMap(testSuite, constructedTestSuite.prompts);
   const unifiedConfig = { ...testSuite, prompts: constructedTestSuite.prompts };
-  const author = getAuthor(testSuite.author) ?? undefined;
+  const author = getAuthor(testSuite.author);
   const evalRecord = testSuite.writeLatestResults
     ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, { author })
     : new Eval(unifiedConfig, { author });

@@ -11,6 +11,7 @@ import {
 import { evaluate } from '../../src/evaluator';
 import {
   checkEmailStatusAndMaybeExit,
+  getAuthor,
   promptForEmailUnverified,
 } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
@@ -108,6 +109,7 @@ describe('evalCommand', () => {
       },
       basePath: path.resolve('/'),
     });
+    vi.mocked(getAuthor).mockReturnValue(null);
     vi.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
     vi.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
   });
@@ -132,6 +134,30 @@ describe('evalCommand', () => {
     expect(helpText).toContain(
       'Path to configuration file or cloud config UUID. Automatically loads promptfooconfig.yaml',
     );
+  });
+
+  it('should apply resolved author when --no-write is used', async () => {
+    const cmdObj = { table: false, write: false };
+    const config = {} as UnifiedConfig;
+    let capturedEvalRecord: Eval | undefined;
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(getAuthor).mockReturnValue('ci-author@example.com');
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => {
+      capturedEvalRecord = evalRecord as Eval;
+      return evalRecord as Eval;
+    });
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(capturedEvalRecord?.author).toBe('ci-author@example.com');
   });
 
   it('should load cloud eval config when config is a single UUID', async () => {

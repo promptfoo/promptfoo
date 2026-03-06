@@ -48,6 +48,15 @@ vi.mock('../src/evaluator', async () => {
     }),
   };
 });
+vi.mock('../src/globalConfig/accounts', async () => {
+  const originalModule = await vi.importActual<typeof import('../src/globalConfig/accounts')>(
+    '../src/globalConfig/accounts',
+  );
+  return {
+    ...originalModule,
+    getAuthor: vi.fn().mockReturnValue(null),
+  };
+});
 vi.mock('../src/migrate');
 vi.mock('../src/prompts', async () => {
   const originalModule = await vi.importActual<typeof import('../src/prompts')>('../src/prompts');
@@ -409,7 +418,7 @@ describe('evaluate function', () => {
     expect(createEvalSpy).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.objectContaining({ author: undefined }),
+      expect.objectContaining({ author: null }),
     );
 
     createEvalSpy.mockRestore();
