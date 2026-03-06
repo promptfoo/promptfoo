@@ -351,6 +351,7 @@ const sidebars = {
         id: 'getting-started',
       },
       items: [
+        { type: 'doc', id: 'getting-started' },
         {
           type: 'category',
           label: 'Configuration',
