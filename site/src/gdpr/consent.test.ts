@@ -156,10 +156,10 @@ describe('consent.js', () => {
       expect((window as any).__pf_analytics_loaded).toBe(true);
     });
 
-    it('missing country defaults to opt_in (fail-closed)', () => {
+    it('missing country defaults to opt_out', () => {
       runConsent();
-      expect(document.getElementById('cc-banner')).not.toBeNull();
-      expect((window as any).__pf_analytics_loaded).toBe(false);
+      expect(document.getElementById('cc-banner')).toBeNull();
+      expect((window as any).__pf_analytics_loaded).toBe(true);
     });
 
     it('Brazil maps to opt_in', () => {
@@ -942,15 +942,16 @@ describe('consent.js', () => {
     });
   });
 
-  // ── Fail-closed region default ──
+  // ── Unknown region fallback ──
 
-  describe('fail-closed region default', () => {
-    it('missing pf_country defaults to opt_in (banner shown, no scripts)', () => {
+  describe('unknown region fallback', () => {
+    it('missing pf_country defaults to opt_out (no banner, scripts load)', () => {
       // No pf_country cookie set
       runConsent();
-      expect(document.getElementById('cc-banner')).not.toBeNull();
-      expect((window as any).__pf_analytics_loaded).toBe(false);
-      expect((window as any).__pf_marketing_loaded).toBe(false);
+      expect(document.getElementById('cc-banner')).toBeNull();
+      expect((window as any).__pf_analytics_loaded).toBe(true);
+      expect((window as any).__pf_marketing_loaded).toBe(true);
+      expect(getCookie('pf_consent')).toBe('v1.o.1.1');
     });
   });
 });

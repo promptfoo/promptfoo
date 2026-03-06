@@ -117,9 +117,9 @@
 
   function getRegion() {
     var country = getCookie('pf_country');
-    // Fail-closed: block scripts when country is unknown (missing CF header,
-    // blocked cookies, non-CF environments). Safest default for GDPR.
-    if (!country) return 'opt_in';
+    // Unknown country falls back to opt-out so analytics/marketing still load
+    // when geolocation is unavailable (missing CF header, blocked cookies, non-CF environments).
+    if (!country) return 'opt_out';
     if (OPT_IN_COUNTRIES.includes(country)) return 'opt_in';
     if (OPT_OUT_COUNTRIES.includes(country)) return 'opt_out';
     return 'notice';
