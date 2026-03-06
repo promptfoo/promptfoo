@@ -1,5 +1,5 @@
 ---
-title: 'GPT-5.4 vs GPT-5.2 on the Same Benchmark'
+title: 'GPT-5.4 Trust and Safety Assessment'
 description: 'We replayed 611 recovered prompt payloads from our December GPT-5.2 red team against GPT-5.2 and GPT-5.4 with reasoning disabled and the same grader.'
 image: /img/blog/gpt-5.4-vs-gpt-5.2/hero.jpg
 date: 2026-03-06
@@ -7,7 +7,7 @@ authors: [michael]
 tags: [red-teaming, security-vulnerability, openai]
 ---
 
-# GPT-5.4 vs GPT-5.2 on the Same Benchmark
+# GPT-5.4 Trust and Safety Assessment
 
 OpenAI released [GPT-5.4](https://openai.com/index/introducing-gpt-5-4/) on March 5, 2026. For this follow-up, we wanted the comparison to be as apples-to-apples as possible.
 
