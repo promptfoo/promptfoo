@@ -47,11 +47,13 @@ If you run Promptfoo in higher-risk contexts (CI, shared machines, third-party c
 
 ## Supported Versions
 
-| Version                  | Supported        |
-| ------------------------ | ---------------- |
-| Latest published release | ✅               |
-| `main` branch            | ✅ (best effort) |
-| Older releases           | ❌               |
+| Version                               | Supported        |
+| ------------------------------------- | ---------------- |
+| Latest published release (npm/Docker) | ✅               |
+| `main` branch (unreleased fixes)      | ✅ (best effort) |
+| Previously published releases         | ❌               |
+
+We do not backport security fixes. Unsupported releases are previously published versions older than the latest published release. If you report an issue against an older release, we may ask you to reproduce it on the latest supported version.
 
 ## Reporting a Vulnerability
 
@@ -59,12 +61,106 @@ If you run Promptfoo in higher-risk contexts (CI, shared machines, third-party c
 
 Report privately via:
 
-- **GitHub Security Advisories:** "Report a vulnerability" button (preferred)
+- **GitHub Security Advisories:** [Report a vulnerability](https://github.com/promptfoo/promptfoo/security/advisories/new) (preferred — this is a secure channel)
 - **Email:** security@promptfoo.dev (fallback: support@promptfoo.dev)
+
+Email is not encrypted by default. For sensitive details (exploit code, PoC artifacts), use GitHub Security Advisories or wait until we establish a secure channel.
 
 We will acknowledge your report within **1 business day**.
 
 For safe harbor provisions and full process details, see our [Responsible Disclosure Policy](https://www.promptfoo.dev/responsible-disclosure-policy/).
+
+### What to Include in Your Report
+
+A good report helps us triage and fix issues faster. Please include:
+
+- **Description** of the vulnerability and its security impact
+- **Reproduction steps** — minimal config snippet or sequence of actions (redact any real secrets or API keys)
+- **Promptfoo version** (`promptfoo --version` or `promptfoo debug`)
+- **Environment** — Node.js version, OS, install method (npm, npx, Docker)
+- **Affected surface** — CLI, web UI, or library/SDK
+- **Model provider** in use, if relevant to the issue
+
+## Response Timeline
+
+These are response targets, not service-level guarantees.
+
+- Acknowledgment and initial assessment are measured from report receipt.
+- Remediation targets start once we confirm severity.
+
+| Stage                    | Target           |
+| ------------------------ | ---------------- |
+| Acknowledgment           | 1 business day   |
+| Initial assessment       | 5 business days  |
+| Fix (Critical, 9.0–10.0) | 14 calendar days |
+| Fix (High, 7.0–8.9)      | 30 calendar days |
+| Fix (Medium, 4.0–6.9)    | 60 calendar days |
+| Fix (Low, 0.1–3.9)       | Best effort      |
+
+Severity is assessed using [CVSS v4.0](https://www.first.org/cvss/v4.0/specification-document), supplemented by Promptfoo's trust model and deployment context. Targets assume we have enough information to reproduce or validate the issue and are not blocked on reporter follow-up or upstream fixes. We may ship mitigations or workarounds before a full fix is available. We may adjust timelines if a fix requires significant architectural changes and **will communicate any material delays**.
+
+**Promptfoo-specific severity considerations (illustrative, not automatic):**
+
+- Untrusted input leading to arbitrary code execution: typically **Critical**
+- CSRF bypass enabling arbitrary command execution or file write via the local server: typically **High**
+- Secret or credential leakage to unconfigured or attacker-controlled destinations: typically **High**
+- Algorithmic DoS in CI pipelines causing significant resource exhaustion: typically **Medium–High**
+- Web UI XSS requiring deliberate user interaction (for example, self-XSS): typically **Low** or no CVE (see Scope)
+
+## Embargo and Non-Disclosure
+
+We ask reporters to keep vulnerability details confidential until:
+
+- A fix or mitigation is available, or
+- We agree on a disclosure date
+
+If remediation is delayed, we will keep the reporter informed and coordinate a revised disclosure timeline in good faith.
+
+## CVE Policy
+
+We request CVEs through GitHub Security Advisories when appropriate. Final advisory and CVE decisions depend on exploitability, impact, affected deployment model, and CNA policies and availability.
+
+**We usually request a CVE for:**
+
+- Remote code execution from untrusted inputs (prompts, test cases, model outputs)
+- CSRF bypass enabling arbitrary command execution or file write on the local server
+- Secret or credential leakage to unconfigured or unintended destinations
+- Supply chain compromise affecting Promptfoo-published packages, dependencies, or build artifacts
+
+**CVE-eligible (case-by-case):**
+
+- Algorithmic DoS in CI pipelines with significant resource impact
+- Web UI XSS with demonstrable impact beyond self-XSS
+
+**We generally do not request a CVE for:**
+
+- Issues in explicitly configured custom code (JS assertions, providers, transforms)
+- Local API access issues within the documented trust model
+- Self-XSS requiring the user to paste payloads into their own console or UI
+- Quality, UX, or non-security functional bugs
+
+We may still fix issues in the categories above without requesting a CVE; this classification only affects whether we publish a formal advisory.
+
+## Safe Harbor
+
+We consider security research conducted in good faith to be authorized and will not initiate legal action against researchers who:
+
+- Act in good faith and follow this policy
+- Avoid privacy violations, data destruction, and service disruption
+- Do not access or modify other users' data
+- Report vulnerabilities promptly and do not exploit them beyond what is necessary to demonstrate the issue
+- Limit testing to Promptfoo-owned assets, or systems and accounts you own or are explicitly authorized to test (do not test third-party services, infrastructure, or other users' accounts)
+- Do not perform social engineering, phishing, physical attacks, or volumetric denial-of-service testing
+
+This safe harbor applies to activities conducted under this policy. For the full legal terms, see our [Responsible Disclosure Policy](https://www.promptfoo.dev/responsible-disclosure-policy/). In case of conflict, the Responsible Disclosure Policy governs.
+
+## Coordinated Disclosure
+
+When a fix is released, we will:
+
+1. Publish a [GitHub Security Advisory](https://github.com/promptfoo/promptfoo/security/advisories) with full details
+2. Credit the reporter by name (unless anonymity is requested)
+3. Document the fix in release notes or the CHANGELOG, as appropriate
 
 ## Scope
 

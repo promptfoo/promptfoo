@@ -28,8 +28,8 @@ Before getting started, make sure you have:
 Create a new directory for your comparison project:
 
 ```sh
-npx promptfoo@latest init --example gpt-vs-claude-vs-gemini
-cd gpt-vs-claude-vs-gemini
+npx promptfoo@latest init --example compare-gpt-vs-claude-vs-gemini
+cd compare-gpt-vs-claude-vs-gemini
 ```
 
 Open the `promptfooconfig.yaml` file. This is where you'll configure the models to test, the prompts to use, and the test cases to run.

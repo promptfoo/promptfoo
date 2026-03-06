@@ -16,7 +16,7 @@ The golang provider currently experimental
 You can initialize a new Go provider project using:
 
 ```sh
-promptfoo init --example golang-provider
+promptfoo init --example provider-golang
 ```
 
 ## Provider Interface

@@ -13,6 +13,7 @@
  */
 
 import dedent from 'dedent';
+import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import { extractFirstJsonObject } from '../../../util/json';
@@ -240,6 +241,12 @@ export class VoiceCrescendoProvider implements ApiProvider {
     this.config = { ...config };
     this.maxTurns = config.maxTurns || DEFAULT_MAX_TURNS;
     this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
+
+    // Cap turns for unauthenticated users
+    if (!isLoggedIntoCloud()) {
+      this.maxTurns = Math.min(this.maxTurns, 10);
+    }
+
     this.nunjucks = getNunjucksEngine();
     this.memory = new VoiceMemorySystem();
     this.conversationId = crypto.randomUUID();
