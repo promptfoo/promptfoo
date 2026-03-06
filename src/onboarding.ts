@@ -18,7 +18,7 @@ import type { ProviderOptions } from './types/providers';
 
 const CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/overview
+# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
 
 description: "My eval"
 
@@ -199,7 +199,7 @@ REM You can also call external scripts or executables
 REM php my_script.php
 `;
 
-const PYTHON_VAR = `# Learn more about using dynamic variables: https://promptfoo.dev/docs/configuration/overview/#import-vars-from-separate-files
+const PYTHON_VAR = `# Learn more about using dynamic variables: https://promptfoo.dev/docs/configuration/guide/#import-vars-from-separate-files
 def get_var(var_name, prompt, other_vars):
     # This is where you can fetch documents from a database, call an API, etc.
     # ...
@@ -217,7 +217,7 @@ def get_var(var_name, prompt, other_vars):
     # return { 'error': 'Error message' }
 `;
 
-const JAVASCRIPT_VAR = `// Learn more about using dynamic variables: https://promptfoo.dev/docs/configuration/overview/#import-vars-from-separate-files
+const JAVASCRIPT_VAR = `// Learn more about using dynamic variables: https://promptfoo.dev/docs/configuration/guide/#import-vars-from-separate-files
 module.exports = function (varName, prompt, otherVars) {
   // This is where you can fetch documents from a database, call an API, etc.
   // ...
@@ -276,7 +276,7 @@ ${promptfooCommand('view')}
 
 ## Learn more
 
-- Configuration guide: https://promptfoo.dev/docs/configuration/overview
+- Configuration guide: https://promptfoo.dev/docs/configuration/guide
 - All providers: https://promptfoo.dev/docs/providers
 - Assertions & metrics: https://promptfoo.dev/docs/configuration/expected-outputs
 - Examples: https://github.com/promptfoo/promptfoo/tree/main/examples
@@ -727,7 +727,7 @@ export async function initializeProject(directory: string | null, interactive: b
       );
     }
     logger.info('');
-    logger.info(chalk.gray(`  Docs: https://promptfoo.dev/docs/configuration/overview`));
+    logger.info(chalk.gray(`  Docs: https://promptfoo.dev/docs/configuration/guide`));
 
     return telemetryDetails;
   } catch (err) {

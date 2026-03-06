@@ -316,7 +316,7 @@ For more information, see [red team setup](/docs/red-team/quickstart/).
 
 AWS Bedrock Guardrails also support image content moderation through the ApplyGuardrail API, allowing you to detect harmful visual content. This requires a separate provider implementation since image and text testing work fundamentally differently in Promptfoo.
 
-For comprehensive testing with image datasets like UnsafeBench, see the [Multi-Modal Red Teaming guide](/docs/red-team/guides/multimodal-red-team/#approach-3-unsafebench-dataset-testing).
+For comprehensive testing with image datasets like UnsafeBench, see the [Multi-Modal Red Teaming guide](/docs/guides/multimodal-red-team/#approach-3-unsafebench-dataset-testing).
 
 Here's an image-specific provider implementation:
 

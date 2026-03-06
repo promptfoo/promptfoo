@@ -553,4 +553,4 @@ npx promptfoo@latest redteam run -c promptfooconfig.yaml
 - [Audio Inputs Strategy](/docs/red-team/strategies/audio)
 - [Video Inputs Strategy](/docs/red-team/strategies/video)
 - [LLM Red Teaming Guide](/docs/red-team/)
-- [Testing Guardrails](/docs/red-team/guides/testing-guardrails)
+- [Testing Guardrails](/docs/guides/testing-guardrails)

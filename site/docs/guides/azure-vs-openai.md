@@ -25,7 +25,7 @@ The end result will be a side-by-side comparison view that looks like this, whic
 Before we get started, you need the following:
 
 - An API key for OpenAI and Azure OpenAI services.
-- [Install](/docs/configuration/getting-started) `promptfoo`.
+- [Install](/docs/getting-started) `promptfoo`.
 
 Additionally, make sure you have the following environment variables set:
 

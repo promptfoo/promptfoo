@@ -9,7 +9,7 @@ OpenAI recently released an [Assistants API](https://platform.openai.com/docs/as
 
 [Test-driven development](/docs/intro#workflow-and-philosophy) allows you to compare prompts, models, and tools while measuring improvement and avoiding unexplained regressions. It's an example of [systematic iteration vs. trial and error](https://ianww.com/blog/2023/05/21/prompt-engineering-framework).
 
-This guide walks you through using promptfoo to select the best prompt, model, and tools using OpenAI's Assistants API. It assumes that you've already [set up](/docs/configuration/getting-started) promptfoo.
+This guide walks you through using promptfoo to select the best prompt, model, and tools using OpenAI's Assistants API. It assumes that you've already [set up](/docs/getting-started) promptfoo.
 
 ## Step 1: Create an assistant
 

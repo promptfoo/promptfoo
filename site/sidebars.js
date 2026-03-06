@@ -270,12 +270,12 @@ const redTeamSidebar = [
       {
         type: 'doc',
         label: 'Application Red Teaming',
-        id: 'red-team/guides/llm-redteaming',
+        id: 'guides/llm-redteaming',
       },
       {
         type: 'doc',
         label: 'Testing Guardrails',
-        id: 'red-team/guides/testing-guardrails',
+        id: 'guides/testing-guardrails',
       },
       {
         type: 'doc',
@@ -295,12 +295,12 @@ const redTeamSidebar = [
       {
         type: 'doc',
         label: 'Red Teaming a Chatbase Chatbot',
-        id: 'red-team/guides/chatbase-redteam',
+        id: 'guides/chatbase-redteam',
       },
       {
         type: 'doc',
         label: 'Multi-Modal Red Teaming',
-        id: 'red-team/guides/multimodal-red-team',
+        id: 'guides/multimodal-red-team',
       },
       {
         type: 'doc',
@@ -310,12 +310,12 @@ const redTeamSidebar = [
       {
         type: 'doc',
         label: 'Evaluating Safety with HarmBench',
-        id: 'red-team/guides/evaling-with-harmbench',
+        id: 'guides/evaling-with-harmbench',
       },
       {
         type: 'doc',
         label: 'Testing Google Cloud Model Armor',
-        id: 'red-team/guides/google-cloud-model-armor',
+        id: 'guides/google-cloud-model-armor',
       },
       {
         type: 'doc',
@@ -350,14 +350,14 @@ const sidebars = {
         type: 'generated-index',
       },
       items: [
-        { type: 'doc', id: 'configuration/getting-started' },
+        { type: 'doc', id: 'getting-started' },
         {
           type: 'category',
           label: 'Configuration',
           collapsed: true,
           link: {
             type: 'doc',
-            id: 'configuration/overview',
+            id: 'configuration/guide',
           },
           items: [
             { type: 'doc', id: 'configuration/reference' },

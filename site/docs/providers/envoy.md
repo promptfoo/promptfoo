@@ -9,7 +9,7 @@ description: "Connect to AI models through Envoy AI Gateway's OpenAI-compatible 
 
 ## Setup
 
-1. Deploy and configure your Envoy AI Gateway following the [official setup guide](https://aigateway.envoyproxy.io/docs/configuration/getting-started/basic-usage)
+1. Deploy and configure your Envoy AI Gateway following the [official setup guide](https://aigateway.envoyproxy.io/docs/getting-started/basic-usage)
 2. Configure your gateway URL either via environment variable or in your config
 3. Set up authentication if required by your gateway configuration
 

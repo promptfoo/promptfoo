@@ -38,4 +38,4 @@ The configuration in `promptfooconfig.yaml` shows:
 - How to specify multiple providers (models)
 - How to set up test cases with different variable values
 
-This is the same example shown in the Getting Started guide at https://promptfoo.dev/docs/configuration/getting-started
+This is the same example shown in the Getting Started guide at https://promptfoo.dev/docs/getting-started

@@ -28,7 +28,7 @@ By running a temperature eval, you can make data-driven decisions that balance t
 
 ## Prerequisites
 
-Before setting up an evaluation, create a new directory and a `promptfooconfig.yaml` file. For more information on getting started with promptfoo, refer to the [getting started guide](/docs/configuration/getting-started).
+Before setting up an evaluation, create a new directory and a `promptfooconfig.yaml` file. For more information on getting started with promptfoo, refer to the [getting started guide](/docs/getting-started).
 
 ## Evaluating
 

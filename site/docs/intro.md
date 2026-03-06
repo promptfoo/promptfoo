@@ -21,7 +21,7 @@ The goal: **test-driven LLM development**, not trial-and-error.
 :::tip Get Started
 
 - [**Red teaming**](/docs/red-team/quickstart) - Scan for security vulnerabilities and compliance risks
-- [**Evaluations**](/docs/configuration/getting-started) - Test quality and accuracy of your prompts, models, and applications
+- [**Evaluations**](/docs/getting-started) - Test quality and accuracy of your prompts, models, and applications
 
 :::
 

@@ -12,7 +12,7 @@ keywords:
     test configuration,
     assertion types,
   ]
-pagination_prev: configuration/overview
+pagination_prev: configuration/guide
 pagination_next: configuration/prompts
 ---
 
@@ -29,7 +29,7 @@ Here is the main structure of the promptfoo configuration file:
 | providers                       | string \| string[] \| [Record\<string, ProviderOptions\>](#provideroptions) \| ProviderOptions[] | Yes      | One or more [LLM APIs](/docs/providers) to use. Can also be specified as `targets`                                                                                                                                              |
 | prompts                         | string \| string[]                                                                               | Yes      | One or more [prompts](/docs/configuration/prompts) to load                                                                                                                                                                      |
 | tests                           | string \| [Test Case](#test-case)[]                                                              | Yes      | Path to a [test file](/docs/configuration/test-cases), OR list of LLM prompt variations (aka "test case")                                                                                                                       |
-| defaultTest                     | string \| Partial [Test Case](#test-case)                                                        | No       | Sets the [default properties](/docs/configuration/overview#default-test-cases) for each test case. Can be an inline object or a `file://` path to an external YAML/JSON file.                                                   |
+| defaultTest                     | string \| Partial [Test Case](#test-case)                                                        | No       | Sets the [default properties](/docs/configuration/guide#default-test-cases) for each test case. Can be an inline object or a `file://` path to an external YAML/JSON file.                                                      |
 | outputPath                      | string                                                                                           | No       | Where to write output. Writes to console/web viewer if not set. See [output formats](/docs/configuration/outputs).                                                                                                              |
 | evaluateOptions.maxConcurrency  | number                                                                                           | No       | Maximum number of concurrent requests. Defaults to 4                                                                                                                                                                            |
 | evaluateOptions.repeat          | number                                                                                           | No       | Number of times to run each test case. Defaults to 1                                                                                                                                                                            |
@@ -57,8 +57,8 @@ A test case represents a single example input that is fed into all prompts and p
 | threshold                     | number                                                          | No       | Test will fail if the combined score of assertions is less than this number                                                                                                                                                            |
 | metadata                      | Record\<string, string \| string[] \| any\>                     | No       | Additional metadata to include with the test case, useful for [filtering](/docs/configuration/test-cases#metadata-in-csv) or grouping results                                                                                          |
 | options                       | Object                                                          | No       | Additional configuration settings for the test case                                                                                                                                                                                    |
-| options.transformVars         | string                                                          | No       | A filepath (js or py) or JavaScript snippet that runs on the vars before they are substituted into the prompt. See [transforming input variables](/docs/configuration/overview#transforming-input-variables).                          |
-| options.transform             | string                                                          | No       | A filepath (js or py) or JavaScript snippet that runs on LLM output before any assertions. See [transforming outputs](/docs/configuration/overview#transforming-outputs).                                                              |
+| options.transformVars         | string                                                          | No       | A filepath (js or py) or JavaScript snippet that runs on the vars before they are substituted into the prompt. See [transforming input variables](/docs/configuration/guide#transforming-input-variables).                             |
+| options.transform             | string                                                          | No       | A filepath (js or py) or JavaScript snippet that runs on LLM output before any assertions. See [transforming outputs](/docs/configuration/guide#transforming-outputs).                                                                 |
 | options.prefix                | string                                                          | No       | Text to prepend to the prompt                                                                                                                                                                                                          |
 | options.suffix                | string                                                          | No       | Text to append to the prompt                                                                                                                                                                                                           |
 | options.provider              | string                                                          | No       | The API provider to use for [model-graded](/docs/configuration/expected-outputs/model-graded) assertion grading                                                                                                                        |
@@ -631,7 +631,7 @@ interface ProviderOptions {
   prompts?: string[];
 
   // Transform the output, either with inline Javascript or external py/js script
-  // See /docs/configuration/overview#transforming-outputs
+  // See /docs/configuration/guide#transforming-outputs
   transform?: string;
 
   // Sleep this long before each request

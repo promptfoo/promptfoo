@@ -87,7 +87,7 @@ Tools are defined using the [`@tool` decorator](https://strandsagents.com/latest
 
 ### Test cases and assertion types
 
-The [promptfoo config](https://promptfoo.dev/docs/configuration/overview/) includes 5 test cases that demonstrate different [assertion types](https://promptfoo.dev/docs/configuration/expected-outputs/):
+The [promptfoo config](https://promptfoo.dev/docs/configuration/guide/) includes 5 test cases that demonstrate different [assertion types](https://promptfoo.dev/docs/configuration/expected-outputs/):
 
 | Test                                | Description                | Assertion types used                    |
 | ----------------------------------- | -------------------------- | --------------------------------------- |

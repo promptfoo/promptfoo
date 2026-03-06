@@ -164,7 +164,7 @@ tests:
         value: darkness
 ```
 
-For more info on setting up the config, see the [configuration guide](/docs/configuration/overview).
+For more info on setting up the config, see the [configuration guide](/docs/configuration/guide).
 
 ## Conclusion
 
@@ -176,4 +176,4 @@ In this particular eval, the models performed very similarly in terms of answers
 
 Of course, this is a limited example test set. The tradeoff between cost, latency, and accuracy is going to be tailored for each application. That's why it's important to run your own eval.
 
-I encourage you to experiment with your own test cases and use this guide as a starting point. To learn more, see [Getting Started](/docs/configuration/getting-started).
+I encourage you to experiment with your own test cases and use this guide as a starting point. To learn more, see [Getting Started](/docs/getting-started).

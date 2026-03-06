@@ -217,6 +217,6 @@ Testing for malicious code generation resistance is critical for:
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
 - [Harmful Content Plugin](harmful.md)
 - [OWASP LLM Top 10](/docs/red-team/owasp-llm-top-10)
-- [Testing Guardrails](/docs/red-team/guides/testing-guardrails)
+- [Testing Guardrails](/docs/guides/testing-guardrails)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://www.promptfoo.dev">Website</a> ·
-  <a href="https://www.promptfoo.dev/docs/configuration/getting-started/">Getting Started</a> ·
+  <a href="https://www.promptfoo.dev/docs/getting-started/">Getting Started</a> ·
   <a href="https://www.promptfoo.dev/docs/red-team/">Red Teaming</a> ·
   <a href="https://www.promptfoo.dev/docs/">Documentation</a> ·
   <a href="https://discord.gg/promptfoo">Discord</a>
@@ -43,11 +43,11 @@ promptfoo eval
 promptfoo view
 ```
 
-See [Getting Started](https://www.promptfoo.dev/docs/configuration/getting-started/) (evals) or [Red Teaming](https://www.promptfoo.dev/docs/red-team/) (vulnerability scanning) for more.
+See [Getting Started](https://www.promptfoo.dev/docs/getting-started/) (evals) or [Red Teaming](https://www.promptfoo.dev/docs/red-team/) (vulnerability scanning) for more.
 
 ## What can you do with Promptfoo?
 
-- **Test your prompts and models** with [automated evaluations](https://www.promptfoo.dev/docs/configuration/getting-started/)
+- **Test your prompts and models** with [automated evaluations](https://www.promptfoo.dev/docs/getting-started/)
 - **Secure your LLM apps** with [red teaming](https://www.promptfoo.dev/docs/red-team/) and vulnerability scanning
 - **Compare models** side-by-side (OpenAI, Anthropic, Azure, Bedrock, Ollama, and [more](https://www.promptfoo.dev/docs/providers/))
 - **Automate checks** in [CI/CD](https://www.promptfoo.dev/docs/integrations/ci-cd/)
@@ -77,7 +77,7 @@ It also can generate [security vulnerability reports](https://www.promptfoo.dev/
 
 ## Learn More
 
-- [Getting Started](https://www.promptfoo.dev/docs/configuration/getting-started/)
+- [Getting Started](https://www.promptfoo.dev/docs/getting-started/)
 - [Full Documentation](https://www.promptfoo.dev/docs/intro/)
 - [Red Teaming Guide](https://www.promptfoo.dev/docs/red-team/)
 - [CLI Usage](https://www.promptfoo.dev/docs/usage/command-line/)

@@ -122,7 +122,7 @@ const config: Config = {
               description: 'Find LLM vulnerabilities in your IDE and CI/CD',
             },
             {
-              to: '/docs/configuration/getting-started/',
+              to: '/docs/getting-started/',
               label: 'Evaluations',
               description: 'Test and evaluate your prompts, models, and RAG pipelines',
             },
@@ -244,7 +244,7 @@ const config: Config = {
             },
             {
               label: 'Evaluations',
-              to: '/docs/configuration/getting-started/',
+              to: '/docs/getting-started/',
             },
             {
               label: 'Enterprise',
@@ -447,38 +447,6 @@ const config: Config = {
       '@docusaurus/plugin-client-redirects',
       {
         redirects: [
-          {
-            from: '/docs/configuration/guide',
-            to: '/docs/configuration/overview',
-          },
-          {
-            from: '/docs/getting-started',
-            to: '/docs/configuration/getting-started',
-          },
-          {
-            from: '/docs/guides/llm-redteaming',
-            to: '/docs/red-team/guides/llm-redteaming',
-          },
-          {
-            from: '/docs/guides/testing-guardrails',
-            to: '/docs/red-team/guides/testing-guardrails',
-          },
-          {
-            from: '/docs/guides/multimodal-red-team',
-            to: '/docs/red-team/guides/multimodal-red-team',
-          },
-          {
-            from: '/docs/guides/evaling-with-harmbench',
-            to: '/docs/red-team/guides/evaling-with-harmbench',
-          },
-          {
-            from: '/docs/guides/chatbase-redteam',
-            to: '/docs/red-team/guides/chatbase-redteam',
-          },
-          {
-            from: '/docs/guides/google-cloud-model-armor',
-            to: '/docs/red-team/guides/google-cloud-model-armor',
-          },
           {
             from: '/docs/category/troubleshooting',
             to: '/docs/usage/troubleshooting',

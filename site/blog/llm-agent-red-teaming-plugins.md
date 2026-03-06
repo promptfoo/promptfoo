@@ -74,7 +74,7 @@ To start using these plugins in your LLM red teaming process, update your `promp
 
 For detailed configuration options and examples, check out our documentation:
 
-- **[Overview of red teaming](/docs/red-team/)**
+- **[Intro to red teaming](/docs/red-team/)**
 - [BOLA plugin documentation](/docs/red-team/plugins/bola)
 - [BFLA plugin documentation](/docs/red-team/plugins/bfla)
 - [SSRF plugin documentation](/docs/red-team/plugins/ssrf)

@@ -2,7 +2,7 @@
 title: Getting started
 description: Learn how to set up your first promptfoo config file, create prompts, configure providers, and run your first LLM evaluation.
 keywords: [getting started, setup, configuration, prompts, providers, evaluation, llm testing]
-sidebar_position: 0
+sidebar_position: 5
 ---
 
 import Tabs from '@theme/Tabs';
@@ -174,7 +174,7 @@ To configure your evaluation:
 
    When writing test cases, think of core use cases and potential failures that you want to make sure your prompts handle correctly.
 
-   [&raquo; More information on setting up tests](/docs/configuration/overview)
+   [&raquo; More information on setting up tests](/docs/configuration/guide)
 
 4. **Run the evaluation**: Make sure you're in the directory containing `promptfooconfig.yaml`, then run:
 
@@ -227,7 +227,7 @@ The YAML configuration format runs each prompt through a series of test cases an
 Asserts are _optional_. Many people get value out of reviewing outputs manually, and the web UI helps facilitate this.
 
 :::tip
-See the [Configuration docs](/docs/configuration/overview) for a detailed guide.
+See the [Configuration docs](/docs/configuration/guide) for a detailed guide.
 :::
 
 ## Examples
@@ -467,7 +467,7 @@ Now that you've run your first eval, here are some ways to go deeper:
 
 **Customize your setup:**
 
-- [Configuration guide](/docs/configuration/overview) - Detailed walkthrough of all config options
+- [Configuration guide](/docs/configuration/guide) - Detailed walkthrough of all config options
 - [Providers documentation](/docs/providers) - All 60+ supported AI models and services
 - [Assertions & Metrics](/docs/configuration/expected-outputs) - Automatically grade outputs on a pass/fail basis
 

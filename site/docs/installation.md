@@ -85,10 +85,10 @@ After installation, you can start using promptfoo by running:
 
 This will guide you through the process of creating a `promptfooconfig.yaml` file.
 
-For a guide on running your first evaluation, please refer to our [Getting Started guide](./configuration/getting-started.md).
+For a guide on running your first evaluation, please refer to our [Getting Started guide](./getting-started.md).
 
 ## See Also
 
-- [Getting Started](./configuration/getting-started.md)
+- [Getting Started](./getting-started.md)
 - [Troubleshooting](./usage/troubleshooting.md)
 - [Contributing](./contributing.md)

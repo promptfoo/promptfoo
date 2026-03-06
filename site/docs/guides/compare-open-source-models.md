@@ -287,4 +287,4 @@ Everything else in the configuration stays the same.
 
 Ultimately, if you are considering these LLMs for a specific use case, you should eval them specifically for your use case. Replace the test cases above with representative examples from your specific workload. This will create a much more specific and useful benchmark.
 
-View the [getting started](/docs/configuration/getting-started) guide to run your own LLM benchmarks.
+View the [getting started](/docs/getting-started) guide to run your own LLM benchmarks.

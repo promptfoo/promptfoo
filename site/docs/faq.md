@@ -26,7 +26,7 @@ Promptfoo's red teaming capabilities allow you to:
 3. Analyze results to improve AI system safety and reliability.
 4. Continuously monitor LLM performance against evolving threats.
 
-For more details, see our [LLM Red Teaming Guide](/docs/red-team/guides/llm-redteaming).
+For more details, see our [LLM Red Teaming Guide](/docs/guides/llm-redteaming).
 
 ### Which LLM providers does Promptfoo support?
 
@@ -136,5 +136,5 @@ Yes. The documentation website follows the [LLMs.txt specification](https://llms
 
 - [General Troubleshooting Guide](/docs/usage/troubleshooting) - Memory optimization, API keys, timeouts, and debugging
 - [Red Team Troubleshooting Guide](/docs/red-team/troubleshooting/overview) - Common issues with LLM red teaming
-- [Configuration Guide](/docs/configuration/overview)
-- [LLM Red Teaming Guide](/docs/red-team/guides/llm-redteaming)
+- [Configuration Guide](/docs/configuration/guide)
+- [LLM Red Teaming Guide](/docs/guides/llm-redteaming)

@@ -401,7 +401,7 @@ project/
 
 ## See Also
 
-- [Configuration Overview](./overview.md) - Basic configuration concepts
+- [Configuration Guide](./guide.md) - Basic configuration concepts
 - [Configuration Reference](./reference.md) - Complete configuration options
 - [Test Cases](./test-cases.md) - Organizing test cases
 - [Prompts](./prompts.md) - Managing prompts and templates

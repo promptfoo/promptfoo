@@ -32,7 +32,7 @@ providers:
       model_id: 'gpt-4o-mini'
 
 # Default assertions applied to all test cases
-# https://promptfoo.dev/docs/configuration/overview/#default-test-cases
+# https://promptfoo.dev/docs/configuration/guide/#default-test-cases
 defaultTest:
   assert:
     # Performance: Response should complete within 30 seconds
