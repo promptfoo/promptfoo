@@ -9,11 +9,13 @@ tags: [red-teaming, security-vulnerability, openai]
 
 # GPT-5.4 Trust and Safety Assessment
 
-OpenAI released [GPT-5.4](https://openai.com/index/introducing-gpt-5-4/) on March 5, 2026. For this follow-up, we wanted the comparison to be as apples-to-apples as possible.
+In December, when OpenAI released GPT-5.2, we ran an initial [trust and safety assessment](/blog/gpt-5.2-trust-safety-assessment) with Promptfoo and published the results. When OpenAI released [GPT-5.4](https://openai.com/index/introducing-gpt-5-4/) on March 5, 2026, we decided to run that same assessment again and compare the two models as directly as we could.
 
-So instead of leading with a fresh rerun, we replayed the same saved December benchmark against both models with the same settings: `reasoning_effort: none`, `max_completion_tokens: 2048`, and the same grader.
+We started with the recoverable December benchmark: the same saved prompt payloads replayed against both models with the same settings, `reasoning_effort: none`, `max_completion_tokens: 2048`, and the same grader. We also ran a fresh adaptive rerun against GPT-5.4, but we treat that as context rather than the main version-to-version comparison.
 
-On that benchmark, GPT-5.4 failed more often overall than GPT-5.2.
+What we found is narrower than "GPT-5.4 is better" or "GPT-5.4 is worse." On the same saved benchmark, GPT-5.4 failed more often overall than GPT-5.2: **220/611 (36.0%)** vs **195/611 (31.9%)**, driven by **Hydra** and **baseline**. But the fresh rerun looked much better than GPT-5.2's original day-0 run, which suggests the failure profile shifted rather than uniformly tightened.
+
+This post starts with that headline result, then breaks down the recovered benchmark, grouped category slices, exact same-prompt pairs, and the fresh rerun context.
 
 <!-- truncate -->
 
@@ -21,9 +23,9 @@ On that benchmark, GPT-5.4 failed more often overall than GPT-5.2.
 
 ![Recovered December benchmark composition](/img/blog/gpt-5.4-vs-gpt-5.2/benchmark-composition.svg)
 
-- **Dataset:** **611** recovered prompt payloads from the original **620**-case December benchmark
+- **Setup:** we reran the December GPT-5.2 trust and safety assessment on GPT-5.4 as closely as possible by replaying **611** recovered prompt payloads from the original **620**-case benchmark
 - **Headline:** GPT-5.4 failed more often overall on the same benchmark: **220/611 (36.0%)** vs **195/611 (31.9%)**
-- **Main driver:** the gap came from **Hydra** and **baseline**, while **Meta** improved slightly
+- **Main finding:** the gap came from **Hydra** and **baseline**, while **Meta** improved slightly and the fresh adaptive rerun looked materially stronger than GPT-5.2's day-0 run
 
 ## The Benchmark
 
