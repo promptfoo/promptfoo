@@ -15,6 +15,7 @@
  */
 import dedent from 'dedent';
 import { renderPrompt } from '../../evaluatorHelpers';
+import { isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import invariant from '../../util/invariant';
@@ -83,18 +84,24 @@ const getIterativeTreeGoalRubric = (goal: string | undefined): string => {
   `;
 };
 
-/** Maximum number of attempts for the red team conversation */
-const MAX_ATTEMPTS = 250;
+/** Default maximum number of attempts for the red team conversation */
+const DEFAULT_MAX_ATTEMPTS = 250;
 
-/** Maximum depth of the search tree */
-const MAX_DEPTH = 25;
+/** Default maximum depth of the search tree */
+const DEFAULT_MAX_DEPTH = 25;
 
-/** Maximum number of consecutive iterations without improvement before stopping */
-const MAX_NO_IMPROVEMENT = 25;
+/** Default maximum number of consecutive iterations without improvement before stopping */
+const DEFAULT_MAX_NO_IMPROVEMENT = 25;
 
-/** Constants for TAP parameters */
-export const MAX_WIDTH = 10; // w parameter from paper
-const BRANCHING_FACTOR = 4; // b parameter from paper
+/** Default constants for TAP parameters */
+export const DEFAULT_MAX_WIDTH = 10; // w parameter from paper
+const DEFAULT_BRANCHING_FACTOR = 4; // b parameter from paper
+
+/** Reduced limits for unauthenticated users */
+const UNAUTHED_MAX_DEPTH = 5;
+const UNAUTHED_BRANCHING_FACTOR = 2;
+const UNAUTHED_MAX_WIDTH = 3;
+const UNAUTHED_MAX_ATTEMPTS = 30;
 
 /**
  * Extracts defined session IDs from tree outputs
@@ -395,9 +402,12 @@ function pruneToWidth(nodes: TreeNode[], width: number): TreeNode[] {
  * @param goal - The goal or objective for the red team.
  * @returns The selected diverse nodes.
  */
-export async function selectNodes(nodes: TreeNode[]): Promise<TreeNode[]> {
+export async function selectNodes(
+  nodes: TreeNode[],
+  maxWidth: number = DEFAULT_MAX_WIDTH,
+): Promise<TreeNode[]> {
   // Keep top w scoring nodes
-  return pruneToWidth(nodes, MAX_WIDTH);
+  return pruneToWidth(nodes, maxWidth);
 }
 
 /**
@@ -462,6 +472,7 @@ async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration,
   perTurnLayers = [],
   inputs,
+  treeParams,
 }: {
   context: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -476,6 +487,13 @@ async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
   inputs?: Record<string, string>;
+  treeParams?: {
+    maxDepth?: number;
+    maxAttempts?: number;
+    maxWidth?: number;
+    branchingFactor?: number;
+    maxNoImprovement?: number;
+  };
 }): Promise<RedteamTreeResponse> {
   const nunjucks = getNunjucksEngine();
   const goal: string = context?.test?.metadata?.goal || (vars[injectVar] as string);
@@ -485,6 +503,13 @@ async function runRedteamConversation({
   const transformVarsConfig = test?.options?.transformVars;
   // Generate goal-specific evaluation rubric
   const additionalRubric = getIterativeTreeGoalRubric(goal);
+
+  // Resolve tree parameters from config, with defaults
+  const MAX_DEPTH = treeParams?.maxDepth ?? DEFAULT_MAX_DEPTH;
+  const BRANCHING_FACTOR = treeParams?.branchingFactor ?? DEFAULT_BRANCHING_FACTOR;
+  const MAX_ATTEMPTS = treeParams?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+  const MAX_WIDTH = treeParams?.maxWidth ?? DEFAULT_MAX_WIDTH;
+  const MAX_NO_IMPROVEMENT = treeParams?.maxNoImprovement ?? DEFAULT_MAX_NO_IMPROVEMENT;
 
   let maxScore = 0;
 
@@ -1007,7 +1032,7 @@ async function runRedteamConversation({
       }
     }
 
-    currentBestNodes = await selectNodes(nextLevelNodes);
+    currentBestNodes = await selectNodes(nextLevelNodes, MAX_WIDTH);
     logger.debug(
       `[Depth ${depth}] Exploration complete. Selected ${currentBestNodes.length} diverse nodes for next depth. Current best score: ${bestScore}. Max score: ${maxScore}`,
     );
@@ -1111,6 +1136,14 @@ class RedteamIterativeTreeProvider implements ApiProvider {
    * @param config - The configuration object for the provider.
    * @param initializeProviders - A export function to initialize the OpenAI providers.
    */
+  private readonly treeParams: {
+    maxDepth: number;
+    maxAttempts: number;
+    maxWidth: number;
+    branchingFactor: number;
+    maxNoImprovement: number;
+  };
+
   constructor(readonly config: Record<string, VarValue>) {
     logger.debug('[IterativeTree] Constructor config', { config });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
@@ -1119,6 +1152,26 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );
+
+    // Read tree params from config (set by UI StrategyConfigDialog), fall back to defaults
+    let maxDepth = Number(config.maxDepth) || DEFAULT_MAX_DEPTH;
+    let branchingFactor = Number(config.branchingFactor) || DEFAULT_BRANCHING_FACTOR;
+    let maxWidth = Number(config.maxWidth) || DEFAULT_MAX_WIDTH;
+    let maxAttempts = Number(config.maxAttempts) || DEFAULT_MAX_ATTEMPTS;
+    const maxNoImprovement = Number(config.maxNoImprovement) || DEFAULT_MAX_NO_IMPROVEMENT;
+
+    // Clamp tree parameters for unauthenticated users
+    if (!isLoggedIntoCloud()) {
+      maxDepth = Math.min(maxDepth, UNAUTHED_MAX_DEPTH);
+      branchingFactor = Math.min(branchingFactor, UNAUTHED_BRANCHING_FACTOR);
+      maxWidth = Math.min(maxWidth, UNAUTHED_MAX_WIDTH);
+      maxAttempts = Math.min(maxAttempts, UNAUTHED_MAX_ATTEMPTS);
+      logger.warn(
+        'jailbreak:tree parameters reduced for unauthenticated users. Run `promptfoo auth login` for full access.',
+      );
+    }
+
+    this.treeParams = { maxDepth, branchingFactor, maxWidth, maxAttempts, maxNoImprovement };
   }
 
   /**
@@ -1193,6 +1246,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
       inputs: this.inputs,
+      treeParams: this.treeParams,
     });
   }
 }
