@@ -916,11 +916,9 @@ describe('ClaudeCodeSDKProvider', () => {
         it('with additionalDirectories configuration', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
-          const additionalDirectories = ['/path/to/dir1', '/path/to/dir2'];
-
           const provider = new ClaudeCodeSDKProvider({
             config: {
-              additional_directories: additionalDirectories,
+              additional_directories: ['./relative/dir', '/absolute/dir'],
             },
             env: { ANTHROPIC_API_KEY: 'test-api-key' },
           });
@@ -929,7 +927,7 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(mockQuery).toHaveBeenCalledWith({
             prompt: 'Test prompt',
             options: expect.objectContaining({
-              additionalDirectories,
+              additionalDirectories: ['/test/basePath/relative/dir', '/absolute/dir'],
             }),
           });
         });

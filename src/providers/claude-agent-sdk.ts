@@ -757,7 +757,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
         path: safeResolve(basePath, plugin.path),
       })),
       maxBudgetUsd: config.max_budget_usd,
-      additionalDirectories: config.additional_directories,
+      additionalDirectories: config.additional_directories?.map((dir) =>
+        safeResolve(basePath, dir),
+      ),
       resume: config.resume,
       forkSession: config.fork_session,
       resumeSessionAt: config.resume_session_at,
