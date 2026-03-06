@@ -8,7 +8,7 @@
  * expected attributes.
  *
  * Usage:
- *   npx tsx examples/otel-tracing/validate-tracing.ts
+ *   npx tsx examples/integration-opentelemetry/built-in/validate-tracing.ts
  *
  * Prerequisites:
  *   - Set OPENAI_API_KEY environment variable

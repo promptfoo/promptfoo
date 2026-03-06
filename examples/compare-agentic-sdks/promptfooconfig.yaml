@@ -12,7 +12,7 @@ providers:
     label: codex-sdk
     config:
       model: gpt-5.1-codex
-      working_dir: examples/agentic-sdk-comparison/test-codebase
+      working_dir: examples/compare-agentic-sdks/test-codebase
       skip_git_repo_check: true
       output_schema:
         type: object
@@ -50,7 +50,7 @@ providers:
     label: claude-agent-sdk
     config:
       model: claude-sonnet-4-6
-      working_dir: examples/agentic-sdk-comparison/test-codebase
+      working_dir: examples/compare-agentic-sdks/test-codebase
 
   # OpenCode SDK with file system tools (provider-agnostic)
   - id: opencode:sdk
@@ -58,7 +58,7 @@ providers:
     config:
       provider_id: anthropic
       model: claude-sonnet-4-6
-      working_dir: examples/agentic-sdk-comparison/test-codebase
+      working_dir: examples/compare-agentic-sdks/test-codebase
 
   # Plain LLM for baseline (no file access)
   - id: openai:gpt-5.1

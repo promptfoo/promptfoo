@@ -12,7 +12,7 @@ targets:
         'signature': '{{signature}}'
       signatureAuth:
         type: jks
-        keystorePath: ./examples/http-provider-auth-signature-jks/clientkeystore.jks
+        keystorePath: ./clientkeystore.jks
         # keystorePassword: password # Can be provided here or via PROMPTFOO_JKS_PASSWORD env var
         keyAlias: 'client'
         keyPassword: password

@@ -15,7 +15,7 @@ See `promptfooconfig.js` for the full configuration, including prompts, provider
 ## Running the Example
 
 ```
-promptfoo eval -c [path to examples/function-tools-callback/]promptfooconfig.js
+promptfoo eval -c [path to examples/eval-function-tools-callback/]promptfooconfig.js
 ```
 
 For more details on function calling and OpenAI tools, refer to:

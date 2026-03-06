@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../../site/static/config-schema.json
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: ElevenLabs Forced Alignment - Subtitle generation
 
 # Alignment uses audio files + transcripts - pass via vars
@@ -24,7 +24,7 @@ defaultTest:
 tests:
   - description: Align Armstrong moon landing speech
     vars:
-      audioFile: examples/elevenlabs-stt/audio/sample1.mp3
+      audioFile: examples/provider-elevenlabs/stt/audio/sample1.mp3
       transcript: "That's one small step for man, one giant leap for mankind."
       format: json
     assert:
@@ -35,7 +35,7 @@ tests:
 
   - description: Align Armstrong to SRT format
     vars:
-      audioFile: examples/elevenlabs-stt/audio/sample1.mp3
+      audioFile: examples/provider-elevenlabs/stt/audio/sample1.mp3
       transcript: "That's one small step for man, one giant leap for mankind."
       format: srt
     assert:
@@ -44,7 +44,7 @@ tests:
 
   - description: Align sample2 hello message
     vars:
-      audioFile: examples/elevenlabs-stt/audio/sample2.wav
+      audioFile: examples/provider-elevenlabs/stt/audio/sample2.wav
       transcript: "Hello. What's today's date? Could you please let me know?"
       format: json
     assert:

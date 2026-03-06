@@ -77,7 +77,7 @@ providers:
 tests:
   - description: Verify isolation succeeds
     vars:
-      audioFile: examples/elevenlabs-stt/audio/sample1.mp3
+      audioFile: examples/provider-elevenlabs/stt/audio/sample1.mp3
     assert:
       - type: javascript
         value: output.includes('isolated successfully')

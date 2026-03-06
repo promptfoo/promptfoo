@@ -40,7 +40,7 @@ To access the MMLU dataset, you'll need to authenticate with Hugging Face:
    You can clone this repository and from the root directory run:
 
    ```bash
-   cd examples/deepseek-r1-vs-openai-o1
+   cd examples/compare-deepseek-r1-vs-openai-o1
    ```
 
    or you can get the example with:

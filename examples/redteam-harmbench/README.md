@@ -37,7 +37,7 @@ ollama run llama3.1:8b
 
 ## Running the Evaluation
 
-Now that we've set our LLMs, let's run an eval against the HarmBench behaviors dataset. You'll see that we also include the dataset in the `examples/harmbench` directory in `harmbench_behaviors_text_all.csv`. The full dataset contains 400+ text-based test cases across several different criteria. You can also fetch this (or any other) dataset from the [HarmBench GitHub repository](https://github.com/centerforaisafety/HarmBench/tree/main/data/behavior_datasets).
+Now that we've set our LLMs, let's run an eval against the HarmBench behaviors dataset. You'll see that we also include the dataset in the `examples/redteam-harmbench` directory in `harmbench_behaviors_text_all.csv`. The full dataset contains 400+ text-based test cases across several different criteria. You can also fetch this (or any other) dataset from the [HarmBench GitHub repository](https://github.com/centerforaisafety/HarmBench/tree/main/data/behavior_datasets).
 
 Finally, let's open up a third terminal window and run the following command to kick off the evaluation:
 

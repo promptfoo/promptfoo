@@ -23,7 +23,7 @@ export GROQ_API_KEY=your_groq_key
 ## Running the Example
 
 ```bash
-npx promptfoo eval -c examples/cloudflare-gateway/promptfooconfig.yaml
+npx promptfoo eval -c examples/provider-cloudflare/gateway/promptfooconfig.yaml
 ```
 
 ## What This Example Does

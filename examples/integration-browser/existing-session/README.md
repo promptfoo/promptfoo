@@ -20,7 +20,7 @@ This example demonstrates two browser provider modes:
 ### 1. Start the test server
 
 ```bash
-cd examples/browser-existing-session
+cd examples/integration-browser/existing-session
 node server.js
 ```
 

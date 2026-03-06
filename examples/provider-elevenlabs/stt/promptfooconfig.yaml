@@ -41,7 +41,7 @@ defaultTest:
 tests:
   - description: Transcription of sample1
     vars:
-      audioFile: examples/elevenlabs-stt/audio/sample1.mp3
+      audioFile: examples/provider-elevenlabs/stt/audio/sample1.mp3
     assert:
       - type: javascript
         value: output.length > 10
@@ -50,14 +50,14 @@ tests:
 
   - description: Transcription of sample2
     vars:
-      audioFile: examples/elevenlabs-stt/audio/sample2.wav
+      audioFile: examples/provider-elevenlabs/stt/audio/sample2.wav
     assert:
       - type: javascript
         value: output.length > 10
 
   - description: Diarization test
     vars:
-      audioFile: examples/elevenlabs-stt/audio/sample3_multiple_speakers.mp3
+      audioFile: examples/provider-elevenlabs/stt/audio/sample3_multiple_speakers.mp3
     assert:
       - type: javascript
         value: output.length > 10

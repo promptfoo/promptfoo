@@ -62,7 +62,7 @@ The external file (`shared/defaultTest.yaml`) contains the same configuration th
 ## Running the Example
 
 ```bash
-cd examples/external-defaulttest
+cd examples/config-external-defaulttest
 npx promptfoo@latest eval
 ```
 

@@ -8,7 +8,7 @@
 #   VERCEL_AI_GATEWAY_API_KEY - Your Vercel AI Gateway API key
 #
 # Run with:
-#   npx promptfoo eval -c examples/vercel-ai-gateway/promptfooconfig.yaml
+#   npx promptfoo eval -c examples/integration-vercel/ai-gateway/promptfooconfig.yaml
 
 description: Vercel AI Gateway multi-provider comparison
 

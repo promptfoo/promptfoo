@@ -20,7 +20,7 @@
 # you can omit the provider API keys - Cloudflare will use the stored keys.
 #
 # Run with:
-#   npx promptfoo eval -c examples/cloudflare-gateway/promptfooconfig.yaml
+#   npx promptfoo eval -c examples/provider-cloudflare/gateway/promptfooconfig.yaml
 
 description: Cloudflare AI Gateway comparison
 

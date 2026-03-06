@@ -7,7 +7,7 @@
 # then reports the actual prompt sent to the LLM.
 #
 # Setup:
-#   cd examples/vercel-ai-sdk
+#   cd examples/integration-vercel/ai-sdk
 #   npm install
 #   export OPENAI_API_KEY=sk-...
 #

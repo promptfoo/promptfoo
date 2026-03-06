@@ -82,7 +82,7 @@ All examples use Cloudflare's OpenAI-compatible endpoints, supporting standard p
 For local testing with your development version:
 
 ```bash
-npm run local -- eval -c examples/cloudflare-ai/chat_config.yaml
+npm run local -- eval -c examples/provider-cloudflare/ai/chat_config.yaml
 ```
 
 ## References

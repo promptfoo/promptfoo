@@ -12,7 +12,7 @@ targets:
         'signature': '{{signature}}'
       signatureAuth:
         type: pfx
-        pfxPath: ./examples/http-provider-auth-signature-pfx/certificate.pfx
+        pfxPath: ./certificate.pfx
         pfxPassword: 'password'
         signatureValidityMs: 300000
         signatureDataTemplate: 'promptfoo-app{{signatureTimestamp}}'

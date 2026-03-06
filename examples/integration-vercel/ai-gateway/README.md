@@ -25,7 +25,7 @@ npx promptfoo eval
 Or run directly:
 
 ```bash
-npx promptfoo eval -c examples/vercel-ai-gateway/promptfooconfig.yaml
+npx promptfoo eval -c examples/integration-vercel/ai-gateway/promptfooconfig.yaml
 ```
 
 ## What This Example Does

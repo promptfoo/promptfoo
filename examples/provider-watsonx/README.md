@@ -37,7 +37,7 @@ promptfoo eval
 Or with the local build:
 
 ```sh
-npm run local -- eval --config examples/watsonx/promptfooconfig.yaml
+npm run local -- eval --config examples/provider-watsonx/promptfooconfig.yaml
 ```
 
 Afterwards, view the results:
