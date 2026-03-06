@@ -62,6 +62,7 @@ describe('auth command', () => {
       user: mockCloudUser,
       organization: mockOrganization,
       app: mockApp,
+      hasActiveLicense: false,
     });
   });
 
@@ -193,6 +194,7 @@ describe('auth command', () => {
         user: newCloudUser,
         organization: mockOrganization,
         app: mockApp,
+        hasActiveLicense: false,
       });
 
       const loginCmd = program.commands
