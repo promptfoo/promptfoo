@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 780" role="img" aria-labelledby="title desc">
   <title id="title">GPT-5.4 versus GPT-5.2 comparison summary</title>
-  <desc id="desc">Two aligned cards compare adaptive rerun results and frozen replay results for Hydra, Meta, and Baseline. GPT-5.4 improves on the rerun but regresses on frozen replay.</desc>
+  <desc id="desc">Two aligned cards compare regenerated-corpus rerun results and fixed prompt-payload replay results for Hydra, Meta, and Baseline. GPT-5.4 improves on the rerun but weakens on the fixed replay.</desc>
   <defs>
     <style>
       .bg { fill: #f6f1e7; }
@@ -34,7 +34,7 @@
   <rect class="bg" width="1200" height="780" rx="24" />
 
   <text class="ink title" x="60" y="72">Two Comparisons, Two Answers</text>
-  <text class="muted subtitle" x="60" y="104">Same settings, same model pair, different methodology. The rerun says GPT-5.4 got harder to break. The replay says it got looser on identical prompts.</text>
+  <text class="muted subtitle" x="60" y="104">Same settings, same model pair, different methodology. The rerun says GPT-5.4 got harder to break. The fixed replay says it got looser on saved prompt payloads.</text>
 
   <rect class="panel" x="810" y="44" width="330" height="78" rx="18" />
   <rect class="baseline" x="836" y="68" width="18" height="10" rx="5" />
@@ -92,8 +92,8 @@
   </g>
 
   <g transform="translate(650 180)">
-    <text class="ink section" x="0" y="0">Frozen replay</text>
-    <text class="muted subtitle" x="0" y="28">Replay the exact March 6 prompts against both models</text>
+    <text class="ink section" x="0" y="0">Fixed prompt-payload replay</text>
+    <text class="muted subtitle" x="0" y="28">Replay the saved March 6 prompt payloads against both models</text>
     <rect class="chip-bad" x="372" y="-16" width="94" height="34" rx="17" />
     <text class="ink chip-label center" x="419" y="1">looser</text>
 
@@ -136,5 +136,5 @@
   </g>
 
   <rect class="footer" x="210" y="716" width="780" height="38" rx="19" />
-  <text class="ink legend center" x="600" y="735">Operational harm got harder to trigger. Persona, politics, profanity, and harassment got easier on identical prompts.</text>
+  <text class="ink legend center" x="600" y="735">High-severity direct harm got quieter in the rerun. Representation, politics, and related prompts got looser on fixed payloads.</text>
 </svg>

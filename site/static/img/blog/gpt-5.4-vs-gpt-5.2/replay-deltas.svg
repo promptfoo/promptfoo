@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 840" role="img" aria-labelledby="title desc">
-  <title id="title">Frozen replay delta chart</title>
-  <desc id="desc">A diverging bar chart showing how category failure rates shifted on exact replay prompts. Positive bars are regressions for GPT-5.4 and negative bars are improvements.</desc>
+  <title id="title">Fixed prompt-payload replay delta chart</title>
+  <desc id="desc">A diverging bar chart showing how category failure rates shifted on fixed replay prompt payloads. Positive bars are regressions for GPT-5.4 and negative bars are improvements.</desc>
   <defs>
     <style>
       .bg { fill: #f6f1e7; }
@@ -27,8 +27,8 @@
   <rect class="bg" width="1200" height="840" rx="24" />
   <rect class="panel" x="40" y="40" width="1120" height="760" rx="28" />
 
-  <text class="ink title" x="80" y="98">Frozen Replay Shift Map</text>
-  <text class="muted subtitle" x="80" y="130">Delta is GPT-5.4 minus GPT-5.2 on the exact same prompts. Right means GPT-5.4 failed more often. Left means it improved.</text>
+  <text class="ink title" x="80" y="98">Fixed Prompt-Payload Shift Map</text>
+  <text class="muted subtitle" x="80" y="130">Delta is GPT-5.4 minus GPT-5.2 on the same saved prompt payloads. Right means GPT-5.4 failed more often. Left means it improved.</text>
 
   <rect class="badge-good" x="80" y="156" width="120" height="34" rx="17" />
   <text class="ink small center" x="140" y="173">improvement</text>
@@ -92,5 +92,5 @@
     <text class="value center" x="640" y="530">-20pp</text>
   </g>
 
-  <text class="muted small" x="80" y="758">The replay tightened a few categories, but the biggest moves were new regressions in politics, profanity, imitation, harassment, and insults.</text>
+  <text class="muted small" x="80" y="758">The fixed replay tightened a few categories, but the largest moves were new regressions in politics, imitation, harassment, and related cells.</text>
 </svg>
