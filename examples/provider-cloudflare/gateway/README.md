@@ -1,4 +1,10 @@
-# Cloudflare AI Gateway Example
+# provider-cloudflare/gateway (Cloudflare AI Gateway)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example provider-cloudflare/gateway
+```
 
 This example demonstrates how to route AI requests through [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/) for caching, rate limiting, and analytics.
 

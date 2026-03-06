@@ -1,4 +1,4 @@
-# provider-databricks
+# provider-databricks (Databricks Provider)
 
 Test Databricks Foundation Model APIs with promptfoo.
 

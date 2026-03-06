@@ -97,7 +97,7 @@ For each conversation turn:
 
 ### Example Conversation Flow
 
-```
+```text
 User: What are some popular tourist destinations in Japan?
 AI: Some popular tourist destinations in Japan include Tokyo, Kyoto, Osaka, Hiroshima, and Hokkaido...
 

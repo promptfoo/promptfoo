@@ -1,5 +1,11 @@
 # provider-elevenlabs/agents (ElevenLabs Conversational Agents)
 
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example provider-elevenlabs/agents
+```
+
 Test and evaluate ElevenLabs voice AI agents with multi-turn conversations.
 
 ## What this tests

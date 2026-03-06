@@ -6,13 +6,15 @@ You can run this example with:
 npx promptfoo@latest init --example huggingface/hate-speech-detection
 ```
 
+## Usage
+
 To get started, set your HF_API_TOKEN environment variable.
 
 Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
 promptfoo eval
 ```
 

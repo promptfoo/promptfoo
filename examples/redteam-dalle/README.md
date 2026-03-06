@@ -48,7 +48,7 @@ This example demonstrates how to use promptfoo to automatically discover jailbre
 
 During evaluation, you may see error messages like:
 
-```
+```python
 Error from target provider: 400 Your request was rejected as a result of our safety system.
 Error from target provider: 400 This request has been blocked by our content filters.
 ```

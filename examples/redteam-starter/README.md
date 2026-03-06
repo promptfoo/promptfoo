@@ -6,8 +6,10 @@ You can run this example with:
 npx promptfoo@latest init --example redteam-starter
 ```
 
+## Usage
+
 This runs a redteam against an example public HTTP chatbot endpoint.
 
-```
+```bash
 promptfoo redteam run
 ```

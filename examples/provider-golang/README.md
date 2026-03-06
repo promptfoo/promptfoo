@@ -18,7 +18,7 @@ promptfoo init --example provider-golang
 
 This example shows two implementations of the same provider interface:
 
-```
+```text
 provider-golang/
 ├── go.mod            # Root module definition
 ├── main.go           # Root provider implementation

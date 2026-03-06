@@ -1,4 +1,4 @@
-# integration-browser/headless
+# integration-browser/headless (Headless Browser Automation)
 
 A browser automation example demonstrating how to test web applications using Playwright.
 

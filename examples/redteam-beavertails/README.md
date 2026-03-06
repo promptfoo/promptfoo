@@ -1,4 +1,4 @@
-# BeaverTails Red Team Testing
+# redteam-beavertails (BeaverTails Red Team Testing)
 
 This example demonstrates how to use the BeaverTails plugin for red team testing, including subcategory filtering.
 

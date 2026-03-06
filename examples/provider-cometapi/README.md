@@ -1,4 +1,4 @@
-# CometAPI
+# provider-cometapi (CometAPI Provider)
 
 This example shows how to use CometAPI to access various language models through a unified OpenAI-compatible interface.
 

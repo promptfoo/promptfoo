@@ -6,6 +6,8 @@ You can run this example with:
 npx promptfoo@latest init --example compare-phi-vs-llama
 ```
 
+## Usage
+
 To get started:
 
 ```sh
@@ -17,7 +19,7 @@ Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
 promptfoo eval
 ```
 

@@ -1,4 +1,4 @@
-# openai (Azure OpenAI)
+# azure/openai (Azure OpenAI)
 
 This example demonstrates how to use Azure OpenAI with promptfoo, including text generation and vision capabilities.
 

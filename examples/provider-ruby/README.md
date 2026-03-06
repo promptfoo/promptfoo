@@ -1,4 +1,4 @@
-# provider-ruby
+# provider-ruby (Ruby Provider)
 
 This example demonstrates how to create a custom Ruby provider for promptfoo that integrates with the OpenAI API.
 

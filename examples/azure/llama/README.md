@@ -1,4 +1,4 @@
-# llama (Azure Llama Models)
+# azure/llama (Azure Llama Models)
 
 This example demonstrates how to use Meta Llama models on Azure AI Foundry with promptfoo.
 

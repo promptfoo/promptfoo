@@ -6,13 +6,15 @@ You can run this example with:
 npx promptfoo@latest init --example config-transform-file
 ```
 
+## Usage
+
 To get started, set your OPENAI_API_KEY environment variable.
 
 Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
 promptfoo eval
 ```
 

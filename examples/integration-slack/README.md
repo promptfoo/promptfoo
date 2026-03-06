@@ -1,4 +1,4 @@
-# integration-slack
+# integration-slack (Slack Integration)
 
 This example shows how to collect human feedback via Slack for evaluating AI responses.
 

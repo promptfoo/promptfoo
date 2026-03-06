@@ -6,6 +6,8 @@ You can run this example with:
 npx promptfoo@latest init --example compare-claude-vs-gpt-image
 ```
 
+## Usage
+
 This example compares an image analysis task using:
 
 - gpt-4.1 via OpenAI

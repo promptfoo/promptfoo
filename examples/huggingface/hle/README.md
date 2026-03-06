@@ -1,4 +1,4 @@
-# huggingface/hle
+# huggingface/hle (Humanity's Last Exam)
 
 Evaluate LLMs against [Humanity's Last Exam (HLE)](https://arxiv.org/abs/2501.14249), a challenging benchmark created by 1,000+ experts across 500+ institutions. HLE features 3,000+ questions spanning 100+ subjects, designed to push AI capabilities to their limits.
 

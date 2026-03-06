@@ -12,7 +12,7 @@ If you use a model-graded eval, you must set your OPENAI_API_KEY environment var
 
 Then run:
 
-```
+```bash
 promptfoo eval --assertions asserts.yaml --model-outputs outputs.json
 ```
 

@@ -1,4 +1,4 @@
-# e2b Code Eval — step-by-step sandboxed code-eval example
+# integration-e2b (E2B Code Evaluation)
 
 ## What This Example Demonstrates
 

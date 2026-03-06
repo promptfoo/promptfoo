@@ -6,6 +6,8 @@ You can run this example with:
 npx promptfoo@latest init --example config-multi-turn
 ```
 
+## Usage
+
 To get started, set your OPENAI_API_KEY environment variable.
 
 Next, have a look at prompt.json and edit promptfooconfig.yaml. The prompt uses a special built-in variable `_conversation` that has the following signature:
@@ -28,7 +30,7 @@ Use `completion.output` to get the assistant's response to that message.
 
 Then run:
 
-```
+```bash
 promptfoo eval
 ```
 

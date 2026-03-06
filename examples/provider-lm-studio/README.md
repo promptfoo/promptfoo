@@ -44,7 +44,7 @@ This example demonstrates how to use Promptfoo with LM Studio for prompt evaluat
 
 1. **Run Evaluation**:
 
-   ```
+   ```bash
    npx promptfoo eval
    ```
 

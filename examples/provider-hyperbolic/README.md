@@ -1,4 +1,4 @@
-# provider-hyperbolic
+# provider-hyperbolic (Hyperbolic AI Provider)
 
 This directory contains examples for testing Hyperbolic AI models with promptfoo.
 

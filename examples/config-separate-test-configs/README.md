@@ -6,10 +6,12 @@ You can run this example with:
 npx promptfoo@latest init --example config-separate-test-configs
 ```
 
+## Usage
+
 This example shows how you can use paths and wildcards to simplify for `promptfooconfig.yaml`.
 
 Run:
 
-```
+```bash
 promptfoo eval
 ```

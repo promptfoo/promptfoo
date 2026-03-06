@@ -1,4 +1,4 @@
-# provider-litellm
+# provider-litellm (LiteLLM Provider)
 
 You can run this example with:
 

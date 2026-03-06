@@ -1,4 +1,4 @@
-# google-imagen
+# google-imagen (Google Imagen)
 
 This example demonstrates Google image generation models, including both Imagen and Gemini native image generation.
 

@@ -20,7 +20,7 @@ npx promptfoo@latest init --example redteam-foundation-model
 
 Create a `.env` file with your API keys:
 
-```
+```text
 OPENAI_API_KEY=your_openai_key_here
 ANTHROPIC_API_KEY=your_anthropic_key_here
 # Add other provider keys as needed

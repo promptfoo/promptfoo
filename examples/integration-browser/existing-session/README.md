@@ -1,4 +1,4 @@
-# integration-browser/existing-session
+# integration-browser/existing-session (Browser Existing Session)
 
 Test OAuth-authenticated applications by connecting to existing Chrome browser sessions.
 

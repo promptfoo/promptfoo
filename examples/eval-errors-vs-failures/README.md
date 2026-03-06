@@ -6,4 +6,6 @@ You can run this example with:
 npx promptfoo@latest init --example eval-errors-vs-failures
 ```
 
+## Usage
+
 This directory contains a custom provider that throws errors when the prompt includes `!ERROR!`, demonstrating how promptfoo distinguishes between test errors (provider failures) and test failures (failed assertions).

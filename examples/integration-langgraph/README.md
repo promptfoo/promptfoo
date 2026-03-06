@@ -1,10 +1,10 @@
-# integration-langgraph
+# integration-langgraph (LangGraph Integration)
 
 This example demonstrates how to use LangGraph with Promptfoo, including a research agent setup, structured output, and red teaming or evaluation.
 
 You can run this example with:
 
-```
+```bash
 npx promptfoo@latest init --example integration-langgraph
 ```
 
@@ -37,7 +37,7 @@ pip install langgraph langchain langchain-openai python-dotenv
 
 Install promptfoo CLI:
 
-```
+```bash
 npm install -g promptfoo
 ```
 

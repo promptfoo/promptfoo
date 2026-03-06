@@ -8,14 +8,6 @@ npx promptfoo@latest init --example simple-csv
 
 This example demonstrates how to use CSV and Excel files for test cases in promptfoo, including working with JSON fields for language translation tasks.
 
-## Getting Started
-
-You can initialize this example in your project by running:
-
-```bash
-promptfoo init --example simple-csv
-```
-
 ## Features Demonstrated
 
 - CSV and Excel (XLSX) test case formats with JSON configuration fields

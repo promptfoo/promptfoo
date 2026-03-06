@@ -1,4 +1,10 @@
-# HTTP Provider with TLS Certificates
+# provider-http/tls (HTTP Provider with TLS Certificates)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example provider-http/tls
+```
 
 This example demonstrates how to configure the HTTP provider with TLS/SSL certificates for mutual TLS (mTLS) authentication.
 

@@ -13,7 +13,7 @@ There are two examples:
 
 Then run:
 
-```
+```bash
 promptfoo eval
 ```
 

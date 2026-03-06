@@ -6,13 +6,15 @@ You can run this example with:
 npx promptfoo@latest init --example compare-claude-vs-gpt
 ```
 
+## Usage
+
 To get started, set your OPENAI_API_KEY and ANTHROPIC_API_KEY environment variables.
 
 Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
 promptfoo eval
 ```
 

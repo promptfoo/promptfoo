@@ -6,13 +6,15 @@ You can run this example with:
 npx promptfoo@latest init --example provider-replicate/lifeboat
 ```
 
+## Usage
+
 To get started, set your OpenAI and Replicate API tokens in promptfooconfig.yaml.
 
 Then, add your test cases.
 
 Then run:
 
-```
+```bash
 promptfoo eval
 ```
 

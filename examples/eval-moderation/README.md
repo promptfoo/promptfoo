@@ -6,13 +6,15 @@ You can run this example with:
 npx promptfoo@latest init --example eval-moderation
 ```
 
+## Usage
+
 To get started, set your OPENAI_API_KEY and REPLICATE_API_KEY environment variables.
 
 Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
 promptfoo eval
 ```
 

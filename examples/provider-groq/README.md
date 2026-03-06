@@ -6,13 +6,15 @@ You can run this example with:
 npx promptfoo@latest init --example provider-groq
 ```
 
+## Usage
+
 To get started, set your `GROQ_API_KEY` environment variable.
 
 Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
 promptfoo eval
 ```
 

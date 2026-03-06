@@ -14,7 +14,7 @@ See `promptfooconfig.js` for the full configuration, including prompts, provider
 
 ## Running the Example
 
-```
+```bash
 promptfoo eval -c [path to examples/eval-function-tools-callback/]promptfooconfig.js
 ```
 

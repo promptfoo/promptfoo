@@ -22,7 +22,7 @@ ollama run mannix/llama3.1-8b-abliterated
 
 You should be able to interact with the model in the terminal window.
 
-```
+```text
 >>> Send a message (/? for help)
 >>> Is the sky high in the month of July, respond with only yes/no answer
 Yes.

@@ -1,4 +1,4 @@
-# google-video
+# google-video (Google Video)
 
 This example demonstrates Google Veo video generation models for AI-powered video creation from text prompts.
 

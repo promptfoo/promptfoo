@@ -1,4 +1,4 @@
-# integration-google-adk
+# integration-google-adk (Google ADK Integration)
 
 This example demonstrates how to test Google Agent Development Kit (ADK) agents using promptfoo. It shows both single-turn and multi-turn conversation patterns with automatic session management.
 

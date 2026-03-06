@@ -12,13 +12,13 @@ Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
 promptfoo eval -c configs/*
 ```
 
 or
 
-```
+```bash
 promptfoo eval -c configs/config1.yaml configs/config2.yaml
 ```
 

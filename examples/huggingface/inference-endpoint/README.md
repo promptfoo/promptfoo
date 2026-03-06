@@ -6,13 +6,15 @@ You can run this example with:
 npx promptfoo@latest init --example huggingface/inference-endpoint
 ```
 
+## Usage
+
 To get started, set your HF_API_TOKEN environment variable. See also https://promptfoo.dev/docs/providers/huggingface/ for setup details.
 
 Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
 promptfoo eval
 ```
 

@@ -6,4 +6,6 @@ You can run this example with:
 npx promptfoo@latest init --example integration-docker/code-generation-sandbox
 ```
 
+## Usage
+
 See https://promptfoo.dev/docs/guides/sandboxed-code-evals

@@ -6,5 +6,7 @@ You can run this example with:
 npx promptfoo@latest init --example redteam-intent-sequence
 ```
 
+## Usage
+
 This is a simple example that shows how you can hardcode a sequence of prompts
 into a red team evaluation.

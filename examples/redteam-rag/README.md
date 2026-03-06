@@ -6,6 +6,8 @@ You can run this example with:
 npx promptfoo@latest init --example redteam-rag
 ```
 
+## Usage
+
 This is a simple red team example for a hypothetical customer service agent representing Travel R Us, a hotel search company.
 
 We check for things like:
@@ -17,12 +19,12 @@ We check for things like:
 
 To run the pre-generated eval (`redteam.yaml`):
 
-```
+```bash
 promptfoo redteam eval
 ```
 
 To re-generate tests and run the red team eval:
 
-```
+```bash
 promptfoo redteam run
 ```

@@ -78,7 +78,7 @@ tests:
 
 ## Project Structure
 
-```
+```text
 openai-agents-basic/
 ├── agents/
 │   └── dungeon-master-agent.ts    # D&D Dungeon Master agent
@@ -287,7 +287,7 @@ Then visit `http://localhost:16686` to view traces.
 
 **Combat Scenario:**
 
-```
+```text
 Player: "I attack the goblin with my longsword!"
 DM: *rolls 1d20+5* You rolled a 18 total! Your blade strikes true.
     *rolls 1d8+4* You deal 9 slashing damage. The goblin staggers back,
@@ -296,7 +296,7 @@ DM: *rolls 1d20+5* You rolled a 18 total! Your blade strikes true.
 
 **Natural 20:**
 
-```
+```text
 Player: "I attack the dragon!"
 DM: *rolls 1d20+5* Natural 20! Critical hit! Your longsword finds a gap
     in the dragon's scales. *rolls 2d8+4* You deal a devastating 16 damage!
@@ -304,7 +304,7 @@ DM: *rolls 1d20+5* Natural 20! Critical hit! Your longsword finds a gap
 
 **Character Stats Check:**
 
-```
+```text
 Player: "What are my current stats?"
 DM: You're Thorin Ironforge, a Level 5 Mountain Dwarf Fighter:
     - HP: 42/47
@@ -315,7 +315,7 @@ DM: You're Thorin Ironforge, a Level 5 Mountain Dwarf Fighter:
 
 **Scene Description:**
 
-```
+```text
 Player: "I enter the ancient crypt"
 DM: *describes ominous crypt* Rows of stone sarcophagi line the walls,
     some with their lids askew. The air is thick and stale. Strange scratch

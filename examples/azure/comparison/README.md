@@ -1,4 +1,4 @@
-# comparison (Azure Model Comparison)
+# azure/comparison (Azure Model Comparison)
 
 This example demonstrates how to compare models from different providers on Azure AI Foundry, including OpenAI, Anthropic Claude, Meta Llama, and Mistral.
 

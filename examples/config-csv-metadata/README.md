@@ -6,6 +6,8 @@ You can run this example with:
 npx promptfoo@latest init --example config-csv-metadata
 ```
 
+## Usage
+
 This example demonstrates how to use metadata columns in CSV and Excel test files to organize and filter your test cases. You can see more details on how to build test cases from CSV in the [Promptfoo docs](https://www.promptfoo.dev/docs/configuration/test-cases/#csv-format)
 
 ### Files

@@ -6,6 +6,8 @@ You can run this example with:
 npx promptfoo@latest init --example integration-langchain
 ```
 
+## Usage
+
 This example shows how to run a Python (LangChain) chain implementation with Promptfoo. It compares GPT-4 versus LangChain's LLM Math module.
 
 To run it, first create a virtual env and install the requirements:
@@ -20,6 +22,6 @@ pip install -r requirements.txt
 
 Then run the eval:
 
-```
+```bash
 npx promptfoo eval
 ```

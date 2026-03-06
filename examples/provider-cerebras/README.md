@@ -22,7 +22,7 @@ export CEREBRAS_API_KEY="your-api-key-here"
 
 Alternatively, you can add it to your `.env` file:
 
-```
+```text
 CEREBRAS_API_KEY=your-api-key-here
 ```
 

@@ -1,4 +1,10 @@
-# Max-Score Selection Example
+# eval-max-score-selection (Max-Score Selection)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example eval-max-score-selection
+```
 
 This example demonstrates the `max-score` assertion type for objective output selection based on aggregated scores from other assertions.
 

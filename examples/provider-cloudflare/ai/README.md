@@ -1,4 +1,4 @@
-# provider-cloudflare/ai
+# provider-cloudflare/ai (Cloudflare Workers AI)
 
 Cloudflare Workers AI evaluation with OpenAI-compatible endpoints.
 

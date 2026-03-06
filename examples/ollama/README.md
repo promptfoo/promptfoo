@@ -74,7 +74,7 @@ npx promptfoo@latest eval -c promptfooconfig.function-calling.yaml
 
 **Expected output**:
 
-```
+```text
 ✔ Evaluation complete
 Pass Rate: 100.00%
 Successes: 3
@@ -117,7 +117,7 @@ Edit `promptfooconfig.function-calling.yaml` to:
 
 ## File Structure
 
-```
+```text
 examples/ollama/
 ├── README.md                              # This file
 ├── promptfooconfig.yaml                   # Model comparison (default)

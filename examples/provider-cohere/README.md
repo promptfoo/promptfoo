@@ -6,19 +6,21 @@ You can run this example with:
 npx promptfoo@latest init --example provider-cohere
 ```
 
+## Usage
+
 To get started, set your COHERE_API_KEY environment variable.
 
 Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
 promptfoo eval
 ```
 
 Or
 
-```
+```bash
 promptfoo eval -c complex_config.yaml
 ```
 

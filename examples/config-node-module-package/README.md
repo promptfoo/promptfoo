@@ -6,11 +6,13 @@ You can run this example with:
 npx promptfoo@latest init --example config-node-module-package
 ```
 
+## Usage
+
 To get started, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
 promptfoo eval
 ```
 

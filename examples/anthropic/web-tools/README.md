@@ -1,4 +1,4 @@
-# web-tools
+# anthropic/web-tools (Anthropic Web Tools)
 
 This example demonstrates Anthropic's web search and web fetch tools, showing both basic URL fetching and comprehensive research workflows.
 

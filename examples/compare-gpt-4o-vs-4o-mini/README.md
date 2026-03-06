@@ -28,7 +28,7 @@ npx promptfoo@latest init --example compare-gpt-4o-vs-4o-mini
 
    Alternatively, you can set the API key in a `.env` file:
 
-   ```
+   ```text
    OPENAI_API_KEY=your_openai_api_key
    ```
 

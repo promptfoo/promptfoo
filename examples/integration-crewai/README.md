@@ -1,4 +1,4 @@
-# integration-crewai
+# integration-crewai (CrewAI Integration)
 
 This example shows how to use **CrewAI agents** with promptfoo to evaluate AI agent performance.
 

@@ -1,4 +1,10 @@
-# Helicone AI Gateway Example
+# integration-helicone (Helicone AI Gateway)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example integration-helicone
+```
 
 This example demonstrates how to use the Helicone AI Gateway provider in promptfoo to route requests through a self-hosted Helicone AI Gateway instance for unified provider access.
 

@@ -18,7 +18,7 @@ This example demonstrates using promptfoo from a TypeScript script.
 
 You can set these in a `.env` file:
 
-```
+```text
 OPENAI_API_KEY=sk-your-key-here
 ANTHROPIC_API_KEY=sk-ant-your-key-here
 ```
