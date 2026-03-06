@@ -1684,7 +1684,28 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
-        it('with debug configuration', async () => {
+        it('with debug configuration and relative debug_file', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              debug: true,
+              debug_file: './logs/debug.log',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              debug: true,
+              debugFile: '/test/basePath/logs/debug.log',
+            }),
+          });
+        });
+
+        it('with debug configuration and absolute debug_file', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
           const provider = new ClaudeCodeSDKProvider({

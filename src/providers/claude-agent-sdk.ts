@@ -774,7 +774,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       agent: config.agent,
       sessionId: config.session_id,
       debug: config.debug,
-      debugFile: config.debug_file,
+      debugFile: config.debug_file ? safeResolve(basePath, config.debug_file) : undefined,
       sandbox: config.sandbox,
       allowDangerouslySkipPermissions: config.allow_dangerously_skip_permissions,
       permissionPromptToolName: config.permission_prompt_tool_name,
