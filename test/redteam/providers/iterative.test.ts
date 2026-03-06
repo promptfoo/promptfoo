@@ -10,6 +10,11 @@ const mockGetTargetResponse = vi.hoisted(() => vi.fn());
 const mockCheckPenalizedPhrases = vi.hoisted(() => vi.fn());
 const mockGetGraderById = vi.hoisted(() => vi.fn());
 
+vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
+}));
+
 vi.mock('../../../src/logger', () => ({
   default: {
     debug: vi.fn(),

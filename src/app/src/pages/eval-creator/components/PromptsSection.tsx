@@ -123,6 +123,8 @@ const PromptsSection = () => {
             <TooltipContent>Upload prompt from file</TooltipContent>
           </Tooltip>
 
+          <Button onClick={() => setPromptDialogOpen(true)}>Add Prompt</Button>
+
           {prompts.length === 0 && (
             <Button
               variant="secondary"
@@ -135,7 +137,6 @@ const PromptsSection = () => {
               Add Example
             </Button>
           )}
-          <Button onClick={() => setPromptDialogOpen(true)}>Add Prompt</Button>
         </div>
       </div>
 
@@ -214,6 +215,7 @@ const PromptsSection = () => {
         open={promptDialogOpen}
         prompt={editingPromptIndex === null ? '' : prompts[editingPromptIndex]}
         index={editingPromptIndex === null ? 0 : editingPromptIndex}
+        isEditing={editingPromptIndex !== null}
         onAdd={(newPrompt) => {
           if (editingPromptIndex === null) {
             setPrompts([...prompts, newPrompt]);

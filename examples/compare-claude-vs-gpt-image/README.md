@@ -11,7 +11,7 @@ This example compares an image analysis task using:
 - gpt-4.1 via OpenAI
 - claude-sonnet-4-6 via Amazon Bedrock
 - claude-sonnet-4-6 via Anthropic
-- gemini-2.5-flash-image (Nano Banana) via Google AI Studio
+- gemini-3.1-flash-image-preview (Nano Banana 2) via Google AI Studio
 
 GPT-4.1, Claude, and Gemini have different prompt formats. We use custom provider functions in Python and JavaScript to dynamically format the prompt based on context about the provider. The responses are scored using `llm-rubric` with a vision-capable OpenAI model.
 

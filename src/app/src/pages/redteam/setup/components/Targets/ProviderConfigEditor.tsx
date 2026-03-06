@@ -24,6 +24,8 @@ export interface ProviderConfigEditorProps {
   providerType?: string;
   onTargetTested?: (success: boolean) => void;
   onSessionTested?: (success: boolean) => void;
+  /** Set to 'eval' to hide red-team-specific options like Test Generation */
+  mode?: 'eval' | 'redteam';
 }
 
 function ProviderConfigEditor({
@@ -38,8 +40,10 @@ function ProviderConfigEditor({
   providerType,
   onTargetTested,
   onSessionTested,
+  mode = 'redteam',
 }: ProviderConfigEditorProps) {
   const { config, updateConfig } = useRedTeamConfig();
+  const isRedTeam = mode === 'redteam';
   const [bodyError, setBodyError] = useState<string | React.ReactNode | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [rawConfigJson, setRawConfigJson] = useState<string>(
@@ -402,11 +406,12 @@ function ProviderConfigEditor({
           extensions={extensions}
           onExtensionsChange={onExtensionsChange}
           onValidationChange={(hasErrors) => setExtensionErrors(hasErrors)}
-          testGenerationInstructions={config.testGenerationInstructions ?? ''}
-          onTestGenerationInstructionsChange={(instructions) =>
-            updateConfig('testGenerationInstructions', instructions)
-          }
-          onPromptsChange={(prompts) => updateConfig('prompts', prompts)}
+          {...(isRedTeam && {
+            testGenerationInstructions: config.testGenerationInstructions ?? '',
+            onTestGenerationInstructionsChange: (instructions: string) =>
+              updateConfig('testGenerationInstructions', instructions),
+            onPromptsChange: (prompts: string[]) => updateConfig('prompts', prompts),
+          })}
         />
       </div>
     </div>
