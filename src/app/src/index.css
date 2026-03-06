@@ -72,19 +72,6 @@
     }
   }
 
-  /* Indeterminate progress bar animation */
-  @keyframes indeterminate {
-    0% {
-      transform: translateX(-100%);
-    }
-    50% {
-      transform: translateX(200%);
-    }
-    100% {
-      transform: translateX(-100%);
-    }
-  }
-
   /* Sheet/Dialog animation keyframes */
   @keyframes enter {
     from {
