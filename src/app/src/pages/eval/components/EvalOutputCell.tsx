@@ -433,28 +433,39 @@ function EvalOutputCell({
   }
 
   // Append structured images (e.g. from Gemini text+image responses)
+  // When the primary output was already rendered as an image (data URI, blob ref, or SVG),
+  // skip the first entry in output.images to avoid rendering the same image twice.
+  // Additional images beyond the first are still shown.
   if (output.images?.length) {
-    const imageElements = output.images.map((img: ImageOutput, idx: number) => {
-      const src = resolveImageSource(img);
-      return src ? (
-        <img
-          key={`img-${idx}`}
-          src={src}
-          alt={output.prompt || 'Generated image'}
-          loading="lazy"
-          style={{ width: '100%', cursor: 'pointer' }}
-          onClick={() => toggleLightbox(src)}
-        />
-      ) : null;
-    });
-    node = node ? (
-      <>
-        {node}
-        {imageElements}
-      </>
-    ) : (
-      imageElements
+    const primaryRenderedAsImage = !!(
+      text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/) ||
+      inlineImageSrc ||
+      text?.trim().startsWith('<svg')
     );
+    const imagesToRender = primaryRenderedAsImage ? output.images.slice(1) : output.images;
+    if (imagesToRender.length > 0) {
+      const imageElements = imagesToRender.map((img: ImageOutput, idx: number) => {
+        const src = resolveImageSource(img);
+        return src ? (
+          <img
+            key={`img-${idx}`}
+            src={src}
+            alt={output.prompt || 'Generated image'}
+            loading="lazy"
+            style={{ width: '100%', cursor: 'pointer' }}
+            onClick={() => toggleLightbox(src)}
+          />
+        ) : null;
+      });
+      node = node ? (
+        <>
+          {node}
+          {imageElements}
+        </>
+      ) : (
+        imageElements
+      );
+    }
   }
 
   const handleRating = (isPass: boolean) => {
