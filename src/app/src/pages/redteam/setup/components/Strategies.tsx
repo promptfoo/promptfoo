@@ -7,7 +7,6 @@ import {
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
 import { useApiHealth } from '@app/hooks/useApiHealth';
-import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import {
@@ -44,6 +43,9 @@ import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 // Set of hero strategy IDs for filtering
 const HERO_STRATEGY_IDS_SET: ReadonlySet<string> = new Set(HERO_STRATEGY_IDS);
 
+/** Strategies gated to enterprise only (always disabled in OSS) */
+const STRATEGIES_ENTERPRISE_ONLY = new Set(['gcg']);
+
 // ------------------------------------------------------------------
 // Types & Interfaces
 // ------------------------------------------------------------------
@@ -76,9 +78,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const {
     data: { status: apiHealthStatus },
   } = useApiHealth();
-  const { data: cloudConfig } = useCloudConfig();
-  const isCloudEnabled = cloudConfig?.isEnabled ?? false;
-
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
 
   const [configDialog, setConfigDialog] = useState<ConfigDialogState>({
@@ -92,26 +91,23 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
 
-  /** Strategies that require authentication to use */
-  const STRATEGIES_REQUIRING_AUTH = useMemo(() => new Set(['gcg']), []);
-
   const isStrategyDisabled = useCallback(
     (strategyId: string) => {
-      if (isRemoteGenerationDisabled && STRATEGIES_REQUIRING_REMOTE_SET.has(strategyId)) {
+      if (STRATEGIES_ENTERPRISE_ONLY.has(strategyId)) {
         return true;
       }
-      if (!isCloudEnabled && STRATEGIES_REQUIRING_AUTH.has(strategyId)) {
+      if (isRemoteGenerationDisabled && STRATEGIES_REQUIRING_REMOTE_SET.has(strategyId)) {
         return true;
       }
       return false;
     },
-    [isRemoteGenerationDisabled, isCloudEnabled, STRATEGIES_REQUIRING_AUTH],
+    [isRemoteGenerationDisabled],
   );
 
-  /** Whether a strategy is disabled specifically because it requires enterprise auth */
+  /** Whether a strategy is disabled specifically because it's enterprise only */
   const isStrategyAuthGated = useCallback(
-    (strategyId: string) => !isCloudEnabled && STRATEGIES_REQUIRING_AUTH.has(strategyId),
-    [isCloudEnabled, STRATEGIES_REQUIRING_AUTH],
+    (strategyId: string) => STRATEGIES_ENTERPRISE_ONLY.has(strategyId),
+    [],
   );
 
   const selectedStrategyIds = useMemo(() => {
@@ -169,11 +165,8 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
       // Allow deselection even when disabled, but block selection
       if (isStrategyDisabled(strategyId) && !isSelected) {
-        if (!isCloudEnabled && STRATEGIES_REQUIRING_AUTH.has(strategyId)) {
-          toast.showToast(
-            'This strategy requires authentication. Run `promptfoo auth login` to use it.',
-            'error',
-          );
+        if (STRATEGIES_ENTERPRISE_ONLY.has(strategyId)) {
+          toast.showToast('This strategy is available in Promptfoo Enterprise.', 'error');
         } else {
           toast.showToast(
             'This strategy requires remote generation to be enabled. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION.',
