@@ -4,7 +4,6 @@ import os from 'os';
 import path from 'path';
 
 import { Presets, SingleBar } from 'cli-progress';
-import { execa } from 'execa';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
@@ -51,6 +50,7 @@ async function checkFfmpegAvailable(): Promise<void> {
     return;
   }
   try {
+    const { execa } = await import('execa');
     await execa('ffmpeg', ['-version']);
     ffmpegAvailable = true;
   } catch (error) {
@@ -116,6 +116,7 @@ async function textToVideo(text: string): Promise<string> {
         const systemFont = getSystemFont();
 
         // Create a 5-second video with white background and text overlay
+        const { execa } = await import('execa');
         await execa('ffmpeg', [
           '-f',
           'lavfi',

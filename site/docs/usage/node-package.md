@@ -192,7 +192,7 @@ import promptfoo from 'promptfoo';
 })();
 ```
 
-There's a full example on Github [here](https://github.com/promptfoo/promptfoo/tree/main/examples/node-package).
+There's a full example on Github [here](https://github.com/promptfoo/promptfoo/tree/main/examples/config-node-package).
 
 Here's the example output in JSON format:
 

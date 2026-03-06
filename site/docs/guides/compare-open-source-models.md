@@ -22,7 +22,7 @@ This guide assumes that you have promptfoo [installed](/docs/installation). It u
 Initialize a new directory that will contain our prompts and test cases:
 
 ```sh
-npx promptfoo@latest init --example open-source-comparison
+npx promptfoo@latest init --example compare-open-source-models
 ```
 
 Now let's start editing `promptfooconfig.yaml`. Create a list of models we'd like to compare:

@@ -32,7 +32,7 @@ By the end of this guide, you'll have a working project setup that connects Lang
 To scaffold the LangGraph + Promptfoo example, you can run:
 
 ```bash
-npx promptfoo@latest init --example langgraph
+npx promptfoo@latest init --example integration-langgraph
 ```
 
 This will:

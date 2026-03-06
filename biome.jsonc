@@ -22,7 +22,7 @@
       "!!**/dist",
       "!!**/build",
       "!!**/public",
-      "!!examples/multiple-turn-conversation/prompt.json",
+      "!!examples/config-multi-turn/prompt.json",
       "!!examples/openai-chat-history/prompt.json",
       "!!test/fixtures/rubric-json-template/**/*.json",
       // Excluded due to stack overflow crash in biome - see https://github.com/biomejs/biome/issues/8783
@@ -223,7 +223,7 @@
   "overrides": [
     {
       "includes": [
-        "examples/multiple-turn-conversation/prompt.json",
+        "examples/config-multi-turn/prompt.json",
         "examples/openai-chat-history/prompt.json"
       ],
       "linter": {
@@ -234,7 +234,7 @@
       }
     },
     {
-      "includes": ["examples/custom-provider/vercelAiSdkExample.js"],
+      "includes": ["examples/provider-custom/basic/vercelAiSdkExample.js"],
       "linter": {
         "enabled": false
       },

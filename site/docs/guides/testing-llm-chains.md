@@ -90,7 +90,7 @@ In this example, the end result is a side-by-side comparison of GPT-4 vs. LangCh
 
 ![langchain eval](/img/docs/langchain-eval.png)
 
-View the [full example on Github](https://github.com/promptfoo/promptfoo/tree/main/examples/langchain-python).
+View the [full example on Github](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-langchain).
 
 ### Using a custom provider
 

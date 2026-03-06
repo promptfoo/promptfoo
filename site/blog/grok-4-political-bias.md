@@ -23,7 +23,7 @@ import TabItem from '@theme/TabItem';
 
 When Grok 4 launched amid Hitler-praising controversies, critics expected Elon Musk's AI to be a right-wing propaganda machine. The reality is much more complicated.
 
-Today, we are releasing a test methodology and [accompanying dataset](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv) for detecting political bias in LLMs. The complete analysis results are available on [Hugging Face](https://huggingface.co/datasets/promptfoo/political-questions).
+Today, we are releasing a test methodology and [accompanying dataset](https://github.com/promptfoo/promptfoo/blob/main/examples/redteam-grok-4-political-bias/political-questions.csv) for detecting political bias in LLMs. The complete analysis results are available on [Hugging Face](https://huggingface.co/datasets/promptfoo/political-questions).
 
 Our measurements show that:
 
@@ -44,7 +44,7 @@ Our measurements show that:
   </p>
 </div>
 
-Our methodology, [published open-source](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/), involves measuring direct bias through responses across a 7-point likert scale, as well as indirect political bias by having each model score other models' responses.
+Our methodology, [published open-source](https://github.com/promptfoo/promptfoo/blob/main/examples/redteam-grok-4-political-bias/), involves measuring direct bias through responses across a 7-point likert scale, as well as indirect political bias by having each model score other models' responses.
 
 <!-- truncate -->
 
@@ -65,7 +65,7 @@ We generated a dataset of political questions covering diverse ideological terra
 
 We created the dataset by seeding initial questions and extending it via [synthetic data generation](https://www.promptfoo.dev/docs/configuration/datasets/) to ensure comprehensive coverage across the political spectrum, with careful attention to avoiding leading questions or implicit biases.
 
-The complete dataset contains 2,500 statements and is [available publicly](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv). The full analysis results, including all model responses and cross-model political bias scores, are available on [Hugging Face](https://huggingface.co/datasets/promptfoo/political-questions).
+The complete dataset contains 2,500 statements and is [available publicly](https://github.com/promptfoo/promptfoo/blob/main/examples/redteam-grok-4-political-bias/political-questions.csv). The full analysis results, including all model responses and cross-model political bias scores, are available on [Hugging Face](https://huggingface.co/datasets/promptfoo/political-questions).
 
 To produce a similar dataset, start by seeding a few example political statements:
 
@@ -188,16 +188,16 @@ We used [Promptfoo](https://github.com/promptfoo/promptfoo) to run a systematic 
 
 **Scale of the Experiment:**
 
-- 10,000 total model responses (4 models × [2,500 questions](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv))
+- 10,000 total model responses (4 models × [2,500 questions](https://github.com/promptfoo/promptfoo/blob/main/examples/redteam-grok-4-political-bias/political-questions.csv))
 - 3.9 million tokens processed
 - 99.98% success rate
 - Approximately $280 in API costs, 20 minutes runtime with 20 concurrent threads
 
-The full experiment code and dataset are available in our [GitHub repository](https://github.com/promptfoo/promptfoo/tree/main/examples/grok-4-political-bias) and [HuggingFace](https://huggingface.co/datasets/promptfoo/political-questions/) under CC-BY 4.0 license.
+The full experiment code and dataset are available in our [GitHub repository](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-grok-4-political-bias) and [HuggingFace](https://huggingface.co/datasets/promptfoo/political-questions/) under CC-BY 4.0 license.
 
 ## Results
 
-Our evaluation of [2,500 political questions](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv) revealed findings that completely contradict the prevailing narrative. On our scale where 0.5 represents true political center (with 0 being far-right and 1 being far-left), here's what we found:
+Our evaluation of [2,500 political questions](https://github.com/promptfoo/promptfoo/blob/main/examples/redteam-grok-4-political-bias/political-questions.csv) revealed findings that completely contradict the prevailing narrative. On our scale where 0.5 represents true political center (with 0 being far-right and 1 being far-left), here's what we found:
 
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', alignItems: 'center', margin: '2rem auto'}}>
   <div>
@@ -390,7 +390,7 @@ When other models agree, Grok often takes the opposite extreme.
 
 Several factors might explain the disconnect:
 
-1. **Cherry-Picking vs. Systematic Analysis**: Media reports often focus on shocking individual examples (Hitler praise, MechaHitler). Our systematic evaluation of [2,500 questions](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv) reveals the overall pattern.
+1. **Cherry-Picking vs. Systematic Analysis**: Media reports often focus on shocking individual examples (Hitler praise, MechaHitler). Our systematic evaluation of [2,500 questions](https://github.com/promptfoo/promptfoo/blob/main/examples/redteam-grok-4-political-bias/political-questions.csv) reveals the overall pattern.
 
 2. **The Extremism Trap**: Grok's bipolar behavior means it DOES produce extreme right-wing outputs - just not more than extreme left-wing ones. Controversial right-wing statements naturally attract more media attention.
 
@@ -466,7 +466,7 @@ defaultTest:
 This configuration means:
 
 - Every response from all 4 models is judged by all 4 models
-- Total judgments: 4 models × [2,500 questions](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv) × 4 judges = 40,000 judgments
+- Total judgments: 4 models × [2,500 questions](https://github.com/promptfoo/promptfoo/blob/main/examples/redteam-grok-4-political-bias/political-questions.csv) × 4 judges = 40,000 judgments
 - Each judge uses the same rubric for consistency
 - Metrics are tracked separately for each judge
 
@@ -561,7 +561,7 @@ You can replicate our experiment using Promptfoo. Start with the simplified two-
 
 ```bash
 # Clone the example
-npx promptfoo@latest init --example grok-4-political-bias
+npx promptfoo@latest init --example redteam-grok-4-political-bias
 
 # Set up API keys
 export XAI_API_KEY=your_xai_key
@@ -630,13 +630,13 @@ Our experiment, while comprehensive, faces several inherent challenges:
 Despite these challenges, our findings remain valuable:
 
 - The systematic approach reveals patterns invisible in anecdotal reports
-- The scale ([2,500 questions](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv)) provides statistical robustness
+- The scale ([2,500 questions](https://github.com/promptfoo/promptfoo/blob/main/examples/redteam-grok-4-political-bias/political-questions.csv)) provides statistical robustness
 - The comparative analysis shows relative differences between models
 - The methodology is transparent and reproducible
 
 ## The Verdict: Grok 4 is redder... but still blue
 
-Our [2,500-question](https://github.com/promptfoo/promptfoo/blob/main/examples/grok-4-political-bias/political-questions.csv) evaluation across 4 major AI models reveals a nuanced truth:
+Our [2,500-question](https://github.com/promptfoo/promptfoo/blob/main/examples/redteam-grok-4-political-bias/political-questions.csv) evaluation across 4 major AI models reveals a nuanced truth:
 
 1. **Grok is more right-leaning than GPT-4.1 or Gemini... but Claude Opus 4 is the most centrist**. At 0.655, Grok is still in progressive territory, positioned between the left-leaning GPT-4.1 (0.745) and the more centrist Claude (0.646).
 
@@ -660,7 +660,7 @@ This isn't necessarily sinister - it likely reflects the training data (academic
 
 Want to run your own political bias tests or contribute to this research? Here's how:
 
-- **Fork the repo**: Clone our [GitHub repository](https://github.com/promptfoo/promptfoo/tree/main/examples/grok-4-political-bias) and run the evaluation suite yourself
+- **Fork the repo**: Clone our [GitHub repository](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-grok-4-political-bias) and run the evaluation suite yourself
 - **Share improvements**: Submit PRs with new questions, better scoring methods, or additional models
 - **Join the discussion**: Share your results and insights in the [Promptfoo Discord](https://discord.gg/promptfoo)
 - **Stay updated**: Follow [@promptfoo](https://twitter.com/promptfoo) for the latest in LLM evaluation research

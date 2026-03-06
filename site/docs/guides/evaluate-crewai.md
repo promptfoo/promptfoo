@@ -25,7 +25,7 @@ By the end of this guide, you’ll have a **hands-on project setup** that connec
 To scaffold the CrewAI + Promptfoo example, you can run:
 
 ```
-npx promptfoo@latest init --example crewai
+npx promptfoo@latest init --example integration-crewai
 ```
 
 This will:
