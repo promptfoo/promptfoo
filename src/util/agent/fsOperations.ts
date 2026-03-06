@@ -10,72 +10,13 @@ import { execSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import logger from '../../logger';
+import { isPathWithinDir } from '../isPathWithinDir';
+
+export { isPathWithinDir };
 
 const MAX_FILE_SIZE = 100_000; // 100KB
 const MAX_GREP_MATCHES = 100;
 const ALLOWED_WRITE_EXTENSIONS = ['.js', '.mjs'];
-
-/**
- * Check if a file path is within a workspace directory.
- *
- * Resolves symlinks to their real paths to prevent symlink-based directory
- * traversal attacks. For non-existent paths (e.g., when creating new files),
- * recursively validates the parent directory until it finds an existing path.
- *
- * @param filePath - The file path to check (can be relative or absolute)
- * @param workspace - The workspace directory (absolute path)
- * @returns Promise that resolves to true if the path is within the workspace
- */
-export async function isPathWithinWorkspace(filePath: string, workspace: string): Promise<boolean> {
-  // Validate workspace exists first — fail fast on configuration errors
-  let realWorkspaceRaw: string;
-  try {
-    realWorkspaceRaw = await fs.realpath(workspace);
-  } catch {
-    throw new Error(`Workspace directory does not exist or is inaccessible: ${workspace}`);
-  }
-
-  try {
-    const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(workspace, filePath);
-    const realTargetRaw = await fs.realpath(absoluteTarget);
-
-    // Windows: compare case-insensitive
-    const realWorkspace =
-      process.platform === 'win32' ? realWorkspaceRaw.toLowerCase() : realWorkspaceRaw;
-    const realTarget = process.platform === 'win32' ? realTargetRaw.toLowerCase() : realTargetRaw;
-
-    // Equal means the workspace dir itself
-    if (realTarget === realWorkspace) {
-      return true;
-    }
-
-    // Containment check via relative() — avoids prefix gotchas like /foo/bar vs /foo/barista
-    const rel = path.relative(realWorkspace, realTarget);
-    return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
-  } catch (error: any) {
-    // If target doesn't exist (ENOENT), validate parent directory instead.
-    // This allows writes to create new files in valid directories.
-    if (error.code === 'ENOENT') {
-      const absoluteTarget = path.isAbsolute(filePath)
-        ? filePath
-        : path.resolve(workspace, filePath);
-      const parentDir = path.dirname(absoluteTarget);
-
-      // Stop recursion if we've reached root
-      if (parentDir === absoluteTarget) {
-        logger.warn('Path validation failed — reached filesystem root');
-        return false;
-      }
-
-      return isPathWithinWorkspace(parentDir, workspace);
-    }
-
-    // Fail safely on any other error (broken symlinks, permission errors, etc.)
-    logger.warn(`Path validation failed for ${filePath}: ${error.message ?? error}`);
-    return false;
-  }
-}
 
 /**
  * Resolve a requested path relative to rootDir and validate it is within
@@ -83,7 +24,7 @@ export async function isPathWithinWorkspace(filePath: string, workspace: string)
  */
 async function resolveAndValidate(requested: string, rootDir: string): Promise<string> {
   const resolved = path.resolve(rootDir, requested);
-  if (!(await isPathWithinWorkspace(resolved, rootDir))) {
+  if (!(await isPathWithinDir(resolved, rootDir))) {
     throw new Error(`Path traversal rejected: ${requested}`);
   }
   return resolved;
