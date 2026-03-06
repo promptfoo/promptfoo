@@ -1,3 +1,63 @@
+import type { Agent } from 'http';
+
+import { getEnvString } from '../../envars';
+
+const REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
+
+export function hasProxyEnv(): boolean {
+  return Boolean(getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY'));
+}
+
+/**
+ * Creates a NodeHttpHandler (HTTP/1.1) for Bedrock SDK clients.
+ *
+ * The @aws-sdk/client-bedrock-runtime package defaults to HTTP/2, which causes
+ * "http2 request did not get a response" errors in many environments (see #7756).
+ * This function forces HTTP/1.1 via NodeHttpHandler.
+ *
+ * For @aws-sdk/client-bedrock-agent-runtime (which already defaults to HTTP/1.1),
+ * this is only needed when proxy or API key authentication is required.
+ */
+export async function createBedrockRequestHandler(options?: {
+  apiKey?: string;
+}): Promise<{ handle: (...args: any[]) => any }> {
+  const hasProxy = hasProxyEnv();
+
+  try {
+    const { NodeHttpHandler } = await import('@smithy/node-http-handler');
+    let proxyAgent: Agent | undefined;
+    if (hasProxy) {
+      const { ProxyAgent } = await import('proxy-agent');
+      proxyAgent = new ProxyAgent() as unknown as Agent;
+    }
+
+    const handler = new NodeHttpHandler({
+      ...(proxyAgent ? { httpsAgent: proxyAgent } : {}),
+      requestTimeout: REQUEST_TIMEOUT_MS,
+    });
+
+    if (options?.apiKey) {
+      const originalHandle = handler.handle.bind(handler);
+      handler.handle = async (request: any, handlerOptions?: any) => {
+        request.headers = {
+          ...request.headers,
+          Authorization: `Bearer ${options.apiKey}`,
+        };
+        return originalHandle(request, handlerOptions);
+      };
+    }
+
+    return handler;
+  } catch {
+    const reason = options?.apiKey
+      ? 'API key authentication requires the @smithy/node-http-handler package'
+      : hasProxy
+        ? 'Proxy configuration requires the @smithy/node-http-handler package'
+        : 'Bedrock provider requires the @smithy/node-http-handler package';
+    throw new Error(`${reason}. Please install it in your project or globally.`);
+  }
+}
+
 interface AmazonResponse {
   output?: {
     message?: {
