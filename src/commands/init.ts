@@ -11,10 +11,11 @@ import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
 import { fetchWithProxy } from '../util/fetch/index';
 import { promptfooCommand } from '../util/promptfooCommand';
-import { EXAMPLE_ALIASES, EXAMPLE_REPLACEMENTS } from './exampleAliases';
+import { EXAMPLE_ALIASES, EXAMPLE_REPLACEMENTS, REMOVED_EXAMPLES } from './exampleAliases';
 import type { Command } from 'commander';
 
 const GITHUB_API_BASE = 'https://api.github.com';
+const DEFAULT_EXAMPLE_REFS = [VERSION, 'main'];
 const EXAMPLE_CONFIG_FILENAMES = new Set([
   'promptfooconfig.yaml',
   'promptfooconfig.yml',
@@ -27,6 +28,12 @@ const EXAMPLE_CONFIG_FILENAMES = new Set([
 interface GitHubTreeItem {
   path: string;
   type: 'blob' | 'tree' | string;
+}
+
+interface GitHubContentItem {
+  name: string;
+  type: 'file' | 'dir' | string;
+  download_url: string | null;
 }
 
 function getGitHubHeaders() {
@@ -83,6 +90,28 @@ async function hasRootPromptfooConfig(exampleDir: string): Promise<boolean> {
   }
 }
 
+async function fetchExampleDirectoryContents(
+  dirPath: string,
+  refs: string[],
+): Promise<GitHubContentItem[]> {
+  const failedRefs: string[] = [];
+
+  for (const ref of refs) {
+    const url = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=${ref}`;
+    const response = await fetchWithProxy(url, {
+      headers: getGitHubHeaders(),
+    });
+    if (response.ok) {
+      return (await response.json()) as GitHubContentItem[];
+    }
+    failedRefs.push(`${ref} (${response.status} ${response.statusText})`);
+  }
+
+  throw new Error(
+    `Failed to fetch directory contents for refs: ${failedRefs.join(', ') || refs.join(', ')}`,
+  );
+}
+
 export async function downloadFile(url: string, filePath: string): Promise<void> {
   const response = await fetchWithProxy(url);
   if (!response.ok) {
@@ -92,40 +121,29 @@ export async function downloadFile(url: string, filePath: string): Promise<void>
   await fs.writeFile(filePath, content);
 }
 
-export async function downloadDirectory(dirPath: string, targetDir: string): Promise<void> {
-  // First try with VERSION
-  const url = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=${VERSION}`;
-  let response = await fetchWithProxy(url, {
-    headers: getGitHubHeaders(),
-  });
-
-  // If VERSION fails, try with 'main'
-  if (!response.ok) {
-    const mainUrl = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=main`;
-    response = await fetchWithProxy(mainUrl, {
-      headers: getGitHubHeaders(),
-    });
-
-    // If both attempts fail, throw an error
-    if (!response.ok) {
-      throw new Error(`Failed to fetch directory contents: ${response.statusText}`);
-    }
-  }
-
-  const contents = await response.json();
+export async function downloadDirectory(
+  dirPath: string,
+  targetDir: string,
+  refs: string[] = DEFAULT_EXAMPLE_REFS,
+): Promise<void> {
+  const contents = await fetchExampleDirectoryContents(dirPath, refs);
 
   for (const item of contents) {
     const itemPath = path.join(targetDir, item.name);
-    if (item.type === 'file') {
+    if (item.type === 'file' && item.download_url) {
       await downloadFile(item.download_url, itemPath);
     } else if (item.type === 'dir') {
       await fs.mkdir(itemPath, { recursive: true });
-      await downloadDirectory(`${dirPath}/${item.name}`, itemPath);
+      await downloadDirectory(`${dirPath}/${item.name}`, itemPath, refs);
     }
   }
 }
 
-export async function downloadExample(exampleName: string, targetDir: string): Promise<void> {
+export async function downloadExample(
+  exampleName: string,
+  targetDir: string,
+  refs: string[] = DEFAULT_EXAMPLE_REFS,
+): Promise<void> {
   let dirAlreadyExists = false;
   try {
     await fs.access(targetDir);
@@ -135,7 +153,7 @@ export async function downloadExample(exampleName: string, targetDir: string): P
   }
   try {
     await fs.mkdir(targetDir, { recursive: true });
-    await downloadDirectory(exampleName, targetDir);
+    await downloadDirectory(exampleName, targetDir, refs);
   } catch (error) {
     if (!dirAlreadyExists) {
       try {
@@ -166,6 +184,53 @@ export async function getExamplesList(): Promise<string[]> {
   }
 }
 
+interface ExampleDownloadSelection {
+  exampleName: string | undefined;
+  downloadRefs: string[];
+}
+
+function isLegacyRefs(refs: string[]): boolean {
+  return refs.length === 1 && !DEFAULT_EXAMPLE_REFS.includes(refs[0]);
+}
+
+function resolveExampleSelection(example: string): ExampleDownloadSelection {
+  const removedExample = REMOVED_EXAMPLES[example];
+  if (removedExample) {
+    logger.warn(chalk.yellow(`Note: ${removedExample.reason}`));
+    logger.info(
+      chalk.yellow(
+        `Downloading the legacy '${example}' example from promptfoo@${removedExample.legacyRef}.`,
+      ),
+    );
+    return {
+      exampleName: example,
+      downloadRefs: [removedExample.legacyRef],
+    };
+  }
+
+  const resolved = EXAMPLE_ALIASES[example];
+  if (resolved) {
+    if (EXAMPLE_REPLACEMENTS[example]) {
+      logger.info(
+        chalk.yellow(`Note: ${EXAMPLE_REPLACEMENTS[example]} Downloading '${resolved}' instead.`),
+      );
+    } else {
+      logger.info(
+        chalk.yellow(`Note: '${example}' has been renamed to '${resolved}'. Using new name.`),
+      );
+    }
+    return {
+      exampleName: resolved,
+      downloadRefs: DEFAULT_EXAMPLE_REFS,
+    };
+  }
+
+  return {
+    exampleName: example,
+    downloadRefs: DEFAULT_EXAMPLE_REFS,
+  };
+}
+
 async function selectExample(): Promise<string> {
   const examples = await getExamplesList();
   const choices = [
@@ -185,33 +250,27 @@ export async function handleExampleDownload(
   example: string | boolean | undefined,
 ): Promise<string | undefined> {
   let exampleName: string | undefined;
+  let downloadRefs = DEFAULT_EXAMPLE_REFS;
 
   if (example === true) {
     exampleName = await selectExample();
   } else if (typeof example === 'string') {
-    const resolved = EXAMPLE_ALIASES[example];
-    if (resolved) {
-      if (EXAMPLE_REPLACEMENTS[example]) {
-        logger.info(
-          chalk.yellow(`Note: ${EXAMPLE_REPLACEMENTS[example]} Downloading '${resolved}' instead.`),
-        );
-      } else {
-        logger.info(
-          chalk.yellow(`Note: '${example}' has been renamed to '${resolved}'. Using new name.`),
-        );
-      }
-      exampleName = resolved;
-    } else {
-      exampleName = example;
-    }
+    const selection = resolveExampleSelection(example);
+    exampleName = selection.exampleName;
+    downloadRefs = selection.downloadRefs;
   }
 
   let attemptDownload = true;
   while (attemptDownload && exampleName) {
     const targetDir = path.join(directory || '.', exampleName);
     try {
-      await downloadExample(exampleName, targetDir);
+      await downloadExample(exampleName, targetDir, downloadRefs);
       logger.info(chalk.green(`✅ Example project '${exampleName}' written to: ${targetDir}`));
+      if (isLegacyRefs(downloadRefs)) {
+        logger.info(
+          chalk.yellow(`Downloaded legacy example '${exampleName}' from ref '${downloadRefs[0]}'.`),
+        );
+      }
       attemptDownload = false;
     } catch (error) {
       logger.error(`Failed to download example: ${error instanceof Error ? error.message : error}`);
@@ -221,6 +280,7 @@ export async function handleExampleDownload(
       });
       if (attemptDownload) {
         exampleName = await selectExample();
+        downloadRefs = DEFAULT_EXAMPLE_REFS;
       } else {
         // User declined to try downloading a different example
         logger.info(

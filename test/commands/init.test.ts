@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 
 import confirm from '@inquirer/confirm';
+import select from '@inquirer/select';
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as init from '../../src/commands/init';
@@ -115,7 +116,7 @@ describe('init command', () => {
       mockFetchWithProxy.mockResolvedValueOnce(mockResponse).mockResolvedValueOnce(mockResponse);
 
       await expect(init.downloadDirectory('example', '/path/to/target')).rejects.toThrow(
-        'Failed to fetch directory contents: Not Found',
+        'Failed to fetch directory contents for refs:',
       );
 
       expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
@@ -296,6 +297,65 @@ describe('init command', () => {
 
         // The resolved name should be used, not the alias
         expect(result).toEqual('provider-custom/basic');
+      });
+
+      it('should use legacy ref for removed examples', async () => {
+        const mockFailure = createMockResponse({
+          ok: false,
+          status: 404,
+          statusText: 'Not Found',
+        });
+        mockFetchWithProxy.mockResolvedValue(mockFailure);
+        vi.mocked(confirm).mockResolvedValue(false);
+
+        const result = await init.handleExampleDownload('.', 'assistant-cli');
+
+        expect(result).toEqual('assistant-cli');
+        expect(mockFetchWithProxy.mock.calls[0][0]).toContain(
+          '/repos/promptfoo/promptfoo/contents/examples/assistant-cli?ref=0.119.14',
+        );
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.stringContaining('assistant-cli was removed'),
+        );
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.stringContaining("legacy 'assistant-cli' example from promptfoo@0.119.14"),
+        );
+      });
+
+      it('should reset to default refs when retrying after legacy example failure', async () => {
+        const mockLegacyFailure = createMockResponse({
+          ok: false,
+          status: 404,
+          statusText: 'Not Found',
+        });
+        const mockTreeResponse = createMockResponse({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              tree: [{ path: 'examples/provider-http/basic/promptfooconfig.yaml', type: 'blob' }],
+            }),
+        });
+        const mockDirectoryResponse = createMockResponse({
+          ok: true,
+          json: () => Promise.resolve([]),
+        });
+
+        mockFetchWithProxy
+          .mockResolvedValueOnce(mockLegacyFailure)
+          .mockResolvedValueOnce(mockTreeResponse)
+          .mockResolvedValueOnce(mockDirectoryResponse);
+
+        vi.mocked(confirm).mockResolvedValue(true);
+        vi.mocked(select).mockResolvedValue('provider-http/basic');
+        vi.spyOn(fs, 'readdir').mockResolvedValue([]);
+
+        await init.handleExampleDownload('.', 'assistant-cli');
+
+        expect(mockFetchWithProxy.mock.calls[2][0]).toContain(
+          '/contents/examples/provider-http/basic?ref=',
+        );
+        expect(mockFetchWithProxy.mock.calls[2][0]).not.toContain('ref=0.119.14');
       });
     });
 
