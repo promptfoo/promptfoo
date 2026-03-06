@@ -464,6 +464,35 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(env.OTEL_RESOURCE_ATTRIBUTES).toContain('test.case.id=tc-456');
       });
 
+      it('should omit traceparent env and escape OTEL resource attributes when no active span context is available', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Traced response'));
+
+        vi.spyOn(genaiTracer, 'getTraceparent').mockReturnValue(undefined);
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: {
+            deep_tracing: true,
+          },
+          env: {
+            ANTHROPIC_API_KEY: 'test-api-key',
+          },
+        });
+
+        await provider.callApi('Test prompt', {
+          evaluationId: 'eval=123,group\nnext',
+          testCaseId: 'tc\\456\rcase',
+          prompt: { raw: 'Test prompt', label: 'test' },
+          vars: {},
+        });
+
+        const env = mockQuery.mock.calls[0][0].options.env;
+        expect(env.TRACEPARENT).toBeUndefined();
+        expect(env.OTEL_RESOURCE_ATTRIBUTES).toContain('evaluation.id=eval\\=123\\,group\\nnext');
+        expect(env.OTEL_RESOURCE_ATTRIBUTES).toContain('test.case.id=tc\\\\456\\rcase');
+        expect(env.OTEL_RESOURCE_ATTRIBUTES).not.toContain('promptfoo.trace_id=');
+        expect(env.OTEL_RESOURCE_ATTRIBUTES).not.toContain('promptfoo.parent_span_id=');
+      });
+
       it('should pass evaluationId into the provider span context', async () => {
         mockQuery.mockReturnValue(createMockResponse('Spanned response'));
 

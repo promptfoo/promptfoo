@@ -133,6 +133,15 @@ function buildResourceAttributeString(
   return segments.length > 0 ? segments.join(',') : undefined;
 }
 
+function escapeOtelResourceAttributeValue(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/,/g, '\\,')
+    .replace(/=/g, '\\=');
+}
+
 function injectDeepTracingEnv(
   env: Record<string, string>,
   currentTraceparent: string | undefined,
@@ -168,15 +177,15 @@ function injectDeepTracingEnv(
   if (currentTraceparent) {
     const parts = currentTraceparent.split('-');
     if (parts.length >= 3) {
-      resourceAttrs.push(`promptfoo.trace_id=${parts[1]}`);
-      resourceAttrs.push(`promptfoo.parent_span_id=${parts[2]}`);
+      resourceAttrs.push(`promptfoo.trace_id=${escapeOtelResourceAttributeValue(parts[1])}`);
+      resourceAttrs.push(`promptfoo.parent_span_id=${escapeOtelResourceAttributeValue(parts[2])}`);
     }
   }
   if (context?.evaluationId) {
-    resourceAttrs.push(`evaluation.id=${context.evaluationId}`);
+    resourceAttrs.push(`evaluation.id=${escapeOtelResourceAttributeValue(context.evaluationId)}`);
   }
   if (context?.testCaseId) {
-    resourceAttrs.push(`test.case.id=${context.testCaseId}`);
+    resourceAttrs.push(`test.case.id=${escapeOtelResourceAttributeValue(context.testCaseId)}`);
   }
 
   const mergedResourceAttrs = buildResourceAttributeString(

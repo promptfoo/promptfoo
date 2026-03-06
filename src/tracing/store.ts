@@ -1,4 +1,4 @@
-import { asc, eq, lt } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
@@ -85,9 +85,18 @@ function computeDepth(
   span: SpanData,
   spanMap: Map<string, SpanData>,
   depthCache: Map<string, number>,
+  visited: Set<string> = new Set(),
 ): number {
   if (depthCache.has(span.spanId)) {
     return depthCache.get(span.spanId)!;
+  }
+
+  if (visited.has(span.spanId)) {
+    logger.warn(
+      `[TraceStore] Detected circular parent reference while computing depth for span ${span.spanId}`,
+    );
+    depthCache.set(span.spanId, 0);
+    return 0;
   }
 
   if (!span.parentSpanId || !spanMap.has(span.parentSpanId)) {
@@ -95,7 +104,14 @@ function computeDepth(
     return 0;
   }
 
-  const parentDepth = computeDepth(spanMap.get(span.parentSpanId)!, spanMap, depthCache);
+  const nextVisited = new Set(visited);
+  nextVisited.add(span.spanId);
+  const parentDepth = computeDepth(
+    spanMap.get(span.parentSpanId)!,
+    spanMap,
+    depthCache,
+    nextVisited,
+  );
   const currentDepth = parentDepth + 1;
   depthCache.set(span.spanId, currentDepth);
   return currentDepth;
@@ -195,7 +211,10 @@ export class TraceStore {
         };
       });
 
-      await db.insert(spansTable).values(spanRecords);
+      await db
+        .insert(spansTable)
+        .values(spanRecords)
+        .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] });
       logger.debug(`[TraceStore] Successfully added ${spans.length} spans to trace ${traceId}`);
       return { stored: true };
     } catch (error) {
@@ -277,9 +296,20 @@ export class TraceStore {
       logger.debug(`[TraceStore] Deleting traces older than ${retentionDays} days`);
       const db = this.getDatabase();
       const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+      const cutoffTimestamp = new Date(cutoffTime).toISOString().replace('T', ' ').slice(0, 19);
 
       // Delete old traces (spans will be cascade deleted due to foreign key)
-      await db.delete(tracesTable).where(lt(tracesTable.createdAt, cutoffTime));
+      await db.delete(tracesTable).where(sql`
+        (
+          typeof(${tracesTable.createdAt}) = 'integer'
+          AND ${tracesTable.createdAt} < ${cutoffTime}
+        )
+        OR
+        (
+          typeof(${tracesTable.createdAt}) = 'text'
+          AND ${tracesTable.createdAt} < ${cutoffTimestamp}
+        )
+      `);
 
       logger.debug(`[TraceStore] Successfully deleted traces older than ${retentionDays} days`);
     } catch (error) {
@@ -384,72 +414,5 @@ export async function getTraceSpans(
   traceId: string,
   options: TraceSpanQueryOptions = {},
 ): Promise<SpanData[]> {
-  const {
-    earliestStartTime,
-    maxSpans,
-    maxDepth,
-    includeInternalSpans = true, // Match TraceStore.getSpans default
-    spanFilter,
-    sanitizeAttributes: shouldSanitize = true,
-  } = options;
-
-  const traceStoreInstance = getTraceStore();
-  const db = (traceStoreInstance as any).getDatabase?.() ?? traceStoreInstance['getDatabase']?.();
-  if (!db) {
-    throw new Error('TraceStore database has not been initialized');
-  }
-
-  const rows = await db
-    .select()
-    .from(spansTable)
-    .where(eq(spansTable.traceId, traceId))
-    .orderBy(asc(spansTable.startTime));
-
-  const spanMap = new Map<string, SpanData>();
-  const depthCache = new Map<string, number>();
-
-  for (const row of rows) {
-    if (earliestStartTime && row.startTime < earliestStartTime) {
-      continue;
-    }
-
-    const spanData: SpanData = {
-      spanId: row.spanId,
-      parentSpanId: row.parentSpanId ?? undefined,
-      name: row.name,
-      startTime: row.startTime,
-      endTime: row.endTime ?? undefined,
-      attributes: shouldSanitize ? sanitizeAttributes(row.attributes) : (row.attributes ?? {}),
-      statusCode: row.statusCode ?? undefined,
-      statusMessage: row.statusMessage ?? undefined,
-    };
-
-    const spanKind = deriveSpanKind(spanData);
-    if (!includeInternalSpans && spanKind === 'internal') {
-      continue;
-    }
-
-    if (spanFilter && spanFilter.length > 0) {
-      const matchesFilter = spanFilter.some((filterName) =>
-        spanData.name.toLowerCase().includes(filterName.toLowerCase()),
-      );
-      if (!matchesFilter) {
-        continue;
-      }
-    }
-
-    spanMap.set(spanData.spanId, spanData);
-  }
-
-  let spans = Array.from(spanMap.values());
-
-  if (maxDepth !== undefined) {
-    spans = spans.filter((span) => computeDepth(span, spanMap, depthCache) < maxDepth);
-  }
-
-  if (maxSpans !== undefined) {
-    spans = spans.slice(0, maxSpans);
-  }
-
-  return spans;
+  return getTraceStore().getSpans(traceId, options);
 }

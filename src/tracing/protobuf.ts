@@ -16,6 +16,8 @@ let protoRoot: protobuf.Root | null = null,
   logsProtoRoot: protobuf.Root | null = null,
   ExportTraceServiceRequest: protobuf.Type | null = null,
   ExportLogsServiceRequestType: protobuf.Type | null = null;
+let protoRootPromise: Promise<protobuf.Root> | null = null,
+  logsProtoRootPromise: Promise<protobuf.Root> | null = null;
 
 /**
  * Get the path to the proto files directory.
@@ -31,36 +33,45 @@ function getProtoDir(): string {
  * Load and cache the OTLP proto definitions
  */
 async function loadProtoDefinitions(): Promise<protobuf.Root> {
-  if (protoRoot) {
+  if (protoRoot !== null) {
     return protoRoot;
   }
-
-  logger.debug('[Protobuf] Loading OTLP proto definitions');
-
-  const protoDir = getProtoDir();
-  logger.debug(`[Protobuf] Proto directory: ${protoDir}`);
-
-  try {
-    // Create a new Root with the proto directory as the include path
-    // This allows imports like "opentelemetry/proto/trace/v1/trace.proto" to resolve correctly
-    const root = new protobuf.Root();
-
-    // Configure the root to resolve imports from the proto directory
-    root.resolvePath = (_origin: string, target: string) => {
-      // Always resolve imports relative to the proto root directory
-      return path.join(protoDir, target);
-    };
-
-    // Load the main trace service proto which imports the others
-    await root.load('opentelemetry/proto/collector/trace/v1/trace_service.proto');
-
-    protoRoot = root;
-    logger.debug('[Protobuf] Successfully loaded OTLP proto definitions');
-    return protoRoot;
-  } catch (error) {
-    logger.error(`[Protobuf] Failed to load proto definitions: ${error}`);
-    throw error;
+  if (protoRootPromise !== null) {
+    return protoRootPromise;
   }
+
+  protoRootPromise = (async () => {
+    logger.debug('[Protobuf] Loading OTLP proto definitions');
+
+    const protoDir = getProtoDir();
+    logger.debug(`[Protobuf] Proto directory: ${protoDir}`);
+
+    try {
+      // Create a new Root with the proto directory as the include path
+      // This allows imports like "opentelemetry/proto/trace/v1/trace.proto" to resolve correctly
+      const root = new protobuf.Root();
+
+      // Configure the root to resolve imports from the proto directory
+      root.resolvePath = (_origin: string, target: string) => {
+        // Always resolve imports relative to the proto root directory
+        return path.join(protoDir, target);
+      };
+
+      // Load the main trace service proto which imports the others
+      await root.load('opentelemetry/proto/collector/trace/v1/trace_service.proto');
+
+      protoRoot = root;
+      logger.debug('[Protobuf] Successfully loaded OTLP proto definitions');
+      return protoRoot;
+    } catch (error) {
+      logger.error(`[Protobuf] Failed to load proto definitions: ${error}`);
+      throw error;
+    } finally {
+      protoRootPromise = null;
+    }
+  })();
+
+  return protoRootPromise;
 }
 
 /**
@@ -83,34 +94,43 @@ async function getExportTraceServiceRequestType(): Promise<protobuf.Type> {
  * Load and cache the OTLP logs proto definitions
  */
 async function loadLogsProtoDefinitions(): Promise<protobuf.Root> {
-  if (logsProtoRoot) {
+  if (logsProtoRoot !== null) {
     return logsProtoRoot;
   }
-
-  logger.debug('[Protobuf] Loading OTLP logs proto definitions');
-
-  const protoDir = getProtoDir();
-  logger.debug(`[Protobuf] Proto directory for logs: ${protoDir}`);
-
-  try {
-    // Create a new Root with the proto directory as the include path
-    const root = new protobuf.Root();
-
-    // Configure the root to resolve imports from the proto directory
-    root.resolvePath = (_origin: string, target: string) => {
-      return path.join(protoDir, target);
-    };
-
-    // Load the logs service proto which imports the others
-    await root.load('opentelemetry/proto/collector/logs/v1/logs_service.proto');
-
-    logsProtoRoot = root;
-    logger.debug('[Protobuf] Successfully loaded OTLP logs proto definitions');
-    return logsProtoRoot;
-  } catch (error) {
-    logger.error(`[Protobuf] Failed to load logs proto definitions: ${error}`);
-    throw error;
+  if (logsProtoRootPromise !== null) {
+    return logsProtoRootPromise;
   }
+
+  logsProtoRootPromise = (async () => {
+    logger.debug('[Protobuf] Loading OTLP logs proto definitions');
+
+    const protoDir = getProtoDir();
+    logger.debug(`[Protobuf] Proto directory for logs: ${protoDir}`);
+
+    try {
+      // Create a new Root with the proto directory as the include path
+      const root = new protobuf.Root();
+
+      // Configure the root to resolve imports from the proto directory
+      root.resolvePath = (_origin: string, target: string) => {
+        return path.join(protoDir, target);
+      };
+
+      // Load the logs service proto which imports the others
+      await root.load('opentelemetry/proto/collector/logs/v1/logs_service.proto');
+
+      logsProtoRoot = root;
+      logger.debug('[Protobuf] Successfully loaded OTLP logs proto definitions');
+      return logsProtoRoot;
+    } catch (error) {
+      logger.error(`[Protobuf] Failed to load logs proto definitions: ${error}`);
+      throw error;
+    } finally {
+      logsProtoRootPromise = null;
+    }
+  })();
+
+  return logsProtoRootPromise;
 }
 
 /**

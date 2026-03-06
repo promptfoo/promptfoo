@@ -163,6 +163,9 @@ describe('TraceStore', () => {
           statusMessage: 'OK',
         },
       ]);
+      expect(mockDb.insert().values().onConflictDoNothing).toHaveBeenCalledWith({
+        target: [expect.anything(), expect.anything()],
+      });
     });
 
     it('should skip spans if trace does not exist', async () => {
@@ -196,7 +199,7 @@ describe('TraceStore', () => {
 
       // Mock insert error
       const error = new Error('Insert failed');
-      mockDb.insert().values.mockRejectedValueOnce(error);
+      mockDb.insert().values().onConflictDoNothing.mockRejectedValueOnce(error);
 
       const spans = [
         {
@@ -336,6 +339,49 @@ describe('TraceStore', () => {
       mockDb.delete().where.mockRejectedValueOnce(error);
 
       await expect(traceStore.deleteOldTraces(30)).rejects.toThrow('Delete failed');
+    });
+  });
+
+  describe('getSpans', () => {
+    it('should handle circular parent references without overflowing the stack', async () => {
+      const rows = [
+        {
+          traceId: 'trace-1',
+          spanId: 'span-a',
+          parentSpanId: 'span-b',
+          name: 'span-a',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {},
+          statusCode: null,
+          statusMessage: null,
+        },
+        {
+          traceId: 'trace-1',
+          spanId: 'span-b',
+          parentSpanId: 'span-a',
+          name: 'span-b',
+          startTime: 1001,
+          endTime: 1101,
+          attributes: {},
+          statusCode: null,
+          statusMessage: null,
+        },
+      ];
+
+      const selectChain = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn(() => Promise.resolve(rows)),
+      };
+
+      vi.spyOn(mockDb, 'select')
+        .mockImplementation(() => ({}))
+        .mockReturnValueOnce(selectChain);
+
+      await expect(traceStore.getSpans('trace-1', { maxDepth: 2 })).resolves.toEqual(
+        expect.any(Array),
+      );
     });
   });
 });

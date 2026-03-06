@@ -6,6 +6,9 @@ import {
   generateTraceparent,
   isOtlpReceiverStarted,
   isTracingEnabled,
+  resetTracingState,
+  startOtlpReceiverIfNeeded,
+  stopOtlpReceiverIfNeeded,
 } from '../../src/tracing/evaluatorTracing';
 
 import type { TestCase, TestSuite } from '../../src/types/index';
@@ -27,11 +30,26 @@ vi.mock('../../src/tracing/store', () => ({
   })),
 }));
 
+vi.mock('../../src/tracing/otlpReceiver', () => ({
+  startOTLPReceiver: vi.fn(),
+  stopOTLPReceiver: vi.fn(),
+}));
+
+vi.mock('../../src/telemetry', () => ({
+  default: {
+    record: vi.fn(),
+  },
+}));
+
+import telemetry from '../../src/telemetry';
+import { startOTLPReceiver, stopOTLPReceiver } from '../../src/tracing/otlpReceiver';
+
 describe('evaluatorTracing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset environment variables
     delete process.env.PROMPTFOO_TRACING_ENABLED;
+    resetTracingState();
   });
 
   describe('generateTraceId', () => {
@@ -202,6 +220,58 @@ describe('evaluatorTracing', () => {
 
   describe('isOtlpReceiverStarted', () => {
     it('should return false initially', () => {
+      expect(isOtlpReceiverStarted()).toBe(false);
+    });
+  });
+
+  describe('startOtlpReceiverIfNeeded', () => {
+    const tracingSuite = {
+      providers: [],
+      prompts: [],
+      tracing: {
+        enabled: true,
+        otlp: {
+          http: {
+            enabled: true,
+            host: '127.0.0.1',
+            port: 4318,
+          },
+        },
+      },
+    } as unknown as TestSuite;
+
+    it('should only start the OTLP receiver once during concurrent startup', async () => {
+      let resolveStart: (() => void) | undefined;
+      vi.mocked(startOTLPReceiver).mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveStart = resolve;
+          }),
+      );
+
+      const firstStart = startOtlpReceiverIfNeeded(tracingSuite);
+      const secondStart = startOtlpReceiverIfNeeded(tracingSuite);
+
+      await vi.waitFor(() => {
+        expect(startOTLPReceiver).toHaveBeenCalledTimes(1);
+      });
+
+      resolveStart?.();
+      await Promise.all([firstStart, secondStart]);
+
+      expect(startOTLPReceiver).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(telemetry.record)).toHaveBeenCalledTimes(1);
+      expect(isOtlpReceiverStarted()).toBe(true);
+    });
+
+    it('should stop the OTLP receiver after startup completes', async () => {
+      vi.mocked(startOTLPReceiver).mockResolvedValueOnce(undefined);
+      vi.mocked(stopOTLPReceiver).mockResolvedValueOnce(undefined);
+
+      await startOtlpReceiverIfNeeded(tracingSuite);
+      await stopOtlpReceiverIfNeeded();
+
+      expect(stopOTLPReceiver).toHaveBeenCalledTimes(1);
       expect(isOtlpReceiverStarted()).toBe(false);
     });
   });

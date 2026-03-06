@@ -169,6 +169,13 @@
       "when": 1767985150681,
       "tag": "0023_wooden_mandrill",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1772756750680,
+      "tag": "0024_parallel_risque",
+      "breakpoints": true
     }
   ]
 }

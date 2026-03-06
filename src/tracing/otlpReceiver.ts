@@ -1,7 +1,7 @@
 import { randomBytes } from 'crypto';
 
 import express from 'express';
-import logger from '../logger';
+import logger, { isDebugEnabled } from '../logger';
 import {
   type OTLPLogsRequest,
   type OTLPTraceRequest,
@@ -68,6 +68,16 @@ const SPAN_KIND_MAP: Record<number, string> = {
   5: 'consumer',
 };
 
+const MAX_ATTRIBUTE_DEPTH = 20;
+const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+class InvalidOtlpPayloadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidOtlpPayloadError';
+  }
+}
+
 export class OTLPReceiver {
   private app: express.Application;
   private traceStore: TraceStore;
@@ -93,10 +103,13 @@ export class OTLPReceiver {
     // OTLP HTTP endpoint for traces
     this.app.post('/v1/traces', async (req, res) => {
       const contentType = req.headers['content-type'] || 'unknown';
+      const debugEnabled = isDebugEnabled();
       const bodySize = req.body
         ? Buffer.isBuffer(req.body)
           ? req.body.length
-          : JSON.stringify(req.body).length
+          : debugEnabled
+            ? JSON.stringify(req.body).length
+            : 0
         : 0;
       logger.debug(
         `[OtlpReceiver] Received trace request: ${req.headers['content-type']} with ${bodySize} bytes`,
@@ -125,9 +138,11 @@ export class OTLPReceiver {
           }
 
           logger.debug('[OtlpReceiver] Parsing OTLP JSON request');
-          logger.debug(
-            `[OtlpReceiver] Request body: ${JSON.stringify(req.body).substring(0, 500)}...`,
-          );
+          if (debugEnabled) {
+            logger.debug(
+              `[OtlpReceiver] Request body: ${JSON.stringify(req.body).substring(0, 500)}...`,
+            );
+          }
           traces = this.parseOTLPJSONRequest(validation.data);
         } else if (isProtobuf) {
           // Parse protobuf request
@@ -156,9 +171,12 @@ export class OTLPReceiver {
           `[OtlpReceiver] Error stack: ${error instanceof Error ? error.stack : 'No stack'}`,
         );
 
-        // Return 400 for invalid protobuf/parsing errors
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (errorMessage.toLowerCase().includes('invalid protobuf')) {
+        // Return 400 for invalid payload/parsing errors
+        const errorMessage = error instanceof Error ? error.message : 'Invalid OTLP traces payload';
+        if (
+          error instanceof InvalidOtlpPayloadError ||
+          errorMessage.toLowerCase().includes('invalid protobuf')
+        ) {
           res.status(400).json({ error: errorMessage });
           return;
         }
@@ -170,10 +188,13 @@ export class OTLPReceiver {
     // OTLP HTTP endpoint for logs (used by Claude Agent SDK)
     this.app.post('/v1/logs', async (req, res) => {
       const contentType = req.headers['content-type'] || 'unknown';
+      const debugEnabled = isDebugEnabled();
       const bodySize = req.body
         ? Buffer.isBuffer(req.body)
           ? req.body.length
-          : JSON.stringify(req.body).length
+          : debugEnabled
+            ? JSON.stringify(req.body).length
+            : 0
         : 0;
       logger.debug(`[OtlpReceiver] Received logs request: ${contentType} with ${bodySize} bytes`);
 
@@ -199,9 +220,11 @@ export class OTLPReceiver {
           }
 
           logger.debug('[OtlpReceiver] Parsing OTLP logs JSON request');
-          logger.debug(
-            `[OtlpReceiver] Request body: ${JSON.stringify(req.body).substring(0, 500)}...`,
-          );
+          if (debugEnabled) {
+            logger.debug(
+              `[OtlpReceiver] Request body: ${JSON.stringify(req.body).substring(0, 500)}...`,
+            );
+          }
           traces = this.parseOTLPLogsJSONRequest(validation.data);
         } else if (isProtobuf) {
           logger.debug('[OtlpReceiver] Parsing OTLP logs protobuf request');
@@ -229,9 +252,12 @@ export class OTLPReceiver {
           `[OtlpReceiver] Error stack: ${error instanceof Error ? error.stack : 'No stack'}`,
         );
 
-        // Return 400 for invalid protobuf/parsing errors
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (errorMessage.toLowerCase().includes('invalid protobuf')) {
+        // Return 400 for invalid payload/parsing errors
+        const errorMessage = error instanceof Error ? error.message : 'Invalid OTLP logs payload';
+        if (
+          error instanceof InvalidOtlpPayloadError ||
+          errorMessage.toLowerCase().includes('invalid protobuf')
+        ) {
           res.status(400).json({ error: errorMessage });
           return;
         }
@@ -298,6 +324,8 @@ export class OTLPReceiver {
     traces: ParsedTrace[],
     label: string,
   ): Promise<{ rejectedCount: number; reasons: string[] }> {
+    let rejectedCount = 0;
+    const reasons = new Set<string>();
     const spansByTrace = new Map<string, SpanData[]>();
     const traceInfoById = new Map<string, { evaluationId?: string; testCaseId?: string }>();
 
@@ -333,6 +361,7 @@ export class OTLPReceiver {
     // Attempting to create a trace with an empty evaluationId would violate the
     // foreign key constraint on the traces table.
     const tracesWithKnownRecords = new Set<string>();
+    const tracesWithCreateFailures = new Set<string>();
     for (const [traceId, info] of traceInfoById) {
       if (!info.evaluationId) {
         logger.debug(
@@ -349,13 +378,16 @@ export class OTLPReceiver {
         });
         tracesWithKnownRecords.add(traceId);
       } catch (error) {
-        logger.error(`[OtlpReceiver] Failed to create trace record for ${traceId}: ${error}`);
-        throw error;
+        const spanCount = spansByTrace.get(traceId)?.length || 0;
+        const reason = `Failed to create trace record for ${traceId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`;
+        logger.error(`[OtlpReceiver] ${reason}`);
+        tracesWithCreateFailures.add(traceId);
+        rejectedCount += spanCount;
+        reasons.add(reason);
       }
     }
-
-    let rejectedCount = 0;
-    const reasons = new Set<string>();
 
     // Store spans for each trace.
     // For traces we created/confirmed above, skip the existence check.
@@ -363,6 +395,13 @@ export class OTLPReceiver {
     // (it may have been pre-created by the evaluator). If the trace doesn't
     // exist, addSpans returns { stored: false } without throwing.
     for (const [traceId, spans] of spansByTrace) {
+      if (tracesWithCreateFailures.has(traceId)) {
+        logger.warn(
+          `[OtlpReceiver] Skipping ${spans.length} ${label} for trace ${traceId} after trace creation failure`,
+        );
+        continue;
+      }
+
       const skipCheck = tracesWithKnownRecords.has(traceId);
       logger.debug(
         `[OtlpReceiver] Storing ${spans.length} ${label} for trace ${traceId} (skipTraceCheck=${skipCheck})`,
@@ -402,10 +441,18 @@ export class OTLPReceiver {
       for (const scopeSpan of resourceSpan.scopeSpans) {
         for (const span of scopeSpan.spans) {
           // Convert IDs - handle both hex strings and base64 encoded binary
-          const traceId = this.convertId(span.traceId, 32); // 32 hex chars = 16 bytes
-          const spanId = this.convertId(span.spanId, 16); // 16 hex chars = 8 bytes
+          const traceId = this.convertId(span.traceId, 32, {
+            fieldName: 'traceId',
+            required: true,
+          })!; // 32 hex chars = 16 bytes
+          const spanId = this.convertId(span.spanId, 16, {
+            fieldName: 'spanId',
+            required: true,
+          })!; // 16 hex chars = 8 bytes
           const parentSpanId = span.parentSpanId
-            ? this.convertId(span.parentSpanId, 16)
+            ? this.convertId(span.parentSpanId, 16, {
+                fieldName: 'parentSpanId',
+              })
             : undefined;
           logger.debug(
             `[OtlpReceiver] Processing span: ${span.name} (${spanId}) in trace ${traceId}`,
@@ -595,9 +642,22 @@ export class OTLPReceiver {
     rawTraceId: string | undefined,
     rawSpanId: string | undefined,
   ): { traceId: string; spanId: string; parentSpanId: string | undefined } {
+    const resourceTraceId =
+      typeof resourceAttributes['promptfoo.trace_id'] === 'string'
+        ? this.convertId(resourceAttributes['promptfoo.trace_id'], 32, {
+            fieldName: 'promptfoo.trace_id',
+          })
+        : undefined;
+    const resourceParentSpanId =
+      typeof resourceAttributes['promptfoo.parent_span_id'] === 'string'
+        ? this.convertId(resourceAttributes['promptfoo.parent_span_id'], 16, {
+            fieldName: 'promptfoo.parent_span_id',
+          })
+        : undefined;
+
     let traceId: string;
-    if (resourceAttributes['promptfoo.trace_id']) {
-      traceId = resourceAttributes['promptfoo.trace_id'] as string;
+    if (resourceTraceId) {
+      traceId = resourceTraceId;
     } else if (rawTraceId) {
       traceId = rawTraceId;
     } else {
@@ -606,7 +666,7 @@ export class OTLPReceiver {
     }
 
     const spanId = rawSpanId || randomBytes(8).toString('hex');
-    const parentSpanId = (resourceAttributes['promptfoo.parent_span_id'] as string) || undefined;
+    const parentSpanId = resourceParentSpanId || undefined;
 
     return { traceId, spanId, parentSpanId };
   }
@@ -803,7 +863,20 @@ export class OTLPReceiver {
   }
 
   private parseDecodedAttributeValue(value: DecodedAttribute['value']): any {
+    return this.parseDecodedAttributeValueWithDepth(value, 0);
+  }
+
+  private parseDecodedAttributeValueWithDepth(
+    value: DecodedAttribute['value'],
+    depth: number,
+  ): any {
     if (!value) {
+      return undefined;
+    }
+    if (depth >= MAX_ATTRIBUTE_DEPTH) {
+      logger.warn(
+        `[OtlpReceiver] Reached max OTLP decoded attribute depth (${MAX_ATTRIBUTE_DEPTH}); truncating nested value`,
+      );
       return undefined;
     }
     if (value.stringValue !== undefined) {
@@ -822,12 +895,14 @@ export class OTLPReceiver {
       return Buffer.from(value.bytesValue).toString('base64');
     }
     if (value.arrayValue?.values) {
-      return value.arrayValue.values.map((v) => this.parseDecodedAttributeValue(v));
+      return value.arrayValue.values.map((v) =>
+        this.parseDecodedAttributeValueWithDepth(v, depth + 1),
+      );
     }
     if (value.kvlistValue?.values) {
       const kvMap: Record<string, any> = {};
       for (const kv of value.kvlistValue.values) {
-        kvMap[kv.key] = this.parseDecodedAttributeValue(kv.value);
+        kvMap[kv.key] = this.parseDecodedAttributeValueWithDepth(kv.value, depth + 1);
       }
       return kvMap;
     }
@@ -852,6 +927,19 @@ export class OTLPReceiver {
   }
 
   private parseAttributeValue(value: OTLPAttribute['value']): any {
+    return this.parseAttributeValueWithDepth(value, 0);
+  }
+
+  private parseAttributeValueWithDepth(value: OTLPAttribute['value'], depth: number): any {
+    if (!value) {
+      return undefined;
+    }
+    if (depth >= MAX_ATTRIBUTE_DEPTH) {
+      logger.warn(
+        `[OtlpReceiver] Reached max OTLP attribute depth (${MAX_ATTRIBUTE_DEPTH}); truncating nested value`,
+      );
+      return undefined;
+    }
     if (value.stringValue !== undefined) {
       return value.stringValue;
     }
@@ -868,59 +956,105 @@ export class OTLPReceiver {
       return value.bytesValue;
     }
     if (value.arrayValue?.values) {
-      return value.arrayValue.values.map((v) => this.parseAttributeValue(v));
+      return value.arrayValue.values.map((v) => this.parseAttributeValueWithDepth(v, depth + 1));
     }
     if (value.kvlistValue?.values) {
       const kvMap: Record<string, any> = {};
       for (const kv of value.kvlistValue.values) {
-        kvMap[kv.key] = this.parseAttributeValue(kv.value);
+        kvMap[kv.key] = this.parseAttributeValueWithDepth(kv.value, depth + 1);
       }
       return kvMap;
     }
     return undefined;
   }
 
-  private convertId(id: string, expectedHexLength: number): string {
+  private convertId(
+    id: string,
+    expectedHexLength: number,
+    options?: { fieldName?: string; required?: boolean },
+  ): string | undefined {
     logger.debug(
       `[OtlpReceiver] Converting ID: ${id} (length: ${id.length}, expected hex length: ${expectedHexLength})`,
     );
 
+    const fieldName = options?.fieldName || 'id';
+    const normalizedId = id.trim();
+
     // Check if it's already a hex string of the expected length
-    if (id.length === expectedHexLength && /^[0-9a-f]+$/i.test(id)) {
+    if (normalizedId.length === expectedHexLength && /^[0-9a-f]+$/i.test(normalizedId)) {
       logger.debug(`[OtlpReceiver] ID is already hex format`);
-      return id.toLowerCase();
+      return this.normalizeValidatedHexId(normalizedId.toLowerCase(), fieldName, options);
     }
 
-    // Try base64 decoding
-    try {
-      const buffer = Buffer.from(id, 'base64');
-      const hex = buffer.toString('hex');
-      logger.debug(`[OtlpReceiver] Base64 decoded: ${id} -> ${hex} (${buffer.length} bytes)`);
-
-      // Check if the decoded value looks like it was originally a hex string encoded as UTF-8
-      const utf8String = buffer.toString('utf8');
-      if (utf8String.length === expectedHexLength && /^[0-9a-f]+$/i.test(utf8String)) {
-        logger.debug(`[OtlpReceiver] Detected hex string encoded as UTF-8: ${utf8String}`);
-        return utf8String.toLowerCase();
+    if (!BASE64_PATTERN.test(normalizedId) || normalizedId.length % 4 !== 0) {
+      if (options?.required) {
+        throw new InvalidOtlpPayloadError(
+          `Invalid ${fieldName}: expected ${expectedHexLength / 2}-byte hex or base64-encoded binary`,
+        );
       }
+      logger.warn(`[OtlpReceiver] Ignoring invalid optional ${fieldName}: ${id}`);
+      return undefined;
+    }
 
-      // If the resulting hex is the expected length, return it
-      if (hex.length === expectedHexLength) {
-        return hex;
+    const buffer = Buffer.from(normalizedId, 'base64');
+    const reEncoded = buffer.toString('base64');
+    if (reEncoded !== normalizedId.replace(/=+$/, '') && reEncoded !== normalizedId) {
+      if (options?.required) {
+        throw new InvalidOtlpPayloadError(
+          `Invalid ${fieldName}: expected ${expectedHexLength / 2}-byte hex or base64-encoded binary`,
+        );
       }
+      logger.warn(`[OtlpReceiver] Ignoring invalid optional ${fieldName}: ${id}`);
+      return undefined;
+    }
 
-      // Otherwise, something's wrong
-      logger.warn(
-        `[OtlpReceiver] Unexpected ID format: ${id} -> ${hex} (expected ${expectedHexLength} hex chars)`,
+    const hex = buffer.toString('hex');
+    logger.debug(`[OtlpReceiver] Base64 decoded: ${id} -> ${hex} (${buffer.length} bytes)`);
+
+    // Check if the decoded value looks like it was originally a hex string encoded as UTF-8
+    const utf8String = buffer.toString('utf8');
+    if (utf8String.length === expectedHexLength && /^[0-9a-f]+$/i.test(utf8String)) {
+      logger.debug(`[OtlpReceiver] Detected hex string encoded as UTF-8: ${utf8String}`);
+      return this.normalizeValidatedHexId(utf8String.toLowerCase(), fieldName, options);
+    }
+
+    if (hex.length === expectedHexLength) {
+      return this.normalizeValidatedHexId(hex, fieldName, options);
+    }
+
+    if (options?.required) {
+      throw new InvalidOtlpPayloadError(
+        `Invalid ${fieldName}: expected ${expectedHexLength / 2}-byte hex or base64-encoded binary`,
       );
-      return id.toLowerCase();
-    } catch (error) {
-      logger.error(`[OtlpReceiver] Failed to convert ID: ${error}`);
-      return id.toLowerCase();
     }
+
+    logger.warn(
+      `[OtlpReceiver] Ignoring invalid optional ${fieldName}: ${id} -> ${hex} (expected ${expectedHexLength} hex chars)`,
+    );
+    return undefined;
+  }
+
+  private normalizeValidatedHexId(
+    hexId: string,
+    fieldName: string,
+    options?: { required?: boolean },
+  ): string | undefined {
+    if (/^0+$/.test(hexId)) {
+      if (options?.required) {
+        throw new InvalidOtlpPayloadError(`Invalid ${fieldName}: all-zero ID is not valid`);
+      }
+      logger.warn(`[OtlpReceiver] Ignoring invalid optional ${fieldName}: all-zero ID`);
+      return undefined;
+    }
+    return hexId;
   }
 
   listen(port: number = 4318, host: string = '127.0.0.1'): Promise<void> {
+    if (this.server) {
+      logger.debug('[OtlpReceiver] Receiver already running, skipping duplicate listen request');
+      return Promise.resolve();
+    }
+
     this.port = port;
     logger.debug(`[OtlpReceiver] Starting receiver on ${host}:${port}`);
 
