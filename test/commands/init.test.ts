@@ -410,10 +410,23 @@ describe('init command', () => {
           text: () => Promise.resolve('description: test'),
         });
 
-        mockFetchWithProxy
-          .mockResolvedValueOnce(mockTreeResponse)
-          .mockResolvedValueOnce(mockDirectoryResponse)
-          .mockResolvedValueOnce(mockFileResponse);
+        mockFetchWithProxy.mockImplementation(async (url) => {
+          const requestUrl = url.toString();
+          if (requestUrl.includes('/git/trees/')) {
+            return mockTreeResponse;
+          }
+          if (requestUrl.includes('/contents/examples/provider-opencode-sdk/basic')) {
+            return mockDirectoryResponse;
+          }
+          if (requestUrl === 'https://example.com/promptfooconfig.yaml') {
+            return mockFileResponse;
+          }
+          return createMockResponse({
+            ok: false,
+            status: 404,
+            statusText: 'Not Found',
+          });
+        });
 
         vi.mocked(select).mockResolvedValue('provider-opencode-sdk/basic');
         vi.spyOn(fs, 'readdir').mockResolvedValue(['promptfooconfig.yaml'] as unknown as Awaited<
