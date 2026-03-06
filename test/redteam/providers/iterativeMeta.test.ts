@@ -142,7 +142,7 @@ describe('RedteamIterativeMetaProvider', () => {
   });
 
   // Note: Constructor tests omitted as they require complex module mocking
-  // The provider requires cloud access, so testing focuses on the core function
+  // The provider requires remote generation, so testing focuses on the core function
 
   describe('runMetaAgentRedteam', () => {
     it('should execute iterations and call cloud for decisions', async () => {
