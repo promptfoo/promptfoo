@@ -91,12 +91,31 @@
   var MARKETING_COOKIE_PATTERNS = [/^_gcl_/, /^_fbp$/, /^_fbc$/];
   var ALL_VENDOR_COOKIE_PATTERNS = ANALYTICS_COOKIE_PATTERNS.concat(MARKETING_COOKIE_PATTERNS);
 
+  function getCookieDeletionDomains(hostname) {
+    if (!hostname || hostname === 'localhost' || /^[\d.]+$/.test(hostname)) {
+      return [];
+    }
+
+    var parts = hostname.split('.');
+    var domains = ['.' + hostname];
+
+    for (var i = 1; i < parts.length - 1; i++) {
+      // Skip the bare public-suffix candidate for multi-label hosts.
+      if (parts.length > 3 && i === parts.length - 2) {
+        continue;
+      }
+      domains.push('.' + parts.slice(i).join('.'));
+    }
+
+    return domains.filter(function (domain, index) {
+      return domains.indexOf(domain) === index;
+    });
+  }
+
   function clearVendorCookies(patterns) {
-    // Derive the top-level domain for domain-scoped cookie deletion (e.g. ".promptfoo.dev")
-    var hostParts = location.hostname.split('.');
-    var topDomain = hostParts.length >= 2 ? '.' + hostParts.slice(-2).join('.') : location.hostname;
     var expiry = 'expires=Thu, 01 Jan 1970 00:00:00 GMT;SameSite=Lax;Secure';
     var cookiePatterns = patterns || ALL_VENDOR_COOKIE_PATTERNS;
+    var domains = getCookieDeletionDomains(location.hostname);
 
     document.cookie.split(';').forEach(function (c) {
       var name = c.split('=')[0].trim();
@@ -105,8 +124,12 @@
         if (cookiePatterns[i].test(name)) {
           // Delete across all path/domain combinations vendors may use
           deleteCookie(name);
-          document.cookie = name + '=;path=/;domain=' + topDomain + ';' + expiry;
           document.cookie = name + '=;path=' + location.pathname + ';' + expiry;
+          domains.forEach(function (domain) {
+            document.cookie = name + '=;path=/;domain=' + domain + ';' + expiry;
+            document.cookie =
+              name + '=;path=' + location.pathname + ';domain=' + domain + ';' + expiry;
+          });
           break;
         }
       }
@@ -129,6 +152,12 @@
 
   // ── Cookie Format ──
 
+  function parseConsentFlag(value) {
+    if (value === '1') return 1;
+    if (value === '0') return 0;
+    return null;
+  }
+
   function parseConsent(raw) {
     if (!raw) return null;
     // Migrate old format
@@ -137,11 +166,19 @@
     // New format: v1.{region}.{analytics}.{marketing}
     var parts = raw.split('.');
     if (parts.length === 4 && parts[0] === 'v1') {
-      return {
-        region: parts[1],
-        analytics: parseInt(parts[2], 10),
-        marketing: parseInt(parts[3], 10),
-      };
+      var analytics = parseConsentFlag(parts[2]);
+      var marketing = parseConsentFlag(parts[3]);
+      if (
+        REGION_CODE.opt_in !== parts[1] &&
+        REGION_CODE.opt_out !== parts[1] &&
+        REGION_CODE.notice !== parts[1]
+      ) {
+        return null;
+      }
+      if (analytics === null || marketing === null) {
+        return null;
+      }
+      return { region: parts[1], analytics: analytics, marketing: marketing };
     }
     return null;
   }

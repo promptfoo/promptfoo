@@ -131,6 +131,16 @@ describe('consent.js', () => {
       expect((window as any).__pf_analytics_loaded).toBe(false);
       expect((window as any).__pf_marketing_loaded).toBe(false);
     });
+
+    it('ignores malformed v1 consent values and falls back to the region default', () => {
+      setCookie('pf_country', 'US');
+      setCookie('pf_consent', 'v1.o.9.1');
+      runConsent();
+
+      expect(getCookie('pf_consent')).toBe('v1.o.1.1');
+      expect((window as any).__pf_analytics_loaded).toBe(true);
+      expect((window as any).__pf_marketing_loaded).toBe(true);
+    });
   });
 
   // ── Region Detection ──
@@ -912,6 +922,52 @@ describe('consent.js', () => {
       // Non-vendor cookie should survive
       expect(getCookie('user_pref')).toBe('dark');
       expect(getCookie('_ga')).toBeNull();
+    });
+
+    it('tries host and parent-domain deletions for subdomain deployments', () => {
+      Object.defineProperty(window, 'location', {
+        writable: true,
+        value: {
+          ...window.location,
+          hash: '',
+          pathname: '/docs/',
+          search: '',
+          href: 'https://docs.promptfoo.co.uk/docs/',
+          hostname: 'docs.promptfoo.co.uk',
+          reload: vi.fn(),
+        },
+      });
+
+      setCookie('pf_country', 'US');
+      runConsent();
+
+      (window as any).__pf_manage_cookies();
+      (document.getElementById('cc-analytics') as HTMLInputElement).checked = false;
+
+      const cookieWrites: string[] = [];
+      try {
+        Object.defineProperty(document, 'cookie', {
+          configurable: true,
+          get() {
+            return 'pf_country=US; _ga=GA1.1.12345';
+          },
+          set(value: string) {
+            cookieWrites.push(value);
+          },
+        });
+
+        document.getElementById('cc-save')!.click();
+
+        expect(cookieWrites).toEqual(
+          expect.arrayContaining([
+            expect.stringContaining('domain=.docs.promptfoo.co.uk'),
+            expect.stringContaining('domain=.promptfoo.co.uk'),
+          ]),
+        );
+        expect(cookieWrites.some((value) => value.includes('domain=.co.uk'))).toBe(false);
+      } finally {
+        delete (document as Document & { cookie?: string }).cookie;
+      }
     });
   });
 
