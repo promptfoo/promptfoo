@@ -32,7 +32,7 @@ The end result is a report that shows you how well your model is able to defend 
 
 :::info
 
-To jump straight to the code, [click here](https://github.com/promptfoo/promptfoo/tree/main/examples/cyberseceval).
+To jump straight to the code, [click here](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-cyberseceval).
 
 :::
 
@@ -93,7 +93,7 @@ We'll set up a basic prompt file `prompt.json` that just passes through each pro
 ]
 ```
 
-And lastly, we'll [download the CyberSecEval test cases](https://github.com/promptfoo/promptfoo/blob/main/examples/cyberseceval/prompt_injection.json) and place them in the same directory as `prompt_injection.json`.
+And lastly, we'll [download the CyberSecEval test cases](https://github.com/promptfoo/promptfoo/blob/main/examples/redteam-cyberseceval/prompt_injection.json) and place them in the same directory as `prompt_injection.json`.
 
 ## Testing Different Models
 

@@ -22,7 +22,7 @@ MMLU serves as an effective benchmark for comparing reasoning capabilities becau
 :::tip Quick Start
 
 ```bash
-npx promptfoo@latest init --example openai-gpt-5-vs-gpt-5-mini-mmlu
+npx promptfoo@latest init --example compare-gpt-5-vs-gpt-5-mini-mmlu
 ```
 
 :::

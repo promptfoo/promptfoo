@@ -244,4 +244,4 @@ tests:
 
 ## See Also
 
-For a complete example, see [examples/openclaw](https://github.com/promptfoo/promptfoo/tree/main/examples/openclaw).
+For a complete example, see [examples/provider-openclaw](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-openclaw).
