@@ -64,8 +64,12 @@
 
   // ── Helpers ──
 
+  function escapeRegex(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
   function getCookie(name) {
-    var m = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    var m = document.cookie.match(new RegExp('(^| )' + escapeRegex(name) + '=([^;]+)'));
     return m ? m[2] : null;
   }
 
@@ -348,27 +352,27 @@
       '<div class="cc-cat-row">' +
       '<span class="cc-cat-name">Analytics</span>' +
       '<label class="cc-toggle">' +
-      '<input type="checkbox" id="cc-analytics"' +
+      '<input type="checkbox" id="cc-analytics" aria-describedby="cc-analytics-desc cc-analytics-tools"' +
       (analyticsChecked ? ' checked' : '') +
       '>' +
       '<span class="cc-toggle-track"></span>' +
       '</label>' +
       '</div>' +
-      '<div class="cc-cat-desc">Usage measurement.</div>' +
-      '<div class="cc-cat-tools">Google Analytics, PostHog</div>' +
+      '<div class="cc-cat-desc" id="cc-analytics-desc">Usage measurement.</div>' +
+      '<div class="cc-cat-tools" id="cc-analytics-tools">Google Analytics, PostHog</div>' +
       '</div>' +
       '<div class="cc-category">' +
       '<div class="cc-cat-row">' +
       '<span class="cc-cat-name">Marketing</span>' +
       '<label class="cc-toggle">' +
-      '<input type="checkbox" id="cc-marketing"' +
+      '<input type="checkbox" id="cc-marketing" aria-describedby="cc-marketing-desc cc-marketing-tools"' +
       (marketingChecked ? ' checked' : '') +
       '>' +
       '<span class="cc-toggle-track"></span>' +
       '</label>' +
       '</div>' +
-      '<div class="cc-cat-desc">Advertising &amp; visitor identification.</div>' +
-      '<div class="cc-cat-tools">Google Ads, Vector, Reo</div>' +
+      '<div class="cc-cat-desc" id="cc-marketing-desc">Advertising &amp; visitor identification.</div>' +
+      '<div class="cc-cat-tools" id="cc-marketing-tools">Google Ads, Vector, Reo</div>' +
       '</div>' +
       '<div class="cc-prefs-btns">' +
       '<button id="cc-reject-all">Reject All</button>' +

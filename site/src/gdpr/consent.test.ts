@@ -173,6 +173,13 @@ describe('consent.js', () => {
       runConsent();
       expect(document.getElementById('cc-banner')).not.toBeNull();
     });
+
+    it('does not treat partial country-code matches as opt-in or opt-out', () => {
+      setCookie('pf_country', 'A');
+      runConsent();
+      expect(document.getElementById('cc-banner')).toBeNull();
+      expect(getCookie('pf_consent')).toBe('v1.n.1.1');
+    });
   });
 
   // ── Opt-in Flow ──
@@ -335,6 +342,21 @@ describe('consent.js', () => {
       const m = document.getElementById('cc-marketing') as HTMLInputElement;
       expect(a.checked).toBe(true);
       expect(m.checked).toBe(false);
+    });
+
+    it('links toggle descriptions for screen readers', () => {
+      setCookie('pf_country', 'DE');
+      runConsent();
+      document.getElementById('cc-manage')!.click();
+
+      const analytics = document.getElementById('cc-analytics');
+      const marketing = document.getElementById('cc-marketing');
+      expect(analytics?.getAttribute('aria-describedby')).toBe(
+        'cc-analytics-desc cc-analytics-tools',
+      );
+      expect(marketing?.getAttribute('aria-describedby')).toBe(
+        'cc-marketing-desc cc-marketing-tools',
+      );
     });
 
     it('starts with toggles off in opt-in regions before consent', () => {
