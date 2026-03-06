@@ -166,8 +166,12 @@ describe('CloudConfig', () => {
       );
     });
 
-    it('should set sharing to false when hasActiveLicense is false', async () => {
-      const noLicenseResponse = { ...mockResponse, hasActiveLicense: false };
+    it('should set sharing to false when hasActiveLicense is false and user created after cutoff', async () => {
+      const noLicenseResponse = {
+        ...mockResponse,
+        hasActiveLicense: false,
+        user: { ...mockResponse.user, createdAt: new Date('2026-03-10T00:00:00Z') },
+      };
       const mockFetchResponse = {
         ok: true,
         json: () => Promise.resolve(noLicenseResponse),
@@ -187,6 +191,36 @@ describe('CloudConfig', () => {
         expect.objectContaining({
           cloud: expect.objectContaining({
             sharing: false,
+          }),
+        }),
+      );
+    });
+
+    it('should set sharing to true when hasActiveLicense is false but user created before cutoff (grandfathered)', async () => {
+      const grandfatheredResponse = {
+        ...mockResponse,
+        hasActiveLicense: false,
+        user: { ...mockResponse.user, createdAt: new Date('2026-03-01T00:00:00Z') },
+      };
+      const mockFetchResponse = {
+        ok: true,
+        json: () => Promise.resolve(grandfatheredResponse),
+        text: () => Promise.resolve(JSON.stringify(grandfatheredResponse)),
+      } as Response;
+
+      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+
+      const result = await cloudConfigInstance.validateAndSetApiToken(
+        'test-token',
+        'https://test.api',
+      );
+
+      expect(result.hasActiveLicense).toBe(false);
+      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual(
+        expect.objectContaining({
+          cloud: expect.objectContaining({
+            sharing: true,
           }),
         }),
       );
