@@ -6,6 +6,11 @@ import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src
 const mockGetProvider = vi.hoisted(() => vi.fn<() => Promise<any>>());
 const mockGetTargetResponse = vi.hoisted(() => vi.fn<() => Promise<any>>());
 
+vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
+}));
+
 vi.mock('../../../src/redteam/providers/shared', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -583,8 +588,8 @@ describe('RedteamIterativeMetaProvider', () => {
         vars: { query: 'test' },
       });
 
-      // 3 agent calls + 3 target calls = 6 total requests
-      expect(result.tokenUsage?.numRequests).toBeGreaterThanOrEqual(3);
+      // Probe counting should only include target calls.
+      expect(result.tokenUsage?.numRequests).toBe(3);
     });
 
     it('should handle missing token usage gracefully', async () => {
@@ -617,9 +622,9 @@ describe('RedteamIterativeMetaProvider', () => {
         vars: { query: 'test' },
       });
 
-      // Should still return tokenUsage object with numRequests counted
+      // Should still return tokenUsage object with target numRequests counted
       expect(result.tokenUsage).toBeDefined();
-      expect(result.tokenUsage?.numRequests).toBeGreaterThanOrEqual(1);
+      expect(result.tokenUsage?.numRequests).toBe(1);
     });
   });
 

@@ -5,7 +5,7 @@ This example demonstrates Anthropic's web search and web fetch tools, showing bo
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example web-tools
+npx promptfoo@latest init --example anthropic/web-tools
 ```
 
 ## Features Demonstrated
@@ -27,7 +27,7 @@ prompts:
     {{task}}
 
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-4-6
     config:
       temperature: 0
       max_tokens: 2500

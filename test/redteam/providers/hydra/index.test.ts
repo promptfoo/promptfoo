@@ -504,6 +504,73 @@ describe('HydraProvider', () => {
       );
       expect(escapedCall).toBeDefined();
     });
+
+    it('should propagate sessionId to context.vars in stateful mode', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        sessionId: 'session-456',
+        tokenUsage: { total: 50, prompt: 25, completion: 25 },
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 2,
+        stateful: true,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(context.vars['sessionId']).toBe('session-456');
+      expect(result.metadata?.sessionId).toBe('session-456');
+    });
+
+    it('should not propagate sessionId to context.vars in stateless mode', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        sessionId: 'session-789',
+        tokenUsage: { total: 50, prompt: 25, completion: 25 },
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+        stateful: false,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      await provider.callApi('', context);
+
+      expect(context.vars['sessionId']).toBeUndefined();
+    });
   });
 
   describe('callApi() - stateless mode', () => {
@@ -1244,13 +1311,15 @@ describe('HydraProvider', () => {
 
       const result = await provider.callApi('', context);
 
-      // Total should be sum of all calls
+      // Total tokens should be sum of all calls
       // Agent: 100 + 150 = 250
       // Target: 80 + 120 = 200
       // Total: 450
       expect(result.tokenUsage?.total).toBe(450);
       expect(result.tokenUsage?.prompt).toBe(225);
       expect(result.tokenUsage?.completion).toBe(225);
+      // Probes should only count target calls.
+      expect(result.tokenUsage?.numRequests).toBe(2);
     });
   });
 

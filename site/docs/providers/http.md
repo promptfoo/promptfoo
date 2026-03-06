@@ -40,6 +40,14 @@ tests:
       language: 'French'
 ```
 
+When available, Promptfoo also injects runtime variables such as `{{evaluationId}}`, which is useful for correlating downstream logs with a specific eval run:
+
+```yaml
+body:
+  prompt: '{{prompt}}'
+  evaluation_id: '{{evaluationId}}'
+```
+
 `body` can be a string or JSON object. If the body is a string, the `Content-Type` header defaults to `text/plain` unless specified otherwise. If the body is an object, then content type is automatically set to `application/json`.
 
 ### JSON Example

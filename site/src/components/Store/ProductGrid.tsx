@@ -28,7 +28,7 @@ export function ProductGrid({ products, isLoading, error }: ProductGridProps) {
           minHeight: '50vh',
         }}
       >
-        <CircularProgress sx={{ color: '#000' }} />
+        <CircularProgress sx={{ color: 'var(--ifm-color-primary)' }} />
       </Box>
     );
   }

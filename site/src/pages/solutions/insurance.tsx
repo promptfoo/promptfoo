@@ -153,7 +153,7 @@ export default function Insurance() {
         </section>
 
         {/* Regulatory Alignment */}
-        <section className={styles.solutionSection} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.solutionSection}>
           <div className="container">
             <p className={styles.sectionEyebrow}>Regulatory Alignment</p>
             <h2 className={styles.sectionTitle}>Tests mapped to the audits you face</h2>
@@ -264,7 +264,7 @@ export default function Insurance() {
         </section>
 
         {/* PHI Protection Section */}
-        <section className={styles.solutionSection} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.solutionSection}>
           <div className="container">
             <div className={styles.showcaseRow}>
               <div className={styles.showcaseText}>
@@ -325,7 +325,7 @@ export default function Insurance() {
         </section>
 
         {/* Proof Banner */}
-        <section className={styles.section} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.section}>
           <div className="container">
             <div className={styles.proofBanner}>
               <div className={styles.proofBannerContainer}>
@@ -387,7 +387,7 @@ export default function Insurance() {
         </section>
 
         {/* Network Accuracy Testing */}
-        <section className={styles.solutionSection} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.solutionSection}>
           <div className="container">
             <p className={styles.sectionEyebrow}>No Surprises Act Compliance</p>
             <h2 className={styles.sectionTitle}>Network accuracy testing</h2>

@@ -1,6 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import * as React from 'react';
+
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DataTable } from './data-table';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -8,6 +10,38 @@ interface TestRow {
   id: string;
   name: string;
 }
+
+interface HeaderFilterRow {
+  id: string;
+  name: string;
+  status: string;
+}
+
+const headerFilterColumns: ColumnDef<HeaderFilterRow>[] = [
+  {
+    accessorKey: 'name',
+    header: 'Name',
+  },
+  {
+    accessorKey: 'status',
+    header: 'Status',
+    meta: {
+      filterVariant: 'select',
+      filterOptions: [
+        { label: 'Alpha', value: 'alpha' },
+        { label: 'Beta', value: 'beta' },
+        { label: 'Gamma', value: 'gamma' },
+      ],
+    },
+  },
+];
+
+const headerFilterRows: HeaderFilterRow[] = [
+  { id: '1', name: 'Row One', status: 'alpha' },
+  { id: '2', name: 'Row Two', status: 'beta' },
+  { id: '3', name: 'Row Three', status: 'gamma' },
+  { id: '4', name: 'Row Four', status: 'alpha' },
+];
 
 describe('DataTable', () => {
   const columns: ColumnDef<TestRow>[] = [
@@ -143,6 +177,29 @@ describe('DataTable', () => {
     expect(screen.getByText('No results match your search')).toBeInTheDocument();
   });
 
+  it('should rehydrate toolbar filter rows from active column filters when reopened', async () => {
+    const user = userEvent.setup();
+    const data: TestRow[] = [
+      { id: '1', name: 'Item 1' },
+      { id: '2', name: 'Item 2' },
+      { id: '3', name: 'Item 3' },
+    ];
+
+    render(<DataTable columns={columns} data={data} />);
+
+    await user.click(screen.getByRole('button', { name: /^Filters/ }));
+    expect(await screen.findByPlaceholderText('Value...')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^Filters/ }));
+
+    await user.click(screen.getByRole('button', { name: 'Filter Name' }));
+    const headerFilterInput = await screen.findByPlaceholderText('Value...');
+    await user.type(headerFilterInput, 'Item 2');
+    await user.click(screen.getByRole('button', { name: 'Filter Name' }));
+
+    await user.click(screen.getByRole('button', { name: /^Filters/ }));
+    expect(await screen.findByDisplayValue('Item 2')).toBeInTheDocument();
+  });
+
   describe('pagination', () => {
     // Generate test data with enough rows to require pagination
     const generateData = (count: number): TestRow[] =>
@@ -240,6 +297,318 @@ describe('DataTable', () => {
       expect(screen.getByText(/Showing 1 to 25 of 30 rows/)).toBeInTheDocument();
       expect(screen.getByText('Item 1')).toBeInTheDocument();
       expect(screen.getByText('Item 25')).toBeInTheDocument();
+    });
+
+    it('should call external onPaginationChange when Next is clicked in manual pagination mode', async () => {
+      const user = userEvent.setup();
+      const data = generateData(10);
+      const onPaginationChange = vi.fn();
+      const onPageSizeChange = vi.fn();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          manualPagination
+          pageIndex={0}
+          pageSize={10}
+          pageCount={5}
+          onPaginationChange={onPaginationChange}
+          onPageSizeChange={onPageSizeChange}
+          rowCount={50}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+
+      expect(onPaginationChange).toHaveBeenCalledTimes(1);
+      expect(onPaginationChange).toHaveBeenCalledWith({ pageIndex: 1, pageSize: 10 });
+    });
+
+    it('should call external onPageSizeChange (not onPaginationChange) when page size changes in manual pagination mode', async () => {
+      const user = userEvent.setup();
+      const data = generateData(10);
+      const onPaginationChange = vi.fn();
+      const onPageSizeChange = vi.fn();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          manualPagination
+          pageIndex={3}
+          pageSize={10}
+          pageCount={10}
+          onPaginationChange={onPaginationChange}
+          onPageSizeChange={onPageSizeChange}
+          rowCount={100}
+        />,
+      );
+
+      const pageSizeSelect = screen.getByRole('combobox');
+      await user.click(pageSizeSelect);
+      await user.click(screen.getByRole('option', { name: '25' }));
+
+      expect(onPageSizeChange).toHaveBeenCalledTimes(1);
+      expect(onPageSizeChange).toHaveBeenCalledWith(25);
+      expect(onPaginationChange).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('should support page-size changes through onPageSizeChange in a controlled manual-pagination wrapper', async () => {
+      const user = userEvent.setup();
+      const data = generateData(50);
+      const totalRows = 50;
+      const onPaginationChange = vi.fn();
+      const onPageSizeChange = vi.fn();
+
+      const ControlledPaginationWrapper = () => {
+        const [pagination, setPagination] = React.useState({
+          pageIndex: 2,
+          pageSize: 5,
+        });
+
+        return (
+          <DataTable
+            columns={columns}
+            data={data.slice(
+              pagination.pageIndex * pagination.pageSize,
+              (pagination.pageIndex + 1) * pagination.pageSize,
+            )}
+            manualPagination
+            rowCount={totalRows}
+            pageCount={Math.ceil(totalRows / pagination.pageSize)}
+            pageIndex={pagination.pageIndex}
+            pageSize={pagination.pageSize}
+            onPaginationChange={(nextPagination) => {
+              onPaginationChange(nextPagination);
+              setPagination(nextPagination);
+            }}
+            onPageSizeChange={(pageSize) => {
+              onPageSizeChange(pageSize);
+              setPagination((prev) => ({ ...prev, pageSize, pageIndex: 0 }));
+            }}
+          />
+        );
+      };
+
+      render(<ControlledPaginationWrapper />);
+
+      const pageSizeSelect = screen.getByRole('combobox');
+      await user.click(pageSizeSelect);
+      await user.click(screen.getByRole('option', { name: '25' }));
+
+      expect(onPageSizeChange).toHaveBeenCalledTimes(1);
+      expect(onPageSizeChange).toHaveBeenCalledWith(25);
+      expect(onPaginationChange).not.toHaveBeenCalled();
+      expect(screen.getByText('Item 1')).toBeInTheDocument();
+      expect(screen.getByText('Item 25')).toBeInTheDocument();
+    });
+
+    it('should use rowCount and avoid client-side row slicing in manual pagination mode', () => {
+      const data = generateData(15);
+      const onPaginationChange = vi.fn();
+      const onPageSizeChange = vi.fn();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          manualPagination
+          pageIndex={0}
+          pageSize={10}
+          pageCount={8}
+          onPaginationChange={onPaginationChange}
+          onPageSizeChange={onPageSizeChange}
+          rowCount={73}
+        />,
+      );
+
+      // Manual pagination should render all provided rows for the current page payload.
+      expect(screen.getByText('Item 15')).toBeInTheDocument();
+      expect(screen.getByText(/Showing 1 to 10 of 73 rows/)).toBeInTheDocument();
+    });
+
+    it('should paginate and filter client-side when manual pagination is disabled', async () => {
+      const user = userEvent.setup();
+      const data: TestRow[] = Array.from({ length: 12 }, (_, i) => ({
+        id: `${i + 1}`,
+        name: i < 10 ? `Target-${i + 1}` : `Other-${i + 1}`,
+      }));
+
+      render(<DataTable columns={columns} data={data} initialPageSize={5} />);
+
+      expect(screen.getByText(/Showing 1 to 5 of 12 rows/)).toBeInTheDocument();
+      expect(screen.getByText('Target-5')).toBeInTheDocument();
+      expect(screen.queryByText('Target-6')).not.toBeInTheDocument();
+
+      const searchInput = screen.getByPlaceholderText('Search...');
+      await user.type(searchInput, 'Target');
+
+      expect(screen.getByText(/Showing 1 to 5 of 10 rows/)).toBeInTheDocument();
+      expect(screen.getByText('Target-5')).toBeInTheDocument();
+      expect(screen.queryByText('Other-11')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+      expect(screen.getByText(/Showing 6 to 10 of 10 rows/)).toBeInTheDocument();
+      expect(screen.getByText('Target-10')).toBeInTheDocument();
+    });
+
+    it('should delegate manual pagination to external state callbacks', async () => {
+      const user = userEvent.setup();
+      const data = generateData(20);
+      const onPaginationChange = vi.fn();
+      const onPageSizeChange = vi.fn();
+
+      const ControlledPaginationWrapper = () => {
+        const [pagination, setPagination] = React.useState({
+          pageIndex: 0,
+          pageSize: 5,
+        });
+
+        return (
+          <DataTable
+            columns={columns}
+            data={data.slice(
+              pagination.pageIndex * pagination.pageSize,
+              (pagination.pageIndex + 1) * pagination.pageSize,
+            )}
+            manualPagination
+            rowCount={20}
+            pageCount={4}
+            pageIndex={pagination.pageIndex}
+            pageSize={pagination.pageSize}
+            onPaginationChange={(nextPagination) => {
+              onPaginationChange(nextPagination);
+              setPagination(nextPagination);
+            }}
+            onPageSizeChange={(pageSize) => {
+              onPageSizeChange(pageSize);
+              setPagination((prev) => ({ ...prev, pageSize, pageIndex: 0 }));
+            }}
+          />
+        );
+      };
+
+      render(<ControlledPaginationWrapper />);
+
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+
+      expect(onPaginationChange).toHaveBeenCalledTimes(1);
+      expect(onPaginationChange).toHaveBeenCalledWith({ pageIndex: 1, pageSize: 5 });
+      expect(onPageSizeChange).not.toHaveBeenCalled();
+      expect(screen.getByText('Item 6')).toBeInTheDocument();
+      expect(screen.getByText(/Showing 6 to 10 of 20 rows/)).toBeInTheDocument();
+    });
+  });
+
+  describe('column header filters', () => {
+    it('should filter rows using the text input in a header popover', async () => {
+      const user = userEvent.setup();
+      const data: HeaderFilterRow[] = [
+        ...headerFilterRows,
+        { id: '5', name: 'Alpha Row', status: 'gamma' },
+      ];
+
+      render(<DataTable columns={headerFilterColumns} data={data} showPagination={false} />);
+
+      await user.click(screen.getByRole('button', { name: 'Filter Name' }));
+      await user.type(screen.getByPlaceholderText('Value...'), 'Alpha');
+
+      expect(screen.getByText('Alpha Row')).toBeInTheDocument();
+      expect(screen.queryByText('Row Two')).not.toBeInTheDocument();
+      expect(screen.queryByText('Row Three')).not.toBeInTheDocument();
+    });
+
+    it('should filter rows using the select input in a header popover', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <DataTable columns={headerFilterColumns} data={headerFilterRows} showPagination={false} />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Filter Status' }));
+      const popover = screen.getByRole('dialog');
+      const comboboxes = within(popover).getAllByRole('combobox');
+      const valueSelect = comboboxes[1];
+
+      await user.click(valueSelect);
+      const option = screen.getByRole('option', { name: 'Beta', hidden: true });
+      fireEvent.click(option);
+
+      expect(screen.getByText('Row Two')).toBeInTheDocument();
+      expect(screen.queryByText('Row One')).not.toBeInTheDocument();
+      expect(screen.queryByText('Row Three')).not.toBeInTheDocument();
+      expect(screen.queryByText('Row Four')).not.toBeInTheDocument();
+    });
+
+    it('should support multi-select filtering from header popovers', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <DataTable columns={headerFilterColumns} data={headerFilterRows} showPagination={false} />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Filter Status' }));
+      const popover = screen.getByRole('dialog');
+
+      const operatorSelect = within(popover).getAllByRole('combobox')[0];
+      await user.click(operatorSelect);
+      const isAnyOption = await screen.findByRole('option', { name: /^is any of$/, hidden: true });
+      await user.click(isAnyOption);
+
+      const multiSelectButton = await within(popover).findByText('Select values...');
+      await user.click(multiSelectButton);
+      await user.click(within(popover).getByText('Alpha'));
+      await user.click(within(popover).getByText('Beta'));
+
+      expect(screen.getByText('Row One')).toBeInTheDocument();
+      expect(screen.getByText('Row Two')).toBeInTheDocument();
+      expect(screen.getByText('Row Four')).toBeInTheDocument();
+      expect(screen.queryByText('Row Three')).not.toBeInTheDocument();
+    });
+
+    it('should open header filter popovers with an active interactive row by default', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <DataTable columns={headerFilterColumns} data={headerFilterRows} showPagination={false} />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Filter Name' }));
+      const operatorSelect = screen.getByRole('combobox');
+      const valueInput = screen.getByPlaceholderText('Value...');
+
+      expect(operatorSelect).toBeInTheDocument();
+      expect(valueInput).toBeInTheDocument();
+      expect(valueInput).toBeEnabled();
+
+      await user.type(valueInput, 'Row');
+      expect(screen.getByText('Row One')).toBeInTheDocument();
+    });
+
+    it('should include header popover filters in the filter toolbar panel', async () => {
+      const user = userEvent.setup();
+
+      render(<DataTable columns={headerFilterColumns} data={headerFilterRows} />);
+
+      await user.click(screen.getByRole('button', { name: 'Filter Status' }));
+      const popover = screen.getByRole('dialog');
+      const comboboxes = within(popover).getAllByRole('combobox');
+      const valueSelect = comboboxes[1];
+      await user.click(valueSelect);
+      const betaOption = screen.getByRole('option', { name: 'Beta', hidden: true });
+      fireEvent.click(betaOption);
+
+      await user.click(screen.getByRole('button', { name: /Filters/ }));
+      const toolbarDialog = screen
+        .getAllByRole('dialog')
+        .find((node) => within(node).queryByRole('heading', { name: 'Filters' }));
+      expect(toolbarDialog).toBeDefined();
+      expect(await within(toolbarDialog as HTMLElement).findByText('Status')).toBeInTheDocument();
+      expect(await within(toolbarDialog as HTMLElement).findByText(/beta/i)).toBeInTheDocument();
     });
   });
 
@@ -437,6 +806,317 @@ describe('DataTable', () => {
       // Data cells should not have cursor-pointer (unless onRowClick is provided)
       const dataCell = cells?.[1];
       expect(dataCell?.className).toContain('overflow-hidden');
+    });
+  });
+
+  describe('cell content wrapper', () => {
+    it('should wrap data cell content in a div with overflow-hidden but not select cells', () => {
+      const data: TestRow[] = [{ id: '1', name: 'Test Item' }];
+
+      render(<DataTable columns={columns} data={data} enableRowSelection />);
+
+      const table = screen.getByRole('table');
+      const tbody = table.querySelector('tbody');
+      const firstRow = tbody?.querySelector('tr');
+      const cells = firstRow?.querySelectorAll('td');
+
+      // First cell is the select column - should NOT have the overflow wrapper
+      const selectCell = cells?.[0];
+      const selectWrapper = selectCell?.querySelector(':scope > div.overflow-hidden');
+      expect(selectWrapper).toBeNull();
+
+      // Data cells should have the overflow wrapper
+      const dataCell = cells?.[1];
+      const dataWrapper = dataCell?.querySelector(':scope > div.overflow-hidden');
+      expect(dataWrapper).not.toBeNull();
+      expect(dataWrapper?.className).toContain('min-w-0');
+    });
+
+    it('should render cell text content inside the overflow wrapper', () => {
+      const data: TestRow[] = [
+        { id: '1', name: 'A very long target name that would overflow a narrow column width' },
+      ];
+
+      render(<DataTable columns={columns} data={data} />);
+
+      // Text should be in the document and accessible
+      const textElement = screen.getByText(
+        'A very long target name that would overflow a narrow column width',
+      );
+      expect(textElement).toBeInTheDocument();
+
+      // The text should be inside a td > div.overflow-hidden chain
+      const wrapper = textElement.closest('div.overflow-hidden');
+      expect(wrapper).not.toBeNull();
+      const td = wrapper?.closest('td');
+      expect(td).not.toBeNull();
+    });
+
+    it('should allow click events to propagate through the wrapper to custom cell renderers', async () => {
+      const user = userEvent.setup();
+      const handleClick = vi.fn();
+
+      const columnsWithButton: ColumnDef<TestRow>[] = [
+        {
+          accessorKey: 'name',
+          header: 'Name',
+          cell: ({ getValue }) => (
+            <button data-testid="cell-button" onClick={handleClick}>
+              {getValue<string>()}
+            </button>
+          ),
+        },
+      ];
+
+      const data: TestRow[] = [{ id: '1', name: 'Clickable Item' }];
+
+      render(<DataTable columns={columnsWithButton} data={data} />);
+
+      const button = screen.getByTestId('cell-button');
+      expect(button).toBeInTheDocument();
+      expect(button.textContent).toBe('Clickable Item');
+
+      await user.click(button);
+      expect(handleClick).toHaveBeenCalledOnce();
+    });
+
+    it('should not break row selection checkboxes', async () => {
+      const user = userEvent.setup();
+      const data: TestRow[] = [
+        { id: '1', name: 'Item 1' },
+        { id: '2', name: 'Item 2' },
+      ];
+
+      render(<DataTable columns={columns} data={data} enableRowSelection />);
+
+      const checkboxes = screen.getAllByRole('checkbox');
+      expect(checkboxes).toHaveLength(3); // 1 header + 2 rows
+
+      // Select individual row - should work through the wrapper
+      await user.click(checkboxes[1]);
+      expect(checkboxes[1]).toBeChecked();
+      expect(checkboxes[2]).not.toBeChecked();
+    });
+
+    it('should keep long text within constrained column width with ellipsis', () => {
+      const longNameData: TestRow[] = [
+        {
+          id: '1',
+          name: 'This is an extremely long text value intended to test truncation behavior',
+        },
+      ];
+      const longNameColumns: ColumnDef<TestRow>[] = [
+        { accessorKey: 'id', header: 'ID', size: 100 },
+        { accessorKey: 'name', header: 'Name', size: 120 },
+      ];
+
+      render(<DataTable columns={longNameColumns} data={longNameData} />);
+
+      const table = screen.getByRole('table');
+      const firstRow = table.querySelector('tbody tr');
+      const nameCell = firstRow?.querySelectorAll('td')[1];
+
+      expect(nameCell).not.toBeNull();
+      expect(nameCell?.style.width).toBe('120px');
+      expect(nameCell?.style.minWidth).toBe('120px');
+      expect(nameCell?.style.maxWidth).toBe('120px');
+      expect(nameCell?.className).toContain('overflow-hidden');
+      expect(nameCell?.className).toContain('text-ellipsis');
+
+      const textWrapper = screen
+        .getByText('This is an extremely long text value intended to test truncation behavior')
+        .closest('div');
+
+      expect(textWrapper).not.toBeNull();
+      expect(textWrapper?.className).toContain('overflow-hidden');
+      expect(textWrapper?.className).toContain('min-w-0');
+    });
+
+    it('should preserve explicit Tailwind color utility classes in both themes', () => {
+      const colorColumns: ColumnDef<TestRow>[] = [
+        {
+          accessorKey: 'name',
+          header: 'Name',
+          cell: ({ getValue }) => (
+            <span
+              data-testid="color-test-cell"
+              className="text-emerald-700 dark:text-emerald-300 bg-amber-50 dark:bg-amber-950"
+            >
+              {getValue<string>()}
+            </span>
+          ),
+        },
+      ];
+      const colorData: TestRow[] = [{ id: '1', name: 'Colorful row' }];
+
+      render(
+        <>
+          <DataTable columns={colorColumns} data={colorData} />
+          <div className="dark">
+            <DataTable columns={colorColumns} data={colorData} />
+          </div>
+        </>,
+      );
+
+      const cells = screen.getAllByTestId('color-test-cell');
+      expect(cells).toHaveLength(2);
+      expect(cells[0]).toHaveClass('text-emerald-700');
+      expect(cells[0]).toHaveClass('dark:text-emerald-300');
+      expect(cells[0]).toHaveClass('bg-amber-50');
+      expect(cells[0]).toHaveClass('dark:bg-amber-950');
+      expect(cells[1]).toHaveClass('text-emerald-700');
+      expect(cells[1]).toHaveClass('dark:text-emerald-300');
+      expect(cells[1]).toHaveClass('bg-amber-50');
+      expect(cells[1]).toHaveClass('dark:bg-amber-950');
+    });
+  });
+
+  describe('row expansion', () => {
+    const data: TestRow[] = [
+      { id: '1', name: 'Item 1' },
+      { id: '2', name: 'Item 2' },
+      { id: '3', name: 'Item 3' },
+    ];
+
+    const renderSubComponent = (row: { original: TestRow }) => (
+      <div data-testid={`expanded-${row.original.id}`}>Details for {row.original.name}</div>
+    );
+
+    it('should render expand chevron column when renderSubComponent is provided', () => {
+      render(<DataTable columns={columns} data={data} renderSubComponent={renderSubComponent} />);
+
+      const expandButtons = screen.getAllByRole('button', { name: /expand row/i });
+      expect(expandButtons).toHaveLength(3);
+    });
+
+    it('should not render expand column when renderSubComponent is not provided', () => {
+      render(<DataTable columns={columns} data={data} />);
+
+      expect(screen.queryByRole('button', { name: /expand row/i })).not.toBeInTheDocument();
+    });
+
+    it('should expand a row when chevron is clicked', async () => {
+      const user = userEvent.setup();
+
+      render(<DataTable columns={columns} data={data} renderSubComponent={renderSubComponent} />);
+
+      expect(screen.queryByTestId('expanded-1')).not.toBeInTheDocument();
+
+      const expandButtons = screen.getAllByRole('button', { name: /expand row/i });
+      await user.click(expandButtons[0]);
+
+      expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
+      expect(screen.getByText('Details for Item 1')).toBeInTheDocument();
+    });
+
+    it('should collapse a row when chevron is clicked again', async () => {
+      const user = userEvent.setup();
+
+      render(<DataTable columns={columns} data={data} renderSubComponent={renderSubComponent} />);
+
+      const expandButtons = screen.getAllByRole('button', { name: /expand row/i });
+
+      await user.click(expandButtons[0]);
+      expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
+
+      await user.click(expandButtons[0]);
+      expect(screen.queryByTestId('expanded-1')).not.toBeInTheDocument();
+    });
+
+    it('should allow multiple rows expanded simultaneously by default', async () => {
+      const user = userEvent.setup();
+
+      render(<DataTable columns={columns} data={data} renderSubComponent={renderSubComponent} />);
+
+      const expandButtons = screen.getAllByRole('button', { name: /expand row/i });
+
+      await user.click(expandButtons[0]);
+      await user.click(expandButtons[1]);
+
+      expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
+      expect(screen.getByTestId('expanded-2')).toBeInTheDocument();
+    });
+
+    it('should collapse other rows in singleExpand mode', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          renderSubComponent={renderSubComponent}
+          singleExpand
+        />,
+      );
+
+      const expandButtons = screen.getAllByRole('button', { name: /expand row/i });
+
+      await user.click(expandButtons[0]);
+      expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
+
+      await user.click(expandButtons[1]);
+      expect(screen.queryByTestId('expanded-1')).not.toBeInTheDocument();
+      expect(screen.getByTestId('expanded-2')).toBeInTheDocument();
+    });
+
+    it('should respect getRowCanExpand predicate', () => {
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          renderSubComponent={renderSubComponent}
+          getRowCanExpand={(row) => row.original.id !== '2'}
+        />,
+      );
+
+      const expandButtons = screen.getAllByRole('button', { name: /expand row/i });
+      expect(expandButtons).toHaveLength(2);
+    });
+
+    it('should toggle expansion on row click when onRowClick is not provided', async () => {
+      const user = userEvent.setup();
+
+      render(<DataTable columns={columns} data={data} renderSubComponent={renderSubComponent} />);
+
+      const table = screen.getByRole('table');
+      const rows = table.querySelectorAll('tbody tr');
+      await user.click(rows[0]);
+
+      expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
+    });
+
+    it('should NOT toggle expansion on row click when onRowClick IS provided', async () => {
+      const user = userEvent.setup();
+      const onRowClick = vi.fn();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          renderSubComponent={renderSubComponent}
+          onRowClick={onRowClick}
+        />,
+      );
+
+      const table = screen.getByRole('table');
+      const rows = table.querySelectorAll('tbody tr');
+      await user.click(rows[0]);
+
+      expect(onRowClick).toHaveBeenCalledOnce();
+      expect(screen.queryByTestId('expanded-1')).not.toBeInTheDocument();
+    });
+
+    it('should render expanded content spanning all columns', async () => {
+      const user = userEvent.setup();
+
+      render(<DataTable columns={columns} data={data} renderSubComponent={renderSubComponent} />);
+
+      const expandButtons = screen.getAllByRole('button', { name: /expand row/i });
+      await user.click(expandButtons[0]);
+
+      const expandedContent = screen.getByTestId('expanded-1');
+      const expandedTd = expandedContent.closest('td');
+      expect(expandedTd).toHaveAttribute('colspan', '3');
     });
   });
 });

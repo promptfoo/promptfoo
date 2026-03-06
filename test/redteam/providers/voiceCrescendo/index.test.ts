@@ -17,6 +17,7 @@ vi.mock('../../../../src/redteam/providers/shared', () => ({
     getGradingProvider: vi.fn(),
   },
   getTargetResponse: vi.fn(),
+  externalizeResponseForRedteamHistory: vi.fn(async (response: unknown) => response),
 }));
 
 vi.mock('../../../../src/redteam/remoteGeneration', () => ({
@@ -178,8 +179,9 @@ describe('VoiceCrescendoProvider', () => {
 
     // Verify token usage is accumulated
     expect(result.tokenUsage).toBeDefined();
-    expect(result.tokenUsage?.numRequests).toBeGreaterThan(0);
-    // Token usage should include redteam, target, and evaluation calls
+    // Probe counting should include only target calls.
+    expect(result.tokenUsage?.numRequests).toBe(result.metadata?.voiceCrescendoTurnsCompleted);
+    // Token totals still include internal calls.
     expect(result.tokenUsage?.total).toBeGreaterThan(0);
   });
 
@@ -210,7 +212,7 @@ describe('VoiceCrescendoProvider', () => {
 
     // Should still have token usage from successful calls
     expect(result.tokenUsage).toBeDefined();
-    expect(result.tokenUsage?.numRequests).toBeGreaterThanOrEqual(1);
+    expect(result.tokenUsage?.numRequests).toBe(1);
   });
 
   it('should include metadata with conversation history', async () => {

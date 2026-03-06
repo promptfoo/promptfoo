@@ -1,3 +1,0 @@
-Talk about {{topic}}.
----
-Talk about {{topic}}. Include a brief primer on macroeconomics. Be sure to ask the user for clarification if they have inquired about a broad topic.

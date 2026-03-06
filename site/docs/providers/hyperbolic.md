@@ -274,7 +274,7 @@ Hyperbolic offers competitive pricing across all model types (rates as of Januar
 Test your setup with working examples:
 
 ```bash
-npx promptfoo@latest init --example hyperbolic
+npx promptfoo@latest init --example provider-hyperbolic
 ```
 
 This includes tested configurations for text generation, image creation, audio synthesis, and vision tasks.

@@ -1,3 +1,0 @@
-'Generate a comprehensive overview of current trends in {{topic}}.'
----
-'Create a detailed article on the latest advancements in {{topic}}, highlighting key trends and technologies.'

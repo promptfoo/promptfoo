@@ -1,3 +1,0 @@
-Rephrase this in {{language}}: {{body | allcaps}}
----
-Translate this to conversational {{language}}: {{body | allcaps}}

@@ -237,14 +237,7 @@ export const OPENAI_CHAT_MODELS = [
     },
   })),
   // GPT-5 models
-  ...['gpt-5', 'gpt-5-2025-08-07'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.25 / 1e6,
-      output: 10 / 1e6,
-    },
-  })),
-  ...['gpt-5-chat-latest'].map((model) => ({
+  ...['gpt-5', 'gpt-5-2025-08-07', 'gpt-5-chat', 'gpt-5-chat-latest'].map((model) => ({
     id: model,
     cost: {
       input: 1.25 / 1e6,
@@ -287,7 +280,7 @@ export const OPENAI_CHAT_MODELS = [
     },
   })),
   // GPT-5.1 models
-  ...['gpt-5.1'].map((model) => ({
+  ...['gpt-5.1', 'gpt-5.1-2025-11-13', 'gpt-5.1-chat-latest'].map((model) => ({
     id: model,
     cost: {
       input: 1.25 / 1e6,
@@ -316,15 +309,22 @@ export const OPENAI_CHAT_MODELS = [
     },
   })),
   // GPT-5.2 models
-  ...['gpt-5.2', 'gpt-5.2-2025-12-11'].map((model) => ({
+  ...['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5.2-chat-latest', 'gpt-5.2-codex'].map((model) => ({
     id: model,
     cost: {
       input: 1.75 / 1e6,
       output: 14 / 1e6,
     },
   })),
+  ...['gpt-5.2-pro', 'gpt-5.2-pro-2025-12-11'].map((model) => ({
+    id: model,
+    cost: {
+      input: 15 / 1e6,
+      output: 120 / 1e6,
+    },
+  })),
   // GPT-5.3 models
-  ...['gpt-5.3-codex'].map((model) => ({
+  ...['gpt-5.3-chat-latest', 'gpt-5.3-codex'].map((model) => ({
     id: model,
     cost: {
       input: 1.75 / 1e6,
@@ -336,6 +336,21 @@ export const OPENAI_CHAT_MODELS = [
     cost: {
       input: 0.5 / 1e6,
       output: 4 / 1e6,
+    },
+  })),
+  // GPT-5.4 models
+  ...['gpt-5.4', 'gpt-5.4-2026-03-05'].map((model) => ({
+    id: model,
+    cost: {
+      input: 2.5 / 1e6,
+      output: 15 / 1e6,
+    },
+  })),
+  ...['gpt-5.4-pro', 'gpt-5.4-pro-2026-03-05'].map((model) => ({
+    id: model,
+    cost: {
+      input: 30 / 1e6,
+      output: 180 / 1e6,
     },
   })),
   // gpt-audio models

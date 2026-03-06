@@ -85,7 +85,7 @@ export default function GitHubStars(): React.ReactElement {
 
   return (
     <a
-      href="https://github.com/promptfoo/promptfoo"
+      href="https://github.com/promptfoo/promptfoo#readme"
       target="_blank"
       rel="noopener noreferrer"
       className={styles.githubStars}

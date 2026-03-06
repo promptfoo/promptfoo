@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: QuiverAI SVG generation evaluation
+
+prompts:
+  - 'Create a simple SVG icon of: {{subject}}'
+
+providers:
+  # Default config - streams for faster responses
+  - id: quiverai:arrow-preview
+    label: Arrow (default)
+    config:
+      max_output_tokens: 8192
+
+  # With style instructions
+  - id: quiverai:arrow-preview
+    label: Arrow (flat style)
+    config:
+      max_output_tokens: 8192
+      instructions: 'Flat design with clean geometry and a minimal color palette'
+
+defaultTest:
+  options:
+    rubricPrompt: |
+      Evaluate if this SVG meets the criteria. Be fair - stylized interpretations are fine.
+      Output JSON: {"reason": "<brief analysis>", "pass": true|false, "score": 0.0-1.0}
+
+      SVG: {{ output }}
+      Criteria: {{ value }}
+
+tests:
+  - vars:
+      subject: a red heart
+    assert:
+      - type: is-xml
+      - type: llm-rubric
+        value: Contains a heart shape in red color
+        threshold: 0.5
+
+  - vars:
+      subject: a yellow star
+    assert:
+      - type: is-xml
+      - type: llm-rubric
+        value: Contains a star shape in yellow/gold color
+        threshold: 0.5
+
+  - vars:
+      subject: a rocket ship
+    assert:
+      - type: is-xml
+      - type: llm-rubric
+        value: Contains a rocket or spaceship shape
+        threshold: 0.5
+
+  - vars:
+      subject: a red panda face
+    assert:
+      - type: is-xml
+      - type: llm-rubric
+        value: Contains a face with red/orange coloring suggestive of a red panda
+        threshold: 0.4

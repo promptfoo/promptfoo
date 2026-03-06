@@ -16,6 +16,8 @@ export interface GoogleModel {
   id: string;
   cost?: GoogleModelCost;
   tieredCost?: GoogleModelTieredCost;
+  /** Override pricing for Vertex AI when it differs from AI Studio. */
+  vertexCost?: GoogleModelCost;
 }
 
 /**
@@ -25,6 +27,16 @@ export interface GoogleModel {
  * Note: Vertex AI may have different pricing for some models.
  */
 export const GOOGLE_MODELS: GoogleModel[] = [
+  // Gemini 3.1 models (Preview)
+  {
+    id: 'gemini-3.1-pro-preview',
+    cost: { input: 2.0 / 1e6, output: 12.0 / 1e6 },
+    tieredCost: {
+      threshold: 200_000,
+      above: { input: 4.0 / 1e6, output: 18.0 / 1e6 },
+    },
+  },
+
   // Gemini 3.0 models (Preview)
   {
     id: 'gemini-3-flash-preview',
@@ -60,25 +72,25 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       above: { input: 2.5 / 1e6, output: 15.0 / 1e6 },
     },
   })),
-  ...['gemini-2.5-flash', 'gemini-2.5-flash-preview-04-17', 'gemini-2.5-flash-preview-05-20'].map(
-    (id) => ({
-      id,
-      cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
-    }),
-  ),
+  ...[
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-preview-04-17',
+    'gemini-2.5-flash-preview-05-20',
+    'gemini-2.5-flash-preview-09-2025',
+  ].map((id) => ({
+    id,
+    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
+  })),
   ...['gemini-2.5-flash-lite', 'gemini-2.5-flash-lite-preview-09-2025'].map((id) => ({
     id,
     cost: { input: 0.1 / 1e6, output: 0.4 / 1e6 },
   })),
-  {
-    id: 'gemini-2.5-flash-preview-09-2025',
-    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
-  },
 
   // Gemini 2.0 models
   ...['gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp'].map((id) => ({
     id,
     cost: { input: 0.1 / 1e6, output: 0.4 / 1e6 },
+    vertexCost: { input: 0.15 / 1e6, output: 0.6 / 1e6 },
   })),
   ...[
     'gemini-2.0-flash-lite',
@@ -165,6 +177,18 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   {
     id: 'gemini-pro-vision',
     cost: { input: 0.5 / 1e6, output: 1.5 / 1e6 },
+  },
+
+  // Gemini Robotics
+  {
+    id: 'gemini-robotics-er-1.5-preview',
+    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
+  },
+
+  // Gemini Embedding
+  {
+    id: 'gemini-embedding-001',
+    cost: { input: 0.15 / 1e6, output: 0 },
   },
 
   // Models without pricing (no cost field) - legacy PaLM, Gemma, MedLM, etc.

@@ -1,3 +1,0 @@
-translate this into {{language}}: {{input}}
----
-You are a {{language}} translation bot. Translate the following: {{input}}

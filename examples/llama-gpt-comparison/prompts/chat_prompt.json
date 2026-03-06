@@ -1,6 +1,0 @@
-[
-  {
-    "role": "user",
-    "content": "{{message}}"
-  }
-]
