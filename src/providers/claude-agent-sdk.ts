@@ -7,6 +7,7 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
+import { safeResolve } from '../util/pathUtils';
 import { cacheResponse, getCachedResponse, initializeAgenticCache } from './agentic-utils';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
@@ -716,7 +717,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     let workingDir: string | undefined;
 
     if (config.working_dir) {
-      workingDir = config.working_dir;
+      const basePath = cliState.basePath ? path.resolve(cliState.basePath) : process.cwd();
+      workingDir = safeResolve(basePath, config.working_dir);
     } else {
       isTempDir = true;
     }
@@ -785,7 +787,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     const cacheResult = await initializeAgenticCache(
       {
         cacheKeyPrefix: 'anthropic:claude-agent-sdk',
-        workingDir: config.working_dir,
+        workingDir,
         bustCache: context?.bustCache,
         mcp: config.mcp?.servers?.length ? config.mcp : undefined,
         cacheMcp: config.cache_mcp,
