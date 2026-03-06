@@ -190,7 +190,7 @@ export class CloudConfig {
         user,
         organization,
         app,
-        hasActiveLicense: !!hasActiveLicense,
+        hasActiveLicense: typeof hasActiveLicense === 'boolean' ? hasActiveLicense : false,
       };
     } catch (err) {
       const error = err as Error & { cause?: string };
