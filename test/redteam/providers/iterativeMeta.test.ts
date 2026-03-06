@@ -6,6 +6,11 @@ import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src
 const mockGetProvider = vi.hoisted(() => vi.fn<() => Promise<any>>());
 const mockGetTargetResponse = vi.hoisted(() => vi.fn<() => Promise<any>>());
 
+vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
+}));
+
 vi.mock('../../../src/redteam/providers/shared', async (importOriginal) => {
   return {
     ...(await importOriginal()),

@@ -131,6 +131,11 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 vi.mock('../../src/providers/websocket');
 
+vi.mock('../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
+}));
+
 vi.mock('../../src/globalConfig/cloud', () => {
   return {
     CLOUD_API_HOST: 'https://api.promptfoo.app',

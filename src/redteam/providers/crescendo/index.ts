@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { renderPrompt } from '../../../evaluatorHelpers';
+import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import {
@@ -166,6 +167,11 @@ export class CrescendoProvider implements ApiProvider {
     // Support backwards compatibility: use maxRounds if maxTurns is not provided
     this.maxTurns = config.maxTurns || config.maxRounds || DEFAULT_MAX_TURNS;
     this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
+
+    // Cap turns for unauthenticated users
+    if (!isLoggedIntoCloud()) {
+      this.maxTurns = Math.min(this.maxTurns, 10);
+    }
     this.nunjucks = getNunjucksEngine();
     this.memory = new MemorySystem();
     this.targetConversationId = crypto.randomUUID();
