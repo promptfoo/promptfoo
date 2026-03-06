@@ -5,6 +5,7 @@
  */
 
 import logger from '../../logger';
+import { sleepWithAbort } from '../../util/time';
 import type ora from 'ora';
 
 import type {
@@ -179,29 +180,6 @@ function isCapacityError(error: unknown): boolean {
     return error.message.includes(CAPACITY_ERROR_MESSAGE);
   }
   return false;
-}
-
-/**
- * Sleep that can be interrupted by an abort signal
- */
-async function sleepWithAbort(ms: number, signal: AbortSignal): Promise<void> {
-  if (signal.aborted) {
-    throw new Error('cancelled by user');
-  }
-
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      signal.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-
-    const onAbort = () => {
-      clearTimeout(timeout);
-      reject(new Error('cancelled by user'));
-    };
-
-    signal.addEventListener('abort', onAbort, { once: true });
-  });
 }
 
 /**
