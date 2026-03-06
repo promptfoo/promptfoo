@@ -886,7 +886,10 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(mockQuery).toHaveBeenCalledWith({
             prompt: 'Test prompt',
             options: expect.objectContaining({
-              plugins,
+              plugins: [
+                { type: 'local', path: '/test/basePath/my-plugin' },
+                { type: 'local', path: '/absolute/path/to/plugin' },
+              ],
             }),
           });
         });

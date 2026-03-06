@@ -713,11 +713,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       ? Array.from(new Set(config.disallowed_tools)).sort()
       : undefined;
 
+    const basePath = cliState.basePath ? path.resolve(cliState.basePath) : process.cwd();
+
     let isTempDir = false;
     let workingDir: string | undefined;
 
     if (config.working_dir) {
-      const basePath = cliState.basePath ? path.resolve(cliState.basePath) : process.cwd();
       workingDir = safeResolve(basePath, config.working_dir);
     } else {
       isTempDir = true;
@@ -751,7 +752,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       maxThinkingTokens: config.max_thinking_tokens,
       allowedTools,
       disallowedTools,
-      plugins: config.plugins,
+      plugins: config.plugins?.map((plugin) => ({
+        ...plugin,
+        path: safeResolve(basePath, plugin.path),
+      })),
       maxBudgetUsd: config.max_budget_usd,
       additionalDirectories: config.additional_directories,
       resume: config.resume,
