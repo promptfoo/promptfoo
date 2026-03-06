@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">Recovered December benchmark composition</title>
+  <desc id="desc">A visual summary of the recovered December benchmark: 620 original cases, 611 replayed cleanly today, with 210 baseline, 196 Hydra, 205 Meta, and 9 skipped Hydra traces.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f6f1e7; }
+      .panel { fill: #fffaf1; stroke: #d8ccb8; stroke-width: 2; }
+      .card { fill: #fdf8ef; stroke: #d8ccb8; stroke-width: 2; }
+      .ink { fill: #1f241f; }
+      .muted { fill: #67604f; }
+      .rule { stroke: #d8ccb8; stroke-width: 1.5; }
+      .baseline { fill: #dcefe7; }
+      .hydra { fill: #f3d6b8; }
+      .meta { fill: #f6c7b8; }
+      .skip { fill: #e9dfd0; }
+      .pill { fill: #efe5d4; }
+      .title { font-size: 34px; font-weight: 700; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .subtitle { font-size: 18px; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .section { font-size: 22px; font-weight: 700; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .label { font-size: 18px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .body { font-size: 16px; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .value { font-size: 34px; font-weight: 700; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+      .small { font-size: 14px; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .center { text-anchor: middle; }
+      .right { text-anchor: end; }
+      .arrow { fill: none; stroke: #8c806b; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1200" height="700" rx="24" />
+  <rect class="panel" x="40" y="40" width="1120" height="620" rx="28" />
+
+  <text class="ink title" x="80" y="94">Recovered December Benchmark</text>
+  <text class="muted subtitle" x="80" y="126">We started from the original December corpus, recovered the replayable payloads, and ran that same benchmark against both models.</text>
+
+  <rect class="card" x="80" y="174" width="270" height="360" rx="24" />
+  <text class="muted small" x="112" y="214">Original December run</text>
+  <text class="ink value" x="112" y="266">620</text>
+  <text class="ink section" x="112" y="300">saved cases</text>
+  <text class="muted body" x="112" y="340">Source eval</text>
+  <text class="ink small" x="112" y="366">eval-E24-2025-12-11T18:49:28</text>
+  <line class="rule" x1="112" y1="392" x2="318" y2="392" />
+  <text class="muted body" x="112" y="426">What was in it:</text>
+  <text class="ink body" x="112" y="456">baseline, Hydra, Meta</text>
+  <text class="ink body" x="112" y="486">reasoning disabled</text>
+  <text class="ink body" x="112" y="516">day-0 GPT-5.2 corpus</text>
+
+  <path class="arrow" d="M 390 354 C 450 354, 470 354, 530 354" />
+  <path class="arrow" d="M 520 340 L 546 354 L 520 368" />
+  <rect class="pill" x="408" y="310" width="110" height="30" rx="15" />
+  <text class="ink small center" x="463" y="329">recovered</text>
+
+  <rect class="card" x="560" y="174" width="520" height="360" rx="24" />
+  <text class="muted small" x="592" y="214">Replayable today</text>
+  <text class="ink value" x="592" y="266">611</text>
+  <text class="ink section" x="592" y="300">clean payloads</text>
+
+  <rect class="baseline" x="592" y="334" width="420" height="56" rx="18" />
+  <text class="ink label" x="620" y="368">Baseline</text>
+  <text class="ink value right" x="984" y="370">210</text>
+
+  <rect class="hydra" x="592" y="408" width="392" height="56" rx="18" />
+  <text class="ink label" x="620" y="442">Hydra</text>
+  <text class="ink value right" x="956" y="444">196</text>
+
+  <rect class="meta" x="592" y="482" width="410" height="56" rx="18" />
+  <text class="ink label" x="620" y="516">Meta</text>
+  <text class="ink value right" x="974" y="518">205</text>
+
+  <rect class="card" x="80" y="560" width="1000" height="70" rx="22" />
+  <text class="muted small" x="112" y="590">Excluded from the fixed benchmark</text>
+  <text class="ink body" x="112" y="616">9 Hydra traces total: 7 had no saved message trace after backtracking, and 2 contained literal template syntax in the saved messages.</text>
+
+  <rect class="skip" x="910" y="560" width="170" height="70" rx="22" />
+  <text class="muted small center" x="995" y="590">skipped</text>
+  <text class="ink value center" x="995" y="618">9</text>
+</svg>
