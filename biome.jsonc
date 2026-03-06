@@ -234,7 +234,7 @@
       }
     },
     {
-      "includes": ["examples/custom-provider/vercelAiSdkExample.js"],
+      "includes": ["examples/provider-custom/basic/vercelAiSdkExample.js"],
       "linter": {
         "enabled": false
       },

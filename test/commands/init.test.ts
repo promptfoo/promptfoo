@@ -181,26 +181,62 @@ describe('init command', () => {
         ok: true,
         status: 200,
         json: () =>
-          Promise.resolve([
-            { name: 'example1', type: 'dir' },
-            { name: 'example2', type: 'dir' },
-            { name: 'not-an-example', type: 'file' },
-          ]),
+          Promise.resolve({
+            tree: [
+              { path: 'examples/provider-http/basic/promptfooconfig.yaml', type: 'blob' },
+              { path: 'examples/provider-http/README.md', type: 'blob' },
+              { path: 'examples/eval-json-output/promptfooconfig.yaml', type: 'blob' },
+              { path: 'examples/provider-http/basic/server.js', type: 'blob' },
+            ],
+          }),
       });
       mockFetchWithProxy.mockResolvedValue(mockResponse);
 
       const examples = await init.getExamplesList();
 
-      expect(examples).toEqual(['example1', 'example2']);
+      expect(examples).toEqual(['eval-json-output', 'provider-http/basic']);
     });
 
-    it('should return an empty array if fetching fails', async () => {
-      const mockResponse = createMockResponse({
+    it('should fall back to main when VERSION tree request fails', async () => {
+      const mockVersionFailure = createMockResponse({
         ok: false,
         status: 404,
         statusText: 'Not Found',
       });
-      mockFetchWithProxy.mockResolvedValue(mockResponse);
+      const mockMainSuccess = createMockResponse({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            tree: [{ path: 'examples/config-js/promptfooconfig.js', type: 'blob' }],
+          }),
+      });
+
+      mockFetchWithProxy
+        .mockResolvedValueOnce(mockVersionFailure)
+        .mockResolvedValueOnce(mockMainSuccess);
+
+      const examples = await init.getExamplesList();
+
+      expect(examples).toEqual(['config-js']);
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithProxy.mock.calls[1][0]).toContain('/git/trees/main?recursive=1');
+    });
+
+    it('should return an empty array if fetching fails', async () => {
+      const mockVersionFailure = createMockResponse({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+      });
+      const mockMainFailure = createMockResponse({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+      });
+      mockFetchWithProxy
+        .mockResolvedValueOnce(mockVersionFailure)
+        .mockResolvedValueOnce(mockMainFailure);
 
       const examples = await init.getExamplesList();
 
@@ -239,6 +275,17 @@ describe('init command', () => {
         await init.handleExampleDownload('.', 'some-unknown-example');
 
         expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('has been renamed'));
+      });
+
+      it('should show replacement messaging for removed examples', async () => {
+        mockFetchWithProxy.mockRejectedValue(new Error('404 Not Found'));
+        vi.mocked(confirm).mockResolvedValue(false);
+
+        await init.handleExampleDownload('.', 'dbrx-benchmark');
+
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.stringContaining('dbrx-benchmark was removed because DBRX is no longer available'),
+        );
       });
 
       it('should download using the resolved alias name', async () => {

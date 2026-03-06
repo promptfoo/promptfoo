@@ -29,7 +29,7 @@ export const EXAMPLE_ALIASES: Record<string, string> = {
   'custom-provider-typescript': 'provider-custom/typescript',
   cyberseceval: 'redteam-cyberseceval',
   databricks: 'provider-databricks',
-  'dbrx-benchmark': 'eval-summarization',
+  'dbrx-benchmark': 'provider-databricks',
   'deepseek-r1-vs-openai-o1': 'compare-deepseek-r1-vs-openai-o1',
   docker: 'integration-docker/basic',
   'docker-code-generation-sandbox': 'integration-docker/code-generation-sandbox',
@@ -169,4 +169,9 @@ export const EXAMPLE_ALIASES: Record<string, string> = {
   'xai-video': 'xai/video',
   'xai-voice': 'xai/voice',
   xstest: 'redteam-xstest',
+};
+
+// Aliases where the old example was removed and we route to the closest maintained alternative.
+export const EXAMPLE_REPLACEMENTS: Record<string, string> = {
+  'dbrx-benchmark': 'dbrx-benchmark was removed because DBRX is no longer available.',
 };

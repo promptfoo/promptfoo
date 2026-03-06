@@ -11,10 +11,77 @@ import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
 import { fetchWithProxy } from '../util/fetch/index';
 import { promptfooCommand } from '../util/promptfooCommand';
-import { EXAMPLE_ALIASES } from './exampleAliases';
+import { EXAMPLE_ALIASES, EXAMPLE_REPLACEMENTS } from './exampleAliases';
 import type { Command } from 'commander';
 
 const GITHUB_API_BASE = 'https://api.github.com';
+const EXAMPLE_CONFIG_FILENAMES = new Set([
+  'promptfooconfig.yaml',
+  'promptfooconfig.yml',
+  'promptfooconfig.js',
+  'promptfooconfig.cjs',
+  'promptfooconfig.mjs',
+  'promptfooconfig.ts',
+]);
+
+interface GitHubTreeItem {
+  path: string;
+  type: 'blob' | 'tree' | string;
+}
+
+function getGitHubHeaders() {
+  return {
+    Accept: 'application/vnd.github.v3+json',
+    'User-Agent': 'promptfoo-cli',
+  };
+}
+
+async function fetchExamplesTree(ref: string): Promise<GitHubTreeItem[]> {
+  const response = await fetchWithProxy(
+    `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/git/trees/${ref}?recursive=1`,
+    { headers: getGitHubHeaders() },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `GitHub tree request failed for ref '${ref}': ${response.status} ${response.statusText}`,
+    );
+  }
+
+  const data = (await response.json()) as { tree?: GitHubTreeItem[] };
+  return data.tree ?? [];
+}
+
+function extractRunnableExamples(tree: GitHubTreeItem[]): string[] {
+  const examples = new Set<string>();
+
+  for (const item of tree) {
+    if (item.type !== 'blob' || !item.path.startsWith('examples/')) {
+      continue;
+    }
+
+    const basename = path.posix.basename(item.path);
+    if (!EXAMPLE_CONFIG_FILENAMES.has(basename)) {
+      continue;
+    }
+
+    const exampleDir = path.posix.dirname(item.path).replace(/^examples\//, '');
+    if (exampleDir && exampleDir !== '.') {
+      examples.add(exampleDir);
+    }
+  }
+
+  return [...examples].sort((a, b) => a.localeCompare(b));
+}
+
+async function hasRootPromptfooConfig(exampleDir: string): Promise<boolean> {
+  try {
+    const entries = await fs.readdir(exampleDir);
+    return entries.some((entry) => EXAMPLE_CONFIG_FILENAMES.has(entry));
+  } catch {
+    return false;
+  }
+}
 
 export async function downloadFile(url: string, filePath: string): Promise<void> {
   const response = await fetchWithProxy(url);
@@ -29,20 +96,14 @@ export async function downloadDirectory(dirPath: string, targetDir: string): Pro
   // First try with VERSION
   const url = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=${VERSION}`;
   let response = await fetchWithProxy(url, {
-    headers: {
-      Accept: 'application/vnd.github.v3+json',
-      'User-Agent': 'promptfoo-cli',
-    },
+    headers: getGitHubHeaders(),
   });
 
   // If VERSION fails, try with 'main'
   if (!response.ok) {
     const mainUrl = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=main`;
     response = await fetchWithProxy(mainUrl, {
-      headers: {
-        Accept: 'application/vnd.github.v3+json',
-        'User-Agent': 'promptfoo-cli',
-      },
+      headers: getGitHubHeaders(),
     });
 
     // If both attempts fail, throw an error
@@ -91,29 +152,17 @@ export async function downloadExample(exampleName: string, targetDir: string): P
 
 export async function getExamplesList(): Promise<string[]> {
   try {
-    const response = await fetchWithProxy(
-      `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples?ref=${VERSION}`,
-      {
-        headers: {
-          Accept: 'application/vnd.github.v3+json',
-          'User-Agent': 'promptfoo-cli',
-        },
-      },
-    );
-
-    if (!response.ok) {
-      throw new Error(`GitHub API request failed: ${response.status} ${response.statusText}`);
+    try {
+      return extractRunnableExamples(await fetchExamplesTree(VERSION));
+    } catch {
+      // Fall back to main when VERSION isn't available.
+      return extractRunnableExamples(await fetchExamplesTree('main'));
     }
-
-    const data = (await response.json()) as Array<{ name: string; type: string }>;
-
-    // Filter for directories only
-    return data.filter((item) => item.type === 'dir').map((item) => item.name);
   } catch (error) {
     logger.error(
       `Failed to fetch examples list: ${error instanceof Error ? error.message : error}`,
     );
-    return []; // Return an empty array if fetching fails
+    return [];
   }
 }
 
@@ -142,9 +191,15 @@ export async function handleExampleDownload(
   } else if (typeof example === 'string') {
     const resolved = EXAMPLE_ALIASES[example];
     if (resolved) {
-      logger.info(
-        chalk.yellow(`Note: '${example}' has been renamed to '${resolved}'. Using new name.`),
-      );
+      if (EXAMPLE_REPLACEMENTS[example]) {
+        logger.info(
+          chalk.yellow(`Note: ${EXAMPLE_REPLACEMENTS[example]} Downloading '${resolved}' instead.`),
+        );
+      } else {
+        logger.info(
+          chalk.yellow(`Note: '${example}' has been renamed to '${resolved}'. Using new name.`),
+        );
+      }
       exampleName = resolved;
     } else {
       exampleName = example;
@@ -187,11 +242,12 @@ export async function handleExampleDownload(
     return;
   }
 
-  const basePath = directory && directory !== '.' ? `${directory}/` : '';
-  const readmePath = path.join(basePath, exampleName, 'README.md');
-  const cdCommand = `cd ${path.join(basePath, exampleName)}`;
+  const examplePath = path.join(directory || '.', exampleName);
+  const readmePath = path.join(examplePath, 'README.md');
+  const cdCommand = `cd ${examplePath}`;
+  const isRunnableFromRoot = await hasRootPromptfooConfig(examplePath);
 
-  if (exampleName.includes('redteam')) {
+  if (exampleName.includes('redteam') || !isRunnableFromRoot) {
     logger.info(
       dedent`
 
