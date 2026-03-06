@@ -590,17 +590,46 @@ describe('GoogleProvider', () => {
       expect(result.cost).toBeCloseTo(1.25e-5, 10);
     });
 
-    it('should return undefined cost for Vertex AI mode', async () => {
+    it('should return cost for Vertex AI mode with known model', async () => {
       const provider = new GoogleProvider('gemini-pro', {
-        config: { vertexai: true, projectId: 'my-project' },
+        config: { vertexai: true, apiKey: 'test-vertex-key' },
       });
 
-      await provider.callApi('test prompt');
+      vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 20, totalTokenCount: 30 },
+        }),
+      } as any);
 
-      // getGoogleClient mock returns default response with usageMetadata
-      // but cost should be undefined because Vertex AI pricing differs
       const result = await provider.callApi('test prompt');
-      expect(result.cost).toBeUndefined();
+      // gemini-pro: input 0.5/1e6, output 1.5/1e6
+      // 10 prompt + 20 completion = 0.000035
+      expect(result.cost).toBeCloseTo(0.000035, 10);
+    });
+
+    it('should use Vertex-specific pricing when it differs from AI Studio', async () => {
+      const provider = new GoogleProvider('gemini-2.0-flash', {
+        config: { vertexai: true, apiKey: 'test-vertex-key' },
+      });
+
+      vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1000,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1500,
+          },
+        }),
+      } as any);
+
+      const result = await provider.callApi('test prompt');
+      // Vertex pricing for gemini-2.0-flash: input $0.15/1M, output $0.60/1M
+      // 1000 * 0.15/1e6 + 500 * 0.60/1e6 = 0.00045
+      expect(result.cost).toBeCloseTo(0.00045, 10);
     });
 
     it('should return undefined cost for cached responses', async () => {
