@@ -171,6 +171,11 @@ async function followRedirects(
         break;
       }
       currentUrl = new URL(location, currentUrl).href;
+
+      // RFC 7231: 301/302/303 switch to GET and drop body; 307/308 preserve method
+      if ([301, 302, 303].includes(response.status)) {
+        init = { ...init, method: 'GET', body: undefined };
+      }
     } else {
       break;
     }
