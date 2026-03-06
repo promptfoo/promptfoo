@@ -312,13 +312,13 @@ describe('init command', () => {
 
         expect(result).toEqual('assistant-cli');
         expect(mockFetchWithProxy.mock.calls[0][0]).toContain(
-          '/repos/promptfoo/promptfoo/contents/examples/assistant-cli?ref=0.119.14',
+          '/repos/promptfoo/promptfoo/contents/examples/assistant-cli?ref=0.120.26',
         );
         expect(logger.warn).toHaveBeenCalledWith(
           expect.stringContaining('assistant-cli was removed'),
         );
         expect(logger.info).toHaveBeenCalledWith(
-          expect.stringContaining("legacy 'assistant-cli' example from promptfoo@0.119.14"),
+          expect.stringContaining("legacy 'assistant-cli' example from promptfoo@0.120.26"),
         );
       });
 
@@ -336,7 +336,12 @@ describe('init command', () => {
               tree: [{ path: 'examples/provider-http/basic/promptfooconfig.yaml', type: 'blob' }],
             }),
         });
-        const mockDirectoryResponse = createMockResponse({
+        const mockDefaultRefFailure = createMockResponse({
+          ok: false,
+          status: 404,
+          statusText: 'Not Found',
+        });
+        const mockMainRefSuccess = createMockResponse({
           ok: true,
           json: () => Promise.resolve([]),
         });
@@ -344,7 +349,8 @@ describe('init command', () => {
         mockFetchWithProxy
           .mockResolvedValueOnce(mockLegacyFailure)
           .mockResolvedValueOnce(mockTreeResponse)
-          .mockResolvedValueOnce(mockDirectoryResponse);
+          .mockResolvedValueOnce(mockDefaultRefFailure)
+          .mockResolvedValueOnce(mockMainRefSuccess);
 
         vi.mocked(confirm).mockResolvedValue(true);
         vi.mocked(select).mockResolvedValue('provider-http/basic');
@@ -355,7 +361,9 @@ describe('init command', () => {
         expect(mockFetchWithProxy.mock.calls[2][0]).toContain(
           '/contents/examples/provider-http/basic?ref=',
         );
-        expect(mockFetchWithProxy.mock.calls[2][0]).not.toContain('ref=0.119.14');
+        expect(mockFetchWithProxy.mock.calls[3][0]).toContain(
+          '/contents/examples/provider-http/basic?ref=main',
+        );
       });
     });
 

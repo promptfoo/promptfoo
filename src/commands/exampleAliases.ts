@@ -186,23 +186,23 @@ export const REMOVED_EXAMPLES: Record<
   }
 > = {
   'assistant-cli': {
-    legacyRef: '0.119.14',
+    legacyRef: '0.120.26',
     reason: 'assistant-cli was removed because it is redundant with newer examples.',
   },
   'colab-notebook': {
-    legacyRef: '0.119.14',
+    legacyRef: '0.120.26',
     reason: 'colab-notebook was removed because it no longer works with current dependencies.',
   },
   'elevenlabs-supporting-apis': {
-    legacyRef: '0.119.14',
+    legacyRef: '0.120.26',
     reason: 'elevenlabs-supporting-apis was removed because the example is deprecated.',
   },
   'gemma-vs-llama': {
-    legacyRef: '0.119.14',
+    legacyRef: '0.120.26',
     reason: 'gemma-vs-llama was removed because the underlying model is no longer available.',
   },
   'gemma-vs-mistral': {
-    legacyRef: '0.119.14',
+    legacyRef: '0.120.26',
     reason: 'gemma-vs-mistral was removed because the underlying model is no longer available.',
   },
 };
