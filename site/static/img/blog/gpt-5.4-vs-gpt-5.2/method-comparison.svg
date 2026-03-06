@@ -1,140 +1,84 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 780" role="img" aria-labelledby="title desc">
-  <title id="title">GPT-5.4 versus GPT-5.2 comparison summary</title>
-  <desc id="desc">Two aligned cards compare regenerated-corpus rerun results and fixed prompt-payload replay results for Hydra, Meta, and Baseline. GPT-5.4 improves on the rerun but weakens on the fixed replay.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">GPT-5.4 versus GPT-5.2 on the same benchmark</title>
+  <desc id="desc">A benchmark summary comparing GPT-5.2 and GPT-5.4 on the same 635 saved prompt payloads. GPT-5.4 has a higher failure rate overall, in baseline, Hydra, and Meta.</desc>
   <defs>
     <style>
       .bg { fill: #f6f1e7; }
-      .panel { fill: #fffaf3; stroke: #d9cfbe; stroke-width: 2; }
-      .panel-good { fill: #f4fbf8; stroke: #8eb7ac; stroke-width: 2; }
-      .panel-bad { fill: #fff6ef; stroke: #d6a179; stroke-width: 2; }
-      .ink { fill: #1f2937; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-      .muted { fill: #667085; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-      .title { font-size: 34px; font-weight: 700; }
-      .subtitle { font-size: 16px; }
-      .section { font-size: 22px; font-weight: 700; }
-      .legend { font-size: 14px; font-weight: 600; }
-      .row { font-size: 17px; font-weight: 700; }
-      .value { font-size: 13px; font-weight: 600; }
-      .chip-label { font-size: 15px; font-weight: 700; }
-      .tick { font-size: 12px; }
-      .middle { dominant-baseline: middle; }
-      .center { text-anchor: middle; dominant-baseline: middle; }
-      .axis { stroke: #d5d9df; stroke-width: 1; }
-      .divider { stroke: #e6ded0; stroke-width: 1; }
-      .baseline { fill: #4b5563; }
-      .model { fill: #0f766e; }
-      .model-worse { fill: #c2410c; }
-      .chip-good { fill: #d8f1e9; }
-      .chip-bad { fill: #fde3d2; }
-      .chip-neutral { fill: #ebe6db; }
-      .footer { fill: #f0eadf; stroke: #d8cfbf; stroke-width: 1.5; }
+      .panel { fill: #fffaf1; stroke: #d8ccb8; stroke-width: 2; }
+      .card { fill: #fdf8ef; stroke: #d8ccb8; stroke-width: 2; }
+      .ink { fill: #1f241f; }
+      .muted { fill: #67604f; }
+      .rule { stroke: #d8ccb8; stroke-width: 1.5; }
+      .g52 { fill: #1f4f46; }
+      .g54 { fill: #b64d2c; }
+      .delta-up { fill: #b64d2c; }
+      .delta-down { fill: #1f4f46; }
+      .pill { fill: #efe5d4; }
+      .pill-warn { fill: #f6d7cc; }
+      .pill-good { fill: #dcefe7; }
+      .title { font: 700 34px "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif; }
+      .subtitle { font: 500 18px "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif; }
+      .section { font: 700 22px "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif; }
+      .label { font: 600 18px "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif; }
+      .body { font: 500 17px "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif; }
+      .value { font: 700 28px "IBM Plex Mono", "SFMono-Regular", Consolas, monospace; }
+      .small { font: 500 15px "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif; }
+      .center { text-anchor: middle; }
+      .right { text-anchor: end; }
     </style>
   </defs>
 
-  <rect class="bg" width="1200" height="780" rx="24" />
+  <rect class="bg" width="1200" height="760" rx="24" />
+  <rect class="panel" x="40" y="40" width="1120" height="680" rx="28" />
 
-  <text class="ink title" x="60" y="72">Two Comparisons, Two Answers</text>
-  <text class="muted subtitle" x="60" y="104">Same settings, same model pair, different methodology. The rerun says GPT-5.4 got harder to break. The fixed replay says it got looser on saved prompt payloads.</text>
+  <text class="ink title" x="80" y="94">Same Benchmark, Same Settings</text>
+  <text class="muted subtitle" x="80" y="126">635 saved prompt payloads replayed unchanged against GPT-5.2 and GPT-5.4 with reasoning_effort:none, max_completion_tokens:2048, and the same grader.</text>
 
-  <rect class="panel" x="810" y="44" width="330" height="78" rx="18" />
-  <rect class="baseline" x="836" y="68" width="18" height="10" rx="5" />
-  <text class="ink legend middle" x="864" y="73">GPT-5.2</text>
-  <rect class="model" x="948" y="56" width="18" height="10" rx="5" />
-  <text class="ink legend middle" x="976" y="61">GPT-5.4 lower ASR</text>
-  <rect class="model-worse" x="948" y="84" width="18" height="10" rx="5" />
-  <text class="ink legend middle" x="976" y="89">GPT-5.4 higher ASR</text>
+  <rect class="card" x="80" y="164" width="1040" height="116" rx="24" />
+  <text class="muted small" x="120" y="204">Headline</text>
+  <text class="ink section" x="120" y="238">GPT-5.4 failed more often on the same benchmark</text>
+  <rect class="pill-good" x="120" y="248" width="246" height="28" rx="14" />
+  <text class="ink small center" x="243" y="267">GPT-5.2: 80/635 (12.6%)</text>
+  <rect class="pill-warn" x="382" y="248" width="252" height="28" rx="14" />
+  <text class="ink small center" x="508" y="267">GPT-5.4: 97/635 (15.3%)</text>
+  <text class="delta-up value right" x="1080" y="242">+17</text>
+  <text class="muted body right" x="1080" y="270">more failures for GPT-5.4</text>
 
-  <rect class="panel-good" x="40" y="150" width="540" height="540" rx="28" />
-  <rect class="panel-bad" x="620" y="150" width="540" height="540" rx="28" />
+  <text class="muted small" x="128" y="336">Strategy</text>
+  <text class="g52 small center" x="560" y="336">GPT-5.2</text>
+  <text class="g54 small center" x="790" y="336">GPT-5.4</text>
+  <text class="muted small center" x="1000" y="336">Delta</text>
 
-  <g transform="translate(70 180)">
-    <text class="ink section" x="0" y="0">Adaptive rerun</text>
-    <text class="muted subtitle" x="0" y="28">Re-run the December GPT-5.2 methodology on GPT-5.4</text>
-    <rect class="chip-good" x="365" y="-16" width="118" height="34" rx="17" />
-    <text class="ink chip-label center" x="424" y="1">safer overall</text>
+  <line class="rule" x1="120" y1="352" x2="1080" y2="352" />
 
-    <g transform="translate(0 82)">
-      <text class="muted tick middle" x="0" y="-8">0%</text>
-      <text class="muted tick middle center" x="75" y="-8">25%</text>
-      <text class="muted tick middle center" x="150" y="-8">50%</text>
-      <text class="muted tick middle center" x="225" y="-8">75%</text>
-      <text class="muted tick middle" x="300" y="-8" text-anchor="end">100%</text>
-      <line class="axis" x1="0" y1="0" x2="300" y2="0" />
-      <line class="axis" x1="0" y1="128" x2="300" y2="128" />
-      <line class="axis" x1="0" y1="256" x2="300" y2="256" />
-      <line class="divider" x1="0" y1="92" x2="462" y2="92" />
-      <line class="divider" x1="0" y1="220" x2="462" y2="220" />
+  <text class="ink label" x="128" y="404">Basic</text>
+  <text class="g52 value center" x="560" y="404">7/215</text>
+  <text class="g54 value center" x="790" y="404">11/215</text>
+  <text class="delta-up value center" x="1000" y="404">+1.8pp</text>
+  <text class="muted body center" x="560" y="432">3.3%</text>
+  <text class="muted body center" x="790" y="432">5.1%</text>
+  <text class="muted body center" x="1000" y="432">4 more fails</text>
 
-      <text class="ink row middle" x="0" y="22">Hydra</text>
-      <rect class="baseline" x="0" y="42" width="236" height="16" rx="8" />
-      <rect class="model" x="0" y="66" width="57" height="16" rx="8" />
-      <text class="ink value middle" x="312" y="50">GPT-5.2 78.5%</text>
-      <text class="ink value middle" x="312" y="74">GPT-5.4 19.0%</text>
-      <rect class="chip-good" x="354" y="34" width="96" height="40" rx="20" />
-      <text class="ink chip-label center" x="402" y="54">-59.5pp</text>
+  <line class="rule" x1="120" y1="456" x2="1080" y2="456" />
 
-      <text class="ink row middle" x="0" y="150">Meta</text>
-      <rect class="baseline" x="0" y="170" width="183" height="16" rx="8" />
-      <rect class="model" x="0" y="194" width="96" height="16" rx="8" />
-      <text class="ink value middle" x="312" y="178">GPT-5.2 61.0%</text>
-      <text class="ink value middle" x="312" y="202">GPT-5.4 31.9%</text>
-      <rect class="chip-good" x="354" y="162" width="96" height="40" rx="20" />
-      <text class="ink chip-label center" x="402" y="182">-29.1pp</text>
+  <text class="ink label" x="128" y="508">Hydra</text>
+  <text class="g52 value center" x="560" y="508">30/210</text>
+  <text class="g54 value center" x="790" y="508">34/210</text>
+  <text class="delta-up value center" x="1000" y="508">+1.9pp</text>
+  <text class="muted body center" x="560" y="536">14.3%</text>
+  <text class="muted body center" x="790" y="536">16.2%</text>
+  <text class="muted body center" x="1000" y="536">4 more fails</text>
 
-      <text class="ink row middle" x="0" y="278">Baseline</text>
-      <rect class="baseline" x="0" y="298" width="13" height="16" rx="8" />
-      <rect class="model" x="0" y="322" width="10" height="16" rx="8" />
-      <text class="ink value middle" x="312" y="306">GPT-5.2 4.3%</text>
-      <text class="ink value middle" x="312" y="330">GPT-5.4 3.3%</text>
-      <rect class="chip-neutral" x="354" y="290" width="96" height="40" rx="20" />
-      <text class="ink chip-label center" x="402" y="310">-1.0pp</text>
-    </g>
-  </g>
+  <line class="rule" x1="120" y1="560" x2="1080" y2="560" />
 
-  <g transform="translate(650 180)">
-    <text class="ink section" x="0" y="0">Fixed prompt-payload replay</text>
-    <text class="muted subtitle" x="0" y="28">Replay the saved March 6 prompt payloads against both models</text>
-    <rect class="chip-bad" x="372" y="-16" width="94" height="34" rx="17" />
-    <text class="ink chip-label center" x="419" y="1">looser</text>
+  <text class="ink label" x="128" y="612">Meta</text>
+  <text class="g52 value center" x="560" y="612">43/210</text>
+  <text class="g54 value center" x="790" y="612">52/210</text>
+  <text class="delta-up value center" x="1000" y="612">+4.3pp</text>
+  <text class="muted body center" x="560" y="640">20.5%</text>
+  <text class="muted body center" x="790" y="640">24.8%</text>
+  <text class="muted body center" x="1000" y="640">9 more fails</text>
 
-    <g transform="translate(0 82)">
-      <text class="muted tick middle" x="0" y="-8">0%</text>
-      <text class="muted tick middle center" x="75" y="-8">25%</text>
-      <text class="muted tick middle center" x="150" y="-8">50%</text>
-      <text class="muted tick middle center" x="225" y="-8">75%</text>
-      <text class="muted tick middle" x="300" y="-8" text-anchor="end">100%</text>
-      <line class="axis" x1="0" y1="0" x2="300" y2="0" />
-      <line class="axis" x1="0" y1="128" x2="300" y2="128" />
-      <line class="axis" x1="0" y1="256" x2="300" y2="256" />
-      <line class="divider" x1="0" y1="92" x2="462" y2="92" />
-      <line class="divider" x1="0" y1="220" x2="462" y2="220" />
-
-      <text class="ink row middle" x="0" y="22">Hydra</text>
-      <rect class="baseline" x="0" y="42" width="41" height="16" rx="8" />
-      <rect class="model-worse" x="0" y="66" width="47" height="16" rx="8" />
-      <text class="ink value middle" x="312" y="50">GPT-5.2 13.8%</text>
-      <text class="ink value middle" x="312" y="74">GPT-5.4 15.7%</text>
-      <rect class="chip-bad" x="354" y="34" width="88" height="40" rx="20" />
-      <text class="ink chip-label center" x="398" y="54">+1.9pp</text>
-
-      <text class="ink row middle" x="0" y="150">Meta</text>
-      <rect class="baseline" x="0" y="170" width="62" height="16" rx="8" />
-      <rect class="model-worse" x="0" y="194" width="74" height="16" rx="8" />
-      <text class="ink value middle" x="312" y="178">GPT-5.2 20.5%</text>
-      <text class="ink value middle" x="312" y="202">GPT-5.4 24.8%</text>
-      <rect class="chip-bad" x="354" y="162" width="88" height="40" rx="20" />
-      <text class="ink chip-label center" x="398" y="182">+4.3pp</text>
-
-      <text class="ink row middle" x="0" y="278">Baseline</text>
-      <rect class="baseline" x="0" y="298" width="10" height="16" rx="8" />
-      <rect class="model-worse" x="0" y="322" width="15" height="16" rx="8" />
-      <text class="ink value middle" x="312" y="306">GPT-5.2 3.3%</text>
-      <text class="ink value middle" x="312" y="330">GPT-5.4 5.1%</text>
-      <rect class="chip-bad" x="354" y="290" width="88" height="40" rx="20" />
-      <text class="ink chip-label center" x="398" y="310">+1.8pp</text>
-    </g>
-  </g>
-
-  <rect class="footer" x="210" y="716" width="780" height="38" rx="19" />
-  <text class="ink legend center" x="600" y="735">High-severity direct harm got quieter in the rerun. Representation, politics, and related prompts got looser on fixed payloads.</text>
+  <rect class="pill" x="120" y="676" width="960" height="26" rx="13" />
+  <text class="ink small center" x="600" y="694">Largest same-benchmark gap: Meta. Largest benchmark regressions: politics, profanity, imitation, harassment, and insults.</text>
 </svg>
