@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">GPT-5.4 vs GPT-5.2 trust and safety comparison</title>
+  <desc id="desc">Two side-by-side charts showing that GPT-5.4 improves on an adaptive rerun but regresses on exact frozen replay prompts.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f7f2e8; }
+      .card { fill: #fffaf2; stroke: #d8cfbf; stroke-width: 2; }
+      .card-good { fill: #f4fbf8; stroke: #8fb8ad; stroke-width: 2; }
+      .card-bad { fill: #fff6ef; stroke: #d8a27d; stroke-width: 2; }
+      .ink { fill: #1f2937; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .muted { fill: #667085; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .title { font-size: 32px; font-weight: 700; }
+      .subtitle { font-size: 16px; }
+      .section { font-size: 22px; font-weight: 700; }
+      .label { font-size: 15px; font-weight: 600; }
+      .small { font-size: 13px; }
+      .axis { stroke: #d4d8de; stroke-width: 1; }
+      .baseline { fill: #434c5e; }
+      .gpt54 { fill: #0f766e; }
+      .delta-good { fill: #0f766e; }
+      .delta-bad { fill: #c2410c; }
+      .chip-good { fill: #d8f1e9; }
+      .chip-bad { fill: #fde3d2; }
+      .chip-neutral { fill: #ebe7dd; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1200" height="760" rx="24" />
+
+  <text class="ink title" x="60" y="70">Two Comparisons, Two Answers</text>
+  <text class="muted subtitle" x="60" y="102">Same settings, same model pair, different methodology. Adaptive rerun says GPT-5.4 improved. Frozen replay says it became more permissive.</text>
+
+  <rect class="card-good" x="40" y="140" width="540" height="540" rx="28" />
+  <rect class="card-bad" x="620" y="140" width="540" height="540" rx="28" />
+
+  <text class="ink section" x="70" y="190">Adaptive rerun</text>
+  <text class="muted subtitle" x="70" y="216">Re-run the December GPT-5.2 methodology on GPT-5.4</text>
+  <rect class="chip-good" x="430" y="168" width="120" height="34" rx="17" />
+  <text class="delta-good label" x="490" y="190" text-anchor="middle">safer overall</text>
+
+  <text class="ink section" x="650" y="190">Frozen replay</text>
+  <text class="muted subtitle" x="650" y="216">Replay the exact March 6 prompts against both models</text>
+  <rect class="chip-bad" x="1020" y="168" width="110" height="34" rx="17" />
+  <text class="delta-bad label" x="1075" y="190" text-anchor="middle">looser</text>
+
+  <g transform="translate(70 255)">
+    <text class="muted small" x="0" y="-8">0%</text>
+    <text class="muted small" x="75" y="-8">25%</text>
+    <text class="muted small" x="150" y="-8">50%</text>
+    <text class="muted small" x="225" y="-8">75%</text>
+    <text class="muted small" x="300" y="-8" text-anchor="end">100%</text>
+    <line class="axis" x1="0" y1="0" x2="300" y2="0" />
+    <line class="axis" x1="0" y1="130" x2="300" y2="130" />
+    <line class="axis" x1="0" y1="260" x2="300" y2="260" />
+
+    <text class="ink label" x="0" y="26">Hydra</text>
+    <rect class="baseline" x="0" y="42" width="235.5" height="18" rx="9" />
+    <rect class="gpt54" x="0" y="68" width="57" height="18" rx="9" />
+    <text class="ink small" x="246" y="56">GPT-5.2 78.5%</text>
+    <text class="ink small" x="68" y="82">GPT-5.4 19.0%</text>
+    <rect class="chip-good" x="338" y="44" width="104" height="42" rx="21" />
+    <text class="delta-good label" x="390" y="70" text-anchor="middle">-59.5pp</text>
+
+    <text class="ink label" x="0" y="156">Meta</text>
+    <rect class="baseline" x="0" y="172" width="183" height="18" rx="9" />
+    <rect class="gpt54" x="0" y="198" width="95.7" height="18" rx="9" />
+    <text class="ink small" x="194" y="186">GPT-5.2 61.0%</text>
+    <text class="ink small" x="106" y="212">GPT-5.4 31.9%</text>
+    <rect class="chip-good" x="338" y="174" width="104" height="42" rx="21" />
+    <text class="delta-good label" x="390" y="200" text-anchor="middle">-29.1pp</text>
+
+    <text class="ink label" x="0" y="286">Baseline</text>
+    <rect class="baseline" x="0" y="302" width="12.9" height="18" rx="9" />
+    <rect class="gpt54" x="0" y="328" width="9.9" height="18" rx="9" />
+    <text class="ink small" x="26" y="316">GPT-5.2 4.3%</text>
+    <text class="ink small" x="24" y="342">GPT-5.4 3.3%</text>
+    <rect class="chip-neutral" x="338" y="304" width="104" height="42" rx="21" />
+    <text class="ink label" x="390" y="330" text-anchor="middle">-1.0pp</text>
+  </g>
+
+  <g transform="translate(650 255)">
+    <text class="muted small" x="0" y="-8">0%</text>
+    <text class="muted small" x="75" y="-8">25%</text>
+    <text class="muted small" x="150" y="-8">50%</text>
+    <text class="muted small" x="225" y="-8">75%</text>
+    <text class="muted small" x="300" y="-8" text-anchor="end">100%</text>
+    <line class="axis" x1="0" y1="0" x2="300" y2="0" />
+    <line class="axis" x1="0" y1="130" x2="300" y2="130" />
+    <line class="axis" x1="0" y1="260" x2="300" y2="260" />
+
+    <text class="ink label" x="0" y="26">Hydra</text>
+    <rect class="baseline" x="0" y="42" width="41.4" height="18" rx="9" />
+    <rect class="gpt54" x="0" y="68" width="47.1" height="18" rx="9" />
+    <text class="ink small" x="52" y="56">GPT-5.2 13.8%</text>
+    <text class="ink small" x="58" y="82">GPT-5.4 15.7%</text>
+    <rect class="chip-bad" x="338" y="44" width="94" height="42" rx="21" />
+    <text class="delta-bad label" x="385" y="70" text-anchor="middle">+1.9pp</text>
+
+    <text class="ink label" x="0" y="156">Meta</text>
+    <rect class="baseline" x="0" y="172" width="61.5" height="18" rx="9" />
+    <rect class="gpt54" x="0" y="198" width="74.4" height="18" rx="9" />
+    <text class="ink small" x="72" y="186">GPT-5.2 20.5%</text>
+    <text class="ink small" x="85" y="212">GPT-5.4 24.8%</text>
+    <rect class="chip-bad" x="338" y="174" width="94" height="42" rx="21" />
+    <text class="delta-bad label" x="385" y="200" text-anchor="middle">+4.3pp</text>
+
+    <text class="ink label" x="0" y="286">Baseline</text>
+    <rect class="baseline" x="0" y="302" width="9.9" height="18" rx="9" />
+    <rect class="gpt54" x="0" y="328" width="15.3" height="18" rx="9" />
+    <text class="ink small" x="23" y="316">GPT-5.2 3.3%</text>
+    <text class="ink small" x="28" y="342">GPT-5.4 5.1%</text>
+    <rect class="chip-bad" x="338" y="304" width="94" height="42" rx="21" />
+    <text class="delta-bad label" x="385" y="330" text-anchor="middle">+1.8pp</text>
+  </g>
+
+  <rect class="card" x="250" y="690" width="700" height="42" rx="21" />
+  <text class="ink label" x="600" y="716" text-anchor="middle">Operational harm got much harder to trigger. Persona, politics, profanity, and harassment got easier on identical prompts.</text>
+</svg>

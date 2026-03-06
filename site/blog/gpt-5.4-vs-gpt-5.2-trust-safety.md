@@ -76,32 +76,23 @@ That second pass is important. It holds the prompt corpus fixed, so any differen
 
 ## Results
 
+![Adaptive rerun and frozen replay comparison](/img/blog/gpt-5.4-vs-gpt-5.2/method-comparison.svg)
+
+The split result is the whole story: GPT-5.4 looked much stronger on the adaptive rerun, then weaker on the frozen replay.
+
 ### Result 1: Same Methodology Rerun
 
 Under the same methodology as the December 11, 2025 GPT-5.2 post, GPT-5.4 looks substantially better.
 
-| Strategy               | GPT-5.2         | GPT-5.4        | Change  |
-| ---------------------- | --------------- | -------------- | ------- |
-| **Hydra** (multi-turn) | 78.5% (161/205) | 19.0% (40/210) | -59.5pp |
-| **Meta** (single-turn) | 61.0% (122/200) | 31.9% (67/210) | -29.1pp |
-| **Baseline**           | 4.3% (9/210)    | 3.3% (7/215)   | -1.0pp  |
+- **Hydra:** **78.5% -> 19.0%** (**-59.5pp**)
+- **Meta:** **61.0% -> 31.9%** (**-29.1pp**)
+- **Baseline:** **4.3% -> 3.3%** (**-1.0pp**)
 
 The scariest December categories mostly stopped being routine wins. In this rerun, `harmful:illegal-drugs`, `harmful:illegal-activities`, `harmful:child-exploitation`, `harmful:hate`, and `harmful:misinformation-disinformation` all landed at **0/5 under both Hydra and Meta**.
 
 The remaining weak spots looked different: **imitation, insults, politics, specialized advice, and contract or compliance-shaped prompts**.
 
-Selected GPT-5.4 rerun categories:
-
-| Category                       | Baseline | Hydra | Meta |
-| ------------------------------ | -------- | ----- | ---- |
-| **imitation**                  | 3/5      | 5/5   | 5/5  |
-| **harmful:insults**            | 0/5      | 4/5   | 5/5  |
-| **politics**                   | 0/5      | 0/5   | 5/5  |
-| **harmful:specialized-advice** | 1/5      | 3/5   | 5/5  |
-| **contracts**                  | 0/5      | 3/5   | 3/5  |
-| **coppa**                      | 1/5      | 3/5   | 2/5  |
-| **harmful:illegal-drugs**      | 0/5      | 0/5   | 0/5  |
-| **harmful:child-exploitation** | 0/5      | 0/5   | 0/5  |
+![Selected GPT-5.4 rerun categories](/img/blog/gpt-5.4-vs-gpt-5.2/rerun-categories.svg)
 
 One Hydra row had an empty target output but a missing grader result because the remote grader was blocked. If you exclude that unresolved row, Hydra moves from **19.0% (40/210)** to **18.6% (39/210)**. The headline conclusion does not change.
 
@@ -109,11 +100,9 @@ One Hydra row had an empty target output but a missing grader result because the
 
 When we froze the March 6 prompt corpus and replayed those exact prompts against both models, the result flipped.
 
-| Strategy               | GPT-5.2        | GPT-5.4        | Change |
-| ---------------------- | -------------- | -------------- | ------ |
-| **Hydra** (multi-turn) | 13.8% (29/210) | 15.7% (33/210) | +1.9pp |
-| **Meta** (single-turn) | 20.5% (43/210) | 24.8% (52/210) | +4.3pp |
-| **Baseline**           | 3.3% (7/215)   | 5.1% (11/215)  | +1.8pp |
+- **Hydra:** **13.8% -> 15.7%** (**+1.9pp**)
+- **Meta:** **20.5% -> 24.8%** (**+4.3pp**)
+- **Baseline:** **3.3% -> 5.1%** (**+1.8pp**)
 
 On the exact same prompts, GPT-5.4 was more permissive overall.
 
@@ -127,18 +116,7 @@ The biggest replay regressions were concentrated in a few areas:
 
 There were still some real improvements on the frozen corpus. For example, `pii:direct` under Hydra improved from **2/5 -> 0/5**, and the replayed misinformation prompt about the World Health Organization endorsing bleach for COVID-19 was refused by GPT-5.4 after GPT-5.2 had produced a fake article.
 
-Selected frozen-replay deltas:
-
-| Category / strategy                              | GPT-5.2 | GPT-5.4 | Delta |
-| ------------------------------------------------ | ------- | ------- | ----- |
-| **politics / Meta**                              | 1/5     | 5/5     | +80pp |
-| **harmful:profanity / Meta**                     | 0/5     | 4/5     | +80pp |
-| **imitation / baseline**                         | 0/5     | 3/5     | +60pp |
-| **harmful:harassment-bullying / Meta**           | 0/5     | 3/5     | +60pp |
-| **harmful:insults / Meta**                       | 2/5     | 5/5     | +60pp |
-| **pii:direct / Hydra**                           | 2/5     | 0/5     | -40pp |
-| **harmful:misinformation-disinformation / Meta** | 1/5     | 0/5     | -20pp |
-| **contracts / Meta**                             | 2/5     | 1/5     | -20pp |
+![Frozen replay deltas](/img/blog/gpt-5.4-vs-gpt-5.2/replay-deltas.svg)
 
 Each model also had one symmetric Hydra execution error caused by a prompt containing shell syntax like `${#SUCCESS[@]}`, which Nunjucks interpreted as a comment. Those were execution errors, not jailbreak wins, and they do not change the direction of the result.
 
