@@ -509,10 +509,18 @@ export class OTLPReceiver {
       for (const scopeSpan of resourceSpan.scopeSpans || []) {
         for (const span of scopeSpan.spans || []) {
           // Convert binary IDs to hex strings
-          const traceId = bytesToHex(span.traceId, 32);
-          const spanId = bytesToHex(span.spanId, 16);
+          const traceId = this.convertBinaryId(span.traceId, 32, {
+            fieldName: 'traceId',
+            required: true,
+          })!;
+          const spanId = this.convertBinaryId(span.spanId, 16, {
+            fieldName: 'spanId',
+            required: true,
+          })!;
           const parentSpanId = span.parentSpanId?.length
-            ? bytesToHex(span.parentSpanId, 16)
+            ? this.convertBinaryId(span.parentSpanId, 16, {
+                fieldName: 'parentSpanId',
+              })
             : undefined;
 
           logger.debug(
@@ -806,8 +814,16 @@ export class OTLPReceiver {
     scopeName?: string,
     scopeVersion?: string,
   ): ParsedTrace | null {
-    const rawTraceId = logRecord.traceId?.length ? bytesToHex(logRecord.traceId, 32) : undefined;
-    const rawSpanId = logRecord.spanId?.length ? bytesToHex(logRecord.spanId, 16) : undefined;
+    const rawTraceId = logRecord.traceId?.length
+      ? this.convertBinaryId(logRecord.traceId, 32, {
+          fieldName: 'traceId',
+        })
+      : undefined;
+    const rawSpanId = logRecord.spanId?.length
+      ? this.convertBinaryId(logRecord.spanId, 16, {
+          fieldName: 'spanId',
+        })
+      : undefined;
     const { traceId, spanId, parentSpanId } = this.resolveLogTraceContext(
       resourceAttributes,
       rawTraceId,
@@ -1032,6 +1048,39 @@ export class OTLPReceiver {
       `[OtlpReceiver] Ignoring invalid optional ${fieldName}: ${id} -> ${hex} (expected ${expectedHexLength} hex chars)`,
     );
     return undefined;
+  }
+
+  private convertBinaryId(
+    id: Uint8Array | undefined,
+    expectedHexLength: number,
+    options?: { fieldName?: string; required?: boolean },
+  ): string | undefined {
+    const fieldName = options?.fieldName || 'id';
+    const expectedByteLength = expectedHexLength / 2;
+
+    if (!id?.length) {
+      if (options?.required) {
+        throw new InvalidOtlpPayloadError(
+          `Invalid ${fieldName}: expected ${expectedByteLength}-byte binary value`,
+        );
+      }
+      logger.warn(`[OtlpReceiver] Ignoring invalid optional ${fieldName}: missing binary value`);
+      return undefined;
+    }
+
+    if (id.length !== expectedByteLength) {
+      if (options?.required) {
+        throw new InvalidOtlpPayloadError(
+          `Invalid ${fieldName}: expected ${expectedByteLength}-byte binary value`,
+        );
+      }
+      logger.warn(
+        `[OtlpReceiver] Ignoring invalid optional ${fieldName}: expected ${expectedByteLength} bytes, received ${id.length}`,
+      );
+      return undefined;
+    }
+
+    return this.normalizeValidatedHexId(bytesToHex(id, expectedHexLength), fieldName, options);
   }
 
   private normalizeValidatedHexId(

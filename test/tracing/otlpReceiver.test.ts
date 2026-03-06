@@ -845,6 +845,71 @@ describe('OTLPReceiver', () => {
       });
       expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
     });
+
+    it('should reject protobuf traces with all-zero required trace IDs', async () => {
+      const protobufRequest = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: new Uint8Array(16),
+                    spanId: new Uint8Array([0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef]),
+                    name: 'protobuf-zero-trace-id',
+                    startTimeUnixNano: 1700000000000000000n,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const encodedData = await encodeOTLPRequest(protobufRequest);
+      const response = await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/x-protobuf')
+        .send(encodedData)
+        .expect(400);
+
+      expect(response.body).toEqual({
+        error: 'Invalid traceId: all-zero ID is not valid',
+      });
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+    });
+
+    it('should reject protobuf traces with missing required trace IDs', async () => {
+      const protobufRequest = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    spanId: new Uint8Array([0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef]),
+                    name: 'protobuf-missing-trace-id',
+                    startTimeUnixNano: 1700000000000000000n,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const encodedData = await encodeOTLPRequest(protobufRequest);
+      const response = await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/x-protobuf')
+        .send(encodedData)
+        .expect(400);
+
+      expect(response.body).toEqual({
+        error: 'Invalid traceId: expected 16-byte binary value',
+      });
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+    });
   });
 
   describe('Receiver lifecycle', () => {
@@ -1207,6 +1272,50 @@ describe('OTLPReceiver', () => {
               'log.severity_text': 'WARN',
               'log.event_name': 'claude_code.api_request',
             }),
+          }),
+        ]),
+        { skipTraceCheck: false },
+      );
+    });
+
+    it('should ignore invalid protobuf log trace and span IDs and generate replacements', async () => {
+      (receiver as any).traceStore = mockTraceStore;
+
+      const protobufLogsRequest = {
+        resourceLogs: [
+          {
+            scopeLogs: [
+              {
+                logRecords: [
+                  {
+                    timeUnixNano: 1700000000000000000n,
+                    severityText: 'INFO',
+                    eventName: 'protobuf_invalid_ids',
+                    traceId: new Uint8Array(16),
+                    spanId: new Uint8Array(8),
+                    body: { stringValue: 'should ignore zero IDs' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const encodedData = await encodeOTLPLogsRequest(protobufLogsRequest);
+      const response = await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/x-protobuf')
+        .send(encodedData)
+        .expect(200);
+
+      expect(response.body).toEqual({ partialSuccess: {} });
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        expect.not.stringMatching(/^0{32}$/),
+        expect.arrayContaining([
+          expect.objectContaining({
+            spanId: expect.not.stringMatching(/^0{16}$/),
+            name: 'protobuf_invalid_ids',
           }),
         ]),
         { skipTraceCheck: false },

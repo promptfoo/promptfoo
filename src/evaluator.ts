@@ -445,8 +445,12 @@ export async function runEval({
       // Add trace context properties if tracing is enabled (may override evaluationId with trace-specific ID)
       if (traceContext) {
         callApiContext.traceparent = traceContext.traceparent;
-        callApiContext.evaluationId = traceContext.evaluationId;
-        callApiContext.testCaseId = traceContext.testCaseId;
+        if (traceContext.evaluationId) {
+          callApiContext.evaluationId = traceContext.evaluationId;
+        }
+        if (traceContext.testCaseId) {
+          callApiContext.testCaseId = traceContext.testCaseId;
+        }
       }
 
       // Wrap provider call with rate limit registry if available

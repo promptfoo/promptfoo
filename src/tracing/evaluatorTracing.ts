@@ -188,31 +188,32 @@ export async function generateTraceContextIfNeeded(
   logger.debug(`[EvaluatorTracing] Generated trace context: traceId=${traceId}, spanId=${spanId}`);
 
   // Get evaluation ID from test metadata (set by Evaluator class)
-  let evaluationId = test.metadata?.evaluationId || evaluateOptions?.eventSource;
+  const evaluationId = test.metadata?.evaluationId || evaluateOptions?.eventSource;
   if (!evaluationId) {
     logger.warn(
       '[EvaluatorTracing] No evaluation ID found in test metadata or evaluateOptions, trace will not be linked to evaluation',
     );
-    evaluationId = `eval-${Date.now()}`;
   }
   const testCaseId = test.metadata?.testCaseId || (test as any).id || `${testIdx}-${promptIdx}`;
 
   // Store trace association in trace store
-  try {
-    logger.debug(`[EvaluatorTracing] Creating trace record for traceId=${traceId}`);
-    await traceStore.createTrace({
-      traceId,
-      evaluationId: evaluationId || '',
-      testCaseId: testCaseId || '',
-      metadata: {
-        testIdx,
-        promptIdx,
-        vars: test.vars,
-      },
-    });
-    logger.debug('[EvaluatorTracing] Trace record created successfully');
-  } catch (error) {
-    logger.error(`[EvaluatorTracing] Failed to create trace: ${error}`);
+  if (evaluationId) {
+    try {
+      logger.debug(`[EvaluatorTracing] Creating trace record for traceId=${traceId}`);
+      await traceStore.createTrace({
+        traceId,
+        evaluationId,
+        testCaseId: testCaseId || '',
+        metadata: {
+          testIdx,
+          promptIdx,
+          vars: test.vars,
+        },
+      });
+      logger.debug('[EvaluatorTracing] Trace record created successfully');
+    } catch (error) {
+      logger.error(`[EvaluatorTracing] Failed to create trace: ${error}`);
+    }
   }
 
   logger.debug(

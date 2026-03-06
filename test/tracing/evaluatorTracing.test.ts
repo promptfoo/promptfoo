@@ -13,6 +13,10 @@ import {
 
 import type { TestCase, TestSuite } from '../../src/types/index';
 
+const mockTraceStore = {
+  createTrace: vi.fn(),
+};
+
 // Mock the logger
 vi.mock('../../src/logger', () => ({
   default: {
@@ -25,9 +29,7 @@ vi.mock('../../src/logger', () => ({
 
 // Mock the trace store
 vi.mock('../../src/tracing/store', () => ({
-  getTraceStore: vi.fn(() => ({
-    createTrace: vi.fn(),
-  })),
+  getTraceStore: vi.fn(() => mockTraceStore),
 }));
 
 vi.mock('../../src/tracing/otlpReceiver', () => ({
@@ -47,6 +49,7 @@ import { startOTLPReceiver, stopOTLPReceiver } from '../../src/tracing/otlpRecei
 describe('evaluatorTracing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockTraceStore.createTrace.mockReset();
     // Reset environment variables
     delete process.env.PROMPTFOO_TRACING_ENABLED;
     resetTracingState();
@@ -138,8 +141,9 @@ describe('evaluatorTracing', () => {
 
       expect(result).not.toBeNull();
       expect(result!.traceparent).toMatch(/^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/);
-      expect(result!.evaluationId).toMatch(/^eval-/);
+      expect(result!.evaluationId).toBeUndefined();
       expect(result!.testCaseId).toBe('5-10');
+      expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
     });
 
     it('should generate trace context when tracing is enabled via YAML config', async () => {
@@ -158,8 +162,9 @@ describe('evaluatorTracing', () => {
 
       expect(result).not.toBeNull();
       expect(result!.traceparent).toMatch(/^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/);
-      expect(result!.evaluationId).toMatch(/^eval-/);
+      expect(result!.evaluationId).toBeUndefined();
       expect(result!.testCaseId).toBe('3-7');
+      expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
     });
   });
 
