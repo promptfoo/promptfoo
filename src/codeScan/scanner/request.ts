@@ -5,7 +5,6 @@
  */
 
 import logger from '../../logger';
-import { sleep } from '../../util/time';
 import type ora from 'ora';
 
 import type {
@@ -183,6 +182,29 @@ function isCapacityError(error: unknown): boolean {
 }
 
 /**
+ * Sleep that can be interrupted by an abort signal
+ */
+async function sleepWithAbort(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) {
+    throw new Error('cancelled by user');
+  }
+
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+
+    const onAbort = () => {
+      clearTimeout(timeout);
+      reject(new Error('cancelled by user'));
+    };
+
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/**
  * Execute scan request with retry for capacity errors
  *
  * When the server is at capacity, it returns "Server at capacity. Please retry."
@@ -225,14 +247,14 @@ export async function executeScanRequestWithRetry(
         `Server busy, retrying in ${Math.round(delay / 1000)}s (attempt ${attempt + 1}/${MAX_RETRIES})`,
       );
 
-      // Update spinner during retry wait
+      // Update spinner during retry wait (abort-aware)
       if (showSpinner && spinner) {
         const originalText = spinner.text;
         spinner.text = `Server busy, retrying in ${Math.round(delay / 1000)}s...`;
-        await sleep(delay);
+        await sleepWithAbort(delay, options.abortController.signal);
         spinner.text = originalText;
       } else {
-        await sleep(delay);
+        await sleepWithAbort(delay, options.abortController.signal);
       }
     }
   }
