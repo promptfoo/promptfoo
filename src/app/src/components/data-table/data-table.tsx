@@ -50,6 +50,9 @@ export function DataTable<TData, TValue = unknown>({
   rowSelection: controlledRowSelection,
   onRowSelectionChange,
   getRowId,
+  expanded: controlledExpanded,
+  onExpandedChange,
+  expandedRowClassName,
   toolbarActions,
   maxHeight,
   initialColumnVisibility = {},
@@ -90,7 +93,7 @@ export function DataTable<TData, TValue = unknown>({
     }));
   }, []);
   const [internalRowSelection, setInternalRowSelection] = React.useState<RowSelectionState>({});
-  const [expanded, setExpanded] = React.useState<ExpandedState>({});
+  const [internalExpanded, setInternalExpanded] = React.useState<ExpandedState>({});
   const [isPending, startTransition] = React.useTransition();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
@@ -105,6 +108,8 @@ export function DataTable<TData, TValue = unknown>({
 
   // Use controlled or internal row selection state
   const rowSelection = controlledRowSelection ?? internalRowSelection;
+  const expanded = controlledExpanded ?? internalExpanded;
+
   const handleRowSelectionChange = React.useCallback(
     (updaterOrValue: RowSelectionState | ((old: RowSelectionState) => RowSelectionState)) => {
       const newValue =
@@ -116,6 +121,28 @@ export function DataTable<TData, TValue = unknown>({
       }
     },
     [onRowSelectionChange, rowSelection],
+  );
+
+  const handleExpandedChange = React.useCallback(
+    (updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState)) => {
+      const nextValue =
+        typeof updaterOrValue === 'function' ? updaterOrValue(expanded) : updaterOrValue;
+      let normalizedValue = nextValue;
+
+      if (singleExpand && typeof nextValue !== 'boolean' && typeof expanded !== 'boolean') {
+        const newKeys = Object.keys(nextValue).filter((key) => !expanded[key] && nextValue[key]);
+        if (newKeys.length > 0) {
+          normalizedValue = { [newKeys[0]]: true };
+        }
+      }
+
+      if (onExpandedChange) {
+        onExpandedChange(normalizedValue);
+      } else {
+        setInternalExpanded(normalizedValue);
+      }
+    },
+    [expanded, onExpandedChange, singleExpand],
   );
 
   // Create checkbox column for row selection (selects ALL rows, not just current page)
@@ -218,22 +245,7 @@ export function DataTable<TData, TValue = unknown>({
     },
     globalFilterFn: 'includesString',
     onRowSelectionChange: handleRowSelectionChange,
-    onExpandedChange: (updater) => {
-      setExpanded((prev) => {
-        const next = typeof updater === 'function' ? updater(prev) : updater;
-        if (!singleExpand || typeof next === 'boolean') {
-          return next;
-        }
-        // In singleExpand mode, keep only the newly expanded row
-        if (typeof prev !== 'boolean' && typeof next !== 'boolean') {
-          const newKeys = Object.keys(next).filter((k) => !prev[k] && next[k]);
-          if (newKeys.length > 0) {
-            return { [newKeys[0]]: true };
-          }
-        }
-        return next;
-      });
-    },
+    onExpandedChange: handleExpandedChange,
     getRowCanExpand: getRowCanExpandProp ?? (renderSubComponent ? () => true : undefined),
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
@@ -260,6 +272,7 @@ export function DataTable<TData, TValue = unknown>({
     ...(renderSubComponent ? { getExpandedRowModel: getExpandedRowModel() } : {}),
   });
 
+  const visibleColumnCount = table.getVisibleLeafColumns().length;
   const tableMinWidth = table.getTotalSize() ? `${table.getTotalSize()}px` : undefined;
   const totalRows = manualPagination ? (rowCount ?? 0) : table.getFilteredRowModel().rows.length;
 
@@ -531,8 +544,16 @@ export function DataTable<TData, TValue = unknown>({
                       })}
                     </tr>
                     {renderSubComponent && row.getIsExpanded() && (
-                      <tr className="bg-zinc-100/30 dark:bg-zinc-800/30">
-                        <td colSpan={allColumns.length} className="p-4">
+                      <tr
+                        className={cn(
+                          'bg-neutral-100/30 dark:bg-neutral-800/30',
+                          expandedRowClassName,
+                        )}
+                      >
+                        <td
+                          colSpan={visibleColumnCount}
+                          className="border-b border-zinc-200 p-4 dark:border-zinc-800"
+                        >
                           {renderSubComponent(row)}
                         </td>
                       </tr>
@@ -541,7 +562,7 @@ export function DataTable<TData, TValue = unknown>({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={allColumns.length} className="h-[200px] text-center">
+                  <td colSpan={visibleColumnCount} className="h-[200px] text-center">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Search className="size-8 text-zinc-400 dark:text-zinc-500" />
                       <p className="text-sm text-zinc-500 dark:text-zinc-400">

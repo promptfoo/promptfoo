@@ -248,7 +248,7 @@ This configuration allows the model to first search for relevant information, th
   - Use `blocked_domains` to blacklist specific domains
   - **Note:** Only one of `allowed_domains` or `blocked_domains` can be specified, not both
 
-See the [Anthropic Tool Use Guide](https://docs.anthropic.com/en/docs/tool-use) for more information on how to define tools and the tool use example [here](https://github.com/promptfoo/promptfoo/tree/main/examples/tool-use).
+See the [Anthropic Tool Use Guide](https://docs.anthropic.com/en/docs/tool-use) for more information on how to define tools and the tool use example [here](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-tool-use).
 
 ### Images / Vision
 
@@ -631,14 +631,14 @@ We provide several example implementations demonstrating Claude's capabilities:
 
 #### Core Features
 
-- [Tool Use Example](https://github.com/promptfoo/promptfoo/tree/main/examples/tool-use) - Shows how to use Claude's tool calling capabilities
+- [Tool Use Example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-tool-use) - Shows how to use Claude's tool calling capabilities
 - [Structured Outputs Example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/structured-outputs) - Demonstrates JSON outputs and strict tool use for guaranteed schema compliance
 - [Vision Example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vision) - Demonstrates using Claude's vision capabilities
 
 #### Model Comparisons & Evaluations
 
-- [Claude vs GPT](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vs-gpt) - Compares Claude with GPT-4 on various tasks
-- [Claude vs GPT Image Analysis](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vs-gpt-image) - Compares Claude's and GPT's image analysis capabilities
+- [Claude vs GPT](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-claude-vs-gpt) - Compares Claude with GPT-4 on various tasks
+- [Claude vs GPT Image Analysis](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-claude-vs-gpt-image) - Compares Claude's and GPT's image analysis capabilities
 
 #### Cloud Platform Integrations
 

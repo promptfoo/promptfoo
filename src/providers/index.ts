@@ -13,9 +13,8 @@ import {
   validateLinkedTargetId,
 } from '../util/cloud';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
-import { renderEnvOnlyInObject } from '../util/index';
 import invariant from '../util/invariant';
-import { getNunjucksEngine } from '../util/templates';
+import { renderEnvOnlyInObject } from '../util/render';
 import { providerMap } from './registry';
 
 import type { EnvOverrides } from '../types/env';
@@ -61,10 +60,9 @@ export async function loadApiProvider(
     await validateLinkedTargetId(providerOptions.config.linkedTargetId);
   }
 
-  const renderedProviderPath = getNunjucksEngine().renderString(
-    providerPath,
-    mergedEnv ? { env: mergedEnv } : {},
-  );
+  // Render only env templates in provider path to avoid blanking unresolved placeholders.
+  // This keeps behavior consistent with provider id/config rendering and file:// provider refs.
+  const renderedProviderPath = renderEnvOnlyInObject(providerPath, mergedEnv);
 
   if (isCloudProvider(renderedProviderPath)) {
     const cloudDatabaseId = getCloudDatabaseId(renderedProviderPath);
@@ -156,10 +154,7 @@ export async function loadApiProvider(
       ret.transform = options.transform;
       ret.delay = options.delay;
       ret.inputs = options.inputs;
-      ret.label ||= getNunjucksEngine().renderString(
-        String(options.label || ''),
-        mergedEnv ? { env: mergedEnv } : {},
-      );
+      ret.label ||= renderEnvOnlyInObject(String(options.label || ''), mergedEnv);
       return ret;
     }
   }

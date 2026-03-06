@@ -1,7 +1,12 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
-import { callOpenAiImageApi, formatOutput, OpenAiImageProvider } from '../openai/image';
+import {
+  buildStructuredImageOutputs,
+  callOpenAiImageApi,
+  formatOutput,
+  OpenAiImageProvider,
+} from '../openai/image';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 
 import type { EnvOverrides } from '../../types/env';
@@ -107,8 +112,9 @@ export class XAIImageProvider extends OpenAiImageProvider {
 
     let data: any, status: number, statusText: string;
     let cached = false;
+    let latencyMs: number | undefined;
     try {
-      ({ data, cached, status, statusText } = await callOpenAiImageApi(
+      ({ data, cached, status, statusText, latencyMs } = await callOpenAiImageApi(
         `${this.getApiUrl()}${endpoint}`,
         body,
         headers,
@@ -141,10 +147,13 @@ export class XAIImageProvider extends OpenAiImageProvider {
       }
 
       const cost = cached ? 0 : this.calculateImageCost(config.n || 1);
+      const images = buildStructuredImageOutputs(data);
 
       return {
         output: formattedOutput,
+        images,
         cached,
+        latencyMs,
         cost,
         ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
       };

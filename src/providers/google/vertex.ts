@@ -20,6 +20,7 @@ import {
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
+  calculateGoogleCost,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
@@ -667,22 +668,39 @@ export class VertexChatProvider extends GoogleGenericProvider {
         }
 
         const lastData = dataWithResponse[dataWithResponse.length - 1];
+        const promptTokenCount = lastData.usageMetadata?.promptTokenCount;
+        const completionTokenCount = lastData.usageMetadata?.candidatesTokenCount;
+        const thoughtsTokenCount = lastData.usageMetadata?.thoughtsTokenCount;
         const tokenUsage = {
           total: lastData.usageMetadata?.totalTokenCount || 0,
-          prompt: lastData.usageMetadata?.promptTokenCount || 0,
-          completion: lastData.usageMetadata?.candidatesTokenCount || 0,
-          ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
+          prompt: promptTokenCount || 0,
+          completion: completionTokenCount || 0,
+          ...(thoughtsTokenCount !== undefined && {
             completionDetails: {
-              reasoning: lastData.usageMetadata.thoughtsTokenCount,
+              reasoning: thoughtsTokenCount,
               acceptedPrediction: 0,
               rejectedPrediction: 0,
             },
           }),
         };
+        // Include thinking tokens in output cost - Google bills them as output tokens
+        const completionForCost =
+          completionTokenCount != null
+            ? completionTokenCount + (thoughtsTokenCount ?? 0)
+            : undefined;
+        const cost = calculateGoogleCost(
+          this.modelName,
+          config,
+          promptTokenCount,
+          completionForCost,
+          true,
+        );
+
         response = {
           cached: false,
           output,
           tokenUsage,
+          cost,
           metadata: {},
         };
 
@@ -748,9 +766,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
           }
           if (results.length > 0) {
             response = {
-              cached: response.cached,
+              ...response,
               output: results.join('\n'),
-              tokenUsage: response.tokenUsage,
             };
           }
         }

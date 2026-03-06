@@ -5,7 +5,7 @@ This example demonstrates Anthropic's web search and web fetch tools, showing bo
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example web-tools
+npx promptfoo@latest init --example anthropic/web-tools
 ```
 
 ## Features Demonstrated
