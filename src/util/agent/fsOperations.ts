@@ -2,23 +2,88 @@
  * CLI-side filesystem operations for recon.
  *
  * All operations are sandboxed to a root directory — path traversal
- * outside the root is rejected.
+ * outside the root is rejected. Uses realpath to resolve symlinks,
+ * preventing symlink-based directory traversal attacks.
  */
 
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
+import logger from '../../logger';
+
 const MAX_FILE_SIZE = 100_000; // 100KB
 const MAX_GREP_MATCHES = 100;
 const ALLOWED_WRITE_EXTENSIONS = ['.js', '.mjs'];
 
 /**
- * Resolve a requested path relative to rootDir, rejecting traversal.
+ * Check if a file path is within a workspace directory.
+ *
+ * Resolves symlinks to their real paths to prevent symlink-based directory
+ * traversal attacks. For non-existent paths (e.g., when creating new files),
+ * recursively validates the parent directory until it finds an existing path.
+ *
+ * @param filePath - The file path to check (can be relative or absolute)
+ * @param workspace - The workspace directory (absolute path)
+ * @returns Promise that resolves to true if the path is within the workspace
  */
-function safePath(requested: string, rootDir: string): string {
+export async function isPathWithinWorkspace(filePath: string, workspace: string): Promise<boolean> {
+  // Validate workspace exists first — fail fast on configuration errors
+  let realWorkspaceRaw: string;
+  try {
+    realWorkspaceRaw = await fs.realpath(workspace);
+  } catch {
+    throw new Error(`Workspace directory does not exist or is inaccessible: ${workspace}`);
+  }
+
+  try {
+    const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(workspace, filePath);
+    const realTargetRaw = await fs.realpath(absoluteTarget);
+
+    // Windows: compare case-insensitive
+    const realWorkspace =
+      process.platform === 'win32' ? realWorkspaceRaw.toLowerCase() : realWorkspaceRaw;
+    const realTarget = process.platform === 'win32' ? realTargetRaw.toLowerCase() : realTargetRaw;
+
+    // Equal means the workspace dir itself
+    if (realTarget === realWorkspace) {
+      return true;
+    }
+
+    // Containment check via relative() — avoids prefix gotchas like /foo/bar vs /foo/barista
+    const rel = path.relative(realWorkspace, realTarget);
+    return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+  } catch (error: any) {
+    // If target doesn't exist (ENOENT), validate parent directory instead.
+    // This allows writes to create new files in valid directories.
+    if (error.code === 'ENOENT') {
+      const absoluteTarget = path.isAbsolute(filePath)
+        ? filePath
+        : path.resolve(workspace, filePath);
+      const parentDir = path.dirname(absoluteTarget);
+
+      // Stop recursion if we've reached root
+      if (parentDir === absoluteTarget) {
+        logger.warn('Path validation failed — reached filesystem root');
+        return false;
+      }
+
+      return isPathWithinWorkspace(parentDir, workspace);
+    }
+
+    // Fail safely on any other error (broken symlinks, permission errors, etc.)
+    logger.warn(`Path validation failed for ${filePath}: ${error.message ?? error}`);
+    return false;
+  }
+}
+
+/**
+ * Resolve a requested path relative to rootDir and validate it is within
+ * the sandbox (symlink-safe). Returns the resolved absolute path.
+ */
+async function resolveAndValidate(requested: string, rootDir: string): Promise<string> {
   const resolved = path.resolve(rootDir, requested);
-  if (!resolved.startsWith(rootDir + path.sep) && resolved !== rootDir) {
+  if (!(await isPathWithinWorkspace(resolved, rootDir))) {
     throw new Error(`Path traversal rejected: ${requested}`);
   }
   return resolved;
@@ -29,13 +94,17 @@ function safePath(requested: string, rootDir: string): string {
  * Only allows writing files with extensions in ALLOWED_WRITE_EXTENSIONS.
  * Creates parent directories if needed.
  * Returns the absolute path of the written file.
+ *
+ * **Security:** Callers must gate writes behind user approval when content
+ * is agent-generated (freeform LLM output). Deterministic/compiled content
+ * (e.g., DSL-to-JS compilation) does not require additional gating.
  */
 export async function writeFile(
   filePath: string,
   content: string,
   rootDir: string,
 ): Promise<string> {
-  const resolved = safePath(filePath, rootDir);
+  const resolved = await resolveAndValidate(filePath, rootDir);
   const ext = path.extname(resolved).toLowerCase();
   if (!ALLOWED_WRITE_EXTENSIONS.includes(ext)) {
     throw new Error(
@@ -51,7 +120,7 @@ export async function writeFile(
  * Read a file relative to rootDir. Truncates at MAX_FILE_SIZE.
  */
 export async function readFile(filePath: string, rootDir: string): Promise<string> {
-  const resolved = safePath(filePath, rootDir);
+  const resolved = await resolveAndValidate(filePath, rootDir);
   const stat = await fs.stat(resolved);
 
   if (!stat.isFile()) {
@@ -72,7 +141,7 @@ export async function listDirectory(
   dirPath: string,
   rootDir: string,
 ): Promise<Array<{ name: string; type: 'file' | 'directory'; size?: number }>> {
-  const resolved = safePath(dirPath, rootDir);
+  const resolved = await resolveAndValidate(dirPath, rootDir);
   const entries = await fs.readdir(resolved, { withFileTypes: true });
 
   const results: Array<{ name: string; type: 'file' | 'directory'; size?: number }> = [];
@@ -91,19 +160,22 @@ export async function listDirectory(
  * Grep for a pattern across files in rootDir.
  * Returns up to MAX_GREP_MATCHES results.
  */
-export function grepFiles(
+export async function grepFiles(
   pattern: string,
   rootDir: string,
   options?: { path?: string; include?: string },
-): { matches: Array<{ file: string; line: number; content: string }>; truncated: boolean } {
-  const searchDir = options?.path ? safePath(options.path, rootDir) : rootDir;
+): Promise<{
+  matches: Array<{ file: string; line: number; content: string }>;
+  truncated: boolean;
+}> {
+  const searchDir = options?.path ? await resolveAndValidate(options.path, rootDir) : rootDir;
 
   // Build grep command
   const args = ['-rn', '--binary-files=without-match'];
   if (options?.include) {
     args.push(`--include=${options.include}`);
   }
-  // Cap output
+  // Cap output per-file
   args.push('-m', String(MAX_GREP_MATCHES));
   args.push('--', pattern, searchDir);
 
@@ -115,9 +187,8 @@ export function grepFiles(
     });
 
     const lines = output.trim().split('\n').filter(Boolean);
-    const truncated = lines.length >= MAX_GREP_MATCHES;
 
-    const matches = lines.map((line) => {
+    const allMatches = lines.map((line) => {
       // grep -n format: file:line:content
       const firstColon = line.indexOf(':');
       const secondColon = line.indexOf(':', firstColon + 1);
@@ -126,6 +197,10 @@ export function grepFiles(
       const content = line.slice(secondColon + 1).slice(0, 200); // cap line length
       return { file, line: lineNum, content };
     });
+
+    // Enforce global cap — grep -m only limits per-file
+    const truncated = allMatches.length >= MAX_GREP_MATCHES;
+    const matches = allMatches.slice(0, MAX_GREP_MATCHES);
 
     return { matches, truncated };
   } catch (error) {

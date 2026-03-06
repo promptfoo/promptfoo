@@ -25,6 +25,11 @@ export interface AttachTargetLinkFsOptions {
 /**
  * Attach filesystem handlers to an AgentClient.
  *
+ * **Trust model:** FS_WRITE content flowing through this handler should
+ * originate from deterministic compilation (e.g., DSL-to-JS), not freeform
+ * agent output. If the content source changes to accept agent-generated text,
+ * an explicit user-approval gate must be added before writing.
+ *
  * @param client - The connected AgentClient
  * @param rootDir - The root directory for filesystem operations
  * @param options - Optional callbacks
@@ -74,7 +79,7 @@ export function attachTargetLinkFs(
       logger.debug('[TargetLink] Received fs_grep request', { requestId, pattern });
 
       try {
-        const { matches, truncated } = grepFiles(pattern, rootDir, {
+        const { matches, truncated } = await grepFiles(pattern, rootDir, {
           path: searchPath,
           include,
         });
