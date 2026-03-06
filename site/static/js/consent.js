@@ -22,11 +22,45 @@
 
   // Countries requiring opt-in consent
   // EU-27 + EEA (IS, LI, NO) + UK + Switzerland + Brazil + Canada
-  var OPT_IN_COUNTRIES =
-    'AT BE BG HR CY CZ DK EE FI FR DE GR HU IE IT LV LT LU MT NL PL PT RO SK SI ES SE IS LI NO GB CH BR CA';
+  var OPT_IN_COUNTRIES = [
+    'AT',
+    'BE',
+    'BG',
+    'HR',
+    'CY',
+    'CZ',
+    'DK',
+    'EE',
+    'FI',
+    'FR',
+    'DE',
+    'GR',
+    'HU',
+    'IE',
+    'IT',
+    'LV',
+    'LT',
+    'LU',
+    'MT',
+    'NL',
+    'PL',
+    'PT',
+    'RO',
+    'SK',
+    'SI',
+    'ES',
+    'SE',
+    'IS',
+    'LI',
+    'NO',
+    'GB',
+    'CH',
+    'BR',
+    'CA',
+  ];
 
   // Countries using opt-out model
-  var OPT_OUT_COUNTRIES = 'US';
+  var OPT_OUT_COUNTRIES = ['US'];
 
   // ── Helpers ──
 
@@ -43,25 +77,28 @@
   }
 
   function deleteCookie(name) {
-    document.cookie = name + '=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    document.cookie = name + '=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT;SameSite=Lax;Secure';
   }
 
   // Known first-party cookies set by vendor scripts.
   // Analytics: GA (_ga*, _gid, _gat*), PostHog (ph_*)
   // Marketing: Google Ads (_gcl_*), Meta (_fbp, _fbc)
-  var VENDOR_COOKIE_PATTERNS = [/^_ga/, /^_gid$/, /^_gat/, /^ph_/, /^_gcl_/, /^_fbp$/, /^_fbc$/];
+  var ANALYTICS_COOKIE_PATTERNS = [/^_ga/, /^_gid$/, /^_gat/, /^ph_/];
+  var MARKETING_COOKIE_PATTERNS = [/^_gcl_/, /^_fbp$/, /^_fbc$/];
+  var ALL_VENDOR_COOKIE_PATTERNS = ANALYTICS_COOKIE_PATTERNS.concat(MARKETING_COOKIE_PATTERNS);
 
-  function clearVendorCookies() {
+  function clearVendorCookies(patterns) {
     // Derive the top-level domain for domain-scoped cookie deletion (e.g. ".promptfoo.dev")
     var hostParts = location.hostname.split('.');
     var topDomain = hostParts.length >= 2 ? '.' + hostParts.slice(-2).join('.') : location.hostname;
-    var expiry = 'expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    var expiry = 'expires=Thu, 01 Jan 1970 00:00:00 GMT;SameSite=Lax;Secure';
+    var cookiePatterns = patterns || ALL_VENDOR_COOKIE_PATTERNS;
 
     document.cookie.split(';').forEach(function (c) {
       var name = c.split('=')[0].trim();
       if (!name) return;
-      for (var i = 0; i < VENDOR_COOKIE_PATTERNS.length; i++) {
-        if (VENDOR_COOKIE_PATTERNS[i].test(name)) {
+      for (var i = 0; i < cookiePatterns.length; i++) {
+        if (cookiePatterns[i].test(name)) {
           // Delete across all path/domain combinations vendors may use
           deleteCookie(name);
           document.cookie = name + '=;path=/;domain=' + topDomain + ';' + expiry;
@@ -79,8 +116,8 @@
     // Fail-closed: block scripts when country is unknown (missing CF header,
     // blocked cookies, non-CF environments). Safest default for GDPR.
     if (!country) return 'opt_in';
-    if (OPT_IN_COUNTRIES.indexOf(country) !== -1) return 'opt_in';
-    if (OPT_OUT_COUNTRIES.indexOf(country) !== -1) return 'opt_out';
+    if (OPT_IN_COUNTRIES.includes(country)) return 'opt_in';
+    if (OPT_OUT_COUNTRIES.includes(country)) return 'opt_out';
     return 'notice';
   }
 
@@ -391,11 +428,18 @@
       closePrefs();
 
       // If a category was revoked that was already loaded, clean up and reload
+      var revokedPatterns = [];
       var needReload = false;
-      if (!a && analyticsWasLoaded) needReload = true;
-      if (!m && marketingWasLoaded) needReload = true;
+      if (!a && analyticsWasLoaded) {
+        needReload = true;
+        revokedPatterns = revokedPatterns.concat(ANALYTICS_COOKIE_PATTERNS);
+      }
+      if (!m && marketingWasLoaded) {
+        needReload = true;
+        revokedPatterns = revokedPatterns.concat(MARKETING_COOKIE_PATTERNS);
+      }
       if (needReload) {
-        clearVendorCookies();
+        clearVendorCookies(revokedPatterns);
         window.location.reload();
         return;
       }
@@ -453,97 +497,91 @@
 
   // ── Init ──
 
+  function onReady(callback) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', callback);
+    } else {
+      callback();
+    }
+  }
+
+  function showPreferencesFromHash() {
+    if (window.location.hash === '#manage-cookies') {
+      onReady(function () {
+        showPreferences();
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+      });
+    }
+  }
+
+  function handleOptIn(consent) {
+    var nextConsent = consent;
+    // Invalidate consent obtained under a less-strict region (e.g. US opt-out).
+    // The user must re-consent under opt-in rules.
+    if (nextConsent && nextConsent.region !== 'i') {
+      deleteCookie(COOKIE);
+      nextConsent = null;
+    }
+    if (nextConsent) {
+      loadByConsent(nextConsent);
+      onReady(checkHash);
+      return;
+    }
+    onReady(function () {
+      if (window.location.hash === '#manage-cookies') {
+        showPreferences();
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+      } else {
+        showBanner();
+      }
+    });
+  }
+
+  function handleOptOut(consent) {
+    var gpc = !!navigator.globalPrivacyControl;
+    var nextConsent = consent;
+    // Scripts load by default, GPC honored for marketing
+    if (!nextConsent) {
+      saveConsent(1, gpc ? 0 : 1);
+      nextConsent = parseConsent(getCookie(COOKIE));
+    }
+    // GPC must be honored continuously — override marketing on every page load
+    // and clear any marketing cookies that were previously set
+    if (gpc && nextConsent && nextConsent.marketing) {
+      nextConsent.marketing = 0;
+      saveConsent(nextConsent.analytics, 0);
+      clearVendorCookies(MARKETING_COOKIE_PATTERNS);
+    }
+    loadByConsent(nextConsent);
+    showPreferencesFromHash();
+  }
+
+  function handleNotice(consent) {
+    var nextConsent = consent;
+    if (!nextConsent) {
+      saveConsent(1, 1);
+      nextConsent = parseConsent(getCookie(COOKIE));
+    }
+    loadByConsent(nextConsent);
+    showPreferencesFromHash();
+  }
+
   function init() {
     var region = getRegion();
     window.__pf_privacy_region = region;
     var consent = migrateIfNeeded();
 
     if (region === 'opt_in') {
-      // Invalidate consent obtained under a less-strict region (e.g. US opt-out).
-      // The user must re-consent under opt-in rules.
-      if (consent && consent.region !== 'i') {
-        deleteCookie(COOKIE);
-        consent = null;
-      }
-      // Block until consent
-      if (consent) {
-        loadByConsent(consent);
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', checkHash);
-        } else {
-          checkHash();
-        }
-        return;
-      }
-      // First visit: show banner
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function () {
-          if (window.location.hash === '#manage-cookies') {
-            showPreferences();
-            history.replaceState(null, '', window.location.pathname + window.location.search);
-          } else {
-            showBanner();
-          }
-        });
-      } else {
-        if (window.location.hash === '#manage-cookies') {
-          showPreferences();
-          history.replaceState(null, '', window.location.pathname + window.location.search);
-        } else {
-          showBanner();
-        }
-      }
+      handleOptIn(consent);
       return;
     }
 
     if (region === 'opt_out') {
-      var gpc = !!navigator.globalPrivacyControl;
-      // Scripts load by default, GPC honored for marketing
-      if (!consent) {
-        saveConsent(1, gpc ? 0 : 1);
-        consent = parseConsent(getCookie(COOKIE));
-      }
-      // GPC must be honored continuously — override marketing on every page load
-      // and clear any marketing cookies that were previously set
-      if (gpc && consent && consent.marketing) {
-        consent.marketing = 0;
-        saveConsent(consent.analytics, 0);
-        clearVendorCookies();
-      }
-      loadByConsent(consent);
-      // Handle hash
-      if (window.location.hash === '#manage-cookies') {
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', function () {
-            showPreferences();
-            history.replaceState(null, '', window.location.pathname + window.location.search);
-          });
-        } else {
-          showPreferences();
-          history.replaceState(null, '', window.location.pathname + window.location.search);
-        }
-      }
+      handleOptOut(consent);
       return;
     }
 
-    // Notice region: implied consent
-    if (!consent) {
-      saveConsent(1, 1);
-      consent = parseConsent(getCookie(COOKIE));
-    }
-    loadByConsent(consent);
-    // Handle hash
-    if (window.location.hash === '#manage-cookies') {
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function () {
-          showPreferences();
-          history.replaceState(null, '', window.location.pathname + window.location.search);
-        });
-      } else {
-        showPreferences();
-        history.replaceState(null, '', window.location.pathname + window.location.search);
-      }
-    }
+    handleNotice(consent);
   }
 
   init();

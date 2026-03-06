@@ -629,12 +629,6 @@ describe('consent.js', () => {
       setCookie('pf_country', country);
       runConsent();
       expect(document.getElementById('cc-banner')).not.toBeNull();
-      // Cleanup for next iteration
-      document.getElementById('cc-banner')?.remove();
-      document.getElementById('cc-overlay')?.remove();
-      clearCookies();
-      document.querySelectorAll('script[src]').forEach((el) => el.remove());
-      resetGlobals();
     });
   });
 
@@ -789,6 +783,24 @@ describe('consent.js', () => {
       // Cookie should be updated to reflect GPC override
       const consent = getCookie('pf_consent');
       expect(consent).toBe('v1.o.1.0');
+    });
+
+    it('GPC cleanup preserves analytics cookies while clearing marketing cookies', () => {
+      setCookie('pf_country', 'US');
+      setCookie('pf_consent', 'v1.o.1.1');
+      setCookie('_ga', 'GA1.1.12345');
+      setCookie('_gcl_au', 'marketing_cookie');
+
+      Object.defineProperty(navigator, 'globalPrivacyControl', {
+        writable: true,
+        configurable: true,
+        value: true,
+      });
+
+      runConsent();
+
+      expect(getCookie('_ga')).toBe('GA1.1.12345');
+      expect(getCookie('_gcl_au')).toBeNull();
     });
   });
 
