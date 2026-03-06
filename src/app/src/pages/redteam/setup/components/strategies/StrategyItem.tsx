@@ -12,7 +12,7 @@ import {
   DEFAULT_STRATEGIES_SET,
   MULTI_MODAL_STRATEGIES_SET,
 } from '@promptfoo/redteam/constants';
-import { Settings } from 'lucide-react';
+import { Lock, Settings } from 'lucide-react';
 import { TestCaseGenerateButton } from './../TestCaseDialog';
 import { useStrategyTestGeneration } from './useStrategyTestGeneration';
 
@@ -32,6 +32,7 @@ interface StrategyItemProps {
   onConfigClick: (id: string) => void;
   isDisabled: boolean;
   isRemoteGenerationDisabled: boolean;
+  isAuthGated?: boolean;
   isConfigured?: boolean;
 }
 
@@ -42,6 +43,7 @@ export function StrategyItem({
   onConfigClick,
   isDisabled,
   isRemoteGenerationDisabled,
+  isAuthGated = false,
   isConfigured = true,
 }: StrategyItemProps) {
   const { handleTestCaseGeneration, isGenerating, isCurrentStrategy } = useStrategyTestGeneration({
@@ -131,6 +133,17 @@ export function StrategyItem({
                   PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION
                   to enable.
                 </TooltipContent>
+              </Tooltip>
+            )}
+            {isDisabled && isAuthGated && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge className="h-5 gap-1 bg-gradient-to-r from-amber-500 to-amber-600 text-[0.6rem] font-bold tracking-wider text-white shadow-sm">
+                    <Lock className="size-2.5" />
+                    ENTERPRISE
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>This strategy is available in Promptfoo Enterprise</TooltipContent>
               </Tooltip>
             )}
           </div>

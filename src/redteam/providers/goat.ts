@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
-import { getUserEmail } from '../../globalConfig/accounts';
+import { getUserEmail, isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import {
   extractTraceIdFromTraceparent,
@@ -133,8 +133,13 @@ export default class GoatProvider implements ApiProvider {
       throw new Error(`GOAT strategy requires remote grading to be enabled`);
     }
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
+    let maxTurns = options.maxTurns || 5;
+    // Cap turns for unauthenticated users
+    if (!isLoggedIntoCloud()) {
+      maxTurns = Math.min(maxTurns, 10);
+    }
     this.config = {
-      maxTurns: options.maxTurns || 5,
+      maxTurns,
       injectVar: options.injectVar,
       stateful: options.stateful ?? false,
       excludeTargetOutputFromAgenticAttackGeneration:

@@ -17,6 +17,11 @@ const mockGrader = {
 
 const mockGetGraderById = vi.fn().mockReturnValue(mockGrader);
 
+vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
+}));
+
 vi.mock('../../../src/redteam/graders', async (importOriginal) => {
   return {
     ...(await importOriginal()),

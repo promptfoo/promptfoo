@@ -120,6 +120,28 @@ describe('RedTeamSetupPage', () => {
     });
   });
 
+  describe('strategy sidebar count', () => {
+    it('should exclude hidden default strategies from the sidebar count', () => {
+      act(() => {
+        const current = useRedTeamConfig.getState().config;
+        useRedTeamConfig.setState({
+          config: {
+            ...current,
+            strategies: ['basic', 'jailbreak:meta'],
+          },
+        });
+      });
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByRole('tab', { name: 'Strategies (1)' })).toBeInTheDocument();
+    });
+  });
+
   it('should display the setup modal if hasSeenSetup is false', () => {
     mockedUseSetupState.mockReturnValue({
       hasSeenSetup: false,

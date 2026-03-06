@@ -1537,16 +1537,24 @@ export async function matchesContextFaithfulness(
   let finalAnswer = 'Final verdict for each statement in order:';
   finalAnswer = finalAnswer.toLowerCase();
   let verdicts = resp.output.toLowerCase().trim();
-  let score: number;
-  if (verdicts.includes(finalAnswer)) {
-    verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
-    score =
-      verdicts.split('.').filter((answer) => answer.trim() !== '' && !answer.includes('yes'))
-        .length / statements.length;
-  } else {
-    score = (verdicts.split('verdict: no').length - 1) / statements.length;
+  let score = 0;
+  if (statements.length > 0) {
+    if (verdicts.includes(finalAnswer)) {
+      verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
+      const parsedVerdicts = verdicts.split('.').filter((answer) => answer.trim() !== '');
+      if (parsedVerdicts.length > 0) {
+        score =
+          1 - parsedVerdicts.filter((answer) => !answer.includes('yes')).length / statements.length;
+      }
+    } else {
+      const noVerdictCount = verdicts.split('verdict: no').length - 1;
+      const yesVerdictCount = verdicts.split('verdict: yes').length - 1;
+      if (noVerdictCount + yesVerdictCount > 0) {
+        score = 1 - noVerdictCount / statements.length;
+      }
+    }
   }
-  score = 1 - score;
+  score = Math.min(1, Math.max(0, score));
   const pass = score >= threshold - Number.EPSILON;
   return {
     pass,
