@@ -6,6 +6,9 @@ export const CLOUD_API_HOST = 'https://api.promptfoo.app';
 
 export const API_HOST = getEnvString('API_HOST', CLOUD_API_HOST);
 
+// Free customers created before this date are grandfathered into auto-share.
+export const SHARING_CUTOFF_DATE = new Date('2026-03-09T00:00:00Z');
+
 interface CloudUser {
   id: string;
   name: string;
@@ -183,9 +186,6 @@ export class CloudConfig {
       this.setApiHost(apiHost);
       this.setAppUrl(app.url);
       if (typeof hasActiveLicense === 'boolean') {
-        // Paid customers always get auto-share. Free customers created on or before
-        // March 8th 2026 are grandfathered in; newer free customers have it off.
-        const SHARING_CUTOFF_DATE = new Date('2026-03-09T00:00:00Z');
         const createdAt = user?.createdAt ? new Date(user.createdAt) : null;
         const isGrandfathered = createdAt != null && createdAt < SHARING_CUTOFF_DATE;
         this.setSharing(hasActiveLicense || isGrandfathered);
