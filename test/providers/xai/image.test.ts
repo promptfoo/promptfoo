@@ -121,7 +121,7 @@ describe('XAI Image Provider', () => {
 
       expect(result).toEqual({
         output: '![Generate a cat](https://example.com/image.jpg)',
-        images: [{ data: 'https://example.com/image.jpg', mimeType: 'image/png' }],
+        images: [{ data: 'https://example.com/image.jpg', mimeType: 'image/jpeg' }],
         cached: false,
         cost: 0.07, // xAI pricing: $0.07 per generated image
       });
@@ -138,7 +138,7 @@ describe('XAI Image Provider', () => {
 
       expect(result).toEqual({
         output: '![test prompt](https://example.com/image.jpg)',
-        images: [{ data: 'https://example.com/image.jpg', mimeType: 'image/png' }],
+        images: [{ data: 'https://example.com/image.jpg', mimeType: 'image/jpeg' }],
         cached: true,
         cost: 0,
       });
@@ -166,8 +166,8 @@ describe('XAI Image Provider', () => {
       expect(result).toEqual({
         output: '![test prompt](https://example.com/image-1.jpg)',
         images: [
-          { data: 'https://example.com/image-1.jpg', mimeType: 'image/png' },
-          { data: 'https://example.com/image-2.jpg', mimeType: 'image/png' },
+          { data: 'https://example.com/image-1.jpg', mimeType: 'image/jpeg' },
+          { data: 'https://example.com/image-2.jpg', mimeType: 'image/jpeg' },
         ],
         cached: false,
         cost: 0.14,

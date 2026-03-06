@@ -3,7 +3,7 @@ import {
   createTreeNode,
   evaluateResponse,
   getNewPrompt,
-  MAX_WIDTH,
+  DEFAULT_MAX_WIDTH as MAX_WIDTH,
   renderSystemPrompts,
   selectNodes,
   updateRedteamHistory,

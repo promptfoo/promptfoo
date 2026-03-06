@@ -599,7 +599,7 @@ describe('OpenAiImageProvider', () => {
         config: { apiKey: 'test-key', output_format: 'jpeg' },
       });
 
-      await provider.callApi('test prompt');
+      const result = await provider.callApi('test prompt');
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
@@ -608,6 +608,10 @@ describe('OpenAiImageProvider', () => {
         }),
         expect.any(Number),
       );
+      expect(result).toMatchObject({
+        output: 'data:image/jpeg;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/jpeg;base64,base64EncodedImageData', mimeType: 'image/jpeg' }],
+      });
     });
 
     it('should handle gpt-image-1 output_compression parameter', async () => {
@@ -903,7 +907,7 @@ describe('OpenAiImageProvider', () => {
         config: { apiKey: 'test-key', output_format: 'jpeg' },
       });
 
-      await provider.callApi('test prompt');
+      const result = await provider.callApi('test prompt');
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
@@ -912,6 +916,10 @@ describe('OpenAiImageProvider', () => {
         }),
         expect.any(Number),
       );
+      expect(result).toMatchObject({
+        output: 'data:image/jpeg;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/jpeg;base64,base64EncodedImageData', mimeType: 'image/jpeg' }],
+      });
     });
 
     it('should handle gpt-image-1.5 output_compression parameter', async () => {

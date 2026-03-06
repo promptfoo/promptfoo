@@ -1,14 +1,18 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
-import { callOpenAiImageApi, formatOutput, OpenAiImageProvider } from '../openai/image';
+import {
+  buildStructuredImageOutputs,
+  callOpenAiImageApi,
+  formatOutput,
+  OpenAiImageProvider,
+} from '../openai/image';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
-  ImageOutput,
   ProviderResponse,
 } from '../../types/index';
 import type { ApiProvider } from '../../types/providers';
@@ -143,20 +147,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
       }
 
       const cost = cached ? 0 : this.calculateImageCost(config.n || 1);
-      const images: ImageOutput[] | undefined =
-        Array.isArray(data.data) && data.data.length > 0
-          ? data.data
-              .map((item: any): ImageOutput | null => {
-                if (item.b64_json) {
-                  return { data: `data:image/png;base64,${item.b64_json}`, mimeType: 'image/png' };
-                }
-                if (item.url) {
-                  return { data: item.url, mimeType: 'image/png' };
-                }
-                return null;
-              })
-              .filter((item: ImageOutput | null): item is ImageOutput => item !== null)
-          : undefined;
+      const images = buildStructuredImageOutputs(data);
 
       return {
         output: formattedOutput,

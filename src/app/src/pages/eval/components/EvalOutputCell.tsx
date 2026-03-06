@@ -127,6 +127,36 @@ export function resolveEvalImageOutputSource(image: ImageOutput): string | undef
   return resolveImageSource(image);
 }
 
+function isImageLikeDataUri(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('data:')) {
+    return false;
+  }
+
+  const mimeType = trimmed.slice('data:'.length).split(/[;,]/, 1)[0]?.toLowerCase();
+  return Boolean(
+    mimeType && (mimeType.startsWith('image/') || mimeType === 'application/octet-stream'),
+  );
+}
+
+function getPrimaryRenderedImageSrc(text: string, inlineImageSrc?: string): string | undefined {
+  const trimmed = text.trim();
+
+  if (trimmed.startsWith('<svg')) {
+    return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(text)))}`;
+  }
+
+  if (isImageLikeDataUri(text)) {
+    return inlineImageSrc || text;
+  }
+
+  if (inlineImageSrc && !trimmed.startsWith('data:')) {
+    return inlineImageSrc;
+  }
+
+  return undefined;
+}
+
 export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
   maxTextLength: number;
@@ -268,6 +298,8 @@ function EvalOutputCell({
   const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   const normalizedText = normalizeMediaText(text);
   const inlineImageSrc = resolveImageSource(text);
+  const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
+  const primaryRenderedAsImage = Boolean(primaryRenderedImageSrc);
   const outputAudioSource = resolveAudioSource(output.audio);
   let node: React.ReactNode | undefined;
   let renderedMarkdownOutput = false;
@@ -372,22 +404,13 @@ function EvalOutputCell({
     } catch (error) {
       console.error('Invalid regular expression:', (error as Error).message);
     }
-  } else if (
-    text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/) ||
-    inlineImageSrc ||
-    text?.trim().startsWith('<svg')
-  ) {
-    // Convert raw SVG to data URI if needed
-    let src = inlineImageSrc || text;
-    if (text?.trim().startsWith('<svg')) {
-      src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(text)))}`;
-    }
+  } else if (primaryRenderedImageSrc) {
     node = (
       <img
-        src={src}
+        src={primaryRenderedImageSrc}
         alt={output.prompt}
         style={{ width: '100%' }}
-        onClick={() => toggleLightbox(src)}
+        onClick={() => toggleLightbox(primaryRenderedImageSrc)}
       />
     );
   } else if (output.audio) {
@@ -476,8 +499,8 @@ function EvalOutputCell({
 
   if (output.images?.length) {
     const renderedImageSrcs = new Set<string>();
-    if (inlineImageSrc) {
-      renderedImageSrcs.add(normalizeImageSrcForComparison(inlineImageSrc));
+    if (primaryRenderedImageSrc) {
+      renderedImageSrcs.add(normalizeImageSrcForComparison(primaryRenderedImageSrc));
     }
     if (renderedMarkdownOutput) {
       for (const source of extractMarkdownImageSources(normalizedText)) {
@@ -485,7 +508,14 @@ function EvalOutputCell({
       }
     }
 
-    const imageElements = output.images
+    // Keep the legacy "skip the first structured image" behavior when the primary
+    // output is already rendered as an image. Some providers repeat that same
+    // image first, but encode it differently enough that direct source comparison
+    // alone is not reliable after merging main.
+    const imagesToRender =
+      primaryRenderedAsImage && !renderedMarkdownOutput ? output.images.slice(1) : output.images;
+
+    const imageElements = imagesToRender
       .map((img: ImageOutput, idx: number) => {
         const src = resolveEvalImageOutputSource(img);
         if (!src || renderedImageSrcs.has(normalizeImageSrcForComparison(src))) {
