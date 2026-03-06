@@ -189,7 +189,7 @@ To build the project:
 npm run build
 ```
 
-For continuous building of the api during development:
+For continuous building of the API during development:
 
 ```bash
 npm run build:watch
