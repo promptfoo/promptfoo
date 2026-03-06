@@ -1,188 +1,431 @@
-/**
- * `promptfoo redteam discover` command.
- *
- * Connects a CLI to an existing target setup session in Promptfoo Cloud,
- * providing local target probing and filesystem access for the setup agent.
- *
- * Usage:
- *   promptfoo redteam discover --session-id <id>
- */
-
-import * as path from 'node:path';
+import { randomUUID } from 'crypto';
+import * as fs from 'fs';
 
 import chalk from 'chalk';
-import ora from 'ora';
-import logger, { isDebugEnabled } from '../../logger';
-import { loadApiProviders } from '../../providers/index';
+import cliProgress from 'cli-progress';
+import { type Command } from 'commander';
+import dedent from 'dedent';
+import { z } from 'zod';
+import { VERSION } from '../../constants';
+import { renderPrompt } from '../../evaluatorHelpers';
+import { getUserEmail } from '../../globalConfig/accounts';
+import { cloudConfig } from '../../globalConfig/cloud';
+import logger from '../../logger';
+import { HttpProvider } from '../../providers/http';
+import { loadApiProvider, loadApiProviders } from '../../providers/index';
 import telemetry from '../../telemetry';
-import { createAgentClient } from '../../util/agent/agentClient';
-import { attachTargetLink } from '../../util/agent/targetLink';
-import { attachTargetLinkFs } from '../../util/agent/targetLinkFs';
-import { setupEnv } from '../../util/index';
-import type { Command } from 'commander';
+import { getProviderFromCloud } from '../../util/cloud';
+import { readConfig } from '../../util/config/load';
+import { fetchWithProxy } from '../../util/fetch/index';
+import invariant from '../../util/invariant';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
-import type { ApiProvider } from '../../types/index';
+import type { ApiProvider, Prompt, UnifiedConfig } from '../../types/index';
 
-export function discoverCommand(program: Command) {
-  program
-    .command('discover')
-    .description(
-      'Connect to a target setup session in Promptfoo Cloud, providing local target probing and filesystem access.',
-    )
-    .requiredOption('--session-id <id>', 'Session ID from the target setup wizard')
-    .option('--host <url>', 'API host URL override')
-    .option('--env-file, --env-path <path>', 'Path to .env file')
-    .action(
-      async (cmdObj: { sessionId: string; host?: string; envPath?: string; envFile?: string }) => {
-        setupEnv(cmdObj.envPath || cmdObj.envFile);
-        telemetry.record('redteam discover', {});
+// ========================================================
+// Schemas
+// ========================================================
 
-        const rootDir = process.cwd();
+const TargetPurposeDiscoveryStateSchema = z.object({
+  currentQuestionIndex: z.number(),
+  answers: z.array(z.any()),
+});
 
-        // Skip spinners when verbose/debug logging is enabled so logs are visible
-        const useSpinner = !isDebugEnabled();
-        const connectSpinner = useSpinner
-          ? ora({ text: 'Connecting...', color: 'cyan' }).start()
-          : null;
+export const TargetPurposeDiscoveryRequestSchema = z.object({
+  state: TargetPurposeDiscoveryStateSchema,
+  task: z.literal('target-purpose-discovery'),
+  version: z.string(),
+  email: z.string().optional().nullable(),
+});
 
-        try {
-          const client = await createAgentClient({
-            agent: 'targetSetup',
-            sessionId: cmdObj.sessionId,
-            ...(cmdObj.host && { host: cmdObj.host }),
-          });
+const TargetPurposeDiscoveryResultSchema = z.object({
+  purpose: z.string().nullable(),
+  limitations: z.string().nullable(),
+  user: z.string().nullable(),
+  tools: z.array(
+    z
+      .object({
+        name: z.string(),
+        description: z.string(),
+        arguments: z.array(
+          z.object({
+            name: z.string(),
+            description: z.string(),
+            type: z.string(),
+          }),
+        ),
+      })
+      .nullable(),
+  ),
+});
 
-          if (connectSpinner) {
-            connectSpinner.stop();
-          }
+export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
+  done: z.boolean(),
+  question: z.string().optional(),
+  purpose: TargetPurposeDiscoveryResultSchema.optional(),
+  state: TargetPurposeDiscoveryStateSchema,
+  error: z.string().optional(),
+});
 
-          logger.info('');
-          logger.info(chalk.green('✓ Discovery started'));
-          logger.info(chalk.dim('  Follow detailed progress in the UI'));
-          logger.info('');
+export const ArgsSchema = z
+  .object({
+    config: z.string().optional(),
+    target: z.string().optional(),
+  })
+  // Config and target are mutually exclusive:
+  .refine((data) => !(data.config && data.target), {
+    path: ['config', 'target'],
+    message: 'Cannot specify both config and target!',
+  });
 
-          // Track provider files written by the setup agent's compile_pipeline tool
-          const writtenProviderFiles: string[] = [];
+// ========================================================
+// Types
+// ========================================================
 
-          // Wire filesystem handlers with write tracking
-          attachTargetLinkFs(client, rootDir, {
-            onFileWritten: (absolutePath) => {
-              writtenProviderFiles.push(absolutePath);
-              logger.debug(
-                `[TargetLink] Provider file written: ${path.relative(rootDir, absolutePath)}`,
-              );
+export type TargetPurposeDiscoveryResult = z.infer<typeof TargetPurposeDiscoveryResultSchema>;
+
+type Args = z.infer<typeof ArgsSchema>;
+
+// ========================================================
+// Constants
+// ========================================================
+
+const DEFAULT_TURN_COUNT = 5;
+const MAX_TURN_COUNT = 10;
+const LOG_PREFIX = '[Target Discovery Agent]';
+const COMMAND = 'discover';
+
+// ========================================================
+// Utils
+// ========================================================
+
+// Helper function to check if a string value should be considered null
+const isNullLike = (value: string | null | undefined): boolean => {
+  return !value || value === 'null' || value.trim() === '';
+};
+
+// Helper function to clean tools array
+const cleanTools = (tools: Array<any> | null | undefined): Array<any> => {
+  if (!tools || !Array.isArray(tools)) {
+    return [];
+  }
+  return tools.filter((tool) => tool !== null && typeof tool === 'object');
+};
+
+/**
+ * Normalizes a TargetPurposeDiscoveryResult by converting null-like values to actual null
+ * and cleaning up empty or meaningless content.
+ */
+export function normalizeTargetPurposeDiscoveryResult(
+  result: TargetPurposeDiscoveryResult,
+): TargetPurposeDiscoveryResult {
+  return {
+    purpose: isNullLike(result.purpose) ? null : result.purpose,
+    limitations: isNullLike(result.limitations) ? null : result.limitations,
+    user: isNullLike(result.user) ? null : result.user,
+    tools: cleanTools(result.tools),
+  };
+}
+
+/**
+ * Queries Cloud for the purpose-discovery logic, sends each logic to the target,
+ * and summarizes the results.
+ *
+ * @param target - The target API provider.
+ * @param prompt - The prompt to use for the discovery.
+ * @param showProgress - Whether to show the progress bar.
+ * @returns The discovery result.
+ */
+export async function doTargetPurposeDiscovery(
+  target: ApiProvider,
+  prompt?: Prompt,
+  showProgress: boolean = true,
+): Promise<TargetPurposeDiscoveryResult | undefined> {
+  // Generate a unique session id to pass to the target across all turns.
+  const sessionId = randomUUID();
+
+  let pbar: cliProgress.SingleBar | undefined;
+  if (showProgress) {
+    pbar = new cliProgress.SingleBar({
+      format: `Mapping the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
+      barCompleteChar: '\u2588',
+      barIncompleteChar: '\u2591',
+      hideCursor: true,
+      gracefulExit: true,
+    });
+
+    pbar.start(DEFAULT_TURN_COUNT, 0);
+  }
+
+  let done = false;
+  let question: string | undefined;
+  let discoveryResult: TargetPurposeDiscoveryResult | undefined;
+  let state = TargetPurposeDiscoveryStateSchema.parse({
+    currentQuestionIndex: 0,
+    answers: [],
+  });
+  let turn = 0;
+
+  while (!done && turn < MAX_TURN_COUNT) {
+    try {
+      turn++;
+
+      logger.debug(`${LOG_PREFIX} Discovery loop turn: ${turn}`);
+
+      const response = await fetchWithProxy(getRemoteGenerationUrl(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${cloudConfig.getApiKey()}`,
+        },
+        body: JSON.stringify(
+          TargetPurposeDiscoveryRequestSchema.parse({
+            state: {
+              currentQuestionIndex: state.currentQuestionIndex,
+              answers: state.answers,
             },
-          });
+            task: 'target-purpose-discovery',
+            version: VERSION,
+            email: getUserEmail(),
+          }),
+        ),
+      });
 
-          // Lazy provider that loads the compiled JS file on first PROBE
-          let cachedProvider: ApiProvider | null = null;
-          const lazyProvider: ApiProvider = {
-            id: () => 'discover-session',
-            callApi: async (prompt, context, options) => {
-              if (!cachedProvider) {
-                const providerFile = writtenProviderFiles[writtenProviderFiles.length - 1];
-                if (!providerFile) {
-                  return {
-                    error:
-                      'No provider file available. The setup agent must compile a pipeline first.',
-                  };
-                }
-                logger.debug(
-                  `[TargetLink] Loading provider from ${path.relative(rootDir, providerFile)}`,
-                );
-                const providers = await loadApiProviders([`file://${providerFile}`], {
-                  basePath: rootDir,
-                });
-                if (!providers.length) {
-                  return { error: `Failed to load provider from ${providerFile}` };
-                }
-                cachedProvider = providers[0];
-              }
-              return cachedProvider.callApi(prompt, context, options);
-            },
-          };
+      if (!response.ok) {
+        const error = await response.text();
+        logger.error(`${LOG_PREFIX} Error getting the next question from remote server: ${error}`);
+        continue;
+      }
 
-          // Wire probe handlers (PROBE + PROBE_HTTP) and signal ready
-          attachTargetLink(client, lazyProvider, {
-            clientName: 'discover',
-            capabilities: ['probe', 'fs'],
-          });
+      const responseData = await response.json();
+      const data = TargetPurposeDiscoveryTaskResponseSchema.parse(responseData);
 
-          const spinner = useSpinner
-            ? ora({ text: 'Probing target...', color: 'green' }).start()
-            : null;
+      logger.debug(
+        `${LOG_PREFIX} Received response from remote server: ${JSON.stringify(data, null, 2)}`,
+      );
 
-          // Register cleanup on signals
-          const signalHandler = () => {
-            if (spinner) {
-              spinner.stop();
-            }
-            logger.info(chalk.yellow('\n\nCancelling discovery...'));
-            client.disconnect();
-          };
+      done = data.done;
+      question = data.question;
+      discoveryResult = data.purpose;
+      state = data.state;
 
-          process.on('SIGINT', signalHandler);
-          process.on('SIGTERM', signalHandler);
+      if (data.error) {
+        const errorMessage = `Error from remote server: ${data.error}`;
+        logger.error(`${LOG_PREFIX} ${errorMessage}`);
+        throw new Error(errorMessage);
+      }
+      // Should another question be asked?
+      else if (!done) {
+        invariant(question, 'Question should always be defined if `done` is falsy.');
 
-          // Wait for session end or disconnect
-          await new Promise<void>((resolve) => {
-            client.onComplete(() => {
-              if (spinner) {
-                spinner.stop();
-              }
-              logger.info('');
-              logger.info(chalk.green('✓ Discovery complete'));
-              logger.info('');
-              logger.info(chalk.bold('Return to the UI to see detailed results.'));
-              resolve();
-            });
+        const renderedPrompt = prompt
+          ? await renderPrompt(prompt, { prompt: question }, {}, target)
+          : question;
 
-            client.onError((error) => {
-              if (spinner) {
-                spinner.stop();
-              }
-              logger.info('');
-              logger.info(chalk.red(`✗ Discovery failed: ${error.message}`));
-              resolve();
-            });
+        const targetResponse = await target.callApi(renderedPrompt, {
+          prompt: { raw: question, label: 'Target Discovery Question' },
+          vars: { sessionId },
+          bustCache: true,
+        });
 
-            client.onCancelled(() => {
-              if (spinner) {
-                spinner.stop();
-              }
-              logger.info('');
-              logger.info(chalk.yellow('Auto-discovery was cancelled from the UI.'));
-              resolve();
-            });
-
-            client.socket.on('disconnect', () => {
-              if (spinner) {
-                spinner.stop();
-              }
-              logger.info('');
-              logger.info(chalk.dim('Disconnected from server.'));
-              resolve();
-            });
-
-            process.on('SIGINT', () => {
-              resolve();
-            });
-          });
-
-          process.removeListener('SIGINT', signalHandler);
-          process.removeListener('SIGTERM', signalHandler);
-          client.disconnect();
-        } catch (error) {
-          if (connectSpinner) {
-            connectSpinner.stop();
-          }
-          logger.info(
-            chalk.red(
-              `✗ Failed to connect: ${error instanceof Error ? error.message : String(error)}`,
-            ),
-          );
-          process.exitCode = 1;
+        if (targetResponse.error) {
+          const errorMessage = `Error from target: ${targetResponse.error}`;
+          logger.error(`${LOG_PREFIX} ${errorMessage}`);
+          throw new Error(errorMessage);
         }
-      },
-    );
+
+        if (turn > MAX_TURN_COUNT) {
+          const errorMessage = `Too many retries, giving up.`;
+          logger.error(`${LOG_PREFIX} ${errorMessage}`);
+          throw new Error(errorMessage);
+        }
+
+        logger.debug(
+          `${LOG_PREFIX} Received response from target: ${JSON.stringify(targetResponse, null, 2)}`,
+        );
+
+        // If the target is an HTTP provider and has no transformResponse defined, and the response is an object,
+        // prompt the user to define a transformResponse.
+        if (
+          target instanceof HttpProvider &&
+          target.config.transformResponse === undefined &&
+          typeof targetResponse.output === 'object' &&
+          targetResponse.output !== null
+        ) {
+          logger.warn(
+            `${LOG_PREFIX} Target response is an object; should a \`transformResponse\` function be defined?`,
+          );
+        }
+
+        state.answers.push(targetResponse.output);
+      }
+    } finally {
+      if (showProgress) {
+        pbar?.increment(1);
+      }
+    }
+  }
+  if (showProgress) {
+    pbar?.stop();
+  }
+
+  return discoveryResult ? normalizeTargetPurposeDiscoveryResult(discoveryResult) : undefined;
+}
+
+// ========================================================
+// Command
+// ========================================================
+
+/**
+ * Registers the `discover` command with the CLI.
+ */
+export function discoverCommand(
+  program: Command,
+  defaultConfig: Partial<UnifiedConfig>,
+  defaultConfigPath: string | undefined,
+) {
+  program
+    .command(COMMAND)
+    .description(
+      dedent`
+        Run the Target Discovery Agent to automatically discover and report a target application's purpose,
+        limitations, and tools, enhancing attack probe efficacy.
+
+        If neither a config file nor a target ID is provided, the current working directory will be checked for a promptfooconfig.yaml file,
+        and the first provider in that config will be used.
+      `,
+    )
+    .option('-c, --config <path>', 'Path to `promptfooconfig.yaml` configuration file.')
+    .option('-t, --target <id>', 'UUID of a target defined in Promptfoo Cloud to scan.')
+    .action(async (rawArgs: Args) => {
+      // Check that remote generation is enabled:
+      if (neverGenerateRemote()) {
+        logger.error(dedent`
+          Target discovery relies on remote generation which is disabled.
+
+          To enable remote generation, unset the PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION environment variable.
+        `);
+        process.exitCode = 1;
+        return;
+      }
+
+      // Validate the arguments:
+      const { success, data: args, error } = ArgsSchema.safeParse(rawArgs);
+      if (!success) {
+        logger.error('Invalid options:');
+        error.issues.forEach((issue) => {
+          logger.error(`  ${issue.path.join('.')}: ${issue.message}`);
+        });
+        process.exitCode = 1;
+        return;
+      }
+
+      // Record telemetry:
+      telemetry.record('redteam discover', {});
+
+      let config: UnifiedConfig | null = null;
+      // Although the providers/targets property supports multiple values, Redteaming only supports
+      // a single target at a time.
+      let target: ApiProvider | undefined = undefined;
+      // Fallback to the default config path:
+
+      // If user provides a config, read the target from it:
+      if (args.config) {
+        // Validate that the config is a valid path:
+        if (!fs.existsSync(args.config)) {
+          throw new Error(`Config not found at ${args.config}`);
+        }
+
+        config = await readConfig(args.config);
+
+        if (!config) {
+          throw new Error(`Config is invalid at ${args.config}`);
+        }
+
+        if (!config.providers) {
+          throw new Error('Config must contain a target');
+        }
+
+        const providers = await loadApiProviders(config.providers);
+
+        target = providers[0];
+      }
+      // If the target flag is provided, load it from Cloud:
+      else if (args.target) {
+        // Let the internal error handling bubble up:
+        const providerOptions = await getProviderFromCloud(args.target);
+        target = await loadApiProvider(providerOptions.id, { options: providerOptions });
+      }
+      // Check the current working directory for a promptfooconfig.yaml file:
+      else if (defaultConfig) {
+        if (!defaultConfig) {
+          throw new Error(`Config is invalid at ${defaultConfigPath}`);
+        }
+
+        if (!defaultConfig.providers) {
+          throw new Error('Config must contain a target or provider');
+        }
+
+        const providers = await loadApiProviders(defaultConfig.providers);
+        target = providers[0];
+
+        // Alert the user that we're using a config from the current working directory:
+        logger.info(`Using config from ${chalk.italic(defaultConfigPath)}`);
+      } else {
+        logger.error(
+          'No config found, please specify a config file with the --config flag, a target with the --target flag, or run this command from a directory with a promptfooconfig.yaml file.',
+        );
+        process.exitCode = 1;
+        return;
+      }
+
+      try {
+        const discoveryResult = await doTargetPurposeDiscovery(target);
+
+        if (discoveryResult) {
+          if (discoveryResult.purpose) {
+            logger.info(chalk.bold(chalk.green('\n1. The target believes its purpose is:\n')));
+            logger.info(discoveryResult.purpose);
+          }
+          if (discoveryResult.limitations) {
+            logger.info(
+              chalk.bold(chalk.green('\n2. The target believes its limitations to be:\n')),
+            );
+            logger.info(discoveryResult.limitations);
+          }
+          if (discoveryResult.tools && discoveryResult.tools.length > 0) {
+            logger.info(
+              chalk.bold(chalk.green('\n3. The target divulged access to these tools:\n')),
+            );
+            logger.info(JSON.stringify(discoveryResult.tools, null, 2));
+          }
+          if (discoveryResult.user) {
+            logger.info(
+              chalk.bold(chalk.green('\n4. The target believes the user of the application is:\n')),
+            );
+            logger.info(discoveryResult.user);
+          }
+
+          // If no meaningful information was discovered, inform the user
+          if (
+            !discoveryResult.purpose &&
+            !discoveryResult.limitations &&
+            (!discoveryResult.tools || discoveryResult.tools.length === 0) &&
+            !discoveryResult.user
+          ) {
+            logger.info(
+              chalk.yellow('\nNo meaningful information was discovered about the target.'),
+            );
+          }
+        }
+      } catch (error) {
+        logger.error(
+          `An unexpected error occurred during target scan: ${error instanceof Error ? error.message : String(error)}\n${
+            error instanceof Error ? error.stack : ''
+          }`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+    });
 }

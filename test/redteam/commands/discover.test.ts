@@ -1,13 +1,29 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  ArgsSchema,
   doTargetPurposeDiscovery,
   normalizeTargetPurposeDiscoveryResult,
-} from '../../../src/redteam/commands/targetPurposeDiscovery';
+} from '../../../src/redteam/commands/discover';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 vi.mock('../../../src/util/fetch');
 
 const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
+
+describe('ArgsSchema', () => {
+  it('`config` and `target` are mutually exclusive', () => {
+    const args = {
+      config: 'test',
+      target: 'test',
+      preview: false,
+      overwrite: false,
+    };
+
+    const { success, error } = ArgsSchema.safeParse(args);
+    expect(success).toBe(false);
+    expect(error?.issues[0].message).toBe('Cannot specify both config and target!');
+  });
+});
 
 describe('normalizeTargetPurposeDiscoveryResult', () => {
   it('should handle null-like values', () => {
