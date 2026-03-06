@@ -781,7 +781,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       executable: config.executable,
       executableArgs: config.executable_args,
       extraArgs: config.extra_args,
-      pathToClaudeCodeExecutable: config.path_to_claude_code_executable,
+      pathToClaudeCodeExecutable: config.path_to_claude_code_executable
+        ? safeResolve(basePath, config.path_to_claude_code_executable)
+        : undefined,
       settingSources: config.setting_sources,
       tools: config.tools,
       enableFileCheckpointing: config.enable_file_checkpointing,

@@ -1475,7 +1475,26 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
-        it('with path_to_claude_code_executable configuration', async () => {
+        it('with relative path_to_claude_code_executable configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              path_to_claude_code_executable: './bin/claude-code',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              pathToClaudeCodeExecutable: '/test/basePath/bin/claude-code',
+            }),
+          });
+        });
+
+        it('with absolute path_to_claude_code_executable configuration', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
           const provider = new ClaudeCodeSDKProvider({
