@@ -10,6 +10,7 @@ import EvalResult from '../../models/evalResult';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
+import { shouldShareResults } from '../../util/sharing';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import {
   ComparisonEvalNotFoundError,
@@ -67,7 +68,7 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
     .evaluate(
       Object.assign({}, testSuite as EvaluateTestSuite, {
         writeLatestResults: true,
-        sharing: testSuite.sharing ?? true,
+        sharing: testSuite.sharing ?? shouldShareResults({}),
       }),
       Object.assign({}, evaluateOptions, {
         eventSource: 'web',
