@@ -7,6 +7,7 @@
  *
  * Cache location: ~/.promptfoo/provider-files/{checksum}.{ext}
  */
+import { createHash } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -123,6 +124,14 @@ export async function getOrDownloadProviderFile(
   if (!fileWithContent) {
     logger.debug(`[ProviderFileCache] No file found for provider ${providerId}`);
     return null;
+  }
+
+  // Verify content integrity before caching
+  const actualChecksum = createHash('sha256').update(fileWithContent.content).digest('hex');
+  if (actualChecksum !== fileWithContent.checksumSha256.toLowerCase()) {
+    throw new Error(
+      `[ProviderFileCache] Checksum mismatch for provider ${providerId}: expected ${fileWithContent.checksumSha256}, got ${actualChecksum}`,
+    );
   }
 
   // Cache the file

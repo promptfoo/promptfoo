@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { z } from 'zod';
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -14,19 +15,21 @@ import type { UnifiedConfig } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 
 /**
- * Metadata for a provider file stored in cloud.
+ * Schema for provider file metadata stored in cloud.
  */
-export interface ProviderFileMetadata {
-  id: string;
-  filename: string;
-  language: 'javascript' | 'python';
-  contentType: string;
-  sizeBytes: number;
-  checksumSha256: string;
-  description: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+export const ProviderFileMetadataSchema = z.object({
+  id: z.string(),
+  filename: z.string(),
+  language: z.enum(['javascript', 'python']),
+  contentType: z.string(),
+  sizeBytes: z.number(),
+  checksumSha256: z.string().regex(/^[0-9a-f]+$/i, 'Invalid SHA256 checksum format'),
+  description: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type ProviderFileMetadata = z.infer<typeof ProviderFileMetadataSchema>;
 
 /**
  * Provider file with content included.
@@ -102,12 +105,18 @@ export async function getProviderFromCloud(id: string): Promise<CloudProviderRes
     // The provider options schema has ID field as optional but we know it's required for cloud providers
     invariant(provider.id, `Provider ${id} has no id in ${body.config}`);
 
-    // Extract provider file metadata if present
-    const providerFile: ProviderFileMetadata | null = body.providerFile ?? null;
-    if (providerFile) {
-      logger.debug(
-        `[Cloud] Provider ${id} has uploaded file: ${providerFile.filename} (checksum: ${providerFile.checksumSha256})`,
-      );
+    // Extract and validate provider file metadata if present
+    let providerFile: ProviderFileMetadata | null = null;
+    if (body.providerFile) {
+      const parsed = ProviderFileMetadataSchema.safeParse(body.providerFile);
+      if (parsed.success) {
+        providerFile = parsed.data;
+        logger.debug(
+          `[Cloud] Provider ${id} has uploaded file: ${providerFile.filename} (checksum: ${providerFile.checksumSha256})`,
+        );
+      } else {
+        logger.warn(`[Cloud] Provider ${id} has invalid providerFile metadata, ignoring`);
+      }
     }
 
     return {
