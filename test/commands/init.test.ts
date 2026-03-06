@@ -219,6 +219,39 @@ describe('init command', () => {
   });
 
   describe('handleExampleDownload', () => {
+    describe('alias resolution', () => {
+      it('should resolve old example name to new name via EXAMPLE_ALIASES', async () => {
+        // Download will fail, but we're testing alias resolution, not download
+        mockFetchWithProxy.mockRejectedValue(new Error('404 Not Found'));
+        vi.mocked(confirm).mockResolvedValue(false);
+
+        await init.handleExampleDownload('.', 'custom-provider');
+
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.stringContaining("'custom-provider' has been renamed to 'provider-custom/basic'"),
+        );
+      });
+
+      it('should pass through unknown example names without logging rename message', async () => {
+        mockFetchWithProxy.mockRejectedValue(new Error('404 Not Found'));
+        vi.mocked(confirm).mockResolvedValue(false);
+
+        await init.handleExampleDownload('.', 'some-unknown-example');
+
+        expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('has been renamed'));
+      });
+
+      it('should download using the resolved alias name', async () => {
+        mockFetchWithProxy.mockRejectedValue(new Error('404 Not Found'));
+        vi.mocked(confirm).mockResolvedValue(false);
+
+        const result = await init.handleExampleDownload('.', 'custom-provider');
+
+        // The resolved name should be used, not the alias
+        expect(result).toEqual('provider-custom/basic');
+      });
+    });
+
     describe('when download fails', () => {
       it('should not show success message when user declines retry', async () => {
         // Download failed

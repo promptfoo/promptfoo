@@ -29,6 +29,7 @@ export const EXAMPLE_ALIASES: Record<string, string> = {
   'custom-provider-typescript': 'provider-custom/typescript',
   cyberseceval: 'redteam-cyberseceval',
   databricks: 'provider-databricks',
+  'dbrx-benchmark': 'eval-summarization',
   'deepseek-r1-vs-openai-o1': 'compare-deepseek-r1-vs-openai-o1',
   docker: 'integration-docker/basic',
   'docker-code-generation-sandbox': 'integration-docker/code-generation-sandbox',

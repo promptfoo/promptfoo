@@ -142,7 +142,9 @@ export async function handleExampleDownload(
   } else if (typeof example === 'string') {
     const resolved = EXAMPLE_ALIASES[example];
     if (resolved) {
-      logger.info(chalk.yellow(`Example '${example}' has been renamed to '${resolved}'.`));
+      logger.info(
+        chalk.yellow(`Note: '${example}' has been renamed to '${resolved}'. Using new name.`),
+      );
       exampleName = resolved;
     } else {
       exampleName = example;
