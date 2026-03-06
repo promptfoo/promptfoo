@@ -395,7 +395,7 @@ If you're getting unexpectedly high WER:
 ## Related Examples
 
 - [ElevenLabs TTS](../tts/) - Text-to-Speech synthesis
-- [Audio Quality Testing](../audio-quality/) - Audio generation quality metrics
+- [ElevenLabs Isolation](../isolation/) - Audio cleanup quality comparison
 
 ## Resources
 

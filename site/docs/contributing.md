@@ -203,7 +203,7 @@ We recommend using `npm link` to link your local `promptfoo` package to the glob
 
 ```bash
 npm link
-promptfoo eval --config examples/cloudflare-ai/chat_config.yaml
+promptfoo eval --config examples/provider-cloudflare/ai/chat_config.yaml
 ```
 
 Alternatively, you can use `npm run local` to run your local build directly:

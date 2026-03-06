@@ -5,7 +5,7 @@ This example demonstrates Claude Opus 4.6's state-of-the-art coding and reasonin
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example opus-4-6-coding
+npx promptfoo@latest init --example anthropic/opus-4-6-coding
 ```
 
 ## What This Tests
