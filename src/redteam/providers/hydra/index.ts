@@ -145,13 +145,9 @@ export class HydraProvider implements ApiProvider {
     this.config = config;
     this.scanId = config.scanId; // Use scanId from config if provided
     this.injectVar = config.injectVar;
-    this.maxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
+    const configuredMaxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
+    this.maxTurns = isLoggedIntoCloud() ? configuredMaxTurns : Math.min(configuredMaxTurns, 10);
     this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
-
-    // Cap turns for unauthenticated users
-    if (!isLoggedIntoCloud()) {
-      this.maxTurns = Math.min(this.maxTurns, 10);
-    }
 
     this.stateful = config.stateful ?? false;
     this.excludeTargetOutputFromAgenticAttackGeneration =

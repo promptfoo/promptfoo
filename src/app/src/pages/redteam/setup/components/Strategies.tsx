@@ -164,7 +164,11 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleStrategyToggle = useCallback(
     (strategyId: string) => {
-      if (isStrategyDisabled(strategyId)) {
+      // Check if strategy is selected (for 'basic', only if enabled !== false)
+      const isSelected = selectedStrategyIds.includes(strategyId);
+
+      // Allow deselection even when disabled, but block selection
+      if (isStrategyDisabled(strategyId) && !isSelected) {
         if (!isCloudEnabled && STRATEGIES_REQUIRING_AUTH.has(strategyId)) {
           toast.showToast(
             'This strategy requires authentication. Run `promptfoo auth login` to use it.',
@@ -178,9 +182,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         }
         return;
       }
-
-      // Check if strategy is selected (for 'basic', only if enabled !== false)
-      const isSelected = selectedStrategyIds.includes(strategyId);
 
       if (!isSelected) {
         recordEvent('feature_used', {

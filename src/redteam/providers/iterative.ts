@@ -781,13 +781,11 @@ class RedteamIterativeProvider implements ApiProvider {
     this.injectVar = config.injectVar;
     this.inputs = config.inputs as Record<string, string> | undefined;
 
-    this.numIterations =
+    const configuredIterations =
       Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
-
-    // Cap iterations for unauthenticated users
-    if (!isLoggedIntoCloud()) {
-      this.numIterations = Math.min(this.numIterations, 10);
-    }
+    this.numIterations = isLoggedIntoCloud()
+      ? configuredIterations
+      : Math.min(configuredIterations, 10);
 
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
       config.excludeTargetOutputFromAgenticAttackGeneration,
