@@ -20,7 +20,7 @@ import type { Config } from '../config/schema';
 
 // Capacity error detection and retry configuration
 const CAPACITY_ERROR_MESSAGE = 'Server at capacity';
-const MAX_RETRIES = 6;
+const MAX_RETRIES = 7;
 const BASE_DELAY_MS = 1000;
 
 /**
