@@ -473,6 +473,24 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(rmSyncSpy).not.toHaveBeenCalled();
       });
 
+      it('should resolve working_dir relative paths from the cliState.basePath', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: { working_dir: './workspace' },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        expect(statSyncSpy).toHaveBeenCalledWith('/test/basePath/workspace');
+        expect(mockQuery).toHaveBeenCalledWith({
+          prompt: 'Test prompt',
+          options: expect.objectContaining({
+            cwd: '/test/basePath/workspace',
+          }),
+        });
+      });
+
       it('should error when working_dir does not exist', async () => {
         statSyncSpy.mockImplementation(function () {
           throw new Error('ENOENT: no such file or directory');
