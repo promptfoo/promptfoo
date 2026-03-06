@@ -96,7 +96,7 @@ function ProviderConfigEditor({
             . Promptfoo uses Nunjucks templating to replace <code>{'{{prompt}}'}</code> with the
             actual test content.{' '}
             <a
-              href="https://www.promptfoo.dev/docs/configuration/guide/#using-nunjucks-templates"
+              href="https://www.promptfoo.dev/docs/configuration/overview/#using-nunjucks-templates"
               target="_blank"
               rel="noopener noreferrer"
             >

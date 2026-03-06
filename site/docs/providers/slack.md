@@ -593,4 +593,4 @@ tests:
 
 - [Manual Input Provider](/docs/providers/manual-input) - For terminal-based human input
 - [Webhook Provider](/docs/providers/webhook) - For programmatic integrations
-- [Configuration Guide](/docs/configuration/guide) - General provider setup
+- [Configuration Guide](/docs/configuration/overview) - General provider setup

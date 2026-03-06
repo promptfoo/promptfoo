@@ -24,4 +24,4 @@ Common issues encountered when red teaming LLM applications with promptfoo.
 
 - [Best Practices for Configuring AI Red Teaming](/docs/red-team/troubleshooting/best-practices)
 - [Red Team Quickstart](/docs/red-team/quickstart/)
-- [Configuration Guide](/docs/configuration/guide/)
+- [Configuration Guide](/docs/configuration/overview/)

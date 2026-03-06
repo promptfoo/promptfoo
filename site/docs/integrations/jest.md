@@ -20,7 +20,7 @@ For more information on supported checks, see the [Assertions & Metrics document
 
 Before you begin, make sure you have the following node packages installed:
 
-- [jest](https://jestjs.io/docs/getting-started): `npm install --save-dev jest`
+- [jest](https://jestjs.io/docs/configuration/getting-started): `npm install --save-dev jest`
 - [vitest](https://vitest.dev/guide/): `npm install --save-dev vitest`
 - promptfoo: `npm install --save-dev promptfoo`
 

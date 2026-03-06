@@ -7,7 +7,7 @@ description: Compare LLM outputs side-by-side, rate responses for training data,
 
 # Using the web viewer
 
-After [running an eval](/docs/getting-started), view results in your browser:
+After [running an eval](/docs/configuration/getting-started), view results in your browser:
 
 ```sh
 npx promptfoo@latest view

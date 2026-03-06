@@ -384,7 +384,7 @@ prompts:
 
 ### CSV with defaultTest
 
-Apply the same assertions to all tests loaded from a CSV file using [`defaultTest`](/docs/configuration/guide#default-test-cases):
+Apply the same assertions to all tests loaded from a CSV file using [`defaultTest`](/docs/configuration/overview#default-test-cases):
 
 ```yaml title="promptfooconfig.yaml"
 defaultTest:

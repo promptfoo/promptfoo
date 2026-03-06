@@ -86,7 +86,7 @@ Here are the supported parameters:
 
 2. **Run Promptfoo Evaluation**: This is where the magic happens. We run the evaluation, passing in the configuration file and the prompts we want to evaluate. The results of this step are automatically posted to the pull request.
 
-For more information on how to set up the promptfoo config, see the [Getting Started](/docs/getting-started) docs.
+For more information on how to set up the promptfoo config, see the [Getting Started](/docs/configuration/getting-started) docs.
 
 ## For red teaming
 

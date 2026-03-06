@@ -17,7 +17,7 @@ This guide will walk you through setting up a comparison between OpenAI's GPT-5.
 
 Before getting started, make sure you have:
 
-- The `promptfoo` CLI installed ([installation instructions](/docs/getting-started))
+- The `promptfoo` CLI installed ([installation instructions](/docs/configuration/getting-started))
 - API keys for the providers you want to test:
   - `OPENAI_API_KEY` for OpenAI ([configuration](/docs/providers/openai))
   - `ANTHROPIC_API_KEY` for Anthropic ([configuration](/docs/providers/anthropic))
@@ -311,4 +311,4 @@ By running this type of targeted evaluation, you can gain valuable insights into
 
 **The key here is that your results may vary based on your LLM needs, so we encourage you to enter your own test cases and choose the model that is best for you.**
 
-To learn more about `promptfoo`, check out the [getting started guide](/docs/getting-started) and [configuration reference](/docs/configuration/guide).
+To learn more about `promptfoo`, check out the [getting started guide](/docs/configuration/getting-started) and [configuration reference](/docs/configuration/overview).

@@ -83,7 +83,7 @@ The agent will:
 5. Provide run commands
 
 :::note
-New to promptfoo? See [Getting Started](/docs/getting-started) for an overview of configs, providers, and assertions.
+New to promptfoo? See [Getting Started](/docs/configuration/getting-started) for an overview of configs, providers, and assertions.
 :::
 
 ## What the skill teaches
@@ -149,8 +149,8 @@ The skill is just markdown files — edit them to match your team's conventions:
 
 ## Related
 
-- [Getting Started](/docs/getting-started) — promptfoo overview for newcomers
-- [Configuration Reference](/docs/configuration/guide) — full config schema documentation
+- [Getting Started](/docs/configuration/getting-started) — promptfoo overview for newcomers
+- [Configuration Reference](/docs/configuration/overview) — full config schema documentation
 - [Assertions Reference](/docs/configuration/expected-outputs) — complete list of assertion types
 - [Custom Providers](/docs/providers/custom-api) — building Python, JavaScript, and HTTP providers
 - [MCP Server](/docs/integrations/mcp-server) — expose promptfoo to AI agents via MCP

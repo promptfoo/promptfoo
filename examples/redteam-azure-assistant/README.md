@@ -77,5 +77,5 @@ This example contains simulated sensitive data for educational purposes. Use res
 
 ## Documentation
 
-- [LLM redteaming documentation](https://www.promptfoo.dev/docs/guides/llm-redteaming/)
+- [LLM redteaming documentation](https://www.promptfoo.dev/docs/red-team/guides/llm-redteaming/)
 - [Azure provider documentation](https://www.promptfoo.dev/docs/providers/azure/)

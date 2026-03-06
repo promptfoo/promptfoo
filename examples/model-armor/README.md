@@ -135,4 +135,4 @@ gcloud model-armor templates delete basic-safety --location=us-central1
 
 - [Model Armor Overview](https://cloud.google.com/security-command-center/docs/model-armor-overview)
 - [Promptfoo Guardrails Documentation](https://www.promptfoo.dev/docs/configuration/expected-outputs/guardrails/)
-- [Testing Guardrails Guide](https://www.promptfoo.dev/docs/guides/testing-guardrails/)
+- [Testing Guardrails Guide](https://www.promptfoo.dev/docs/red-team/guides/testing-guardrails/)

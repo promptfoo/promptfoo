@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
+# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/overview
 #
 description: 'Huggingface Dataset'
 

@@ -22,7 +22,7 @@ You can also authenticate into the application using a magic link. To do this, n
 
 You may wish to authenticate into the CLI when using Promptfoo Enterprise. Follow these steps to connect Promptfoo Enterprise to the CLI.
 
-1. Install the Promptfoo CLI. Read [getting started](/docs/getting-started/) for help installing the CLI.
+1. Install the Promptfoo CLI. Read [getting started](/docs/configuration/getting-started/) for help installing the CLI.
 
 2. In the Promptfoo Enterprise app, select the "CLI Login Information" underneath your profile.
 

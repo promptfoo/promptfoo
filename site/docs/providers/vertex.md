@@ -1052,7 +1052,7 @@ If you configure Model Armor floor settings at the project or organization level
 
 For more details, see:
 
-- [Testing Google Cloud Model Armor Guide](/docs/guides/google-cloud-model-armor/) - Complete guide on testing Model Armor with Promptfoo
+- [Testing Google Cloud Model Armor Guide](/docs/red-team/guides/google-cloud-model-armor/) - Complete guide on testing Model Armor with Promptfoo
 - [Model Armor Documentation](https://cloud.google.com/security-command-center/docs/model-armor-overview) - Official Google Cloud docs
 
 ## Supported Features

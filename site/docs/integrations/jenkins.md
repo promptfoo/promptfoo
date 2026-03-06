@@ -242,4 +242,4 @@ Common issues and solutions:
    - Verify npm is available in PATH
    - Consider using `nodejs` tool installer in Jenkins
 
-For more information on Promptfoo configuration and usage, refer to the [configuration reference](/docs/configuration/guide/).
+For more information on Promptfoo configuration and usage, refer to the [configuration reference](/docs/configuration/overview/).

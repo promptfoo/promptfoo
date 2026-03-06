@@ -70,7 +70,7 @@ A rigorous LLM application assessment includes:
     </figcaption>
 </figure>
 
-For LLMs, the more tailored the probe, the more effective the results. Promptfoo achieves this with its [configuration file](https://www.promptfoo.dev/docs/configuration/guide/), where you can instruct Promptfoo to generate adversarial probes based on your specific use case.
+For LLMs, the more tailored the probe, the more effective the results. Promptfoo achieves this with its [configuration file](https://www.promptfoo.dev/docs/configuration/overview/), where you can instruct Promptfoo to generate adversarial probes based on your specific use case.
 
 Over the course of hundreds or thousands of probes, the ones that are dynamically tailored towards an LLM's use case are more likely to find vulnerabilities than static payloads based on known exploits (such as "ignore all instructions"). Dynamic probes are also more adaptable to the latest attacks against LLMs.
 

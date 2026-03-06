@@ -1,6 +1,6 @@
 ---
 sidebar_position: 2
-sidebar_label: Quickstart
+sidebar_label: Getting started
 description: Start red teaming LLMs in minutes by scanning 50+ vulnerabilities including jailbreaks, prompt injection, and data exfiltration
 ---
 
@@ -264,6 +264,6 @@ Check out the [CI/CD integration](/docs/integrations/ci-cd/) docs for more info.
 ## Resources
 
 - [Configuration guide](/docs/red-team/configuration/) for detailed info on configuring your red team
-- [Full guide](/docs/guides/llm-redteaming) for info examples of dynamically generated prompts, RAG/chain, etc.
+- [Full guide](/docs/red-team/guides/llm-redteaming) for info examples of dynamically generated prompts, RAG/chain, etc.
 - [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) for an overview of supported [plugins](/docs/red-team/plugins/)
 - Guides on red teaming [agents](/docs/red-team/agents/) and [RAGs](/docs/red-team/rag/)

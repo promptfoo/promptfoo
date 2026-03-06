@@ -135,7 +135,7 @@ tests:
 
 The default prompt shown on the left side has a pass rate of **55%**. On the right side, the tuned prompt has a pass rate of **94%**.
 
-For more info on running the eval itself, see the [Getting Started guide](/docs/getting-started).
+For more info on running the eval itself, see the [Getting Started guide](/docs/configuration/getting-started).
 
 ### Measuring Perplexity
 

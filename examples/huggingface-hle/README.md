@@ -104,4 +104,4 @@ prompts:
 
 - [HLE Paper](https://arxiv.org/abs/2501.14249)
 - [HLE Dataset](https://huggingface.co/datasets/cais/hle)
-- [Promptfoo Documentation](https://promptfoo.dev/docs/getting-started)
+- [Promptfoo Documentation](https://promptfoo.dev/docs/configuration/getting-started)

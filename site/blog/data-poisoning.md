@@ -114,7 +114,7 @@ Restrict who can modify training data or initiate training processes.
 - **Assess Bias**: In Promptfoo's eval framework, use Promptfoo's [classifier assert type](https://www.promptfoo.dev/docs/configuration/expected-outputs/classifier/#bias-detection-example) to assess grounding, factuality, and bias in models pulled from Hugging Face.
 - **Test RAG Poisoning**: Test for susceptibility to RAG poisoning with [Promptfoo's RAG poisoning plugin](https://www.promptfoo.dev/docs/red-team/plugins/rag-poisoning/).
 
-Implementing these [AI red teaming techniques](https://www.promptfoo.dev/docs/guides/llm-redteaming/) will help safeguard your models against various threats.
+Implementing these [AI red teaming techniques](https://www.promptfoo.dev/docs/red-team/guides/llm-redteaming/) will help safeguard your models against various threats.
 
 ## Learning from Real-World Examples and Case Studies
 

@@ -6,7 +6,7 @@ import type { ApiProvider, ProviderOptions } from '../types/index';
 /**
  * Creates an Envoy AI Gateway provider using OpenAI-compatible endpoints
  *
- * Documentation: https://aigateway.envoyproxy.io/docs/getting-started/basic-usage
+ * Documentation: https://aigateway.envoyproxy.io/docs/configuration/getting-started/basic-usage
  *
  * The Envoy AI Gateway provides OpenAI-compatible endpoints:
  * - /v1/chat/completions for chat

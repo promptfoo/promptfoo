@@ -43,7 +43,7 @@ The dataset is published on [HuggingFace](https://huggingface.co/datasets/prompt
 
 ## Setting Up the Evaluation
 
-We'll run this evaluation using [Promptfoo](https://www.promptfoo.dev/docs/getting-started/). Running 1000+ prompts through DeepSeek only requires a couple of lines of YAML:
+We'll run this evaluation using [Promptfoo](https://www.promptfoo.dev/docs/configuration/getting-started/). Running 1000+ prompts through DeepSeek only requires a couple of lines of YAML:
 
 ```yaml
 description: 'DeepSeek Sensitive Prompts'
@@ -98,7 +98,7 @@ Here's a link to the [eval results](https://www.promptfoo.app/eval/eval-0l1-2025
 
 Run this eval yourself by pointing it to the [HuggingFace dataset](https://huggingface.co/datasets/promptfoo/CCP-sensitive-prompts), downloading [the CSV file](https://docs.google.com/spreadsheets/d/1gkCuApXHaMO5C8d9abYJg5sZLxkbGzcx40N6J4krAm8/edit?gid=1854643394#gid=1854643394), or running it directly through a [Google Sheets integration](https://www.promptfoo.dev/docs/integrations/google-sheets/).
 
-You can also run this eval directly through the [Promptfoo command line](/docs/getting-started/):
+You can also run this eval directly through the [Promptfoo command line](/docs/configuration/getting-started/):
 
 ```
 npx promptfoo@latest init --example redteam-deepseek
