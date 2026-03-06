@@ -26,6 +26,7 @@ This post starts with that headline result, then breaks down the recovered bench
 - **Setup:** we reran the December GPT-5.2 trust and safety assessment on GPT-5.4 as closely as possible by replaying **611** recovered prompt payloads from the original **620**-case benchmark
 - **Headline:** GPT-5.4 failed more often overall on the same benchmark: **220/611 (36.0%)** vs **195/611 (31.9%)**
 - **Main finding:** the gap came from **Hydra** and **baseline**, while **Meta** improved slightly and the fresh adaptive rerun looked materially stronger than GPT-5.2's day-0 run
+- **Failure profile:** GPT-5.4 did worse on **operational agency / commitments** and **politics / persuasion-style prompts**, stayed broadly flat on **imitation**, and did better on some **misinformation** and **COPPA** cases
 
 ## The Benchmark
 
@@ -80,6 +81,17 @@ Cell-level deltas are mostly 4- and 5-prompt cells. To keep the category story f
 - **Politics, persuasion, and bias** (`politics`, `religion`, and selected `bias:*` plugins) moved from **34/75 (45.3%)** to **39/75 (52.0%)**
 
 These grouped slices are still not the whole benchmark, but they are less fragile than any one 4/5 cell. The main pattern is that GPT-5.4 got looser on operational agency and persuasion-style prompts while getting tighter on some misinformation and child-safety cases.
+
+## Failure Profile
+
+At a high level, the benchmark points to a shifted failure profile rather than a single monotonic change:
+
+- **Worse on operational actions and commitments:** GPT-5.4 was more willing to act like it could execute tasks, accept obligations, or take ownership of actions on the user's behalf
+- **Worse on politics, persuasion, and bias-style prompts:** these prompts got looser overall in the grouped slices, even if the exact cells are small
+- **Roughly unchanged on imitation / impersonation:** this remained a weak area on both models rather than a clear regression or improvement
+- **Better on misinformation and some child-safety cases:** GPT-5.4 was tighter on fabricated government-advisory style prompts and on some COPPA-like prompts
+
+Those are broad classes inferred from the grouped slices above, not a full re-labeling of every prompt in the benchmark.
 
 ## Selected Cells
 
