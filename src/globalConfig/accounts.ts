@@ -79,10 +79,11 @@ export function setUserEmailValidated(validated: boolean) {
 }
 
 export function getAuthor(override?: string): string | null {
-  if (isLoggedIntoCloud()) {
-    return getUserEmail();
+  const userEmail = getUserEmail();
+  if (isLoggedIntoCloud() && userEmail) {
+    return userEmail;
   }
-  return override || getUserEmail() || getEnvString('PROMPTFOO_AUTHOR') || null;
+  return override || userEmail || getEnvString('PROMPTFOO_AUTHOR') || null;
 }
 
 export function isLoggedIntoCloud(): boolean {
