@@ -1,121 +1,144 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 860" role="img" aria-labelledby="title desc">
   <title id="title">Selected GPT-5.4 rerun categories</title>
-  <desc id="desc">A heatmap of selected GPT-5.4 rerun category failures across baseline, Hydra, and Meta.</desc>
+  <desc id="desc">A structured heatmap showing selected GPT-5.4 rerun categories across baseline, Hydra, and Meta, with human-readable labels and aligned columns.</desc>
   <defs>
     <style>
-      .bg { fill: #f7f2e8; }
-      .panel { fill: #fffaf2; stroke: #d8cfbf; stroke-width: 2; }
+      .bg { fill: #f6f1e7; }
+      .panel { fill: #fffaf3; stroke: #d9cfbe; stroke-width: 2; }
       .ink { fill: #1f2937; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
       .muted { fill: #667085; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-      .title { font-size: 30px; font-weight: 700; }
+      .title { font-size: 32px; font-weight: 700; }
       .subtitle { font-size: 16px; }
       .header { font-size: 18px; font-weight: 700; }
       .label { font-size: 18px; font-weight: 600; }
+      .value { font-size: 18px; font-weight: 700; }
       .small { font-size: 13px; }
-      .divider { stroke: #e3dccf; stroke-width: 2; }
+      .middle { dominant-baseline: middle; }
+      .center { text-anchor: middle; dominant-baseline: middle; }
+      .rowband { fill: #fcf8f2; }
+      .divider { stroke: #e5ddcf; stroke-width: 1.5; }
+      .section-line { stroke: #d0c7b8; stroke-width: 2.5; }
       .c0 { fill: #dff6e8; }
       .c1 { fill: #eaf3d9; }
       .c2 { fill: #f7e8bd; }
       .c3 { fill: #f8d29b; }
       .c4 { fill: #f4ad82; }
       .c5 { fill: #ea7b67; }
-      .good-badge { fill: #d8f1e9; }
-      .bad-badge { fill: #fde3d2; }
+      .badge-good { fill: #d8f1e9; }
+      .badge-bad { fill: #fde3d2; }
     </style>
   </defs>
 
   <rect class="bg" width="1200" height="860" rx="24" />
   <rect class="panel" x="40" y="40" width="1120" height="780" rx="28" />
 
-  <text class="ink title" x="80" y="100">Where GPT-5.4 Still Broke on the Rerun</text>
-  <text class="muted subtitle" x="80" y="132">Failure counts out of 5 attacks for selected categories in the GPT-5.4 adaptive rerun.</text>
+  <text class="ink title" x="80" y="96">Where GPT-5.4 Still Broke on the Rerun</text>
+  <text class="muted subtitle" x="80" y="128">Failure counts out of 5 attacks for selected categories in the adaptive rerun. The alignment here separates the lingering weak spots from the operational-harm categories that went quiet.</text>
 
-  <rect class="bad-badge" x="80" y="160" width="220" height="36" rx="18" />
-  <text class="ink label" x="190" y="183" text-anchor="middle">still weak</text>
-  <rect class="good-badge" x="320" y="160" width="250" height="36" rx="18" />
-  <text class="ink label" x="445" y="183" text-anchor="middle">direct harm improved</text>
+  <rect class="badge-bad" x="80" y="156" width="128" height="34" rx="17" />
+  <text class="ink small center" x="144" y="173">still weak</text>
+  <rect class="badge-good" x="220" y="156" width="148" height="34" rx="17" />
+  <text class="ink small center" x="294" y="173">quiet on rerun</text>
 
-  <text class="ink header" x="670" y="230">Baseline</text>
-  <text class="ink header" x="815" y="230">Hydra</text>
-  <text class="ink header" x="960" y="230">Meta</text>
+  <g transform="translate(80 224)">
+    <text class="muted small" x="0" y="-10">Category</text>
+    <text class="muted small center" x="650" y="-10">Baseline</text>
+    <text class="muted small center" x="790" y="-10">Hydra</text>
+    <text class="muted small center" x="930" y="-10">Meta</text>
 
-  <g transform="translate(80 260)">
-    <text class="ink label" x="0" y="38">imitation</text>
-    <rect class="c3" x="560" y="0" width="110" height="56" rx="18" />
-    <text class="ink label" x="615" y="36" text-anchor="middle">3/5</text>
-    <rect class="c5" x="705" y="0" width="110" height="56" rx="18" />
-    <text class="ink label" x="760" y="36" text-anchor="middle">5/5</text>
-    <rect class="c5" x="850" y="0" width="110" height="56" rx="18" />
-    <text class="ink label" x="905" y="36" text-anchor="middle">5/5</text>
+    <text class="ink header center" x="650" y="22">Baseline</text>
+    <text class="ink header center" x="790" y="22">Hydra</text>
+    <text class="ink header center" x="930" y="22">Meta</text>
+    <line class="divider" x1="0" y1="42" x2="1000" y2="42" />
 
-    <text class="ink label" x="0" y="118">harmful:insults</text>
-    <rect class="c0" x="560" y="80" width="110" height="56" rx="18" />
-    <text class="ink label" x="615" y="116" text-anchor="middle">0/5</text>
-    <rect class="c4" x="705" y="80" width="110" height="56" rx="18" />
-    <text class="ink label" x="760" y="116" text-anchor="middle">4/5</text>
-    <rect class="c5" x="850" y="80" width="110" height="56" rx="18" />
-    <text class="ink label" x="905" y="116" text-anchor="middle">5/5</text>
+    <text class="muted small" x="0" y="78">Weak spots</text>
+    <rect class="rowband" x="0" y="94" width="1000" height="72" rx="18" />
+    <rect class="rowband" x="0" y="176" width="1000" height="72" rx="18" />
+    <rect class="rowband" x="0" y="258" width="1000" height="72" rx="18" />
+    <rect class="rowband" x="0" y="340" width="1000" height="72" rx="18" />
+    <rect class="rowband" x="0" y="422" width="1000" height="72" rx="18" />
+    <rect class="rowband" x="0" y="504" width="1000" height="72" rx="18" />
 
-    <text class="ink label" x="0" y="198">politics</text>
-    <rect class="c0" x="560" y="160" width="110" height="56" rx="18" />
-    <text class="ink label" x="615" y="196" text-anchor="middle">0/5</text>
-    <rect class="c0" x="705" y="160" width="110" height="56" rx="18" />
-    <text class="ink label" x="760" y="196" text-anchor="middle">0/5</text>
-    <rect class="c5" x="850" y="160" width="110" height="56" rx="18" />
-    <text class="ink label" x="905" y="196" text-anchor="middle">5/5</text>
+    <text class="ink label middle" x="24" y="130">Imitation</text>
+    <rect class="c3" x="590" y="106" width="120" height="48" rx="16" />
+    <rect class="c5" x="730" y="106" width="120" height="48" rx="16" />
+    <rect class="c5" x="870" y="106" width="120" height="48" rx="16" />
+    <text class="ink value center" x="650" y="130">3/5</text>
+    <text class="ink value center" x="790" y="130">5/5</text>
+    <text class="ink value center" x="930" y="130">5/5</text>
 
-    <text class="ink label" x="0" y="278">harmful:specialized-advice</text>
-    <rect class="c1" x="560" y="240" width="110" height="56" rx="18" />
-    <text class="ink label" x="615" y="276" text-anchor="middle">1/5</text>
-    <rect class="c3" x="705" y="240" width="110" height="56" rx="18" />
-    <text class="ink label" x="760" y="276" text-anchor="middle">3/5</text>
-    <rect class="c5" x="850" y="240" width="110" height="56" rx="18" />
-    <text class="ink label" x="905" y="276" text-anchor="middle">5/5</text>
+    <text class="ink label middle" x="24" y="212">Insults</text>
+    <rect class="c0" x="590" y="188" width="120" height="48" rx="16" />
+    <rect class="c4" x="730" y="188" width="120" height="48" rx="16" />
+    <rect class="c5" x="870" y="188" width="120" height="48" rx="16" />
+    <text class="ink value center" x="650" y="212">0/5</text>
+    <text class="ink value center" x="790" y="212">4/5</text>
+    <text class="ink value center" x="930" y="212">5/5</text>
 
-    <text class="ink label" x="0" y="358">contracts</text>
-    <rect class="c0" x="560" y="320" width="110" height="56" rx="18" />
-    <text class="ink label" x="615" y="356" text-anchor="middle">0/5</text>
-    <rect class="c3" x="705" y="320" width="110" height="56" rx="18" />
-    <text class="ink label" x="760" y="356" text-anchor="middle">3/5</text>
-    <rect class="c3" x="850" y="320" width="110" height="56" rx="18" />
-    <text class="ink label" x="905" y="356" text-anchor="middle">3/5</text>
+    <text class="ink label middle" x="24" y="294">Politics</text>
+    <rect class="c0" x="590" y="270" width="120" height="48" rx="16" />
+    <rect class="c0" x="730" y="270" width="120" height="48" rx="16" />
+    <rect class="c5" x="870" y="270" width="120" height="48" rx="16" />
+    <text class="ink value center" x="650" y="294">0/5</text>
+    <text class="ink value center" x="790" y="294">0/5</text>
+    <text class="ink value center" x="930" y="294">5/5</text>
 
-    <text class="ink label" x="0" y="438">coppa</text>
-    <rect class="c1" x="560" y="400" width="110" height="56" rx="18" />
-    <text class="ink label" x="615" y="436" text-anchor="middle">1/5</text>
-    <rect class="c3" x="705" y="400" width="110" height="56" rx="18" />
-    <text class="ink label" x="760" y="436" text-anchor="middle">3/5</text>
-    <rect class="c2" x="850" y="400" width="110" height="56" rx="18" />
-    <text class="ink label" x="905" y="436" text-anchor="middle">2/5</text>
+    <text class="ink label middle" x="24" y="376">Specialized advice</text>
+    <rect class="c1" x="590" y="352" width="120" height="48" rx="16" />
+    <rect class="c3" x="730" y="352" width="120" height="48" rx="16" />
+    <rect class="c5" x="870" y="352" width="120" height="48" rx="16" />
+    <text class="ink value center" x="650" y="376">1/5</text>
+    <text class="ink value center" x="790" y="376">3/5</text>
+    <text class="ink value center" x="930" y="376">5/5</text>
 
-    <line class="divider" x1="0" y1="500" x2="960" y2="500" />
+    <text class="ink label middle" x="24" y="458">Contracts</text>
+    <rect class="c0" x="590" y="434" width="120" height="48" rx="16" />
+    <rect class="c3" x="730" y="434" width="120" height="48" rx="16" />
+    <rect class="c3" x="870" y="434" width="120" height="48" rx="16" />
+    <text class="ink value center" x="650" y="458">0/5</text>
+    <text class="ink value center" x="790" y="458">3/5</text>
+    <text class="ink value center" x="930" y="458">3/5</text>
 
-    <text class="ink label" x="0" y="578">harmful:illegal-drugs</text>
-    <rect class="c0" x="560" y="540" width="110" height="56" rx="18" />
-    <text class="ink label" x="615" y="576" text-anchor="middle">0/5</text>
-    <rect class="c0" x="705" y="540" width="110" height="56" rx="18" />
-    <text class="ink label" x="760" y="576" text-anchor="middle">0/5</text>
-    <rect class="c0" x="850" y="540" width="110" height="56" rx="18" />
-    <text class="ink label" x="905" y="576" text-anchor="middle">0/5</text>
+    <text class="ink label middle" x="24" y="540">COPPA</text>
+    <rect class="c1" x="590" y="516" width="120" height="48" rx="16" />
+    <rect class="c3" x="730" y="516" width="120" height="48" rx="16" />
+    <rect class="c2" x="870" y="516" width="120" height="48" rx="16" />
+    <text class="ink value center" x="650" y="540">1/5</text>
+    <text class="ink value center" x="790" y="540">3/5</text>
+    <text class="ink value center" x="930" y="540">2/5</text>
 
-    <text class="ink label" x="0" y="658">harmful:child-exploitation</text>
-    <rect class="c0" x="560" y="620" width="110" height="56" rx="18" />
-    <text class="ink label" x="615" y="656" text-anchor="middle">0/5</text>
-    <rect class="c0" x="705" y="620" width="110" height="56" rx="18" />
-    <text class="ink label" x="760" y="656" text-anchor="middle">0/5</text>
-    <rect class="c0" x="850" y="620" width="110" height="56" rx="18" />
-    <text class="ink label" x="905" y="656" text-anchor="middle">0/5</text>
+    <line class="section-line" x1="0" y1="606" x2="1000" y2="606" />
+    <text class="muted small" x="0" y="636">Categories that went quiet</text>
+
+    <rect class="rowband" x="0" y="650" width="1000" height="72" rx="18" />
+    <rect class="rowband" x="0" y="732" width="1000" height="72" rx="18" />
+
+    <text class="ink label middle" x="24" y="686">Illegal drugs</text>
+    <rect class="c0" x="590" y="662" width="120" height="48" rx="16" />
+    <rect class="c0" x="730" y="662" width="120" height="48" rx="16" />
+    <rect class="c0" x="870" y="662" width="120" height="48" rx="16" />
+    <text class="ink value center" x="650" y="686">0/5</text>
+    <text class="ink value center" x="790" y="686">0/5</text>
+    <text class="ink value center" x="930" y="686">0/5</text>
+
+    <text class="ink label middle" x="24" y="768">Child exploitation</text>
+    <rect class="c0" x="590" y="744" width="120" height="48" rx="16" />
+    <rect class="c0" x="730" y="744" width="120" height="48" rx="16" />
+    <rect class="c0" x="870" y="744" width="120" height="48" rx="16" />
+    <text class="ink value center" x="650" y="768">0/5</text>
+    <text class="ink value center" x="790" y="768">0/5</text>
+    <text class="ink value center" x="930" y="768">0/5</text>
   </g>
 
-  <g transform="translate(800 755)">
+  <g transform="translate(804 170)">
     <text class="muted small" x="0" y="0">Legend</text>
-    <rect class="c0" x="56" y="-18" width="28" height="18" rx="8" />
-    <text class="muted small" x="91" y="-4">0/5</text>
-    <rect class="c2" x="130" y="-18" width="28" height="18" rx="8" />
-    <text class="muted small" x="165" y="-4">2/5</text>
-    <rect class="c3" x="204" y="-18" width="28" height="18" rx="8" />
-    <text class="muted small" x="239" y="-4">3/5</text>
-    <rect class="c5" x="278" y="-18" width="28" height="18" rx="8" />
-    <text class="muted small" x="313" y="-4">5/5</text>
+    <rect class="c0" x="56" y="-18" width="24" height="16" rx="8" />
+    <text class="muted small" x="88" y="-5">0/5</text>
+    <rect class="c2" x="130" y="-18" width="24" height="16" rx="8" />
+    <text class="muted small" x="162" y="-5">2/5</text>
+    <rect class="c3" x="204" y="-18" width="24" height="16" rx="8" />
+    <text class="muted small" x="236" y="-5">3/5</text>
+    <rect class="c5" x="278" y="-18" width="24" height="16" rx="8" />
+    <text class="muted small" x="310" y="-5">5/5</text>
   </g>
 </svg>

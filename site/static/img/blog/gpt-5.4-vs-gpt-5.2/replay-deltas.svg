@@ -1,82 +1,96 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 820" role="img" aria-labelledby="title desc">
-  <title id="title">Frozen replay category deltas</title>
-  <desc id="desc">A diverging bar chart showing category-level deltas between GPT-5.4 and GPT-5.2 on identical prompts. Positive means GPT-5.4 failed more often.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 840" role="img" aria-labelledby="title desc">
+  <title id="title">Frozen replay delta chart</title>
+  <desc id="desc">A diverging bar chart showing how category failure rates shifted on exact replay prompts. Positive bars are regressions for GPT-5.4 and negative bars are improvements.</desc>
   <defs>
     <style>
-      .bg { fill: #f7f2e8; }
-      .panel { fill: #fffaf2; stroke: #d8cfbf; stroke-width: 2; }
+      .bg { fill: #f6f1e7; }
+      .panel { fill: #fffaf3; stroke: #d9cfbe; stroke-width: 2; }
       .ink { fill: #1f2937; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
       .muted { fill: #667085; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-      .title { font-size: 30px; font-weight: 700; }
+      .title { font-size: 32px; font-weight: 700; }
       .subtitle { font-size: 16px; }
       .label { font-size: 17px; font-weight: 600; }
       .small { font-size: 13px; }
-      .axis { stroke: #cfd4dc; stroke-width: 1; }
-      .zero { stroke: #1f2937; stroke-width: 2; }
+      .value { fill: #fffaf3; font-size: 14px; font-weight: 700; }
+      .middle { dominant-baseline: middle; }
+      .center { text-anchor: middle; dominant-baseline: middle; }
+      .axis { stroke: #d0d6dd; stroke-width: 1; }
+      .zero { stroke: #1f2937; stroke-width: 2.5; }
+      .rowline { stroke: #ebe3d6; stroke-width: 1.5; }
       .regress { fill: #d06a33; }
       .improve { fill: #0f766e; }
-      .chip-bad { fill: #fde3d2; }
-      .chip-good { fill: #d8f1e9; }
+      .badge-good { fill: #d8f1e9; }
+      .badge-bad { fill: #fde3d2; }
     </style>
   </defs>
 
-  <rect class="bg" width="1200" height="820" rx="24" />
-  <rect class="panel" x="40" y="40" width="1120" height="740" rx="28" />
+  <rect class="bg" width="1200" height="840" rx="24" />
+  <rect class="panel" x="40" y="40" width="1120" height="760" rx="28" />
 
   <text class="ink title" x="80" y="98">Frozen Replay Shift Map</text>
-  <text class="muted subtitle" x="80" y="130">Delta is GPT-5.4 minus GPT-5.2 on the exact same prompts. Positive means GPT-5.4 failed more often.</text>
+  <text class="muted subtitle" x="80" y="130">Delta is GPT-5.4 minus GPT-5.2 on the exact same prompts. Right means GPT-5.4 failed more often. Left means it improved.</text>
 
-  <rect class="chip-good" x="80" y="156" width="154" height="36" rx="18" />
-  <text class="ink label" x="157" y="179" text-anchor="middle">improvement</text>
-  <rect class="chip-bad" x="252" y="156" width="144" height="36" rx="18" />
-  <text class="ink label" x="324" y="179" text-anchor="middle">regression</text>
+  <rect class="badge-good" x="80" y="156" width="120" height="34" rx="17" />
+  <text class="ink small center" x="140" y="173">improvement</text>
+  <rect class="badge-bad" x="214" y="156" width="112" height="34" rx="17" />
+  <text class="ink small center" x="270" y="173">regression</text>
 
-  <g transform="translate(140 240)">
-    <line class="axis" x1="160" y1="0" x2="860" y2="0" />
-    <line class="axis" x1="160" y1="500" x2="860" y2="500" />
-    <line class="axis" x1="335" y1="0" x2="335" y2="500" />
-    <line class="axis" x1="510" y1="0" x2="510" y2="500" />
-    <line class="axis" x1="685" y1="0" x2="685" y2="500" />
-    <line class="zero" x1="510" y1="-20" x2="510" y2="540" />
+  <g transform="translate(90 230)">
+    <text class="muted small" x="0" y="-12">Category / strategy</text>
+    <text class="muted small center" x="360" y="-12">-80pp</text>
+    <text class="muted small center" x="520" y="-12">-40pp</text>
+    <text class="muted small center" x="680" y="-12">0</text>
+    <text class="muted small center" x="840" y="-12">+40pp</text>
+    <text class="muted small center" x="1000" y="-12">+80pp</text>
 
-    <text class="muted small" x="160" y="-10">-80pp</text>
-    <text class="muted small" x="335" y="-10">-40pp</text>
-    <text class="muted small" x="500" y="-10">0</text>
-    <text class="muted small" x="682" y="-10">+40pp</text>
-    <text class="muted small" x="850" y="-10">+80pp</text>
+    <line class="axis" x1="360" y1="0" x2="1000" y2="0" />
+    <line class="axis" x1="360" y1="544" x2="1000" y2="544" />
+    <line class="axis" x1="360" y1="0" x2="360" y2="544" />
+    <line class="axis" x1="520" y1="0" x2="520" y2="544" />
+    <line class="zero" x1="680" y1="-20" x2="680" y2="564" />
+    <line class="axis" x1="840" y1="0" x2="840" y2="544" />
+    <line class="axis" x1="1000" y1="0" x2="1000" y2="544" />
 
-    <text class="ink label" x="0" y="38">politics / Meta</text>
-    <rect class="regress" x="510" y="10" width="350" height="34" rx="17" />
-    <text class="ink label" x="875" y="33">+80pp</text>
+    <line class="rowline" x1="0" y1="68" x2="1040" y2="68" />
+    <line class="rowline" x1="0" y1="136" x2="1040" y2="136" />
+    <line class="rowline" x1="0" y1="204" x2="1040" y2="204" />
+    <line class="rowline" x1="0" y1="272" x2="1040" y2="272" />
+    <line class="rowline" x1="0" y1="340" x2="1040" y2="340" />
+    <line class="rowline" x1="0" y1="428" x2="1040" y2="428" />
+    <line class="rowline" x1="0" y1="496" x2="1040" y2="496" />
 
-    <text class="ink label" x="0" y="98">harmful:profanity / Meta</text>
-    <rect class="regress" x="510" y="70" width="350" height="34" rx="17" />
-    <text class="ink label" x="875" y="93">+80pp</text>
+    <text class="ink label middle" x="0" y="34">Politics / Meta</text>
+    <rect class="regress" x="680" y="16" width="320" height="36" rx="18" />
+    <text class="value center" x="952" y="34">+80pp</text>
 
-    <text class="ink label" x="0" y="158">imitation / baseline</text>
-    <rect class="regress" x="510" y="130" width="262.5" height="34" rx="17" />
-    <text class="ink label" x="787.5" y="153">+60pp</text>
+    <text class="ink label middle" x="0" y="102">Profanity / Meta</text>
+    <rect class="regress" x="680" y="84" width="320" height="36" rx="18" />
+    <text class="value center" x="952" y="102">+80pp</text>
 
-    <text class="ink label" x="0" y="218">harmful:harassment-bullying / Meta</text>
-    <rect class="regress" x="510" y="190" width="262.5" height="34" rx="17" />
-    <text class="ink label" x="787.5" y="213">+60pp</text>
+    <text class="ink label middle" x="0" y="170">Imitation / Baseline</text>
+    <rect class="regress" x="680" y="152" width="240" height="36" rx="18" />
+    <text class="value center" x="886" y="170">+60pp</text>
 
-    <text class="ink label" x="0" y="278">harmful:insults / Meta</text>
-    <rect class="regress" x="510" y="250" width="262.5" height="34" rx="17" />
-    <text class="ink label" x="787.5" y="273">+60pp</text>
+    <text class="ink label middle" x="0" y="238">Harassment / Meta</text>
+    <rect class="regress" x="680" y="220" width="240" height="36" rx="18" />
+    <text class="value center" x="886" y="238">+60pp</text>
 
-    <text class="ink label" x="0" y="378">pii:direct / Hydra</text>
-    <rect class="improve" x="335" y="350" width="175" height="34" rx="17" />
-    <text class="ink label" x="320" y="373" text-anchor="end">-40pp</text>
+    <text class="ink label middle" x="0" y="306">Insults / Meta</text>
+    <rect class="regress" x="680" y="288" width="240" height="36" rx="18" />
+    <text class="value center" x="886" y="306">+60pp</text>
 
-    <text class="ink label" x="0" y="438">harmful:misinformation-disinformation / Meta</text>
-    <rect class="improve" x="422.5" y="410" width="87.5" height="34" rx="17" />
-    <text class="ink label" x="407.5" y="433" text-anchor="end">-20pp</text>
+    <text class="ink label middle" x="0" y="394">PII / Hydra</text>
+    <rect class="improve" x="520" y="376" width="160" height="36" rx="18" />
+    <text class="value center" x="598" y="394">-40pp</text>
 
-    <text class="ink label" x="0" y="498">contracts / Meta</text>
-    <rect class="improve" x="422.5" y="470" width="87.5" height="34" rx="17" />
-    <text class="ink label" x="407.5" y="493" text-anchor="end">-20pp</text>
+    <text class="ink label middle" x="0" y="462">Misinformation / Meta</text>
+    <rect class="improve" x="600" y="444" width="80" height="36" rx="18" />
+    <text class="value center" x="640" y="462">-20pp</text>
+
+    <text class="ink label middle" x="0" y="530">Contracts / Meta</text>
+    <rect class="improve" x="600" y="512" width="80" height="36" rx="18" />
+    <text class="value center" x="640" y="530">-20pp</text>
   </g>
 
-  <text class="muted small" x="80" y="742">Read left as improvements and right as regressions. The replay got stricter on a few categories, but the biggest moves were new regressions in politics, profanity, imitation, and harassment.</text>
+  <text class="muted small" x="80" y="758">The replay tightened a few categories, but the biggest moves were new regressions in politics, profanity, imitation, harassment, and insults.</text>
 </svg>
