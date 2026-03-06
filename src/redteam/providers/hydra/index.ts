@@ -158,10 +158,10 @@ export class HydraProvider implements ApiProvider {
       logger.debug('[Hydra] Backtracking disabled in stateful mode');
     }
 
-    // Hydra strategy requires cloud
+    // Hydra strategy requires remote generation
     if (!shouldGenerateRemote()) {
       throw new Error(
-        'jailbreak:hydra strategy requires cloud access. Set PROMPTFOO_REMOTE_GENERATION_URL or log into Promptfoo Cloud.',
+        'jailbreak:hydra strategy requires remote generation, which is currently disabled (commonly because OPENAI_API_KEY is set). To fix, unset OPENAI_API_KEY, set PROMPTFOO_REMOTE_GENERATION_URL, or log into Promptfoo Cloud.',
       );
     }
 

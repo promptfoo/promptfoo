@@ -650,10 +650,10 @@ class RedteamIterativeMetaProvider implements ApiProvider {
     );
     this.perTurnLayers = (config._perTurnLayers as LayerConfig[]) ?? [];
 
-    // Meta-agent strategy requires cloud
+    // Meta-agent strategy requires remote generation
     if (!shouldGenerateRemote()) {
       throw new Error(
-        'jailbreak:meta strategy requires cloud access. Set PROMPTFOO_REMOTE_GENERATION_URL or log into Promptfoo Cloud.',
+        'jailbreak:meta strategy requires remote generation, which is currently disabled (commonly because OPENAI_API_KEY is set). To fix, unset OPENAI_API_KEY, set PROMPTFOO_REMOTE_GENERATION_URL, or log into Promptfoo Cloud.',
       );
     }
 

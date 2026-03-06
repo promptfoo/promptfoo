@@ -1118,5 +1118,45 @@ describe('DataTable', () => {
       const expandedTd = expandedContent.closest('td');
       expect(expandedTd).toHaveAttribute('colspan', '3');
     });
+
+    it('should render expanded content spanning only visible columns', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          renderSubComponent={renderSubComponent}
+          initialColumnVisibility={{ expand: false }}
+        />,
+      );
+
+      const table = screen.getByRole('table');
+      const rows = table.querySelectorAll('tbody tr');
+      await user.click(rows[0]);
+
+      const expandedContent = screen.getByTestId('expanded-1');
+      const expandedTd = expandedContent.closest('td');
+      expect(expandedTd).toHaveAttribute('colspan', '2');
+    });
+
+    it('should allow overriding the expanded row background', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          renderSubComponent={renderSubComponent}
+          expandedRowClassName="bg-transparent"
+        />,
+      );
+
+      const expandButtons = screen.getAllByRole('button', { name: /expand row/i });
+      await user.click(expandButtons[0]);
+
+      const expandedRow = screen.getByTestId('expanded-1').closest('tr');
+      expect(expandedRow).toHaveClass('bg-transparent');
+    });
   });
 });
