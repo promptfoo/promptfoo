@@ -2,6 +2,11 @@
  * Mock airline booking function callbacks
  * All functions receive JSON string arguments and return JSON string responses
  */
+const { randomBytes } = require('crypto');
+
+function generateCertificateId() {
+  return `COMP${randomBytes(4).toString('hex').toUpperCase()}`;
+}
 
 function getUserProfile(args) {
   try {
@@ -230,7 +235,7 @@ function offerCompensation(args) {
     const compensation = {
       compensation_type: 'travel_certificate',
       amount: issue_type === 'cancelled_flight' ? 400 : 200,
-      certificate_id: 'COMP' + Math.random().toString(36).substr(2, 8).toUpperCase(),
+      certificate_id: generateCertificateId(),
       expiry_date: '2025-05-20',
       terms: 'Valid for future bookings, non-transferable',
     };

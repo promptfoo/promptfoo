@@ -63,7 +63,9 @@ const mockFetchWithProxy = vi.mocked(fetchWithProxy);
 describe('init command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFetchWithProxy.mockClear();
+    mockFetchWithProxy.mockReset();
+    vi.mocked(confirm).mockReset();
+    vi.mocked(select).mockReset();
   });
 
   afterEach(() => {
@@ -414,9 +416,9 @@ describe('init command', () => {
           .mockResolvedValueOnce(mockFileResponse);
 
         vi.mocked(select).mockResolvedValue('provider-opencode-sdk/basic');
-        vi.spyOn(fs, 'readdir').mockResolvedValue(
-          ['promptfooconfig.yaml'] as unknown as Awaited<ReturnType<typeof fs.readdir>>,
-        );
+        vi.spyOn(fs, 'readdir').mockResolvedValue(['promptfooconfig.yaml'] as unknown as Awaited<
+          ReturnType<typeof fs.readdir>
+        >);
         vi.spyOn(fs, 'access').mockImplementation(async (targetPath) => {
           if (targetPath.toString().endsWith('README.md')) {
             throw new Error('ENOENT');

@@ -11,6 +11,7 @@
   "license": "MIT",
   "dependencies": {
     "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
     "promptfoo": "^0.120.17"
   }
 }

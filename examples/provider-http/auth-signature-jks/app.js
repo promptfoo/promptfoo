@@ -3,9 +3,17 @@ const { providers } = require('promptfoo');
 const crypto = require('crypto');
 const fs = require('fs');
 const jks = require('jks-js');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 app.use(express.json());
+
+const chatRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Add signature validation configuration for JKS
 const SIGNATURE_CONFIG = {
@@ -87,7 +95,7 @@ function validateSignature(req, res, next) {
   }
 }
 
-app.post('/chat', validateSignature, async (req, res) => {
+app.post('/chat', chatRateLimiter, validateSignature, async (req, res) => {
   try {
     return res.json({ message: 'hello from JKS authenticated endpoint' });
   } catch (error) {

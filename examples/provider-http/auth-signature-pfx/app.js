@@ -3,9 +3,17 @@ const https = require('https');
 const fs = require('fs');
 const crypto = require('crypto');
 const pem = require('pem');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 app.use(express.json());
+
+const chatRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Add signature validation configuration for PFX
 const SIGNATURE_CONFIG = {
@@ -100,7 +108,7 @@ function validateSignature(req, res, next) {
   }
 }
 
-app.post('/chat', validateSignature, async (req, res) => {
+app.post('/chat', chatRateLimiter, validateSignature, async (req, res) => {
   try {
     return res.json({ message: 'hello from PFX authenticated endpoint' });
   } catch (error) {
