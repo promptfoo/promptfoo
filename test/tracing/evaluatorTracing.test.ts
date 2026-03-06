@@ -10,6 +10,7 @@ import {
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from '../../src/tracing/evaluatorTracing';
+import { TestSuiteSchema } from '../../src/types/index';
 
 import type { TestCase, TestSuite } from '../../src/types/index';
 
@@ -165,6 +166,31 @@ describe('evaluatorTracing', () => {
       expect(result!.evaluationId).toBeUndefined();
       expect(result!.testCaseId).toBe('3-7');
       expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('tracing schema defaults', () => {
+    it('should accept OTLP HTTP tracing config without explicit port or acceptFormats', () => {
+      const parsed = TestSuiteSchema.parse({
+        providers: [],
+        prompts: [],
+        tests: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+            },
+          },
+        },
+      });
+
+      expect(parsed.tracing?.otlp?.http).toEqual({
+        enabled: true,
+        port: 4318,
+        host: '127.0.0.1',
+        acceptFormats: ['json'],
+      });
     });
   });
 

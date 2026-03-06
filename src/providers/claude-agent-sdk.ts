@@ -5,7 +5,7 @@ import path from 'node:path';
 import dedent from 'dedent';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
-import { importModule, resolvePackageEntryPoint } from '../esm';
+import { getDirectory, importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
 import { getTraceparent, withGenAISpan } from '../tracing/genaiTracer';
 import { cacheResponse, getCachedResponse, initializeAgenticCache } from './agentic-utils';
@@ -84,10 +84,23 @@ export const CLAUDE_CODE_MODEL_ALIASES = [
  * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
  */
 async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-agent-sdk')> {
-  const basePath =
-    cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
+  const preferredBasePath =
+    cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : undefined;
+  const installBasePath = path.resolve(getDirectory(), '..');
+  const resolutionBasePaths = Array.from(
+    new Set([preferredBasePath, process.cwd(), installBasePath].filter(Boolean)),
+  ) as string[];
 
-  const claudeCodePath = resolvePackageEntryPoint('@anthropic-ai/claude-agent-sdk', basePath);
+  let claudeCodePath: string | null = null;
+  for (const basePath of resolutionBasePaths) {
+    claudeCodePath = resolvePackageEntryPoint('@anthropic-ai/claude-agent-sdk', basePath);
+    if (claudeCodePath) {
+      if (basePath !== preferredBasePath) {
+        logger.debug(`[ClaudeAgentSDK] Resolved SDK using fallback base path: ${basePath}`);
+      }
+      break;
+    }
+  }
 
   if (!claudeCodePath) {
     throw new Error(

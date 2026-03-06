@@ -419,6 +419,25 @@ describe('ClaudeCodeSDKProvider', () => {
         );
       });
 
+      it('should fall back from config basePath to the promptfoo install root when resolving the SDK package', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Fallback resolution response'));
+
+        const { resolvePackageEntryPoint } = await import('../../src/esm');
+        vi.mocked(resolvePackageEntryPoint)
+          .mockReturnValueOnce(null)
+          .mockReturnValue('@anthropic-ai/claude-agent-sdk');
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('Fallback resolution response');
+        expect(resolvePackageEntryPoint).toHaveBeenCalledTimes(2);
+        expect(vi.mocked(resolvePackageEntryPoint).mock.calls[0][1]).toBe('/test/basePath');
+        expect(vi.mocked(resolvePackageEntryPoint).mock.calls[1][1]).toBe(process.cwd());
+      });
+
       it('should inject deep tracing env using the provider span context and preserve resource attributes', async () => {
         mockQuery.mockReturnValue(createMockResponse('Traced response'));
 
