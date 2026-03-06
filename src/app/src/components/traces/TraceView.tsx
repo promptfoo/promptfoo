@@ -120,11 +120,17 @@ export default function TraceView({
           <AlertContent>
             <AlertTitle>No spans received</AlertTitle>
             <AlertDescription>
-              <p>Traces were created but no spans were received. Make sure your provider is:</p>
+              <p>Traces were created but no spans were recorded. Common causes:</p>
               <ul className="mt-2 ml-4 list-disc space-y-1">
-                <li>Configured to send traces to the OTLP endpoint (http://localhost:4318)</li>
-                <li>Creating spans within the trace context</li>
-                <li>Properly exporting spans before the evaluation completes</li>
+                <li>Local span export is disabled (check `PROMPTFOO_OTEL_LOCAL_EXPORT`)</li>
+                <li>
+                  Your provider is not emitting OpenTelemetry spans (custom providers must create
+                  spans and propagate `traceparent`)
+                </li>
+                <li>
+                  Out-of-process spans are not reaching Promptfoo&apos;s OTLP receiver (default
+                  `http://localhost:4318/v1/traces`)
+                </li>
               </ul>
             </AlertDescription>
           </AlertContent>

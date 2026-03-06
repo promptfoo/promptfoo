@@ -5,6 +5,15 @@ import * as configModule from '../../../src/util/config/load';
 
 import type { RedteamCliGenerateOptions } from '../../../src/redteam/types';
 
+// Prevent interactive email prompts in generate flow.
+vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  checkEmailStatusAndMaybeExit: vi.fn().mockResolvedValue('ok'),
+  getAuthor: vi.fn().mockReturnValue(null),
+  getUserEmail: vi.fn().mockReturnValue(null),
+  promptForEmailUnverified: vi.fn().mockResolvedValue({ emailNeedsValidation: false }),
+}));
+
 vi.mock('../../../src/redteam', async (importOriginal) => {
   return {
     ...(await importOriginal()),
