@@ -66,6 +66,11 @@ describe('init command', () => {
     mockFetchWithProxy.mockReset();
     vi.mocked(confirm).mockReset();
     vi.mocked(select).mockReset();
+    vi.mocked(fs.access).mockReset();
+    vi.mocked(fs.mkdir).mockReset();
+    vi.mocked(fs.readdir).mockReset();
+    vi.mocked(fs.rm).mockReset();
+    vi.mocked(fs.writeFile).mockReset();
   });
 
   afterEach(() => {
