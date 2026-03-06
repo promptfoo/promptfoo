@@ -368,7 +368,7 @@ Meta Llama API has strong data commitments:
 
 ## Examples
 
-Check out the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples/llama-api) for:
+Check out the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-llama-cpp) for:
 
 - **Basic chat**: Simple text generation
 - **Multimodal**: Image understanding tasks

@@ -110,10 +110,14 @@
     },
     "@isaacs/brace-expansion": ">=5.0.1",
     "fast-xml-parser": "$fast-xml-parser",
-    "minimatch@<=3.1.3": "3.1.5"
+    "minimatch@<=3.1.3": "3.1.5",
+    "dompurify": ">=3.3.2",
+    "monaco-editor": {
+      "dompurify": ">=3.3.2"
+    }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.63",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.68",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.990.0",
     "@aws-sdk/client-bedrock-runtime": "^3.990.0",
     "@aws-sdk/client-s3": "^3.990.0",
@@ -162,7 +166,7 @@
     "playwright-extra": "^4.3.6",
     "prettier": "^3.8.1",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "read-excel-file": "^7.0.0",
+    "read-excel-file": "^7.0.1",
     "sharp": "^0.34.5",
     "shx": "^0.4.0",
     "source-map-support": "^0.5.21",
@@ -174,7 +178,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.63",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.68",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.990.0",
     "@aws-sdk/client-bedrock-runtime": "^3.990.0",
     "@aws-sdk/client-s3": "^3.990.0",
@@ -188,7 +192,7 @@
     "@huggingface/transformers": "^3.8.1",
     "@ibm-cloud/watsonx-ai": "^1.7.8",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
-    "@openai/codex-sdk": "^0.107.0",
+    "@openai/codex-sdk": "^0.110.0",
     "@playwright/browser-chromium": "^1.58.2",
     "@rollup/rollup-linux-x64-gnu": "^4.59.0",
     "@slack/web-api": "^7.14.1",
@@ -209,12 +213,12 @@
     "playwright": "^1.58.2",
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "read-excel-file": "^7.0.0",
+    "read-excel-file": "^7.0.1",
     "sharp": "^0.34.5"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
-    "@apidevtools/json-schema-ref-parser": "^15.2.2",
+    "@apidevtools/json-schema-ref-parser": "^15.3.1",
     "@googleapis/sheets": "^13.0.1",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
@@ -223,7 +227,7 @@
     "@inquirer/input": "^5.0.8",
     "@inquirer/select": "^5.1.0",
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "@openai/agents": "^0.5.3",
+    "@openai/agents": "^0.5.4",
     "@opencode-ai/sdk": "^1.2.9",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.5.1",

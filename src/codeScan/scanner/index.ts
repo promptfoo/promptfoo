@@ -25,7 +25,7 @@ import { resolveAuthCredentials } from '../util/auth';
 import { parseGitHubPr } from '../util/github';
 import { type CleanupRefs, registerCleanupHandlers } from './cleanup';
 import { createSpinner, displayScanResults } from './output';
-import { buildScanRequest, executeScanRequest } from './request';
+import { buildScanRequest, executeScanRequestWithRetry } from './request';
 
 import type { PullRequestContext, ScanResponse } from '../../types/codeScan';
 import type { Config } from '../config/schema';
@@ -262,7 +262,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
 
     const scanRequest = buildScanRequest(files, metadata, config, sessionId, pullRequest, guidance);
 
-    const scanResponse = await executeScanRequest(client, scanRequest, {
+    const scanResponse = await executeScanRequestWithRetry(client, scanRequest, {
       showSpinner,
       spinner,
       abortController,

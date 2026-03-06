@@ -164,17 +164,18 @@ The `approval_policy` parameter controls when user approval is required:
 
 ## Models
 
-The SDK supports various OpenAI models. Use `gpt-5.3-codex` for current code generation tasks:
+The SDK supports various OpenAI models. Use `gpt-5.4` for the latest frontier model:
 
 ```yaml
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.3-codex # Recommended for code tasks
+      model: gpt-5.4 # Recommended for code tasks
 ```
 
 Supported models include:
 
+- **GPT-5.4** - Frontier model for professional work (`gpt-5.4`)
 - **GPT-5.3 Codex** - Latest codex generation (`gpt-5.3-codex`, `gpt-5.3-codex-spark`)
 - **GPT-5.2** - Current GPT-5.2 line (`gpt-5.2`, `gpt-5.2-codex`)
 - **GPT-5.1 Codex** - Optimized for code generation (`gpt-5.1-codex`, `gpt-5.1-codex-max`, `gpt-5.1-codex-mini`)
@@ -449,14 +450,14 @@ providers:
 
 Available levels vary by model:
 
-| Level     | Description                          | Supported Models           |
-| --------- | ------------------------------------ | -------------------------- |
-| `none`    | No reasoning overhead                | gpt-5.2 only               |
-| `minimal` | SDK alias for minimal reasoning      | All models                 |
-| `low`     | Light reasoning, faster responses    | All models                 |
-| `medium`  | Balanced (default)                   | All models                 |
-| `high`    | Thorough reasoning for complex tasks | All models                 |
-| `xhigh`   | Maximum reasoning depth              | gpt-5.2, gpt-5.1-codex-max |
+| Level     | Description                          | Supported Models                    |
+| --------- | ------------------------------------ | ----------------------------------- |
+| `none`    | No reasoning overhead                | gpt-5.4, gpt-5.2                    |
+| `minimal` | SDK alias for minimal reasoning      | All models                          |
+| `low`     | Light reasoning, faster responses    | All models                          |
+| `medium`  | Balanced (default)                   | All models                          |
+| `high`    | Thorough reasoning for complex tasks | All models                          |
+| `xhigh`   | Maximum reasoning depth              | gpt-5.4, gpt-5.2, gpt-5.1-codex-max |
 
 ## Additional Directories
 
@@ -651,7 +652,7 @@ Choose based on your use case:
 See the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk) for complete implementations:
 
 - [Basic usage](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/basic) - Simple code generation
-- [Agentic SDK comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/agentic-sdk-comparison) - Side-by-side comparison with Claude Agent SDK
+- [Agentic SDK comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-agentic-sdks) - Side-by-side comparison with Claude Agent SDK
 
 ## See Also
 

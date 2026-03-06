@@ -295,6 +295,6 @@ See [Sandboxed code evals](/docs/guides/sandboxed-code-evals) for container-base
 
 - [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk)
 - [Claude Agent SDK provider](/docs/providers/claude-agent-sdk)
-- [Agentic SDK comparison example](https://github.com/promptfoo/promptfoo/tree/main/examples/agentic-sdk-comparison)
+- [Agentic SDK comparison example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-agentic-sdks)
 - [Sandboxed code evals](/docs/guides/sandboxed-code-evals)
 - [Tracing](/docs/tracing/)

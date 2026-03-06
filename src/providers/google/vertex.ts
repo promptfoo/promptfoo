@@ -11,10 +11,16 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
-import { parseMessages } from '../anthropic/util';
+import {
+  calculateAnthropicCost,
+  getTokenUsage,
+  outputFromMessage,
+  parseMessages,
+} from '../anthropic/util';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
+  calculateGoogleCost,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
@@ -34,7 +40,7 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/index';
-import type { ClaudeRequest, ClaudeResponse } from './types';
+import type { ClaudeRequest, ClaudeResponse, ClaudeThinkingConfig } from './types';
 import type {
   GeminiApiResponse,
   GeminiErrorResponse,
@@ -218,22 +224,54 @@ export class VertexChatProvider extends GoogleGenericProvider {
   }
 
   async callClaudeApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
-    const { system, extractedMessages } = parseMessages(prompt);
+    // Support YAML chat prompts (legacy format used by parseChatPrompt)
+    let normalizedPrompt = prompt;
+    if (prompt.trim().startsWith('- role:')) {
+      try {
+        const yaml = await import('js-yaml');
+        const parsed = yaml.default.load(prompt);
+        normalizedPrompt = JSON.stringify(parsed);
+      } catch (err) {
+        return { error: `Chat Completion prompt is not a valid YAML string: ${err}` };
+      }
+    }
+
+    const { system, extractedMessages, thinking } = parseMessages(normalizedPrompt);
+
+    const thinkingConfig: ClaudeThinkingConfig | undefined =
+      this.config.thinking || (thinking as ClaudeThinkingConfig | undefined);
+    const isThinkingEnabled = thinkingConfig?.type === 'enabled';
+
+    let maxTokens = this.config.max_tokens || this.config.maxOutputTokens || 0;
+    if (!maxTokens) {
+      maxTokens = isThinkingEnabled ? 2048 : 512;
+    }
+    // Claude requires max_tokens >= budget_tokens when thinking is enabled
+    if (
+      isThinkingEnabled &&
+      thinkingConfig?.budget_tokens &&
+      maxTokens < thinkingConfig.budget_tokens
+    ) {
+      maxTokens = thinkingConfig.budget_tokens + 1024;
+    }
 
     const body: ClaudeRequest = {
       anthropic_version:
         this.config.anthropicVersion || this.config.anthropic_version || 'vertex-2023-10-16',
       stream: false,
-      max_tokens: this.config.max_tokens || this.config.maxOutputTokens || 512,
+      max_tokens: maxTokens,
       temperature: this.config.temperature,
       top_p: this.config.top_p || this.config.topP,
       top_k: this.config.top_k || this.config.topK,
       ...(system ? { system } : {}),
+      ...(thinkingConfig ? { thinking: thinkingConfig } : {}),
       messages: extractedMessages as ClaudeRequest['messages'],
     };
 
+    const showThinking = this.config.showThinking ?? isThinkingEnabled;
+
     const cache = await getCache();
-    const cacheKey = `vertex:claude:${this.modelName}:${JSON.stringify(body)}`;
+    const cacheKey = `vertex:claude:${this.modelName}:showThinking=${showThinking}:${JSON.stringify(body)}`;
 
     let cachedResponse;
     if (isCacheEnabled()) {
@@ -281,15 +319,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     try {
-      // Extract the text from the response
-      let output = '';
-      if (data.content && data.content.length > 0) {
-        for (const part of data.content) {
-          if (part.type === 'text') {
-            output += part.text;
-          }
-        }
-      }
+      const output = outputFromMessage(data as any, showThinking);
 
       if (!output) {
         return {
@@ -297,18 +327,24 @@ export class VertexChatProvider extends GoogleGenericProvider {
         };
       }
 
-      // Extract token usage information
       const tokenUsage: TokenUsage = {
-        total: data.usage.input_tokens + data.usage.output_tokens || 0,
-        prompt: data.usage.input_tokens || 0,
-        completion: data.usage.output_tokens || 0,
+        ...getTokenUsage(data, false),
         numRequests: 1,
       };
+
+      // Normalize Vertex model names (e.g. claude-3-5-sonnet-v2@20241022 → claude-3-5-sonnet-20241022)
+      const normalizedModelName = this.modelName.replace(/-v\d+@/, '-').replace('@', '-');
 
       const response = {
         cached: false,
         output,
         tokenUsage,
+        cost: calculateAnthropicCost(
+          normalizedModelName,
+          this.config,
+          data.usage?.input_tokens,
+          data.usage?.output_tokens,
+        ),
       };
 
       if (isCacheEnabled()) {
@@ -632,22 +668,39 @@ export class VertexChatProvider extends GoogleGenericProvider {
         }
 
         const lastData = dataWithResponse[dataWithResponse.length - 1];
+        const promptTokenCount = lastData.usageMetadata?.promptTokenCount;
+        const completionTokenCount = lastData.usageMetadata?.candidatesTokenCount;
+        const thoughtsTokenCount = lastData.usageMetadata?.thoughtsTokenCount;
         const tokenUsage = {
           total: lastData.usageMetadata?.totalTokenCount || 0,
-          prompt: lastData.usageMetadata?.promptTokenCount || 0,
-          completion: lastData.usageMetadata?.candidatesTokenCount || 0,
-          ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
+          prompt: promptTokenCount || 0,
+          completion: completionTokenCount || 0,
+          ...(thoughtsTokenCount !== undefined && {
             completionDetails: {
-              reasoning: lastData.usageMetadata.thoughtsTokenCount,
+              reasoning: thoughtsTokenCount,
               acceptedPrediction: 0,
               rejectedPrediction: 0,
             },
           }),
         };
+        // Include thinking tokens in output cost - Google bills them as output tokens
+        const completionForCost =
+          completionTokenCount != null
+            ? completionTokenCount + (thoughtsTokenCount ?? 0)
+            : undefined;
+        const cost = calculateGoogleCost(
+          this.modelName,
+          config,
+          promptTokenCount,
+          completionForCost,
+          true,
+        );
+
         response = {
           cached: false,
           output,
           tokenUsage,
+          cost,
           metadata: {},
         };
 
@@ -713,9 +766,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
           }
           if (results.length > 0) {
             response = {
-              cached: response.cached,
+              ...response,
               output: results.join('\n'),
-              tokenUsage: response.tokenUsage,
             };
           }
         }

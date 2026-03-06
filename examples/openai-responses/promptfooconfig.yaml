@@ -5,8 +5,8 @@ prompts:
 
 providers:
   # GPT-5 models showcasing latest capabilities
-  - id: openai:responses:gpt-5.3-chat-latest
-    label: gpt-5.3-chat-latest-text-format
+  - id: openai:responses:gpt-5.4
+    label: gpt-5.4-text-format
     config:
       temperature: 0.7
       instructions: 'You are a helpful AI assistant. Extract key details about the event.'

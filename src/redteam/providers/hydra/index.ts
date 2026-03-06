@@ -1,6 +1,7 @@
 import { isBlobStorageEnabled } from '../../../blobs/extractor';
 import { shouldAttemptRemoteBlobUpload } from '../../../blobs/remoteUpload';
 import { renderPrompt } from '../../../evaluatorHelpers';
+import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import {
@@ -144,8 +145,10 @@ export class HydraProvider implements ApiProvider {
     this.config = config;
     this.scanId = config.scanId; // Use scanId from config if provided
     this.injectVar = config.injectVar;
-    this.maxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
+    const configuredMaxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
+    this.maxTurns = isLoggedIntoCloud() ? configuredMaxTurns : Math.min(configuredMaxTurns, 10);
     this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
+
     this.stateful = config.stateful ?? false;
     this.excludeTargetOutputFromAgenticAttackGeneration =
       config.excludeTargetOutputFromAgenticAttackGeneration ?? false;
@@ -155,10 +158,10 @@ export class HydraProvider implements ApiProvider {
       logger.debug('[Hydra] Backtracking disabled in stateful mode');
     }
 
-    // Hydra strategy requires cloud
+    // Hydra strategy requires remote generation
     if (!shouldGenerateRemote()) {
       throw new Error(
-        'jailbreak:hydra strategy requires cloud access. Set PROMPTFOO_REMOTE_GENERATION_URL or log into Promptfoo Cloud.',
+        'jailbreak:hydra strategy requires remote generation, which is currently disabled (commonly because OPENAI_API_KEY is set). To fix, unset OPENAI_API_KEY, set PROMPTFOO_REMOTE_GENERATION_URL, or log into Promptfoo Cloud.',
       );
     }
 

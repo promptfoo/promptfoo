@@ -52,8 +52,9 @@ export interface Reasoning {
    * **o-series models only**
    *
    * Constraints effort on reasoning for
-   * [reasoning models](https://platform.openai.com/docs/guides/reasoning). Currently
-   * supported values are `low`, `medium`, and `high`. Reducing reasoning effort can
+   * [reasoning models](https://platform.openai.com/docs/guides/reasoning). Supported
+   * values are `low`, `medium`, and `high` for o-series models. GPT-5 models may
+   * also support `none`, `minimal`, and `xhigh`. Reducing reasoning effort can
    * result in faster responses and fewer tokens used on reasoning in a response.
    */
   effort?: ReasoningEffort;
@@ -66,8 +67,10 @@ export interface Reasoning {
   summary?: 'auto' | 'concise' | 'detailed' | null;
 }
 
+export type GPT5ReasoningEffort = Exclude<ReasoningEffort, null> | 'minimal' | 'xhigh';
+
 export type GPT5Reasoning = Omit<Reasoning, 'effort'> & {
-  effort?: ReasoningEffort | 'minimal';
+  effort?: GPT5ReasoningEffort;
 };
 
 /** Verbosity level supported by GPT-5 models */

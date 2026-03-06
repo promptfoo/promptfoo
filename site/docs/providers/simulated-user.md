@@ -202,7 +202,7 @@ tests:
 
 This enables automatic evaluation of whether your agent successfully handles different customer types and scenarios.
 
-For a complete working example with 31 customer personas and comprehensive assertions, see the [Simulated User example](https://github.com/promptfoo/promptfoo/tree/main/examples/tau-simulated-user).
+For a complete working example with 31 customer personas and comprehensive assertions, see the [Simulated User example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-tau).
 
 ### Using with Custom Providers
 

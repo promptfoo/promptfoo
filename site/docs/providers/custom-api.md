@@ -11,10 +11,10 @@ Custom Javascript providers let you create providers in JavaScript or TypeScript
 
 promptfoo supports multiple JavaScript module formats. Complete working examples are available on GitHub:
 
-- [CommonJS Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider) - (`.js`, `.cjs`) - Uses `module.exports` and `require()`
-- [ESM Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider-mjs) - (`.mjs`, `.js` with `"type": "module"`) - Uses `import`/`export`
-- [TypeScript Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider-typescript) - (`.ts`) - Provides type safety with interfaces
-- [Embeddings Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider-embeddings) (commonjs)
+- [CommonJS Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-custom/basic) - (`.js`, `.cjs`) - Uses `module.exports` and `require()`
+- [ESM Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-custom/mjs) - (`.mjs`, `.js` with `"type": "module"`) - Uses `import`/`export`
+- [TypeScript Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-custom/typescript) - (`.ts`) - Provides type safety with interfaces
+- [Embeddings Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-custom/embeddings) (commonjs)
 
 ## Provider Interface
 
@@ -149,7 +149,7 @@ The reported prompt is used for:
 - **Assertions**: Prompt-based assertions like `moderation` check this value
 - **Debugging**: Helps understand what was actually sent to the LLM
 
-See the [vercel-ai-sdk example](https://github.com/promptfoo/promptfoo/tree/main/examples/vercel-ai-sdk) for a complete working example.
+See the [vercel-ai-sdk example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-vercel/ai-sdk) for a complete working example.
 
 ### Two-Stage Provider
 

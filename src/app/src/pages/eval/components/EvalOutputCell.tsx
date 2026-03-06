@@ -87,6 +87,76 @@ export function isVideoProvider(provider: string | undefined): boolean {
   return provider.includes(':video:');
 }
 
+export function normalizeImageSrcForComparison(src: string): string {
+  const normalized = normalizeMediaText(src.trim());
+  return resolveImageSource(normalized) || normalized;
+}
+
+export function extractMarkdownImageSources(markdown: string): string[] {
+  const sources = new Set<string>();
+
+  const markdownImageRegex = /!\[[^\]]*]\((<[^>]+>|[^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
+  const htmlImageRegex = /<img[^>]*\ssrc=["']([^"']+)["'][^>]*>/gi;
+
+  for (const match of markdown.matchAll(markdownImageRegex)) {
+    const candidate = match[1]?.trim();
+    if (!candidate) {
+      continue;
+    }
+    const unwrapped =
+      candidate.startsWith('<') && candidate.endsWith('>') ? candidate.slice(1, -1) : candidate;
+    sources.add(normalizeImageSrcForComparison(unwrapped));
+  }
+
+  for (const match of markdown.matchAll(htmlImageRegex)) {
+    const candidate = match[1]?.trim();
+    if (!candidate) {
+      continue;
+    }
+    sources.add(normalizeImageSrcForComparison(candidate));
+  }
+
+  return [...sources];
+}
+
+export function resolveEvalImageOutputSource(image: ImageOutput): string | undefined {
+  if (typeof image.data === 'string' && /^https?:\/\//.test(image.data)) {
+    return image.data;
+  }
+
+  return resolveImageSource(image);
+}
+
+function isImageLikeDataUri(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('data:')) {
+    return false;
+  }
+
+  const mimeType = trimmed.slice('data:'.length).split(/[;,]/, 1)[0]?.toLowerCase();
+  return Boolean(
+    mimeType && (mimeType.startsWith('image/') || mimeType === 'application/octet-stream'),
+  );
+}
+
+function getPrimaryRenderedImageSrc(text: string, inlineImageSrc?: string): string | undefined {
+  const trimmed = text.trim();
+
+  if (trimmed.startsWith('<svg')) {
+    return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(text)))}`;
+  }
+
+  if (isImageLikeDataUri(text)) {
+    return inlineImageSrc || text;
+  }
+
+  if (inlineImageSrc && !trimmed.startsWith('data:')) {
+    return inlineImageSrc;
+  }
+
+  return undefined;
+}
+
 export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
   maxTextLength: number;
@@ -228,8 +298,11 @@ function EvalOutputCell({
   const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   const normalizedText = normalizeMediaText(text);
   const inlineImageSrc = resolveImageSource(text);
+  const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
+  const primaryRenderedAsImage = Boolean(primaryRenderedImageSrc);
   const outputAudioSource = resolveAudioSource(output.audio);
   let node: React.ReactNode | undefined;
+  let renderedMarkdownOutput = false;
   let failReasons: string[] = [];
   let passReasons: string[] = [];
 
@@ -331,22 +404,13 @@ function EvalOutputCell({
     } catch (error) {
       console.error('Invalid regular expression:', (error as Error).message);
     }
-  } else if (
-    text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/) ||
-    inlineImageSrc ||
-    text?.trim().startsWith('<svg')
-  ) {
-    // Convert raw SVG to data URI if needed
-    let src = inlineImageSrc || text;
-    if (text?.trim().startsWith('<svg')) {
-      src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(text)))}`;
-    }
+  } else if (primaryRenderedImageSrc) {
     node = (
       <img
-        src={src}
+        src={primaryRenderedImageSrc}
         alt={output.prompt}
         style={{ width: '100%' }}
-        onClick={() => toggleLightbox(src)}
+        onClick={() => toggleLightbox(primaryRenderedImageSrc)}
       />
     );
   } else if (output.audio) {
@@ -417,6 +481,7 @@ function EvalOutputCell({
       }
     }
     if (!isJsonHandled && renderMarkdown) {
+      renderedMarkdownOutput = true;
       // Use stable constants and memoized components to prevent unnecessary
       // re-renders when parent re-renders due to layout changes.
       // @see https://github.com/promptfoo/promptfoo/issues/969
@@ -432,29 +497,52 @@ function EvalOutputCell({
     }
   }
 
-  // Append structured images (e.g. from Gemini text+image responses)
   if (output.images?.length) {
-    const imageElements = output.images.map((img: ImageOutput, idx: number) => {
-      const src = resolveImageSource(img);
-      return src ? (
-        <img
-          key={`img-${idx}`}
-          src={src}
-          alt={output.prompt || 'Generated image'}
-          loading="lazy"
-          style={{ width: '100%', cursor: 'pointer' }}
-          onClick={() => toggleLightbox(src)}
-        />
-      ) : null;
-    });
-    node = node ? (
-      <>
-        {node}
-        {imageElements}
-      </>
-    ) : (
-      imageElements
-    );
+    const renderedImageSrcs = new Set<string>();
+    if (primaryRenderedImageSrc) {
+      renderedImageSrcs.add(normalizeImageSrcForComparison(primaryRenderedImageSrc));
+    }
+    if (renderedMarkdownOutput) {
+      for (const source of extractMarkdownImageSources(normalizedText)) {
+        renderedImageSrcs.add(source);
+      }
+    }
+
+    // Keep the legacy "skip the first structured image" behavior when the primary
+    // output is already rendered as an image. Some providers repeat that same
+    // image first, but encode it differently enough that direct source comparison
+    // alone is not reliable after merging main.
+    const imagesToRender =
+      primaryRenderedAsImage && !renderedMarkdownOutput ? output.images.slice(1) : output.images;
+
+    const imageElements = imagesToRender
+      .map((img: ImageOutput, idx: number) => {
+        const src = resolveEvalImageOutputSource(img);
+        if (!src || renderedImageSrcs.has(normalizeImageSrcForComparison(src))) {
+          return null;
+        }
+        return (
+          <img
+            key={`img-${idx}`}
+            src={src}
+            alt={output.prompt || 'Generated image'}
+            loading="lazy"
+            style={{ display: 'block', width: '100%', cursor: 'pointer' }}
+            onClick={() => toggleLightbox(src)}
+          />
+        );
+      })
+      .filter((img): img is React.ReactElement => img !== null);
+    if (imageElements.length > 0) {
+      node = node ? (
+        <>
+          {node}
+          {imageElements}
+        </>
+      ) : (
+        imageElements
+      );
+    }
   }
 
   const handleRating = (isPass: boolean) => {

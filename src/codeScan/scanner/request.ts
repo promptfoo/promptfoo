@@ -4,6 +4,8 @@
  * Handles building scan requests and executing them via the agent client.
  */
 
+import logger from '../../logger';
+import { sleepWithAbort } from '../../util/time';
 import type ora from 'ora';
 
 import type {
@@ -15,6 +17,11 @@ import type {
 } from '../../types/codeScan';
 import type { AgentClient } from '../../util/agent/agentClient';
 import type { Config } from '../config/schema';
+
+// Capacity error detection and retry configuration
+const CAPACITY_ERROR_MESSAGE = 'Server at capacity';
+const MAX_RETRIES = 7;
+const BASE_DELAY_MS = 1000;
 
 /**
  * Options for scan execution
@@ -163,4 +170,73 @@ export async function executeScanRequest(
   });
 
   return scanResponse;
+}
+
+/**
+ * Check if error is a server capacity error
+ */
+function isCapacityError(error: unknown): boolean {
+  if (error instanceof Error) {
+    return error.message.includes(CAPACITY_ERROR_MESSAGE);
+  }
+  return false;
+}
+
+/**
+ * Execute scan request with retry for capacity errors
+ *
+ * When the server is at capacity, it returns "Server at capacity. Please retry."
+ * This wrapper retries with exponential backoff + jitter to spread load.
+ *
+ * Backoff schedule: ~1s, ~2s, ~4s, ~8s, ~16s, ~32s (total ~63s max)
+ *
+ * @param client - Connected agent client
+ * @param request - Scan request to send
+ * @param options - Execution options
+ * @returns Promise resolving to scan response
+ * @throws Error if scan fails after all retries
+ */
+export async function executeScanRequestWithRetry(
+  client: AgentClient,
+  request: ScanRequest,
+  options: ScanExecutionOptions,
+): Promise<ScanResponse> {
+  const { showSpinner, spinner } = options;
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      return await executeScanRequest(client, request, options);
+    } catch (error) {
+      // Only retry capacity errors, not other failures
+      if (!isCapacityError(error)) {
+        throw error;
+      }
+
+      // On last attempt, throw the error
+      if (attempt === MAX_RETRIES - 1) {
+        throw error;
+      }
+
+      // Exponential backoff with jitter: base * 2^attempt * (0.7 to 1.3)
+      const jitter = 0.7 + 0.6 * Math.random();
+      const delay = BASE_DELAY_MS * Math.pow(2, attempt) * jitter;
+
+      logger.debug(
+        `Server busy, retrying in ${Math.round(delay / 1000)}s (attempt ${attempt + 1}/${MAX_RETRIES})`,
+      );
+
+      // Update spinner during retry wait (abort-aware)
+      if (showSpinner && spinner) {
+        const originalText = spinner.text;
+        spinner.text = `Server busy, retrying in ${Math.round(delay / 1000)}s...`;
+        await sleepWithAbort(delay, options.abortController.signal);
+        spinner.text = originalText;
+      } else {
+        await sleepWithAbort(delay, options.abortController.signal);
+      }
+    }
+  }
+
+  // TypeScript: This should never be reached due to throw on last attempt
+  throw new Error('Scan failed: exceeded maximum retries');
 }
