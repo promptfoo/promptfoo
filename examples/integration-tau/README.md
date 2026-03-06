@@ -27,7 +27,7 @@ The example uses **mocked airline functions** to simulate a booking system witho
 
 Realistic multi-turn conversations between different customer types and the booking agent:
 
-```python
+```text
 User: I need a flight from New York to Seattle on May 20th
 Agent: I'd be happy to help! May I have your user ID?
 User: It's mia_li_3668

@@ -63,7 +63,7 @@ vars:
 
 **Actual Prompt Sent:**
 
-```python
+```text
 System: You are a world-class expert in quantum physics.
 
 Your communication style:

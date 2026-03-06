@@ -43,12 +43,12 @@ function getCodeFences(content: string): Array<{ line: number; lang: string | nu
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trim();
     if (trimmed.startsWith('```')) {
-      if (!inCodeBlock) {
+      if (inCodeBlock) {
+        inCodeBlock = false;
+      } else {
         const lang = trimmed.slice(3).trim() || null;
         fences.push({ line: i + 1, lang });
         inCodeBlock = true;
-      } else {
-        inCodeBlock = false;
       }
     }
   }
@@ -169,11 +169,10 @@ describe('Example README standards', () => {
       const bareFences = fences.filter((f) => f.lang === null);
       if (bareFences.length > 0) {
         const lineNumbers = bareFences.map((f) => f.line).join(', ');
-        expect(bareFences).toHaveLength(
-          0,
-          // @ts-expect-error vitest message param
+        expect(
+          bareFences,
           `Code blocks without language specifiers at lines: ${lineNumbers}`,
-        );
+        ).toHaveLength(0);
       }
     });
 
@@ -197,11 +196,7 @@ describe('Example README standards', () => {
         return true;
       });
       if (missing.length > 0) {
-        expect(missing).toEqual(
-          [],
-          // @ts-expect-error vitest message param
-          `Referenced files not found: ${missing.join(', ')}`,
-        );
+        expect(missing, `Referenced files not found: ${missing.join(', ')}`).toEqual([]);
       }
     });
 
@@ -210,11 +205,10 @@ describe('Example README standards', () => {
         const subDirs = getSubExampleDirs(dirPath);
         const missingRefs = subDirs.filter((dir) => !content.includes(dir));
         if (missingRefs.length > 0) {
-          expect(missingRefs).toEqual(
-            [],
-            // @ts-expect-error vitest message param
+          expect(
+            missingRefs,
             `Sub-example directories not mentioned: ${missingRefs.join(', ')}`,
-          );
+          ).toEqual([]);
         }
       });
     }

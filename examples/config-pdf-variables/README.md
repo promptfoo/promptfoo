@@ -10,7 +10,7 @@ npx promptfoo@latest init --example config-pdf-variables
 
 First, download some PDFs from arxiv.org:
 
-```text
+```bash
 ./fetch_pdfs.sh
 ```
 
