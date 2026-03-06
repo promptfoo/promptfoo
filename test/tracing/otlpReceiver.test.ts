@@ -43,6 +43,33 @@ async function encodeOTLPRequest(data: any): Promise<Buffer> {
   return Buffer.from(encoded);
 }
 
+// Helper to load logs proto root
+let logsProtoRoot: protobuf.Root | null = null;
+
+async function getLogsProtoRoot(): Promise<protobuf.Root> {
+  if (logsProtoRoot) {
+    return logsProtoRoot;
+  }
+  const protoDir = path.join(__dirname, '../../src/tracing/proto');
+  const root = new protobuf.Root();
+  root.resolvePath = (_origin: string, target: string) => {
+    return path.join(protoDir, target);
+  };
+  await root.load('opentelemetry/proto/collector/logs/v1/logs_service.proto');
+  logsProtoRoot = root;
+  return logsProtoRoot;
+}
+
+async function encodeOTLPLogsRequest(data: any): Promise<Buffer> {
+  const root = await getLogsProtoRoot();
+  const ExportLogsServiceRequest = root.lookupType(
+    'opentelemetry.proto.collector.logs.v1.ExportLogsServiceRequest',
+  );
+  const message = ExportLogsServiceRequest.create(data);
+  const encoded = ExportLogsServiceRequest.encode(message).finish();
+  return Buffer.from(encoded);
+}
+
 // Mock the database
 vi.mock('../../src/database', () => ({
   getDb: vi.fn(() => ({
@@ -89,7 +116,7 @@ describe('OTLPReceiver', () => {
     // Create mock trace store
     mockTraceStore = {
       createTrace: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-      addSpans: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      addSpans: vi.fn().mockResolvedValue({ stored: true }),
       getTracesByEvaluation: vi.fn<() => Promise<any[]>>().mockResolvedValue([]),
       getTrace: vi.fn<() => Promise<any | null>>().mockResolvedValue(null),
       deleteOldTraces: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
@@ -204,7 +231,7 @@ describe('OTLPReceiver', () => {
             statusMessage: 'OK',
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false },
       );
     });
 
@@ -260,7 +287,7 @@ describe('OTLPReceiver', () => {
             name: 'span-2',
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false },
       );
     });
 
@@ -321,7 +348,7 @@ describe('OTLPReceiver', () => {
             }),
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false },
       );
     });
 
@@ -420,7 +447,7 @@ describe('OTLPReceiver', () => {
             statusMessage: 'Success',
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false },
       );
     });
 
@@ -432,6 +459,46 @@ describe('OTLPReceiver', () => {
         .expect(400);
 
       expect(response.status).toBe(400);
+    });
+
+    it('should reject JSON with missing required resourceSpans field', async () => {
+      const invalidRequest = { spans: [] }; // Missing resourceSpans
+
+      const response = await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send(invalidRequest)
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error');
+      expect(response.body.error).toContain('resourceSpans');
+    });
+
+    it('should reject JSON with invalid span structure', async () => {
+      const invalidRequest = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    // Missing required fields: traceId, spanId, name, startTimeUnixNano
+                    kind: 1,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const response = await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send(invalidRequest)
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error');
     });
 
     it('should handle trace store errors gracefully', async () => {
@@ -465,6 +532,98 @@ describe('OTLPReceiver', () => {
         .expect(500);
 
       expect(response.body).toEqual({ error: 'Internal server error' });
+    });
+
+    it('should skip trace creation for spans without evaluationId and use skipTraceCheck=true for spans with evaluationId', async () => {
+      const otlpRequest = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: Buffer.from('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'hex').toString(
+                      'base64',
+                    ),
+                    spanId: Buffer.from('1111111111111111', 'hex').toString('base64'),
+                    name: 'span-with-eval-id',
+                    startTimeUnixNano: '1000000000',
+                    attributes: [
+                      {
+                        key: 'evaluation.id',
+                        value: { stringValue: 'eval-123' },
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send(otlpRequest)
+        .expect(200);
+
+      // Should create trace with the evaluationId
+      expect(mockTraceStore.createTrace).toHaveBeenCalledWith({
+        traceId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        evaluationId: 'eval-123',
+        testCaseId: '',
+      });
+
+      // Should call addSpans with skipTraceCheck=true since we created the trace
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'span-with-eval-id',
+          }),
+        ]),
+        { skipTraceCheck: true },
+      );
+    });
+
+    it('should not attempt to create trace with empty evaluationId', async () => {
+      const otlpRequest = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: Buffer.from('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'hex').toString(
+                      'base64',
+                    ),
+                    spanId: Buffer.from('2222222222222222', 'hex').toString('base64'),
+                    name: 'orphan-span',
+                    startTimeUnixNano: '1000000000',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send(otlpRequest)
+        .expect(200);
+
+      // Should NOT call createTrace (no evaluationId)
+      expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
+
+      // Should call addSpans with skipTraceCheck=false (let store verify trace exists)
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        expect.any(Array),
+        { skipTraceCheck: false },
+      );
     });
   });
 
@@ -501,8 +660,562 @@ describe('OTLPReceiver', () => {
         .expect(200);
 
       expect(mockTraceStore.addSpans).toHaveBeenCalledWith(traceIdHex, expect.any(Array), {
-        skipTraceCheck: true,
+        skipTraceCheck: false,
       });
+    });
+  });
+
+  describe('Logs ingestion (/v1/logs)', () => {
+    it('should provide service information for logs endpoint', async () => {
+      const response = await request(receiver.getApp()).get('/v1/logs').expect(200);
+
+      expect(response.body).toEqual({
+        service: 'promptfoo-otlp-receiver',
+        version: '1.0.0',
+        supported_formats: ['json', 'protobuf'],
+        description: 'OTLP logs endpoint - logs are converted to spans for tracing',
+      });
+    });
+
+    it('should accept valid OTLP JSON logs and convert to spans', async () => {
+      // Manually override the traceStore property for this test
+      (receiver as any).traceStore = mockTraceStore;
+
+      const otlpLogsRequest = {
+        resourceLogs: [
+          {
+            resource: {
+              attributes: [{ key: 'service.name', value: { stringValue: 'claude-code-sdk' } }],
+            },
+            scopeLogs: [
+              {
+                scope: {
+                  name: 'claude_code',
+                  version: '1.0.0',
+                },
+                logRecords: [
+                  {
+                    timeUnixNano: '1700000000000000000',
+                    severityNumber: 9,
+                    severityText: 'INFO',
+                    eventName: 'claude_code.tool_result',
+                    traceId: Buffer.from('12345678901234567890123456789012', 'hex').toString(
+                      'base64',
+                    ),
+                    spanId: Buffer.from('1234567890123456', 'hex').toString('base64'),
+                    body: {
+                      stringValue: 'Tool execution completed',
+                    },
+                    attributes: [
+                      { key: 'tool.name', value: { stringValue: 'Read' } },
+                      { key: 'tool.duration_ms', value: { intValue: '150' } },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const response = await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(otlpLogsRequest);
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ partialSuccess: {} });
+
+      // Verify log was converted to span and stored
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        '12345678901234567890123456789012',
+        expect.arrayContaining([
+          expect.objectContaining({
+            spanId: '1234567890123456',
+            name: 'claude_code.tool_result',
+            startTime: 1700000000000,
+            endTime: 1700000000000, // Zero-duration span
+            attributes: expect.objectContaining({
+              'service.name': 'claude-code-sdk',
+              'tool.name': 'Read',
+              'tool.duration_ms': 150,
+              'log.severity_number': 9,
+              'log.severity_text': 'INFO',
+              'log.event_name': 'claude_code.tool_result',
+              'log.body': 'Tool execution completed',
+              'otel.scope.name': 'claude_code',
+              'otel.span.kind': 'internal',
+            }),
+          }),
+        ]),
+        { skipTraceCheck: false },
+      );
+    });
+
+    it('should handle logs without trace context by generating IDs', async () => {
+      // Manually override the traceStore property for this test
+      (receiver as any).traceStore = mockTraceStore;
+
+      const otlpLogsRequest = {
+        resourceLogs: [
+          {
+            scopeLogs: [
+              {
+                logRecords: [
+                  {
+                    timeUnixNano: '1700000000000000000',
+                    severityText: 'INFO',
+                    eventName: 'orphan_event',
+                    body: {
+                      stringValue: 'An orphan log event',
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const response = await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(otlpLogsRequest);
+
+      expect(response.status).toBe(200);
+
+      // Verify addSpans was called with a generated trace ID (32 hex chars)
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        expect.stringMatching(/^[0-9a-f]{32}$/),
+        expect.arrayContaining([
+          expect.objectContaining({
+            spanId: expect.stringMatching(/^[0-9a-f]{16}$/),
+            name: 'orphan_event',
+          }),
+        ]),
+        { skipTraceCheck: false },
+      );
+    });
+
+    it('should accept valid OTLP protobuf logs', async () => {
+      // Manually override the traceStore property for this test
+      (receiver as any).traceStore = mockTraceStore;
+
+      const traceIdBytes = new Uint8Array([
+        0xab, 0xcd, 0xef, 0x12, 0xab, 0xcd, 0xef, 0x12, 0xab, 0xcd, 0xef, 0x12, 0xab, 0xcd, 0xef,
+        0x12,
+      ]);
+      const spanIdBytes = new Uint8Array([0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88]);
+
+      const protobufLogsRequest = {
+        resourceLogs: [
+          {
+            resource: {
+              attributes: [{ key: 'service.name', value: { stringValue: 'claude-agent-sdk' } }],
+            },
+            scopeLogs: [
+              {
+                scope: {
+                  name: 'claude_code',
+                  version: '2.0.0',
+                },
+                logRecords: [
+                  {
+                    timeUnixNano: 1700000000000000000n,
+                    severityNumber: 13,
+                    severityText: 'WARN',
+                    eventName: 'claude_code.api_request',
+                    traceId: traceIdBytes,
+                    spanId: spanIdBytes,
+                    body: {
+                      stringValue: 'API request initiated',
+                    },
+                    attributes: [{ key: 'api.model', value: { stringValue: 'claude-opus' } }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const encodedData = await encodeOTLPLogsRequest(protobufLogsRequest);
+
+      const response = await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/x-protobuf')
+        .send(encodedData)
+        .expect(200);
+
+      expect(response.body).toEqual({ partialSuccess: {} });
+
+      // Verify spans were stored with correct trace ID
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'abcdef12abcdef12abcdef12abcdef12',
+        expect.arrayContaining([
+          expect.objectContaining({
+            spanId: '1122334455667788',
+            name: 'claude_code.api_request',
+            attributes: expect.objectContaining({
+              'service.name': 'claude-agent-sdk',
+              'api.model': 'claude-opus',
+              'log.severity_number': 13,
+              'log.severity_text': 'WARN',
+              'log.event_name': 'claude_code.api_request',
+            }),
+          }),
+        ]),
+        { skipTraceCheck: false },
+      );
+    });
+
+    it('should reject unsupported content types for logs', async () => {
+      const response = await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'text/plain')
+        .send('invalid data')
+        .expect(415);
+
+      expect(response.body).toEqual({ error: 'Unsupported content type' });
+    });
+
+    it('should reject invalid protobuf data for logs', async () => {
+      const response = await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/x-protobuf')
+        .send(Buffer.from('invalid protobuf data'))
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error');
+      expect(response.body.error).toMatch(/invalid protobuf/i);
+    });
+
+    it('should reject JSON with missing required resourceLogs field', async () => {
+      const invalidRequest = { logs: [] }; // Missing resourceLogs
+
+      const response = await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(invalidRequest)
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error');
+      expect(response.body.error).toContain('resourceLogs');
+    });
+
+    it('should reject JSON with invalid log record structure', async () => {
+      const invalidRequest = {
+        resourceLogs: [
+          {
+            scopeLogs: [
+              {
+                logRecords: [
+                  {
+                    // Missing required timeUnixNano
+                    severityText: 'INFO',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const response = await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(invalidRequest)
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error');
+      expect(response.body.error).toContain('timeUnixNano');
+    });
+
+    it('should handle multiple log records in a single request', async () => {
+      // Manually override the traceStore property for this test
+      (receiver as any).traceStore = mockTraceStore;
+
+      const traceIdBase64 = Buffer.from('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', 'hex').toString(
+        'base64',
+      );
+
+      const otlpLogsRequest = {
+        resourceLogs: [
+          {
+            scopeLogs: [
+              {
+                logRecords: [
+                  {
+                    timeUnixNano: '1700000000000000000',
+                    eventName: 'claude_code.tool_decision',
+                    traceId: traceIdBase64,
+                    spanId: Buffer.from('1111111111111111', 'hex').toString('base64'),
+                    body: { stringValue: 'Deciding to use Read tool' },
+                  },
+                  {
+                    timeUnixNano: '1700000001000000000',
+                    eventName: 'claude_code.tool_result',
+                    traceId: traceIdBase64,
+                    spanId: Buffer.from('2222222222222222', 'hex').toString('base64'),
+                    body: { stringValue: 'Read tool completed' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(otlpLogsRequest)
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+        expect.arrayContaining([
+          expect.objectContaining({
+            spanId: '1111111111111111',
+            name: 'claude_code.tool_decision',
+          }),
+          expect.objectContaining({
+            spanId: '2222222222222222',
+            name: 'claude_code.tool_result',
+          }),
+        ]),
+        { skipTraceCheck: false },
+      );
+    });
+
+    it('should re-parent orphan logs using promptfoo.trace_id from resource attributes', async () => {
+      (receiver as any).traceStore = mockTraceStore;
+
+      // SDK generates its own traceId, but resource attributes carry the evaluator's
+      const sdkTraceId = 'aabbccddaabbccddaabbccddaabbccdd';
+      const evaluatorTraceId = '11223344556677881122334455667788';
+      const evaluatorParentSpanId = 'abcdef1234567890';
+
+      const otlpLogsRequest = {
+        resourceLogs: [
+          {
+            resource: {
+              attributes: [
+                { key: 'service.name', value: { stringValue: 'claude-agent-sdk' } },
+                { key: 'promptfoo.trace_id', value: { stringValue: evaluatorTraceId } },
+                {
+                  key: 'promptfoo.parent_span_id',
+                  value: { stringValue: evaluatorParentSpanId },
+                },
+                { key: 'evaluation.id', value: { stringValue: 'eval-123' } },
+                { key: 'test.case.id', value: { stringValue: 'tc-456' } },
+              ],
+            },
+            scopeLogs: [
+              {
+                logRecords: [
+                  {
+                    timeUnixNano: '1700000000000000000',
+                    eventName: 'claude_code.tool_result',
+                    // SDK's own trace ID — should be overridden by resource attribute
+                    traceId: Buffer.from(sdkTraceId, 'hex').toString('base64'),
+                    spanId: Buffer.from('1234567890abcdef', 'hex').toString('base64'),
+                    body: { stringValue: 'Tool completed' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const response = await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(otlpLogsRequest);
+
+      expect(response.status).toBe(200);
+
+      // Verify the span was stored under the evaluator's trace ID, not the SDK's.
+      // skipTraceCheck is true because evaluation.id was found, so the handler
+      // created a trace record and marked this traceId as known.
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        evaluatorTraceId,
+        expect.arrayContaining([
+          expect.objectContaining({
+            spanId: '1234567890abcdef',
+            parentSpanId: evaluatorParentSpanId,
+            name: 'claude_code.tool_result',
+            attributes: expect.objectContaining({
+              'promptfoo.trace_id': evaluatorTraceId,
+              'promptfoo.parent_span_id': evaluatorParentSpanId,
+              'evaluation.id': 'eval-123',
+              'test.case.id': 'tc-456',
+            }),
+          }),
+        ]),
+        { skipTraceCheck: true },
+      );
+
+      // Verify trace was created with the evaluationId from resource attributes
+      expect(mockTraceStore.createTrace).toHaveBeenCalledWith({
+        traceId: evaluatorTraceId,
+        evaluationId: 'eval-123',
+        testCaseId: 'tc-456',
+      });
+    });
+
+    it('should use log traceId when no promptfoo.trace_id resource attribute exists', async () => {
+      (receiver as any).traceStore = mockTraceStore;
+
+      const sdkTraceId = 'aabbccddaabbccddaabbccddaabbccdd';
+
+      const otlpLogsRequest = {
+        resourceLogs: [
+          {
+            resource: {
+              attributes: [{ key: 'service.name', value: { stringValue: 'claude-agent-sdk' } }],
+            },
+            scopeLogs: [
+              {
+                logRecords: [
+                  {
+                    timeUnixNano: '1700000000000000000',
+                    eventName: 'some_event',
+                    traceId: Buffer.from(sdkTraceId, 'hex').toString('base64'),
+                    spanId: Buffer.from('abcdef1234567890', 'hex').toString('base64'),
+                    body: { stringValue: 'No resource re-parenting' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const response = await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(otlpLogsRequest);
+
+      expect(response.status).toBe(200);
+
+      // Should use the SDK's own trace ID since no resource attribute override
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        sdkTraceId,
+        expect.arrayContaining([
+          expect.objectContaining({
+            spanId: 'abcdef1234567890',
+            parentSpanId: undefined,
+            name: 'some_event',
+          }),
+        ]),
+        { skipTraceCheck: false },
+      );
+    });
+
+    it('should re-parent protobuf orphan logs using resource attributes', async () => {
+      (receiver as any).traceStore = mockTraceStore;
+
+      const evaluatorTraceId = '00112233445566778899aabbccddeeff';
+      const evaluatorParentSpanId = 'fedcba9876543210';
+
+      const protobufLogsRequest = {
+        resourceLogs: [
+          {
+            resource: {
+              attributes: [
+                { key: 'service.name', value: { stringValue: 'claude-agent-sdk' } },
+                { key: 'promptfoo.trace_id', value: { stringValue: evaluatorTraceId } },
+                {
+                  key: 'promptfoo.parent_span_id',
+                  value: { stringValue: evaluatorParentSpanId },
+                },
+                { key: 'evaluation.id', value: { stringValue: 'eval-789' } },
+              ],
+            },
+            scopeLogs: [
+              {
+                logRecords: [
+                  {
+                    timeUnixNano: 1700000000000000000n,
+                    severityNumber: 9,
+                    severityText: 'INFO',
+                    eventName: 'claude_code.api_request',
+                    // SDK's own trace ID bytes — should be overridden
+                    traceId: new Uint8Array([
+                      0xaa, 0xbb, 0xcc, 0xdd, 0xaa, 0xbb, 0xcc, 0xdd, 0xaa, 0xbb, 0xcc, 0xdd, 0xaa,
+                      0xbb, 0xcc, 0xdd,
+                    ]),
+                    spanId: new Uint8Array([0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88]),
+                    body: { stringValue: 'API request' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const encodedData = await encodeOTLPLogsRequest(protobufLogsRequest);
+
+      const response = await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/x-protobuf')
+        .send(encodedData);
+
+      expect(response.status).toBe(200);
+
+      // Verify re-parented under evaluator's trace.
+      // skipTraceCheck is true because evaluation.id triggers trace creation.
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        evaluatorTraceId,
+        expect.arrayContaining([
+          expect.objectContaining({
+            spanId: '1122334455667788',
+            parentSpanId: evaluatorParentSpanId,
+            name: 'claude_code.api_request',
+            attributes: expect.objectContaining({
+              'promptfoo.trace_id': evaluatorTraceId,
+              'promptfoo.parent_span_id': evaluatorParentSpanId,
+              'evaluation.id': 'eval-789',
+            }),
+          }),
+        ]),
+        { skipTraceCheck: true },
+      );
+    });
+
+    it('should handle log store errors gracefully', async () => {
+      // Manually override the traceStore property for this test
+      (receiver as any).traceStore = mockTraceStore;
+      mockTraceStore.addSpans.mockRejectedValueOnce(new Error('Database error'));
+
+      const otlpLogsRequest = {
+        resourceLogs: [
+          {
+            scopeLogs: [
+              {
+                logRecords: [
+                  {
+                    timeUnixNano: '1700000000000000000',
+                    eventName: 'error-log',
+                    body: { stringValue: 'Test' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const response = await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(otlpLogsRequest)
+        .expect(500);
+
+      expect(response.body).toEqual({ error: 'Internal server error' });
     });
   });
 });

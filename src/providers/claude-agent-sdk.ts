@@ -7,6 +7,7 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
+import { getTraceparent, withGenAISpan } from '../tracing/genaiTracer';
 import { cacheResponse, getCachedResponse, initializeAgenticCache } from './agentic-utils';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
@@ -502,6 +503,27 @@ export interface ClaudeCodeOptions {
      */
     behavior?: 'first_option' | 'random' | 'deny';
   };
+
+  /**
+   * Enable deep tracing to capture internal Claude Agent SDK events.
+   *
+   * When enabled, this configures the Claude Agent SDK to export its internal
+   * OTEL events (tool calls, API requests, etc.) to promptfoo's OTLP receiver.
+   * These events appear as child spans under the main provider span in the trace view.
+   *
+   * Requires the OTLP receiver to be running (enabled via tracing config in promptfooconfig.yaml).
+   *
+   * @example
+   * ```yaml
+   * providers:
+   *   - id: anthropic:claude-agent-sdk
+   *     config:
+   *       deep_tracing: true
+   * ```
+   *
+   * @default false
+   */
+  deep_tracing?: boolean;
 }
 
 /**
@@ -661,6 +683,68 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     // Ensure API key is available to Claude Agent SDK
     if (this.apiKey) {
       env.ANTHROPIC_API_KEY = this.apiKey;
+    }
+
+    // Get traceparent for trace context propagation
+    // First try to get from context (passed from evaluator), then fall back to active OTEL context
+    const traceparent = context?.traceparent || getTraceparent();
+
+    // Inject OpenTelemetry configuration for deep tracing
+    // This allows the Claude Agent SDK to export its internal events to our OTLP receiver
+    // Without deep_tracing, we still capture spans at the provider level but don't
+    // inject OTEL vars into SDK (which would cause export errors if no collector)
+    if (config.deep_tracing) {
+      // Apply OTEL defaults only if not already set by user env overrides.
+      // Claude Code exports events as OTEL logs (not traces) to our OTLP receiver.
+      const otelDefaults: Record<string, string> = {
+        CLAUDE_CODE_ENABLE_TELEMETRY: '1',
+        OTEL_LOGS_EXPORTER: 'otlp',
+        OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:4318',
+        OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json',
+        OTEL_SERVICE_NAME: 'claude-agent-sdk',
+      };
+      for (const [key, value] of Object.entries(otelDefaults)) {
+        if (!env[key]) {
+          env[key] = value;
+        }
+      }
+      // W3C Trace Context - only set if we have a traceparent for proper parent-child linking
+      if (traceparent) {
+        env.TRACEPARENT = traceparent;
+      }
+      // Pass evaluation context as OTEL resource attributes so the receiver
+      // can link orphan SDK logs back to the correct trace/evaluation.
+      // The SDK's bundled @opentelemetry/resources envDetector reads this.
+      const resourceAttrs: string[] = [];
+      if (traceparent) {
+        const parts = traceparent.split('-');
+        if (parts.length >= 3) {
+          resourceAttrs.push(`promptfoo.trace_id=${parts[1]}`);
+          resourceAttrs.push(`promptfoo.parent_span_id=${parts[2]}`);
+        }
+      }
+      if (context?.evaluationId) {
+        resourceAttrs.push(`evaluation.id=${context.evaluationId}`);
+      }
+      if (context?.testCaseId) {
+        resourceAttrs.push(`test.case.id=${context.testCaseId}`);
+      }
+      if (resourceAttrs.length > 0) {
+        env.OTEL_RESOURCE_ATTRIBUTES = resourceAttrs.join(',');
+      }
+      logger.debug('[ClaudeAgentSDK] Injecting OTEL config for deep tracing', {
+        traceparent: traceparent || '(none - SDK will start own trace)',
+        endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+        userConfigured: {
+          endpoint: !!this.env?.OTEL_EXPORTER_OTLP_ENDPOINT,
+          protocol: !!this.env?.OTEL_EXPORTER_OTLP_PROTOCOL,
+          serviceName: !!this.env?.OTEL_SERVICE_NAME,
+        },
+      });
+    } else {
+      // When deep_tracing is disabled, remove any inherited TRACEPARENT
+      // to prevent accidental trace linking from parent processes
+      delete env.TRACEPARENT;
     }
 
     // Could potentially do more to validate credentials for Bedrock/Vertex here, but Anthropic key is the main use case
@@ -864,109 +948,133 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       })}`,
     );
 
+    // Wrap the SDK call in a GenAI span for observability
+    const modelName = config.model || 'default';
+    const spanContext = {
+      system: 'anthropic',
+      operationName: 'agent' as const,
+      model: modelName,
+      providerId: this.providerId,
+      traceparent,
+      maxTokens: config.max_thinking_tokens,
+      evalId: context?.originalProvider?.id(),
+      requestBody: JSON.stringify({ prompt: prompt.substring(0, 500) }),
+    };
+
     try {
-      // Dynamically import the ESM module once and cache it
-      if (!this.claudeCodeModule) {
-        this.claudeCodeModule = await loadClaudeCodeSDK();
-      }
-
-      const res = await this.claudeCodeModule.query(queryParams);
-
-      // Collect tool calls and results from intermediate messages
-      const toolCallsMap = new Map<string, ToolCallEntry>();
-
-      for await (const msg of res) {
-        if (msg.type === 'assistant') {
-          // Extract tool_use content blocks from assistant messages
-          for (const block of msg.message.content) {
-            if (block.type === 'tool_use') {
-              toolCallsMap.set(block.id, {
-                id: block.id,
-                name: block.name,
-                input: block.input,
-                output: undefined,
-                is_error: false,
-                parentToolUseId: msg.parent_tool_use_id,
-              });
-            }
+      return await withGenAISpan(
+        spanContext,
+        async () => {
+          // Dynamically import the ESM module once and cache it
+          if (!this.claudeCodeModule) {
+            this.claudeCodeModule = await loadClaudeCodeSDK();
           }
-        } else if (msg.type === 'user') {
-          // Extract tool_result content blocks and match to tool calls
-          const content = msg.message?.content;
-          if (Array.isArray(content)) {
-            for (const block of content) {
-              if (block.type === 'tool_result') {
-                const entry = toolCallsMap.get(block.tool_use_id);
-                if (entry) {
-                  entry.output = block.content;
-                  entry.is_error = block.is_error ?? false;
+
+          const res = await this.claudeCodeModule.query(queryParams);
+
+          // Collect tool calls and results from intermediate messages
+          const toolCallsMap = new Map<string, ToolCallEntry>();
+
+          for await (const msg of res) {
+            if (msg.type === 'assistant') {
+              // Extract tool_use content blocks from assistant messages
+              for (const block of msg.message.content) {
+                if (block.type === 'tool_use') {
+                  toolCallsMap.set(block.id, {
+                    id: block.id,
+                    name: block.name,
+                    input: block.input,
+                    output: undefined,
+                    is_error: false,
+                    parentToolUseId: msg.parent_tool_use_id,
+                  });
                 }
+              }
+            } else if (msg.type === 'user') {
+              // Extract tool_result content blocks and match to tool calls
+              const content = msg.message?.content;
+              if (Array.isArray(content)) {
+                for (const block of content) {
+                  if (block.type === 'tool_result') {
+                    const entry = toolCallsMap.get(block.tool_use_id);
+                    if (entry) {
+                      entry.output = block.content;
+                      entry.is_error = block.is_error ?? false;
+                    }
+                  }
+                }
+              }
+            } else if (msg.type === 'result') {
+              const raw = JSON.stringify(msg);
+              const tokenUsage: ProviderResponse['tokenUsage'] = {
+                prompt: msg.usage?.input_tokens,
+                completion: msg.usage?.output_tokens,
+                total:
+                  msg.usage?.input_tokens && msg.usage?.output_tokens
+                    ? msg.usage?.input_tokens + msg.usage?.output_tokens
+                    : undefined,
+              };
+              const cost = msg.total_cost_usd ?? 0;
+              const sessionId = msg.session_id;
+
+              const toolCallsArray = Array.from(toolCallsMap.values());
+
+              if (msg.subtype === 'success') {
+                logger.debug(`Claude Agent SDK response: ${raw}`);
+                // When structured output is enabled and available, use it as the output
+                // Otherwise fall back to the text result
+                const output =
+                  msg.structured_output !== undefined ? msg.structured_output : msg.result;
+                const response: ProviderResponse = {
+                  output,
+                  tokenUsage,
+                  cost,
+                  raw,
+                  sessionId,
+                  metadata: {
+                    toolCalls: toolCallsArray,
+                    numTurns: msg.num_turns,
+                    durationMs: msg.duration_ms,
+                    durationApiMs: msg.duration_api_ms,
+                    modelUsage: msg.modelUsage,
+                    permissionDenials: msg.permission_denials,
+                    ...(msg.structured_output !== undefined
+                      ? { structuredOutput: msg.structured_output }
+                      : {}),
+                  },
+                };
+
+                // Cache the response using shared utilities
+                await cacheResponse(cacheResult, response, 'Claude Agent SDK');
+                return response;
+              } else {
+                return {
+                  error: `Claude Agent SDK call failed: ${msg.subtype}`,
+                  tokenUsage,
+                  cost,
+                  raw,
+                  sessionId,
+                  metadata: {
+                    toolCalls: toolCallsArray,
+                    numTurns: msg.num_turns,
+                    durationMs: msg.duration_ms,
+                    durationApiMs: msg.duration_api_ms,
+                    modelUsage: msg.modelUsage,
+                    permissionDenials: msg.permission_denials,
+                  },
+                };
               }
             }
           }
-        } else if (msg.type === 'result') {
-          const raw = JSON.stringify(msg);
-          const tokenUsage: ProviderResponse['tokenUsage'] = {
-            prompt: msg.usage?.input_tokens,
-            completion: msg.usage?.output_tokens,
-            total:
-              msg.usage?.input_tokens && msg.usage?.output_tokens
-                ? msg.usage?.input_tokens + msg.usage?.output_tokens
-                : undefined,
-          };
-          const cost = msg.total_cost_usd ?? 0;
-          const sessionId = msg.session_id;
 
-          const toolCallsArray = Array.from(toolCallsMap.values());
-
-          if (msg.subtype === 'success') {
-            logger.debug(`Claude Agent SDK response: ${raw}`);
-            // When structured output is enabled and available, use it as the output
-            // Otherwise fall back to the text result
-            const output = msg.structured_output !== undefined ? msg.structured_output : msg.result;
-            const response: ProviderResponse = {
-              output,
-              tokenUsage,
-              cost,
-              raw,
-              sessionId,
-              metadata: {
-                toolCalls: toolCallsArray,
-                numTurns: msg.num_turns,
-                durationMs: msg.duration_ms,
-                durationApiMs: msg.duration_api_ms,
-                modelUsage: msg.modelUsage,
-                permissionDenials: msg.permission_denials,
-                ...(msg.structured_output !== undefined
-                  ? { structuredOutput: msg.structured_output }
-                  : {}),
-              },
-            };
-
-            // Cache the response using shared utilities
-            await cacheResponse(cacheResult, response, 'Claude Agent SDK');
-            return response;
-          } else {
-            return {
-              error: `Claude Agent SDK call failed: ${msg.subtype}`,
-              tokenUsage,
-              cost,
-              raw,
-              sessionId,
-              metadata: {
-                toolCalls: toolCallsArray,
-                numTurns: msg.num_turns,
-                durationMs: msg.duration_ms,
-                durationApiMs: msg.duration_api_ms,
-                modelUsage: msg.modelUsage,
-                permissionDenials: msg.permission_denials,
-              },
-            };
-          }
-        }
-      }
-
-      return { error: "Claude Agent SDK call didn't return a result" };
+          return { error: "Claude Agent SDK call didn't return a result" };
+        },
+        (response: ProviderResponse) => ({
+          tokenUsage: response.tokenUsage,
+          responseBody: response.raw,
+          cacheHit: response.cached,
+        }),
+      );
     } catch (error: any) {
       const isAbort = error?.name === 'AbortError' || callOptions?.abortSignal?.aborted;
 
