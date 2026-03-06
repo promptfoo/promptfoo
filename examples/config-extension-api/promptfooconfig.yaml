@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Extension Hook Example
+
+prompts:
+  - 'Rephrase this in {{language}}: {{body}}'
+
+providers:
+  - openai:gpt-4.1-mini
+
+extensions:
+  - file://hooks.py:extension_hook
+  # - file://hooks.js:extensionHook
+
+tests:
+  - vars:
+      body: 'Hello, how are you?'
+      language: 'Norwegian'
+    assert:
+      - type: contains-any
+        value:
+          - 'Hallo'
+          - 'Hei'
+          - 'Hå'
+      - type: not-contains
+        value: 'Hello'
+  - vars:
+      body: 'I love sailing on the sea.'
+      language: 'French'
+    assert:
+      - type: llm-rubric
+        value: 'The response is in French'

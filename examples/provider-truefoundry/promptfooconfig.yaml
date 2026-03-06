@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: TrueFoundry LLM Gateway Example
+
+prompts:
+  - |
+    You are a helpful assistant. Answer the following question concisely:
+    {{question}}
+
+providers:
+  # Basic GPT-5 configuration through TrueFoundry
+  - id: truefoundry:openai-main/gpt-5
+    label: 'GPT-5 via TrueFoundry'
+    config:
+      temperature: 0.7
+      max_completion_tokens: 500
+      metadata:
+        user_id: 'example-user'
+        environment: 'development'
+      loggingConfig:
+        enabled: true
+
+  # Claude Sonnet 4.5 for comparison
+  - id: truefoundry:anthropic-main/claude-sonnet-4.5
+    label: 'Claude Sonnet 4.5 via TrueFoundry'
+    config:
+      temperature: 0.7
+      max_tokens: 500
+      metadata:
+        user_id: 'example-user'
+        environment: 'development'
+      loggingConfig:
+        enabled: true
+
+tests:
+  - description: 'Basic knowledge test'
+    vars:
+      question: 'What is the capital of France?'
+    assert:
+      - type: contains
+        value: 'Paris'
+
+  - description: 'Technical explanation'
+    vars:
+      question: 'Explain machine learning in simple terms'
+    assert:
+      - type: llm-rubric
+        value: 'Provides a clear, simple explanation of machine learning'
+
+  - description: 'Creative writing'
+    vars:
+      question: 'Write a haiku about coding'
+    assert:
+      - type: llm-rubric
+        value: 'Responds with a proper haiku (5-7-5 syllable structure)'
+
+defaultTest:
+  options:
+    provider:
+      config:
+        temperature: 0.7

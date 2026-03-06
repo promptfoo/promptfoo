@@ -1,0 +1,7 @@
+You are a Python code generator. Write a Python function to solve the following problem:
+
+{{problem}}
+
+Use the following function name: {{function_name}}
+
+Only provide the function code, without any explanations or additional text. Wrap your code in triple backticks.

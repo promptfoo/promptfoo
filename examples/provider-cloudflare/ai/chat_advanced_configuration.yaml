@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - Tell me a funny joke about {{topic}}
+
+providers:
+  - id: cloudflare-ai:chat:@cf/mistralai/mistral-small-3.1-24b-instruct
+    config:
+      accountId: your_account_id_here
+      # ===============
+      # API key is loaded from CLOUDFLARE_API_KEY environment variable
+      # Alternatively, use custom environment variable names:
+      # apiKeyEnvar: CUSTOM_CLOUDFLARE_KEY
+      # accountIdEnvar: CUSTOM_CLOUDFLARE_ACCOUNT
+      # ===============
+      # OpenAI-compatible model parameters
+      max_tokens: 800
+      temperature: 0.7
+      seed: 1
+
+tests:
+  - vars:
+      topic: programming
+    assert:
+      - type: icontains
+        value: '{{topic}}'

@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Advanced reasoning capabilities testing
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: hyperbolic:deepseek-ai/DeepSeek-V3
+    label: DeepSeek V3
+    config:
+      temperature: 0.1
+      max_tokens: 2048
+
+  - id: hyperbolic:meta-llama/Meta-Llama-3.1-70B-Instruct
+    label: Llama 3.1-70B
+    config:
+      temperature: 0.3
+      max_tokens: 1024
+
+tests:
+  # Classic puzzle with a twist
+  - vars:
+      prompt: 'Solve this step by step: A time-traveling farmer needs to transport a robot fox, a cyborg chicken, and quantum grain across a dimensional rift. The portal can only carry the farmer and one item. If left alone, the robot fox hacks the cyborg chicken, and the cyborg chicken deletes the quantum grain. How can the farmer transport all three safely across dimensions?'
+    assert:
+      - type: contains-all
+        value: ['farmer', 'chicken', 'fox', 'grain']
+      - type: llm-rubric
+        value: 'The solution correctly solves the river crossing puzzle with proper step-by-step reasoning'
+
+  # Tricky weighing problem
+  - vars:
+      prompt: 'Solve this step by step: You have 8 identical magic orbs, but one contains a tiny dragon that makes it slightly heavier. Using an enchanted balance scale only twice, how do you find the orb with the dragon?'
+    assert:
+      - type: llm-rubric
+        value: 'The solution correctly identifies how to find the heavier orb in exactly 2 weighings with clear logic'
+
+  # Mathematical brain teaser
+  - vars:
+      prompt: 'Explain this using mathematical proof: A mathematician walks into a café and claims that 0.999... (repeating) equals exactly 1. The barista is skeptical. How would you convince the barista using mathematical proof?'
+    assert:
+      - type: llm-rubric
+        value: 'The explanation provides a clear and convincing mathematical proof that 0.999... = 1'
+
+  # Word problem with a catch
+  - vars:
+      prompt: 'Solve this step by step: At a magical sports shop, a enchanted bat and a golden ball cost $1.10 total. The bat costs exactly $1 more than the ball. What does each item cost? (Warning: your first instinct might be wrong!)'
+    assert:
+      - type: contains
+        value: '$0.05'
+      - type: contains
+        value: '$1.05'
+
+  # Programming puzzle
+  - vars:
+      prompt: 'Write a recursive function to calculate the nth Fibonacci number, then explain why it would make a computer cry and how to make it happy again with optimization.'
+    assert:
+      - type: contains
+        value: 'def'
+      - type: contains-any
+        value: ['O(2^n)', 'exponential']
+      - type: contains-any
+        value: ['memoization', 'dynamic programming', 'iterative']

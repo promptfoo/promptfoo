@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Basic Hyperbolic functionality test
+
+prompts:
+  - 'Hello there! Please greet me like a friendly robot.'
+
+providers:
+  - id: hyperbolic:meta-llama/Meta-Llama-3.1-70B-Instruct
+    label: Llama 3.1-70B
+    config:
+      temperature: 0.1
+      max_tokens: 100
+
+tests:
+  - assert:
+      - type: contains-any
+        value: ['hello', 'hi', 'greetings', 'Hello', 'hey', 'GREETINGS', 'HELLO']
+      - type: llm-rubric
+        value: 'The response is a friendly greeting with a robotic or AI personality'

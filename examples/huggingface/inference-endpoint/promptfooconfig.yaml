@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'HF private inference endpoint'
+
+prompts:
+  - 'Write a tweet about {{topic}}:'
+
+providers:
+  - id: huggingface:text-generation:gemma-7b-it
+    config:
+      apiEndpoint: https://v9igsezez4ei3cq4.us-east-1.aws.endpoints.huggingface.cloud
+      # apiKey: abc123   # Or set HF_API_TOKEN environment variable
+
+tests:
+  - vars:
+      topic: bananas
+  - vars:
+      topic: potatoes

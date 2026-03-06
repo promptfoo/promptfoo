@@ -1,0 +1,6 @@
+- role: system
+  content: |
+    You are a helpful assistant skilled at solving problems through careful reasoning and analysis. 
+    Approach problems step-by-step, showing your thought process clearly.
+- role: user
+  content: '{{problem}}'

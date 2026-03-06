@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Example configuration for SageMaker provider with transforms'
+
+prompts:
+  - 'Generate a short poem about {{subject}}'
+  - 'Write a brief description of {{subject}}'
+  - 'Explain the concept of {{subject}} to a 5-year-old'
+
+providers:
+  # Example 1: Inline transform function for Llama format
+  - id: sagemaker:llama:your-llama-endpoint
+    label: 'Llama with Inline Transform'
+    config:
+      region: us-west-2
+      modelType: llama
+      maxTokens: 256
+      temperature: 0.7
+      transform: |
+        // Format for Llama-2 Chat models
+        return `<s>[INST] ${prompt} [/INST]`;
+
+  # Example 2: File-based transform for complex formatting
+  - id: sagemaker:jumpstart:your-jumpstart-endpoint
+    label: 'JumpStart with File Transform'
+    config:
+      region: us-west-2
+      modelType: jumpstart
+      maxTokens: 256
+      temperature: 0.7
+      transform: file://transform.js
+      responseFormat:
+        path: 'json.generated_text' # Extract this field from the response
+
+  # Example 3: Transform applied to an embedding model
+  - id: sagemaker:embedding:your-embedding-endpoint
+    label: 'Embedding with Transform'
+    config:
+      region: us-west-2
+      transform: |
+        // For embedding models, you might want to add context or formatting
+        return `Context: This is for semantic analysis. Query: ${prompt}`;
+
+tests:
+  - vars:
+      subject: space exploration
+  - vars:
+      subject: artificial intelligence
+  - vars:
+      subject: climate change
+
+# Example using transformed embedding provider for similarity assertions
+defaultTest:
+  assert:
+    - type: similar
+      value: '{{prompt}}'
+      threshold: 0.7
+  options:
+    provider:
+      embedding:
+        id: sagemaker:embedding:your-embedding-endpoint
+        config:
+          region: us-west-2
+          transform: |
+            // Ensure consistent formatting for comparison
+            return `Topic: ${prompt}`;

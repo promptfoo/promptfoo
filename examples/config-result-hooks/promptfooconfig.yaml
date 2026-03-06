@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Result processing hooks demo
+
+prompts:
+  - 'Write a haiku about {{topic}}'
+
+providers:
+  - openai:gpt-4.1-mini
+
+# Extension hooks for processing results
+extensions:
+  - file://result-handler.js:afterAll
+
+tests:
+  - vars:
+      topic: artificial intelligence
+    assert:
+      - type: contains
+        value: AI
+  - vars:
+      topic: coffee
+    assert:
+      - type: llm-rubric
+        value: mentions coffee or caffeine
+  - vars:
+      topic: mountains
+    assert:
+      - type: javascript
+        value: output.split('\n').length >= 3

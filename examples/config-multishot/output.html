@@ -1,0 +1,125 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Table Output</title>
+    <style>
+      body {
+        font-family:
+          -apple-system,
+          BlinkMacSystemFont,
+          Segoe UI,
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+      }
+      table,
+      th,
+      td {
+        border: 1px solid black;
+        border-collapse: collapse;
+        text-align: left;
+        word-break: break-all;
+      }
+      th,
+      td {
+        padding: 5px;
+        min-width: 200px;
+      }
+
+      tr > td[data-content^='[PASS]'] {
+        color: green;
+      }
+      tr > td[data-content^='[FAIL]'] {
+        color: #ad0000;
+      }
+    </style>
+  </head>
+  <body>
+    <table>
+      <thead>
+        <th>
+          [ {&quot;role&quot;: &quot;system&quot;, &quot;content&quot;: &quot;You are a helpful
+          assistant.&quot;}, {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Who won
+          the world series in {{ year }}?&quot;} ]
+        </th>
+
+        <th>
+          [ {&quot;role&quot;: &quot;system&quot;, &quot;content&quot;: &quot;You are a sports
+          historian.&quot;}, {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;This
+          team won the world series in {{ year }}:&quot;} ]
+        </th>
+
+        <th>year</th>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-content="[PASS] The New York Yankees won the World Series in 1950.">
+            [PASS] The New York Yankees won the World Series in 1950.
+          </td>
+
+          <td data-content="[PASS] The New York Yankees won the World Series in 1950.">
+            [PASS] The New York Yankees won the World Series in 1950.
+          </td>
+
+          <td data-content="1950">1950</td>
+        </tr>
+
+        <tr>
+          <td data-content="[PASS] The Detroit Tigers won the World Series in 1984.">
+            [PASS] The Detroit Tigers won the World Series in 1984.
+          </td>
+
+          <td
+            data-content="[PASS] The Detroit Tigers won the World Series in 1984. They defeated the San Diego Padres in five games to win their fourth championship in franchise history. The Tigers were led by manager Sparky Anderson and a talented roster that included players such as Alan Trammell, Lou Whitaker, Jack Morris, and Kirk Gibson."
+          >
+            [PASS] The Detroit Tigers won the World Series in 1984. They defeated the San Diego
+            Padres in five games to win their fourth championship in franchise history. The Tigers
+            were led by manager Sparky Anderson and a talented roster that included players such as
+            Alan Trammell, Lou Whitaker, Jack Morris, and Kirk Gibson.
+          </td>
+
+          <td data-content="1984">1984</td>
+        </tr>
+
+        <tr>
+          <td data-content="[PASS] The Los Angeles Dodgers won the World Series in 2020.">
+            [PASS] The Los Angeles Dodgers won the World Series in 2020.
+          </td>
+
+          <td
+            data-content="[PASS] The Los Angeles Dodgers won the World Series in 2020. It was their first championship since 1988."
+          >
+            [PASS] The Los Angeles Dodgers won the World Series in 2020. It was their first
+            championship since 1988.
+          </td>
+
+          <td data-content="2020">2020</td>
+        </tr>
+
+        <tr>
+          <td
+            data-content="[PASS] I&#39;m sorry, but as an AI language model, I cannot predict future events. However, the World Series in 2021 was won by the Atlanta Braves."
+          >
+            [PASS] I&#39;m sorry, but as an AI language model, I cannot predict future events.
+            However, the World Series in 2021 was won by the Atlanta Braves.
+          </td>
+
+          <td
+            data-content="[PASS] As an AI language model, I do not have knowledge of future events. However, I can tell you about the past World Series winners. The most recent World Series champions are the Los Angeles Dodgers, who won the 2020 World Series against the Tampa Bay Rays. The Dodgers have won a total of seven World Series championships in their history, with their first win coming in 1955."
+          >
+            [PASS] As an AI language model, I do not have knowledge of future events. However, I can
+            tell you about the past World Series winners. The most recent World Series champions are
+            the Los Angeles Dodgers, who won the 2020 World Series against the Tampa Bay Rays. The
+            Dodgers have won a total of seven World Series championships in their history, with
+            their first win coming in 1955.
+          </td>
+
+          <td data-content="2023">2023</td>
+        </tr>
+      </tbody>
+    </table>
+  </body>
+</html>

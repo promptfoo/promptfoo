@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Amazon SageMaker OpenAI-compatible model evaluation'
+
+prompts:
+  - 'Write a tweet about {{topic}}'
+  - 'Write a short blog introduction about {{topic}}'
+  - 'List 3 key benefits of {{topic}}'
+
+providers:
+  - id: sagemaker:openai:your-endpoint-name
+    config:
+      region: us-east-1
+      modelType: openai
+      temperature: 0.7
+      maxTokens: 256
+
+tests:
+  - vars:
+      topic: sustainable packaging
+  - vars:
+      topic: artificial intelligence in healthcare
+  - vars:
+      topic: remote work policies

@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Table Output</title>
+    <style>
+      body {
+        font-family:
+          -apple-system,
+          BlinkMacSystemFont,
+          Segoe UI,
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+      }
+      table,
+      th,
+      td {
+        border: 1px solid black;
+        border-collapse: collapse;
+        text-align: left;
+        word-break: break-all;
+      }
+      th,
+      td {
+        padding: 5px;
+        min-width: 200px;
+      }
+
+      tr > td[data-content^='[PASS]'] {
+        color: green;
+      }
+      tr > td[data-content^='[FAIL]'] {
+        color: #ad0000;
+      }
+    </style>
+  </head>
+  <body>
+    <table>
+      <thead>
+        <th>Rephrase this in {{language}}: {{body}}</th>
+
+        <th>Translate this to conversational {{language}}: {{body}}</th>
+
+        <th>body</th>
+
+        <th>language</th>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-content="Bonjour le monde">Bonjour le monde</td>
+
+          <td data-content="Bonjour le monde">Bonjour le monde</td>
+
+          <td data-content="Hello world">Hello world</td>
+
+          <td data-content="French">French</td>
+        </tr>
+
+        <tr>
+          <td data-content="J&#39;ai faim.">J&#39;ai faim.</td>
+
+          <td data-content="J&#39;ai faim.">J&#39;ai faim.</td>
+
+          <td data-content="I&#39;m hungry">I&#39;m hungry</td>
+
+          <td data-content="French">French</td>
+        </tr>
+
+        <tr>
+          <td data-content="Ahoy thar, world!">Ahoy thar, world!</td>
+
+          <td data-content="Ahoy thar world!">Ahoy thar world!</td>
+
+          <td data-content="Hello world">Hello world</td>
+
+          <td data-content="Pirate">Pirate</td>
+        </tr>
+
+        <tr>
+          <td data-content="Arrr, me belly be empty and yearnin&#39; for grub.">
+            Arrr, me belly be empty and yearnin&#39; for grub.
+          </td>
+
+          <td data-content="Arrr, me belly be rumblin&#39;! I be needin&#39; some grub!">
+            Arrr, me belly be rumblin&#39;! I be needin&#39; some grub!
+          </td>
+
+          <td data-content="I&#39;m hungry">I&#39;m hungry</td>
+
+          <td data-content="Pirate">Pirate</td>
+        </tr>
+      </tbody>
+    </table>
+  </body>
+</html>

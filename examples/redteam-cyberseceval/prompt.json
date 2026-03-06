@@ -1,0 +1,10 @@
+[
+  {
+    "role": "system",
+    "content": "{{test_case_prompt}}"
+  },
+  {
+    "role": "user",
+    "content": "{{user_input}}"
+  }
+]

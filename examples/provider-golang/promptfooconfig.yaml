@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Golang provider example'
+
+prompts:
+  - 'Given the sequence {{sequence}}, what are the next two numbers and explain your reasoning?'
+
+providers:
+  - id: 'file://evaluation/main.go:CallApi'
+    label: 'Provider in evaluation/'
+
+  - id: 'file://main.go:CallApi'
+    label: 'Provider in root'
+    config:
+      reasoning_effort: 'high'
+
+tests:
+  - vars:
+      sequence: '2, 6, 12, 20, 30'
+    assert:
+      - type: contains
+        value: '42' # Next number in sequence
+      - type: contains
+        value: '56' # Number after that
+
+  - vars:
+      sequence: '3, 7, 13, 21, 31'
+    assert:
+      - type: contains
+        value: '43' # Next number
+      - type: contains
+        value: '57' # Number after that

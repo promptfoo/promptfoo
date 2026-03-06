@@ -1,0 +1,6 @@
+- role: system
+  content: 'Be concise'
+- role: user
+  content: |
+    Answer this riddle:
+    {{riddle}}

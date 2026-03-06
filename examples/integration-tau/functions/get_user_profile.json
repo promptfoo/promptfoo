@@ -1,0 +1,17 @@
+{
+  "type": "function",
+  "function": {
+    "name": "get_user_profile",
+    "description": "Get user profile information including membership tier, payment methods, and personal details",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "The user ID to look up"
+        }
+      },
+      "required": ["user_id"]
+    }
+  }
+}

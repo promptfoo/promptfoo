@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Structured outputs with Perplexity (JSON and regex)
+
+prompts:
+  - 'Tell me about {{movie}}. Format your answer as a structured JSON object.'
+  - 'What is the postal code for {{city}}, {{country}}?'
+
+providers:
+  - id: perplexity:sonar
+    config:
+      temperature: 0.1
+      max_tokens: 1000
+      usage_tier: 'medium' # For cost calculation
+      response_format:
+        type: 'json_schema'
+        json_schema:
+          schema:
+            type: 'object'
+            properties:
+              title: { type: 'string' }
+              director: { type: 'string' }
+              year: { type: 'integer' }
+              genres: { type: 'array', items: { type: 'string' } }
+              plot_summary: { type: 'string' }
+            required: ['title', 'director', 'year', 'genres', 'plot_summary']
+      # This provider will be used for the first prompt only
+
+  - id: perplexity:sonar
+    config:
+      temperature: 0.1
+      max_tokens: 150
+      usage_tier: 'low' # For cost calculation
+      response_format:
+        type: 'regex'
+        regex:
+          regex: '[0-9A-Z]{1,10}'
+      # This provider will be used for the second prompt only
+
+tests:
+  - vars:
+      movie: Inception
+      city: Paris
+      country: France
+  - vars:
+      movie: The Matrix
+      city: Tokyo
+      country: Japan
+  - vars:
+      movie: Parasite
+      city: Sydney
+      country: Australia

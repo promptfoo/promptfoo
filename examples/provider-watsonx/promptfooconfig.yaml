@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'WatsonX Model Comparison'
+
+prompts:
+  - 'Answer the following question in 1-2 sentences: {{question}}'
+
+providers:
+  - id: watsonx:ibm/granite-3-3-8b-instruct
+    label: 'Granite 3.3 8B'
+  - id: watsonx:meta-llama/llama-3-3-70b-instruct
+    label: 'Llama 3.3 70B'
+  - id: watsonx:mistralai/mistral-large
+    label: 'Mistral Large'
+
+tests:
+  - vars:
+      question: 'What is the capital of France?'
+    assert:
+      - type: contains
+        value: 'Paris'
+
+  - vars:
+      question: 'What is 2+2?'
+    assert:
+      - type: contains
+        value: '4'

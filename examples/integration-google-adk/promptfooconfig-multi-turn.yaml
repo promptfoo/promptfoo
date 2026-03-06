@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: ADK multi-turn testing with conversation memory
+extensions:
+  - file://adk-session-hook.js:adkSessionHook
+defaultTest:
+  options:
+    provider: google:gemini-2.5-flash
+    delay: 2000
+prompts:
+  - '{{prompt}} '
+providers:
+  - id: https
+    config:
+      url: 'http://localhost:8000/run'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+      body:
+        app_name: 'weather_agent'
+        user_id: 'test_user'
+        session_id: 'conversation'
+        new_message:
+          role: 'user'
+          parts:
+            - text: '{{prompt}}'
+      transformResponse: 'file://adk-response-transform.js'
+tests:
+  - description: Initial weather query
+    vars:
+      prompt: "What's the weather in New York?"
+    assert:
+      - type: contains
+        value: 'New York'
+  - description: Follow-up weather query
+    vars:
+      prompt: 'How about London?'
+    assert:
+      - type: contains
+        value: 'London'
+  - description: Memory test - multi-turn conversation memory
+    vars:
+      prompt: 'Compare the weather between the two cities I asked about'
+    assert:
+      - type: llm-rubric
+        value: 'Response demonstrates that the agent remembers the previous cities (New York and London) from earlier in the conversation and provides a comparison between them'
+outputPath: multi-turn-results.json

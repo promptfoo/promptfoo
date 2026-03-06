@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Amazon Nova 2 Lite with Extended Thinking'
+
+prompts:
+  - 'Solve this step by step: {{problem}}'
+
+providers:
+  # Nova 2 Lite with reasoning enabled (high effort)
+  # Note: Must use cross-region model ID (us.) for on-demand access
+  # Temperature must not be set when reasoning is enabled
+  - id: bedrock:us.amazon.nova-2-lite-v1:0
+    label: Nova 2 Lite (High Reasoning)
+    config:
+      region: 'us-east-1'
+      interfaceConfig:
+        max_new_tokens: 4096
+      reasoningConfig:
+        type: enabled
+        maxReasoningEffort: high
+
+  # Nova 2 Lite with reasoning enabled (medium effort)
+  - id: bedrock:us.amazon.nova-2-lite-v1:0
+    label: Nova 2 Lite (Medium Reasoning)
+    config:
+      region: 'us-east-1'
+      interfaceConfig:
+        max_new_tokens: 4096
+      reasoningConfig:
+        type: enabled
+        maxReasoningEffort: medium
+
+  # Nova 2 Lite with reasoning disabled (fast mode)
+  - id: bedrock:us.amazon.nova-2-lite-v1:0
+    label: Nova 2 Lite (Fast)
+    config:
+      region: 'us-east-1'
+      interfaceConfig:
+        max_new_tokens: 2048
+        temperature: 0.7
+      reasoningConfig:
+        type: disabled
+
+tests:
+  - vars:
+      problem: 'A train leaves Station A at 9:00 AM traveling at 60 mph. Another train leaves Station B, 300 miles away, at 10:00 AM traveling toward Station A at 90 mph. At what time will the trains meet?'
+  - vars:
+      problem: 'If a bat and ball cost $1.10 together, and the bat costs $1 more than the ball, how much does the ball cost?'
+  - vars:
+      problem: 'In a room of 23 people, what is the probability that at least two people share a birthday?'
+  - vars:
+      problem: 'A farmer has 17 sheep. All but 9 die. How many sheep does the farmer have left?'
+  - vars:
+      problem: 'If it takes 5 machines 5 minutes to make 5 widgets, how long does it take 100 machines to make 100 widgets?'

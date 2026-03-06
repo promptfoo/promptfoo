@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Node modules'
+
+prompts:
+  - 'Write a tweet about {{topic}}'
+
+providers:
+  - package:testpackage:Provider
+
+tests:
+  - vars:
+      topic: bananas

@@ -1,0 +1,385 @@
+{
+  "_resultsLoaded": false,
+  "createdAt": 1758065385111,
+  "id": "eval-uex-2025-09-16T23:29:45",
+  "config": {
+    "prompts": [
+      {
+        "raw": "Write a haiku about: {{body}}",
+        "label": "Write a haiku about: {{body}}"
+      },
+      {
+        "raw": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]",
+        "label": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]"
+      },
+      {
+        "raw": "Write 3 words about {{body}}",
+        "label": "prompt.txt: Write 3 words about {{body}}"
+      },
+      {
+        "raw": "vars=>{const genres=[\"fantasy\",\"sci-fi\",\"mystery\",\"horror\"];const characters={fantasy:\"wizard\",\"sci-fi\":\"alien\",mystery:\"detective\",horror:\"ghost\"};const genre=genres[Math.floor(Math.random()*genres.length)];const character=characters[genre];return[{role:\"system\",content:`You have encountered a ${character} in a ${genre} setting. Engage with the character using the knowledge typical for that genre.`},{role:\"user\",content:\"{{body}}\"}]}",
+        "label": ""
+      }
+    ],
+    "providers": ["openai:gpt-4.1-mini", null],
+    "tests": [
+      {
+        "vars": {
+          "body": "Hello world"
+        }
+      },
+      {
+        "vars": {
+          "body": "I'm hungry"
+        },
+        "assert": [
+          {
+            "type": "javascript"
+          }
+        ]
+      }
+    ],
+    "writeLatestResults": true
+  },
+  "results": [],
+  "prompts": [
+    {
+      "raw": "Write a haiku about: {{body}}",
+      "label": "Write a haiku about: {{body}}",
+      "id": "64a38a678decacb9c6c12748f049b7558eaf709be7fe34f2b7120605754a02e6",
+      "provider": "openai:gpt-4.1-mini",
+      "metrics": {
+        "score": 1,
+        "testPassCount": 1,
+        "testFailCount": 1,
+        "testErrorCount": 0,
+        "assertPassCount": 0,
+        "assertFailCount": 1,
+        "totalLatencyMs": 2363,
+        "tokenUsage": {
+          "prompt": 30,
+          "completion": 38,
+          "cached": 0,
+          "total": 68,
+          "numRequests": 2,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          }
+        },
+        "namedScores": {},
+        "namedScoresCount": {},
+        "cost": 0.00007280000000000001
+      }
+    },
+    {
+      "raw": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]",
+      "label": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]",
+      "id": "13fa8ee48f9101367ab54fddbb72cc53eabc1aeacc250503e0023c99635059c7",
+      "provider": "openai:gpt-4.1-mini",
+      "metrics": {
+        "score": 1,
+        "testPassCount": 1,
+        "testFailCount": 1,
+        "testErrorCount": 0,
+        "assertPassCount": 0,
+        "assertFailCount": 1,
+        "totalLatencyMs": 2148,
+        "tokenUsage": {
+          "prompt": 50,
+          "completion": 41,
+          "cached": 0,
+          "total": 91,
+          "numRequests": 2,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          }
+        },
+        "namedScores": {},
+        "namedScoresCount": {},
+        "cost": 0.00008560000000000001
+      }
+    },
+    {
+      "raw": "Write 3 words about {{body}}",
+      "label": "prompt.txt: Write 3 words about {{body}}",
+      "id": "16946aa0e5135cee46b889df493c8c8c6033b45b679c47143e94e39ee1854e26",
+      "provider": "openai:gpt-4.1-mini",
+      "metrics": {
+        "score": 1,
+        "testPassCount": 1,
+        "testFailCount": 1,
+        "testErrorCount": 0,
+        "assertPassCount": 0,
+        "assertFailCount": 1,
+        "totalLatencyMs": 1723,
+        "tokenUsage": {
+          "prompt": 28,
+          "completion": 9,
+          "cached": 0,
+          "total": 37,
+          "numRequests": 2,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          }
+        },
+        "namedScores": {},
+        "namedScoresCount": {},
+        "cost": 0.000025600000000000002
+      }
+    },
+    {
+      "raw": "vars=>{const genres=[\"fantasy\",\"sci-fi\",\"mystery\",\"horror\"];const characters={fantasy:\"wizard\",\"sci-fi\":\"alien\",mystery:\"detective\",horror:\"ghost\"};const genre=genres[Math.floor(Math.random()*genres.length)];const character=characters[genre];return[{role:\"system\",content:`You have encountered a ${character} in a ${genre} setting. Engage with the character using the knowledge typical for that genre.`},{role:\"user\",content:\"{{body}}\"}]}",
+      "label": "",
+      "id": "08d55eb2289671c2dcc6444a62b58a627fde3dba2ba17e4861c1ffa86fe2f48f",
+      "provider": "openai:gpt-4.1-mini",
+      "metrics": {
+        "score": 1,
+        "testPassCount": 1,
+        "testFailCount": 1,
+        "testErrorCount": 0,
+        "assertPassCount": 0,
+        "assertFailCount": 1,
+        "totalLatencyMs": 3017,
+        "tokenUsage": {
+          "prompt": 70,
+          "completion": 125,
+          "cached": 0,
+          "total": 195,
+          "numRequests": 2,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          }
+        },
+        "namedScores": {},
+        "namedScoresCount": {},
+        "cost": 0.000228
+      }
+    },
+    {
+      "raw": "Write a haiku about: {{body}}",
+      "label": "Write a haiku about: {{body}}",
+      "id": "64a38a678decacb9c6c12748f049b7558eaf709be7fe34f2b7120605754a02e6",
+      "provider": "custom-function-1",
+      "metrics": {
+        "score": 1,
+        "testPassCount": 1,
+        "testFailCount": 1,
+        "testErrorCount": 0,
+        "assertPassCount": 0,
+        "assertFailCount": 1,
+        "totalLatencyMs": 1,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 2,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          }
+        },
+        "namedScores": {},
+        "namedScoresCount": {},
+        "cost": 0
+      }
+    },
+    {
+      "raw": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]",
+      "label": "[{\"role\":\"system\",\"content\":\"You are speaking to a time traveler. Begin your conversation.\"},{\"role\":\"user\",\"content\":\"{{body}}\"}]",
+      "id": "13fa8ee48f9101367ab54fddbb72cc53eabc1aeacc250503e0023c99635059c7",
+      "provider": "custom-function-1",
+      "metrics": {
+        "score": 1,
+        "testPassCount": 1,
+        "testFailCount": 1,
+        "testErrorCount": 0,
+        "assertPassCount": 0,
+        "assertFailCount": 1,
+        "totalLatencyMs": 0,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 2,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          }
+        },
+        "namedScores": {},
+        "namedScoresCount": {},
+        "cost": 0
+      }
+    },
+    {
+      "raw": "Write 3 words about {{body}}",
+      "label": "prompt.txt: Write 3 words about {{body}}",
+      "id": "16946aa0e5135cee46b889df493c8c8c6033b45b679c47143e94e39ee1854e26",
+      "provider": "custom-function-1",
+      "metrics": {
+        "score": 1,
+        "testPassCount": 1,
+        "testFailCount": 1,
+        "testErrorCount": 0,
+        "assertPassCount": 0,
+        "assertFailCount": 1,
+        "totalLatencyMs": 0,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 2,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          }
+        },
+        "namedScores": {},
+        "namedScoresCount": {},
+        "cost": 0
+      }
+    },
+    {
+      "raw": "vars=>{const genres=[\"fantasy\",\"sci-fi\",\"mystery\",\"horror\"];const characters={fantasy:\"wizard\",\"sci-fi\":\"alien\",mystery:\"detective\",horror:\"ghost\"};const genre=genres[Math.floor(Math.random()*genres.length)];const character=characters[genre];return[{role:\"system\",content:`You have encountered a ${character} in a ${genre} setting. Engage with the character using the knowledge typical for that genre.`},{role:\"user\",content:\"{{body}}\"}]}",
+      "label": "",
+      "id": "08d55eb2289671c2dcc6444a62b58a627fde3dba2ba17e4861c1ffa86fe2f48f",
+      "provider": "custom-function-1",
+      "metrics": {
+        "score": 1,
+        "testPassCount": 1,
+        "testFailCount": 1,
+        "testErrorCount": 0,
+        "assertPassCount": 0,
+        "assertFailCount": 1,
+        "totalLatencyMs": 1,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 2,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          }
+        },
+        "namedScores": {},
+        "namedScoresCount": {},
+        "cost": 0
+      }
+    }
+  ],
+  "persisted": true,
+  "vars": ["body"]
+}

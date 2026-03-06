@@ -1,0 +1,9 @@
+You are a helpful assistant. Reply with a concise answer to this inquiry: "{{question}}"
+---
+You are a helpful assistant. Reply with a concise answer to this inquiry: "{{question}}"
+
+- Think carefully & step-by-step.
+- Only use information available on Wikipedia.
+- You must answer the question directly, without speculation.
+- You cannot access realtime information. Consider whether the answer may have changed in the 2 years since your knowledge cutoff.
+- If you are not confident in your answer, begin your response with "Unsure".

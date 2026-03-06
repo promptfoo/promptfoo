@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Groq Provider Demo'
+
+prompts:
+  - 'Answer this question as concisely as possible: {{calculation}}'
+  - 'Calculate the following and provide a brief explanation: {{calculation}}'
+
+providers:
+  - id: groq:llama-4-scout-17b-16e-instruct
+  - id: groq:llama-4-maverick-17b-128e-instruct
+  - id: groq:llama-3.3-70b-versatile
+    config:
+      max_completion_tokens: 300
+      tools:
+        - type: function
+          function:
+            name: calculate
+            description: 'Evaluate a mathematical expression'
+            parameters:
+              type: object
+              properties:
+                expression:
+                  type: string
+                  description: 'The mathematical expression to evaluate'
+              required:
+                - 'expression'
+      tool_choice: auto
+  - id: groq:openai/gpt-oss-120b
+    label: 'GPT-OSS 120B with reasoning'
+    config:
+      temperature: 0.6
+      max_completion_tokens: 1000
+      include_reasoning: true
+      reasoning_effort: 'medium'
+  - id: groq:openai/gpt-oss-20b
+    label: 'GPT-OSS 20B (reasoning hidden)'
+    config:
+      temperature: 0.6
+      max_completion_tokens: 1000
+      include_reasoning: false
+
+tests:
+  - vars:
+      calculation: 25 * 4 + 10
+  - vars:
+      calculation: (8 + 2) * 5

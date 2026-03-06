@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Transform with external function'
+
+prompts:
+  - 'Write a tweet about {{topic}}'
+
+providers:
+  - openai:gpt-4.1-mini
+
+defaultTest:
+  options:
+    transform: file://transform.js
+    # transform: file://transform.py:custom_func_name
+
+tests:
+  - vars:
+      topic: bananas

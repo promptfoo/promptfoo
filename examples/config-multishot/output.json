@@ -1,0 +1,182 @@
+{
+  "version": 1,
+  "results": [
+    {
+      "prompt": {
+        "raw": "[\n  {\"role\": \"system\", \"content\": \"You are a helpful assistant.\"},\n  {\"role\": \"user\", \"content\": \"Who won the world series in 1950?\"}\n]\n",
+        "display": "[\n  {\"role\": \"system\", \"content\": \"You are a helpful assistant.\"},\n  {\"role\": \"user\", \"content\": \"Who won the world series in {{ year }}?\"}\n]\n"
+      },
+      "vars": {
+        "year": 1950
+      },
+      "response": {
+        "output": "The New York Yankees won the World Series in 1950.",
+        "tokenUsage": {
+          "cached": 42
+        }
+      },
+      "success": true
+    },
+    {
+      "prompt": {
+        "raw": "[\n  {\"role\": \"system\", \"content\": \"You are a helpful assistant.\"},\n  {\"role\": \"user\", \"content\": \"Who won the world series in 1984?\"}\n]\n",
+        "display": "[\n  {\"role\": \"system\", \"content\": \"You are a helpful assistant.\"},\n  {\"role\": \"user\", \"content\": \"Who won the world series in {{ year }}?\"}\n]\n"
+      },
+      "vars": {
+        "year": 1984
+      },
+      "response": {
+        "output": "The Detroit Tigers won the World Series in 1984.",
+        "tokenUsage": {
+          "cached": 41
+        }
+      },
+      "success": true
+    },
+    {
+      "prompt": {
+        "raw": "[\n  {\"role\": \"system\", \"content\": \"You are a sports historian.\"},\n  {\"role\": \"user\", \"content\": \"This team won the world series in 1984:\"}\n]\n",
+        "display": "[\n  {\"role\": \"system\", \"content\": \"You are a sports historian.\"},\n  {\"role\": \"user\", \"content\": \"This team won the world series in {{ year }}:\"}\n]\n"
+      },
+      "vars": {
+        "year": 1984
+      },
+      "response": {
+        "output": "The Detroit Tigers won the World Series in 1984. They defeated the San Diego Padres in five games to win their fourth championship in franchise history. The Tigers were led by manager Sparky Anderson and a talented roster that included players such as Alan Trammell, Lou Whitaker, Jack Morris, and Kirk Gibson.",
+        "tokenUsage": {
+          "cached": 94
+        }
+      },
+      "success": true
+    },
+    {
+      "prompt": {
+        "raw": "[\n  {\"role\": \"system\", \"content\": \"You are a sports historian.\"},\n  {\"role\": \"user\", \"content\": \"This team won the world series in 1950:\"}\n]\n",
+        "display": "[\n  {\"role\": \"system\", \"content\": \"You are a sports historian.\"},\n  {\"role\": \"user\", \"content\": \"This team won the world series in {{ year }}:\"}\n]\n"
+      },
+      "vars": {
+        "year": 1950
+      },
+      "response": {
+        "output": "The New York Yankees won the World Series in 1950.",
+        "tokenUsage": {
+          "cached": 43
+        }
+      },
+      "success": true
+    },
+    {
+      "prompt": {
+        "raw": "[\n  {\"role\": \"system\", \"content\": \"You are a sports historian.\"},\n  {\"role\": \"user\", \"content\": \"This team won the world series in 2020:\"}\n]\n",
+        "display": "[\n  {\"role\": \"system\", \"content\": \"You are a sports historian.\"},\n  {\"role\": \"user\", \"content\": \"This team won the world series in {{ year }}:\"}\n]\n"
+      },
+      "vars": {
+        "year": 2020
+      },
+      "response": {
+        "output": "The Los Angeles Dodgers won the World Series in 2020. It was their first championship since 1988.",
+        "tokenUsage": {
+          "cached": 53
+        }
+      },
+      "success": true
+    },
+    {
+      "prompt": {
+        "raw": "[\n  {\"role\": \"system\", \"content\": \"You are a helpful assistant.\"},\n  {\"role\": \"user\", \"content\": \"Who won the world series in 2023?\"}\n]\n",
+        "display": "[\n  {\"role\": \"system\", \"content\": \"You are a helpful assistant.\"},\n  {\"role\": \"user\", \"content\": \"Who won the world series in {{ year }}?\"}\n]\n"
+      },
+      "vars": {
+        "year": 2023
+      },
+      "response": {
+        "output": "I'm sorry, but as an AI language model, I cannot predict future events. However, the World Series in 2021 was won by the Atlanta Braves.",
+        "tokenUsage": {
+          "cached": 62
+        }
+      },
+      "success": true
+    },
+    {
+      "prompt": {
+        "raw": "[\n  {\"role\": \"system\", \"content\": \"You are a sports historian.\"},\n  {\"role\": \"user\", \"content\": \"This team won the world series in 2023:\"}\n]\n",
+        "display": "[\n  {\"role\": \"system\", \"content\": \"You are a sports historian.\"},\n  {\"role\": \"user\", \"content\": \"This team won the world series in {{ year }}:\"}\n]\n"
+      },
+      "vars": {
+        "year": 2023
+      },
+      "response": {
+        "output": "As an AI language model, I do not have knowledge of future events. However, I can tell you about the past World Series winners. The most recent World Series champions are the Los Angeles Dodgers, who won the 2020 World Series against the Tampa Bay Rays. The Dodgers have won a total of seven World Series championships in their history, with their first win coming in 1955.",
+        "tokenUsage": {
+          "cached": 109
+        }
+      },
+      "success": true
+    },
+    {
+      "prompt": {
+        "raw": "[\n  {\"role\": \"system\", \"content\": \"You are a helpful assistant.\"},\n  {\"role\": \"user\", \"content\": \"Who won the world series in 2020?\"}\n]\n",
+        "display": "[\n  {\"role\": \"system\", \"content\": \"You are a helpful assistant.\"},\n  {\"role\": \"user\", \"content\": \"Who won the world series in {{ year }}?\"}\n]\n"
+      },
+      "vars": {
+        "year": 2020
+      },
+      "response": {
+        "output": "The Los Angeles Dodgers won the World Series in 2020.",
+        "tokenUsage": {
+          "cached": 42
+        }
+      },
+      "success": true
+    }
+  ],
+  "stats": {
+    "successes": 8,
+    "failures": 0,
+    "tokenUsage": {
+      "total": 0,
+      "prompt": 0,
+      "completion": 0,
+      "cached": 486
+    }
+  },
+  "table": {
+    "head": {
+      "prompts": [
+        "[\n  {\"role\": \"system\", \"content\": \"You are a helpful assistant.\"},\n  {\"role\": \"user\", \"content\": \"Who won the world series in {{ year }}?\"}\n]\n",
+        "[\n  {\"role\": \"system\", \"content\": \"You are a sports historian.\"},\n  {\"role\": \"user\", \"content\": \"This team won the world series in {{ year }}:\"}\n]\n"
+      ],
+      "vars": ["year"]
+    },
+    "body": [
+      {
+        "outputs": [
+          "[PASS] The New York Yankees won the World Series in 1950.",
+          "[PASS] The New York Yankees won the World Series in 1950."
+        ],
+        "vars": [1950]
+      },
+      {
+        "outputs": [
+          "[PASS] The Detroit Tigers won the World Series in 1984.",
+          "[PASS] The Detroit Tigers won the World Series in 1984. They defeated the San Diego Padres in five games to win their fourth championship in franchise history. The Tigers were led by manager Sparky Anderson and a talented roster that included players such as Alan Trammell, Lou Whitaker, Jack Morris, and Kirk Gibson."
+        ],
+        "vars": [1984]
+      },
+      {
+        "outputs": [
+          "[PASS] The Los Angeles Dodgers won the World Series in 2020.",
+          "[PASS] The Los Angeles Dodgers won the World Series in 2020. It was their first championship since 1988."
+        ],
+        "vars": [2020]
+      },
+      {
+        "outputs": [
+          "[PASS] I'm sorry, but as an AI language model, I cannot predict future events. However, the World Series in 2021 was won by the Atlanta Braves.",
+          "[PASS] As an AI language model, I do not have knowledge of future events. However, I can tell you about the past World Series winners. The most recent World Series champions are the Los Angeles Dodgers, who won the 2020 World Series against the Tampa Bay Rays. The Dodgers have won a total of seven World Series championships in their history, with their first win coming in 1955."
+        ],
+        "vars": [2023]
+      }
+    ]
+  }
+}

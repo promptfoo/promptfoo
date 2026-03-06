@@ -1,0 +1,25 @@
+# This file contains a list of test cases. They're added alongside test cases
+# from tests1.yaml in the example promptfooconfig.yaml.
+
+- vars:
+    topic: alien invasions
+    content_type: survival tips
+  assert:
+    - type: javascript
+      value: output.length > 100
+- vars:
+    topic: time travel
+    content_type: tourist attractions
+- vars:
+    topic: zombie apocalypse
+    content_type: home renovation ideas
+- vars:
+    topic: unicorn breeding
+    content_type: best practices
+- vars:
+    topic: telepathy for beginners
+    content_type: etiquette rules
+- vars:
+    topic: fairy dust
+    content_type: cleaning hacks
+- vars: ../vars/vars_*.yaml

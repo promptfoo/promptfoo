@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: ADK single-turn testing with session isolation
+extensions:
+  - file://adk-session-hook.js:adkSessionHook
+defaultTest:
+  options:
+    provider: google:gemini-2.5-flash
+    delay: 2000
+prompts:
+  - '{{prompt}}'
+providers:
+  - id: https
+    config:
+      url: 'http://localhost:8000/run'
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+      body:
+        app_name: 'weather_agent'
+        user_id: 'test_user'
+        session_id: '{{session_id}}'
+        new_message:
+          role: 'user'
+          parts:
+            - text: '{{prompt}}'
+      transformResponse: 'file://adk-response-transform.js'
+tests:
+  - description: Weather query for New York
+    vars:
+      prompt: "What's the weather in New York?"
+      session_id: 'session_ny'
+    assert:
+      - type: contains
+        value: 'New York'
+  - description: Weather query for London (independent session)
+    vars:
+      prompt: 'How about London?'
+      session_id: 'session_london'
+    assert:
+      - type: contains
+        value: 'London'
+  - description: Context isolation test (fresh session)
+    vars:
+      prompt: 'What cities have we discussed?'
+      session_id: 'session_fresh'
+    assert:
+      - type: llm-rubric
+        value: 'Response indicates no memory of previous conversations or cities, demonstrating session isolation'
+outputPath: single-turn-results.json

@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Titan Text Eval'
+
+prompts:
+  - 'Convert this English to {{language}}: {{input}}'
+  - 'Translate to {{language}}: {{input}}'
+
+providers:
+  # https://docs.aws.amazon.com/bedrock/latest/userguide/titan-text-models.html
+  - id: bedrock:amazon.titan-text-lite-v1
+    config:
+      region: 'us-east-1'
+      textGenerationConfig:
+        maxTokenCount: 400
+        temperature: 0.3
+        stopSequences: []
+        topP: 0.9
+
+      # Optional guardrails
+      # guardrailIdentifier: x6jfrw53f5ag
+      # guardrailVersion: DRAFT
+
+tests:
+  - vars:
+      language: French
+      input: Hello world
+  - vars:
+      language: Spanish
+      input: Where is the library?

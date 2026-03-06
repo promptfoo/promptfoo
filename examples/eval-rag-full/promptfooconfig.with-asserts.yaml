@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'RAG - End to end test with comparison'
+
+prompts:
+  - '{{question}}'
+
+providers:
+  - id: file://retrieve.py
+    label: RAG retrieval small
+    config:
+      topK: 5
+  - id: file://retrieve.py
+    label: RAG retrieval big
+    config:
+      topK: 10
+
+tests:
+  - vars:
+      question: How has Apple's total net sales changed over time?
+    assert:
+      - type: contains
+        value: '82,959 million'
+      - type: contains
+        value: '117,154 million'
+  - vars:
+      question: What are the major factors contributing to the change in Apple's gross margin in the most recent 10-Q compared to the previous quarters?
+    assert:
+      - type: llm-rubric
+        value: 'cites weakness in foreign currencies relative to the U.S. dollar'
+  - vars:
+      question: Has there been any significant change in Apple's operating expenses over the reported quarters? If so, what are the key drivers for this change?
+    assert:
+      - type: contains
+        value: 'net sales'
+  - vars:
+      question: How has Apple's revenue from iPhone sales fluctuated across quarters?
+    assert:
+      - type: icontains-all
+        value:
+          - '2023'
+          - '2022'
+          - '2021'
+  - vars:
+      question: Can any trends be identified in Apple's Services segment revenue over the reported periods?
+    assert:
+      - type: icontains
+        value: services
+  - vars:
+      question: What is the impact of foreign exchange rates on Apple's financial performance? List this out separately for each reported period.
+    assert:
+      - type: llm-rubric
+        value: 'includes specific commentary on foreign exchange'
+  - vars:
+      question: Are there any notable changes in Apple's liquidity position or cash flows as reported in these 10-Qs?
+    assert:
+      - type: llm-rubric
+        value: 'no notable changes'
+  - vars:
+      question: Examine how Intel's effective tax rate in the most recent 10-Q compares with the tax-related discussions in the notes section.
+    assert:
+      - type: contains
+        value: '696.2%'
+  - vars:
+      question: In Amazon's latest 10-Q, how does the revenue distribution across its diverse business segments like e-commerce, AWS, and others compare to the costs incurred in these segments?

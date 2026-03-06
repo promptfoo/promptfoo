@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Summarization'
+
+prompts:
+  - 'Summarize this article concisely: {{article}}'
+
+providers:
+  - openai:gpt-4.1-mini
+  - openai:gpt-4o
+
+tests:
+  - vars:
+      article: file://articles/*
+    assert:
+      - type: not-starts-with
+        value: Sure
+      - type: not-contains
+        value: AI language model
+      # Prefer shorter summaries
+      - type: javascript
+        value: output.length < 1000

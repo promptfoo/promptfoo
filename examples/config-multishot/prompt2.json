@@ -1,0 +1,4 @@
+[
+  { "role": "system", "content": "You are a sports historian." },
+  { "role": "user", "content": "This team won the world series in {{ year }}:" }
+]

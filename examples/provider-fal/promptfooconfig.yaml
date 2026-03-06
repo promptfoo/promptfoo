@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: fal.ai image generation comparison
+
+prompts:
+  - 'Create a {{quality}} image of {{subject}} with {{style}} aesthetic'
+
+providers:
+  - id: fal:image:fal-ai/flux/schnell
+    config:
+      seed: 42
+      num_inference_steps: 4
+      guidance_scale: 3.5
+
+  - id: fal:image:fal-ai/flux/dev
+    config:
+      seed: 42
+      num_inference_steps: 28
+      guidance_scale: 7.5
+      image_size: landscape_4_3
+
+tests:
+  - vars:
+      style: Van Gogh painting
+      subject: starry night over a cyberpunk city
+      mood: dreamy
+      quality: highly detailed
+
+  - vars:
+      style: Picasso cubist artwork
+      subject: robot playing chess
+      mood: abstract
+      quality: artistic
+
+  - vars:
+      style: Monet impressionist painting
+      subject: dragon flying over water lilies
+      mood: serene
+      quality: ethereal
+
+  - vars:
+      style: Studio Ghibli animation
+      subject: floating castle in the clouds
+      mood: whimsical
+      quality: cinematic
+
+  - vars:
+      style: cyberpunk digital art
+      subject: neon-lit street with flying cars
+      mood: futuristic
+      quality: ultra-realistic
+
+  - vars:
+      style: Renaissance masterpiece
+      subject: astronaut discovering alien ruins
+      mood: majestic
+      quality: museum-worthy
+
+  - vars:
+      style: Japanese woodblock print
+      subject: giant octopus attacking a spaceship
+      mood: dramatic
+      quality: traditional

@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: PydanticAI agent evaluation
+
+prompts:
+  - '{{query}}'
+
+providers:
+  - id: file://provider.py
+    label: PydanticAI Weather Agent
+
+defaultTest:
+  assert:
+    - type: is-json
+      value:
+        type: object
+        properties:
+          location:
+            type: string
+          temperature:
+            type: string
+          description:
+            type: string
+        required: ['location', 'temperature', 'description']
+
+tests:
+  - description: 'Basic weather query with JavaScript assertion'
+    vars:
+      query: "What's the weather like in London?"
+    assert:
+      - type: javascript
+        value: output.location.toLowerCase().includes('london') && output.temperature !== 'N/A'
+
+  - description: 'Structured output validation with Python assertion'
+    vars:
+      query: 'Weather in New York'
+    assert:
+      - type: python
+        value: "'new york' in output.get('location', '').lower() and output.get('temperature', '').endswith(('°C', '°F'))"
+
+  - description: 'Weather quality assessment with LLM rubric'
+    vars:
+      query: 'Weather in Tokyo'
+    assert:
+      - type: llm-rubric
+        value: 'The weather response should be realistic and include proper temperature units. The location should be correctly identified as Tokyo.'

@@ -1,0 +1,5 @@
+prompt,label
+"Tell me about {{topic}} in the style of a children's book","Children's Book Style"
+"Explain {{topic}} as if you're a professor giving a lecture","Academic Lecture"
+"Write a short poem about {{topic}}","Poetic Format"
+"What's the relationship between {{topic}} and technology?","Tech Analysis" 

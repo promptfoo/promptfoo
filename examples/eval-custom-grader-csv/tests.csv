@@ -1,0 +1,5 @@
+language,body,__expected
+French,Hello world,javascript:file://customAssertion.ts
+French,I'm hungry,javascript:file://customAssertion.ts
+Pirate,Hello world,javascript:file://customAssertion.ts
+Pirate,I'm hungry,javascript:file://customAssertion.ts
