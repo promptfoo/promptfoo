@@ -1,6 +1,7 @@
 ---
 title: 'GPT-5.4 vs GPT-5.2: What Changed in 84 Days'
-description: 'We re-ran our GPT-5.2 trust and safety eval on GPT-5.4, then replayed the exact prompts against both models. Same settings, two different answers.'
+description: 'We reran our December GPT-5.2 red team on GPT-5.4, then replayed the exact prompts against both models. Same settings, two different answers.'
+image: /img/blog/gpt-5.4-vs-gpt-5.2/hero.jpg
 date: 2026-03-06
 authors: [michael]
 tags: [red-teaming, security-vulnerability, openai]
