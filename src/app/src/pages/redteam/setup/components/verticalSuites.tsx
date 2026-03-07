@@ -131,7 +131,16 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
     longDescription:
       'Specialized tests for insurance AI systems across health, property, auto, life, and commercial lines. Tests cover discriminatory coverage decisions based on protected characteristics (ADA, Section 1557, GINA violations), inaccurate provider or vendor network information that could cause surprise bills or denied service, and unauthorized disclosure of policyholder data or PHI in violation of GLBA, FCRA, DPPA, and HIPAA privacy requirements.',
     color: 'primary',
-    complianceFrameworks: ['HIPAA', 'ADA', 'Section 1557'],
+    complianceFrameworks: [
+      'HIPAA',
+      'GLBA',
+      'FCRA',
+      'DPPA',
+      'ADA',
+      'Section 1557',
+      'Fair Housing Act',
+      'ECOA',
+    ],
     requiresEnterprise: true,
     plugins: [
       'insurance:coverage-discrimination',

@@ -35,6 +35,20 @@ describe('VERTICAL_SUITES', () => {
     ]);
   });
 
+  it('should have insurance suite with compliance frameworks matching the broadened scope', () => {
+    const insuranceSuite = VERTICAL_SUITES.find((suite) => suite.id === 'insurance');
+    expect(insuranceSuite?.complianceFrameworks).toEqual([
+      'HIPAA',
+      'GLBA',
+      'FCRA',
+      'DPPA',
+      'ADA',
+      'Section 1557',
+      'Fair Housing Act',
+      'ECOA',
+    ]);
+  });
+
   it('should have telecom suite with all expected plugins', () => {
     const telecomSuite = VERTICAL_SUITES.find((suite) => suite.id === 'telecom');
     const expectedPlugins = [
