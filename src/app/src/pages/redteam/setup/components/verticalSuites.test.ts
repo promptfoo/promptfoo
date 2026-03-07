@@ -109,8 +109,12 @@ describe('DOMAIN_SPECIFIC_PLUGINS', () => {
     expect(DOMAIN_SPECIFIC_PLUGINS).toContain('telecom:e911-misinformation' as Plugin);
   });
 
+  it('should include insurance data disclosure plugin', () => {
+    expect(DOMAIN_SPECIFIC_PLUGINS).toContain('insurance:data-disclosure' as Plugin);
+  });
+
   it('should have correct total number of plugins', () => {
-    // Count expected: ecommerce(4) + financial(10) + medical(6) + insurance(3) + pharmacy(3) + telecom(12)
+    // Count expected: ecommerce(4) + financial(10) + medical(6) + insurance(4) + pharmacy(3) + telecom(12)
     const expectedCount = VERTICAL_SUITES.reduce((sum, suite) => sum + suite.plugins.length, 0);
     expect(DOMAIN_SPECIFIC_PLUGINS).toHaveLength(expectedCount);
   });
