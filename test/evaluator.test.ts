@@ -2152,6 +2152,31 @@ describe('evaluator', () => {
     expect(summary.results[1].response?.output).toBe('Second run First run ');
   });
 
+  it('does not force concurrency to 1 for _conversation substrings', async () => {
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+    let forcedConversationConcurrency = false;
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Summarize the pre_conversation_context for the user: {{ question }}')],
+      tests: [{ vars: { question: 'What changed?' } }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      await evaluate(testSuite, evalRecord, { maxConcurrency: 3 });
+      forcedConversationConcurrency = infoSpy.mock.calls.some(
+        ([message]) =>
+          typeof message === 'string' &&
+          message.includes('Setting concurrency to 1 because the') &&
+          message.includes('_conversation'),
+      );
+    } finally {
+      infoSpy.mockRestore();
+    }
+
+    expect(forcedConversationConcurrency).toBe(false);
+  });
+
   it('evaluate with labeled and unlabeled providers and providerPromptMap', async () => {
     const mockLabeledProvider: ApiProvider = {
       id: () => 'labeled-provider-id',

@@ -4,6 +4,8 @@ import { getEnvBool } from '../envars';
 
 import type { NunjucksFilterMap } from '../types/index';
 
+const TEMPLATE_COMMENT_REGEX = /\{#[\s\S]*?#\}/g;
+
 /**
  * Get a Nunjucks engine instance with optional filters and configuration.
  * @param filters - Optional map of custom Nunjucks filters.
@@ -63,10 +65,9 @@ export function extractVariablesFromTemplate(template: string): string[] {
   const variableSet = new Set<string>();
   const regex =
     /\{\{[\s]*([^{}\s|]+)[\s]*(?:\|[^}]+)?\}\}|\{%[\s]*(?:if|for)[\s]+([^{}\s]+)[\s]*.*?%\}/g;
-  const commentRegex = /\{#[\s\S]*?#\}/g;
 
   // Remove comments
-  template = template.replace(commentRegex, '');
+  template = template.replace(TEMPLATE_COMMENT_REGEX, '');
 
   let match;
   while ((match = regex.exec(template)) !== null) {
@@ -85,6 +86,23 @@ export function extractVariablesFromTemplate(template: string): string[] {
   }
 
   return Array.from(variableSet);
+}
+
+/**
+ * Check whether a Nunjucks template references a variable as an actual template identifier.
+ * This ignores plain text and property access on other variables.
+ */
+export function templateUsesVariable(template: string, variableName: string): boolean {
+  if (!variableName) {
+    return false;
+  }
+
+  return extractVariablesFromTemplate(template).some(
+    (variable) =>
+      variable === variableName ||
+      variable.startsWith(`${variableName}[`) ||
+      variable.startsWith(`${variableName}.`),
+  );
 }
 
 /**
