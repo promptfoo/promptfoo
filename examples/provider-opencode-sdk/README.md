@@ -4,6 +4,7 @@ The OpenCode SDK provider enables you to run agentic evals through OpenCode, an 
 
 ```bash
 npx promptfoo@latest init --example provider-opencode-sdk
+cd provider-opencode-sdk
 ```
 
 ## Setup

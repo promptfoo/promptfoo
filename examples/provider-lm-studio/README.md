@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-lm-studio
+cd provider-lm-studio
 ```
 
 This example demonstrates how to use Promptfoo with LM Studio for prompt evaluation. It showcases configuration for interacting with the LM Studio API using a locally hosted language model.

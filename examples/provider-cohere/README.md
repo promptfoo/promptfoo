@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-cohere
+cd provider-cohere
 ```
 
 ## Usage

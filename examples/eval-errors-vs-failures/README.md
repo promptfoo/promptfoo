@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example eval-errors-vs-failures
+cd eval-errors-vs-failures
 ```
 
 ## Usage

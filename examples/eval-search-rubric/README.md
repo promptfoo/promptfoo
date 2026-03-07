@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example eval-search-rubric
+cd eval-search-rubric
 ```
 
 This example demonstrates how to use the `search-rubric` assertion type to verify that LLM outputs contain accurate, current information.

@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-nscale
+cd provider-nscale
 ```
 
 ## Prerequisites

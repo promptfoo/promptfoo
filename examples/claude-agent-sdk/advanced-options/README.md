@@ -4,6 +4,7 @@ This example demonstrates advanced Claude Agent SDK configuration options includ
 
 ```bash
 npx promptfoo@latest init --example claude-agent-sdk/advanced-options
+cd claude-agent-sdk/advanced-options
 ```
 
 ## Setup

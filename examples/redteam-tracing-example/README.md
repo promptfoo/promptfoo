@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-tracing-example
+cd redteam-tracing-example
 ```
 
 This example demonstrates how to use tracing with red team strategies to provide attackers and graders with visibility into the internal operations of your LLM application.

@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example eval-markdown-rendering
+cd eval-markdown-rendering
 ```
 
 ## Usage

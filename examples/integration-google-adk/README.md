@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example integration-google-adk
+cd integration-google-adk
 ```
 
 ## What this example shows

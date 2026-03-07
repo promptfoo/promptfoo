@@ -8,6 +8,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-cloudflare/ai
+cd provider-cloudflare/ai
 ```
 
 ## Environment Variables

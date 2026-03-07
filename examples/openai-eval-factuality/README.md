@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example openai-eval-factuality
+cd openai-eval-factuality
 ```
 
 ## Usage

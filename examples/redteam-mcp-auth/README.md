@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-mcp-auth
+cd redteam-mcp-auth
 ```
 
 This example demonstrates how to configure authentication for red team evaluations against MCP (Model Context Protocol) servers. It shows OAuth 2.0 client credentials flow for authenticating with remote MCP servers.

@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-vars-referencing-vars
+cd config-vars-referencing-vars
 ```
 
 ## Usage

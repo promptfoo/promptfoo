@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-custom/mjs
+cd provider-custom/mjs
 ```
 
 ## Usage

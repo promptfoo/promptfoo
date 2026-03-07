@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-separate-test-configs
+cd config-separate-test-configs
 ```
 
 ## Usage

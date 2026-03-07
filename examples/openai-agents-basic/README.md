@@ -35,6 +35,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example openai-agents-basic
+cd openai-agents-basic
 ```
 
 Or if you've cloned the repo:

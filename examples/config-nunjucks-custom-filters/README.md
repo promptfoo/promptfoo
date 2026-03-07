@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-nunjucks-custom-filters
+cd config-nunjucks-custom-filters
 ```
 
 ## Usage

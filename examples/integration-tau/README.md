@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example integration-tau
+cd integration-tau
 ```
 
 This example demonstrates testing conversational AI agents using **OpenAI's Responses API with function calling**. It simulates an airline booking system with 31 different customer personas to test how well agents handle realistic conversations.

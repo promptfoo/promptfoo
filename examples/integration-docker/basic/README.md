@@ -8,7 +8,7 @@
 
 ```bash
 npx promptfoo@latest init --example integration-docker/basic
-cd docker
+cd integration-docker/basic
 ```
 
 2. Enable Docker Model Runner in Docker Desktop or Docker Engine per https://docs.docker.com/ai/model-runner/#enable-docker-model-runner.

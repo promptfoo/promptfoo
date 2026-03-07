@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example eval-javascript-assert-external
+cd eval-javascript-assert-external
 ```
 
 ## Usage

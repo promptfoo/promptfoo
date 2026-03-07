@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example integration-helicone
+cd integration-helicone
 ```
 
 This example demonstrates how to use the Helicone AI Gateway provider in promptfoo to route requests through a self-hosted Helicone AI Gateway instance for unified provider access.

@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-prompts-per-model
+cd config-prompts-per-model
 ```
 
 ## Usage

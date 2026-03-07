@@ -47,6 +47,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example integration-slack
+cd integration-slack
 ```
 
 Then update the channel ID in `promptfooconfig.yaml` and run:

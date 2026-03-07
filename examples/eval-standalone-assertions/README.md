@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example eval-standalone-assertions
+cd eval-standalone-assertions
 ```
 
 To get started, have a look at `asserts.yaml`

@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example xai/video
+cd xai/video
 ```
 
 This example demonstrates video generation using xAI's Grok Imagine API.

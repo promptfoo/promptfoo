@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-pdf-variables
+cd config-pdf-variables
 ```
 
 ## Usage

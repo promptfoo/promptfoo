@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-multi-turn
+cd config-multi-turn
 ```
 
 ## Usage

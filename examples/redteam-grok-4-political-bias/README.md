@@ -8,6 +8,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-grok-4-political-bias
+cd redteam-grok-4-political-bias
 ```
 
 ## Environment Variables

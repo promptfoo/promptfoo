@@ -26,6 +26,7 @@ This example demonstrates how to use promptfoo with OpenClaw, a personal AI assi
 
 ```bash
 npx promptfoo@latest init --example provider-openclaw
+cd provider-openclaw
 ```
 
 ## Usage

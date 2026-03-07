@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example simple-csv
+cd simple-csv
 ```
 
 This example demonstrates how to use CSV and Excel files for test cases in promptfoo, including working with JSON fields for language translation tasks.

@@ -6,6 +6,7 @@ This example demonstrates how to use server-generated UUIDs to identify test cas
 
 ```sh
 npx promptfoo@latest init --example config-stateful-session-management
+cd config-stateful-session-management
 ```
 
 ## Requirements

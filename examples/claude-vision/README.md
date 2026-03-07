@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example claude-vision
+cd claude-vision
 ```
 
 ## Usage

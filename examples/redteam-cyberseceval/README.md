@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-cyberseceval
+cd redteam-cyberseceval
 ```
 
 This example shows how to run Meta's CyberSecEval benchmark to test LLMs for prompt injection vulnerabilities.

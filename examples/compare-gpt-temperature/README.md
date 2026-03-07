@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example compare-gpt-temperature
+cd compare-gpt-temperature
 ```
 
 ## Usage

@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-external-provider-config
+cd config-external-provider-config
 ```
 
 ## Usage

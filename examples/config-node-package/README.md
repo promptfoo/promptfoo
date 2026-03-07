@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-node-package
+cd config-node-package
 ```
 
 This example demonstrates using promptfoo from a Node.js script.

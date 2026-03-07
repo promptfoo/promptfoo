@@ -8,6 +8,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example openai-realtime
+cd openai-realtime
 ```
 
 This will create all necessary files and folder structure to get started quickly.

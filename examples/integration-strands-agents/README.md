@@ -8,6 +8,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example integration-strands-agents
+cd integration-strands-agents
 ```
 
 ## Overview

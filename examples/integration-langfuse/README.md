@@ -39,6 +39,7 @@ To get started with this example:
 
 ```bash
 npx promptfoo@latest init --example integration-langfuse
+cd integration-langfuse
 ```
 
 ## Running the example

@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example openai-chat-history
+cd openai-chat-history
 ```
 
 ## Usage

@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-foundation-model
+cd redteam-foundation-model
 ```
 
 ## How to Use This Example

@@ -11,6 +11,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-websockets/streaming
+cd config-websockets/streaming
 ```
 
 ## What’s in this folder

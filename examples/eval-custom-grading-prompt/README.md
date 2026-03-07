@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example eval-custom-grading-prompt
+cd eval-custom-grading-prompt
 ```
 
 ## Usage

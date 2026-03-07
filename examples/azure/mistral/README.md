@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example azure/mistral
+cd azure/mistral
 ```
 
 ## Setup

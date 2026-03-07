@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example compare-llama-vs-gpt
+cd compare-llama-vs-gpt
 ```
 
 ## Usage

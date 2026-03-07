@@ -23,6 +23,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example huggingface/dataset-factuality
+cd huggingface/dataset-factuality
 ```
 
 After initialization, you can customize the `promptfooconfig.yaml` file to adjust:

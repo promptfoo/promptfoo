@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example eval-conversation-relevance
+cd eval-conversation-relevance
 ```
 
 This example demonstrates how to use the `conversation-relevance` assertion to evaluate whether chatbot responses remain relevant throughout a conversation.

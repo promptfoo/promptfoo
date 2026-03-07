@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example huggingface/hate-speech-detection
+cd huggingface/hate-speech-detection
 ```
 
 ## Usage

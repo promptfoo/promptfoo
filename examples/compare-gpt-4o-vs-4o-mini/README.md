@@ -4,46 +4,12 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example compare-gpt-4o-vs-4o-mini
+cd compare-gpt-4o-vs-4o-mini
+npx promptfoo@latest eval
 ```
 
-## Quick Start
+## Usage
 
-1. Initialize this example by running:
+Set your OPENAI_API_KEY environment variable, then run `npx promptfoo@latest eval`.
 
-   ```bash
-   npx promptfoo@latest init --example compare-gpt-4o-vs-4o-mini
-   ```
-
-2. Navigate to the newly created `gpt-4o-vs-4o-mini` directory:
-
-   ```bash
-   cd compare-gpt-4o-vs-4o-mini
-   ```
-
-3. Set an OpenAI API key directly in your environment:
-
-   ```bash
-   export OPENAI_API_KEY="your_openai_api_key"
-   ```
-
-   Alternatively, you can set the API key in a `.env` file:
-
-   ```text
-   OPENAI_API_KEY=your_openai_api_key
-   ```
-
-4. Run the evaluation with:
-
-   ```bash
-   npx promptfoo@latest eval --no-cache
-   ```
-
-   Note: the `--no-cache` flag is required because the example uses a [latency assertion](https://www.promptfoo.dev/docs/configuration/expected-outputs/deterministic/#latency) which does not support caching.
-
-5. View the results:
-
-   ```bash
-   npx promptfoo@latest view
-   ```
-
-   The expected output will include the responses from both models for the provided riddles, allowing you to compare their performance side by side.
+Note: this example uses a [latency assertion](https://www.promptfoo.dev/docs/configuration/expected-outputs/deterministic/#latency), so use `--no-cache` to get accurate timing results.

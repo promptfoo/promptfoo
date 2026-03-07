@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-store-and-reuse-outputs
+cd config-store-and-reuse-outputs
 ```
 
 ## Usage
