@@ -450,8 +450,8 @@ You've learned to:
 
 Check out complete examples:
 
-- [examples/elevenlabs-tts-advanced](https://github.com/promptfoo/promptfoo/tree/main/examples/elevenlabs-tts-advanced)
-- [examples/elevenlabs-agents](https://github.com/promptfoo/promptfoo/tree/main/examples/elevenlabs-agents)
+- [examples/provider-elevenlabs/tts-advanced](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-elevenlabs/tts-advanced)
+- [examples/provider-elevenlabs/agents](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-elevenlabs/agents)
 
 ### Resources
 

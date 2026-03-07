@@ -575,16 +575,20 @@ export class GoogleProvider extends GoogleGenericProvider {
             c.groundingMetadata || c.groundingChunks || c.groundingSupports || c.webSearchQueries,
         );
 
-      // Calculate cost only for AI Studio mode (Vertex AI pricing differs)
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
         tokenUsage.completion != null
           ? tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0)
           : undefined;
-      const cost =
-        !this.isVertexMode && !cached
-          ? calculateGoogleCost(this.modelName, config, tokenUsage.prompt, completionForCost)
-          : undefined;
+      const cost = cached
+        ? undefined
+        : calculateGoogleCost(
+            this.modelName,
+            config,
+            tokenUsage.prompt,
+            completionForCost,
+            this.isVertexMode,
+          );
 
       const response: ProviderResponse = {
         output,

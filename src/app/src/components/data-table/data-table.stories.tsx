@@ -809,6 +809,89 @@ export const WithConditionalExpansion: Story = {
   ),
 };
 
+// Row expansion - default expanded (uncontrolled with initial state)
+export const WithDefaultExpanded: Story = {
+  render: () => (
+    <DataTable
+      columns={columns}
+      data={sampleData}
+      expanded={{ '0': true, '2': true }}
+      renderSubComponent={(row) => (
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium">Details for {row.original.name}</h4>
+          <p className="text-sm text-muted-foreground">
+            Provider: {row.original.provider} | Score: {row.original.score}% | Created:{' '}
+            {row.original.createdAt}
+          </p>
+        </div>
+      )}
+    />
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Rows 1 and 3 start expanded by passing an initial `expanded` state. The user can still toggle rows freely (uncontrolled after mount).',
+      },
+    },
+  },
+};
+
+// Row expansion - controlled expanded state
+export const WithControlledExpansion: Story = {
+  render: () => {
+    const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
+    const expandedCount = Object.values(expanded).filter(Boolean).length;
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <button
+            className="text-sm px-3 py-1 rounded border border-border hover:bg-muted"
+            onClick={() =>
+              setExpanded(Object.fromEntries(sampleData.map((_, i) => [String(i), true])))
+            }
+          >
+            Expand all
+          </button>
+          <button
+            className="text-sm px-3 py-1 rounded border border-border hover:bg-muted"
+            onClick={() => setExpanded({})}
+          >
+            Collapse all
+          </button>
+          <span className="text-sm text-muted-foreground">
+            {expandedCount} of {sampleData.length} rows expanded
+          </span>
+        </div>
+        <DataTable
+          columns={columns}
+          data={sampleData}
+          expanded={expanded}
+          onExpandedChange={(next) => setExpanded(next as Record<string, boolean>)}
+          renderSubComponent={(row) => (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">Details for {row.original.name}</h4>
+              <p className="text-sm text-muted-foreground">
+                Provider: {row.original.provider} | Score: {row.original.score}% | Created:{' '}
+                {row.original.createdAt}
+              </p>
+            </div>
+          )}
+        />
+      </div>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Fully controlled expansion: the parent owns `expanded` state and receives updates via `onExpandedChange`. The "Expand all" / "Collapse all" buttons demonstrate programmatic control.',
+      },
+    },
+  },
+};
+
 // Explicit Tailwind utility colors (light and dark variants) are preserved in cell renderers.
 export const WithExplicitTailwindColors: Story = {
   render: () => {

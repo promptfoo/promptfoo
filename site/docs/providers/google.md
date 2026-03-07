@@ -1150,7 +1150,7 @@ Try the examples:
 promptfoo init --example google-live
 
 # Function calling and tools example
-promptfoo init --example google-live-tools
+promptfoo init --example google-live
 
 # Audio generation example
 promptfoo init --example google-live-audio
