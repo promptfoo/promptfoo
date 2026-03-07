@@ -7,13 +7,13 @@ rm -f promptfoo-errors.log redteam.yaml
 # Run the CLI tool and capture the output
 # Use a temp file so we can display output on failure (logger writes to stdout)
 generate_output_file=$(mktemp)
-if ! npm run bin redteam generate -- -c test/redteam/integration/promptfooconfig.yaml --force > "$generate_output_file" 2>&1; then
-  echo "ERROR: promptfoo redteam generate failed"
-  echo "--- Output ---"
-  cat "$generate_output_file"
-  echo "--- End Output ---"
-  rm -f "$generate_output_file"
-  exit 1
+if ! npm run bin redteam generate -- -c test/redteam/integration/promptfooconfig.yaml --force >"$generate_output_file" 2>&1; then
+	echo "ERROR: promptfoo redteam generate failed"
+	echo "--- Output ---"
+	cat "$generate_output_file"
+	echo "--- End Output ---"
+	rm -f "$generate_output_file"
+	exit 1
 fi
 output=$(cat "$generate_output_file")
 rm -f "$generate_output_file"
@@ -22,61 +22,61 @@ echo "Done running promptfoo redteam generate"
 
 # Check if error log exists and display contents if it does
 if [ -f "promptfoo-errors.log" ]; then
-  echo "ERROR: promptfoo-errors.log exists:"
-  cat "promptfoo-errors.log"
-  exit 1
+	echo "ERROR: promptfoo-errors.log exists:"
+	cat "promptfoo-errors.log"
+	exit 1
 else
-  echo "Confirmed: No promptfoo-errors.log file exists"
+	echo "Confirmed: No promptfoo-errors.log file exists"
 fi
 
 # Check for expected output patterns
 # With numTests: 1 on jailbreak:composite, we get 2 plugin tests + 1 strategy test = 3 total
 if echo "$output" | grep -q "Wrote 3 test cases to redteam.yaml"; then
-  echo "Expected line (Wrote 3 test cases to redteam.yaml) found for promptfoo redteam generate"
+	echo "Expected line (Wrote 3 test cases to redteam.yaml) found for promptfoo redteam generate"
 else
-  echo "ERROR: Expected line (Wrote 3 test cases to redteam.yaml) not found in output."
-  echo "$output"
-  exit 1
+	echo "ERROR: Expected line (Wrote 3 test cases to redteam.yaml) not found in output."
+	echo "$output"
+	exit 1
 fi
 
 echo "Running promptfoo redteam eval"
 export PROMPTFOO_AUTHOR="ci-placeholder@promptfoo.dev"
 eval_output_file=$(mktemp)
 set +e
-npm run bin redteam eval > "$eval_output_file" 2>&1
+npm run bin redteam eval >"$eval_output_file" 2>&1
 exit_code=$?
 set -e
 output=$(cat "$eval_output_file")
 rm -f "$eval_output_file"
 
 if [ $exit_code -ne 0 ]; then
-  if [ $exit_code -eq 100 ]; then
-    echo "Got exit code 100 - this is acceptable"
-  else
-    echo "Command failed with exit code $exit_code"
-    echo "--- Output ---"
-    echo "$output"
-    echo "--- End Output ---"
-    exit $exit_code
-  fi
+	if [ $exit_code -eq 100 ]; then
+		echo "Got exit code 100 - this is acceptable"
+	else
+		echo "Command failed with exit code $exit_code"
+		echo "--- Output ---"
+		echo "$output"
+		echo "--- End Output ---"
+		exit $exit_code
+	fi
 fi
 echo "Done running promptfoo redteam eval"
 
 echo "Checking for errors in promptfoo-errors.log"
 if [ -f "promptfoo-errors.log" ]; then
-  echo "ERROR: promptfoo-errors.log exists:"
-  cat "promptfoo-errors.log"
-  exit 1
+	echo "ERROR: promptfoo-errors.log exists:"
+	cat "promptfoo-errors.log"
+	exit 1
 else
-  echo "Confirmed: No promptfoo-errors.log file exists"
+	echo "Confirmed: No promptfoo-errors.log file exists"
 fi
 
 if echo "$output" | grep -q "0 errors"; then
-  echo "Expected line found (0 errors) for promptfoo redteam eval"
+	echo "Expected line found (0 errors) for promptfoo redteam eval"
 else
-  echo "ERROR: Expected line (0 errors) not found in output."
-  echo "$output"
-  exit 1
+	echo "ERROR: Expected line (0 errors) not found in output."
+	echo "$output"
+	exit 1
 fi
 
 echo "All checks passed!"
