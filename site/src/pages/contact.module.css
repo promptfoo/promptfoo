@@ -18,19 +18,6 @@
   height: fit-content;
 }
 
-/* Calendar Container */
-.calendarContainer {
-  background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  overflow: visible;
-  height: auto;
-}
-
-[data-theme='dark'] .calendarContainer {
-  background-color: var(--ifm-background-surface-color);
-}
-
 /* Contact Form */
 .contactForm {
   max-width: 100%;
@@ -193,10 +180,6 @@
 }
 
 @media (max-width: 768px) {
-  .calendarContainer {
-    min-height: 800px;
-  }
-
   .formGrid {
     grid-template-columns: 1fr;
   }

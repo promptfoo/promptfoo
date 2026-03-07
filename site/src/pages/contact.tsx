@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 
-import Cal, { getCalApi } from '@calcom/embed-react';
 import Head from '@docusaurus/Head';
 import { useColorMode } from '@docusaurus/theme-common';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
@@ -13,61 +12,13 @@ import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Layout from '@theme/Layout';
 import styles from './contact.module.css';
 
-function Calendar() {
-  useEffect(() => {
-    (async function () {
-      const cal = await getCalApi({});
-      cal('ui', {
-        styles: { branding: { brandColor: '#000000' } },
-        hideEventTypeDetails: false,
-        layout: 'month_view',
-      });
-    })();
-  }, []);
-
-  return (
-    <div className={styles.calendarContainer}>
-      <Cal
-        calLink="team/promptfoo/intro2"
-        style={{ width: '100%', height: '100%', overflow: 'visible' }}
-        config={{ layout: 'month_view' }}
-      />
-    </div>
-  );
-}
-
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`contact-tabpanel-${index}`}
-      aria-labelledby={`contact-tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
-    </div>
-  );
-}
-
 function Contact(): React.ReactElement {
   const isDarkTheme = useColorMode().colorMode === 'dark';
-  const [tabValue, setTabValue] = useState(0);
 
   const theme = React.useMemo(
     () =>
@@ -82,151 +33,116 @@ function Contact(): React.ReactElement {
     [isDarkTheme],
   );
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
-  };
-
   return (
     <ThemeProvider theme={theme}>
-      {/* Simple Hero */}
       <Container maxWidth="lg">
         <Box sx={{ textAlign: 'center', py: 4, mb: 4 }}>
           <Typography variant="h3" component="h1" gutterBottom sx={{ fontWeight: 600 }}>
-            Book a Demo
+            Contact Promptfoo
           </Typography>
           <Typography variant="h6" color="text.secondary">
-            Let's discuss how Promptfoo can secure your AI infrastructure
+            Tell us what you're working on and we'll follow up with the right team
           </Typography>
         </Box>
 
-        {/* Main Content with Sidebar */}
         <Box className={styles.mainLayout}>
-          {/* Left Column - Contact Forms */}
           <Box className={styles.contactColumn}>
-            <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-              <Tabs
-                value={tabValue}
-                onChange={handleTabChange}
-                aria-label="contact tabs"
-                sx={{
-                  '& .MuiTab-root': {
-                    fontSize: '1rem',
-                    textTransform: 'none',
-                    fontWeight: 500,
-                  },
-                }}
-              >
-                <Tab label="Schedule a Demo" />
-                <Tab label="Inquiry Form" />
-              </Tabs>
-            </Box>
-
-            <TabPanel value={tabValue} index={0}>
-              <Calendar />
-            </TabPanel>
-
-            <TabPanel value={tabValue} index={1}>
-              <form action="https://submit-form.com/ghriv7voL" className={styles.contactForm}>
-                <Box className={styles.formGrid}>
-                  <TextField
-                    fullWidth
-                    id="name"
-                    name="name"
-                    label="Full Name"
-                    variant="outlined"
-                    required
-                    margin="normal"
-                    size="small"
-                  />
-                  <TextField
-                    fullWidth
-                    id="email"
-                    name="email"
-                    label="Work Email"
-                    type="email"
-                    variant="outlined"
-                    required
-                    margin="normal"
-                    size="small"
-                    helperText="Use your company email"
-                  />
-                </Box>
-
-                <Box className={styles.formGrid}>
-                  <TextField
-                    fullWidth
-                    id="company"
-                    name="company"
-                    label="Company"
-                    variant="outlined"
-                    required
-                    margin="normal"
-                    size="small"
-                  />
-                  <TextField
-                    fullWidth
-                    id="title"
-                    name="title"
-                    label="Job Title"
-                    variant="outlined"
-                    margin="normal"
-                    size="small"
-                  />
-                </Box>
-
-                <FormControl fullWidth margin="normal" variant="outlined" required size="small">
-                  <InputLabel id="interested-in-label">I'm interested in</InputLabel>
-                  <Select
-                    labelId="interested-in-label"
-                    id="interested-in"
-                    name="interested-in"
-                    label="I'm interested in"
-                  >
-                    <MenuItem value="Enterprise Security">
-                      Enterprise Security & Red Teaming
-                    </MenuItem>
-                    <MenuItem value="AI Guardrails">AI Guardrails & Compliance</MenuItem>
-                    <MenuItem value="Model Evaluation">Model Evaluation & Testing</MenuItem>
-                    <MenuItem value="Custom Solution">Custom Enterprise Solution</MenuItem>
-                    <MenuItem value="Other">Other</MenuItem>
-                  </Select>
-                </FormControl>
-
+            <form action="https://submit-form.com/ghriv7voL" className={styles.contactForm}>
+              <Box className={styles.formGrid}>
                 <TextField
                   fullWidth
-                  id="message"
-                  name="message"
-                  label="How can we help?"
-                  multiline
-                  rows={4}
+                  id="name"
+                  name="name"
+                  label="Full Name"
                   variant="outlined"
                   required
                   margin="normal"
                   size="small"
                 />
+                <TextField
+                  fullWidth
+                  id="email"
+                  name="email"
+                  label="Work Email"
+                  type="email"
+                  variant="outlined"
+                  required
+                  margin="normal"
+                  size="small"
+                  helperText="Use your company email"
+                />
+              </Box>
 
-                <Box sx={{ textAlign: 'center', mt: 3 }}>
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    size="large"
-                    sx={{
-                      px: 4,
-                      py: 1,
-                      textTransform: 'none',
-                      fontWeight: 500,
-                    }}
-                  >
-                    Send Message
-                  </Button>
-                </Box>
-              </form>
-            </TabPanel>
+              <Box className={styles.formGrid}>
+                <TextField
+                  fullWidth
+                  id="company"
+                  name="company"
+                  label="Company"
+                  variant="outlined"
+                  required
+                  margin="normal"
+                  size="small"
+                />
+                <TextField
+                  fullWidth
+                  id="title"
+                  name="title"
+                  label="Job Title"
+                  variant="outlined"
+                  margin="normal"
+                  size="small"
+                />
+              </Box>
+
+              <FormControl fullWidth margin="normal" variant="outlined" required size="small">
+                <InputLabel id="interested-in-label">I'm interested in</InputLabel>
+                <Select
+                  labelId="interested-in-label"
+                  id="interested-in"
+                  name="interested-in"
+                  label="I'm interested in"
+                >
+                  <MenuItem value="Enterprise Security">Enterprise Security & Red Teaming</MenuItem>
+                  <MenuItem value="AI Guardrails">AI Guardrails & Compliance</MenuItem>
+                  <MenuItem value="Model Evaluation">Model Evaluation & Testing</MenuItem>
+                  <MenuItem value="Custom Solution">Custom Enterprise Solution</MenuItem>
+                  <MenuItem value="Other">Other</MenuItem>
+                </Select>
+              </FormControl>
+
+              <TextField
+                fullWidth
+                id="message"
+                name="message"
+                label="How can we help?"
+                multiline
+                rows={4}
+                variant="outlined"
+                required
+                margin="normal"
+                size="small"
+              />
+
+              <Box sx={{ textAlign: 'center', mt: 3 }}>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  size="large"
+                  sx={{
+                    px: 4,
+                    py: 1,
+                    textTransform: 'none',
+                    fontWeight: 500,
+                  }}
+                >
+                  Send Message
+                </Button>
+              </Box>
+            </form>
           </Box>
 
-          {/* Right Column - Social Proof */}
           <Box className={styles.socialProofColumn}>
-            {/* Trusted By */}
             <Box className={styles.trustedBySection}>
               <Typography
                 variant="h6"
@@ -269,7 +185,6 @@ function Contact(): React.ReactElement {
               </Box>
             </Box>
 
-            {/* Testimonials */}
             <Box className={styles.testimonialsSection}>
               <Typography
                 variant="h6"
@@ -352,7 +267,6 @@ function Contact(): React.ReactElement {
               </Box>
             </Box>
 
-            {/* Quick Links */}
             <Box className={styles.quickLinks}>
               <Typography
                 variant="h6"
@@ -416,13 +330,13 @@ export default function Page(): React.ReactElement {
   return (
     <Layout
       title="Contact Enterprise Sales"
-      description="Contact Promptfoo for enterprise AI security solutions. Schedule a demo or speak with our sales team about red teaming, guardrails, and compliance."
+      description="Contact Promptfoo about enterprise AI security solutions, red teaming, guardrails, and compliance."
     >
       <Head>
-        <meta property="og:title" content="Book a Demo - Promptfoo" />
+        <meta property="og:title" content="Contact Promptfoo" />
         <meta
           property="og:description"
-          content="Contact Promptfoo for enterprise AI security solutions. Schedule a demo or speak with our sales team."
+          content="Contact Promptfoo about enterprise AI security solutions, red teaming, guardrails, and compliance."
         />
         <meta property="og:image" content={`${siteUrl}/img/og/contact-og.png`} />
         <meta property="og:image:width" content="1200" />
@@ -430,10 +344,10 @@ export default function Page(): React.ReactElement {
         <meta property="og:type" content="website" />
         <meta property="og:url" content={`${siteUrl}/contact`} />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Book a Demo - Promptfoo" />
+        <meta name="twitter:title" content="Contact Promptfoo" />
         <meta
           name="twitter:description"
-          content="Contact Promptfoo for enterprise AI security solutions. Schedule a demo or speak with our sales team."
+          content="Contact Promptfoo about enterprise AI security solutions, red teaming, guardrails, and compliance."
         />
         <meta name="twitter:image" content={`${siteUrl}/img/og/contact-og.png`} />
         <link rel="canonical" href={`${siteUrl}/contact`} />
