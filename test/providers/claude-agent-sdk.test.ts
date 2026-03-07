@@ -1,3 +1,4 @@
+import path from 'node:path';
 import fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +14,8 @@ import type { NonNullableUsage, Query, SDKMessage } from '@anthropic-ai/claude-a
 import type { MockInstance } from 'vitest';
 
 import type { CallApiContextParams } from '../../src/types/index';
+
+const testBasePath = path.resolve('/test/basePath');
 
 vi.mock('../../src/cliState', () => ({
   default: { basePath: '/test/basePath' },
@@ -482,11 +485,11 @@ describe('ClaudeCodeSDKProvider', () => {
         });
         await provider.callApi('Test prompt');
 
-        expect(statSyncSpy).toHaveBeenCalledWith('/test/basePath/workspace');
+        expect(statSyncSpy).toHaveBeenCalledWith(path.resolve(testBasePath, 'workspace'));
         expect(mockQuery).toHaveBeenCalledWith({
           prompt: 'Test prompt',
           options: expect.objectContaining({
-            cwd: '/test/basePath/workspace',
+            cwd: path.resolve(testBasePath, 'workspace'),
           }),
         });
       });
@@ -887,7 +890,7 @@ describe('ClaudeCodeSDKProvider', () => {
             prompt: 'Test prompt',
             options: expect.objectContaining({
               plugins: [
-                { type: 'local', path: '/test/basePath/my-plugin' },
+                { type: 'local', path: path.resolve(testBasePath, 'my-plugin') },
                 { type: 'local', path: '/absolute/path/to/plugin' },
               ],
             }),
@@ -927,7 +930,7 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(mockQuery).toHaveBeenCalledWith({
             prompt: 'Test prompt',
             options: expect.objectContaining({
-              additionalDirectories: ['/test/basePath/relative/dir', '/absolute/dir'],
+              additionalDirectories: [path.resolve(testBasePath, 'relative/dir'), '/absolute/dir'],
             }),
           });
         });
@@ -1489,7 +1492,7 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(mockQuery).toHaveBeenCalledWith({
             prompt: 'Test prompt',
             options: expect.objectContaining({
-              pathToClaudeCodeExecutable: '/test/basePath/bin/claude-code',
+              pathToClaudeCodeExecutable: path.resolve(testBasePath, 'bin/claude-code'),
             }),
           });
         });
@@ -1719,7 +1722,7 @@ describe('ClaudeCodeSDKProvider', () => {
             prompt: 'Test prompt',
             options: expect.objectContaining({
               debug: true,
-              debugFile: '/test/basePath/logs/debug.log',
+              debugFile: path.resolve(testBasePath, 'logs/debug.log'),
             }),
           });
         });
