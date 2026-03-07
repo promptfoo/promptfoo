@@ -1,3 +1,4 @@
+import path from 'node:path';
 import fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +14,8 @@ import type { NonNullableUsage, Query, SDKMessage } from '@anthropic-ai/claude-a
 import type { MockInstance } from 'vitest';
 
 import type { CallApiContextParams } from '../../src/types/index';
+
+const testBasePath = path.resolve('/test/basePath');
 
 vi.mock('../../src/cliState', () => ({
   default: { basePath: '/test/basePath' },
@@ -473,6 +476,24 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(rmSyncSpy).not.toHaveBeenCalled();
       });
 
+      it('should resolve working_dir relative paths from the cliState.basePath', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: { working_dir: './workspace' },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        expect(statSyncSpy).toHaveBeenCalledWith(path.resolve(testBasePath, 'workspace'));
+        expect(mockQuery).toHaveBeenCalledWith({
+          prompt: 'Test prompt',
+          options: expect.objectContaining({
+            cwd: path.resolve(testBasePath, 'workspace'),
+          }),
+        });
+      });
+
       it('should error when working_dir does not exist', async () => {
         statSyncSpy.mockImplementation(function () {
           throw new Error('ENOENT: no such file or directory');
@@ -868,7 +889,10 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(mockQuery).toHaveBeenCalledWith({
             prompt: 'Test prompt',
             options: expect.objectContaining({
-              plugins,
+              plugins: [
+                { type: 'local', path: path.resolve(testBasePath, 'my-plugin') },
+                { type: 'local', path: '/absolute/path/to/plugin' },
+              ],
             }),
           });
         });
@@ -895,11 +919,9 @@ describe('ClaudeCodeSDKProvider', () => {
         it('with additionalDirectories configuration', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
-          const additionalDirectories = ['/path/to/dir1', '/path/to/dir2'];
-
           const provider = new ClaudeCodeSDKProvider({
             config: {
-              additional_directories: additionalDirectories,
+              additional_directories: ['./relative/dir', '/absolute/dir'],
             },
             env: { ANTHROPIC_API_KEY: 'test-api-key' },
           });
@@ -908,7 +930,7 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(mockQuery).toHaveBeenCalledWith({
             prompt: 'Test prompt',
             options: expect.objectContaining({
-              additionalDirectories,
+              additionalDirectories: [path.resolve(testBasePath, 'relative/dir'), '/absolute/dir'],
             }),
           });
         });
@@ -1456,7 +1478,26 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
-        it('with path_to_claude_code_executable configuration', async () => {
+        it('with relative path_to_claude_code_executable configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              path_to_claude_code_executable: './bin/claude-code',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              pathToClaudeCodeExecutable: path.resolve(testBasePath, 'bin/claude-code'),
+            }),
+          });
+        });
+
+        it('with absolute path_to_claude_code_executable configuration', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
           const provider = new ClaudeCodeSDKProvider({
@@ -1665,7 +1706,28 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
-        it('with debug configuration', async () => {
+        it('with debug configuration and relative debug_file', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              debug: true,
+              debug_file: './logs/debug.log',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              debug: true,
+              debugFile: path.resolve(testBasePath, 'logs/debug.log'),
+            }),
+          });
+        });
+
+        it('with debug configuration and absolute debug_file', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
           const provider = new ClaudeCodeSDKProvider({
