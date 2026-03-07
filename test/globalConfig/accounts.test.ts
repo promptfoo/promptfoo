@@ -316,22 +316,13 @@ describe('accounts', () => {
       vi.clearAllMocks();
     });
 
-    it('should use CI email when in CI environment', async () => {
+    it('should bypass email verification checks for the CI placeholder email', async () => {
       vi.mocked(isCI).mockReturnValue(true);
-
-      const mockResponse = new Response(JSON.stringify({ status: 'ok' }), {
-        status: 200,
-        statusText: 'OK',
-      });
-      vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
       await checkEmailStatusAndMaybeExit();
 
-      expect(fetchWithTimeout).toHaveBeenCalledWith(
-        expect.stringContaining('/api/users/status?email=ci-placeholder%40promptfoo.dev'),
-        undefined,
-        500,
-      );
+      expect(fetchWithTimeout).not.toHaveBeenCalled();
+      expect(mockExit).not.toHaveBeenCalled();
     });
 
     it('should use user email when not in CI environment', async () => {
@@ -487,22 +478,12 @@ describe('accounts', () => {
       });
     });
 
-    it('should use CI email when in CI environment', async () => {
+    it('should treat the CI placeholder email as pre-validated', async () => {
       vi.mocked(isCI).mockReturnValue(true);
-
-      const mockResponse = new Response(JSON.stringify({ status: 'ok' }), {
-        status: 200,
-        statusText: 'OK',
-      });
-      vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
       const result = await checkEmailStatus();
 
-      expect(fetchWithTimeout).toHaveBeenCalledWith(
-        expect.stringContaining('/api/users/status?email=ci-placeholder%40promptfoo.dev'),
-        undefined,
-        500,
-      );
+      expect(fetchWithTimeout).not.toHaveBeenCalled();
       expect(result).toEqual({
         status: 'ok',
         hasEmail: true,
@@ -598,6 +579,21 @@ describe('accounts', () => {
 
         expect(telemetry.saveConsent).toHaveBeenCalledWith('test@example.com', {
           source: 'promptForEmailValidated',
+        });
+      });
+
+      it('should skip remote validation for the CI placeholder email', async () => {
+        vi.mocked(isCI).mockReturnValue(true);
+
+        const result = await checkEmailStatus({ validate: true });
+
+        expect(fetchWithTimeout).not.toHaveBeenCalled();
+        expect(telemetry.saveConsent).not.toHaveBeenCalled();
+        expect(result).toEqual({
+          status: 'ok',
+          hasEmail: true,
+          email: 'ci-placeholder@promptfoo.dev',
+          message: undefined,
         });
       });
 
