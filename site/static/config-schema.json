@@ -834,6 +834,11 @@
                 "trace-error-spans",
                 "trace-span-count",
                 "trace-span-duration",
+                "trajectory:goal-achieved",
+                "trajectory:step-count",
+                "trajectory:tool-args-match",
+                "trajectory:tool-sequence",
+                "trajectory:tool-used",
                 "search-rubric",
                 "webhook",
                 "word-count"
@@ -898,6 +903,11 @@
                 "trace-error-spans",
                 "trace-span-count",
                 "trace-span-duration",
+                "trajectory:goal-achieved",
+                "trajectory:step-count",
+                "trajectory:tool-args-match",
+                "trajectory:tool-sequence",
+                "trajectory:tool-used",
                 "search-rubric",
                 "webhook",
                 "word-count"
