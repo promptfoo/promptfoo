@@ -61,6 +61,7 @@ import { HijackingGrader } from './plugins/hijacking';
 import { ImitationGrader } from './plugins/imitation';
 import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
 import { InsuranceCoverageDiscriminationPluginGrader } from './plugins/insurance/coverageDiscrimination';
+import { InsuranceDataDisclosurePluginGrader } from './plugins/insurance/dataDisclosure';
 import { InsuranceNetworkMisinformationPluginGrader } from './plugins/insurance/networkMisinformation';
 import { InsurancePhiDisclosurePluginGrader } from './plugins/insurance/phiDisclosure';
 import { IntentGrader } from './plugins/intent';
@@ -196,6 +197,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
   'promptfoo:redteam:insurance:coverage-discrimination':
     new InsuranceCoverageDiscriminationPluginGrader(),
+  'promptfoo:redteam:insurance:data-disclosure': new InsuranceDataDisclosurePluginGrader(),
   'promptfoo:redteam:insurance:network-misinformation':
     new InsuranceNetworkMisinformationPluginGrader(),
   'promptfoo:redteam:insurance:phi-disclosure': new InsurancePhiDisclosurePluginGrader(),
