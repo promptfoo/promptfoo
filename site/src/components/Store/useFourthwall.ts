@@ -435,6 +435,14 @@ export function isInStock(stock: { type: string; quantity?: number }): boolean {
   return false;
 }
 
+// Check if a product is completely sold out (all variants out of stock)
+export function isProductSoldOut(product: FourthwallProduct): boolean {
+  if (product.status === 'UNAVAILABLE') {
+    return true;
+  }
+  return product.variants.every((variant) => !isInStock(variant.stock));
+}
+
 // Get display name from attribute value (handles both string and object formats)
 export function getAttributeName(attr: FourthwallAttributeValue): string {
   if (typeof attr === 'string') {
