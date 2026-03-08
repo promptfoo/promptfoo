@@ -52,6 +52,23 @@ describe('prepareComments', () => {
     expect(result.generalComments[0].file).toBeNull();
   });
 
+  it('should treat file-scoped comments without a line as general comments', () => {
+    const comments: Comment[] = [
+      {
+        file: 'src/test.ts',
+        line: null,
+        severity: CodeScanSeverity.HIGH,
+        finding: 'File-level issue',
+      },
+    ];
+
+    const result = prepareComments(comments, 'Review text', 'low');
+
+    expect(result.lineComments).toEqual([]);
+    expect(result.generalComments).toHaveLength(1);
+    expect(result.generalComments[0].file).toBe('src/test.ts');
+  });
+
   it('should filter out severity=none from general comments', () => {
     const comments: Comment[] = [
       {
