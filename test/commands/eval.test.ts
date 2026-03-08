@@ -39,6 +39,7 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
     cloudConfig: {
       isEnabled: vi.fn().mockReturnValue(false),
       getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
+      getSharing: vi.fn().mockReturnValue(undefined),
     },
   };
 });
@@ -99,6 +100,8 @@ describe('evalCommand', () => {
   beforeEach(() => {
     program = new Command();
     vi.clearAllMocks();
+    vi.mocked(cloudConfig.getSharing).mockReset();
+    vi.mocked(cloudConfig.getSharing).mockReturnValue(undefined);
     vi.mocked(getEvalConfigFromCloud).mockReset();
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: defaultConfig,
