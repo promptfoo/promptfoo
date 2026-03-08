@@ -3,6 +3,7 @@ import { matchesPattern } from './traceUtils';
 import type { TraceData, TraceSpan } from '../types/tracing';
 
 export type TrajectoryStepType = 'command' | 'message' | 'reasoning' | 'search' | 'span' | 'tool';
+type TrajectoryAttributes = Record<string, unknown>;
 
 export interface TrajectoryStepMatcher {
   name?: string;
@@ -12,7 +13,7 @@ export interface TrajectoryStepMatcher {
 
 export interface TrajectoryStep {
   aliases: string[];
-  attributes: Record<string, any>;
+  attributes: TrajectoryAttributes;
   endTime?: number;
   name: string;
   spanId: string;
@@ -51,7 +52,7 @@ const SEARCH_ATTRIBUTE_KEYS = [
 ] as const;
 
 function getStringAttribute(
-  attributes: Record<string, any>,
+  attributes: TrajectoryAttributes,
   keys: readonly string[],
 ): string | undefined {
   for (const key of keys) {

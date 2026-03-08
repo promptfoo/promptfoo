@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleTrajectoryGoalSuccess } from '../../src/assertions/trajectory';
 import { matchesTrajectoryGoalSuccess } from '../../src/matchers';
 
-import type { ApiProvider, AssertionParams, AtomicTestCase, GradingResult } from '../../src/types/index';
+import type {
+  ApiProvider,
+  AssertionParams,
+  AtomicTestCase,
+  GradingResult,
+} from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
 vi.mock('../../src/matchers', () => ({

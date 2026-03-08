@@ -645,7 +645,7 @@ The `threshold` defaults to `1.0` (exact match required). Lower thresholds allow
 | `[get_weather, book_flight]` | `[get_weather, book_flight, search]` | 0.667     | 1.0    | 0.8   |
 | `[get_weather]`              | `[book_flight]`                      | 0.0       | 0.0    | 0.0   |
 
-### trajectory:tool-used
+### trajectory:tool-used {#trajectorytool-used}
 
 The `trajectory:tool-used` assertion checks traced tool steps rather than the model's final output. It works well for agent evals where the important question is "did the agent actually use the right tool?".
 
@@ -674,7 +674,7 @@ tests:
 - An array of strings, such as `['search_orders', 'compose_reply']`
 - An object with `pattern`, `min`, and optional `max`
 
-### trajectory:tool-sequence
+### trajectory:tool-sequence {#trajectorytool-sequence}
 
 The `trajectory:tool-sequence` assertion checks the order of traced tool usage. This is useful when an agent must gather information before taking a follow-up action.
 
@@ -699,7 +699,7 @@ tests:
 
 `mode: in_order` is the default and allows extra tool steps in between the expected ones. `mode: exact` requires the traced tool sequence to match exactly.
 
-### trajectory:step-count
+### trajectory:step-count {#trajectorystep-count}
 
 The `trajectory:step-count` assertion counts normalized trajectory steps. It can filter by step type (`tool`, `command`, `search`, `reasoning`, `message`, or `span`) and by glob-style name pattern.
 

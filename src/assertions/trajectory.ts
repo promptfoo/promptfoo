@@ -1,3 +1,4 @@
+import { matchesTrajectoryGoalSuccess } from '../matchers';
 import {
   extractTrajectorySteps,
   formatTrajectoryStep,
@@ -6,7 +7,6 @@ import {
   summarizeTrajectoryForJudge,
   type TrajectoryStepMatcher,
 } from './trajectoryUtils';
-import { matchesTrajectoryGoalSuccess } from '../matchers';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 

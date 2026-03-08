@@ -58,7 +58,7 @@ assert:
     value: Sacramento is the capital of California
 ```
 
-## trajectory:goal-success
+## trajectory:goal-success {#trajectorygoal-success}
 
 Use `trajectory:goal-success` when you care about whether an agent actually completed a task, not just whether it used a specific tool or produced a plausible final sentence.
 
@@ -84,7 +84,7 @@ tests:
         provider: openai:gpt-5-mini
 ```
 
-This works best alongside deterministic trajectory checks such as [`trajectory:tool-used`](/docs/configuration/expected-outputs/deterministic#trajectorytool-used) or [`trajectory:tool-sequence`](/docs/configuration/expected-outputs/deterministic#trajectorytool-sequence) when the exact path through the task also matters.
+This works best alongside deterministic trajectory checks such as [`trajectory:tool-used`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used) or [`trajectory:tool-sequence`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence) when the exact path through the task also matters.
 
 Example of pi scorer:
 
