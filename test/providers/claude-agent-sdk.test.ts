@@ -487,6 +487,7 @@ describe('ClaudeCodeSDKProvider', () => {
         mockQuery.mockReturnValue(createMockResponse('Traced response'));
 
         vi.spyOn(genaiTracer, 'getTraceparent').mockReturnValue(undefined);
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
 
         const provider = new ClaudeCodeSDKProvider({
           config: {
@@ -510,6 +511,49 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(env.OTEL_RESOURCE_ATTRIBUTES).toContain('test.case.id=tc\\\\456\\rcase');
         expect(env.OTEL_RESOURCE_ATTRIBUTES).not.toContain('promptfoo.trace_id=');
         expect(env.OTEL_RESOURCE_ATTRIBUTES).not.toContain('promptfoo.parent_span_id=');
+        expect(warnSpy).toHaveBeenCalledWith(
+          '[ClaudeAgentSDK] deep_tracing is enabled but no active Promptfoo trace context is available. Enable tracing.enabled and tracing.otlp.http.enabled if you want SDK events attached to eval traces.',
+        );
+      });
+
+      it('should remove inherited TRACEPARENT when deep tracing is disabled', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Plain response'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: {
+            ANTHROPIC_API_KEY: 'test-api-key',
+            TRACEPARENT: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01',
+          },
+        });
+
+        await provider.callApi('Test prompt');
+
+        const env = mockQuery.mock.calls[0][0].options.env;
+        expect(env.TRACEPARENT).toBeUndefined();
+      });
+
+      it('should warn when deep tracing is enabled but the OTLP receiver is not running', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Traced response'));
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: {
+            deep_tracing: true,
+          },
+          env: {
+            ANTHROPIC_API_KEY: 'test-api-key',
+          },
+        });
+
+        await provider.callApi('Test prompt', {
+          traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01',
+          prompt: { raw: 'Test prompt', label: 'test' },
+          vars: {},
+        });
+
+        expect(warnSpy).toHaveBeenCalledWith(
+          '[ClaudeAgentSDK] deep_tracing is enabled but Promptfoo OTLP receiver is not running. Enable tracing.enabled and tracing.otlp.http.enabled if you want SDK events captured.',
+        );
       });
 
       it('should pass evaluationId into the provider span context', async () => {

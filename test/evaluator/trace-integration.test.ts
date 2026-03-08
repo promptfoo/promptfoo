@@ -21,6 +21,7 @@ vi.mock('../../src/tracing/evaluatorTracing', () => ({
   generateTraceContextIfNeeded: vi.fn(),
   startOtlpReceiverIfNeeded: vi.fn(),
   stopOtlpReceiverIfNeeded: vi.fn(),
+  waitForOtlpReceiverIdleIfNeeded: vi.fn(),
   isOtlpReceiverStarted: vi.fn(() => false),
   isTracingEnabled: vi.fn((test) => test.metadata?.tracingEnabled === true),
 }));

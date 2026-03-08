@@ -7,6 +7,7 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { getDirectory, importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
+import { isOtlpReceiverStarted } from '../tracing/evaluatorTracing';
 import { getTraceparent, withGenAISpan } from '../tracing/genaiTracer';
 import { cacheResponse, getCachedResponse, initializeAgenticCache } from './agentic-utils';
 import { ANTHROPIC_MODELS } from './anthropic/util';
@@ -184,6 +185,9 @@ function injectDeepTracingEnv(
     env.TRACEPARENT = currentTraceparent;
   } else {
     delete env.TRACEPARENT;
+    logger.warn(
+      '[ClaudeAgentSDK] deep_tracing is enabled but no active Promptfoo trace context is available. Enable tracing.enabled and tracing.otlp.http.enabled if you want SDK events attached to eval traces.',
+    );
   }
 
   const resourceAttrs: string[] = [];
@@ -992,6 +996,11 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
         async () => {
           const queryEnv = { ...env };
           if (config.deep_tracing) {
+            if (!isOtlpReceiverStarted()) {
+              logger.warn(
+                '[ClaudeAgentSDK] deep_tracing is enabled but Promptfoo OTLP receiver is not running. Enable tracing.enabled and tracing.otlp.http.enabled if you want SDK events captured.',
+              );
+            }
             // Pull the trace context from the active provider span so SDK events become its children.
             injectDeepTracingEnv(queryEnv, getTraceparent(), context);
           }

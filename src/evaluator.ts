@@ -36,6 +36,7 @@ import {
   isOtlpReceiverStarted,
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
+  waitForOtlpReceiverIdleIfNeeded,
 } from './tracing/evaluatorTracing';
 import { getDefaultOtelConfig } from './tracing/otelConfig';
 import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
@@ -2425,9 +2426,8 @@ class Evaluator {
       }
 
       if (isOtlpReceiverStarted()) {
-        // Add a delay to allow providers to finish exporting spans
-        logger.debug('[Evaluator] Waiting for span exports to complete...');
-        await sleep(3000);
+        logger.debug('[Evaluator] Waiting for OTLP receiver to become idle...');
+        await waitForOtlpReceiverIdleIfNeeded({ idleMs: 250, timeoutMs: 3000, pollMs: 50 });
       }
       await stopOtlpReceiverIfNeeded();
 

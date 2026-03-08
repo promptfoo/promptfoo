@@ -17,7 +17,6 @@ let otlpReceiverStartPromise: Promise<void> | null = null;
 export function resetTracingState(): void {
   otlpReceiverStarted = false;
   otlpReceiverStartPromise = null;
-  logger.debug('[EvaluatorTracing] Tracing state reset');
 }
 
 /**
@@ -60,11 +59,6 @@ export function isOtlpReceiverStarted(): boolean {
  */
 export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<void> {
   const tracingHttpConfig = testSuite.tracing?.otlp?.http;
-  logger.debug(`[EvaluatorTracing] Checking tracing config: ${JSON.stringify(testSuite.tracing)}`);
-  logger.debug(`[EvaluatorTracing] testSuite keys: ${Object.keys(testSuite)}`);
-  logger.debug(
-    `[EvaluatorTracing] Full testSuite.tracing: ${JSON.stringify(testSuite.tracing, null, 2)}`,
-  );
 
   if (testSuite.tracing?.enabled && tracingHttpConfig?.enabled && otlpReceiverStarted === false) {
     if (otlpReceiverStartPromise !== null) {
@@ -95,16 +89,6 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
       }
     })();
     await otlpReceiverStartPromise;
-  } else {
-    if (otlpReceiverStarted === true) {
-      logger.debug('[EvaluatorTracing] OTLP receiver already started, skipping initialization');
-    } else {
-      logger.debug('[EvaluatorTracing] Tracing not enabled or OTLP HTTP receiver not configured');
-      logger.debug(`[EvaluatorTracing] tracing.enabled: ${testSuite.tracing?.enabled}`);
-      logger.debug(
-        `[EvaluatorTracing] tracing.otlp.http.enabled: ${testSuite.tracing?.otlp?.http?.enabled}`,
-      );
-    }
   }
 }
 
@@ -131,6 +115,32 @@ export async function stopOtlpReceiverIfNeeded(): Promise<void> {
 }
 
 /**
+ * Wait for the OTLP receiver to become idle before shutdown.
+ * This lets late-arriving provider exports land without a fixed sleep.
+ */
+export async function waitForOtlpReceiverIdleIfNeeded(options?: {
+  idleMs?: number;
+  timeoutMs?: number;
+  pollMs?: number;
+}): Promise<boolean> {
+  if (otlpReceiverStartPromise !== null) {
+    await otlpReceiverStartPromise;
+  }
+
+  if (otlpReceiverStarted !== true) {
+    return true;
+  }
+
+  try {
+    const { waitForOTLPReceiverIdle } = await import('./otlpReceiver');
+    return await waitForOTLPReceiverIdle(options);
+  } catch (error) {
+    logger.error(`[EvaluatorTracing] Failed while waiting for OTLP receiver idle state: ${error}`);
+    return false;
+  }
+}
+
+/**
  * Check if tracing is enabled for a test case
  *
  * Tracing is enabled if any of the following are true:
@@ -143,12 +153,7 @@ export function isTracingEnabled(test: TestCase, testSuite?: TestSuite): boolean
   const yamlConfigEnabled = testSuite?.tracing?.enabled === true;
   const envEnabled = getEnvBool('PROMPTFOO_TRACING_ENABLED', false);
 
-  const result = metadataEnabled || yamlConfigEnabled || envEnabled;
-
-  logger.debug(
-    `[EvaluatorTracing] isTracingEnabled check: metadata=${metadataEnabled}, yamlConfig=${yamlConfigEnabled}, env=${envEnabled}, result=${result}`,
-  );
-  return result;
+  return metadataEnabled || yamlConfigEnabled || envEnabled;
 }
 
 /**
@@ -166,18 +171,11 @@ export async function generateTraceContextIfNeeded(
   testCaseId?: string;
 } | null> {
   const tracingEnabled = isTracingEnabled(test, testSuite);
-
-  if (tracingEnabled) {
-    logger.debug('[EvaluatorTracing] Tracing enabled for test case');
-    logger.debug(`[EvaluatorTracing] Test metadata: ${JSON.stringify(test.metadata)}`);
-  }
-
   if (!tracingEnabled) {
     return null;
   }
 
   // Import trace store dynamically to avoid circular dependencies
-  logger.debug('[EvaluatorTracing] Importing trace store');
   const { getTraceStore } = await import('./store');
   const traceStore = getTraceStore();
 
@@ -185,7 +183,6 @@ export async function generateTraceContextIfNeeded(
   const traceId = generateTraceId();
   const spanId = generateSpanId();
   const traceparent = generateTraceparent(traceId, spanId);
-  logger.debug(`[EvaluatorTracing] Generated trace context: traceId=${traceId}, spanId=${spanId}`);
 
   // Get evaluation ID from test metadata (set by Evaluator class)
   const evaluationId = test.metadata?.evaluationId || evaluateOptions?.eventSource;
@@ -199,7 +196,6 @@ export async function generateTraceContextIfNeeded(
   // Store trace association in trace store
   if (evaluationId) {
     try {
-      logger.debug(`[EvaluatorTracing] Creating trace record for traceId=${traceId}`);
       await traceStore.createTrace({
         traceId,
         evaluationId,
@@ -210,15 +206,10 @@ export async function generateTraceContextIfNeeded(
           vars: test.vars,
         },
       });
-      logger.debug('[EvaluatorTracing] Trace record created successfully');
     } catch (error) {
       logger.error(`[EvaluatorTracing] Failed to create trace: ${error}`);
     }
   }
-
-  logger.debug(
-    `[EvaluatorTracing] Trace context ready: ${traceparent} for test case ${testCaseId}`,
-  );
 
   return {
     traceparent,

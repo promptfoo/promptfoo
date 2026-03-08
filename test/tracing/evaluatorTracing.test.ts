@@ -9,6 +9,7 @@ import {
   resetTracingState,
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
+  waitForOtlpReceiverIdleIfNeeded,
 } from '../../src/tracing/evaluatorTracing';
 import { TestSuiteSchema } from '../../src/types/index';
 
@@ -36,6 +37,7 @@ vi.mock('../../src/tracing/store', () => ({
 vi.mock('../../src/tracing/otlpReceiver', () => ({
   startOTLPReceiver: vi.fn(),
   stopOTLPReceiver: vi.fn(),
+  waitForOTLPReceiverIdle: vi.fn(),
 }));
 
 vi.mock('../../src/telemetry', () => ({
@@ -45,7 +47,11 @@ vi.mock('../../src/telemetry', () => ({
 }));
 
 import telemetry from '../../src/telemetry';
-import { startOTLPReceiver, stopOTLPReceiver } from '../../src/tracing/otlpReceiver';
+import {
+  startOTLPReceiver,
+  stopOTLPReceiver,
+  waitForOTLPReceiverIdle,
+} from '../../src/tracing/otlpReceiver';
 
 describe('evaluatorTracing', () => {
   beforeEach(() => {
@@ -304,6 +310,25 @@ describe('evaluatorTracing', () => {
 
       expect(stopOTLPReceiver).toHaveBeenCalledTimes(1);
       expect(isOtlpReceiverStarted()).toBe(false);
+    });
+
+    it('should wait for the OTLP receiver idle state after startup completes', async () => {
+      vi.mocked(startOTLPReceiver).mockResolvedValueOnce(undefined);
+      vi.mocked(waitForOTLPReceiverIdle).mockResolvedValueOnce(true);
+
+      await startOtlpReceiverIfNeeded(tracingSuite);
+      const result = await waitForOtlpReceiverIdleIfNeeded({
+        idleMs: 10,
+        timeoutMs: 20,
+        pollMs: 5,
+      });
+
+      expect(result).toBe(true);
+      expect(waitForOTLPReceiverIdle).toHaveBeenCalledWith({
+        idleMs: 10,
+        timeoutMs: 20,
+        pollMs: 5,
+      });
     });
   });
 });

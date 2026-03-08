@@ -2,7 +2,8 @@ import fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
-import { importModule } from '../../src/esm';
+import cliState from '../../src/cliState';
+import { importModule, resolvePackageEntryPoint } from '../../src/esm';
 import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 
@@ -67,9 +68,11 @@ describe('OpenAICodexSDKProvider', () => {
   let statSyncSpy: MockInstance;
   let existsSyncSpy: MockInstance;
   const mockImportModule = vi.mocked(importModule);
+  const mockResolvePackageEntryPoint = vi.mocked(resolvePackageEntryPoint);
 
   beforeEach(() => {
     vi.clearAllMocks();
+    cliState.basePath = undefined;
 
     // Reset mock implementations
     mockStartThread.mockReturnValue(mockThread);
@@ -210,6 +213,22 @@ describe('OpenAICodexSDKProvider', () => {
 
         const provider = new OpenAICodexSDKProvider();
         await expect(provider.callApi('Test prompt')).rejects.toThrow(/OpenAI API key is not set/);
+      });
+
+      it('should fall back from config basePath to the promptfoo install root when resolving the SDK package', async () => {
+        cliState.basePath = '/tmp/outside-config';
+        mockRun.mockResolvedValue(createMockResponse('Fallback resolution response'));
+        mockResolvePackageEntryPoint.mockReturnValueOnce(null).mockReturnValue('@openai/codex-sdk');
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('Fallback resolution response');
+        expect(mockResolvePackageEntryPoint).toHaveBeenCalledTimes(2);
+        expect(mockResolvePackageEntryPoint.mock.calls[0][1]).toBe('/tmp/outside-config');
+        expect(mockResolvePackageEntryPoint.mock.calls[1][1]).toBe(process.cwd());
       });
     });
 

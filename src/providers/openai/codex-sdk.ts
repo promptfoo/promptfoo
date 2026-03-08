@@ -6,7 +6,7 @@ import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
-import { importModule, resolvePackageEntryPoint } from '../../esm';
+import { getDirectory, importModule, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
 import {
   type GenAISpanContext,
@@ -217,10 +217,23 @@ export interface OpenAICodexSDKConfig {
  * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
  */
 async function loadCodexSDK(): Promise<any> {
-  const basePath =
-    cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
+  const preferredBasePath =
+    cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : undefined;
+  const installBasePath = path.resolve(getDirectory(), '..');
+  const resolutionBasePaths = Array.from(
+    new Set([preferredBasePath, process.cwd(), installBasePath].filter(Boolean)),
+  ) as string[];
 
-  const codexPath = resolvePackageEntryPoint('@openai/codex-sdk', basePath);
+  let codexPath: string | null = null;
+  for (const basePath of resolutionBasePaths) {
+    codexPath = resolvePackageEntryPoint('@openai/codex-sdk', basePath);
+    if (codexPath) {
+      if (basePath !== preferredBasePath) {
+        logger.debug(`[OpenAICodexSDK] Resolved SDK using fallback base path: ${basePath}`);
+      }
+      break;
+    }
+  }
 
   if (!codexPath) {
     throw new Error(

@@ -674,11 +674,19 @@ For running Claude Code in VMs, containers, or remote environments, you can prov
 Enable deep tracing to capture internal Claude Agent SDK events (tool calls, API requests, thinking blocks, etc.) for observability and debugging:
 
 ```yaml
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+
 providers:
   - id: anthropic:claude-agent-sdk
     config:
       deep_tracing: true
 ```
+
+`deep_tracing: true` configures the provider to emit SDK telemetry. `tracing.otlp.http.enabled: true` starts Promptfoo's OTLP receiver so those events are actually captured and attached to the eval trace.
 
 When `deep_tracing` is enabled:
 

@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import path from 'path';
 
 import protobuf from 'protobufjs';
@@ -916,13 +917,20 @@ describe('OTLPReceiver', () => {
     it('should ignore duplicate listen calls on the same receiver instance', async () => {
       const fakeServer = {
         on: vi.fn(),
+        once: vi.fn((event: string, handler: (...args: any[]) => void) => {
+          if (event === 'listening') {
+            handler();
+          }
+          return fakeServer as any;
+        }),
+        off: vi.fn(),
+        listening: true,
         close: vi.fn((callback?: () => void) => callback?.()),
         closeAllConnections: vi.fn(),
       };
       const listenSpy = vi
         .spyOn(receiver.getApp(), 'listen')
-        .mockImplementation((_port: any, _host: any, callback?: () => void) => {
-          callback?.();
+        .mockImplementation((_port: any, _host: any) => {
           return fakeServer as any;
         });
 
@@ -931,6 +939,72 @@ describe('OTLPReceiver', () => {
 
       expect(listenSpy).toHaveBeenCalledTimes(1);
       await receiver.stop();
+    });
+
+    it('should clear stale server handle after listen error and allow retry', async () => {
+      const failedServer = new EventEmitter() as EventEmitter & {
+        listening: boolean;
+        close: (callback?: () => void) => void;
+        closeAllConnections: () => void;
+      };
+      failedServer.listening = false;
+      failedServer.close = (callback?: () => void) => callback?.();
+      failedServer.closeAllConnections = vi.fn();
+
+      const successfulServer = new EventEmitter() as EventEmitter & {
+        listening: boolean;
+        close: (callback?: () => void) => void;
+        closeAllConnections: () => void;
+      };
+      successfulServer.listening = true;
+      successfulServer.close = (callback?: () => void) => callback?.();
+      successfulServer.closeAllConnections = vi.fn();
+
+      const listenSpy = vi
+        .spyOn(receiver.getApp(), 'listen')
+        .mockImplementationOnce((_port: any, _host: any) => {
+          setImmediate(() => {
+            failedServer.emit('error', new Error('EADDRINUSE'));
+          });
+          return failedServer as any;
+        })
+        .mockImplementationOnce((_port: any, _host: any) => {
+          setImmediate(() => {
+            successfulServer.emit('listening');
+          });
+          return successfulServer as any;
+        });
+
+      await expect(receiver.listen(4318, '127.0.0.1')).rejects.toThrow('EADDRINUSE');
+      await expect(receiver.listen(4318, '127.0.0.1')).resolves.toBeUndefined();
+
+      expect(listenSpy).toHaveBeenCalledTimes(2);
+      await receiver.stop();
+    });
+
+    it('should wait for the receiver to become idle after recent activity', async () => {
+      vi.useFakeTimers();
+
+      try {
+        (receiver as any).server = {};
+        (receiver as any).activeRequests = 1;
+        (receiver as any).lastActivityAt = Date.now();
+
+        const waitPromise = receiver.waitForIdle({
+          idleMs: 100,
+          timeoutMs: 1000,
+          pollMs: 25,
+        });
+
+        await vi.advanceTimersByTimeAsync(50);
+        (receiver as any).activeRequests = 0;
+        (receiver as any).lastActivityAt = Date.now();
+        await vi.advanceTimersByTimeAsync(125);
+
+        await expect(waitPromise).resolves.toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
@@ -1204,6 +1278,60 @@ describe('OTLPReceiver', () => {
           errorMessage: 'Trace missing',
         },
       });
+    });
+
+    it('should return partial success when trace spans cannot be stored', async () => {
+      (receiver as any).traceStore = mockTraceStore;
+      mockTraceStore.addSpans.mockImplementationOnce(
+        async () =>
+          ({
+            stored: false,
+            reason: 'Trace missing',
+          }) as any,
+      );
+
+      const otlpRequest = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: Buffer.from('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'hex').toString(
+                      'base64',
+                    ),
+                    spanId: Buffer.from('1111111111111111', 'hex').toString('base64'),
+                    name: 'unstored-trace-span',
+                    startTimeUnixNano: '1000000000',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const response = await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send(otlpRequest)
+        .expect(200);
+
+      expect(response.body).toEqual({
+        partialSuccess: {
+          rejectedSpans: 1,
+          errorMessage: 'Trace missing',
+        },
+      });
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'unstored-trace-span',
+          }),
+        ]),
+        { skipTraceCheck: false },
+      );
     });
 
     it('should accept valid OTLP protobuf logs', async () => {
