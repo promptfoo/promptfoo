@@ -2,6 +2,12 @@ import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
+function parseCommaSeparatedValues(value: string): string[] {
+  return (
+    value.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g)?.map((v) => v.trim().replace(/^"|"$/g, '')) ?? []
+  );
+}
+
 export const handleContains = ({
   assertion,
   renderedValue,
@@ -60,9 +66,7 @@ export const handleContainsAny = ({
   let value = valueFromScript ?? renderedValue;
   invariant(value, '"contains-any" assertion type must have a value');
   if (typeof value === 'string') {
-    // Handle quoted values and escaped commas
-    value =
-      value.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g)?.map((v) => v.trim().replace(/^"|"$/g, '')) ?? [];
+    value = parseCommaSeparatedValues(value);
   }
   invariant(Array.isArray(value), '"contains-any" assertion type must have an array value');
   const pass = value.some((v) => outputString.includes(String(v))) !== inverse;
@@ -86,7 +90,7 @@ export const handleIContainsAny = ({
   let value = valueFromScript ?? renderedValue;
   invariant(value, '"icontains-any" assertion type must have a value');
   if (typeof value === 'string') {
-    value = value.split(',').map((v) => v.trim());
+    value = parseCommaSeparatedValues(value);
   }
   invariant(Array.isArray(value), '"icontains-any" assertion type must have an array value');
   const pass =
@@ -111,7 +115,7 @@ export const handleContainsAll = ({
   let value = valueFromScript ?? renderedValue;
   invariant(value, '"contains-all" assertion type must have a value');
   if (typeof value === 'string') {
-    value = value.split(',').map((v) => v.trim());
+    value = parseCommaSeparatedValues(value);
   }
   invariant(Array.isArray(value), '"contains-all" assertion type must have an array value');
   const missingStrings = value.filter((v) => !outputString.includes(String(v)));
@@ -136,7 +140,7 @@ export const handleIContainsAll = ({
   let value = valueFromScript ?? renderedValue;
   invariant(value, '"icontains-all" assertion type must have a value');
   if (typeof value === 'string') {
-    value = value.split(',').map((v) => v.trim());
+    value = parseCommaSeparatedValues(value);
   }
   invariant(Array.isArray(value), '"icontains-all" assertion type must have an array value');
   const missingStrings = value.filter(
