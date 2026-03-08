@@ -26,71 +26,98 @@ async function makeRequest(method, url, data = null) {
   }
 }
 
-async function adkSessionHook(hookName, context) {
-  const ADK_HOST = process.env.ADK_HOST || 'localhost';
-  const ADK_PORT = parseInt(process.env.ADK_PORT || '8000');
-  const APP_NAME = process.env.ADK_APP_NAME || 'weather_agent';
-  const USER_ID = process.env.ADK_USER_ID || 'test_user';
+function getAdkConfig() {
+  const host = process.env.ADK_HOST || 'localhost';
+  const port = Number.parseInt(process.env.ADK_PORT || '8000', 10);
+  const appName = process.env.ADK_APP_NAME || 'weather_agent';
+  const userId = process.env.ADK_USER_ID || 'test_user';
 
-  const baseUrl = `http://${ADK_HOST}:${ADK_PORT}`;
+  return {
+    appName,
+    userId,
+    baseUrl: `http://${host}:${port}`,
+  };
+}
+
+function getSessionUrl(config, sessionId) {
+  return `${config.baseUrl}/apps/${config.appName}/users/${config.userId}/sessions/${sessionId}`;
+}
+
+function collectSessionIds(context) {
+  const sessionIds = new Set();
+  const tests = context.suite?.tests || [];
+
+  if (Array.isArray(tests)) {
+    for (const test of tests) {
+      if (test && typeof test === 'object' && test.vars && test.vars.session_id) {
+        sessionIds.add(test.vars.session_id);
+      }
+    }
+  }
+
+  if (sessionIds.size === 0) {
+    sessionIds.add('conversation');
+  }
+
+  return Array.from(sessionIds);
+}
+
+async function createSession(config, sessionId) {
+  const response = await makeRequest('POST', getSessionUrl(config, sessionId), { state: {} });
+
+  if (response.ok) {
+    const sessionData = await response.json();
+    console.log(`✅ Session created: ${sessionData.id}`);
+    return;
+  }
+
+  if (response.status === 422) {
+    console.log(`ℹ️  Session ${sessionId} already exists`);
+    return;
+  }
+
+  console.log(`⚠️  Failed to create session ${sessionId}: ${response.status}`);
+}
+
+async function setupSessions(context, config) {
+  const sessionIds = collectSessionIds(context);
+  console.log(`🔧 Setting up ${sessionIds.length} ADK session(s)...`);
+
+  try {
+    for (const sessionId of sessionIds) {
+      await createSession(config, sessionId);
+    }
+  } catch (error) {
+    console.log(`⚠️  Error connecting to ADK server: ${error.message}`);
+    console.log('Make sure ADK server is running on http://localhost:8000');
+  }
+
+  context._adkSessionIds = sessionIds;
+}
+
+async function cleanupSessions(sessionIds, config) {
+  console.log('\n🧹 Cleaning up ADK sessions...');
+
+  try {
+    for (const sessionId of sessionIds) {
+      await makeRequest('DELETE', getSessionUrl(config, sessionId));
+    }
+    console.log('✅ All sessions cleaned up');
+  } catch (error) {
+    console.log(`ℹ️  Cleanup error (non-critical): ${error.message}`);
+  }
+}
+
+async function adkSessionHook(hookName, context) {
+  const config = getAdkConfig();
 
   if (hookName === 'beforeAll') {
-    // Collect all unique session IDs from tests
-    const sessionIds = new Set();
+    await setupSessions(context, config);
+    return;
+  }
 
-    // Check if this is single-turn (multiple session IDs) or multi-turn (one session ID)
-    const tests = context.suite?.tests || [];
-    if (Array.isArray(tests)) {
-      for (const test of tests) {
-        if (test && typeof test === 'object' && test.vars && test.vars.session_id) {
-          sessionIds.add(test.vars.session_id);
-        }
-      }
-    }
-
-    // Default to shared session if no session_id variables found
-    if (sessionIds.size === 0) {
-      sessionIds.add('conversation');
-    }
-
-    console.log(`🔧 Setting up ${sessionIds.size} ADK session(s)...`);
-
-    try {
-      for (const sessionId of sessionIds) {
-        const url = `${baseUrl}/apps/${APP_NAME}/users/${USER_ID}/sessions/${sessionId}`;
-
-        const response = await makeRequest('POST', url, { state: {} });
-
-        if (response.ok) {
-          const sessionData = await response.json();
-          console.log(`✅ Session created: ${sessionData.id}`);
-        } else if (response.status === 422) {
-          console.log(`ℹ️  Session ${sessionId} already exists`);
-        } else {
-          console.log(`⚠️  Failed to create session ${sessionId}: ${response.status}`);
-        }
-      }
-    } catch (error) {
-      console.log(`⚠️  Error connecting to ADK server: ${error.message}`);
-      console.log('Make sure ADK server is running on http://localhost:8000');
-    }
-
-    // Store session IDs for cleanup
-    context._adkSessionIds = Array.from(sessionIds);
-  } else if (hookName === 'afterAll') {
-    console.log('\n🧹 Cleaning up ADK sessions...');
-
-    const sessionIds = context._adkSessionIds || ['conversation'];
-
-    try {
-      for (const sessionId of sessionIds) {
-        const url = `${baseUrl}/apps/${APP_NAME}/users/${USER_ID}/sessions/${sessionId}`;
-        await makeRequest('DELETE', url);
-      }
-      console.log('✅ All sessions cleaned up');
-    } catch (error) {
-      console.log(`ℹ️  Cleanup error (non-critical): ${error.message}`);
-    }
+  if (hookName === 'afterAll') {
+    await cleanupSessions(context._adkSessionIds || ['conversation'], config);
   }
 }
 
