@@ -10,7 +10,7 @@ const examplesDir = path.join(rootDir, 'examples');
 const readmeFiles = globSync('**/README.md', { cwd: examplesDir }).sort();
 
 function getExampleName(readmePath: string): string {
-  return path.dirname(readmePath);
+  return path.dirname(readmePath).split(path.sep).join('/');
 }
 
 function isLeafExample(dirPath: string): boolean {
