@@ -12,6 +12,12 @@ npx promptfoo@latest eval
 npx promptfoo@latest view
 ```
 
+To run the trajectory assertion variant introduced by PR `#8040`, use:
+
+```bash
+npm run local -- eval -c examples/integration-opentelemetry/javascript/promptfooconfig.trajectory.yaml --no-cache
+```
+
 ## Environment Variables
 
 This example requires no API keys - it uses a simulated provider that demonstrates tracing patterns.
@@ -148,6 +154,12 @@ assert:
     value:
       max_count: 0
 ```
+
+The trajectory-specific config at `promptfooconfig.trajectory.yaml` adds:
+
+- `trajectory:tool-used`
+- `trajectory:tool-sequence`
+- `trajectory:step-count`
 
 ## Viewing Traces
 
