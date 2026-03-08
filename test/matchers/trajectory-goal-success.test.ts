@@ -107,4 +107,50 @@ describe('matchesTrajectoryGoalSuccess', () => {
       }),
     );
   });
+
+  it('does not allow caller vars to override goal, trajectory, or output', async () => {
+    const provider = {
+      id: () => 'test-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'Goal achieved' }),
+        tokenUsage: { total: 6, prompt: 3, completion: 3 },
+      }),
+    };
+
+    const grading: GradingConfig = {
+      provider,
+      rubricPrompt:
+        'Goal={{ goal }}\nTrajectory={{ trajectory }}\nOutput={{ output }}\nOrder={{ orderId }}',
+    };
+
+    await matchesTrajectoryGoalSuccess(
+      'Resolve the order lookup task',
+      '{"stepCount":2}',
+      'The order shipped yesterday.',
+      grading,
+      {
+        goal: 'spoofed goal',
+        trajectory: 'spoofed trajectory',
+        output: 'spoofed output',
+        orderId: '123',
+      },
+    );
+
+    expect(provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Goal=Resolve the order lookup task'),
+      expect.objectContaining({
+        prompt: expect.objectContaining({
+          raw: expect.stringContaining(
+            'Goal=Resolve the order lookup task\nTrajectory={"stepCount":2}\nOutput=The order shipped yesterday.\nOrder=123',
+          ),
+        }),
+        vars: expect.objectContaining({
+          goal: 'Resolve the order lookup task',
+          trajectory: '{"stepCount":2}',
+          output: 'The order shipped yesterday.',
+          orderId: '123',
+        }),
+      }),
+    );
+  });
 });

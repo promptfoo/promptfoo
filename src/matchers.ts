@@ -824,10 +824,10 @@ export async function matchesTrajectoryGoalSuccess(
     label: 'trajectory:goal-success',
     providerCallContext,
     vars: {
+      ...(vars || {}),
       goal,
       output: tryParse(llmOutput),
       trajectory,
-      ...(vars || {}),
     },
   });
 }

@@ -188,6 +188,28 @@ describe('trajectory assertions', () => {
         assertion: params.assertion,
       });
     });
+
+    it('fails inverse list assertions when any forbidden tool is present', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-used',
+        inverse: true,
+        assertion: {
+          type: 'not-trajectory:tool-used',
+          value: ['missing_tool', 'compose_reply'],
+        },
+        renderedValue: ['missing_tool', 'compose_reply'],
+      };
+
+      const result = handleTrajectoryToolUsed(params);
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason:
+          'Forbidden tool(s) were used: compose_reply. Actual tools: tool:search_orders, tool:search_inventory, tool:compose_reply',
+        assertion: params.assertion,
+      });
+    });
   });
 
   describe('trajectory:tool-sequence', () => {
@@ -237,6 +259,22 @@ describe('trajectory assertions', () => {
           'Expected exact tool sequence of search_orders, compose_reply, but actual tools were tool:search_orders, tool:search_inventory, tool:compose_reply',
         assertion: params.assertion,
       });
+    });
+
+    it('rejects object steps without a name or pattern', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-sequence',
+        assertion: {
+          type: 'trajectory:tool-sequence',
+          value: [{ type: 'tool' }, 'compose_reply'],
+        },
+        renderedValue: [{ type: 'tool' }, 'compose_reply'],
+      };
+
+      expect(() => handleTrajectoryToolSequence(params)).toThrow(
+        'trajectory:tool-sequence assertion step 1 must include a name or pattern property',
+      );
     });
   });
 

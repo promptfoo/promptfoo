@@ -40,6 +40,21 @@ function formatStepList(stepLabels: string[]): string {
   return stepLabels.length > 0 ? stepLabels.join(', ') : '(none)';
 }
 
+function requireNamedTrajectoryMatcher(
+  matcher: TrajectoryStepMatcher,
+  assertionType: string,
+  index?: number,
+) {
+  if (matcher.pattern || matcher.name) {
+    return;
+  }
+
+  const stepLabel = index === undefined ? 'object' : `step ${index + 1}`;
+  throw new Error(
+    `${assertionType} assertion ${stepLabel} must include a name or pattern property`,
+  );
+}
+
 function resolveGoalSuccessValue(value: unknown): TrajectoryGoalSuccessValue {
   if (typeof value === 'string' && value.trim()) {
     return { goal: value.trim() };
@@ -121,8 +136,7 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
       steps.some((step) => matchesTrajectoryStep(step, matcher)),
     );
 
-    const basePass = missing.length === 0;
-    const pass = applyInverse(basePass, params.inverse);
+    const pass = params.inverse ? matched.length === 0 : missing.length === 0;
     const actualTools = steps.map(formatTrajectoryStep);
 
     const expectedTools = expected.matchers.map(
@@ -130,19 +144,17 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
     );
 
     let reason: string;
-    if (basePass) {
-      reason = `Observed required tool(s): ${expectedTools.join(', ')}. Actual tools: ${formatStepList(actualTools)}`;
-    } else {
-      const missingTools = missing.map((matcher) => matcher.pattern || matcher.name || '*');
-      reason = `Missing required tool(s): ${missingTools.join(', ')}. Actual tools: ${formatStepList(actualTools)}`;
-    }
-
     if (params.inverse) {
       reason = pass
         ? `Forbidden tool(s) were not used: ${expectedTools.join(', ')}`
         : `Forbidden tool(s) were used: ${matched
             .map((matcher) => matcher.pattern || matcher.name || '*')
             .join(', ')}. Actual tools: ${formatStepList(actualTools)}`;
+    } else if (pass) {
+      reason = `Observed required tool(s): ${expectedTools.join(', ')}. Actual tools: ${formatStepList(actualTools)}`;
+    } else {
+      const missingTools = missing.map((matcher) => matcher.pattern || matcher.name || '*');
+      reason = `Missing required tool(s): ${missingTools.join(', ')}. Actual tools: ${formatStepList(actualTools)}`;
     }
 
     return {
@@ -215,7 +227,11 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
   const trace = getTraceOrThrow(params);
   const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
   const value = resolveSequenceValue(params.renderedValue ?? params.assertion.value);
-  const expectedMatchers = value.steps.map((step) => normalizeTrajectoryMatcher(step, 'tool'));
+  const expectedMatchers = value.steps.map((step, index) => {
+    const matcher = normalizeTrajectoryMatcher(step, 'tool');
+    requireNamedTrajectoryMatcher(matcher, 'trajectory:tool-sequence', index);
+    return matcher;
+  });
 
   if (expectedMatchers.length === 0) {
     throw new Error('trajectory:tool-sequence assertion requires at least one expected step');
