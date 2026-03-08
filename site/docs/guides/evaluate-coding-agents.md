@@ -162,6 +162,37 @@ tests:
 
 The agent's output is its final text response describing what it did, not the file contents. For file-level verification, read the files after the eval or enable [tracing](/docs/tracing/).
 
+When you need to verify behavior rather than the agent's self-report, tracing is the better fit. It lets you assert that the agent actually ran tests, executed commands, or took multiple reasoning steps:
+
+```yaml title="promptfooconfig.yaml"
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+
+providers:
+  - id: openai:codex-sdk
+    config:
+      working_dir: ./repo
+      enable_streaming: true
+
+tests:
+  - assert:
+      - type: trajectory:step-count
+        value:
+          type: command
+          pattern: 'pytest*'
+          min: 1
+
+      - type: trajectory:step-count
+        value:
+          type: reasoning
+          min: 1
+```
+
+If your agent emits tool-oriented spans, add [`trajectory:tool-used`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used) or [`trajectory:tool-sequence`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence) to verify the exact tool path.
+
 ### Multi-file feature implementation
 
 When tasks span multiple files, use `llm-rubric` to evaluate semantic completion rather than checking for specific strings.

@@ -165,6 +165,29 @@ npx promptfoo eval
 
 Traces include agent execution spans, tool invocations, model calls, handoff events, and token usage.
 
+Once Promptfoo is collecting those traces, you can assert on the agent's path instead of only its final message:
+
+```yaml
+tests:
+  - vars:
+      query: 'Find order 123 and tell me whether it shipped'
+    assert:
+      - type: trajectory:tool-used
+        value: search_orders
+
+      - type: trajectory:tool-sequence
+        value:
+          steps:
+            - search_orders
+            - compose_reply
+
+      - type: trajectory:goal-success
+        value: 'Determine whether order 123 shipped and tell the user the correct status'
+        provider: openai:gpt-5-mini
+```
+
+See [Tracing](/docs/tracing/) for the eval-level OTLP setup required when you want Promptfoo to ingest and evaluate these traces directly.
+
 ## Example: D&D Dungeon Master
 
 Full working example with D&D mechanics, dice rolling, and character management:
