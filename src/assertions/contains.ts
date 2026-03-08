@@ -3,9 +3,57 @@ import invariant from '../util/invariant';
 import type { AssertionParams, GradingResult } from '../types/index';
 
 function parseCommaSeparatedValues(value: string): string[] {
-  return (
-    value.match(/(".*?"|[^,]+)(?=\s*,|\s*$)/g)?.map((v) => v.trim().replace(/^"|"$/g, '')) ?? []
-  );
+  const results: string[] = [];
+  let i = 0;
+  while (i < value.length) {
+    // Skip whitespace (spaces, tabs, newlines, etc.)
+    while (i < value.length && /\s/.test(value[i])) {
+      i++;
+    }
+    if (i >= value.length) {
+      break;
+    }
+    // Skip comma separators
+    if (value[i] === ',') {
+      i++;
+      continue;
+    }
+    if (value[i] === '"') {
+      // Quoted field: consume until unescaped closing quote
+      i++; // skip opening quote
+      let field = '';
+      while (i < value.length) {
+        if (
+          value[i] === '\\' &&
+          i + 1 < value.length &&
+          (value[i + 1] === '"' || value[i + 1] === '\\')
+        ) {
+          // Escaped quote or backslash: include only the escaped character
+          field += value[i + 1];
+          i += 2;
+        } else if (value[i] === '"' && i + 1 < value.length && value[i + 1] === '"') {
+          // CSV-style doubled quote: "" becomes a literal "
+          field += '"';
+          i += 2;
+        } else if (value[i] === '"') {
+          i++; // skip closing quote
+          break;
+        } else {
+          field += value[i];
+          i++;
+        }
+      }
+      results.push(field);
+    } else {
+      // Unquoted field: consume until comma
+      const start = i;
+      while (i < value.length && value[i] !== ',') {
+        i++;
+      }
+      results.push(value.substring(start, i).trim());
+    }
+  }
+  return results;
 }
 
 export const handleContains = ({
