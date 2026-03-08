@@ -13,7 +13,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { useStore } from '@app/stores/evalConfig';
+import { type EvalConfigState, useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import yaml from 'js-yaml';
 import { Check, Upload } from 'lucide-react';
@@ -63,7 +63,9 @@ const STEP_ACCENT_STYLES = {
   },
 } as const;
 
-function normalizeProviders(providers: UnifiedConfig['providers']): ProviderOptions[] {
+type UpdateEvalConfig = EvalConfigState['updateConfig'];
+
+function normalizeProviders(providers: Partial<UnifiedConfig>['providers']): ProviderOptions[] {
   if (!Array.isArray(providers)) {
     return [];
   }
@@ -74,7 +76,7 @@ function normalizeProviders(providers: UnifiedConfig['providers']): ProviderOpti
   );
 }
 
-function normalizePrompts(prompts: UnifiedConfig['prompts']): string[] {
+function normalizePrompts(prompts: Partial<UnifiedConfig>['prompts']): string[] {
   if (!Array.isArray(prompts)) {
     return [];
   }
@@ -310,7 +312,7 @@ function ProvidersSetupStep({
   updateConfig,
 }: {
   normalizedProviders: ProviderOptions[];
-  updateConfig: ReturnType<typeof useStore>['updateConfig'];
+  updateConfig: UpdateEvalConfig;
 }) {
   return (
     <StepSection
@@ -379,7 +381,7 @@ function PromptsSetupStep({
 }: {
   normalizedPrompts: string[];
   normalizedProviders: ProviderOptions[];
-  updateConfig: ReturnType<typeof useStore>['updateConfig'];
+  updateConfig: UpdateEvalConfig;
   varsList: string[];
 }) {
   return (
@@ -451,7 +453,7 @@ function TestCasesSetupStep({
   normalizedPrompts: string[];
   normalizedProviders: ProviderOptions[];
   testCount: number;
-  updateConfig: ReturnType<typeof useStore>['updateConfig'];
+  updateConfig: UpdateEvalConfig;
   varsList: string[];
 }) {
   return (
@@ -530,9 +532,9 @@ function RunOptionsSetupStep({
   isReadyToRun,
   updateConfig,
 }: {
-  config: UnifiedConfig;
+  config: Partial<UnifiedConfig>;
   isReadyToRun: boolean;
-  updateConfig: ReturnType<typeof useStore>['updateConfig'];
+  updateConfig: UpdateEvalConfig;
 }) {
   const hasRunOptions = Boolean(
     config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency,

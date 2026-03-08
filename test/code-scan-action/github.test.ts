@@ -13,6 +13,10 @@ vi.mock('@actions/core', () => ({
   error: vi.fn(),
 }));
 
+vi.mock('@octokit/rest', () => ({
+  Octokit: class {},
+}));
+
 // Mock @actions/github
 vi.mock('@actions/github', () => ({
   context: {

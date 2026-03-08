@@ -229,7 +229,7 @@ export function getProviderTypeFromId(id: string | undefined): string | undefine
     return prefixedProviderType[1];
   }
 
-  if (Object.hasOwn(EXACT_PROVIDER_TYPES, id)) {
+  if (Object.prototype.hasOwnProperty.call(EXACT_PROVIDER_TYPES, id)) {
     return EXACT_PROVIDER_TYPES[id];
   }
 

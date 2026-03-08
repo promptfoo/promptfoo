@@ -18,15 +18,9 @@ describe('code-scan-action entrypoint', () => {
     };
     mocks.run.mockResolvedValue(undefined);
 
-    vi.doMock('../../code-scan-action/src/main', async () => {
-      const actual = await vi.importActual<typeof import('../../code-scan-action/src/main')>(
-        '../../code-scan-action/src/main',
-      );
-      return {
-        ...actual,
-        run: mocks.run,
-      };
-    });
+    vi.doMock('../../code-scan-action/src/main', () => ({
+      run: mocks.run,
+    }));
   });
 
   afterEach(() => {

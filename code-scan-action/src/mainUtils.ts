@@ -66,8 +66,8 @@ export function toReviewComment(comment: Comment) {
 
   return {
     path: comment.file!,
-    line: comment.line || undefined,
-    start_line: hasRange ? comment.startLine : undefined,
+    line: comment.line ?? undefined,
+    start_line: hasRange && comment.startLine != null ? comment.startLine : undefined,
     side: 'RIGHT' as const,
     start_side: hasRange ? ('RIGHT' as const) : undefined,
     body: buildReviewCommentBody(comment),
