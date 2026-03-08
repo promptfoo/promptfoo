@@ -17,6 +17,11 @@ const mockGrader = {
 
 const mockGetGraderById = vi.fn().mockReturnValue(mockGrader);
 
+vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
+}));
+
 vi.mock('../../../src/redteam/graders', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -201,6 +206,28 @@ describe('RedteamGoatProvider', () => {
 
     const bodyObj = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body);
     expect(bodyObj.purpose).toBeUndefined();
+  });
+
+  it('should stop when target ends conversation', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 3,
+    });
+
+    const targetProvider = createMockTargetProvider(
+      '',
+      {},
+      {
+        conversationEnded: true,
+        conversationEndReason: 'thread_closed',
+      },
+    );
+
+    const context = createMockContext(targetProvider);
+    const result = await provider.callApi('test prompt', context);
+
+    expect(result.metadata?.stopReason).toBe('Target ended conversation');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it('should handle grader integration and stop early on failure', async () => {

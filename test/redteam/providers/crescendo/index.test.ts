@@ -18,6 +18,11 @@ const mockApplyRuntimeTransforms = vi.hoisted(() =>
   })),
 );
 
+vi.mock('../../../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
+}));
+
 vi.mock('../../../../src/providers/promptfoo', async (importOriginal) => {
   return {
     ...(await importOriginal()),

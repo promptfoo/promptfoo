@@ -1,3 +1,4 @@
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
 import { createEmptyTokenUsage } from '../../../src/util/tokenUsageUtils';
@@ -24,6 +25,7 @@ vi.mock('@aws-sdk/client-bedrock-agent-runtime', async (importOriginal) => {
 // Module imports - loaded in beforeAll
 let BedrockAgentRuntimeClient: typeof import('@aws-sdk/client-bedrock-agent-runtime').BedrockAgentRuntimeClient;
 let RetrieveAndGenerateCommand: typeof import('@aws-sdk/client-bedrock-agent-runtime').RetrieveAndGenerateCommand;
+const NodeHttpHandlerMock = vi.mocked(NodeHttpHandler);
 
 // Mock @smithy/node-http-handler with ESM-compatible exports
 vi.mock('@smithy/node-http-handler', () => ({
@@ -139,6 +141,9 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     await provider.getKnowledgeBaseClient();
 
+    // client-bedrock-agent-runtime already defaults to HTTP/1.1,
+    // so no custom handler is needed without proxy or apiKey
+    expect(NodeHttpHandlerMock).not.toHaveBeenCalled();
     expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
@@ -161,6 +166,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     await provider.getKnowledgeBaseClient();
 
+    expect(NodeHttpHandlerMock).not.toHaveBeenCalled();
     expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
@@ -186,6 +192,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     await provider.getKnowledgeBaseClient();
 
+    expect(NodeHttpHandlerMock).not.toHaveBeenCalled();
     expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',

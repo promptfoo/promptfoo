@@ -347,6 +347,9 @@
         "MISTRAL_API_KEY": {
           "type": "string"
         },
+        "MODELSLAB_API_KEY": {
+          "type": "string"
+        },
         "NSCALE_SERVICE_TOKEN": {
           "type": "string"
         },
@@ -1632,6 +1635,9 @@
                     "MISTRAL_API_KEY": {
                       "type": "string"
                     },
+                    "MODELSLAB_API_KEY": {
+                      "type": "string"
+                    },
                     "NSCALE_SERVICE_TOKEN": {
                       "type": "string"
                     },
@@ -1850,7 +1856,8 @@
               "owasp:agentic",
               "eu:ai-act",
               "iso:42001",
-              "gdpr"
+              "gdpr",
+              "dod:ai:ethics"
             ]
           }
         },
@@ -1920,6 +1927,12 @@
                       "debug-access",
                       "default",
                       "divergent-repetition",
+                      "dod:ai:ethics",
+                      "dod:ai:ethics:01",
+                      "dod:ai:ethics:02",
+                      "dod:ai:ethics:03",
+                      "dod:ai:ethics:04",
+                      "dod:ai:ethics:05",
                       "donotanswer",
                       "ecommerce",
                       "ecommerce:compliance-bypass",
@@ -2001,6 +2014,7 @@
                       "indirect-prompt-injection",
                       "insurance",
                       "insurance:coverage-discrimination",
+                      "insurance:data-disclosure",
                       "insurance:network-misinformation",
                       "insurance:phi-disclosure",
                       "intent",
@@ -2185,6 +2199,12 @@
                           "debug-access",
                           "default",
                           "divergent-repetition",
+                          "dod:ai:ethics",
+                          "dod:ai:ethics:01",
+                          "dod:ai:ethics:02",
+                          "dod:ai:ethics:03",
+                          "dod:ai:ethics:04",
+                          "dod:ai:ethics:05",
                           "donotanswer",
                           "ecommerce",
                           "ecommerce:compliance-bypass",
@@ -2266,6 +2286,7 @@
                           "indirect-prompt-injection",
                           "insurance",
                           "insurance:coverage-discrimination",
+                          "insurance:data-disclosure",
                           "insurance:network-misinformation",
                           "insurance:phi-disclosure",
                           "intent",

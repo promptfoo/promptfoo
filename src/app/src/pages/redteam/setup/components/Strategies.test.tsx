@@ -234,6 +234,14 @@ describe('Strategies', () => {
 
       expect(screen.getByText('Multi-modal Strategies')).toBeInTheDocument();
     });
+
+    it('shows Composite Jailbreaks in advanced strategies when expanded', () => {
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      fireEvent.click(screen.getByText('Show Advanced Strategies'));
+
+      expect(screen.getByText('Composite Jailbreaks')).toBeInTheDocument();
+    });
   });
 
   it('renders hero section heading and advanced section after expansion', () => {

@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
-import { getUserEmail } from '../../globalConfig/accounts';
+import { getUserEmail, isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import {
   extractTraceIdFromTraceparent,
@@ -53,7 +53,7 @@ import type { Message } from './shared';
  */
 interface GoatMetadata extends BaseRedteamMetadata {
   redteamFinalPrompt?: string;
-  stopReason: 'Grader failed' | 'Max turns reached';
+  stopReason: 'Grader failed' | 'Max turns reached' | 'Target ended conversation';
   successfulAttacks?: Array<{
     turn: number;
     prompt: string;
@@ -133,8 +133,13 @@ export default class GoatProvider implements ApiProvider {
       throw new Error(`GOAT strategy requires remote grading to be enabled`);
     }
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
+    let maxTurns = options.maxTurns || 5;
+    // Cap turns for unauthenticated users
+    if (!isLoggedIntoCloud()) {
+      maxTurns = Math.min(maxTurns, 10);
+    }
     this.config = {
-      maxTurns: options.maxTurns || 5,
+      maxTurns,
       injectVar: options.injectVar,
       stateful: options.stateful ?? false,
       excludeTargetOutputFromAgenticAttackGeneration:
@@ -228,6 +233,7 @@ export default class GoatProvider implements ApiProvider {
     // Generate goal-specific evaluation rubric
     const userGoal = context?.test?.metadata?.goal || context?.vars[this.config.injectVar];
     const additionalRubric = getGoalRubric(userGoal);
+    let stopReason: GoatMetadata['stopReason'] = 'Max turns reached';
 
     for (let turn = 0; turn < this.config.maxTurns; turn++) {
       try {
@@ -563,6 +569,39 @@ export default class GoatProvider implements ApiProvider {
           context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
           context.vars.sessionId = targetResponse.sessionId;
         }
+        if (targetResponse.conversationEnded) {
+          logger.info('[GOAT] Target ended conversation', {
+            turn,
+            reason: targetResponse.conversationEndReason,
+          });
+          const endedOutput =
+            typeof targetResponse.output === 'string'
+              ? targetResponse.output
+              : safeJsonStringify(targetResponse.output);
+
+          if (endedOutput) {
+            messages.push({
+              role: 'assistant',
+              content: endedOutput,
+            });
+            redteamHistory.push({
+              prompt: attackerMessage.content,
+              promptAudio: lastTransformResult?.audio,
+              promptImage: lastTransformResult?.image,
+              output: endedOutput,
+              outputAudio:
+                targetResponse.audio?.data && targetResponse.audio?.format
+                  ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+                  : undefined,
+              inputVars: currentInputVars,
+            });
+            previousTargetOutput = endedOutput;
+          }
+
+          lastTargetResponse = targetResponse;
+          stopReason = 'Target ended conversation';
+          break;
+        }
         if (targetResponse.error) {
           throw new Error(`[GOAT] Target returned an error: ${targetResponse.error}`);
         }
@@ -716,6 +755,7 @@ export default class GoatProvider implements ApiProvider {
           if (this.config.continueAfterSuccess) {
             // Continue to next turn
           } else {
+            stopReason = 'Grader failed';
             break;
           }
         }
@@ -742,10 +782,7 @@ export default class GoatProvider implements ApiProvider {
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
         redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
         messages: messages as Record<string, any>[],
-        stopReason:
-          this.successfulAttacks.length > 0 && !this.config.continueAfterSuccess
-            ? 'Grader failed'
-            : 'Max turns reached',
+        stopReason,
         redteamHistory,
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,

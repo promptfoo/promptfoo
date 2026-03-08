@@ -1,3 +1,4 @@
+import path from 'node:path';
 import fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +14,8 @@ import type { NonNullableUsage, Query, SDKMessage } from '@anthropic-ai/claude-a
 import type { MockInstance } from 'vitest';
 
 import type { CallApiContextParams } from '../../src/types/index';
+
+const testBasePath = path.resolve('/test/basePath');
 
 vi.mock('../../src/cliState', () => ({
   default: { basePath: '/test/basePath' },
@@ -57,6 +60,35 @@ const createMockUsage = (input = 0, output = 0): NonNullableUsage => ({
   speed: 'standard',
   inference_geo: '',
   iterations: [],
+});
+
+// Helper to create a mock BetaMessage with required fields
+// The BetaMessage type requires: id, container, content, context_management, model, role, stop_reason, stop_sequence, type, usage
+// We use 'as any' for content since test mocks don't need the full BetaContentBlock discriminated union
+const createMockBetaMessage = (
+  content: Array<{ type: string; id?: string; name?: string; input?: unknown; text?: string }>,
+) => ({
+  id: 'msg_mock',
+  container: null,
+  content: content as any,
+  context_management: null,
+  model: 'claude-sonnet-4-20250514' as const,
+  role: 'assistant' as const,
+  stop_reason: 'tool_use' as const,
+  stop_sequence: null,
+  type: 'message' as const,
+  usage: {
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_creation_input_tokens: null,
+    cache_read_input_tokens: null,
+    cache_creation: null,
+    inference_geo: null,
+    iterations: null,
+    server_tool_use: null,
+    service_tier: 'standard' as const,
+    speed: 'standard' as const,
+  },
 });
 
 // Helper to create mock Query response (accepts a single message or an array)
@@ -270,7 +302,14 @@ describe('ClaudeCodeSDKProvider', () => {
           cost: 0.002,
           raw: expect.stringContaining('"type":"result"'),
           sessionId: 'test-session-123',
-          metadata: { toolCalls: [] },
+          metadata: {
+            toolCalls: [],
+            numTurns: 1,
+            durationMs: 1000,
+            durationApiMs: 800,
+            modelUsage: undefined,
+            permissionDenials: [],
+          },
         });
 
         // Verify the raw contains the expected data
@@ -435,6 +474,24 @@ describe('ClaudeCodeSDKProvider', () => {
           }),
         });
         expect(rmSyncSpy).not.toHaveBeenCalled();
+      });
+
+      it('should resolve working_dir relative paths from the cliState.basePath', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: { working_dir: './workspace' },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        expect(statSyncSpy).toHaveBeenCalledWith(path.resolve(testBasePath, 'workspace'));
+        expect(mockQuery).toHaveBeenCalledWith({
+          prompt: 'Test prompt',
+          options: expect.objectContaining({
+            cwd: path.resolve(testBasePath, 'workspace'),
+          }),
+        });
       });
 
       it('should error when working_dir does not exist', async () => {
@@ -832,7 +889,10 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(mockQuery).toHaveBeenCalledWith({
             prompt: 'Test prompt',
             options: expect.objectContaining({
-              plugins,
+              plugins: [
+                { type: 'local', path: path.resolve(testBasePath, 'my-plugin') },
+                { type: 'local', path: '/absolute/path/to/plugin' },
+              ],
             }),
           });
         });
@@ -859,11 +919,9 @@ describe('ClaudeCodeSDKProvider', () => {
         it('with additionalDirectories configuration', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
-          const additionalDirectories = ['/path/to/dir1', '/path/to/dir2'];
-
           const provider = new ClaudeCodeSDKProvider({
             config: {
-              additional_directories: additionalDirectories,
+              additional_directories: ['./relative/dir', '/absolute/dir'],
             },
             env: { ANTHROPIC_API_KEY: 'test-api-key' },
           });
@@ -872,7 +930,7 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(mockQuery).toHaveBeenCalledWith({
             prompt: 'Test prompt',
             options: expect.objectContaining({
-              additionalDirectories,
+              additionalDirectories: [path.resolve(testBasePath, 'relative/dir'), '/absolute/dir'],
             }),
           });
         });
@@ -1420,7 +1478,26 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
-        it('with path_to_claude_code_executable configuration', async () => {
+        it('with relative path_to_claude_code_executable configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              path_to_claude_code_executable: './bin/claude-code',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              pathToClaudeCodeExecutable: path.resolve(testBasePath, 'bin/claude-code'),
+            }),
+          });
+        });
+
+        it('with absolute path_to_claude_code_executable configuration', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
           const provider = new ClaudeCodeSDKProvider({
@@ -1629,7 +1706,28 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
-        it('with debug configuration', async () => {
+        it('with debug configuration and relative debug_file', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              debug: true,
+              debug_file: './logs/debug.log',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              debug: true,
+              debugFile: path.resolve(testBasePath, 'logs/debug.log'),
+            }),
+          });
+        });
+
+        it('with debug configuration and absolute debug_file', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
           const provider = new ClaudeCodeSDKProvider({
@@ -1981,16 +2079,14 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'tool-1',
-                    name: 'Read',
-                    input: { file_path: '/test/file.ts' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'tool-1',
+                  name: 'Read',
+                  input: { file_path: '/test/file.ts' },
+                },
+              ]),
               session_id: 'test-session',
             },
             {
@@ -2048,16 +2144,14 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'tool-1',
-                    name: 'Grep',
-                    input: { pattern: 'TODO', path: '/src' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'tool-1',
+                  name: 'Grep',
+                  input: { pattern: 'TODO', path: '/src' },
+                },
+              ]),
               session_id: 'test-session',
             },
             {
@@ -2077,22 +2171,20 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'tool-2',
-                    name: 'Bash',
-                    input: { command: 'npm test' },
-                  },
-                  {
-                    type: 'tool_use',
-                    id: 'tool-3',
-                    name: 'Read',
-                    input: { file_path: '/test/output.log' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'tool-2',
+                  name: 'Bash',
+                  input: { command: 'npm test' },
+                },
+                {
+                  type: 'tool_use',
+                  id: 'tool-3',
+                  name: 'Read',
+                  input: { file_path: '/test/output.log' },
+                },
+              ]),
               session_id: 'test-session',
             },
             {
@@ -2185,16 +2277,14 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'tool-1',
-                    name: 'Bash',
-                    input: { command: 'rm -rf /' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'tool-1',
+                  name: 'Bash',
+                  input: { command: 'rm -rf /' },
+                },
+              ]),
               session_id: 'error-session',
             },
             {
@@ -2252,16 +2342,14 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'tool-1',
-                    name: 'Read',
-                    input: { file_path: '/test/file.ts' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'tool-1',
+                  name: 'Read',
+                  input: { file_path: '/test/file.ts' },
+                },
+              ]),
               session_id: 'test-session',
             },
             // No user message with tool_result for tool-1
@@ -2306,16 +2394,14 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'tool-1',
-                    name: 'Read',
-                    input: { file_path: '/test/code.ts' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'tool-1',
+                  name: 'Read',
+                  input: { file_path: '/test/code.ts' },
+                },
+              ]),
               session_id: 'test-session',
             },
             {
@@ -2376,32 +2462,28 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'task-tool-1',
-                    name: 'Task',
-                    input: { prompt: 'Run the tests', subagent_type: 'Bash' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'task-tool-1',
+                  name: 'Task',
+                  input: { prompt: 'Run the tests', subagent_type: 'Bash' },
+                },
+              ]),
               session_id: 'test-session',
             },
             // Sub-agent makes its own tool calls (parent_tool_use_id points to the Task tool call)
             {
               type: 'assistant',
               parent_tool_use_id: 'task-tool-1',
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'sub-tool-1',
-                    name: 'Bash',
-                    input: { command: 'npm test' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'sub-tool-1',
+                  name: 'Bash',
+                  input: { command: 'npm test' },
+                },
+              ]),
               session_id: 'test-session',
             },
             {
@@ -2483,16 +2565,14 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'top-1',
-                    name: 'Read',
-                    input: { file_path: '/src/index.ts' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'top-1',
+                  name: 'Read',
+                  input: { file_path: '/src/index.ts' },
+                },
+              ]),
               session_id: 'test-session',
             },
             {
@@ -2513,38 +2593,34 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'task-1',
-                    name: 'Task',
-                    input: { prompt: 'Explore the codebase', subagent_type: 'Explore' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'task-1',
+                  name: 'Task',
+                  input: { prompt: 'Explore the codebase', subagent_type: 'Explore' },
+                },
+              ]),
               session_id: 'test-session',
             },
             // Sub-agent tool calls
             {
               type: 'assistant',
               parent_tool_use_id: 'task-1',
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'sub-1',
-                    name: 'Glob',
-                    input: { pattern: '**/*.ts' },
-                  },
-                  {
-                    type: 'tool_use',
-                    id: 'sub-2',
-                    name: 'Grep',
-                    input: { pattern: 'export', path: '/src' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'sub-1',
+                  name: 'Glob',
+                  input: { pattern: '**/*.ts' },
+                },
+                {
+                  type: 'tool_use',
+                  id: 'sub-2',
+                  name: 'Grep',
+                  input: { pattern: 'export', path: '/src' },
+                },
+              ]),
               session_id: 'test-session',
             },
             {

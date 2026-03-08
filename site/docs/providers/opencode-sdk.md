@@ -497,9 +497,9 @@ Choose based on your use case:
 
 ## Examples
 
-See the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples/opencode-sdk) for complete implementations:
+See the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-opencode-sdk) for complete implementations:
 
-- [Basic usage](https://github.com/promptfoo/promptfoo/tree/main/examples/opencode-sdk/basic) - Simple chat-only mode
+- [Basic usage](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-opencode-sdk/basic) - Simple chat-only mode
 
 ## See Also
 
