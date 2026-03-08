@@ -28,6 +28,49 @@ interface AddProviderDialogProps {
   initialProvider?: ProviderOptions;
 }
 
+const PROVIDER_TYPE_PREFIXES = [
+  ['openai:', 'openai'],
+  ['anthropic:', 'anthropic'],
+  ['bedrock:', 'bedrock'],
+  ['bedrock-agent:', 'bedrock-agent'],
+  ['azure:', 'azure'],
+  ['vertex:', 'vertex'],
+  ['google:', 'google'],
+  ['mistral:', 'mistral'],
+  ['openrouter:', 'openrouter'],
+  ['groq:', 'groq'],
+  ['deepseek:', 'deepseek'],
+  ['perplexity:', 'perplexity'],
+  ['exec:', 'exec'],
+] as const;
+
+const EXACT_PROVIDER_TYPES: Record<string, string> = {
+  http: 'http',
+  websocket: 'websocket',
+  browser: 'browser',
+  mcp: 'mcp',
+};
+
+const FILE_PROVIDER_TYPES = [
+  ['.py', 'python'],
+  ['.js', 'javascript'],
+  ['.go', 'go'],
+] as const;
+
+const AGENT_PROVIDER_TYPES = [
+  ['langchain', 'langchain'],
+  ['autogen', 'autogen'],
+  ['crewai', 'crewai'],
+  ['llamaindex', 'llamaindex'],
+  ['langgraph', 'langgraph'],
+  ['openai_agents', 'openai-agents-sdk'],
+  ['openai-agents', 'openai-agents-sdk'],
+  ['pydantic_ai', 'pydantic-ai'],
+  ['pydantic-ai', 'pydantic-ai'],
+  ['google_adk', 'google-adk'],
+  ['google-adk', 'google-adk'],
+] as const;
+
 export default function AddProviderDialog({
   open,
   onClose,
@@ -181,94 +224,28 @@ export function getProviderTypeFromId(id: string | undefined): string | undefine
     return undefined;
   }
 
-  if (id.startsWith('openai:')) {
-    return 'openai';
-  }
-  if (id.startsWith('anthropic:')) {
-    return 'anthropic';
-  }
-  if (id.startsWith('bedrock:')) {
-    return 'bedrock';
-  }
-  if (id.startsWith('bedrock-agent:')) {
-    return 'bedrock-agent';
-  }
-  if (id.startsWith('azure:')) {
-    return 'azure';
-  }
-  if (id.startsWith('vertex:')) {
-    return 'vertex';
-  }
-  if (id.startsWith('google:')) {
-    return 'google';
-  }
-  if (id.startsWith('mistral:')) {
-    return 'mistral';
-  }
-  if (id.startsWith('openrouter:')) {
-    return 'openrouter';
-  }
-  if (id.startsWith('groq:')) {
-    return 'groq';
-  }
-  if (id.startsWith('deepseek:')) {
-    return 'deepseek';
-  }
-  if (id.startsWith('perplexity:')) {
-    return 'perplexity';
-  }
-  if (id === 'http') {
-    return 'http';
-  }
-  if (id === 'websocket') {
-    return 'websocket';
-  }
-  if (id === 'browser') {
-    return 'browser';
-  }
-  if (id === 'mcp') {
-    return 'mcp';
-  }
-  if (id.startsWith('exec:')) {
-    return 'exec';
-  }
-  if (id.startsWith('file://')) {
-    if (id.includes('.py')) {
-      return 'python';
-    }
-    if (id.includes('.js')) {
-      return 'javascript';
-    }
-    if (id.includes('.go')) {
-      return 'go';
-    }
-    // Check for agent frameworks
-    if (id.includes('langchain')) {
-      return 'langchain';
-    }
-    if (id.includes('autogen')) {
-      return 'autogen';
-    }
-    if (id.includes('crewai')) {
-      return 'crewai';
-    }
-    if (id.includes('llamaindex')) {
-      return 'llamaindex';
-    }
-    if (id.includes('langgraph')) {
-      return 'langgraph';
-    }
-    if (id.includes('openai_agents') || id.includes('openai-agents')) {
-      return 'openai-agents-sdk';
-    }
-    if (id.includes('pydantic_ai') || id.includes('pydantic-ai')) {
-      return 'pydantic-ai';
-    }
-    if (id.includes('google_adk') || id.includes('google-adk')) {
-      return 'google-adk';
-    }
-    return 'generic-agent';
+  const prefixedProviderType = PROVIDER_TYPE_PREFIXES.find(([prefix]) => id.startsWith(prefix));
+  if (prefixedProviderType) {
+    return prefixedProviderType[1];
   }
 
-  return 'custom';
+  if (Object.hasOwn(EXACT_PROVIDER_TYPES, id)) {
+    return EXACT_PROVIDER_TYPES[id];
+  }
+
+  if (!id.startsWith('file://')) {
+    return 'custom';
+  }
+
+  const fileProviderType = FILE_PROVIDER_TYPES.find(([extension]) => id.includes(extension));
+  if (fileProviderType) {
+    return fileProviderType[1];
+  }
+
+  const agentProviderType = AGENT_PROVIDER_TYPES.find(([pattern]) => id.includes(pattern));
+  if (agentProviderType) {
+    return agentProviderType[1];
+  }
+
+  return 'generic-agent';
 }
