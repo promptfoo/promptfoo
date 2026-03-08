@@ -7,6 +7,7 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
+import { safeResolve } from '../util/pathUtils';
 import { cacheResponse, getCachedResponse, initializeAgenticCache } from './agentic-utils';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
@@ -712,11 +713,13 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       ? Array.from(new Set(config.disallowed_tools)).sort()
       : undefined;
 
+    const basePath = cliState.basePath ? path.resolve(cliState.basePath) : process.cwd();
+
     let isTempDir = false;
     let workingDir: string | undefined;
 
     if (config.working_dir) {
-      workingDir = config.working_dir;
+      workingDir = safeResolve(basePath, config.working_dir);
     } else {
       isTempDir = true;
     }
@@ -749,9 +752,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       maxThinkingTokens: config.max_thinking_tokens,
       allowedTools,
       disallowedTools,
-      plugins: config.plugins,
+      plugins: config.plugins?.map((plugin) => ({
+        ...plugin,
+        path: safeResolve(basePath, plugin.path),
+      })),
       maxBudgetUsd: config.max_budget_usd,
-      additionalDirectories: config.additional_directories,
+      additionalDirectories: config.additional_directories?.map((dir) =>
+        safeResolve(basePath, dir),
+      ),
       resume: config.resume,
       forkSession: config.fork_session,
       resumeSessionAt: config.resume_session_at,
@@ -766,14 +774,16 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       agent: config.agent,
       sessionId: config.session_id,
       debug: config.debug,
-      debugFile: config.debug_file,
+      debugFile: config.debug_file ? safeResolve(basePath, config.debug_file) : undefined,
       sandbox: config.sandbox,
       allowDangerouslySkipPermissions: config.allow_dangerously_skip_permissions,
       permissionPromptToolName: config.permission_prompt_tool_name,
       executable: config.executable,
       executableArgs: config.executable_args,
       extraArgs: config.extra_args,
-      pathToClaudeCodeExecutable: config.path_to_claude_code_executable,
+      pathToClaudeCodeExecutable: config.path_to_claude_code_executable
+        ? safeResolve(basePath, config.path_to_claude_code_executable)
+        : undefined,
       settingSources: config.setting_sources,
       tools: config.tools,
       enableFileCheckpointing: config.enable_file_checkpointing,
@@ -785,7 +795,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     const cacheResult = await initializeAgenticCache(
       {
         cacheKeyPrefix: 'anthropic:claude-agent-sdk',
-        workingDir: config.working_dir,
+        workingDir,
         bustCache: context?.bustCache,
         mcp: config.mcp?.servers?.length ? config.mcp : undefined,
         cacheMcp: config.cache_mcp,

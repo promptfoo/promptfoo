@@ -228,6 +228,8 @@ def call_api(prompt, options, context):
     result["cached"] = False
     result["logProbs"] = [-0.5, -0.3, -0.1]
     result["latencyMs"] = 150  # custom latency in milliseconds
+    result["conversationEnded"] = False
+    result["conversationEndReason"] = "thread_closed"
 
     # Error handling
     if something_went_wrong:
@@ -263,6 +265,8 @@ class ProviderResponse:
     cached: Optional[bool]
     logProbs: Optional[List[float]]
     latencyMs: Optional[int]  # overrides measured latency
+    conversationEnded: Optional[bool]
+    conversationEndReason: Optional[str]
     metadata: Optional[Dict[str, Any]]
 
 class ProviderEmbeddingResponse:
@@ -280,6 +284,10 @@ class ProviderClassificationResponse:
 :::tip
 Always include the `output` field in your response, even if it's an empty string when an error occurs.
 :::
+
+For multi-turn red team strategies, return `conversationEnded: True` (with optional
+`conversationEndReason`) when your target intentionally closes the active thread so promptfoo
+stops probing gracefully instead of continuing into timeout/error turns.
 
 ## Complete Examples
 

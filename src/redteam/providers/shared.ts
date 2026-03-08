@@ -252,6 +252,12 @@ export type TargetResponse = {
   };
 } & Omit<ProviderResponse, 'output'> & { output: string };
 
+export function isConversationEndedResponse(
+  response: Pick<ProviderResponse, 'conversationEnded'> | undefined,
+): boolean {
+  return Boolean(response?.conversationEnded);
+}
+
 /**
  * Gets the response from the target provider for a given prompt.
  * @param targetProvider - The API provider to get the response from.
@@ -315,6 +321,14 @@ export async function getTargetResponse(
       ...(targetRespRaw as ProviderResponse),
       output: '',
       error: targetRespRaw.error,
+      tokenUsage,
+    };
+  }
+
+  if (targetRespRaw?.conversationEnded) {
+    return {
+      ...(targetRespRaw as ProviderResponse),
+      output: '',
       tokenUsage,
     };
   }
@@ -464,6 +478,14 @@ export async function createIterationContext({
 
   return iterationContext;
 }
+
+type SharedBacktrackingStopReason =
+  | 'Grader failed'
+  | 'Max backtracks reached'
+  | 'Target ended conversation';
+
+export type RoundBacktrackingStopReason = SharedBacktrackingStopReason | 'Max rounds reached';
+export type TurnBacktrackingStopReason = SharedBacktrackingStopReason | 'Max turns reached';
 
 /**
  * Base metadata interface shared by all redteam providers

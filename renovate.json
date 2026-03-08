@@ -301,6 +301,12 @@
       "minimumReleaseAge": "7 days"
     },
     {
+      "description": "satori: monthly updates to reduce noise from frequent patch releases",
+      "matchPackageNames": ["satori"],
+      "schedule": ["before 6am on the first day of the month"],
+      "minimumReleaseAge": "7 days"
+    },
+    {
       "description": "Vercel AI SDK: monthly updates to reduce noise from frequent patch releases",
       "matchPackageNames": ["ai"],
       "schedule": ["before 6am on the first day of the month"],
