@@ -1,10 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { lookup } from 'node:dns/promises';
+
+import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { isBlobStorageEnabled } from '../../../src/blobs/extractor';
 import { storeBlob } from '../../../src/blobs/index';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiImageProvider } from '../../../src/providers/openai/image';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(),
+}));
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -29,6 +34,8 @@ vi.mock('../../../src/logger', () => ({
   },
 }));
 
+const lookupMock = lookup as unknown as Mock;
+
 describe('OpenAiImageProvider', () => {
   const blobUri = (index: number) => `promptfoo://blob/${index.toString(16).padStart(32, '0')}`;
   const mockFetchResponse = {
@@ -51,6 +58,7 @@ describe('OpenAiImageProvider', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
     vi.mocked(isBlobStorageEnabled).mockReturnValue(true);
     vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
     vi.mocked(fetchWithProxy).mockResolvedValue({
@@ -284,6 +292,29 @@ describe('OpenAiImageProvider', () => {
 
       expect(result).toHaveProperty('error');
       expect(result.error).toContain('No image URL found in response');
+    });
+
+    it('should redact blocked external image URLs instead of fetching them', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { data: [{ url: 'http://169.254.169.254/latest/meta-data' }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toMatchObject({
+        output: '[external image URL omitted for security]',
+        cached: false,
+        cost: 0.04,
+      });
+      expect(result.images).toBeUndefined();
+      expect(fetchWithProxy).not.toHaveBeenCalled();
     });
 
     it('should handle error with minimal details', async () => {

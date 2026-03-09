@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { lookup } from 'node:dns/promises';
+
+import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { isBlobStorageEnabled } from '../../../src/blobs/extractor';
 import { storeBlob } from '../../../src/blobs/index';
 import { fetchWithCache } from '../../../src/cache';
@@ -17,6 +19,9 @@ import {
 } from '../../../src/providers/openai/image';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(),
+}));
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -33,11 +38,14 @@ vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
 }));
 
+const lookupMock = lookup as unknown as Mock;
+
 describe('OpenAI Image Provider Functions', () => {
   const blobUri = (index: number) => `promptfoo://blob/${index.toString(16).padStart(32, '0')}`;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
     vi.mocked(isBlobStorageEnabled).mockReturnValue(true);
     vi.mocked(fetchWithProxy).mockResolvedValue({
       ok: true,
@@ -95,23 +103,31 @@ describe('OpenAI Image Provider Functions', () => {
   describe('formatOutput', () => {
     it('should format URL output correctly', () => {
       const data = {
-        data: [{ url: 'https://example.com/image.png' }],
+        data: [{ url: '/api/blobs/image.png' }],
       };
       const prompt = 'A test prompt';
       const result = formatOutput(data, prompt, 'url');
       expect(typeof result).toBe('string');
       expect(result).toContain('![');
-      expect(result).toContain('](https://example.com/image.png)');
+      expect(result).toContain('](/api/blobs/image.png)');
     });
 
     it('should sanitize prompt text with special characters', () => {
       const data = {
-        data: [{ url: 'https://example.com/image.png' }],
+        data: [{ url: '/api/blobs/image.png' }],
       };
       const prompt = 'A test [with] brackets\nand newlines';
       const result = formatOutput(data, prompt, 'url');
       expect(typeof result).toBe('string');
       expect(result).toContain('A test (with) brackets and newlines');
+    });
+
+    it('should redact external URL output when no safe image source is available', () => {
+      const data = {
+        data: [{ url: 'https://example.com/image.png' }],
+      };
+
+      expect(formatOutput(data, 'prompt', 'url')).toBe('[external image URL omitted for security]');
     });
 
     it('should format base64 output correctly', () => {
@@ -471,6 +487,38 @@ describe('OpenAI Image Provider Functions', () => {
 
       expect(result).toBeUndefined();
     });
+
+    it('should block direct link-local IP targets before fetching', async () => {
+      const result = await buildSafeStructuredImageOutputs({
+        data: [{ url: 'http://169.254.169.254/latest/meta-data' }],
+      });
+
+      expect(result).toBeUndefined();
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+      expect(lookup).not.toHaveBeenCalled();
+    });
+
+    it('should block hostnames that resolve to private IPs before fetching', async () => {
+      lookupMock.mockResolvedValue([{ address: '10.0.0.5', family: 4 }]);
+
+      const result = await buildSafeStructuredImageOutputs({
+        data: [{ url: 'https://images.example.com/generated.png' }],
+      });
+
+      expect(result).toBeUndefined();
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+      expect(lookup).toHaveBeenCalledWith('images.example.com', { all: true, verbatim: true });
+    });
+
+    it('should block known metadata hostnames before fetching', async () => {
+      const result = await buildSafeStructuredImageOutputs({
+        data: [{ url: 'http://metadata.google.internal/computeMetadata/v1/instance' }],
+      });
+
+      expect(result).toBeUndefined();
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+      expect(lookup).not.toHaveBeenCalled();
+    });
   });
 
   describe('formatStructuredImageOutput', () => {
@@ -493,7 +541,7 @@ describe('OpenAI Image Provider Functions', () => {
         'url',
       );
 
-      expect(result).toBe('https://example.com/image.png');
+      expect(result).toBe('[external image URL omitted for security]');
     });
   });
 });

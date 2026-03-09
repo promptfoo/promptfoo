@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { lookup } from 'node:dns/promises';
+
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { isBlobStorageEnabled } from '../../../src/blobs/extractor';
 import { storeBlob } from '../../../src/blobs/index';
 import { callOpenAiImageApi } from '../../../src/providers/openai/image';
@@ -7,6 +9,9 @@ import { createXAIImageProvider, XAIImageProvider } from '../../../src/providers
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 vi.mock('../../../src/logger');
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(),
+}));
 vi.mock('../../../src/blobs/extractor', () => ({
   isBlobStorageEnabled: vi.fn(),
 }));
@@ -23,6 +28,8 @@ vi.mock('../../../src/providers/openai/image', async () => {
     callOpenAiImageApi: vi.fn(),
   };
 });
+
+const lookupMock = lookup as unknown as Mock;
 
 describe('XAI Image Provider', () => {
   const blobUri = (index: number) => `promptfoo://blob/${index.toString(16).padStart(32, '0')}`;
@@ -70,6 +77,7 @@ describe('XAI Image Provider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.clearAllMocks();
+    lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
     vi.mocked(isBlobStorageEnabled).mockReturnValue(true);
     vi.mocked(callOpenAiImageApi).mockResolvedValue(mockSuccessResponse);
     vi.mocked(fetchWithProxy).mockResolvedValue({
