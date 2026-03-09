@@ -196,7 +196,7 @@ You can also return nested metrics and assertions via a `GradingResult` object:
 
 ### GradingResult types
 
-Here's a Ruby type definition you can use for the [`GradingResult`](/docs/configuration/reference/#gradingresult) object:
+Here's a Ruby type definition you can use for the [`GradingResult`](/docs/configuration/types#gradingresult) object:
 
 ```ruby
 # GradingResult

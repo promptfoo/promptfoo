@@ -860,7 +860,7 @@ When using Claude Agent SDK with configurations that allow side effects, like wr
 This increases complexity, so first consider if you can achieve your goal with a read-only configuration. If you do need to test with side effects, here are some strategies that can help:
 
 - **Serial execution**: Set `evaluateOptions.maxConcurrency: 1` in your config or use `--max-concurrency 1` CLI flag
-- **Hooks**: Use promptfoo [extension hooks](/docs/configuration/reference/#extension-hooks) to reset the environment after each test run
+- **Hooks**: Use promptfoo [extension hooks](/docs/configuration/extensions) to reset the environment after each test run
 - **Wrapper scripts**: Handle setup/cleanup outside of promptfoo
 - **Use git**: If you're using a custom working directory, you can use git to reset the files after each test run
 - **Use a container**: Run tests that might run commands in a container to protect the host system

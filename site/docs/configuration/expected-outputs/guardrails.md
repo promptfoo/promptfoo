@@ -253,4 +253,4 @@ Notes:
 See also:
 
 - [HTTP provider transforms and guardrails](/docs/providers/http#guardrails-support)
-- [Reference for the `guardrails` shape](/docs/configuration/reference#guardrails)
+- [Reference for the `guardrails` shape](/docs/configuration/types#guardrails)
