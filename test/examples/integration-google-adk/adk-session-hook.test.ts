@@ -121,4 +121,41 @@ describe('integration-google-adk session hook', () => {
       expect.objectContaining({ method: 'DELETE' }),
     );
   });
+
+  it('only cleans up sessions that were created successfully', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ id: 'session-beta' }),
+      })
+      .mockResolvedValueOnce({ ok: true });
+
+    vi.stubGlobal('fetch', fetchMock);
+    const { runExtensionHook } = await import('../../../src/evaluatorHelpers');
+
+    const context = {
+      suite: {
+        tests: [
+          { vars: { session_id: 'session-alpha' } },
+          { vars: { session_id: 'session-beta' } },
+        ],
+      },
+    };
+
+    await runExtensionHook([HOOK_EXTENSION], 'beforeAll', context as any);
+    expect(context).toHaveProperty('_adkSessionIds', ['session-beta']);
+
+    await runExtensionHook([HOOK_EXTENSION], 'afterAll', context as any);
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      'http://localhost:8000/apps/weather_agent/users/test_user/sessions/session-beta',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
 });

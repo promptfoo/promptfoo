@@ -294,6 +294,43 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(fileInput.value).toBe('');
   });
 
+  it('should replace stale config fields when uploading YAML', async () => {
+    const user = userEvent.setup();
+
+    useStore.getState().updateConfig({
+      description: 'Old description',
+      prompts: ['Old prompt'],
+      tests: [{ vars: { topic: 'stale' } }],
+      evaluateOptions: { maxConcurrency: 10 },
+    });
+
+    render(<EvaluateTestSuiteCreator />);
+
+    const mockYamlContent = [
+      'description: Fresh Config',
+      'providers:',
+      '  - id: test-provider',
+      'prompts:',
+      '  - raw: "Hello {{name}}"',
+    ].join('\n');
+    const mockFile = new File([mockYamlContent], 'fresh.yaml', { type: 'application/yaml' });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
+    });
+
+    expect(useStore.getState().config).toMatchObject({
+      description: 'Fresh Config',
+      providers: [{ id: 'test-provider' }],
+      prompts: [{ raw: 'Hello {{name}}' }],
+      tests: [],
+      evaluateOptions: {},
+    });
+  });
+
   it('should update state when interacting with components', async () => {
     render(<EvaluateTestSuiteCreator />);
 

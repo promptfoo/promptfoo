@@ -89,6 +89,10 @@ describe('stripHtml', () => {
     expect(result).not.toContain('<');
     expect(result).not.toContain('>');
   });
+
+  it('trims output consistently for pretty-printed HTML', () => {
+    expect(stripHtml('\n  <p>Hello World</p>\n')).toBe('Hello World');
+  });
 });
 
 describe('isInStock', () => {

@@ -13,7 +13,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { type EvalConfigState, useStore } from '@app/stores/evalConfig';
+import { DEFAULT_CONFIG, type EvalConfigState, useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import yaml from 'js-yaml';
 import { Check, Upload } from 'lucide-react';
@@ -87,8 +87,13 @@ function normalizePrompts(prompts: Partial<UnifiedConfig>['prompts']): string[] 
         return prompt;
       }
 
-      if (typeof prompt === 'object' && prompt !== null && 'raw' in prompt) {
-        return (prompt as { raw: string }).raw;
+      if (
+        typeof prompt === 'object' &&
+        prompt !== null &&
+        'raw' in prompt &&
+        typeof prompt.raw === 'string'
+      ) {
+        return prompt.raw;
       }
 
       return '';
@@ -170,10 +175,10 @@ function useProviderConfigStatus(showToast: ReturnType<typeof useToast>['showToa
           setHasCustomConfig(data.hasCustomConfig || false);
         }
       } catch (err) {
-        console.error('Failed to fetch provider config status:', err);
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-        showToast(`Failed to load configuration status: ${errorMessage}`, 'error');
         if (isMounted) {
+          console.error('Failed to fetch provider config status:', err);
+          const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+          showToast(`Failed to load configuration status: ${errorMessage}`, 'error');
           setHasCustomConfig(false);
         }
       }
@@ -575,7 +580,7 @@ const EvaluateTestSuiteCreator = () => {
   const [resetKey, setResetKey] = useState(0);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const { config, updateConfig, reset } = useStore();
+  const { config, setConfig, updateConfig, reset } = useStore();
   const hasCustomConfig = useProviderConfigStatus(showToast);
   const normalizedProviders = React.useMemo(
     () => normalizeProviders(config.providers),
@@ -621,7 +626,10 @@ const EvaluateTestSuiteCreator = () => {
         return;
       }
 
-      updateConfig(parsedConfig);
+      setConfig({
+        ...DEFAULT_CONFIG,
+        ...parsedConfig,
+      });
       setResetKey((key) => key + 1);
       showToast('Configuration loaded successfully', 'success');
     } catch (err) {

@@ -77,4 +77,66 @@ describe('redteam MCP ERP tools', () => {
 
     await expect(handleErpTool('toString', {})).rejects.toThrow('Unknown ERP tool: toString');
   });
+
+  it('does not mutate earlier inventory when a later order item is invalid', async () => {
+    const { handleErpTool } = await import(ERP_TOOLS_MODULE);
+    const { mockInventory } = await import(MOCK_DATA_MODULE);
+    const serverInventory = mockInventory.find(
+      (item: { productId: string }) => item.productId === 'PRD-ELEC001',
+    );
+    const deskInventory = mockInventory.find(
+      (item: { productId: string }) => item.productId === 'PRD-FURN001',
+    );
+
+    expect(serverInventory).toBeDefined();
+    expect(deskInventory).toBeDefined();
+
+    const initialServerQuantity = serverInventory!.quantity;
+    const initialDeskQuantity = deskInventory!.quantity;
+
+    await expect(
+      handleErpTool('create_order', {
+        customerId: 'CUST-ABC123',
+        items: [
+          {
+            productId: 'PRD-ELEC001',
+            quantity: 1,
+            unitPrice: 2499.99,
+            discount: 0,
+          },
+          {
+            productId: 'PRD-FURN001',
+            quantity: initialDeskQuantity + 1,
+            unitPrice: 1299.99,
+            discount: 0,
+          },
+        ],
+        priority: 'normal',
+      }),
+    ).rejects.toThrow('Insufficient inventory');
+
+    expect(serverInventory!.quantity).toBe(initialServerQuantity);
+    expect(deskInventory!.quantity).toBe(initialDeskQuantity);
+  });
+
+  it('does not persist negative inventory updates when rejected', async () => {
+    const { handleErpTool } = await import(ERP_TOOLS_MODULE);
+    const { mockInventory } = await import(MOCK_DATA_MODULE);
+    const inventory = mockInventory.find(
+      (item: { productId: string }) => item.productId === 'PRD-FURN001',
+    );
+
+    expect(inventory).toBeDefined();
+    const initialQuantity = inventory!.quantity;
+
+    await expect(
+      handleErpTool('update_inventory', {
+        productId: 'PRD-FURN001',
+        adjustment: -(initialQuantity + 1),
+        reason: 'damage',
+      }),
+    ).rejects.toThrow('Cannot adjust inventory below zero');
+
+    expect(inventory!.quantity).toBe(initialQuantity);
+  });
 });

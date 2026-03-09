@@ -456,7 +456,7 @@ export function stripHtml(html: string): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     // Remove script and style elements before getting textContent
     doc.querySelectorAll('script, style').forEach((el) => el.remove());
-    return doc.body.textContent || '';
+    return (doc.body.textContent || '').trim();
   }
 
   // SSR fallback: String-based stripping for trusted Fourthwall API content.

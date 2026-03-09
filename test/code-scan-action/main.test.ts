@@ -57,6 +57,17 @@ describe('code-scan-action main utilities', () => {
   });
 
   describe('toReviewComment', () => {
+    it('should separate the severity label from the finding text', () => {
+      expect(
+        toReviewComment({
+          file: 'src/auth.ts',
+          line: 42,
+          finding: 'Security issue',
+          severity: 'high',
+        }).body,
+      ).toContain('High\n\nSecurity issue');
+    });
+
     it('should treat startLine equal to line as a single-line review comment', () => {
       expect(
         toReviewComment({

@@ -13,6 +13,7 @@ import {
   type FileLineRanges,
 } from '../../src/codeScan/util/diffLineRanges';
 import {
+  CodeScanSeverity,
   type Comment,
   type FileChange,
   FileChangeStatus,
@@ -43,10 +44,10 @@ export async function getGitHubContext(
       );
     }
 
-    const prNumber = parseInt(prNumberInput, 10);
-    if (isNaN(prNumber)) {
+    if (!/^\d+$/.test(prNumberInput)) {
       throw new Error(`Invalid pr_number input: "${prNumberInput}"`);
     }
+    const prNumber = Number(prNumberInput);
 
     const { data: pr } = await (octokit ?? createOctokit(token)).pulls.get({
       owner: context.repo.owner,
@@ -88,7 +89,8 @@ export async function getPRFiles(
   context: PullRequestContext,
   octokit?: Octokit,
 ): Promise<FileChange[]> {
-  const { data: files } = await (octokit ?? createOctokit(token)).pulls.listFiles({
+  const octokitClient = octokit ?? createOctokit(token);
+  const files = await octokitClient.paginate(octokitClient.pulls.listFiles, {
     owner: context.owner,
     repo: context.repo,
     pull_number: context.number,
@@ -361,7 +363,11 @@ export async function postReviewComments(
 
   // Separate line-specific comments from general PR comments
   const lineComments = processedComments.filter(
-    (comment) => comment.file && comment.line != null && comment.finding,
+    (comment) =>
+      comment.file &&
+      comment.line != null &&
+      comment.finding &&
+      comment.severity !== CodeScanSeverity.NONE,
   );
   const generalComments = processedComments.filter(
     (comment) => (!comment.file || comment.line == null) && comment.finding,

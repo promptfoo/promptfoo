@@ -4,7 +4,11 @@
 
 import * as github from '@actions/github';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getGitHubContext, postReviewComments } from '../../code-scan-action/src/github';
+import {
+  getGitHubContext,
+  getPRFiles,
+  postReviewComments,
+} from '../../code-scan-action/src/github';
 
 // Mock @actions/core
 vi.mock('@actions/core', () => ({
@@ -143,6 +147,62 @@ describe('GitHub API Client', () => {
       ).rejects.toThrow(
         'This action requires a pull_request event or workflow_dispatch with pr_number input',
       );
+    });
+
+    it('should reject workflow_dispatch pr_number values that are not fully numeric', async () => {
+      await expect(
+        getGitHubContext(
+          'test-token',
+          {
+            pulls: {
+              get: vi.fn(),
+            },
+          } as any,
+          {
+            eventName: 'workflow_dispatch',
+            repo: {
+              owner: 'test-owner',
+              repo: 'test-repo',
+            },
+            payload: {
+              inputs: {
+                pr_number: '123abc',
+              },
+            },
+          } as any,
+        ),
+      ).rejects.toThrow('Invalid pr_number input: "123abc"');
+    });
+  });
+
+  describe('getPRFiles', () => {
+    it('should paginate through all changed files', async () => {
+      const paginate = vi.fn().mockResolvedValue([
+        { filename: 'src/a.ts', status: 'modified' },
+        { filename: 'src/b.ts', status: 'added' },
+      ]);
+
+      const files = await getPRFiles(
+        'test-token',
+        {
+          owner: 'test-owner',
+          repo: 'test-repo',
+          number: 123,
+          sha: 'abc123',
+        },
+        {
+          paginate,
+          pulls: {
+            listFiles: vi.fn(),
+          },
+        } as any,
+      );
+
+      expect(paginate).toHaveBeenCalled();
+      expect(files).toEqual([
+        { path: 'src/a.ts', status: 'modified' },
+        { path: 'src/b.ts', status: 'added' },
+      ]);
     });
   });
 

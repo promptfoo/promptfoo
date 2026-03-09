@@ -283,6 +283,7 @@ function handleCreateCustomer(args) {
 
 function validateOrderItems(items) {
   const validatedItems = [];
+  const inventoryAdjustments = new Map();
   let subtotal = 0;
 
   for (const item of items) {
@@ -292,7 +293,9 @@ function validateOrderItems(items) {
     }
 
     const inventory = mockInventory.find((inv) => inv.productId === item.productId);
-    if (!inventory || inventory.quantity < item.quantity) {
+    const reservedQuantity = inventoryAdjustments.get(item.productId) || 0;
+    const remainingQuantity = inventory ? inventory.quantity - reservedQuantity : 0;
+    if (!inventory || remainingQuantity < item.quantity) {
       throw new Error(
         `Insufficient inventory for product ${product.name}. Available: ${inventory?.quantity || 0}, Requested: ${item.quantity}`,
       );
@@ -309,10 +312,10 @@ function validateOrderItems(items) {
     });
 
     subtotal += lineTotal;
-    inventory.quantity -= item.quantity;
+    inventoryAdjustments.set(item.productId, reservedQuantity + item.quantity);
   }
 
-  return { validatedItems, subtotal };
+  return { inventoryAdjustments, validatedItems, subtotal };
 }
 
 function handleCreateOrder(args) {
@@ -322,7 +325,7 @@ function handleCreateOrder(args) {
     throw new Error(`Customer with ID ${input.customerId} not found`);
   }
 
-  const { validatedItems, subtotal } = validateOrderItems(input.items);
+  const { inventoryAdjustments, validatedItems, subtotal } = validateOrderItems(input.items);
   const tax = subtotal * 0.08;
   const shipping = faker.number.float({ min: 10, max: 50, fractionDigits: 2 });
   const order = addOrder({
@@ -337,6 +340,13 @@ function handleCreateOrder(args) {
     shippingAddress: input.shippingAddress || customer.address,
     priority: input.priority,
   });
+
+  for (const [productId, quantity] of inventoryAdjustments.entries()) {
+    const inventory = mockInventory.find((inv) => inv.productId === productId);
+    if (inventory) {
+      inventory.quantity -= quantity;
+    }
+  }
 
   return {
     success: true,
@@ -363,13 +373,15 @@ function handleUpdateInventory(args) {
   }
 
   const previousQuantity = inventory.quantity;
-  inventory.quantity += input.adjustment;
+  const newQuantity = previousQuantity + input.adjustment;
 
-  if (inventory.quantity < 0) {
+  if (newQuantity < 0) {
     throw new Error(
       `Cannot adjust inventory below zero. Current: ${previousQuantity}, Adjustment: ${input.adjustment}`,
     );
   }
+
+  inventory.quantity = newQuantity;
 
   if (input.reason === 'purchase' && input.adjustment > 0) {
     inventory.lastRestocked = new Date().toISOString();
@@ -382,9 +394,9 @@ function handleUpdateInventory(args) {
       productName: product.name,
       previousQuantity,
       adjustment: input.adjustment,
-      newQuantity: inventory.quantity,
+      newQuantity,
       warehouse: inventory.warehouse,
-      belowReorderPoint: inventory.quantity < inventory.reorderPoint,
+      belowReorderPoint: newQuantity < inventory.reorderPoint,
     },
     message: `Inventory updated successfully for ${product.name}`,
   };

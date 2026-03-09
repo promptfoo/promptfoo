@@ -91,6 +91,28 @@ describe('prepareComments', () => {
     expect(result.generalComments[0].severity).toBe(CodeScanSeverity.LOW);
   });
 
+  it('should filter out severity=none from line comments', () => {
+    const comments: Comment[] = [
+      {
+        file: 'src/test.ts',
+        line: 10,
+        severity: CodeScanSeverity.NONE,
+        finding: 'All clear inline note',
+      },
+      {
+        file: 'src/test.ts',
+        line: 11,
+        severity: CodeScanSeverity.LOW,
+        finding: 'Actual issue',
+      },
+    ];
+
+    const result = prepareComments(comments, 'Review', 'low');
+
+    expect(result.lineComments).toHaveLength(1);
+    expect(result.lineComments[0].severity).toBe(CodeScanSeverity.LOW);
+  });
+
   it('should append severity threshold', () => {
     const result = prepareComments([], 'Review text', 'medium');
 

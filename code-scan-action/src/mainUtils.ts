@@ -31,7 +31,8 @@ export function buildCliArgs({
 }
 
 function buildReviewCommentBody(comment: Comment): string {
-  let body = formatSeverity(comment.severity) + comment.finding;
+  const severity = formatSeverity(comment.severity);
+  let body = severity ? `${severity}\n\n${comment.finding}` : comment.finding;
 
   if (comment.fix) {
     body += `\n\n<details>\n<summary>💡 Suggested Fix</summary>\n\n${comment.fix}\n</details>`;

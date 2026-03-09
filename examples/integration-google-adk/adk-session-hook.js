@@ -68,31 +68,35 @@ async function createSession(config, sessionId) {
   if (response.ok) {
     const sessionData = await response.json();
     console.log(`✅ Session created: ${sessionData.id}`);
-    return;
+    return true;
   }
 
   if (response.status === 422) {
     console.log(`ℹ️  Session ${sessionId} already exists`);
-    return;
+    return true;
   }
 
   console.log(`⚠️  Failed to create session ${sessionId}: ${response.status}`);
+  return false;
 }
 
 async function setupSessions(context, config) {
   const sessionIds = collectSessionIds(context);
+  const createdSessionIds = [];
   console.log(`🔧 Setting up ${sessionIds.length} ADK session(s)...`);
 
   try {
     for (const sessionId of sessionIds) {
-      await createSession(config, sessionId);
+      if (await createSession(config, sessionId)) {
+        createdSessionIds.push(sessionId);
+      }
     }
   } catch (error) {
     console.log(`⚠️  Error connecting to ADK server: ${error.message}`);
     console.log('Make sure ADK server is running on http://localhost:8000');
   }
 
-  context._adkSessionIds = sessionIds;
+  context._adkSessionIds = createdSessionIds;
 }
 
 async function cleanupSessions(sessionIds, config) {

@@ -218,6 +218,117 @@ async function runPromptfooScan(cliArgs: string[]): Promise<ScanResponse | null>
   return parseScanResponse(scanOutput);
 }
 
+function buildReviewFallbackBody(
+  reviewBody: ScanResponse['review'],
+  lineComments: Comment[],
+): string {
+  const sections = [];
+  if (reviewBody) {
+    sections.push(reviewBody);
+  }
+  if (lineComments.length > 0) {
+    sections.push(
+      lineComments.map((comment) => buildRichIssueCommentBody(comment)).join('\n\n---\n\n'),
+    );
+  }
+  return sections.join('\n\n---\n\n');
+}
+
+async function postFallbackReview({
+  octokit,
+  context,
+  lineComments,
+  reviewBody,
+}: {
+  octokit: ReturnType<typeof github.getOctokit>;
+  context: Awaited<ReturnType<typeof getGitHubContext>>;
+  lineComments: Comment[];
+  reviewBody: ScanResponse['review'];
+}): Promise<void> {
+  if (lineComments.length === 0 && !reviewBody) {
+    return;
+  }
+
+  core.info(
+    `📌 Posting PR review${lineComments.length > 0 ? ` with ${lineComments.length} line-specific comments` : ''}...`,
+  );
+
+  try {
+    await octokit.rest.pulls.createReview({
+      owner: context.owner,
+      repo: context.repo,
+      pull_number: context.number,
+      event: 'COMMENT',
+      body: reviewBody || undefined,
+      comments: lineComments.length > 0 ? lineComments.map(toReviewComment) : undefined,
+    });
+
+    core.info('✅ PR review posted successfully');
+  } catch (error) {
+    core.warning(
+      `Failed to post PR review: ${error instanceof Error ? error.message : String(error)}`,
+    );
+
+    const fallbackBody = buildReviewFallbackBody(reviewBody, lineComments);
+    if (!fallbackBody) {
+      return;
+    }
+
+    try {
+      await octokit.rest.issues.createComment({
+        owner: context.owner,
+        repo: context.repo,
+        issue_number: context.number,
+        body: fallbackBody,
+      });
+      core.info('✅ Posted PR review content as a fallback issue comment');
+    } catch (fallbackError) {
+      core.warning(
+        `Failed to post PR review fallback comment: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+      );
+    }
+  }
+}
+
+async function postFallbackGeneralComments({
+  octokit,
+  context,
+  generalComments,
+}: {
+  octokit: ReturnType<typeof github.getOctokit>;
+  context: Awaited<ReturnType<typeof getGitHubContext>>;
+  generalComments: Comment[];
+}): Promise<void> {
+  if (generalComments.length === 0) {
+    return;
+  }
+
+  core.info(`💬 Posting ${generalComments.length} general comments...`);
+
+  let successCount = 0;
+  for (const comment of generalComments) {
+    try {
+      await octokit.rest.issues.createComment({
+        owner: context.owner,
+        repo: context.repo,
+        issue_number: context.number,
+        body: buildRichIssueCommentBody(comment),
+      });
+      successCount++;
+    } catch (error) {
+      core.warning(
+        `Failed to post general comment: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  if (successCount === generalComments.length) {
+    core.info('✅ General comments posted successfully');
+  } else {
+    core.warning(`Posted ${successCount}/${generalComments.length} general comments`);
+  }
+}
+
 async function postFallbackCommentsToPr({
   githubToken,
   context,
@@ -233,53 +344,15 @@ async function postFallbackCommentsToPr({
 }): Promise<void> {
   core.info('📝 Server could not post comments - posting as fallback...');
 
-  try {
-    const octokit = github.getOctokit(githubToken);
-    const { lineComments, generalComments, reviewBody } = prepareComments(
-      comments,
-      review,
-      minimumSeverity,
-    );
+  const octokit = github.getOctokit(githubToken);
+  const { lineComments, generalComments, reviewBody } = prepareComments(
+    comments,
+    review,
+    minimumSeverity,
+  );
 
-    if (lineComments.length > 0 || reviewBody) {
-      core.info(
-        `📌 Posting PR review${lineComments.length > 0 ? ` with ${lineComments.length} line-specific comments` : ''}...`,
-      );
-
-      await octokit.rest.pulls.createReview({
-        owner: context.owner,
-        repo: context.repo,
-        pull_number: context.number,
-        event: 'COMMENT',
-        body: reviewBody || undefined,
-        comments: lineComments.length > 0 ? lineComments.map(toReviewComment) : undefined,
-      });
-
-      core.info('✅ PR review posted successfully');
-    }
-
-    if (generalComments.length > 0) {
-      core.info(`💬 Posting ${generalComments.length} general comments...`);
-
-      for (const comment of generalComments) {
-        await octokit.rest.issues.createComment({
-          owner: context.owner,
-          repo: context.repo,
-          issue_number: context.number,
-          body: buildRichIssueCommentBody(comment),
-        });
-      }
-
-      core.info('✅ General comments posted successfully');
-    }
-
-    core.info('✅ All comments posted to PR by action');
-  } catch (error) {
-    core.error(
-      `Failed to post comments: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    core.warning('Comments could not be posted to PR');
-  }
+  await postFallbackReview({ octokit, context, lineComments, reviewBody });
+  await postFallbackGeneralComments({ octokit, context, generalComments });
 }
 
 async function handleScanResults({
@@ -393,7 +466,13 @@ export async function run(): Promise<void> {
     core.setFailed(error instanceof Error ? error.message : String(error));
   } finally {
     if (generatedConfigPath) {
-      fs.unlinkSync(generatedConfigPath);
+      try {
+        fs.unlinkSync(generatedConfigPath);
+      } catch (error) {
+        core.warning(
+          `Failed to remove temporary config ${generatedConfigPath}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
   }
 }

@@ -67,7 +67,9 @@ export function prepareComments(
 
   // Separate line-specific comments from general PR comments
   // Filter out severity='none' comments - they shouldn't be posted separately
-  const lineComments = sortedComments.filter((c) => c.file && c.line != null && c.finding);
+  const lineComments = sortedComments.filter(
+    (c) => c.file && c.line != null && c.finding && c.severity !== CodeScanSeverity.NONE,
+  );
   const generalComments = sortedComments.filter(
     (c) => (!c.file || c.line == null) && c.finding && c.severity !== CodeScanSeverity.NONE,
   );

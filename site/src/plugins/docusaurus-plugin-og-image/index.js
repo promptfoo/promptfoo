@@ -2506,11 +2506,29 @@ function getBreadcrumbLabels(routePath, metadata) {
 }
 
 async function getFileMetadata(routePath, metadata, outDir) {
-  if (routePath.startsWith('/blog/') || !metadata.title) {
+  if (
+    routePath.startsWith('/blog/') ||
+    routePath.startsWith('/docs/') ||
+    routePath.startsWith('/releases/') ||
+    !metadata.title
+  ) {
     return extractMetadataFromMarkdown(routePath, outDir);
   }
 
   return { title: metadata.title };
+}
+
+function getBatchSize() {
+  const parsedBatchSize = Number(process.env.OG_BATCH_SIZE);
+  if (Number.isInteger(parsedBatchSize) && parsedBatchSize > 0) {
+    return parsedBatchSize;
+  }
+
+  if (process.env.OG_BATCH_SIZE) {
+    console.warn(`Invalid OG_BATCH_SIZE="${process.env.OG_BATCH_SIZE}", falling back to 8`);
+  }
+
+  return 8;
 }
 
 function buildRouteMetadata(routePath, metadata, fileMetadata) {
@@ -2825,7 +2843,7 @@ module.exports = function (context, options) {
       let successCount = 0;
       let failureCount = 0;
       const routeMetadata = createRouteMetadataMap(routes, plugins);
-      const batchSize = Number(process.env.OG_BATCH_SIZE) || 8;
+      const batchSize = getBatchSize();
       const routesToProcess = getRoutesToProcess(routesPaths);
 
       const totalRoutes = routesToProcess.length;
