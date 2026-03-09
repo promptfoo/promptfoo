@@ -19,6 +19,8 @@ import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from '.
 
 import type { GlobalConfig } from '../configTypes';
 
+const CI_PLACEHOLDER_EMAIL = 'ci-placeholder@promptfoo.dev';
+
 export function getUserId(): string {
   let globalConfig = readGlobalConfig();
   if (!globalConfig?.id) {
@@ -129,13 +131,24 @@ export async function checkEmailStatus(options?: {
   validate?: boolean;
 }): Promise<EmailStatusResult> {
   const { default: telemetry } = await import('../telemetry');
-  const userEmail = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
+  const ciMode = isCI();
+  const userEmail = ciMode ? CI_PLACEHOLDER_EMAIL : getUserEmail();
 
   if (!userEmail) {
     return {
       status: NO_EMAIL_STATUS,
       hasEmail: false,
       message: 'Redteam evals require email verification. Please enter your work email:',
+    };
+  }
+
+  if (ciMode) {
+    // CI uses a synthetic placeholder to avoid interactive prompts. Treat it as
+    // already validated so test runs do not depend on live account state.
+    return {
+      status: EmailValidationStatus.OK,
+      hasEmail: true,
+      email: userEmail,
     };
   }
 
@@ -212,10 +225,11 @@ export async function checkEmailStatus(options?: {
 
 export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation: boolean }> {
   const { default: telemetry } = await import('../telemetry');
+  const ciMode = isCI();
   const existingEmail = getUserEmail();
-  let email = isCI() ? 'ci-placeholder@promptfoo.dev' : existingEmail;
-  const existingEmailNeedsValidation = !isCI() && getUserEmailNeedsValidation();
-  const existingEmailValidated = isCI() || getUserEmailValidated();
+  let email = ciMode ? CI_PLACEHOLDER_EMAIL : existingEmail;
+  const existingEmailNeedsValidation = !ciMode && getUserEmailNeedsValidation();
+  const existingEmailValidated = ciMode || getUserEmailValidated();
 
   let emailNeedsValidation = existingEmailNeedsValidation && !existingEmailValidated;
 
@@ -269,6 +283,11 @@ export async function checkEmailStatusAndMaybeExit(options?: {
   validate?: boolean;
 }): Promise<EmailOkStatus | BadEmailResult> {
   const result = await checkEmailStatus(options);
+  // In CI, checkEmailStatus already returns OK for the placeholder email.
+  // This guard ensures we never accidentally exit in CI even if the above logic changes.
+  if (isCI()) {
+    return EMAIL_OK_STATUS;
+  }
   if (
     result.status === EmailValidationStatus.RISKY_EMAIL ||
     result.status === EmailValidationStatus.DISPOSABLE_EMAIL
