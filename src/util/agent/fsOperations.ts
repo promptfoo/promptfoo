@@ -9,6 +9,7 @@
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 
 import { isPathWithinDir } from '../isPathWithinDir';
 
@@ -68,10 +69,12 @@ export async function readFile(filePath: string, rootDir: string): Promise<strin
     throw new Error(`Not a file: ${filePath}`);
   }
 
-  const content = await fs.readFile(resolved, 'utf-8');
-  if (content.length > MAX_FILE_SIZE) {
-    return content.slice(0, MAX_FILE_SIZE) + `\n\n[truncated — file is ${stat.size} bytes]`;
+  if (stat.size > MAX_FILE_SIZE) {
+    const content = await readFilePrefix(resolved, MAX_FILE_SIZE);
+    return content + `\n\n[truncated — file is ${stat.size} bytes]`;
   }
+
+  const content = await fs.readFile(resolved, 'utf-8');
   return content;
 }
 
@@ -155,4 +158,18 @@ export async function grepFiles(
 
 function shellEscape(arg: string): string {
   return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
+async function readFilePrefix(filePath: string, maxBytes: number): Promise<string> {
+  const handle = await fs.open(filePath, 'r');
+
+  try {
+    const buffer = Buffer.alloc(maxBytes);
+    const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0);
+    // Decode only the prefix so oversized files never require full allocation.
+    const decoder = new StringDecoder('utf8');
+    return decoder.write(buffer.subarray(0, bytesRead)) + decoder.end();
+  } finally {
+    await handle.close();
+  }
 }
