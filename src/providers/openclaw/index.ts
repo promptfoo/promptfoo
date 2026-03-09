@@ -28,7 +28,7 @@ export { OpenClawToolInvokeProvider } from './tools';
  *   openclaw:responses:X    → OpenClawResponsesProvider('X')
  *   openclaw:agent          → OpenClawAgentProvider('main')
  *   openclaw:agent:X        → OpenClawAgentProvider('X')
- *   openclaw:tools:bash     → OpenClawToolInvokeProvider('bash')
+ *   openclaw:tools:sessions_list → OpenClawToolInvokeProvider('sessions_list')
  */
 export function createOpenClawProvider(
   providerPath: string,

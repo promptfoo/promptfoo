@@ -27,7 +27,8 @@ tests:
 # WebSocket Agent (native WS RPC protocol):
 #  - id: openclaw:agent:main
 #    config:
+#      session_key: promptfoo-eval
 #      timeoutMs: 60000
 #
-# Tool Invoke (direct tool execution):
-#  - openclaw:tools:bash
+# Tool Invoke (stable built-in tool; replace the prompt with '{}'):
+#  - openclaw:tools:sessions_list

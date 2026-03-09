@@ -10,14 +10,15 @@ import type { OpenClawConfig } from './types';
  * OpenClaw Tool Invoke Provider
  *
  * Simple HTTP provider for direct tool invocation via POST /tools/invoke.
- * The tool name is extracted from the provider path: openclaw:tools:bash → tool="bash"
+ * The tool name is extracted from the provider path:
+ * openclaw:tools:sessions_list → tool="sessions_list"
  *
  * The prompt is parsed as JSON for tool arguments. If it's not valid JSON,
  * it's passed as a single `input` argument.
  *
  * Usage:
- *   openclaw:tools:bash        - invoke the bash tool
- *   openclaw:tools:agents_list - invoke the agents_list tool
+ *   openclaw:tools:sessions_list - invoke the sessions_list tool
+ *   openclaw:tools:session_status - invoke the session_status tool
  */
 export class OpenClawToolInvokeProvider implements ApiProvider {
   private toolName: string;

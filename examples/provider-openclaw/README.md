@@ -34,7 +34,8 @@ npx promptfoo@latest init --example provider-openclaw
 npx promptfoo@latest eval
 ```
 
-The provider auto-detects the gateway URL and auth token from `~/.openclaw/openclaw.json`.
+The provider auto-detects the gateway URL and bearer auth secret from the active OpenClaw config
+(`OPENCLAW_CONFIG_PATH` when set, otherwise `~/.openclaw/openclaw.json`).
 
 ## Configuration
 
@@ -46,11 +47,19 @@ providers:
     config:
       gateway_url: http://127.0.0.1:18789
       auth_token: your-token-here
+      # Use auth_password instead when gateway.auth.mode=password
 ```
 
 Or use environment variables:
 
 ```bash
+export OPENCLAW_CONFIG_PATH=~/.openclaw/openclaw.json  # optional
 export OPENCLAW_GATEWAY_URL=http://127.0.0.1:18789
 export OPENCLAW_GATEWAY_TOKEN=your-token-here
+# Or, if your gateway uses password auth:
+# export OPENCLAW_GATEWAY_PASSWORD=your-password-here
 ```
+
+For `openclaw:agent:*`, promptfoo generates an isolated session key per call by default so evals do
+not reuse your persistent OpenClaw `main` session. Set `session_key` explicitly if you want session
+continuity.
