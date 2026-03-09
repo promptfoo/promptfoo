@@ -24,6 +24,20 @@ const getCssVarAsHsl = (varName: string, fallbackHsl: string): string => {
   return `hsl(${fallbackHsl})`;
 };
 
+function isNode(value: unknown): value is { name: string } {
+  return typeof value === 'object' && value !== null && 'name' in value;
+}
+
+const getDisplayName = (name: string): string => {
+  if (name === 'Pass') {
+    return 'Defended';
+  }
+  if (name === 'Fail') {
+    return 'Vulnerable';
+  }
+  return displayNameOverrides[name as keyof typeof displayNameOverrides] || name;
+};
+
 // biome-ignore lint/suspicious/noExplicitAny: FIXME: This type in sankey is private
 type SankeyNodeOptions = any;
 // biome-ignore lint/suspicious/noExplicitAny: FIXME: This type in sankey is private
@@ -34,12 +48,7 @@ const CustomNode = ({ x, y, width, height, index, payload, containerWidth }: San
   const textRef = React.useRef<SVGTextElement>(null);
   const [labelWidth, setLabelWidth] = React.useState(0);
   const isOut = x + width + 6 > containerWidth;
-  const displayName =
-    payload.name === 'Pass'
-      ? 'Defended'
-      : payload.name === 'Fail'
-        ? 'Vulnerable'
-        : displayNameOverrides[payload.name as keyof typeof displayNameOverrides] || payload.name;
+  const displayName = getDisplayName(payload.name);
 
   const label = `${displayName} (${payload.value || 0})`;
   const color =
@@ -335,29 +344,15 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
                 return null;
               }
               const entry = payload[0];
-              const linkData = entry.payload as {
-                source?: { name?: string };
-                target?: { name?: string };
-              };
-              const getDisplayName = (name?: string) => {
-                if (!name) {
-                  return name;
-                }
-                if (name === 'Pass') {
-                  return 'Defended';
-                }
-                if (name === 'Fail') {
-                  return 'Vulnerable';
-                }
-                return displayNameOverrides[name as keyof typeof displayNameOverrides] || name;
-              };
+              const entryPayload: Record<string, unknown> | undefined = entry.payload;
+              const source = entryPayload?.source;
+              const target = entryPayload?.target;
               // Link hover: source and target are resolved SankeyNode objects
-              if (linkData.source && typeof linkData.source === 'object') {
+              if (isNode(source) && isNode(target)) {
                 return (
                   <div className="rounded border border-border bg-card px-3 py-2 text-sm shadow-sm">
                     <strong>
-                      {getDisplayName(linkData.source.name)} →{' '}
-                      {getDisplayName(linkData.target?.name)}
+                      {getDisplayName(source.name)} → {getDisplayName(target.name)}
                     </strong>
                     : {entry.value} tests
                   </div>
