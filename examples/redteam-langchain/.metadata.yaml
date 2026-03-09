@@ -1,0 +1,6 @@
+title: 'Red Team a LangChain Agent'
+description: 'Red team test a LangChain customer service agent using a Python provider with jailbreak strategies'
+tags:
+  - Red Teaming
+  - Python
+  - Integrations

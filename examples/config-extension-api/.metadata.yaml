@@ -1,0 +1,5 @@
+title: 'Extension Hooks (beforeAll, afterAll, beforeEach, afterEach)'
+description: 'Using extension hooks for custom setup and teardown logic during evaluations'
+tags:
+  - Configuration
+  - Python

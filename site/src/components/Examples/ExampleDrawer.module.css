@@ -1,0 +1,233 @@
+.paper {
+  width: 520px;
+  max-width: 100vw;
+}
+
+.drawer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--ifm-background-color);
+  color: var(--ifm-font-color-base);
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: flex-end;
+  padding: 1rem 1.25rem 0;
+}
+
+.closeButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  background: var(--ifm-color-emphasis-100);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--ifm-color-emphasis-600);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.closeButton:hover {
+  background: var(--ifm-color-emphasis-200);
+  color: var(--ifm-color-emphasis-800);
+}
+
+.closeButton svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Content */
+.content {
+  flex: 1;
+  padding: 1.5rem 2rem 2rem;
+  overflow-y: auto;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 100px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: white;
+}
+
+.name {
+  font-size: 1.75rem;
+  font-weight: 750;
+  margin: 0 0 1rem 0;
+  color: var(--ifm-heading-color);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.description {
+  font-size: 1rem;
+  color: var(--ifm-color-emphasis-600);
+  line-height: 1.65;
+  margin: 0 0 2rem 0;
+}
+
+/* Command section */
+.commandSection {
+  margin-bottom: 2rem;
+}
+
+.commandLabel {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ifm-color-emphasis-500);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.625rem;
+}
+
+.commandBox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.875rem 1rem;
+  background: var(--ifm-color-emphasis-100);
+  border-radius: 10px;
+  border: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.commandText {
+  flex: 1;
+  font-size: 0.8125rem;
+  font-family: var(--ifm-font-family-monospace);
+  color: var(--ifm-font-color-base);
+  word-break: break-all;
+}
+
+.copyButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  background: var(--ifm-color-emphasis-200);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--ifm-color-emphasis-600);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.copyButton:hover {
+  background: var(--ifm-color-emphasis-300);
+  color: var(--ifm-color-emphasis-800);
+}
+
+.copyButton svg {
+  width: 1rem;
+  height: 1rem;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Actions */
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.githubButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  padding: 0.875rem 1.5rem;
+  background: linear-gradient(135deg, #24292e 0%, #1b1f23 100%);
+  color: white;
+  border-radius: 10px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition:
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.2s ease;
+}
+
+.githubButton:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  color: white;
+  text-decoration: none;
+}
+
+.githubButton:active {
+  transform: translateY(0);
+}
+
+.githubIcon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+/* Dark mode */
+[data-theme='dark'] .commandBox {
+  background: var(--ifm-color-emphasis-100);
+  border-color: var(--ifm-color-emphasis-200);
+}
+
+[data-theme='dark'] .githubButton {
+  background: linear-gradient(135deg, #f0f6fc 0%, #d0d7de 100%);
+  color: #24292e;
+}
+
+[data-theme='dark'] .githubButton:hover {
+  color: #24292e;
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .paper {
+    width: 100vw;
+  }
+
+  .content {
+    padding: 1.25rem 1.5rem 1.5rem;
+  }
+
+  .name {
+    font-size: 1.375rem;
+  }
+
+  .description {
+    font-size: 0.9375rem;
+  }
+
+  .githubButton {
+    width: 100%;
+  }
+}

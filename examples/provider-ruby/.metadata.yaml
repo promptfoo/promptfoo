@@ -1,0 +1,5 @@
+title: 'Custom Ruby Provider'
+description: 'Write custom promptfoo providers and assertions in Ruby'
+tags:
+  - Providers
+  - Configuration

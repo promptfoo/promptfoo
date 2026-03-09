@@ -297,6 +297,10 @@ const config: Config = {
           title: 'Resources',
           items: [
             {
+              label: 'Examples',
+              to: '/docs/examples',
+            },
+            {
               label: 'API Reference',
               to: '/docs/api-reference/',
             },

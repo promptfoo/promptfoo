@@ -1,0 +1,4 @@
+title: 'Different Prompts Per Model'
+description: 'Configuring which prompts run against which providers using per-provider prompt assignments'
+tags:
+  - Configuration

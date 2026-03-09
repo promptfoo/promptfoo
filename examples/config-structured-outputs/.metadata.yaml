@@ -1,0 +1,5 @@
+title: 'Structured JSON Outputs Across Providers'
+description: 'Enforcing structured JSON outputs with schema validation across OpenAI, Azure, and Anthropic providers'
+tags:
+  - Structured Output
+  - Configuration
