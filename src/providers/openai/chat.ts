@@ -226,10 +226,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
+    const maxTokensDefault = config.omitDefaults
+      ? getEnvString('OPENAI_MAX_TOKENS') !== undefined
+        ? getEnvInt('OPENAI_MAX_TOKENS')
+        : undefined
+      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
     const maxTokens =
-      isReasoningModel || isGPT5Model
-        ? undefined
-        : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
+      isReasoningModel || isGPT5Model ? undefined : (config.max_tokens ?? maxTokensDefault);
 
     const temperatureDefault = config.omitDefaults
       ? getEnvString('OPENAI_TEMPERATURE') !== undefined

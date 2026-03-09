@@ -474,5 +474,48 @@ describe('LiteLLM Provider', () => {
       });
       expect(provider.config.omitDefaults).toBe(false);
     });
+
+    it('should send default temperature: 0 when omitDefaults is false', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+            omitDefaults: false,
+          },
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+
+      expect(body.temperature).toBe(0);
+      expect('temperature' in body).toBe(true);
+      expect(body.max_tokens).toBe(1024);
+      expect('max_tokens' in body).toBe(true);
+    });
+
+    it('should omit max_tokens from request body when not configured', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+          },
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+
+      expect(body.max_tokens).toBeUndefined();
+      expect('max_tokens' in body).toBe(false);
+    });
   });
 });
