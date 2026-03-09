@@ -24,8 +24,6 @@ providers:
 
 defaultTest:
   assert:
-    - type: icontains
-      value: "don't know"
     - type: not-icontains
       value: AI language model
     - type: not-icontains
