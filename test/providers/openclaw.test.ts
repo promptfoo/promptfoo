@@ -17,15 +17,7 @@ vi.mock('../../src/envars', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/envars')>();
   return {
     ...actual,
-    getEnvString: vi.fn((key: string) => {
-      if (key === 'OPENCLAW_GATEWAY_URL') {
-        return process.env.OPENCLAW_GATEWAY_URL;
-      }
-      if (key === 'OPENCLAW_GATEWAY_TOKEN') {
-        return process.env.OPENCLAW_GATEWAY_TOKEN;
-      }
-      return undefined;
-    }),
+    getEnvString: vi.fn((key: string) => process.env[key]),
   };
 });
 
@@ -70,6 +62,8 @@ describe('OpenClaw Provider', () => {
     mockFetchWithProxy.mockReset();
     resetConfigCache();
     process.env = { ...originalEnv };
+    delete process.env.OPENCLAW_CONFIG_PATH;
+    delete process.env.OPENCLAW_GATEWAY_PASSWORD;
     delete process.env.OPENCLAW_GATEWAY_URL;
     delete process.env.OPENCLAW_GATEWAY_TOKEN;
   });
@@ -83,6 +77,15 @@ describe('OpenClaw Provider', () => {
     it('should return undefined when config file does not exist', () => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(false);
       expect(readOpenClawConfig()).toBeUndefined();
+    });
+
+    it('should respect OPENCLAW_CONFIG_PATH when set', () => {
+      process.env.OPENCLAW_CONFIG_PATH = '/tmp/custom-openclaw.json';
+      const existsSpy = vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+      readOpenClawConfig();
+
+      expect(existsSpy).toHaveBeenCalledWith('/tmp/custom-openclaw.json');
     });
 
     it('should parse valid JSON config', () => {
@@ -316,6 +319,28 @@ describe('OpenClaw Provider', () => {
       expect(resolveGatewayUrl()).toBe('http://192.168.1.5:20000');
     });
 
+    it('should treat lan bind mode as 127.0.0.1 for local autodetection', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10600 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({ gateway: { port: 20000, bind: 'lan' } }),
+      );
+
+      expect(resolveGatewayUrl()).toBe('http://127.0.0.1:20000');
+    });
+
+    it('should use customBindHost when bind mode is custom', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10700 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({
+          gateway: { port: 20000, bind: 'custom', customBindHost: '192.168.1.8' },
+        }),
+      );
+
+      expect(resolveGatewayUrl()).toBe('http://192.168.1.8:20000');
+    });
+
     it('should treat loopback bind as 127.0.0.1', () => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(true);
       vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 11000 } as fs.Stats);
@@ -367,6 +392,11 @@ describe('OpenClaw Provider', () => {
       expect(resolveAuthToken()).toBe('env-token');
     });
 
+    it('should use password environment variable when token is unset', () => {
+      process.env.OPENCLAW_GATEWAY_PASSWORD = 'env-password';
+      expect(resolveAuthToken()).toBe('env-password');
+    });
+
     it('should auto-detect from config file third', () => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(true);
       vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 12000 } as fs.Stats);
@@ -379,11 +409,27 @@ describe('OpenClaw Provider', () => {
       expect(resolveAuthToken()).toBe('config-file-token');
     });
 
+    it('should auto-detect password auth from config file', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 12100 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({
+          gateway: { auth: { mode: 'password', password: 'config-file-password' } },
+        }),
+      );
+
+      expect(resolveAuthToken()).toBe('config-file-password');
+    });
+
     it('should prefer per-provider env override over process env', () => {
       process.env.OPENCLAW_GATEWAY_TOKEN = 'process-token';
       expect(resolveAuthToken(undefined, { OPENCLAW_GATEWAY_TOKEN: 'override-token' })).toBe(
         'override-token',
       );
+    });
+
+    it('should use explicit auth password when provided', () => {
+      expect(resolveAuthToken({ auth_password: 'explicit-password' })).toBe('explicit-password');
     });
 
     it('should return undefined when no token available', () => {
@@ -849,6 +895,7 @@ describe('OpenClaw Provider', () => {
       expect(agentReq.method).toBe('agent');
       expect(agentReq.params.message).toBe('Hello agent');
       expect(agentReq.params.agentId).toBe('main');
+      expect(agentReq.params.sessionKey).toMatch(/^promptfoo-[0-9a-f-]{36}$/);
 
       // Verify wait request
       expect(waitReq.method).toBe('agent.wait');
