@@ -297,7 +297,7 @@ describe('OpenCodeSDKProvider', () => {
       it('should fall back to the v1 nested request shape when v2 is unavailable', async () => {
         const { importModule } = await import('../../src/esm');
         vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
-          if (modulePath.includes('/dist/v2/')) {
+          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
             throw new Error('v2 unavailable');
           }
           return {
