@@ -247,7 +247,8 @@ export async function fetchWithCache<T = unknown>(
       // Don't cache if the parsed data contains an error
       if (format === 'json' && parsedData?.error) {
         logger.debug(`Not caching ${url} because it contains an 'error' key: ${parsedData.error}`);
-        return data;
+        errorResponse = data;
+        return;
       }
       logger.debug(`Storing ${url} response in cache with latencyMs=${fetchLatencyMs}: ${data}`);
       return data;
