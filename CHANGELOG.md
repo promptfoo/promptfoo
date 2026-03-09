@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.121.1](https://github.com/promptfoo/promptfoo/compare/0.121.0...0.121.1) (2026-03-09)
+
+
+### Bug Fixes
+
+* **providers:** support newer opencode sdk api ([#8060](https://github.com/promptfoo/promptfoo/issues/8060)) ([7ec80b2](https://github.com/promptfoo/promptfoo/commit/7ec80b2e173dc99438002c8f5d16feb7b6643aa1))
+
 ## [0.121.0](https://github.com/promptfoo/promptfoo/compare/0.120.27...0.121.0) (2026-03-09)
 
 ### ⚠ BREAKING CHANGES
