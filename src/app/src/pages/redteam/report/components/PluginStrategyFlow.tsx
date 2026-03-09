@@ -334,18 +334,39 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
               if (!payload?.[0]) {
                 return null;
               }
-              const data = payload[0];
-              const { source, target, value } = data.payload as {
+              const entry = payload[0];
+              const linkData = entry.payload as {
                 source?: { name?: string };
                 target?: { name?: string };
-                value?: number;
               };
+              const getDisplayName = (name?: string) => {
+                if (!name) {
+                  return name;
+                }
+                if (name === 'Pass') {
+                  return 'Defended';
+                }
+                if (name === 'Fail') {
+                  return 'Vulnerable';
+                }
+                return displayNameOverrides[name as keyof typeof displayNameOverrides] || name;
+              };
+              // Link hover: source and target are resolved SankeyNode objects
+              if (linkData.source && typeof linkData.source === 'object') {
+                return (
+                  <div className="rounded border border-border bg-card px-3 py-2 text-sm shadow-sm">
+                    <strong>
+                      {getDisplayName(linkData.source.name)} →{' '}
+                      {getDisplayName(linkData.target?.name)}
+                    </strong>
+                    : {entry.value} tests
+                  </div>
+                );
+              }
+              // Node hover
               return (
                 <div className="rounded border border-border bg-card px-3 py-2 text-sm shadow-sm">
-                  <strong>
-                    {source?.name} → {target?.name}
-                  </strong>
-                  : {value} tests
+                  <strong>{getDisplayName(String(entry.name))}</strong>: {entry.value} tests
                 </div>
               );
             }}
