@@ -13,6 +13,7 @@ keywords:
     GradingResult,
     programmatic API,
   ]
+pagination_prev: configuration/extensions
 ---
 
 # TypeScript Types

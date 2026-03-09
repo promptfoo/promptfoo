@@ -5,6 +5,8 @@ title: Extension Hooks - Custom Evaluation Lifecycle Logic
 description: Add custom setup, teardown, and per-test logic using extension hooks in promptfoo evaluations.
 keywords:
   [extension hooks, beforeAll, afterAll, beforeEach, afterEach, evaluation lifecycle, custom hooks]
+pagination_prev: configuration/reference
+pagination_next: configuration/types
 ---
 
 # Extension Hooks
