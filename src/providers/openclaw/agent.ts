@@ -85,24 +85,22 @@ export class OpenClawAgentProvider implements ApiProvider {
       let connected = false;
       let resolved = false;
 
-      const timeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          ws.close();
-          resolve({ error: `OpenClaw agent request timed out after ${this.timeoutMs}ms` });
-        }
-      }, this.timeoutMs);
-
-      const finish = (result: ProviderResponse) => {
+      const finish = (result: ProviderResponse, closeSocket = true) => {
         if (resolved) {
           return;
         }
         resolved = true;
         clearTimeout(timeout);
         this.activeConnections.delete(ws);
-        ws.close();
+        if (closeSocket) {
+          ws.close();
+        }
         resolve(result);
       };
+
+      const timeout = setTimeout(() => {
+        finish({ error: `OpenClaw agent request timed out after ${this.timeoutMs}ms` });
+      }, this.timeoutMs);
 
       ws.on('error', (err) => {
         finish({ error: `OpenClaw WebSocket error: ${err.message}` });
@@ -111,7 +109,7 @@ export class OpenClawAgentProvider implements ApiProvider {
       ws.on('close', () => {
         this.activeConnections.delete(ws);
         if (!resolved) {
-          finish({ error: 'OpenClaw WebSocket connection closed unexpectedly' });
+          finish({ error: 'OpenClaw WebSocket connection closed unexpectedly' }, false);
         }
       });
 
@@ -216,17 +214,25 @@ export class OpenClawAgentProvider implements ApiProvider {
           }
 
           const payload = frame.payload as { runId?: string } | undefined;
-          runId = payload?.runId;
-          if (runId) {
-            ws.send(
-              JSON.stringify({
-                type: 'req',
-                id: waitRequestId,
-                method: 'agent.wait',
-                params: { runId, timeoutMs: this.timeoutMs },
-              }),
-            );
+          runId =
+            typeof payload?.runId === 'string' && payload.runId.trim() ? payload.runId : undefined;
+          if (!runId) {
+            logger.warn('[OpenClaw Agent] Missing runId in accepted response', {
+              agentId: this.agentId,
+              payload,
+            });
+            finish({ error: 'OpenClaw agent error: gateway accepted request without a runId' });
+            return;
           }
+
+          ws.send(
+            JSON.stringify({
+              type: 'req',
+              id: waitRequestId,
+              method: 'agent.wait',
+              params: { runId, timeoutMs: this.timeoutMs },
+            }),
+          );
           return;
         }
 

@@ -1334,6 +1334,45 @@ describe('OpenClaw Provider', () => {
       expect(result.error).toContain('Agent timed out');
     });
 
+    it('should fail immediately when agent acceptance is missing a runId', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = messageHandlers.get('message')!;
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'connect.challenge',
+            payload: { nonce: 'n', ts: 1 },
+          }),
+        ),
+      );
+      const connectReq = JSON.parse(mockWs.send.mock.calls[0][0]);
+      onMessage(
+        Buffer.from(JSON.stringify({ type: 'res', id: connectReq.id, ok: true, payload: {} })),
+      );
+      const agentReq = JSON.parse(mockWs.send.mock.calls[1][0]);
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'res',
+            id: agentReq.id,
+            ok: true,
+            payload: { status: 'accepted' },
+          }),
+        ),
+      );
+
+      const result = await promise;
+      expect(result.error).toContain('without a runId');
+      expect(mockWs.send).toHaveBeenCalledTimes(2);
+    });
+
     it('should handle WebSocket errors', async () => {
       const provider = new OpenClawAgentProvider('main', {
         config: { gateway_url: 'http://test:18789' },
