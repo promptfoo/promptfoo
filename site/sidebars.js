@@ -346,10 +346,8 @@ const sidebars = {
     {
       type: 'category',
       label: 'Evals',
-      link: {
-        type: 'doc',
-        id: 'getting-started',
-      },
+      collapsible: true,
+      collapsed: false,
       items: [
         { type: 'doc', id: 'getting-started' },
         {
@@ -357,10 +355,10 @@ const sidebars = {
           label: 'Configuration',
           collapsed: true,
           link: {
-            type: 'doc',
-            id: 'configuration/guide',
+            type: 'generated-index',
           },
           items: [
+            { type: 'doc', id: 'configuration/guide' },
             { type: 'doc', id: 'configuration/reference' },
             { type: 'doc', id: 'configuration/tools' },
             // Page still exists for backwards compatibility, but we don't put it in the sidebar

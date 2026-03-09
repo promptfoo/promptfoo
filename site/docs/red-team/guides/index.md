@@ -16,7 +16,7 @@ Practical tutorials for finding vulnerabilities in LLM applications before deplo
 ## By Application Type
 
 - [RAG Red Teaming](/docs/red-team/rag) — Test retrieval-augmented generation for prompt injection, context manipulation, and data poisoning
-- [Agent Red Teaming](/docs/red-team/agents) — Test LLM agents for privilege escalation, context poisoning, and memory manipulation
+- [Agent Red Teaming](/docs/red-team/llm-agents) — Test LLM agents for privilege escalation, context poisoning, and memory manipulation
 - [MCP Security Testing](/docs/red-team/mcp-security-testing) — Secure Model Context Protocol servers through red teaming and tool poisoning tests
 - [Red Teaming a Chatbase Chatbot](/docs/guides/chatbase-redteam) — Security test a production chatbot
 
