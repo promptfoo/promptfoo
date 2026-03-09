@@ -168,10 +168,13 @@ export function createLiteLLMProvider(
     'http://0.0.0.0:4000';
 
   // Build the config object with proper defaults
+  // omitDefaults: true ensures temperature/max_tokens are not sent unless explicitly
+  // configured, allowing the LiteLLM proxy to apply its own model-specific defaults.
   const litellmConfigDefaults: LiteLLMCompletionOptions = {
     apiKeyEnvar: 'LITELLM_API_KEY',
     apiKeyRequired: false,
     apiBaseUrl: resolvedApiBaseUrl,
+    omitDefaults: true,
   };
 
   // Merge configs, with explicit config values taking precedence

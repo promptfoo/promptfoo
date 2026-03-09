@@ -1,4 +1,11 @@
-# Conversation Relevance Example
+# eval-conversation-relevance (Conversation Relevance)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example eval-conversation-relevance
+cd eval-conversation-relevance
+```
 
 This example demonstrates how to use the `conversation-relevance` assertion to evaluate whether chatbot responses remain relevant throughout a conversation.
 
@@ -74,6 +81,6 @@ The metric evaluates each message position using a sliding window approach. For 
 
 Each window evaluates whether the LAST assistant response in that window is relevant. The final score is:
 
-```
+```text
 Score = Number of Relevant Windows / Total Number of Windows
 ```

@@ -4,6 +4,7 @@ The Claude Agent SDK provider (aka Claude Code provider) enables you to run agen
 
 ```bash
 npx promptfoo@latest init --example claude-agent-sdk
+cd claude-agent-sdk
 ```
 
 ## Setup

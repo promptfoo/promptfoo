@@ -1,4 +1,4 @@
-# OpenAI Model Comparison
+# compare-openai-models (OpenAI Model Comparison)
 
 This example compares OpenAI's `gpt-5.4` with `gpt-5.3-chat-latest` across various riddles and reasoning tasks.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example compare-openai-models
+cd compare-openai-models
 ```
 
 ## Quick Start

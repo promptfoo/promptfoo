@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-llama-cpp
+cd provider-llama-cpp
 ```
 
 ## Install llama.cpp

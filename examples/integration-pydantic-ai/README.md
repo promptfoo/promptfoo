@@ -1,4 +1,4 @@
-# integration-pydantic-ai
+# integration-pydantic-ai (Pydantic AI Integration)
 
 This example demonstrates how to evaluate [PydanticAI](https://ai.pydantic.dev/) agents using promptfoo. PydanticAI is a Python agent framework that provides structured outputs and type safety for AI applications.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example integration-pydantic-ai
+cd integration-pydantic-ai
 ```
 
 ## Quick Start

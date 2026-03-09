@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example integration-github-action
+cd integration-github-action
 ```
 
 This folder contains a standalone GitHub Action that runs **promptfoo** when a pull request modifies prompts.
