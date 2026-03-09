@@ -2577,19 +2577,8 @@ function getGeneratedImageInfo(routePath, outDir) {
   };
 }
 
-async function fileExists(filePath) {
-  return fs
-    .stat(filePath)
-    .then((stat) => stat.isFile())
-    .catch(() => false);
-}
-
 async function injectOgImageUrl({ htmlPath, imageUrl, routePath, siteUrl }) {
   try {
-    if (!(await fileExists(htmlPath))) {
-      return;
-    }
-
     const defaultThumbnailUrl = 'https://www.promptfoo.dev/img/thumbnail.png';
     const newOgImageUrl = `${siteUrl}${imageUrl}`;
     let html = await fs.readFile(htmlPath, 'utf8');
@@ -2601,6 +2590,9 @@ async function injectOgImageUrl({ htmlPath, imageUrl, routePath, siteUrl }) {
     html = html.replaceAll(defaultThumbnailUrl, newOgImageUrl);
     await fs.writeFile(htmlPath, html);
   } catch (error) {
+    if (error.code === 'ENOENT') {
+      return;
+    }
     console.warn(`Could not inject meta tags for ${routePath}:`, error.message);
   }
 }

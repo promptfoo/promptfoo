@@ -533,18 +533,18 @@ function TestCasesSetupStep({
 }
 
 function RunOptionsSetupStep({
-  config,
+  description,
+  evaluateOptions,
+  hasRunOptions,
   isReadyToRun,
   updateConfig,
 }: {
-  config: Partial<UnifiedConfig>;
+  description: string | undefined;
+  evaluateOptions: Partial<UnifiedConfig>['evaluateOptions'];
+  hasRunOptions: boolean;
   isReadyToRun: boolean;
   updateConfig: UpdateEvalConfig;
 }) {
-  const hasRunOptions = Boolean(
-    config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency,
-  );
-
   return (
     <StepSection
       stepNumber={4}
@@ -554,16 +554,16 @@ function RunOptionsSetupStep({
       defaultOpen={false}
     >
       <RunOptionsSection
-        description={config.description}
-        delay={config.evaluateOptions?.delay}
-        maxConcurrency={config.evaluateOptions?.maxConcurrency}
+        description={description}
+        delay={evaluateOptions?.delay}
+        maxConcurrency={evaluateOptions?.maxConcurrency}
         isReadyToRun={isReadyToRun}
         onChange={(options) => {
           const { description: newDesc, ...evalOptions } = options;
           updateConfig({
             description: newDesc,
             evaluateOptions: {
-              ...config.evaluateOptions,
+              ...evaluateOptions,
               ...evalOptions,
             },
           });
@@ -728,7 +728,9 @@ const EvaluateTestSuiteCreator = () => {
 
                 {activeStep === 4 && (
                   <RunOptionsSetupStep
-                    config={config}
+                    description={config.description}
+                    evaluateOptions={config.evaluateOptions}
+                    hasRunOptions={hasRunOptions}
                     isReadyToRun={isReadyToRun}
                     updateConfig={updateConfig}
                   />

@@ -456,7 +456,7 @@ function getOrdersForCustomer(customerId, results) {
 
   const generatedOrders = generateMockOrders(customerId, 10);
   mockOrders.push(...generatedOrders);
-  return [...mockOrders].filter((order) => order.customerId === customerId);
+  return generatedOrders;
 }
 
 function handleQueryOrders(args) {
