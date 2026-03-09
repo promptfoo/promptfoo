@@ -412,3 +412,18 @@ html:not(.docs-wrapper) .DocSearch {
 
 /* Import custom pagination styles */
 @import url('./custom-pagination.css');
+
+/* Announcement bar link styling */
+div[class*='announcementBar'] a {
+  color: #ffffff;
+  text-decoration: none;
+  text-underline-offset: 2px;
+  opacity: 0.85;
+  transition: opacity 0.15s;
+}
+
+div[class*='announcementBar'] a:hover {
+  color: #ffffff;
+  text-decoration: underline;
+  opacity: 1;
+}
