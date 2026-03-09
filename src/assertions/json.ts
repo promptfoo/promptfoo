@@ -90,6 +90,9 @@ export function handleContainsJson({
       const valid = validate(jsonObject);
       pass = inverse ? !valid : valid;
       if (valid) {
+        if (inverse) {
+          errorMessage = 'Output contains JSON conforming to the provided schema';
+        }
         break;
       } else {
         errorMessage = `JSON does not conform to the provided schema. Errors: ${getAjv().errorsText(
