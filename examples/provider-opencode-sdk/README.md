@@ -28,6 +28,10 @@ export OPENAI_API_KEY=your_api_key_here
 
 If promptfoo starts the OpenCode server for you, you can also set `config.apiKey` together with `config.provider_id`. If you use `baseUrl`, the target OpenCode server must already be authenticated.
 
+If you are validating changes inside this repository, use `npm run local -- eval ...` from the repo root. If you initialized an example with `npx promptfoo@latest init --example provider-opencode-sdk`, run `npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache` from the example directory.
+
+The shipped examples use OpenAI for reproducible QA, but the provider itself is not OpenAI-specific. OpenCode can route to Anthropic, Google, Ollama, LM Studio, and other providers configured in OpenCode.
+
 ## Examples
 
 ### Basic Usage
@@ -39,7 +43,8 @@ Chat-only usage in a temporary directory with no filesystem tools.
 **Usage**:
 
 ```bash
-npm run local -- eval -c examples/provider-opencode-sdk/basic/promptfooconfig.yaml --env-file .env --no-cache
+cd basic
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 ```
 
 ### Working Directory
@@ -51,7 +56,8 @@ Read-only filesystem access with `working_dir`, using the default `read`, `grep`
 **Usage**:
 
 ```bash
-npm run local -- eval -c examples/provider-opencode-sdk/working-dir/promptfooconfig.yaml --env-file .env --no-cache
+cd working-dir
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 ```
 
 ### Structured Output
@@ -63,7 +69,8 @@ Provider-enforced JSON Schema output using the OpenCode `format` request option.
 **Usage**:
 
 ```bash
-npm run local -- eval -c examples/provider-opencode-sdk/structured-output/promptfooconfig.yaml --env-file .env --no-cache
+cd structured-output
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 ```
 
 ## Provider Configuration
@@ -97,6 +104,17 @@ providers:
       # Reuse the same OpenCode session for repeated calls
       persist_sessions: true
 ```
+
+## Supported Providers
+
+OpenCode can route requests to the provider ecosystem it already supports, including:
+
+- Anthropic
+- OpenAI
+- Google
+- Ollama
+- LM Studio
+- Other providers configured in OpenCode
 
 ## Learn More
 
