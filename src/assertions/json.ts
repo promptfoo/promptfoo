@@ -87,8 +87,9 @@ export function handleContainsJson({
       } else {
         throw new Error('contains-json assertion must have a string or object value');
       }
-      pass = validate(jsonObject);
-      if (pass) {
+      const valid = validate(jsonObject);
+      pass = inverse ? !valid : valid;
+      if (valid) {
         break;
       } else {
         errorMessage = `JSON does not conform to the provided schema. Errors: ${getAjv().errorsText(
