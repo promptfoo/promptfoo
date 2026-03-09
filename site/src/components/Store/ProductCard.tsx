@@ -16,7 +16,7 @@ interface ProductCardProps {
 export function ProductCard({ product, onClick }: ProductCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const prevSrcRef = useRef<string | undefined>();
+  const prevSrcRef = useRef<string | undefined>(undefined);
 
   const primaryImage = product.images[0];
   const hoverImage = product.images[1] || primaryImage;
