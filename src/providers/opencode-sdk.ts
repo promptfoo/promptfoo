@@ -532,12 +532,13 @@ function tryParseJson(value: string): string | undefined {
 }
 
 function normalizeStructuredText(value: string): string | undefined {
-  const directJson = tryParseJson(value.trim());
+  const trimmedValue = value.trim();
+  const directJson = tryParseJson(trimmedValue);
   if (directJson) {
     return directJson;
   }
 
-  const fencedJsonMatch = value.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  const fencedJsonMatch = trimmedValue.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
   if (!fencedJsonMatch?.[1]) {
     return undefined;
   }
@@ -656,7 +657,13 @@ export class OpenCodeSDKProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
-    // Persistent sessions are intentionally not deleted explicitly here.
+    for (const session of this.sessions.values()) {
+      try {
+        await this.deleteSession(session);
+      } catch (err) {
+        logger.debug(`Failed to delete persistent session ${session.id}: ${err}`);
+      }
+    }
     this.sessions.clear();
     this.sessionOrder = [];
 
@@ -753,7 +760,13 @@ export class OpenCodeSDKProvider implements ApiProvider {
   }
 
   private buildServerEnv(config: OpenCodeSDKConfig): Record<string, string> {
-    const serverEnv: Record<string, string> = { ...process.env } as Record<string, string>;
+    const serverEnv: Record<string, string> = {};
+
+    for (const [key, value] of Object.entries(process.env)) {
+      if (value !== undefined) {
+        serverEnv[key] = value;
+      }
+    }
 
     if (this.env) {
       for (const key of Object.keys(this.env).sort()) {
@@ -1090,6 +1103,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (config.variant) {
       promptBody.variant = config.variant;
     }
+    // v1 accepts permission rules on the prompt payload; v2 moved them to session.create.
     if (config.permission && this.opencodeModule.apiVersion === 'v1') {
       promptBody.permission = config.permission;
     }
@@ -1108,6 +1122,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     const createBody: { title?: string; permission?: OpenCodePermissionConfig } = {
       title: `promptfoo-${Date.now()}`,
     };
+    // v2 accepts permission rules when the session is created, not on each prompt.
     if (config.permission && this.opencodeModule.apiVersion === 'v2') {
       createBody.permission = config.permission;
     }
@@ -1192,15 +1207,24 @@ export class OpenCodeSDKProvider implements ApiProvider {
     };
   }
 
-  private handleCallError(error: any, callOptions?: CallApiOptionsParams): ProviderResponse {
-    const isAbort = error?.name === 'AbortError' || callOptions?.abortSignal?.aborted;
+  private handleCallError(error: unknown, callOptions?: CallApiOptionsParams): ProviderResponse {
+    const isAbort =
+      (error instanceof Error && error.name === 'AbortError') || callOptions?.abortSignal?.aborted;
 
     if (isAbort) {
       logger.warn('OpenCode SDK call aborted');
       return { error: 'OpenCode SDK call aborted' };
     }
 
-    if (error?.code === 'ENOENT' && error?.message?.includes('opencode')) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'ENOENT' &&
+      'message' in error &&
+      typeof error.message === 'string' &&
+      error.message.includes('opencode')
+    ) {
       const cliError = dedent`The OpenCode CLI is required but not installed.
 
         The OpenCode SDK requires the 'opencode' CLI to be installed and available in your PATH.
@@ -1213,9 +1237,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
       return { error: cliError };
     }
 
-    logger.error(`Error calling OpenCode SDK: ${error}`);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('Error calling OpenCode SDK', { error });
     return {
-      error: `Error calling OpenCode SDK: ${error.message || error}`,
+      error: `Error calling OpenCode SDK: ${errorMessage}`,
     };
   }
 
@@ -1285,10 +1310,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
       const providerResponse = this.buildProviderResponse(config, response, session.sessionId);
 
       await cacheResponse(cacheResult, providerResponse, 'OpenCode SDK');
-      logger.debug(`OpenCode SDK response: ${providerResponse.output.substring(0, 100)}...`);
+      logger.debug(`OpenCode SDK response: ${providerResponse.output.slice(0, 100)}...`);
 
       return providerResponse;
-    } catch (error: any) {
+    } catch (error) {
       return this.handleCallError(error, callOptions);
     } finally {
       if (ephemeralSession) {

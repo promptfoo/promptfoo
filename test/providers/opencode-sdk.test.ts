@@ -294,6 +294,70 @@ describe('OpenCodeSDKProvider', () => {
         );
       });
 
+      it('should fall back to the v1 nested request shape when v2 is unavailable', async () => {
+        const { importModule } = await import('../../src/esm');
+        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
+          if (modulePath.includes('/dist/v2/')) {
+            throw new Error('v2 unavailable');
+          }
+          return {
+            createOpencode: mockCreateOpencode,
+            createOpencodeClient: mockCreateOpencodeClient,
+          };
+        });
+
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            working_dir: '/test/dir',
+            permission: {
+              bash: 'allow',
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockSessionCreate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            body: expect.objectContaining({
+              title: expect.stringMatching(/^promptfoo-\d+$/),
+            }),
+            query: {
+              directory: '/test/dir',
+            },
+          }),
+        );
+        expect(mockSessionPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            path: {
+              id: 'test-session-123',
+              sessionID: 'test-session-123',
+            },
+            query: {
+              directory: '/test/dir',
+            },
+            body: expect.objectContaining({
+              parts: [{ type: 'text', text: 'Test prompt' }],
+              permission: {
+                bash: 'allow',
+              },
+            }),
+          }),
+        );
+        expect(mockSessionDelete).toHaveBeenCalledWith(
+          expect.objectContaining({
+            path: {
+              id: 'test-session-123',
+              sessionID: 'test-session-123',
+            },
+            query: {
+              directory: '/test/dir',
+            },
+          }),
+        );
+      });
+
       it('should handle multiple text parts in response', async () => {
         mockSessionPrompt.mockResolvedValue(
           createMockPromptResponse([
@@ -522,6 +586,24 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockSessionDelete).toHaveBeenCalledWith({
           sessionID: 'test-session-123',
         });
+      });
+
+      it('should swallow delete errors for non-persistent sessions', async () => {
+        const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+        mockSessionDelete.mockRejectedValue(new Error('delete failed'));
+
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('Test response');
+        expect(debugSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to delete non-persistent session test-session-123'),
+        );
+
+        debugSpy.mockRestore();
       });
     });
 
@@ -802,6 +884,20 @@ describe('OpenCodeSDKProvider', () => {
       await provider.cleanup();
 
       expect(mockServerClose).toHaveBeenCalled();
+    });
+
+    it('should delete tracked persistent sessions on cleanup', async () => {
+      const provider = new OpenCodeSDKProvider({
+        config: { persist_sessions: true },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      await provider.callApi('Test prompt');
+      await provider.cleanup();
+
+      expect(mockSessionDelete).toHaveBeenCalledWith({
+        sessionID: 'test-session-123',
+      });
     });
   });
 
