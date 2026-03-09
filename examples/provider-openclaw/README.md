@@ -6,7 +6,8 @@ This example demonstrates how to use promptfoo with OpenClaw, a personal AI assi
 
 1. Install OpenClaw: `npm install -g openclaw@latest`
 2. Run the onboarding wizard: `openclaw onboard`
-3. Enable the HTTP API by adding to `~/.openclaw/openclaw.json`:
+3. Enable the HTTP API in `~/.openclaw/openclaw.json` if you want Chat or Responses.
+   These HTTP endpoints are disabled by default upstream:
    ```json
    {
      "gateway": {
@@ -35,7 +36,8 @@ npx promptfoo@latest eval
 ```
 
 The provider auto-detects the gateway URL and bearer auth secret from the active OpenClaw config
-(`OPENCLAW_CONFIG_PATH` when set, otherwise `~/.openclaw/openclaw.json`).
+(`OPENCLAW_CONFIG_PATH` when set, otherwise `~/.openclaw/openclaw.json`). This includes local
+bind/port, `gateway.tls.enabled`, and `gateway.mode=remote` with `gateway.remote.url`.
 
 ## Configuration
 
@@ -63,3 +65,5 @@ export OPENCLAW_GATEWAY_TOKEN=your-token-here
 For `openclaw:agent:*`, promptfoo generates an isolated session key per call by default so evals do
 not reuse your persistent OpenClaw `main` session. Set `session_key` explicitly if you want session
 continuity.
+
+For password-mode gateways, use `auth_password` or `OPENCLAW_GATEWAY_PASSWORD`.
