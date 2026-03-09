@@ -4,7 +4,7 @@ import WebSocket from 'ws';
 import { VERSION } from '../../constants';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../shared';
-import { resolveAuthToken, resolveGatewayUrl } from './shared';
+import { resolveAuthSecret, resolveGatewayWsUrl } from './shared';
 
 import type { ApiProvider, ProviderOptions, ProviderResponse } from '../../types/providers';
 import type { OpenClawConfig } from './types';
@@ -33,7 +33,8 @@ const OPENCLAW_PROTOCOL_VERSION = 3;
 export class OpenClawAgentProvider implements ApiProvider {
   private agentId: string;
   private gatewayUrl: string;
-  private authToken: string | undefined;
+  private authKind: 'password' | 'token' | undefined;
+  private authSecret: string | undefined;
   private openclawConfig: OpenClawConfig;
   private timeoutMs: number;
   private activeConnections = new Set<WebSocket>();
@@ -42,8 +43,10 @@ export class OpenClawAgentProvider implements ApiProvider {
     this.agentId = agentId;
     this.openclawConfig = (providerOptions.config || {}) as OpenClawConfig;
     const env = providerOptions.env as Record<string, string | undefined> | undefined;
-    this.gatewayUrl = resolveGatewayUrl(this.openclawConfig, env);
-    this.authToken = resolveAuthToken(this.openclawConfig, env);
+    this.gatewayUrl = resolveGatewayWsUrl(this.openclawConfig, env);
+    const authSecret = resolveAuthSecret(this.openclawConfig, env);
+    this.authKind = authSecret?.kind;
+    this.authSecret = authSecret?.value;
     this.timeoutMs = this.openclawConfig.timeoutMs ?? REQUEST_TIMEOUT_MS;
   }
 
@@ -67,12 +70,11 @@ export class OpenClawAgentProvider implements ApiProvider {
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
-    const wsUrl = this.gatewayUrl.replace(/^http(s?):\/\//, 'ws$1://');
     // Keep eval runs isolated from the user's persistent main session unless explicitly pinned.
     const sessionKey = this.openclawConfig.session_key || `promptfoo-${crypto.randomUUID()}`;
 
     return new Promise<ProviderResponse>((resolve) => {
-      const ws = new WebSocket(wsUrl);
+      const ws = new WebSocket(this.gatewayUrl);
       this.activeConnections.add(ws);
 
       const agentRequestId = crypto.randomUUID();
@@ -158,7 +160,13 @@ export class OpenClawAgentProvider implements ApiProvider {
                 caps: [],
                 commands: [],
                 permissions: {},
-                ...(this.authToken && { auth: { token: this.authToken } }),
+                ...(this.authSecret &&
+                  this.authKind && {
+                    auth:
+                      this.authKind === 'password'
+                        ? { password: this.authSecret }
+                        : { token: this.authSecret },
+                  }),
               },
             }),
           );
@@ -188,6 +196,9 @@ export class OpenClawAgentProvider implements ApiProvider {
                 sessionKey,
                 ...(this.openclawConfig.thinking_level && {
                   thinking: this.openclawConfig.thinking_level,
+                }),
+                ...(this.openclawConfig.extra_system_prompt && {
+                  extraSystemPrompt: this.openclawConfig.extra_system_prompt,
                 }),
               },
             }),

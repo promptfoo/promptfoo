@@ -90,6 +90,9 @@ function stripJson5Syntax(raw: string): string {
 let cachedConfig: { config: OpenClawGatewayConfig | undefined; mtime: number } | undefined;
 let cachedConfigPath: string | undefined;
 
+type GatewayTransport = 'http' | 'ws';
+export type OpenClawAuthSecret = { kind: 'password' | 'token'; value: string };
+
 /**
  * Reset the config cache. Exported for test isolation.
  */
@@ -104,6 +107,31 @@ function resolveConfigPath(env?: Record<string, string | undefined>): string {
     getEnvString('OPENCLAW_CONFIG_PATH') ||
     path.join(os.homedir(), '.openclaw', 'openclaw.json')
   );
+}
+
+function normalizeGatewayUrl(url: string, transport: GatewayTransport): string | undefined {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  if (transport === 'http') {
+    if (trimmed.startsWith('wss://')) {
+      return `https://${trimmed.slice('wss://'.length)}`;
+    }
+    if (trimmed.startsWith('ws://')) {
+      return `http://${trimmed.slice('ws://'.length)}`;
+    }
+    return trimmed;
+  }
+
+  if (trimmed.startsWith('https://')) {
+    return `wss://${trimmed.slice('https://'.length)}`;
+  }
+  if (trimmed.startsWith('http://')) {
+    return `ws://${trimmed.slice('http://'.length)}`;
+  }
+  return trimmed;
 }
 
 function resolveGatewayHost(gatewayConfig: OpenClawGatewayConfig['gateway'] | undefined): string {
@@ -143,6 +171,81 @@ function resolveGatewayHost(gatewayConfig: OpenClawGatewayConfig['gateway'] | un
 
   // Support older configs that still stored a concrete host in gateway.bind.
   return bind;
+}
+
+function buildLocalGatewayUrl(
+  gatewayConfig: OpenClawGatewayConfig['gateway'],
+  transport: GatewayTransport,
+): string {
+  const scheme =
+    transport === 'ws'
+      ? gatewayConfig?.tls?.enabled
+        ? 'wss'
+        : 'ws'
+      : gatewayConfig?.tls?.enabled
+        ? 'https'
+        : 'http';
+  const port = gatewayConfig?.port ?? DEFAULT_GATEWAY_PORT;
+  const host = resolveGatewayHost(gatewayConfig);
+  return `${scheme}://${host}:${port}`;
+}
+
+function resolveGatewayUrlFromConfig(
+  openclawConfig: OpenClawGatewayConfig | undefined,
+  transport: GatewayTransport,
+): string | undefined {
+  const gatewayConfig = openclawConfig?.gateway;
+  if (!gatewayConfig) {
+    return undefined;
+  }
+
+  if (gatewayConfig.mode === 'remote') {
+    const remoteUrl = normalizeGatewayUrl(gatewayConfig.remote?.url ?? '', transport);
+    if (remoteUrl) {
+      return remoteUrl;
+    }
+  }
+
+  return buildLocalGatewayUrl(gatewayConfig, transport);
+}
+
+function toAuthSecret(
+  kind: OpenClawAuthSecret['kind'],
+  value: string | undefined,
+): OpenClawAuthSecret | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? { kind, value: trimmed } : undefined;
+}
+
+function resolveAuthSecretFromConfig(
+  openclawConfig: OpenClawGatewayConfig | undefined,
+): OpenClawAuthSecret | undefined {
+  const gatewayConfig = openclawConfig?.gateway;
+  const authMode = gatewayConfig?.auth?.mode?.trim();
+  const preferRemoteCredentials = gatewayConfig?.mode === 'remote';
+
+  const localToken = toAuthSecret('token', gatewayConfig?.auth?.token);
+  const localPassword = toAuthSecret('password', gatewayConfig?.auth?.password);
+  const remoteToken = toAuthSecret('token', gatewayConfig?.remote?.token);
+  const remotePassword = toAuthSecret('password', gatewayConfig?.remote?.password);
+
+  if (preferRemoteCredentials) {
+    if (authMode === 'password') {
+      return remotePassword || localPassword || remoteToken || localToken;
+    }
+    if (authMode === 'token') {
+      return remoteToken || localToken || remotePassword || localPassword;
+    }
+    return remoteToken || remotePassword || localToken || localPassword;
+  }
+
+  if (authMode === 'password') {
+    return localPassword || remotePassword || localToken || remoteToken;
+  }
+  if (authMode === 'token') {
+    return localToken || remoteToken || localPassword || remotePassword;
+  }
+  return localToken || localPassword || remoteToken || remotePassword;
 }
 
 /**
@@ -185,27 +288,79 @@ export function resolveGatewayUrl(
   config?: { gateway_url?: string },
   env?: Record<string, string | undefined>,
 ): string {
+  return resolveGatewayTransportUrl(config, env, 'http');
+}
+
+export function resolveGatewayWsUrl(
+  config?: { gateway_url?: string },
+  env?: Record<string, string | undefined>,
+): string {
+  return resolveGatewayTransportUrl(config, env, 'ws');
+}
+
+function resolveGatewayTransportUrl(
+  config: { gateway_url?: string } | undefined,
+  env: Record<string, string | undefined> | undefined,
+  transport: GatewayTransport,
+): string {
   // 1. Explicit config
   if (config?.gateway_url) {
-    return config.gateway_url;
+    return normalizeGatewayUrl(config.gateway_url, transport) || config.gateway_url;
   }
 
   // 2. Per-provider env overrides, then process environment variable
   const envUrl = env?.OPENCLAW_GATEWAY_URL || getEnvString('OPENCLAW_GATEWAY_URL');
   if (envUrl) {
-    return envUrl;
+    return normalizeGatewayUrl(envUrl, transport) || envUrl;
   }
 
   // 3. Auto-detect from the active OpenClaw config file
   const openclawConfig = readOpenClawConfig(env);
-  if (openclawConfig?.gateway) {
-    const port = openclawConfig.gateway.port ?? DEFAULT_GATEWAY_PORT;
-    const host = resolveGatewayHost(openclawConfig.gateway);
-    return `http://${host}:${port}`;
+  const resolvedUrl = resolveGatewayUrlFromConfig(openclawConfig, transport);
+  if (resolvedUrl) {
+    return resolvedUrl;
   }
 
   // 4. Default
-  return `http://${DEFAULT_GATEWAY_HOST}:${DEFAULT_GATEWAY_PORT}`;
+  const scheme = transport === 'ws' ? 'ws' : 'http';
+  return `${scheme}://${DEFAULT_GATEWAY_HOST}:${DEFAULT_GATEWAY_PORT}`;
+}
+
+export function resolveAuthSecret(
+  config?: { auth_password?: string; auth_token?: string },
+  env?: Record<string, string | undefined>,
+): OpenClawAuthSecret | undefined {
+  // 1. Explicit config
+  if (config?.auth_token) {
+    return { kind: 'token', value: config.auth_token };
+  }
+  if (config?.auth_password) {
+    return { kind: 'password', value: config.auth_password };
+  }
+
+  // 2. Per-provider env overrides, then process environment variable
+  const envToken =
+    env?.OPENCLAW_GATEWAY_TOKEN ||
+    getEnvString('OPENCLAW_GATEWAY_TOKEN') ||
+    env?.CLAWDBOT_GATEWAY_TOKEN ||
+    getEnvString('CLAWDBOT_GATEWAY_TOKEN');
+  if (envToken) {
+    return { kind: 'token', value: envToken };
+  }
+  const envPassword =
+    env?.OPENCLAW_GATEWAY_PASSWORD ||
+    getEnvString('OPENCLAW_GATEWAY_PASSWORD') ||
+    env?.CLAWDBOT_GATEWAY_PASSWORD ||
+    getEnvString('CLAWDBOT_GATEWAY_PASSWORD');
+  if (envPassword) {
+    return { kind: 'password', value: envPassword };
+  }
+
+  // 3. Auto-detect from the active OpenClaw config file
+  const openclawConfig = readOpenClawConfig(env);
+  // The config file carries an auth mode, so prefer the secret that matches that mode when it is
+  // explicit. In remote mode, prefer gateway.remote credentials before local gateway.auth values.
+  return resolveAuthSecretFromConfig(openclawConfig);
 }
 
 /**
@@ -216,32 +371,7 @@ export function resolveAuthToken(
   config?: { auth_password?: string; auth_token?: string },
   env?: Record<string, string | undefined>,
 ): string | undefined {
-  // 1. Explicit config
-  if (config?.auth_token) {
-    return config.auth_token;
-  }
-  if (config?.auth_password) {
-    return config.auth_password;
-  }
-
-  // 2. Per-provider env overrides, then process environment variable
-  const envToken =
-    env?.OPENCLAW_GATEWAY_TOKEN ||
-    env?.OPENCLAW_GATEWAY_PASSWORD ||
-    getEnvString('OPENCLAW_GATEWAY_TOKEN') ||
-    getEnvString('OPENCLAW_GATEWAY_PASSWORD');
-  if (envToken) {
-    return envToken;
-  }
-
-  // 3. Auto-detect from the active OpenClaw config file
-  const openclawConfig = readOpenClawConfig(env);
-  // The config file carries an auth mode, so prefer the secret that matches that mode when it is
-  // explicit. If the mode is missing, fall back to whichever bearer secret is present.
-  if (openclawConfig?.gateway?.auth?.mode === 'password' && openclawConfig.gateway.auth.password) {
-    return openclawConfig.gateway.auth.password;
-  }
-  return openclawConfig?.gateway?.auth?.token || openclawConfig?.gateway?.auth?.password;
+  return resolveAuthSecret(config, env)?.value;
 }
 
 /**
