@@ -68,6 +68,8 @@ export class OpenClawAgentProvider implements ApiProvider {
 
   async callApi(prompt: string): Promise<ProviderResponse> {
     const wsUrl = this.gatewayUrl.replace(/^http(s?):\/\//, 'ws$1://');
+    // Keep eval runs isolated from the user's persistent main session unless explicitly pinned.
+    const sessionKey = this.openclawConfig.session_key || `promptfoo-${crypto.randomUUID()}`;
 
     return new Promise<ProviderResponse>((resolve) => {
       const ws = new WebSocket(wsUrl);
@@ -183,9 +185,7 @@ export class OpenClawAgentProvider implements ApiProvider {
                 message: prompt,
                 agentId: this.agentId,
                 idempotencyKey,
-                ...(this.openclawConfig.session_key && {
-                  sessionKey: this.openclawConfig.session_key,
-                }),
+                sessionKey,
                 ...(this.openclawConfig.thinking_level && {
                   thinking: this.openclawConfig.thinking_level,
                 }),
