@@ -231,8 +231,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? undefined
         : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
 
+    const temperatureDefault = config.omitDefaults
+      ? getEnvString('OPENAI_TEMPERATURE') !== undefined
+        ? getEnvFloat('OPENAI_TEMPERATURE')
+        : undefined
+      : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature = this.supportsTemperature()
-      ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
+      ? (config.temperature ?? temperatureDefault)
       : undefined;
     const reasoningEffort = isReasoningModel
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
