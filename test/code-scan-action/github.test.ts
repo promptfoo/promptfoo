@@ -3,7 +3,7 @@
  */
 
 import * as github from '@actions/github';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getGitHubContext, postReviewComments } from '../../code-scan-action/src/github';
 
 // Mock @actions/core
@@ -98,6 +98,10 @@ describe('GitHub API Client', () => {
         },
       },
     };
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('getGitHubContext', () => {

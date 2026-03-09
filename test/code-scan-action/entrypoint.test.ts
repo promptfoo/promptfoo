@@ -24,6 +24,7 @@ describe('code-scan-action entrypoint', () => {
   });
 
   afterEach(() => {
+    vi.resetAllMocks();
     process.env = originalEnv;
   });
 

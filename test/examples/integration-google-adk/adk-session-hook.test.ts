@@ -28,6 +28,7 @@ describe('integration-google-adk session hook', () => {
   });
 
   afterEach(() => {
+    vi.resetAllMocks();
     vi.unstubAllGlobals();
     process.env = { ...originalEnv };
   });

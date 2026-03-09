@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const ERP_TOOLS_MODULE = '../../../examples/redteam-mcp-agent/src/mcp_server/tools/erpTools.js';
 const MOCK_DATA_MODULE = '../../../examples/redteam-mcp-agent/src/mcp_server/data/mockData.js';
@@ -41,6 +41,10 @@ vi.mock('@faker-js/faker', () => {
 describe('redteam MCP ERP tools', () => {
   beforeEach(() => {
     vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('generates orders once for a customer without existing orders', async () => {
