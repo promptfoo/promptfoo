@@ -4,7 +4,15 @@ sidebar_label: TypeScript Types
 title: TypeScript Types - Programmatic API Reference
 description: TypeScript type definitions for promptfoo's programmatic API, including provider, evaluation input, and output types.
 keywords:
-  [TypeScript, API reference, types, ProviderResponse, EvaluateResult, GradingResult, programmatic API]
+  [
+    TypeScript,
+    API reference,
+    types,
+    ProviderResponse,
+    EvaluateResult,
+    GradingResult,
+    programmatic API,
+  ]
 ---
 
 # TypeScript Types

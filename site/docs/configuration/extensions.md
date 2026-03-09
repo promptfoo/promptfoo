@@ -196,19 +196,19 @@ The `beforeAll` and `beforeEach` hooks may mutate specific properties of their c
 
 ### beforeAll
 
-| Property                          | Type                                                     | Description                                                                                |
-| --------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `context.suite.prompts`           | [`Prompt[]`](/docs/configuration/types#prompt)           | The prompts to be evaluated.                                                               |
-| `context.suite.providerPromptMap` | `Record<string, Prompt[]>`                               | A map of provider IDs to [prompts](/docs/configuration/types#prompt).                      |
-| `context.suite.tests`             | [`TestCase[]`](/docs/configuration/reference#test-case)  | The test cases to be evaluated.                                                            |
-| `context.suite.scenarios`         | [`Scenario[]`](/docs/configuration/types#scenario)       | The [scenarios](/docs/configuration/scenarios) to be evaluated.                            |
-| `context.suite.defaultTest`       | [`TestCase`](/docs/configuration/reference#test-case)    | The default test case to be evaluated.                                                     |
-| `context.suite.nunjucksFilters`   | `Record<string, FilePath>`                               | A map of [Nunjucks](https://mozilla.github.io/nunjucks/) filters.                          |
-| `context.suite.derivedMetrics`    | `Record<string, string>`                                 | A map of [derived metrics](/docs/configuration/expected-outputs#creating-derived-metrics). |
-| `context.suite.redteam`           | `Redteam[]`                                              | The [red team](/docs/red-team) configuration to be evaluated.                              |
+| Property                          | Type                                                    | Description                                                                                |
+| --------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `context.suite.prompts`           | [`Prompt[]`](/docs/configuration/types#prompt)          | The prompts to be evaluated.                                                               |
+| `context.suite.providerPromptMap` | `Record<string, Prompt[]>`                              | A map of provider IDs to [prompts](/docs/configuration/types#prompt).                      |
+| `context.suite.tests`             | [`TestCase[]`](/docs/configuration/reference#test-case) | The test cases to be evaluated.                                                            |
+| `context.suite.scenarios`         | [`Scenario[]`](/docs/configuration/types#scenario)      | The [scenarios](/docs/configuration/scenarios) to be evaluated.                            |
+| `context.suite.defaultTest`       | [`TestCase`](/docs/configuration/reference#test-case)   | The default test case to be evaluated.                                                     |
+| `context.suite.nunjucksFilters`   | `Record<string, FilePath>`                              | A map of [Nunjucks](https://mozilla.github.io/nunjucks/) filters.                          |
+| `context.suite.derivedMetrics`    | `Record<string, string>`                                | A map of [derived metrics](/docs/configuration/expected-outputs#creating-derived-metrics). |
+| `context.suite.redteam`           | `Redteam[]`                                             | The [red team](/docs/red-team) configuration to be evaluated.                              |
 
 ### beforeEach
 
-| Property       | Type                                                    | Description                    |
-| -------------- | ------------------------------------------------------- | ------------------------------ |
-| `context.test` | [`TestCase`](/docs/configuration/reference#test-case)   | The test case to be evaluated. |
+| Property       | Type                                                  | Description                    |
+| -------------- | ----------------------------------------------------- | ------------------------------ |
+| `context.test` | [`TestCase`](/docs/configuration/reference#test-case) | The test case to be evaluated. |
