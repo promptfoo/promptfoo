@@ -1,12 +1,11 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 
 import Head from '@docusaurus/Head';
-import { useColorMode } from '@docusaurus/theme-common';
 import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
 import Badge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import Fab from '@mui/material/Fab';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import {
   ProductGrid,
   ProductModal,
@@ -14,8 +13,6 @@ import {
   useCartContext,
   useProducts,
 } from '@site/src/components/Store';
-// CSS module for store-specific styles
-import styles from '@site/src/components/Store/store.module.css';
 import Layout from '@theme/Layout';
 
 function FloatingCartButton() {
@@ -59,47 +56,56 @@ function FloatingCartButton() {
 
 function StoreContent() {
   const { products, isLoading, error } = useProducts('all');
-  const { colorMode } = useColorMode();
-
-  const theme = React.useMemo(
-    () =>
-      createTheme({
-        palette: {
-          mode: colorMode === 'dark' ? 'dark' : 'light',
-        },
-      }),
-    [colorMode],
-  );
-
-  // Hide footer only on this page by adding a body class
-  useEffect(() => {
-    document.body.classList.add(styles.storePageBody);
-    return () => {
-      document.body.classList.remove(styles.storePageBody);
-    };
-  }, []);
 
   return (
-    <ThemeProvider theme={theme}>
-      <Box
-        sx={{
-          minHeight: 'calc(100vh - 60px)', // Account for navbar
-          backgroundColor: 'var(--ifm-background-color)',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        <Box component="main" sx={{ flex: 1 }}>
-          <ProductGrid products={products} isLoading={isLoading} error={error} />
+    <Box
+      sx={{
+        minHeight: 'calc(100vh - 60px)',
+        backgroundColor: 'var(--ifm-background-color)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <Box component="main" sx={{ flex: 1 }}>
+        {/* Store header */}
+        <Box
+          sx={{
+            textAlign: 'center',
+            pt: { xs: 3, sm: 4 },
+            pb: { xs: 1, sm: 2 },
+            px: 2,
+          }}
+        >
+          <Typography
+            variant="h3"
+            component="h1"
+            sx={{
+              fontWeight: 900,
+              letterSpacing: '-0.03em',
+              fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' },
+              color: 'var(--ifm-heading-color)',
+            }}
+          >
+            The Prompt Shop
+          </Typography>
+          <Typography
+            variant="body1"
+            sx={{
+              color: 'var(--ifm-color-emphasis-700)',
+              mt: 0.5,
+              fontSize: { xs: '0.95rem', sm: '1.1rem' },
+            }}
+          >
+            Official Promptfoo merch for the AI testing community
+          </Typography>
         </Box>
 
-        {/* Floating cart button for easier access while shopping */}
-        <FloatingCartButton />
-
-        {/* Product detail modal */}
-        <ProductModal />
+        <ProductGrid products={products} isLoading={isLoading} error={error} />
       </Box>
-    </ThemeProvider>
+
+      <FloatingCartButton />
+      <ProductModal />
+    </Box>
   );
 }
 
@@ -108,6 +114,7 @@ export default function StorePage() {
     <Layout
       title="The Prompt Shop | Promptfoo Merch"
       description="Official Promptfoo merchandise and swag"
+      noFooter
     >
       <Head>
         <meta property="og:title" content="The Prompt Shop" />
