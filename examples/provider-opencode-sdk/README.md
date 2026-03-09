@@ -1,6 +1,6 @@
 # provider-opencode-sdk (OpenCode SDK Examples)
 
-The OpenCode SDK provider enables you to run agentic evals through OpenCode, an open-source AI coding agent for the terminal with support for 75+ LLM providers.
+The OpenCode SDK provider runs agentic evals through OpenCode, an open-source coding agent with support for hosted and local model providers.
 
 ```bash
 npx promptfoo@latest init --example provider-opencode-sdk
@@ -21,78 +21,105 @@ curl -fsSL https://opencode.ai/install | bash
 npm install @opencode-ai/sdk
 ```
 
-Configure your provider credentials. For example, for Anthropic:
-
-```bash
-export ANTHROPIC_API_KEY=your_api_key_here
-```
-
-Or for OpenAI:
+Configure provider credentials in your shell or `.env`. For example:
 
 ```bash
 export OPENAI_API_KEY=your_api_key_here
 ```
 
-OpenCode supports 75+ providers including Anthropic, OpenAI, Google, Groq, Together AI, Ollama (local), and more.
+If promptfoo starts the OpenCode server for you, you can also set `config.apiKey` together with `config.provider_id`. If you use `baseUrl`, the target OpenCode server must already be authenticated.
+
+If you are validating changes inside this repository, use `npm run local -- eval ...` from the repo root. If you initialized an example with `npx promptfoo@latest init --example provider-opencode-sdk`, run `npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache` from the example directory.
+
+The shipped examples use OpenAI for reproducible QA, but the provider itself is not OpenAI-specific. OpenCode can route to Anthropic, Google, Ollama, LM Studio, and other providers configured in OpenCode.
 
 ## Examples
 
 ### Basic Usage
 
-This example shows OpenCode SDK in its simplest form - running in a temporary directory with no file system access or tools enabled, behaving similarly to a standard LLM provider.
+Chat-only usage in a temporary directory with no filesystem tools.
 
 **Location**: `./basic/`
 
 **Usage**:
 
 ```bash
-(cd basic && promptfoo eval)
+cd basic
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
+```
+
+### Working Directory
+
+Read-only filesystem access with `working_dir`, using the default `read`, `grep`, `glob`, and `list` tools.
+
+**Location**: `./working-dir/`
+
+**Usage**:
+
+```bash
+cd working-dir
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
+```
+
+### Structured Output
+
+Provider-enforced JSON Schema output using the OpenCode `format` request option.
+
+**Location**: `./structured-output/`
+
+**Usage**:
+
+```bash
+cd structured-output
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 ```
 
 ## Provider Configuration
 
-The OpenCode SDK provider supports these key configuration options:
+The provider supports these high-value options:
 
 ```yaml
 providers:
   - id: opencode:sdk
     config:
-      # LLM provider (anthropic, openai, google, ollama, etc.)
-      provider_id: anthropic
-      model: claude-sonnet-4-20250514
+      provider_id: openai
+      model: gpt-4o-mini
 
-      # Working directory (enables file tools)
-      working_dir: ./src
+      # Optional: pass credentials directly when promptfoo starts the server
+      apiKey: '{{env.OPENAI_API_KEY}}'
 
-      # Tool configuration
-      tools:
-        read: true
-        grep: true
-        glob: true
-        list: true
-        write: false # Disable file writing
-        bash: false # Disable shell commands
+      # Read-only local repo access
+      working_dir: ./examples/provider-opencode-sdk/basic
+      workspace: feature-branch
 
-      # Session management
+      # Structured output
+      format:
+        type: json_schema
+        schema:
+          type: object
+          properties:
+            answer:
+              type: string
+          required: [answer]
+
+      # Reuse the same OpenCode session for repeated calls
       persist_sessions: true
 ```
 
 ## Supported Providers
 
-OpenCode supports 75+ LLM providers including:
+OpenCode can route requests to the provider ecosystem it already supports, including:
 
-- **Anthropic** - Claude models
-- **OpenAI** - GPT models
-- **Google** - Gemini models
-- **Groq** - Fast inference
-- **Together AI** - Open source models
-- **Ollama** - Local models
-- **Amazon Bedrock** - AWS-hosted models
-- **Google Vertex AI** - GCP-hosted models
-- And many more via [Models.dev](https://models.dev)
+- Anthropic
+- OpenAI
+- Google
+- Ollama
+- LM Studio
+- Other providers configured in OpenCode
 
 ## Learn More
 
 - [OpenCode SDK Provider Documentation](/docs/providers/opencode-sdk/)
 - [OpenCode Documentation](https://opencode.ai/docs/)
+- [OpenCode SDK Reference](https://opencode.ai/docs/sdk/)
 - [Claude Agent SDK Provider](/docs/providers/claude-agent-sdk/) - Alternative agentic provider
