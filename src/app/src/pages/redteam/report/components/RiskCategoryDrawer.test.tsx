@@ -1,14 +1,8 @@
 import { renderWithProviders } from '@app/utils/testutils';
 import { fireEvent, screen } from '@testing-library/react';
-import { useNavigate } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
 import type { AtomicTestCase, EvaluateResult, ResultFailureReason } from '@promptfoo/types';
-
-// Mock dependencies
-vi.mock('react-router-dom', () => ({
-  useNavigate: vi.fn(),
-}));
 
 vi.mock('../../../eval/components/EvalOutputPromptDialog', () => ({
   default: () => null,
@@ -23,7 +17,8 @@ vi.mock('./SuggestionsDialog', () => ({
 }));
 
 describe('RiskCategoryDrawer Component Navigation', () => {
-  const mockNavigate = vi.fn();
+  let originalWindowLocation: Location;
+  const mockAssign = vi.fn();
 
   // Create a mock test case
   const mockTestCase: AtomicTestCase = {
@@ -79,10 +74,22 @@ describe('RiskCategoryDrawer Component Navigation', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
-
-    // Mock window.open
+    originalWindowLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: {
+        ...originalWindowLocation,
+        assign: mockAssign,
+      },
+    });
     global.window.open = vi.fn();
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: originalWindowLocation,
+    });
   });
 
   it('should navigate to eval page when clicking View All Logs button', () => {
@@ -90,12 +97,11 @@ describe('RiskCategoryDrawer Component Navigation', () => {
 
     const viewAllLogsButton = screen.getByText('View All Logs');
 
-    // Test normal click - should use navigate
     fireEvent.click(viewAllLogsButton);
 
     const expectedUrl =
       '/eval/test-eval-123?filter=%5B%7B%22type%22%3A%22plugin%22%2C%22operator%22%3A%22equals%22%2C%22value%22%3A%22bola%22%7D%5D';
-    expect(mockNavigate).toHaveBeenCalledWith(expectedUrl);
+    expect(mockAssign).toHaveBeenCalledWith(expectedUrl);
     expect(window.open).not.toHaveBeenCalled();
   });
 
@@ -104,22 +110,20 @@ describe('RiskCategoryDrawer Component Navigation', () => {
 
     const viewAllLogsButton = screen.getByText('View All Logs');
 
-    // Test Ctrl+click - should open new tab
     fireEvent.click(viewAllLogsButton, { ctrlKey: true });
 
     const expectedUrl =
       '/eval/test-eval-123?filter=%5B%7B%22type%22%3A%22plugin%22%2C%22operator%22%3A%22equals%22%2C%22value%22%3A%22bola%22%7D%5D';
     expect(window.open).toHaveBeenCalledWith(expectedUrl, '_blank');
-    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(mockAssign).not.toHaveBeenCalled();
 
     // Reset mocks
     vi.clearAllMocks();
 
-    // Test Cmd+click (Mac) - should also open new tab
     fireEvent.click(viewAllLogsButton, { metaKey: true });
 
     expect(window.open).toHaveBeenCalledWith(expectedUrl, '_blank');
-    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(mockAssign).not.toHaveBeenCalled();
   });
 
   it('should close drawer when close button is clicked', () => {

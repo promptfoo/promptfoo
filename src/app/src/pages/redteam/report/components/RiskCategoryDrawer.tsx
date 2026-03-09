@@ -9,11 +9,11 @@ import {
 } from '@app/components/ui/collapsible';
 import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
 import { getActualPrompt } from '@app/utils/providerResponse';
 import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
 import { ChevronDown, Lightbulb } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import ChatMessages, { type Message } from '../../../eval/components/ChatMessages';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
@@ -150,8 +150,6 @@ const RiskCategoryDrawer = ({
     return null;
   }
 
-  // All hooks must be called unconditionally after early returns
-  const navigate = useNavigate();
   const [suggestionsDialogOpen, setSuggestionsDialogOpen] = React.useState(false);
   const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(
     undefined,
@@ -323,11 +321,12 @@ const RiskCategoryDrawer = ({
                 ]),
               );
 
-              const url = pluginId ? `/eval/${evalId}?filter=${filterParam}` : `/eval/${evalId}`;
+              const evalDetailUrl = EVAL_ROUTES.DETAIL(evalId);
+              const url = pluginId ? `${evalDetailUrl}?filter=${filterParam}` : evalDetailUrl;
               if (event.ctrlKey || event.metaKey) {
                 window.open(url, '_blank');
               } else {
-                navigate(url);
+                window.location.assign(url);
               }
             }}
           >
