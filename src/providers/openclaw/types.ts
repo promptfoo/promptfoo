@@ -3,10 +3,13 @@
  */
 export interface OpenClawGatewayConfig {
   gateway?: {
+    mode?: string;
     port?: number;
     bind?: string;
+    customBindHost?: string;
     auth?: {
       mode?: string;
+      password?: string;
       token?: string;
     };
     http?: {
@@ -27,6 +30,7 @@ export interface OpenClawGatewayConfig {
  */
 export interface OpenClawConfig {
   gateway_url?: string;
+  auth_password?: string;
   auth_token?: string;
   session_key?: string;
   thinking_level?: string;

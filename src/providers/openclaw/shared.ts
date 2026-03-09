@@ -88,21 +88,71 @@ function stripJson5Syntax(raw: string): string {
  * Cached config to avoid re-reading the file multiple times during provider init.
  */
 let cachedConfig: { config: OpenClawGatewayConfig | undefined; mtime: number } | undefined;
+let cachedConfigPath: string | undefined;
 
 /**
  * Reset the config cache. Exported for test isolation.
  */
 export function resetConfigCache(): void {
   cachedConfig = undefined;
+  cachedConfigPath = undefined;
+}
+
+function resolveConfigPath(env?: Record<string, string | undefined>): string {
+  return (
+    env?.OPENCLAW_CONFIG_PATH ||
+    getEnvString('OPENCLAW_CONFIG_PATH') ||
+    path.join(os.homedir(), '.openclaw', 'openclaw.json')
+  );
+}
+
+function resolveGatewayHost(gatewayConfig: OpenClawGatewayConfig['gateway'] | undefined): string {
+  const bind = gatewayConfig?.bind?.trim();
+  const customBindHost = gatewayConfig?.customBindHost?.trim();
+
+  // OpenClaw stores bind modes, not literal listener hosts, for common cases.
+  if (
+    !bind ||
+    bind === 'auto' ||
+    bind === 'loopback' ||
+    bind === 'lan' ||
+    bind === 'tailnet' ||
+    bind === '0.0.0.0' ||
+    bind === '::' ||
+    bind === '127.0.0.1' ||
+    bind === 'localhost' ||
+    bind === '::1'
+  ) {
+    return DEFAULT_GATEWAY_HOST;
+  }
+
+  if (bind === 'custom') {
+    if (
+      !customBindHost ||
+      customBindHost === '0.0.0.0' ||
+      customBindHost === '::' ||
+      customBindHost === '127.0.0.1' ||
+      customBindHost === 'localhost' ||
+      customBindHost === '::1'
+    ) {
+      return DEFAULT_GATEWAY_HOST;
+    }
+    return customBindHost;
+  }
+
+  // Support older configs that still stored a concrete host in gateway.bind.
+  return bind;
 }
 
 /**
- * Read and parse the OpenClaw configuration file.
+ * Read and parse the active OpenClaw configuration file.
  * Results are cached based on file modification time.
  * Returns undefined if the file doesn't exist or can't be parsed.
  */
-export function readOpenClawConfig(): OpenClawGatewayConfig | undefined {
-  const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
+export function readOpenClawConfig(
+  env?: Record<string, string | undefined>,
+): OpenClawGatewayConfig | undefined {
+  const configPath = resolveConfigPath(env);
   try {
     if (!fs.existsSync(configPath)) {
       return undefined;
@@ -111,7 +161,7 @@ export function readOpenClawConfig(): OpenClawGatewayConfig | undefined {
     const stat = fs.statSync(configPath);
     const mtime = stat.mtimeMs;
 
-    if (cachedConfig && cachedConfig.mtime === mtime) {
+    if (cachedConfig && cachedConfigPath === configPath && cachedConfig.mtime === mtime) {
       return cachedConfig.config;
     }
 
@@ -119,6 +169,7 @@ export function readOpenClawConfig(): OpenClawGatewayConfig | undefined {
     const cleaned = stripJson5Syntax(raw);
     const config = JSON.parse(cleaned) as OpenClawGatewayConfig;
     cachedConfig = { config, mtime };
+    cachedConfigPath = configPath;
     return config;
   } catch (err) {
     logger.debug(`Failed to read OpenClaw config at ${configPath}: ${err}`);
@@ -127,7 +178,7 @@ export function readOpenClawConfig(): OpenClawGatewayConfig | undefined {
 }
 
 /**
- * Auto-detect the OpenClaw gateway URL from config, env overrides, or environment.
+ * Auto-detect the OpenClaw gateway URL from config, env overrides, or the active config file.
  */
 export function resolveGatewayUrl(
   config?: { gateway_url?: string },
@@ -144,14 +195,11 @@ export function resolveGatewayUrl(
     return envUrl;
   }
 
-  // 3. Auto-detect from ~/.openclaw/openclaw.json
-  const openclawConfig = readOpenClawConfig();
+  // 3. Auto-detect from the active OpenClaw config file
+  const openclawConfig = readOpenClawConfig(env);
   if (openclawConfig?.gateway) {
     const port = openclawConfig.gateway.port ?? DEFAULT_GATEWAY_PORT;
-    const bind = openclawConfig.gateway.bind;
-    // Use 127.0.0.1 for loopback, wildcard (0.0.0.0, ::), or unset bind
-    const isLocalBind = !bind || bind === 'loopback' || bind === '0.0.0.0' || bind === '::';
-    const host = isLocalBind ? DEFAULT_GATEWAY_HOST : bind;
+    const host = resolveGatewayHost(openclawConfig.gateway);
     return `http://${host}:${port}`;
   }
 
@@ -160,26 +208,37 @@ export function resolveGatewayUrl(
 }
 
 /**
- * Auto-detect the OpenClaw gateway auth token from config, env overrides, or environment.
+ * Auto-detect the OpenClaw gateway bearer secret from config, env overrides, or the active
+ * config file. OpenClaw accepts either a token or password as the HTTP bearer secret.
  */
 export function resolveAuthToken(
-  config?: { auth_token?: string },
+  config?: { auth_password?: string; auth_token?: string },
   env?: Record<string, string | undefined>,
 ): string | undefined {
   // 1. Explicit config
   if (config?.auth_token) {
     return config.auth_token;
   }
+  if (config?.auth_password) {
+    return config.auth_password;
+  }
 
   // 2. Per-provider env overrides, then process environment variable
-  const envToken = env?.OPENCLAW_GATEWAY_TOKEN || getEnvString('OPENCLAW_GATEWAY_TOKEN');
+  const envToken =
+    env?.OPENCLAW_GATEWAY_TOKEN ||
+    env?.OPENCLAW_GATEWAY_PASSWORD ||
+    getEnvString('OPENCLAW_GATEWAY_TOKEN') ||
+    getEnvString('OPENCLAW_GATEWAY_PASSWORD');
   if (envToken) {
     return envToken;
   }
 
-  // 3. Auto-detect from ~/.openclaw/openclaw.json
-  const openclawConfig = readOpenClawConfig();
-  return openclawConfig?.gateway?.auth?.token;
+  // 3. Auto-detect from the active OpenClaw config file
+  const openclawConfig = readOpenClawConfig(env);
+  if (openclawConfig?.gateway?.auth?.mode === 'password' && openclawConfig.gateway.auth.password) {
+    return openclawConfig.gateway.auth.password;
+  }
+  return openclawConfig?.gateway?.auth?.token || openclawConfig?.gateway?.auth?.password;
 }
 
 /**

@@ -362,6 +362,8 @@ type EnvVars = {
   CODEX_API_KEY?: string;
 
   // OpenClaw
+  OPENCLAW_CONFIG_PATH?: string;
+  OPENCLAW_GATEWAY_PASSWORD?: string;
   OPENCLAW_GATEWAY_TOKEN?: string;
   OPENCLAW_GATEWAY_URL?: string;
 
