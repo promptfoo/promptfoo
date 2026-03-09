@@ -12,7 +12,6 @@ import Typography from '@mui/material/Typography';
 const DISCORD_URL = 'https://discord.gg/promptfoo';
 const GITHUB_URL = 'https://github.com/promptfoo/promptfoo';
 
-// Discord icon SVG
 function DiscordIcon(props: React.ComponentProps<typeof SvgIcon>) {
   return (
     <SvgIcon {...props} viewBox="0 0 24 24">
@@ -40,27 +39,22 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
       open={open}
       onClose={onClose}
       maxWidth={false}
-      fullScreen
       PaperProps={{
         sx: {
-          width: { xs: '100%', sm: '90vw' },
-          maxWidth: { xs: '100%', sm: '600px' },
-          height: { xs: '100%', sm: 'auto' },
-          maxHeight: { xs: '100%', sm: '90vh' },
-          m: { xs: 0, sm: 2 },
-          borderRadius: 0,
+          width: { xs: '100vw', sm: '90vw' },
+          maxWidth: { xs: '100vw', sm: '500px' },
+          height: { xs: '100vh', sm: 'auto' },
+          maxHeight: { xs: '100vh', sm: '90vh' },
+          m: 0,
+          borderRadius: { xs: 0, sm: '8px' },
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-        },
-      }}
-      sx={{
-        '& .MuiDialog-container': {
-          alignItems: { xs: 'stretch', sm: 'center' },
+          color: 'var(--ifm-font-color-base, #1c1e21)',
         },
       }}
     >
-      {/* Header bar - matches ProductModal style */}
+      {/* Header */}
       <Box
         sx={{
           display: 'flex',
@@ -69,7 +63,7 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
           px: { xs: 1.5, sm: 2 },
           py: 1.5,
           backgroundColor: 'var(--ifm-color-primary-darker)',
-          color: 'var(--ifm-button-color, #fff)',
+          color: '#fff',
           flexShrink: 0,
         }}
       >
@@ -88,9 +82,9 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
           onClick={onClose}
           size="small"
           sx={{
-            color: 'var(--ifm-button-color, #fff)',
+            color: '#fff',
             '&:hover': {
-              backgroundColor: 'var(--ifm-color-emphasis-200)',
+              backgroundColor: 'rgba(255, 255, 255, 0.15)',
             },
           }}
           aria-label="Close"
@@ -105,58 +99,44 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
           flex: 1,
           overflow: 'auto',
           WebkitOverflowScrolling: 'touch',
+          backgroundColor: 'var(--ifm-background-color, #ffffff)',
         }}
       >
-        {/* Hero section - reduced height on mobile */}
-        <Box
-          sx={{
-            background:
-              'linear-gradient(135deg, var(--ifm-color-primary-darker) 0%, var(--ifm-color-primary-dark) 50%, var(--ifm-color-primary) 100%)',
-            color: 'var(--ifm-button-color, #fff)',
-            py: { xs: 3, sm: 4 },
-            px: 3,
-            textAlign: 'center',
-          }}
-        >
-          <Typography
-            sx={{
-              fontSize: { xs: '2.5rem', sm: '3rem' },
-              lineHeight: 1,
-              mb: 1.5,
-            }}
-          >
-            🎟️
-          </Typography>
+        {/* Headline */}
+        <Box sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2.5, sm: 3 }, pb: { xs: 1.5, sm: 2 } }}>
           <Typography
             variant="h5"
             sx={{
-              fontWeight: 700,
-              mb: 0.5,
+              fontWeight: 800,
+              letterSpacing: '-0.02em',
               fontSize: { xs: '1.25rem', sm: '1.5rem' },
+              color: 'var(--ifm-heading-color)',
+              mb: 0.5,
             }}
           >
-            Contributor Discount
+            Merge a PR, get a discount code
           </Typography>
           <Typography
+            variant="body2"
             sx={{
-              color: 'var(--ifm-button-color, rgba(255,255,255,0.85))',
-              fontSize: { xs: '0.875rem', sm: '1rem' },
+              color: 'var(--ifm-color-emphasis-600)',
+              fontSize: { xs: '0.85rem', sm: '0.9rem' },
             }}
           >
-            Merge a PR → Get an exclusive discount code
+            We give back to open source contributors with exclusive store discounts.
           </Typography>
         </Box>
 
         {/* Steps */}
-        <Box sx={{ p: { xs: 2, sm: 3 } }}>
+        <Box sx={{ px: { xs: 2, sm: 3 }, pb: { xs: 2, sm: 3 } }}>
           <Typography
             variant="subtitle2"
             sx={{
               fontWeight: 600,
               textTransform: 'uppercase',
               letterSpacing: '0.1em',
-              color: 'text.secondary',
-              mb: 2.5,
+              color: 'var(--ifm-color-emphasis-500)',
+              mb: 2,
               fontSize: '0.7rem',
             }}
           >
@@ -189,21 +169,20 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
                 alignItems: 'flex-start',
               }}
             >
-              {/* Step number - aligned to title baseline */}
               <Box
                 sx={{
                   width: 24,
                   height: 24,
                   borderRadius: '50%',
-                  backgroundColor: index === 2 ? '#5865F2' : 'var(--ifm-color-primary-darker)',
-                  color: 'var(--ifm-button-color, #fff)',
+                  backgroundColor: 'var(--ifm-color-primary-darker)',
+                  color: '#fff',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontWeight: 700,
                   fontSize: '0.7rem',
                   flexShrink: 0,
-                  mt: '2px', // Align with text baseline
+                  mt: '2px',
                 }}
               >
                 {item.step}
@@ -216,6 +195,7 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
                     fontSize: '0.875rem',
                     lineHeight: 1.4,
                     mb: 0.25,
+                    color: 'var(--ifm-heading-color)',
                   }}
                 >
                   {item.title}
@@ -223,7 +203,7 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
                 <Typography
                   variant="body2"
                   sx={{
-                    color: 'text.secondary',
+                    color: 'var(--ifm-color-emphasis-600)',
                     fontSize: '0.8rem',
                     lineHeight: 1.5,
                   }}
@@ -236,11 +216,12 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
         </Box>
       </Box>
 
-      {/* Footer with CTAs - Discord is primary (on right), GitHub secondary */}
+      {/* Footer CTAs */}
       <Box
         sx={{
           p: { xs: 2, sm: 3 },
           borderTop: '1px solid var(--ifm-color-emphasis-300)',
+          backgroundColor: 'var(--ifm-background-color, #ffffff)',
           display: 'flex',
           flexDirection: { xs: 'column-reverse', sm: 'row' },
           gap: 1.5,
@@ -255,15 +236,15 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
           sx={{
             py: { xs: 1.5, sm: 1.25 },
             minHeight: { xs: 48, sm: 44 },
-            borderColor: 'var(--ifm-color-primary-darker)',
-            color: 'var(--ifm-color-primary-darker)',
-            borderRadius: 0,
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            fontSize: { xs: '0.75rem', sm: '0.8125rem' },
+            borderColor: 'var(--ifm-color-emphasis-400)',
+            color: 'var(--ifm-font-color-base)',
+            borderRadius: '8px',
+            textTransform: 'none',
+            fontWeight: 600,
+            fontSize: { xs: '0.8rem', sm: '0.875rem' },
             touchAction: 'manipulation',
             '&:hover': {
-              borderColor: 'var(--ifm-color-primary-darkest)',
+              borderColor: 'var(--ifm-color-emphasis-600)',
               backgroundColor: 'var(--ifm-background-surface-color)',
             },
           }}
@@ -279,14 +260,15 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
           sx={{
             py: { xs: 1.5, sm: 1.25 },
             minHeight: { xs: 48, sm: 44 },
-            backgroundColor: '#5865F2',
-            borderRadius: 0,
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            fontSize: { xs: '0.75rem', sm: '0.8125rem' },
+            backgroundColor: 'var(--ifm-color-primary-darker)',
+            color: '#fff',
+            borderRadius: '8px',
+            textTransform: 'none',
+            fontWeight: 600,
+            fontSize: { xs: '0.8rem', sm: '0.875rem' },
             touchAction: 'manipulation',
             '&:hover': {
-              backgroundColor: '#4752C4',
+              backgroundColor: 'var(--ifm-color-primary-darkest)',
             },
           }}
         >

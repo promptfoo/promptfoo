@@ -47,6 +47,10 @@
     BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif, 'Apple Color Emoji',
     'Segoe UI Emoji', 'Segoe UI Symbol';
   --docusaurus-highlighted-code-line-bg: #fffbdc;
+
+  /* Store page tokens */
+  --store-card-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  --store-card-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.1);
 }
 
 /* For readability concerns, you should choose a lighter palette in dark mode. */
@@ -64,6 +68,10 @@
   /* Update background colors */
   --ifm-background-color: #10191c;
   --ifm-background-surface-color: #17252b;
+
+  /* Store page tokens */
+  --store-card-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --store-card-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 code p {
@@ -381,6 +389,25 @@ html:not(.docs-wrapper) .DocSearch {
 .breadcrumbs__item--active .breadcrumbs__link {
   background: none;
   padding: 0;
+}
+
+/* Prevent iOS zoom on input focus within MUI overlays */
+[class*='MuiDrawer'] input,
+[class*='MuiDrawer'] select,
+[class*='MuiDrawer'] textarea,
+[class*='MuiDialog'] input,
+[class*='MuiDialog'] select,
+[class*='MuiDialog'] textarea {
+  font-size: 16px !important;
+}
+
+/* Print styles — hide MUI overlays */
+@media print {
+  .MuiDrawer-root,
+  .MuiDialog-root,
+  .MuiFab-root {
+    display: none !important;
+  }
 }
 
 /* Import custom pagination styles */

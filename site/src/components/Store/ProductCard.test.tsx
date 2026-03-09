@@ -90,6 +90,16 @@ describe('ProductCard', () => {
     expect(image).toHaveAttribute('src', mockProduct.images[0].url);
   });
 
+  it('displays product name', () => {
+    render(<ProductCard product={mockProduct} onClick={vi.fn()} />);
+    expect(screen.getByText('Test Product')).toBeInTheDocument();
+  });
+
+  it('displays product price', () => {
+    render(<ProductCard product={mockProduct} onClick={vi.fn()} />);
+    expect(screen.getByText('$29.99')).toBeInTheDocument();
+  });
+
   it('handles product with single image', () => {
     const singleImageProduct = {
       ...mockProduct,
