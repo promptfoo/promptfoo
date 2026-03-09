@@ -5,7 +5,6 @@ You can run this example with:
 ```bash
 npx promptfoo@latest init --example compare-gpt-4o-vs-4o-mini
 cd compare-gpt-4o-vs-4o-mini
-npx promptfoo@latest eval
 ```
 
 ## Usage
