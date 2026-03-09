@@ -421,6 +421,24 @@ describe('OpenClaw Provider', () => {
       expect(resolveAuthToken()).toBe('config-file-password');
     });
 
+    it('should prefer the token from config file when mode is token and both secrets are set', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 12150 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({
+          gateway: {
+            auth: {
+              mode: 'token',
+              token: 'config-file-token',
+              password: 'config-file-password',
+            },
+          },
+        }),
+      );
+
+      expect(resolveAuthToken()).toBe('config-file-token');
+    });
+
     it('should prefer per-provider env override over process env', () => {
       process.env.OPENCLAW_GATEWAY_TOKEN = 'process-token';
       expect(resolveAuthToken(undefined, { OPENCLAW_GATEWAY_TOKEN: 'override-token' })).toBe(

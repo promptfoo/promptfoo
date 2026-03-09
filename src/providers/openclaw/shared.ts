@@ -110,7 +110,8 @@ function resolveGatewayHost(gatewayConfig: OpenClawGatewayConfig['gateway'] | un
   const bind = gatewayConfig?.bind?.trim();
   const customBindHost = gatewayConfig?.customBindHost?.trim();
 
-  // OpenClaw stores bind modes, not literal listener hosts, for common cases.
+  // OpenClaw commonly stores named bind modes; older configs may still contain literal bind
+  // addresses, so normalize both shapes to a loopback URL for local autodetection.
   if (
     !bind ||
     bind === 'auto' ||
@@ -235,6 +236,8 @@ export function resolveAuthToken(
 
   // 3. Auto-detect from the active OpenClaw config file
   const openclawConfig = readOpenClawConfig(env);
+  // The config file carries an auth mode, so prefer the secret that matches that mode when it is
+  // explicit. If the mode is missing, fall back to whichever bearer secret is present.
   if (openclawConfig?.gateway?.auth?.mode === 'password' && openclawConfig.gateway.auth.password) {
     return openclawConfig.gateway.auth.password;
   }
