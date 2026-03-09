@@ -335,7 +335,11 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
                 return null;
               }
               const data = payload[0];
-              const { source, target, value } = data;
+              const { source, target, value } = data.payload as {
+                source?: { name?: string };
+                target?: { name?: string };
+                value?: number;
+              };
               return (
                 <div className="rounded border border-border bg-card px-3 py-2 text-sm shadow-sm">
                   <strong>
