@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import Box from '@mui/material/Box';
 import ButtonBase from '@mui/material/ButtonBase';
@@ -16,11 +16,21 @@ interface ProductCardProps {
 export function ProductCard({ product, onClick }: ProductCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const prevSrcRef = useRef<string | undefined>();
 
   const primaryImage = product.images[0];
   const hoverImage = product.images[1] || primaryImage;
 
   const displayImage = isHovered && product.images.length > 1 ? hoverImage : primaryImage;
+
+  // Reset imageLoaded when the displayed image URL changes so the skeleton
+  // shows while the new image loads (e.g. on hover with a second image).
+  useEffect(() => {
+    if (displayImage?.url !== prevSrcRef.current) {
+      setImageLoaded(false);
+      prevSrcRef.current = displayImage?.url;
+    }
+  }, [displayImage?.url]);
 
   const lowestPrice = useMemo(
     () =>

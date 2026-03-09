@@ -143,76 +143,77 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
             How it works
           </Typography>
 
-          {[
-            {
-              step: '1',
-              title: 'Fork & Fix',
-              description: 'Bug fix, feature, docs — all contributions welcome.',
-            },
-            {
-              step: '2',
-              title: 'Get Merged',
-              description: 'Work with maintainers to land your PR.',
-            },
-            {
-              step: '3',
-              title: 'Claim Perks',
-              description: "Drop your merged PR link in Discord #general. We'll DM you a code.",
-            },
-          ].map((item, index) => (
-            <Box
-              key={item.step}
-              sx={{
-                display: 'flex',
-                gap: 1.5,
-                mb: index < 2 ? 2 : 0,
-                alignItems: 'flex-start',
-              }}
-            >
+          <Box component="ol" sx={{ listStyle: 'none', m: 0, p: 0 }}>
+            {[
+              {
+                title: 'Fork & Fix',
+                description: 'Bug fix, feature, docs — all contributions welcome.',
+              },
+              {
+                title: 'Get Merged',
+                description: 'Work with maintainers to land your PR.',
+              },
+              {
+                title: 'Claim Perks',
+                description: "Drop your merged PR link in Discord #general. We'll DM you a code.",
+              },
+            ].map((item, index) => (
               <Box
+                component="li"
+                key={item.title}
                 sx={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--ifm-color-primary-darker)',
-                  color: '#fff',
                   display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 700,
-                  fontSize: '0.7rem',
-                  flexShrink: 0,
-                  mt: '2px',
+                  gap: 1.5,
+                  mb: index < 2 ? 2 : 0,
+                  alignItems: 'flex-start',
                 }}
               >
-                {item.step}
-              </Box>
-              <Box sx={{ flex: 1 }}>
-                <Typography
-                  variant="body2"
+                <Box
+                  aria-hidden="true"
                   sx={{
-                    fontWeight: 600,
-                    fontSize: '0.875rem',
-                    lineHeight: 1.4,
-                    mb: 0.25,
-                    color: 'var(--ifm-heading-color)',
+                    width: 24,
+                    height: 24,
+                    borderRadius: '50%',
+                    backgroundColor: 'var(--ifm-color-primary-darker)',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 700,
+                    fontSize: '0.7rem',
+                    flexShrink: 0,
+                    mt: '2px',
                   }}
                 >
-                  {item.title}
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: 'var(--ifm-color-emphasis-600)',
-                    fontSize: '0.8rem',
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {item.description}
-                </Typography>
+                  {index + 1}
+                </Box>
+                <Box sx={{ flex: 1 }}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontWeight: 600,
+                      fontSize: '0.875rem',
+                      lineHeight: 1.4,
+                      mb: 0.25,
+                      color: 'var(--ifm-heading-color)',
+                    }}
+                  >
+                    {item.title}
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: 'var(--ifm-color-emphasis-600)',
+                      fontSize: '0.8rem',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {item.description}
+                  </Typography>
+                </Box>
               </Box>
-            </Box>
-          ))}
+            ))}
+          </Box>
         </Box>
       </Box>
 

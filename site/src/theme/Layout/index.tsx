@@ -9,22 +9,32 @@ import { useIsDocsPage, useIsEventDetailPage, useIsStorePage } from '@site/src/h
 import OriginalLayout from '@theme-original/Layout';
 import type { Props } from '@theme/Layout';
 
-function StoreThemeProvider({ children }: { children: React.ReactNode }) {
+function StoreThemeProvider({
+  children,
+  forceLight,
+}: {
+  children: React.ReactNode;
+  forceLight: boolean;
+}) {
   const { colorMode } = useColorMode();
+  // When ForceLightTheme is active the DOM is forced to light, but useColorMode
+  // still returns the user's preference. Derive the effective mode so portaled
+  // MUI components (CartDrawer, Dialogs) match the visible page theme.
+  const effectiveMode = forceLight ? 'light' : colorMode === 'dark' ? 'dark' : 'light';
 
   const theme = React.useMemo(
     () =>
       createTheme({
         palette: {
-          mode: colorMode === 'dark' ? 'dark' : 'light',
+          mode: effectiveMode,
           primary: {
-            main: colorMode === 'dark' ? '#ff7a7a' : '#e53a3a',
-            dark: colorMode === 'dark' ? '#e53a3a' : '#b32e2e',
-            light: colorMode === 'dark' ? '#ffa0a0' : '#ff7a7a',
+            main: effectiveMode === 'dark' ? '#ff7a7a' : '#e53a3a',
+            dark: effectiveMode === 'dark' ? '#e53a3a' : '#b32e2e',
+            light: effectiveMode === 'dark' ? '#ffa0a0' : '#ff7a7a',
           },
           background: {
-            default: colorMode === 'dark' ? '#10191c' : '#ffffff',
-            paper: colorMode === 'dark' ? '#17252b' : '#ffffff',
+            default: effectiveMode === 'dark' ? '#10191c' : '#ffffff',
+            paper: effectiveMode === 'dark' ? '#17252b' : '#ffffff',
           },
         },
         shape: { borderRadius: 8 },
@@ -42,13 +52,13 @@ function StoreThemeProvider({ children }: { children: React.ReactNode }) {
           MuiDialog: {
             styleOverrides: {
               paper: {
-                backgroundColor: `${colorMode === 'dark' ? '#17252b' : '#ffffff'} !important`,
+                backgroundColor: `${effectiveMode === 'dark' ? '#17252b' : '#ffffff'} !important`,
               },
             },
           },
         },
       }),
-    [colorMode],
+    [effectiveMode],
   );
 
   return <ThemeProvider theme={theme}>{children}</ThemeProvider>;
@@ -66,7 +76,7 @@ function LayoutInner({
   shouldForceLight: boolean;
 }) {
   return (
-    <StoreThemeProvider>
+    <StoreThemeProvider forceLight={shouldForceLight}>
       {shouldForceLight && <ForceLightTheme />}
       {children}
       <CartDrawer />
