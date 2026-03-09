@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-node-package
+cd config-node-package
 ```
 
 This example demonstrates using promptfoo from a Node.js script.
@@ -17,7 +18,7 @@ This example demonstrates using promptfoo from a Node.js script.
 
 You can set these in a `.env` file:
 
-```
+```text
 OPENAI_API_KEY=sk-your-key-here
 ANTHROPIC_API_KEY=sk-ant-your-key-here
 ```

@@ -1,15 +1,45 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../src/cache';
 import { createLiteLLMProvider, LiteLLMProvider } from '../../src/providers/litellm';
+
+vi.mock('../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+const mockFetchWithCache = vi.mocked(fetchWithCache);
 
 // Mock fetch for API call tests
 const mockFetch = vi.fn();
 global.fetch = mockFetch as any;
 
+const originalOpenAiTemperature = process.env.OPENAI_TEMPERATURE;
+
 describe('LiteLLM Provider', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.OPENAI_TEMPERATURE;
+  });
+
   afterEach(() => {
     vi.resetAllMocks();
     mockFetch.mockReset();
     vi.unstubAllEnvs();
+    if (originalOpenAiTemperature !== undefined) {
+      process.env.OPENAI_TEMPERATURE = originalOpenAiTemperature;
+    } else {
+      delete process.env.OPENAI_TEMPERATURE;
+    }
   });
   describe('createLiteLLMProvider', () => {
     it('should create a chat provider by default', () => {
@@ -332,6 +362,160 @@ describe('LiteLLM Provider', () => {
       // Verify the config is correctly set with max_tokens: 0
       expect(provider.config.max_tokens).toBe(0);
       expect('max_tokens' in provider.config).toBe(true);
+    });
+  });
+
+  describe('Temperature omission for proxy providers (GitHub issue #8044)', () => {
+    const mockResponse = {
+      data: {
+        choices: [{ message: { content: 'Test output' } }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    };
+
+    it('should omit temperature from request body when not configured', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+          },
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+
+      expect(body.temperature).toBeUndefined();
+      expect('temperature' in body).toBe(false);
+    });
+
+    it('should send temperature: 0 when explicitly configured', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+            temperature: 0,
+          },
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+
+      expect(body.temperature).toBe(0);
+      expect('temperature' in body).toBe(true);
+    });
+
+    it('should send temperature: 0.7 when explicitly configured', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+            temperature: 0.7,
+          },
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+
+      expect(body.temperature).toBe(0.7);
+      expect('temperature' in body).toBe(true);
+    });
+
+    it('should use OPENAI_TEMPERATURE env var when set', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+      process.env.OPENAI_TEMPERATURE = '0.5';
+
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+          },
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+
+      expect(body.temperature).toBe(0.5);
+      expect('temperature' in body).toBe(true);
+    });
+
+    it('should set omitDefaults to true by default', () => {
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {});
+      expect(provider.config.omitDefaults).toBe(true);
+    });
+
+    it('should allow user to override omitDefaults', () => {
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+        config: {
+          config: {
+            omitDefaults: false,
+          },
+        },
+      });
+      expect(provider.config.omitDefaults).toBe(false);
+    });
+
+    it('should send default temperature: 0 when omitDefaults is false', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+            omitDefaults: false,
+          },
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+
+      expect(body.temperature).toBe(0);
+      expect('temperature' in body).toBe(true);
+      expect(body.max_tokens).toBe(1024);
+      expect('max_tokens' in body).toBe(true);
+    });
+
+    it('should omit max_tokens from request body when not configured', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+          },
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+
+      expect(body.max_tokens).toBeUndefined();
+      expect('max_tokens' in body).toBe(false);
     });
   });
 });

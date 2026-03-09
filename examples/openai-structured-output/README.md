@@ -11,6 +11,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example openai-structured-output
+cd openai-structured-output
 ```
 
 ## Environment Variables

@@ -1,4 +1,4 @@
-# integration-browser/headless
+# integration-browser/headless (Headless Browser Automation)
 
 A browser automation example demonstrating how to test web applications using Playwright.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example integration-browser/headless
+cd integration-browser/headless
 ```
 
 ## Overview

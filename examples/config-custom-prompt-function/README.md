@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-custom-prompt-function
+cd config-custom-prompt-function
 ```
 
 This example demonstrates the full range of prompt formats supported by promptfoo, with special focus on prompt functions that can return both content and configuration.

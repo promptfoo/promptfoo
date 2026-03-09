@@ -1,9 +1,10 @@
-# provider-litellm
+# provider-litellm (LiteLLM Provider)
 
 You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-litellm
+cd provider-litellm
 ```
 
 This example demonstrates how to use the LiteLLM provider with promptfoo to evaluate multiple models through a unified interface.

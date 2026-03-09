@@ -341,7 +341,7 @@ ELEVENLABS_API_KEY=your_key promptfoo eval
 
 ### Audio File Not Found
 
-```
+```text
 Error: Failed to read audio file: ENOENT: no such file or directory
 ```
 
@@ -355,7 +355,7 @@ prompts:
 
 ### Unsupported Format
 
-```
+```text
 Error: Unsupported audio format
 ```
 

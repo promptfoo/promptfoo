@@ -6,7 +6,7 @@ This example demonstrates how to use OpenTelemetry with Python to trace the inte
 
 ```bash
 npx promptfoo@latest init --example integration-opentelemetry/python
-cd opentelemetry/python
+cd integration-opentelemetry/python
 
 # Create and activate a virtual environment
 python3 -m venv .venv

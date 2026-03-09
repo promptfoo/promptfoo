@@ -6,7 +6,7 @@ This example demonstrates how to use OpenTelemetry to trace the internal operati
 
 ```bash
 npx promptfoo@latest init --example integration-opentelemetry/javascript
-cd opentelemetry/javascript
+cd integration-opentelemetry/javascript
 npm install
 npx promptfoo@latest eval
 npx promptfoo@latest view

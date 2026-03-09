@@ -29,10 +29,10 @@ ollama pull llama2-uncensored
 
 ## Set up the config
 
-Initialize a new directory `compare-llama-vs-gpt` that will contain our prompts and test cases:
+Initialize a new directory `ollama` that will contain our prompts and test cases:
 
 ```sh
-npx promptfoo@latest init --example compare-llama-vs-gpt
+npx promptfoo@latest init --example ollama
 ```
 
 Now let's start editing `promptfooconfig.yaml`. First, we'll add the list of models we'd like to compare:

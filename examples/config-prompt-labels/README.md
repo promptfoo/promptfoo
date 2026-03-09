@@ -4,7 +4,10 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-prompt-labels
+cd config-prompt-labels
 ```
+
+## Usage
 
 This example shows how to use prompt labels to organize your prompts and providers.
 In a single eval, we can run one set of multiple prompts against a provider, another set
@@ -16,7 +19,7 @@ Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
 promptfoo eval
 ```
 
