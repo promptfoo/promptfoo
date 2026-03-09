@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example eval-standalone-assertions
+cd eval-standalone-assertions
 ```
 
 To get started, have a look at `asserts.yaml`
@@ -12,7 +13,7 @@ If you use a model-graded eval, you must set your OPENAI_API_KEY environment var
 
 Then run:
 
-```
+```bash
 promptfoo eval --assertions asserts.yaml --model-outputs outputs.json
 ```
 

@@ -125,7 +125,7 @@ targets:
 
 defaultTest:
   vars:
-    image: file://sample_image.jpg
+    image: file://aldrin_apollo_11.jpg
     format: jpg
 redteam:
   purpose: >-

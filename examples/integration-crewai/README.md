@@ -1,4 +1,4 @@
-# integration-crewai
+# integration-crewai (CrewAI Integration)
 
 This example shows how to use **CrewAI agents** with promptfoo to evaluate AI agent performance.
 
@@ -12,6 +12,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example integration-crewai
+cd integration-crewai
 ```
 
 ## Prerequisites

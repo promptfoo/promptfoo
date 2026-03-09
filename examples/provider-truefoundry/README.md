@@ -18,6 +18,7 @@ To quickly set up this example:
 
 ```bash
 npx promptfoo@latest init --example provider-truefoundry
+cd provider-truefoundry
 ```
 
 ## Examples

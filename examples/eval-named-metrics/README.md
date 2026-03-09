@@ -6,6 +6,7 @@ This example demonstrates custom metric naming and derivation in promptfoo.
 
 ```bash
 npx promptfoo@latest init --example eval-named-metrics
+cd eval-named-metrics
 ```
 
 ## Run

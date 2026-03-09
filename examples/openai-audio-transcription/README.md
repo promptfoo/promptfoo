@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example openai-audio-transcription
+cd openai-audio-transcription
 ```
 
 A simple example showing how to evaluate OpenAI's audio transcription models (Whisper and GPT-4o) with promptfoo.
