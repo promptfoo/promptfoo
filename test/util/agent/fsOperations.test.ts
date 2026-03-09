@@ -42,9 +42,16 @@ describe('agent fsOperations readFile', () => {
     await expect(readFile('small.txt', rootDir)).resolves.toBe('small file contents');
   });
 
-  it('truncates oversized files before using fs.readFile', async () => {
+  it('returns full multibyte content when decoded length fits within the limit', async () => {
+    const multibyteContent = '你'.repeat(60_000);
+    await fs.writeFile(path.join(rootDir, 'multibyte.txt'), multibyteContent, 'utf8');
+
+    await expect(readFile('multibyte.txt', rootDir)).resolves.toBe(multibyteContent);
+  });
+
+  it('truncates very large files without using fs.readFile', async () => {
     const maxFileSize = 100_000;
-    const oversizedContent = 'a'.repeat(maxFileSize + 20_000);
+    const oversizedContent = 'a'.repeat(450_000);
     await fs.writeFile(path.join(rootDir, 'large.txt'), oversizedContent, 'utf8');
 
     const result = await readFile('large.txt', rootDir);

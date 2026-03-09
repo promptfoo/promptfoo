@@ -15,7 +15,8 @@ import { isPathWithinDir } from '../isPathWithinDir';
 
 export { isPathWithinDir };
 
-const MAX_FILE_SIZE = 100_000; // 100KB
+const MAX_FILE_SIZE = 100_000; // Max decoded text length returned to callers
+const MAX_FILE_SCAN_BYTES = MAX_FILE_SIZE * 4;
 const MAX_GREP_MATCHES = 100;
 const ALLOWED_WRITE_EXTENSIONS = ['.js', '.mjs'];
 
@@ -59,7 +60,8 @@ export async function writeFile(
 }
 
 /**
- * Read a file relative to rootDir. Truncates at MAX_FILE_SIZE.
+ * Read a file relative to rootDir. Truncates returned text at MAX_FILE_SIZE
+ * without loading arbitrarily large files into memory.
  */
 export async function readFile(filePath: string, rootDir: string): Promise<string> {
   const resolved = await resolveAndValidate(filePath, rootDir);
@@ -69,13 +71,20 @@ export async function readFile(filePath: string, rootDir: string): Promise<strin
     throw new Error(`Not a file: ${filePath}`);
   }
 
-  if (stat.size > MAX_FILE_SIZE) {
-    const content = await readFilePrefix(resolved, MAX_FILE_SIZE);
-    return content + `\n\n[truncated — file is ${stat.size} bytes]`;
+  if (stat.size <= MAX_FILE_SIZE) {
+    return fs.readFile(resolved, 'utf-8');
   }
 
-  const content = await fs.readFile(resolved, 'utf-8');
-  return content;
+  if (stat.size <= MAX_FILE_SCAN_BYTES) {
+    const content = await fs.readFile(resolved, 'utf-8');
+    if (content.length <= MAX_FILE_SIZE) {
+      return content;
+    }
+    return content.slice(0, MAX_FILE_SIZE) + `\n\n[truncated — file is ${stat.size} bytes]`;
+  }
+
+  const content = await readFilePrefix(resolved, MAX_FILE_SCAN_BYTES);
+  return content.slice(0, MAX_FILE_SIZE) + `\n\n[truncated — file is ${stat.size} bytes]`;
 }
 
 /**
@@ -166,9 +175,9 @@ async function readFilePrefix(filePath: string, maxBytes: number): Promise<strin
   try {
     const buffer = Buffer.alloc(maxBytes);
     const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0);
-    // Decode only the prefix so oversized files never require full allocation.
+    // Decode only the bounded prefix and drop any incomplete trailing code point.
     const decoder = new StringDecoder('utf8');
-    return decoder.write(buffer.subarray(0, bytesRead)) + decoder.end();
+    return decoder.write(buffer.subarray(0, bytesRead));
   } finally {
     await handle.close();
   }
