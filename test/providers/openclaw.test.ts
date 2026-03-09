@@ -54,6 +54,11 @@ vi.mock('../../src/util/fetch/index', () => ({
   fetchWithProxy: mockFetchWithProxy,
 }));
 
+const mockFetchWithCache = vi.hoisted(() => vi.fn());
+vi.mock('../../src/cache', () => ({
+  fetchWithCache: mockFetchWithCache,
+}));
+
 describe('OpenClaw Provider', () => {
   const originalEnv = { ...process.env };
 
@@ -61,6 +66,7 @@ describe('OpenClaw Provider', () => {
     vi.clearAllMocks();
     websocketMocks.WebSocketMock.mockReset();
     mockFetchWithProxy.mockReset();
+    mockFetchWithCache.mockReset();
     resetConfigCache();
     process.env = { ...originalEnv };
     delete process.env.CLAWDBOT_GATEWAY_PASSWORD;
@@ -130,6 +136,34 @@ describe('OpenClaw Provider', () => {
       expect(config?.gateway?.auth?.token).toBe('my-token');
     });
 
+    it('should parse an upstream-style OpenClaw config with unquoted keys', () => {
+      const json5Content = `{
+        gateway: {
+          mode: 'local',
+          bind: 'loopback',
+          port: 19000,
+          auth: {
+            mode: 'token',
+            token: 'my-token',
+          },
+          http: {
+            endpoints: {
+              chatCompletions: { enabled: true },
+              responses: { enabled: true },
+            },
+          },
+        },
+      }`;
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 2500 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(json5Content);
+
+      const config = readOpenClawConfig();
+      expect(config?.gateway?.port).toBe(19000);
+      expect(config?.gateway?.auth?.token).toBe('my-token');
+      expect(config?.gateway?.http?.endpoints?.chatCompletions?.enabled).toBe(true);
+    });
+
     it('should handle JSON5 with block comments', () => {
       const json5Content = `{
         /* block comment */
@@ -162,9 +196,7 @@ describe('OpenClaw Provider', () => {
       expect((config?.gateway as any)?.url).toBe('http://example.com/path');
     });
 
-    it('should not strip comment-like content inside single-quoted strings', () => {
-      // The parser tracks single-quoted strings to avoid corrupting them,
-      // even though JSON.parse doesn't support single quotes as key/value delimiters
+    it('should preserve comment-like content inside strings', () => {
       const json5Content = `{
         "gateway": {
           "port": 19000,
@@ -714,6 +746,35 @@ describe('OpenClaw Provider', () => {
     it('should set apiKeyRequired to false', () => {
       const provider = new OpenClawResponsesProvider('main', {});
       expect(provider.config.apiKeyRequired).toBe(false);
+    });
+
+    it('should call the responses endpoint without requiring an OpenAI API key', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('OpenClaw response');
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithCache.mock.calls[0][0]).toBe('http://test:18789/v1/responses');
+      expect(mockFetchWithCache.mock.calls[0][1].headers.Authorization).toBeUndefined();
     });
   });
 

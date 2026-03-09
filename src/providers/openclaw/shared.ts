@@ -2,6 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+import JSON5 from 'json5';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 
@@ -10,79 +11,6 @@ import type { OpenClawConfig, OpenClawGatewayConfig } from './types';
 
 export const DEFAULT_GATEWAY_PORT = 18789;
 export const DEFAULT_GATEWAY_HOST = '127.0.0.1';
-
-/**
- * Strip JSON5 syntax (comments and trailing commas) for JSON.parse compatibility.
- * Uses a state machine to avoid corrupting strings containing // or slash characters.
- */
-function stripJson5Syntax(raw: string): string {
-  let result = '';
-  let i = 0;
-  let inString = false;
-  let stringQuote = '';
-  let escape = false;
-
-  while (i < raw.length) {
-    const ch = raw[i];
-
-    if (inString) {
-      result += ch;
-      if (escape) {
-        escape = false;
-      } else if (ch === '\\') {
-        escape = true;
-      } else if (ch === stringQuote) {
-        inString = false;
-      }
-      i++;
-      continue;
-    }
-
-    // Not in string
-    if (ch === '"' || ch === "'") {
-      inString = true;
-      stringQuote = ch;
-      result += ch;
-      i++;
-    } else if (ch === '/' && raw[i + 1] === '/') {
-      // Line comment — skip to end of line
-      while (i < raw.length && raw[i] !== '\n') {
-        i++;
-      }
-    } else if (ch === '/' && raw[i + 1] === '*') {
-      // Block comment — skip to */
-      i += 2;
-      while (i < raw.length - 1 && !(raw[i] === '*' && raw[i + 1] === '/')) {
-        i++;
-      }
-      // Skip closing */ if found (guard against unclosed block comments)
-      if (i < raw.length - 1 && raw[i] === '*' && raw[i + 1] === '/') {
-        i += 2;
-      }
-    } else if (ch === ',') {
-      // Skip trailing commas (comma followed only by whitespace then } or ])
-      let j = i + 1;
-      while (
-        j < raw.length &&
-        (raw[j] === ' ' || raw[j] === '\t' || raw[j] === '\n' || raw[j] === '\r')
-      ) {
-        j++;
-      }
-      if (j < raw.length && (raw[j] === '}' || raw[j] === ']')) {
-        // Trailing comma — skip it, whitespace will be added by next iterations
-        i++;
-      } else {
-        result += ch;
-        i++;
-      }
-    } else {
-      result += ch;
-      i++;
-    }
-  }
-
-  return result;
-}
 
 /**
  * Cached config to avoid re-reading the file multiple times during provider init.
@@ -270,8 +198,7 @@ export function readOpenClawConfig(
     }
 
     const raw = fs.readFileSync(configPath, 'utf-8');
-    const cleaned = stripJson5Syntax(raw);
-    const config = JSON.parse(cleaned) as OpenClawGatewayConfig;
+    const config = JSON5.parse(raw) as OpenClawGatewayConfig;
     cachedConfig = { config, mtime };
     cachedConfigPath = configPath;
     return config;
