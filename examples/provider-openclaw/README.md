@@ -15,6 +15,9 @@ This example demonstrates how to use promptfoo with OpenClaw, a personal AI assi
          "endpoints": {
            "chatCompletions": {
              "enabled": true
+           },
+           "responses": {
+             "enabled": true
            }
          }
        }

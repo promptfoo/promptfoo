@@ -33,6 +33,9 @@ openclaw onboard
       "endpoints": {
         "chatCompletions": {
           "enabled": true
+        },
+        "responses": {
+          "enabled": true
         }
       }
     }
@@ -205,7 +208,8 @@ tests:
 ### With Custom Thinking Level (WS Agent)
 
 `thinking_level` is only supported by the WebSocket Agent provider. Valid values are `off`,
-`minimal`, `low`, `medium`, `high`, `xhigh`, and `adaptive`.
+`minimal`, `low`, `medium`, `high`, `xhigh`, and `adaptive`, though model support still depends on
+the upstream provider/model combination.
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
