@@ -16,6 +16,7 @@ const setAuthHeaders = (
   (provider as any).authHeaders = headers;
   (provider as any).initialized = true;
 };
+const originalOpenAiTemperature = process.env.OPENAI_TEMPERATURE;
 
 describe('AzureCompletionProvider', () => {
   beforeEach(() => {
@@ -26,6 +27,7 @@ describe('AzureCompletionProvider', () => {
       'api-key': 'test-key',
     });
     delete process.env.OPENAI_STOP;
+    delete process.env.OPENAI_TEMPERATURE;
     process.env.AZURE_API_HOST = 'test.azure.com';
     process.env.AZURE_API_KEY = 'test-key';
   });
@@ -33,6 +35,11 @@ describe('AzureCompletionProvider', () => {
   afterEach(() => {
     delete process.env.AZURE_API_HOST;
     delete process.env.AZURE_API_KEY;
+    if (originalOpenAiTemperature !== undefined) {
+      process.env.OPENAI_TEMPERATURE = originalOpenAiTemperature;
+    } else {
+      delete process.env.OPENAI_TEMPERATURE;
+    }
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
@@ -247,6 +254,73 @@ describe('AzureCompletionProvider', () => {
     const actualCall = vi.mocked(fetchWithCache).mock.calls[0];
     const body = JSON.parse(actualCall[1]?.body as string);
     expect(body.logprobs).toBe(3);
+  });
+
+  it('should omit temperature when not configured and OPENAI_TEMPERATURE is unset', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        choices: [{ text: 'hello' }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      },
+      cached: false,
+    } as any);
+
+    const provider = new AzureCompletionProvider('test', {
+      config: { apiHost: 'test.azure.com' },
+    });
+    setAuthHeaders(provider);
+
+    await provider.callApi('test prompt');
+
+    const actualCall = vi.mocked(fetchWithCache).mock.calls[0];
+    const body = JSON.parse(actualCall[1]?.body as string);
+    expect(body.temperature).toBeUndefined();
+    expect('temperature' in body).toBe(false);
+  });
+
+  it('should include temperature from OPENAI_TEMPERATURE when set', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        choices: [{ text: 'hello' }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      },
+      cached: false,
+    } as any);
+    process.env.OPENAI_TEMPERATURE = '0.5';
+
+    const provider = new AzureCompletionProvider('test', {
+      config: { apiHost: 'test.azure.com' },
+    });
+    setAuthHeaders(provider);
+
+    await provider.callApi('test prompt');
+
+    const actualCall = vi.mocked(fetchWithCache).mock.calls[0];
+    const body = JSON.parse(actualCall[1]?.body as string);
+    expect(body.temperature).toBe(0.5);
+    expect('temperature' in body).toBe(true);
+  });
+
+  it('should include temperature: 0 when explicitly configured', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        choices: [{ text: 'hello' }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      },
+      cached: false,
+    } as any);
+
+    const provider = new AzureCompletionProvider('test', {
+      config: { apiHost: 'test.azure.com', temperature: 0 },
+    });
+    setAuthHeaders(provider);
+
+    await provider.callApi('test prompt');
+
+    const actualCall = vi.mocked(fetchWithCache).mock.calls[0];
+    const body = JSON.parse(actualCall[1]?.body as string);
+    expect(body.temperature).toBe(0);
+    expect('temperature' in body).toBe(true);
   });
 
   it('should allow config.headers to override authHeaders', async () => {

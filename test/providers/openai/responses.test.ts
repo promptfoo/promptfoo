@@ -29,13 +29,21 @@ vi.mock('../../../src/python/pythonUtils', async (importOriginal) => {
   };
 });
 
+const originalOpenAiTemperature = process.env.OPENAI_TEMPERATURE;
+
 describe('OpenAiResponsesProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.OPENAI_TEMPERATURE;
   });
 
   afterEach(() => {
     vi.resetAllMocks();
+    if (originalOpenAiTemperature !== undefined) {
+      process.env.OPENAI_TEMPERATURE = originalOpenAiTemperature;
+    } else {
+      delete process.env.OPENAI_TEMPERATURE;
+    }
   });
 
   it('should support various model names', async () => {
@@ -485,6 +493,83 @@ describe('OpenAiResponsesProvider', () => {
 
     // temperature: 0 should be present in the request body
     expect(body.temperature).toBe(0);
+    expect('temperature' in body).toBe(true);
+  });
+
+  it('should omit temperature when not configured and OPENAI_TEMPERATURE is unset', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'gpt-4o',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Response' }],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
+    const reqOptions = mockCall[1] as { body: string };
+    const body = JSON.parse(reqOptions.body);
+
+    expect(body.temperature).toBeUndefined();
+    expect('temperature' in body).toBe(false);
+  });
+
+  it('should send temperature from OPENAI_TEMPERATURE when set', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'gpt-4o',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Response' }],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    process.env.OPENAI_TEMPERATURE = '0.5';
+
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
+    const reqOptions = mockCall[1] as { body: string };
+    const body = JSON.parse(reqOptions.body);
+
+    expect(body.temperature).toBe(0.5);
     expect('temperature' in body).toBe(true);
   });
 

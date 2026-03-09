@@ -17,6 +17,7 @@ const setAuthHeaders = (
   (provider as any).authHeaders = headers;
   (provider as any).initialized = true;
 };
+const originalOpenAiTemperature = process.env.OPENAI_TEMPERATURE;
 
 describe('AzureChatCompletionProvider', () => {
   beforeEach(() => {
@@ -24,10 +25,16 @@ describe('AzureChatCompletionProvider', () => {
     vi.spyOn(AzureChatCompletionProvider.prototype as any, 'getAuthHeaders').mockResolvedValue({
       'api-key': 'test-key',
     });
+    delete process.env.OPENAI_TEMPERATURE;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    if (originalOpenAiTemperature !== undefined) {
+      process.env.OPENAI_TEMPERATURE = originalOpenAiTemperature;
+    } else {
+      delete process.env.OPENAI_TEMPERATURE;
+    }
   });
 
   describe('config merging', () => {
@@ -638,6 +645,32 @@ describe('AzureChatCompletionProvider', () => {
       });
       const { body } = await (provider as any).getOpenAiBody('test prompt');
       expect(body).not.toHaveProperty('temperature');
+    });
+
+    it('should omit temperature when not configured and OPENAI_TEMPERATURE is unset', async () => {
+      const provider = new AzureChatCompletionProvider('test-deployment');
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+      expect(body.temperature).toBeUndefined();
+      expect('temperature' in body).toBe(false);
+    });
+
+    it('should include temperature from OPENAI_TEMPERATURE when set', async () => {
+      process.env.OPENAI_TEMPERATURE = '0.5';
+      const provider = new AzureChatCompletionProvider('test-deployment');
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+      expect(body.temperature).toBe(0.5);
+      expect('temperature' in body).toBe(true);
+    });
+
+    it('should include temperature: 0 when explicitly configured', async () => {
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          temperature: 0,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+      expect(body.temperature).toBe(0);
+      expect('temperature' in body).toBe(true);
     });
 
     it('should support variable rendering in reasoning_effort', async () => {

@@ -35,6 +35,7 @@ const mockLogger = vi.mocked(logger);
 const mockImportModule = vi.mocked(importModule);
 const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
 const originalDeepseekApiKey = process.env.DEEPSEEK_API_KEY;
+const originalOpenAiTemperature = process.env.OPENAI_TEMPERATURE;
 
 describe('OpenAI Provider', () => {
   beforeEach(() => {
@@ -42,6 +43,7 @@ describe('OpenAI Provider', () => {
     disableCache();
     process.env.OPENAI_API_KEY = 'test-api-key';
     process.env.DEEPSEEK_API_KEY = 'test-deepseek-key';
+    delete process.env.OPENAI_TEMPERATURE;
   });
 
   afterEach(() => {
@@ -55,6 +57,11 @@ describe('OpenAI Provider', () => {
       process.env.DEEPSEEK_API_KEY = originalDeepseekApiKey;
     } else {
       delete process.env.DEEPSEEK_API_KEY;
+    }
+    if (originalOpenAiTemperature !== undefined) {
+      process.env.OPENAI_TEMPERATURE = originalOpenAiTemperature;
+    } else {
+      delete process.env.OPENAI_TEMPERATURE;
     }
   });
 
@@ -1698,6 +1705,49 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       // temperature: 0 should be present in the request body
       expect(body.temperature).toBe(0);
+      expect('temperature' in body).toBe(true);
+    });
+
+    it('should omit temperature when not configured and OPENAI_TEMPERATURE is unset', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4');
+      await provider.callApi('Test prompt');
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+
+      expect(body.temperature).toBeUndefined();
+      expect('temperature' in body).toBe(false);
+    });
+
+    it('should send temperature from OPENAI_TEMPERATURE when set', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+      process.env.OPENAI_TEMPERATURE = '0.5';
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4');
+      await provider.callApi('Test prompt');
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+
+      expect(body.temperature).toBe(0.5);
       expect('temperature' in body).toBe(true);
     });
 

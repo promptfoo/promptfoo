@@ -7,6 +7,7 @@ vi.mock('../../../src/cache');
 vi.mock('../../../src/logger');
 
 const mockFetchWithCache = vi.mocked(fetchWithCache);
+const originalOpenAiTemperature = process.env.OPENAI_TEMPERATURE;
 
 describe('OpenAI Provider', () => {
   beforeEach(() => {
@@ -14,10 +15,16 @@ describe('OpenAI Provider', () => {
     disableCache();
     // Set a default API key for tests unless explicitly testing missing key
     process.env.OPENAI_API_KEY = 'test-api-key';
+    delete process.env.OPENAI_TEMPERATURE;
   });
 
   afterEach(() => {
     enableCache();
+    if (originalOpenAiTemperature !== undefined) {
+      process.env.OPENAI_TEMPERATURE = originalOpenAiTemperature;
+    } else {
+      delete process.env.OPENAI_TEMPERATURE;
+    }
   });
 
   describe('OpenAiCompletionProvider', () => {
@@ -192,6 +199,45 @@ describe('OpenAI Provider', () => {
       const actualCall = mockFetchWithCache.mock.calls[0];
       const body = JSON.parse(actualCall[1]?.body as string);
       expect(body.logprobs).toBe(3);
+    });
+
+    it('should omit temperature when not configured and OPENAI_TEMPERATURE is unset', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      await provider.callApi('Test prompt');
+
+      const actualCall = mockFetchWithCache.mock.calls[0];
+      const body = JSON.parse(actualCall[1]?.body as string);
+      expect(body.temperature).toBeUndefined();
+      expect('temperature' in body).toBe(false);
+    });
+
+    it('should send temperature from OPENAI_TEMPERATURE when set', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+      process.env.OPENAI_TEMPERATURE = '0.5';
+
+      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      await provider.callApi('Test prompt');
+
+      const actualCall = mockFetchWithCache.mock.calls[0];
+      const body = JSON.parse(actualCall[1]?.body as string);
+      expect(body.temperature).toBe(0.5);
+      expect('temperature' in body).toBe(true);
+    });
+
+    it('should send temperature: 0 when explicitly configured', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiCompletionProvider('text-davinci-003', {
+        config: { temperature: 0 },
+      });
+      await provider.callApi('Test prompt');
+
+      const actualCall = mockFetchWithCache.mock.calls[0];
+      const body = JSON.parse(actualCall[1]?.body as string);
+      expect(body.temperature).toBe(0);
+      expect('temperature' in body).toBe(true);
     });
 
     it('should handle response parsing errors', async () => {

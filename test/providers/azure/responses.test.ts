@@ -14,6 +14,7 @@ const mockMaybeLoadResponseFormatFromExternalFile =
     typeof maybeLoadResponseFormatFromExternalFile
   >;
 let authHeadersValue: Record<string, string>;
+const originalOpenAiTemperature = process.env.OPENAI_TEMPERATURE;
 
 describe('AzureResponsesProvider', () => {
   beforeEach(() => {
@@ -23,12 +24,18 @@ describe('AzureResponsesProvider', () => {
     process.env.AZURE_API_KEY = 'test-key';
     process.env.AZURE_API_HOST = 'test.openai.azure.com';
     authHeadersValue = { 'api-key': 'test-key' };
+    delete process.env.OPENAI_TEMPERATURE;
   });
 
   afterEach(() => {
     delete process.env.AZURE_API_KEY;
     delete process.env.AZURE_API_HOST;
     delete (AzureResponsesProvider.prototype as any).authHeaders;
+    if (originalOpenAiTemperature !== undefined) {
+      process.env.OPENAI_TEMPERATURE = originalOpenAiTemperature;
+    } else {
+      delete process.env.OPENAI_TEMPERATURE;
+    }
   });
 
   describe('constructor', () => {
@@ -207,6 +214,25 @@ describe('AzureResponsesProvider', () => {
 
       // temperature: 0 should be present in the request body
       expect(body.temperature).toBe(0);
+      expect('temperature' in body).toBe(true);
+    });
+
+    it('should omit temperature when not configured and OPENAI_TEMPERATURE is unset', async () => {
+      const provider = new AzureResponsesProvider('gpt-4.1-test');
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.temperature).toBeUndefined();
+      expect('temperature' in body).toBe(false);
+    });
+
+    it('should include temperature from OPENAI_TEMPERATURE when set', async () => {
+      process.env.OPENAI_TEMPERATURE = '0.5';
+      const provider = new AzureResponsesProvider('gpt-4.1-test');
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.temperature).toBe(0.5);
       expect('temperature' in body).toBe(true);
     });
 
