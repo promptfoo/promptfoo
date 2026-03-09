@@ -503,7 +503,7 @@ LOG_LEVEL=debug npx promptfoo@latest eval -c config.yaml
 ### Security Examples
 
 - [Red team starter](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-starter) - Basic security testing
-- [RAG poisoning tests](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-rag) - Document poisoning detection
+- [RAG red team tests](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-rag) - Customer service red team testing (RBAC, competitors, harmful content)
 - [DoNotAnswer dataset](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-donotanswer) - Harmful content detection
 
 ### Integration Examples

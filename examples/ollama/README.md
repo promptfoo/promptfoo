@@ -16,7 +16,7 @@ cd ollama
 
 ```bash
 # For comparison example (default)
-ollama pull llama3.3
+ollama pull llama4:scout
 ollama pull llama2-uncensored
 
 # For function calling example
@@ -31,7 +31,7 @@ This directory contains two different Ollama examples:
 
 **Config**: `promptfooconfig.yaml`
 
-Compares different Ollama models (llama3.3, llama2-uncensored) with OpenAI models using various prompts and assertions.
+Compares different Ollama models (llama4:scout, llama2-uncensored) with OpenAI models using various prompts and assertions.
 
 **Running**:
 

@@ -9,7 +9,7 @@ cd integration-langchain
 
 ## Usage
 
-This example shows how to run a Python (LangChain) chain implementation with Promptfoo. It compares GPT-4 versus LangChain's LLM Math module.
+This example shows how to run a Python (LangChain) chain implementation with Promptfoo. It compares GPT-5 versus LangChain's LLM Math module.
 
 To run it, first create a virtual env and install the requirements:
 

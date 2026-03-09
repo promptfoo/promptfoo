@@ -64,8 +64,8 @@ Each question is evaluated for accuracy using an LLM judge that compares the mod
 HLE is designed to be extremely challenging. Recent model performance:
 
 - **OpenAI Deep Research**: 26.6% accuracy
-- **o4-mini**: ~13% accuracy
-- **DeepSeek-R1**: 8.5% accuracy
+- **o4-mini**: 18.1% accuracy
+- **DeepSeek-R1**: 9.4% accuracy
 
 Low scores are expected - this benchmark represents the cutting edge of AI evaluation.
 
