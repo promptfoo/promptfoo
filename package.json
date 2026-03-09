@@ -139,7 +139,7 @@
     "@types/express": "^5.0.6",
     "@types/js-yaml": "^4.0.9",
     "@types/jsdom": "^27.0.0",
-    "@types/node": "^24.10.13",
+    "@types/node": "^24.12.0",
     "@types/nunjucks": "^3.2.6",
     "@types/opener": "^1.4.3",
     "@types/pdf-parse": "^1.1.5",
