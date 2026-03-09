@@ -70,6 +70,12 @@ describe('matchesTrajectoryGoalSuccess', () => {
     });
   });
 
+  it('throws when grading config is not provided', async () => {
+    await expect(
+      matchesTrajectoryGoalSuccess('Resolve the task', '{"stepCount":1}', 'output', undefined),
+    ).rejects.toThrow('Cannot grade output without grading config');
+  });
+
   it('applies assertion thresholds to the returned score', async () => {
     const provider = {
       id: () => 'test-provider',

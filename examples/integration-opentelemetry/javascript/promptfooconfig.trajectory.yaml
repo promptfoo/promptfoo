@@ -1,11 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Trajectory assertions with OpenTelemetry traces
 
-providers:
-  - file://provider-simple-traced.js
-
 prompts:
   - 'Explain how {{topic}} works in simple terms'
+
+providers:
+  - file://provider-simple-traced.js
 
 tests:
   - vars:
@@ -50,4 +50,5 @@ tracing:
     http:
       enabled: true
       port: 4318
+      host: '0.0.0.0'
       acceptFormats: ['json']

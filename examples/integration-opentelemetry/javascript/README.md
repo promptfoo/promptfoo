@@ -12,10 +12,10 @@ npx promptfoo@latest eval
 npx promptfoo@latest view
 ```
 
-To run the trajectory assertion variant introduced by PR `#8040`, use:
+To run the trajectory assertion variant from this directory, use:
 
 ```bash
-npm run local -- eval -c examples/integration-opentelemetry/javascript/promptfooconfig.trajectory.yaml --no-cache
+npx promptfoo@latest eval -c promptfooconfig.trajectory.yaml --no-cache
 ```
 
 ## Environment Variables
@@ -60,6 +60,7 @@ tracing:
     http:
       enabled: true
       port: 4318
+      host: '0.0.0.0'
 ```
 
 ## Instrumenting Your Provider

@@ -4,7 +4,10 @@ import {
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from '../../src/assertions/trajectory';
-import { extractTrajectorySteps } from '../../src/assertions/trajectoryUtils';
+import {
+  extractTrajectorySteps,
+  summarizeTrajectoryForJudge,
+} from '../../src/assertions/trajectoryUtils';
 
 import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
@@ -112,6 +115,95 @@ describe('trajectory utilities', () => {
 
     expect(steps[4].aliases).toContain('ls');
     expect(steps[2].aliases).toContain('mcp inventory/search_inventory');
+  });
+
+  it('only treats a generic query attribute as search when the span looks search-like', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'span-sql',
+          name: 'sql.query',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            query: 'SELECT * FROM users',
+          },
+        },
+        {
+          spanId: 'span-search',
+          name: 'document_search',
+          startTime: 1200,
+          endTime: 1300,
+          attributes: {
+            query: 'refund policy',
+          },
+        },
+      ],
+    });
+
+    expect(steps.map((step) => ({ type: step.type, name: step.name }))).toEqual([
+      { type: 'span', name: 'sql.query' },
+      { type: 'search', name: 'refund policy' },
+    ]);
+  });
+
+  it('compacts repeated steps and truncates long judge summaries', () => {
+    const trace = {
+      ...mockTraceData,
+      spans: [
+        ...Array.from({ length: 4 }, (_, index) => ({
+          spanId: `search-${index}`,
+          name: 'document_search',
+          startTime: 1000 + index,
+          endTime: 1100 + index,
+          attributes: {
+            query: 'refund policy',
+          },
+        })),
+        ...Array.from({ length: 25 }, (_, index) => ({
+          spanId: `tool-${index}`,
+          name: 'tool.call',
+          startTime: 2000 + index,
+          endTime: 2100 + index,
+          attributes: {
+            'tool.name': `tool_${index + 1}`,
+          },
+        })),
+      ],
+    } satisfies TraceData;
+
+    const summary = JSON.parse(summarizeTrajectoryForJudge(trace)) as {
+      compactedStepCount: number;
+      stepCount: number;
+      steps: Array<
+        | {
+            collapsedCount?: number;
+            index?: number;
+            name?: string;
+            spanName?: string;
+            type?: string;
+          }
+        | { omittedCount: number }
+      >;
+    };
+
+    expect(summary.stepCount).toBe(29);
+    expect(summary.compactedStepCount).toBe(26);
+    expect(summary.steps).toHaveLength(25);
+    expect(summary.steps[0]).toMatchObject({
+      index: 1,
+      type: 'search',
+      name: 'refund policy',
+      spanName: 'document_search',
+      collapsedCount: 4,
+    });
+    expect(summary.steps[12]).toEqual({ omittedCount: 2 });
+    expect(summary.steps.at(-1)).toMatchObject({
+      index: 29,
+      type: 'tool',
+      name: 'tool_25',
+    });
   });
 });
 

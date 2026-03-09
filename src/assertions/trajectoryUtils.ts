@@ -44,12 +44,33 @@ const COMMAND_ATTRIBUTE_KEYS = [
   'command_name',
 ] as const;
 
-const SEARCH_ATTRIBUTE_KEYS = [
-  'codex.search.query',
-  'search.query',
-  'search_query',
-  'query',
-] as const;
+const SEARCH_ATTRIBUTE_KEYS = ['codex.search.query', 'search.query', 'search_query'] as const;
+
+const GENERIC_QUERY_ATTRIBUTE_KEYS = ['query'] as const;
+
+const SEARCH_SPAN_NAME_PATTERN = /(^|[\s._:/-])(search|find|lookup|retriev(?:e|al))($|[\s._:/-])/i;
+
+const MAX_JUDGE_SUMMARY_STEPS = 24;
+const JUDGE_SUMMARY_HEAD_STEPS = 12;
+const JUDGE_SUMMARY_TAIL_STEPS = 12;
+
+interface TrajectoryStepStatus {
+  code: number;
+  message?: string;
+}
+
+interface JudgeTrajectoryStep {
+  collapsedCount?: number;
+  index: number;
+  name: string;
+  spanName?: string;
+  status?: TrajectoryStepStatus;
+  type: TrajectoryStepType;
+}
+
+interface OmittedJudgeTrajectorySteps {
+  omittedCount: number;
+}
 
 function getStringAttribute(
   attributes: TrajectoryAttributes,
@@ -62,6 +83,32 @@ function getStringAttribute(
     }
   }
   return undefined;
+}
+
+function hasSameStatus(left?: TrajectoryStepStatus, right?: TrajectoryStepStatus): boolean {
+  return left?.code === right?.code && left?.message === right?.message;
+}
+
+function isSearchLikeSpan(span: TraceSpan): boolean {
+  const attributes = span.attributes || {};
+  if (SEARCH_SPAN_NAME_PATTERN.test(span.name) || span.name.startsWith('search ')) {
+    return true;
+  }
+
+  return Object.keys(attributes).some(
+    (key) => key !== 'query' && /(^|[._])(search|lookup|retriev(?:e|al))($|[._])/i.test(key),
+  );
+}
+
+function getTrajectoryStepStatus(step: Pick<TrajectoryStep, 'statusCode' | 'statusMessage'>) {
+  if (step.statusCode === undefined || step.statusCode === 0) {
+    return undefined;
+  }
+
+  return {
+    code: step.statusCode,
+    ...(step.statusMessage ? { message: step.statusMessage } : {}),
+  };
 }
 
 function getCommandExecutable(command: string): string | undefined {
@@ -132,6 +179,11 @@ function extractSearchQuery(span: TraceSpan): string | undefined {
   const directMatch = getStringAttribute(attributes, SEARCH_ATTRIBUTE_KEYS);
   if (directMatch) {
     return directMatch;
+  }
+
+  const genericQuery = getStringAttribute(attributes, GENERIC_QUERY_ATTRIBUTE_KEYS);
+  if (genericQuery && isSearchLikeSpan(span)) {
+    return genericQuery;
   }
 
   if (span.name.startsWith('search ')) {
@@ -268,26 +320,58 @@ export function formatTrajectoryStep(step: TrajectoryStep): string {
   return `${step.type}:${step.name}`;
 }
 
+function compactJudgeTrajectorySteps(steps: JudgeTrajectoryStep[]): JudgeTrajectoryStep[] {
+  const compacted: JudgeTrajectoryStep[] = [];
+
+  for (const step of steps) {
+    const previousStep = compacted[compacted.length - 1];
+    if (
+      previousStep &&
+      previousStep.type === step.type &&
+      previousStep.name === step.name &&
+      previousStep.spanName === step.spanName &&
+      hasSameStatus(previousStep.status, step.status)
+    ) {
+      previousStep.collapsedCount = (previousStep.collapsedCount ?? 1) + 1;
+      continue;
+    }
+
+    compacted.push(step);
+  }
+
+  return compacted;
+}
+
+function truncateJudgeTrajectorySteps(
+  steps: JudgeTrajectoryStep[],
+): Array<JudgeTrajectoryStep | OmittedJudgeTrajectorySteps> {
+  if (steps.length <= MAX_JUDGE_SUMMARY_STEPS) {
+    return steps;
+  }
+
+  return [
+    ...steps.slice(0, JUDGE_SUMMARY_HEAD_STEPS),
+    { omittedCount: steps.length - MAX_JUDGE_SUMMARY_STEPS },
+    ...steps.slice(-JUDGE_SUMMARY_TAIL_STEPS),
+  ];
+}
+
 export function summarizeTrajectoryForJudge(trace: TraceData): string {
-  const steps = extractTrajectorySteps(trace).map((step, index) => ({
+  const rawSteps = extractTrajectorySteps(trace).map((step, index) => ({
     index: index + 1,
     type: step.type,
     name: step.name,
     ...(step.spanName !== step.name ? { spanName: step.spanName } : {}),
-    ...(step.statusCode !== undefined && step.statusCode !== 0
-      ? {
-          status: {
-            code: step.statusCode,
-            ...(step.statusMessage ? { message: step.statusMessage } : {}),
-          },
-        }
-      : {}),
+    ...(getTrajectoryStepStatus(step) ? { status: getTrajectoryStepStatus(step) } : {}),
   }));
+  const compactedSteps = compactJudgeTrajectorySteps(rawSteps);
+  const steps = truncateJudgeTrajectorySteps(compactedSteps);
 
   return JSON.stringify(
     {
       traceId: trace.traceId,
-      stepCount: steps.length,
+      stepCount: rawSteps.length,
+      compactedStepCount: compactedSteps.length,
       steps,
     },
     null,

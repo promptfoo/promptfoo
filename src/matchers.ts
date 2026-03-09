@@ -630,15 +630,6 @@ function parseJsonGradingResponse(
     };
   }
 
-  if (!Array.isArray(jsonObjects) || jsonObjects.length === 0) {
-    return {
-      failure: fail(
-        `${label} produced malformed response - We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
-        resp.tokenUsage,
-      ),
-    };
-  }
-
   const parsed = jsonObjects[0] as Partial<GradingResult>;
   if (typeof parsed !== 'object' || parsed === null || parsed === undefined) {
     return {
