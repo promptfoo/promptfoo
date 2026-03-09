@@ -377,7 +377,22 @@
         "OPENAI_ORGANIZATION": {
           "type": "string"
         },
+        "CLAWDBOT_GATEWAY_PASSWORD": {
+          "type": "string"
+        },
+        "CLAWDBOT_GATEWAY_TOKEN": {
+          "type": "string"
+        },
+        "CLAWDBOT_GATEWAY_URL": {
+          "type": "string"
+        },
         "CODEX_API_KEY": {
+          "type": "string"
+        },
+        "OPENCLAW_CONFIG_PATH": {
+          "type": "string"
+        },
+        "OPENCLAW_GATEWAY_PASSWORD": {
           "type": "string"
         },
         "OPENCLAW_GATEWAY_TOKEN": {
@@ -1665,7 +1680,22 @@
                     "OPENAI_ORGANIZATION": {
                       "type": "string"
                     },
+                    "CLAWDBOT_GATEWAY_PASSWORD": {
+                      "type": "string"
+                    },
+                    "CLAWDBOT_GATEWAY_TOKEN": {
+                      "type": "string"
+                    },
+                    "CLAWDBOT_GATEWAY_URL": {
+                      "type": "string"
+                    },
                     "CODEX_API_KEY": {
+                      "type": "string"
+                    },
+                    "OPENCLAW_CONFIG_PATH": {
+                      "type": "string"
+                    },
+                    "OPENCLAW_GATEWAY_PASSWORD": {
                       "type": "string"
                     },
                     "OPENCLAW_GATEWAY_TOKEN": {

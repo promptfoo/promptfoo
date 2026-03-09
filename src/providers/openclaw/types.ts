@@ -3,10 +3,22 @@
  */
 export interface OpenClawGatewayConfig {
   gateway?: {
+    mode?: string;
     port?: number;
     bind?: string;
+    customBindHost?: string;
+    remote?: {
+      enabled?: boolean;
+      password?: string;
+      token?: string;
+      url?: string;
+    };
+    tls?: {
+      enabled?: boolean;
+    };
     auth?: {
       mode?: string;
+      password?: string;
       token?: string;
     };
     http?: {
@@ -26,8 +38,12 @@ export interface OpenClawGatewayConfig {
  * Shared config options available to all OpenClaw providers.
  */
 export interface OpenClawConfig {
+  action?: string;
   gateway_url?: string;
+  auth_password?: string;
   auth_token?: string;
+  dry_run?: boolean;
+  extra_system_prompt?: string;
   session_key?: string;
   thinking_level?: string;
   timeoutMs?: number;
