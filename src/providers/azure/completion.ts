@@ -34,11 +34,16 @@ export class AzureCompletionProvider extends AzureGenericProvider {
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
     }
+    const envTemperature =
+      getEnvString('OPENAI_TEMPERATURE') !== undefined
+        ? getEnvFloat('OPENAI_TEMPERATURE')
+        : undefined;
+    const temperature = this.config.temperature ?? envTemperature;
     const body = {
       model: this.deploymentName,
       prompt,
       max_tokens: this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
-      temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
+      ...(temperature !== undefined ? { temperature } : {}),
       top_p: this.config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
       presence_penalty: this.config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
       frequency_penalty:

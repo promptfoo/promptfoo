@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../../cache';
-import { getEnvFloat, getEnvInt } from '../../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
   type GenAISpanContext,
@@ -144,6 +144,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     // Check if this is configured as a reasoning model
     const isReasoningModel = this.isReasoningModel();
+    const envTemperature =
+      getEnvString('OPENAI_TEMPERATURE') !== undefined
+        ? getEnvFloat('OPENAI_TEMPERATURE')
+        : undefined;
+    const temperature = config.temperature ?? envTemperature;
 
     // Get max tokens based on model type
     const maxTokens = config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024);
@@ -173,7 +178,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           }
         : {
             max_tokens: maxTokens,
-            temperature: config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
+            ...(temperature !== undefined ? { temperature } : {}),
           }),
       top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
       presence_penalty: config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
