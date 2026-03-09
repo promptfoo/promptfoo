@@ -120,10 +120,6 @@ export function extractMarkdownImageSources(markdown: string): string[] {
 }
 
 export function resolveEvalImageOutputSource(image: ImageOutput): string | undefined {
-  if (typeof image.data === 'string' && /^https?:\/\//.test(image.data)) {
-    return image.data;
-  }
-
   return resolveImageSource(image);
 }
 

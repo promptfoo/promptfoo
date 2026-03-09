@@ -2,9 +2,9 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import {
-  buildStructuredImageOutputs,
+  buildSafeStructuredImageOutputs,
   callOpenAiImageApi,
-  formatOutput,
+  formatStructuredImageOutput,
   OpenAiImageProvider,
 } from '../openai/image';
 import { REQUEST_TIMEOUT_MS } from '../shared';
@@ -141,13 +141,19 @@ export class XAIImageProvider extends OpenAiImageProvider {
     }
 
     try {
-      const formattedOutput = formatOutput(data, prompt, responseFormat);
+      const images = await buildSafeStructuredImageOutputs(data, undefined, context);
+      const formattedOutput = formatStructuredImageOutput(
+        data,
+        prompt,
+        responseFormat,
+        undefined,
+        images,
+      );
       if (typeof formattedOutput === 'object') {
         return formattedOutput;
       }
 
       const cost = cached ? 0 : this.calculateImageCost(config.n || 1);
-      const images = buildStructuredImageOutputs(data);
 
       return {
         output: formattedOutput,

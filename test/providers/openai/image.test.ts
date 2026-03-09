@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { isBlobStorageEnabled } from '../../../src/blobs/extractor';
+import { storeBlob } from '../../../src/blobs/index';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiImageProvider } from '../../../src/providers/openai/image';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -8,6 +11,15 @@ vi.mock('../../../src/cache', async (importOriginal) => {
     fetchWithCache: vi.fn(),
   };
 });
+vi.mock('../../../src/blobs/extractor', () => ({
+  isBlobStorageEnabled: vi.fn(),
+}));
+vi.mock('../../../src/blobs/index', () => ({
+  storeBlob: vi.fn(),
+}));
+vi.mock('../../../src/util/fetch/index', () => ({
+  fetchWithProxy: vi.fn(),
+}));
 vi.mock('../../../src/logger', () => ({
   default: {
     debug: vi.fn(),
@@ -18,6 +30,7 @@ vi.mock('../../../src/logger', () => ({
 }));
 
 describe('OpenAiImageProvider', () => {
+  const blobUri = (index: number) => `promptfoo://blob/${index.toString(16).padStart(32, '0')}`;
   const mockFetchResponse = {
     data: {
       data: [{ url: 'https://example.com/image.png' }],
@@ -38,7 +51,29 @@ describe('OpenAiImageProvider', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(isBlobStorageEnabled).mockReturnValue(true);
     vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
+    vi.mocked(fetchWithProxy).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers({ 'content-type': 'image/png' }),
+      arrayBuffer: async () => new ArrayBuffer(1024),
+    } as Response);
+    let blobIndex = 0;
+    vi.mocked(storeBlob).mockImplementation(async (_buffer, mimeType) => {
+      blobIndex += 1;
+      return {
+        ref: {
+          uri: blobUri(blobIndex),
+          hash: blobIndex.toString(16).padStart(32, '0'),
+          mimeType,
+          sizeBytes: 1024,
+          provider: 'filesystem',
+        },
+        deduplicated: false,
+      };
+    });
   });
 
   describe('Basic functionality', () => {
@@ -62,9 +97,9 @@ describe('OpenAiImageProvider', () => {
         expect.any(Number),
       );
 
-      expect(result).toEqual({
-        output: '![Generate a cat](https://example.com/image.png)',
-        images: [{ data: 'https://example.com/image.png', mimeType: 'image/png' }],
+      expect(result).toMatchObject({
+        output: `![Generate a cat](${blobUri(1)})`,
+        images: [{ blobRef: expect.objectContaining({ uri: blobUri(1) }), mimeType: 'image/png' }],
         cached: false,
         cost: 0.04, // Default cost for DALL-E 3 standard 1024x1024
       });
@@ -82,9 +117,9 @@ describe('OpenAiImageProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result).toEqual({
-        output: '![test prompt](https://example.com/image.png)',
-        images: [{ data: 'https://example.com/image.png', mimeType: 'image/png' }],
+      expect(result).toMatchObject({
+        output: `![test prompt](${blobUri(1)})`,
+        images: [{ blobRef: expect.objectContaining({ uri: blobUri(1) }), mimeType: 'image/png' }],
         cached: true,
         cost: 0, // Cost is 0 for cached responses
       });
@@ -109,11 +144,11 @@ describe('OpenAiImageProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result).toEqual({
-        output: '![test prompt](https://example.com/image-1.png)',
+      expect(result).toMatchObject({
+        output: `![test prompt](${blobUri(1)})`,
         images: [
-          { data: 'https://example.com/image-1.png', mimeType: 'image/png' },
-          { data: 'https://example.com/image-2.png', mimeType: 'image/png' },
+          { blobRef: expect.objectContaining({ uri: blobUri(1) }), mimeType: 'image/png' },
+          { blobRef: expect.objectContaining({ uri: blobUri(2) }), mimeType: 'image/png' },
         ],
         cached: false,
         cost: 0.08, // DALL-E 3 standard 1024x1024 with n=2
@@ -127,7 +162,7 @@ describe('OpenAiImageProvider', () => {
 
       const result = await provider.callApi('Test [prompt] with\nnewlines');
 
-      expect(result.output).toBe('![Test (prompt) with newlines](https://example.com/image.png)');
+      expect(result.output).toBe(`![Test (prompt) with newlines](${blobUri(1)})`);
     });
 
     it('should correctly use ID passed during construction', async () => {

@@ -1,5 +1,8 @@
+import { isBlobStorageEnabled } from '../../blobs/extractor';
+import { storeBlob } from '../../blobs/index';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { ellipsize } from '../../util/text';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
@@ -120,6 +123,8 @@ type OpenAiImageOptions = OpenAiSharedOptions & {
   model?: OpenAiImageModel;
 } & (DallE2Options | DallE3Options | GptImage1Options);
 
+type ImageBlobContext = Pick<CallApiContextParams, 'evaluationId' | 'testIdx' | 'promptIdx'>;
+
 // Helper functions to check model types (including dated variants like gpt-image-1.5-2025-12-16)
 function isGptImage1(model: string): boolean {
   return model === 'gpt-image-1' || model.startsWith('gpt-image-1-2025');
@@ -213,6 +218,25 @@ function inferMimeTypeFromUrl(url: string): string | undefined {
   return undefined;
 }
 
+function isExternalHttpUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url);
+}
+
+function formatImageMarkdown(prompt: string, imageSrc: string): string {
+  const sanitizedPrompt = prompt
+    .replace(/\r?\n|\r/g, ' ')
+    .replace(/\[/g, '(')
+    .replace(/\]/g, ')');
+  const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
+
+  return `![${ellipsizedPrompt}](${imageSrc})`;
+}
+
+function getPrimaryImageSource(images?: ImageOutput[]): string | undefined {
+  const primaryImage = images?.[0];
+  return primaryImage?.blobRef?.uri || primaryImage?.data;
+}
+
 export function buildStructuredImageOutputs(
   data: any,
   outputFormat?: string,
@@ -229,6 +253,9 @@ export function buildStructuredImageOutputs(
       }
 
       if (item.url) {
+        if (isExternalHttpUrl(item.url)) {
+          return null;
+        }
         const mimeType = inferMimeTypeFromUrl(item.url);
         return mimeType ? { data: item.url, mimeType } : { data: item.url };
       }
@@ -236,6 +263,119 @@ export function buildStructuredImageOutputs(
       return null;
     })
     .filter((item: ImageOutput | null): item is ImageOutput => item !== null);
+}
+
+async function storeExternalImageUrlAsBlob(
+  url: string,
+  outputFormat?: string,
+  blobContext?: ImageBlobContext,
+  index?: number,
+): Promise<ImageOutput | null> {
+  if (!isBlobStorageEnabled()) {
+    logger.warn('[OpenAI Image] Skipping external image URL because blob storage is disabled', {
+      url,
+    });
+    return null;
+  }
+
+  try {
+    const response = await fetchWithProxy(url);
+    if (!response.ok) {
+      logger.warn('[OpenAI Image] Failed to download external image URL', {
+        url,
+        status: response.status,
+        statusText: response.statusText,
+      });
+      return null;
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const responseMimeType = response.headers.get('content-type')?.split(';', 1)[0];
+    const mimeType =
+      responseMimeType || inferMimeTypeFromUrl(url) || getMimeTypeForOutputFormat(outputFormat);
+    const { ref } = await storeBlob(buffer, mimeType, {
+      evalId: blobContext?.evaluationId,
+      testIdx: blobContext?.testIdx,
+      promptIdx: blobContext?.promptIdx,
+      location: index == null ? 'response.images' : `response.images[${index}]`,
+      kind: 'image',
+    });
+
+    return { blobRef: ref, mimeType };
+  } catch (error) {
+    logger.warn('[OpenAI Image] Failed to internalize external image URL', {
+      url,
+      error: String(error),
+    });
+    return null;
+  }
+}
+
+export async function buildSafeStructuredImageOutputs(
+  data: any,
+  outputFormat?: string,
+  blobContext?: ImageBlobContext,
+): Promise<ImageOutput[] | undefined> {
+  if (!Array.isArray(data.data) || data.data.length === 0) {
+    return undefined;
+  }
+
+  const images = await Promise.all(
+    data.data.map(async (item: any, index: number): Promise<ImageOutput | null> => {
+      if (item.b64_json) {
+        const mimeType = getMimeTypeForOutputFormat(outputFormat);
+        return { data: `data:${mimeType};base64,${item.b64_json}`, mimeType };
+      }
+
+      if (!item.url) {
+        return null;
+      }
+
+      if (isExternalHttpUrl(item.url)) {
+        return storeExternalImageUrlAsBlob(item.url, outputFormat, blobContext, index);
+      }
+
+      const mimeType = inferMimeTypeFromUrl(item.url);
+      return mimeType ? { data: item.url, mimeType } : { data: item.url };
+    }),
+  );
+
+  const safeImages = images.filter(
+    (item: ImageOutput | null): item is ImageOutput => item !== null,
+  );
+  return safeImages.length > 0 ? safeImages : undefined;
+}
+
+export function formatStructuredImageOutput(
+  data: any,
+  prompt: string,
+  responseFormat?: string,
+  outputFormat?: string,
+  images?: ImageOutput[],
+): string | { error: string } {
+  const primaryImageSource = getPrimaryImageSource(images);
+  if (primaryImageSource) {
+    return responseFormat === 'b64_json'
+      ? primaryImageSource
+      : formatImageMarkdown(prompt, primaryImageSource);
+  }
+
+  if (responseFormat === 'b64_json') {
+    const b64Json = data.data?.[0]?.b64_json;
+    if (!b64Json) {
+      return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
+    }
+
+    return `data:${getMimeTypeForOutputFormat(outputFormat)};base64,${b64Json}`;
+  }
+
+  const url = data.data?.[0]?.url;
+  if (!url) {
+    return { error: `No image URL found in response: ${JSON.stringify(data)}` };
+  }
+
+  // Fall back to plain text so the UI does not auto-fetch an external image.
+  return url;
 }
 
 export function formatOutput(
@@ -257,13 +397,7 @@ export function formatOutput(
       return { error: `No image URL found in response: ${JSON.stringify(data)}` };
     }
 
-    const sanitizedPrompt = prompt
-      .replace(/\r?\n|\r/g, ' ')
-      .replace(/\[/g, '(')
-      .replace(/\]/g, ')');
-    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-
-    return `![${ellipsizedPrompt}](${url})`;
+    return formatImageMarkdown(prompt, url);
   }
 }
 
@@ -390,6 +524,7 @@ export async function processApiResponse(
   quality?: string,
   n: number = 1,
   outputFormat?: string,
+  blobContext?: ImageBlobContext,
 ): Promise<ProviderResponse> {
   if (data.error) {
     await data?.deleteFromCache?.();
@@ -399,13 +534,20 @@ export async function processApiResponse(
   }
 
   try {
-    const formattedOutput = formatOutput(data, prompt, responseFormat, outputFormat);
+    const images = await buildSafeStructuredImageOutputs(data, outputFormat, blobContext);
+    const formattedOutput = formatStructuredImageOutput(
+      data,
+      prompt,
+      responseFormat,
+      outputFormat,
+      images,
+    );
     if (typeof formattedOutput === 'object') {
+      await data?.deleteFromCache?.();
       return formattedOutput;
     }
 
     const cost = cached ? 0 : calculateImageCost(model, size, quality, n);
-    const images = buildStructuredImageOutputs(data, outputFormat);
 
     return {
       output: formattedOutput,
@@ -513,6 +655,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       config.quality,
       config.n || 1,
       'output_format' in config ? config.output_format : undefined,
+      context,
     );
   }
 }

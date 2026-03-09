@@ -540,6 +540,17 @@ describe('EvalOutputCell duplicate image prevention', () => {
       const images = container.querySelectorAll('img');
       expect(images).toHaveLength(2);
     });
+
+    it('should not render external structured image URLs', () => {
+      const props = createBaseProps({
+        text: 'some-invalid-blob-ref',
+        images: [{ data: 'https://attacker.example/internal-probe.png' }],
+      });
+
+      const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+      expect(container.querySelectorAll('img')).toHaveLength(0);
+    });
   });
 
   describe('integration with different output types', () => {

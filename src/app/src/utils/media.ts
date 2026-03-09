@@ -145,20 +145,24 @@ export function resolveAudioSource(
 export function resolveImageSource(
   image?: { data?: string; format?: string; blobRef?: BlobLike } | string | null,
 ): string | undefined {
-  if (typeof image === 'string') {
-    const blobUrl = resolveBlobUri(image);
+  const resolveInlineImageData = (data: string, format: string): string | undefined => {
+    const blobUrl = resolveBlobUri(data);
     if (blobUrl) {
       return blobUrl;
     }
-    if (image.startsWith('data:')) {
-      return image;
+    if (data.startsWith('data:')) {
+      return data;
     }
-    // Allow base64-ish payloads that are purely non-whitespace and use common base64/url-safe chars
-    // Require a minimum length to avoid misclassifying short strings (e.g., session IDs) as images.
-    if (image.length >= 60 && /^[A-Za-z0-9+/=_-]+$/.test(image)) {
-      return `data:image/png;base64,${image}`;
+    // Match the string-path behavior so arbitrary URLs and short identifiers
+    // are not reinterpreted as inline image payloads.
+    if (data.length >= 60 && /^[A-Za-z0-9+/=_-]+$/.test(data)) {
+      return `data:image/${format};base64,${data}`;
     }
     return undefined;
+  };
+
+  if (typeof image === 'string') {
+    return resolveInlineImageData(image, 'png');
   }
 
   const blobUrl = resolveBlobRef(image?.blobRef);
@@ -167,10 +171,7 @@ export function resolveImageSource(
   }
 
   if (image?.data) {
-    const format = image.format || 'png';
-    return image.data.startsWith('data:')
-      ? image.data
-      : `data:image/${format};base64,${image.data}`;
+    return resolveInlineImageData(image.data, image.format || 'png');
   }
 
   return undefined;
