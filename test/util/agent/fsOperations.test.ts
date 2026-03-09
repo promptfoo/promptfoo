@@ -9,10 +9,17 @@ const fsPromisesMock = vi.hoisted(() => ({
   readFileSpy: vi.fn(),
 }));
 
+function getActualReadFile(): typeof fs.readFile {
+  if (!fsPromisesMock.actualReadFile) {
+    throw new Error('readFile mock not initialized');
+  }
+  return fsPromisesMock.actualReadFile;
+}
+
 vi.mock('node:fs/promises', async () => {
   const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
   fsPromisesMock.actualReadFile = actual.readFile.bind(actual);
-  fsPromisesMock.readFileSpy.mockImplementation(fsPromisesMock.actualReadFile);
+  fsPromisesMock.readFileSpy.mockImplementation(getActualReadFile());
 
   return {
     ...actual,
@@ -27,7 +34,7 @@ describe('agent fsOperations readFile', () => {
 
   beforeEach(async () => {
     fsPromisesMock.readFileSpy.mockReset();
-    fsPromisesMock.readFileSpy.mockImplementation(fsPromisesMock.actualReadFile);
+    fsPromisesMock.readFileSpy.mockImplementation(getActualReadFile());
     rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-fs-operations-'));
   });
 
