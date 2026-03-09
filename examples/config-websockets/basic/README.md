@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-websockets/basic
+cd config-websockets/basic
 ```
 
 This example shows how to connect promptfoo to a WebSocket-based LLM service.

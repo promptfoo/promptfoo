@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example amazon-bedrock/models
+cd amazon-bedrock/models
 ```
 
 ## Prerequisites

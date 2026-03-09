@@ -36,7 +36,7 @@ npx promptfoo@latest eval
 
 The first evaluation downloads both models (cached for subsequent runs):
 
-```
+```text
 Downloading Qwen3-0.6B-ONNX... ~600MB
 Downloading all-MiniLM-L6-v2... ~23MB
 ```

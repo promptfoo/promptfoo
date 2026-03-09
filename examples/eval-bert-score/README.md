@@ -4,6 +4,7 @@ Use BERTScore to measure semantic similarity between LLM outputs and reference t
 
 ```bash
 npx promptfoo@latest init --example eval-bert-score
+cd eval-bert-score
 ```
 
 ## Setup

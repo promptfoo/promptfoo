@@ -11,21 +11,14 @@ import {
   resetConfigCache,
   resolveAuthToken,
   resolveGatewayUrl,
+  resolveGatewayWsUrl,
 } from '../../src/providers/openclaw';
 
 vi.mock('../../src/envars', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/envars')>();
   return {
     ...actual,
-    getEnvString: vi.fn((key: string) => {
-      if (key === 'OPENCLAW_GATEWAY_URL') {
-        return process.env.OPENCLAW_GATEWAY_URL;
-      }
-      if (key === 'OPENCLAW_GATEWAY_TOKEN') {
-        return process.env.OPENCLAW_GATEWAY_TOKEN;
-      }
-      return undefined;
-    }),
+    getEnvString: vi.fn((key: string) => process.env[key]),
   };
 });
 
@@ -61,6 +54,11 @@ vi.mock('../../src/util/fetch/index', () => ({
   fetchWithProxy: mockFetchWithProxy,
 }));
 
+const mockFetchWithCache = vi.hoisted(() => vi.fn());
+vi.mock('../../src/cache', () => ({
+  fetchWithCache: mockFetchWithCache,
+}));
+
 describe('OpenClaw Provider', () => {
   const originalEnv = { ...process.env };
 
@@ -68,8 +66,14 @@ describe('OpenClaw Provider', () => {
     vi.clearAllMocks();
     websocketMocks.WebSocketMock.mockReset();
     mockFetchWithProxy.mockReset();
+    mockFetchWithCache.mockReset();
     resetConfigCache();
     process.env = { ...originalEnv };
+    delete process.env.CLAWDBOT_GATEWAY_PASSWORD;
+    delete process.env.CLAWDBOT_GATEWAY_TOKEN;
+    delete process.env.CLAWDBOT_GATEWAY_URL;
+    delete process.env.OPENCLAW_CONFIG_PATH;
+    delete process.env.OPENCLAW_GATEWAY_PASSWORD;
     delete process.env.OPENCLAW_GATEWAY_URL;
     delete process.env.OPENCLAW_GATEWAY_TOKEN;
   });
@@ -83,6 +87,15 @@ describe('OpenClaw Provider', () => {
     it('should return undefined when config file does not exist', () => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(false);
       expect(readOpenClawConfig()).toBeUndefined();
+    });
+
+    it('should respect OPENCLAW_CONFIG_PATH when set', () => {
+      process.env.OPENCLAW_CONFIG_PATH = '/tmp/custom-openclaw.json';
+      const existsSpy = vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+      readOpenClawConfig();
+
+      expect(existsSpy).toHaveBeenCalledWith('/tmp/custom-openclaw.json');
     });
 
     it('should parse valid JSON config', () => {
@@ -123,6 +136,34 @@ describe('OpenClaw Provider', () => {
       expect(config?.gateway?.auth?.token).toBe('my-token');
     });
 
+    it('should parse an upstream-style OpenClaw config with unquoted keys', () => {
+      const json5Content = `{
+        gateway: {
+          mode: 'local',
+          bind: 'loopback',
+          port: 19000,
+          auth: {
+            mode: 'token',
+            token: 'my-token',
+          },
+          http: {
+            endpoints: {
+              chatCompletions: { enabled: true },
+              responses: { enabled: true },
+            },
+          },
+        },
+      }`;
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 2500 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(json5Content);
+
+      const config = readOpenClawConfig();
+      expect(config?.gateway?.port).toBe(19000);
+      expect(config?.gateway?.auth?.token).toBe('my-token');
+      expect(config?.gateway?.http?.endpoints?.chatCompletions?.enabled).toBe(true);
+    });
+
     it('should handle JSON5 with block comments', () => {
       const json5Content = `{
         /* block comment */
@@ -155,9 +196,7 @@ describe('OpenClaw Provider', () => {
       expect((config?.gateway as any)?.url).toBe('http://example.com/path');
     });
 
-    it('should not strip comment-like content inside single-quoted strings', () => {
-      // The parser tracks single-quoted strings to avoid corrupting them,
-      // even though JSON.parse doesn't support single quotes as key/value delimiters
+    it('should preserve comment-like content inside strings', () => {
       const json5Content = `{
         "gateway": {
           "port": 19000,
@@ -288,6 +327,11 @@ describe('OpenClaw Provider', () => {
       expect(resolveGatewayUrl()).toBe('http://env-host:8888');
     });
 
+    it('should fall back to legacy CLAWDBOT gateway URL environment variable', () => {
+      process.env.CLAWDBOT_GATEWAY_URL = 'http://legacy-host:8888';
+      expect(resolveGatewayUrl()).toBe('http://legacy-host:8888');
+    });
+
     it('should auto-detect from config file third', () => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(true);
       vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 9000 } as fs.Stats);
@@ -314,6 +358,28 @@ describe('OpenClaw Provider', () => {
       );
 
       expect(resolveGatewayUrl()).toBe('http://192.168.1.5:20000');
+    });
+
+    it('should treat lan bind mode as 127.0.0.1 for local autodetection', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10600 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({ gateway: { port: 20000, bind: 'lan' } }),
+      );
+
+      expect(resolveGatewayUrl()).toBe('http://127.0.0.1:20000');
+    });
+
+    it('should use customBindHost when bind mode is custom', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10700 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({
+          gateway: { port: 20000, bind: 'custom', customBindHost: '192.168.1.8' },
+        }),
+      );
+
+      expect(resolveGatewayUrl()).toBe('http://192.168.1.8:20000');
     });
 
     it('should treat loopback bind as 127.0.0.1', () => {
@@ -344,6 +410,28 @@ describe('OpenClaw Provider', () => {
       expect(resolveGatewayUrl()).toBe('http://127.0.0.1:18789');
     });
 
+    it('should use https when local gateway TLS is enabled', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10250 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({ gateway: { port: 20000, tls: { enabled: true } } }),
+      );
+
+      expect(resolveGatewayUrl()).toBe('https://127.0.0.1:20000');
+    });
+
+    it('should use gateway.remote.url when config is in remote mode', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10260 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({
+          gateway: { mode: 'remote', remote: { url: 'wss://remote.example:443' } },
+        }),
+      );
+
+      expect(resolveGatewayUrl()).toBe('https://remote.example:443');
+    });
+
     it('should prefer per-provider env override over process env', () => {
       process.env.OPENCLAW_GATEWAY_URL = 'http://process-env:8888';
       expect(resolveGatewayUrl(undefined, { OPENCLAW_GATEWAY_URL: 'http://override:7777' })).toBe(
@@ -355,6 +443,43 @@ describe('OpenClaw Provider', () => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(false);
       expect(resolveGatewayUrl()).toBe('http://127.0.0.1:18789');
     });
+
+    it('should ignore whitespace-only explicit gateway URLs', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+      expect(resolveGatewayUrl({ gateway_url: '   ' })).toBe('http://127.0.0.1:18789');
+    });
+  });
+
+  describe('resolveGatewayWsUrl', () => {
+    it('should convert explicit http URLs to ws', () => {
+      expect(resolveGatewayWsUrl({ gateway_url: 'http://host:1234' })).toBe('ws://host:1234');
+    });
+
+    it('should convert explicit https URLs to wss', () => {
+      expect(resolveGatewayWsUrl({ gateway_url: 'https://host:1234' })).toBe('wss://host:1234');
+    });
+
+    it('should use wss when local gateway TLS is enabled', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10270 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({ gateway: { port: 20000, tls: { enabled: true } } }),
+      );
+
+      expect(resolveGatewayWsUrl()).toBe('wss://127.0.0.1:20000');
+    });
+
+    it('should preserve remote wss URLs in remote mode', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10280 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({
+          gateway: { mode: 'remote', remote: { url: 'wss://remote.example:443' } },
+        }),
+      );
+
+      expect(resolveGatewayWsUrl()).toBe('wss://remote.example:443');
+    });
   });
 
   describe('resolveAuthToken', () => {
@@ -365,6 +490,11 @@ describe('OpenClaw Provider', () => {
     it('should use environment variable second', () => {
       process.env.OPENCLAW_GATEWAY_TOKEN = 'env-token';
       expect(resolveAuthToken()).toBe('env-token');
+    });
+
+    it('should use password environment variable when token is unset', () => {
+      process.env.OPENCLAW_GATEWAY_PASSWORD = 'env-password';
+      expect(resolveAuthToken()).toBe('env-password');
     });
 
     it('should auto-detect from config file third', () => {
@@ -379,11 +509,78 @@ describe('OpenClaw Provider', () => {
       expect(resolveAuthToken()).toBe('config-file-token');
     });
 
+    it('should auto-detect password auth from config file', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 12100 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({
+          gateway: { auth: { mode: 'password', password: 'config-file-password' } },
+        }),
+      );
+
+      expect(resolveAuthToken()).toBe('config-file-password');
+    });
+
+    it('should fall back to gateway.remote token in local mode when gateway.auth is unset', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 12125 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({
+          gateway: { mode: 'local', remote: { token: 'remote-config-token' } },
+        }),
+      );
+
+      expect(resolveAuthToken()).toBe('remote-config-token');
+    });
+
+    it('should prefer the token from config file when mode is token and both secrets are set', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 12150 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({
+          gateway: {
+            auth: {
+              mode: 'token',
+              token: 'config-file-token',
+              password: 'config-file-password',
+            },
+          },
+        }),
+      );
+
+      expect(resolveAuthToken()).toBe('config-file-token');
+    });
+
+    it('should prefer gateway.remote password in remote mode when password auth is configured', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 12175 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({
+          gateway: {
+            mode: 'remote',
+            auth: { mode: 'password', password: 'local-config-password' },
+            remote: { password: 'remote-config-password' },
+          },
+        }),
+      );
+
+      expect(resolveAuthToken()).toBe('remote-config-password');
+    });
+
     it('should prefer per-provider env override over process env', () => {
       process.env.OPENCLAW_GATEWAY_TOKEN = 'process-token';
       expect(resolveAuthToken(undefined, { OPENCLAW_GATEWAY_TOKEN: 'override-token' })).toBe(
         'override-token',
       );
+    });
+
+    it('should use explicit auth password when provided', () => {
+      expect(resolveAuthToken({ auth_password: 'explicit-password' })).toBe('explicit-password');
+    });
+
+    it('should fall back to legacy CLAWDBOT token environment variables', () => {
+      process.env.CLAWDBOT_GATEWAY_TOKEN = 'legacy-token';
+      expect(resolveAuthToken()).toBe('legacy-token');
     });
 
     it('should return undefined when no token available', () => {
@@ -550,6 +747,35 @@ describe('OpenClaw Provider', () => {
       const provider = new OpenClawResponsesProvider('main', {});
       expect(provider.config.apiKeyRequired).toBe(false);
     });
+
+    it('should call the responses endpoint without requiring an OpenAI API key', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('OpenClaw response');
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithCache.mock.calls[0][0]).toBe('http://test:18789/v1/responses');
+      expect(mockFetchWithCache.mock.calls[0][1].headers.Authorization).toBeUndefined();
+    });
   });
 
   describe('OpenClawToolInvokeProvider', () => {
@@ -678,6 +904,44 @@ describe('OpenClaw Provider', () => {
       const fetchCall = mockFetchWithProxy.mock.calls[0];
       const body = JSON.parse(fetchCall[1]?.body as string);
       expect(body.sessionKey).toBe('my-session');
+    });
+
+    it('should include action and dryRun when configured', async () => {
+      const provider = new OpenClawToolInvokeProvider('sessions_list', {
+        config: { action: 'json', dry_run: true, gateway_url: 'http://test:18789' },
+      });
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: async () => ({ ok: true, result: 'ok' }),
+      } as Response);
+
+      await provider.callApi('{}');
+
+      const fetchCall = mockFetchWithProxy.mock.calls[0];
+      const body = JSON.parse(fetchCall[1]?.body as string);
+      expect(body.action).toBe('json');
+      expect(body.dryRun).toBe(true);
+    });
+
+    it('should merge custom headers into the request', async () => {
+      const provider = new OpenClawToolInvokeProvider('sessions_list', {
+        config: {
+          gateway_url: 'http://test:18789',
+          headers: { 'x-openclaw-message-channel': 'slack' },
+        },
+      });
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: async () => ({ ok: true, result: 'ok' }),
+      } as Response);
+
+      await provider.callApi('{}');
+
+      const fetchCall = mockFetchWithProxy.mock.calls[0];
+      const headers = fetchCall[1]?.headers as Record<string, string>;
+      expect(headers['x-openclaw-message-channel']).toBe('slack');
     });
 
     it('should stringify non-string results', async () => {
@@ -849,6 +1113,7 @@ describe('OpenClaw Provider', () => {
       expect(agentReq.method).toBe('agent');
       expect(agentReq.params.message).toBe('Hello agent');
       expect(agentReq.params.agentId).toBe('main');
+      expect(agentReq.params.sessionKey).toMatch(/^promptfoo-[0-9a-f-]{36}$/);
 
       // Verify wait request
       expect(waitReq.method).toBe('agent.wait');
@@ -1069,6 +1334,45 @@ describe('OpenClaw Provider', () => {
       expect(result.error).toContain('Agent timed out');
     });
 
+    it('should fail immediately when agent acceptance is missing a runId', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = messageHandlers.get('message')!;
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'connect.challenge',
+            payload: { nonce: 'n', ts: 1 },
+          }),
+        ),
+      );
+      const connectReq = JSON.parse(mockWs.send.mock.calls[0][0]);
+      onMessage(
+        Buffer.from(JSON.stringify({ type: 'res', id: connectReq.id, ok: true, payload: {} })),
+      );
+      const agentReq = JSON.parse(mockWs.send.mock.calls[1][0]);
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'res',
+            id: agentReq.id,
+            ok: true,
+            payload: { status: 'accepted' },
+          }),
+        ),
+      );
+
+      const result = await promise;
+      expect(result.error).toContain('without a runId');
+      expect(mockWs.send).toHaveBeenCalledTimes(2);
+    });
+
     it('should handle WebSocket errors', async () => {
       const provider = new OpenClawAgentProvider('main', {
         config: { gateway_url: 'http://test:18789' },
@@ -1117,6 +1421,58 @@ describe('OpenClaw Provider', () => {
       expect(agentReq.params.thinking).toBe('high');
 
       // Wait response to resolve
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'res',
+            id: waitReq.id,
+            ok: true,
+            payload: { status: 'ok' },
+          }),
+        ),
+      );
+
+      const result = await promise;
+      expect(result.output).toBe('No output from agent');
+    });
+
+    it('should send password auth during connect when auth_password is configured', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789', auth_password: 'my-password' },
+      });
+
+      void provider.callApi('Hello');
+      const onMessage = messageHandlers.get('message')!;
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'connect.challenge',
+            payload: { nonce: 'n', ts: 1 },
+          }),
+        ),
+      );
+
+      const connectReq = JSON.parse(mockWs.send.mock.calls[0][0]);
+      expect(connectReq.params.auth.password).toBe('my-password');
+      expect(connectReq.params.auth.token).toBeUndefined();
+    });
+
+    it('should include extraSystemPrompt when configured', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: {
+          extra_system_prompt: 'Be terse.',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = messageHandlers.get('message')!;
+      const { agentReq, waitReq } = simulateHandshake(onMessage);
+
+      expect(agentReq.params.extraSystemPrompt).toBe('Be terse.');
+
       onMessage(
         Buffer.from(
           JSON.stringify({

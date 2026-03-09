@@ -1,5 +1,12 @@
 # provider-replicate/llama-guard-moderation (LlamaGuard Content Moderation)
 
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example provider-replicate/llama-guard-moderation
+cd provider-replicate/llama-guard-moderation
+```
+
 This example demonstrates how to use Meta's LlamaGuard models for content moderation in promptfoo.
 
 ## Features

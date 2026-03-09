@@ -185,6 +185,14 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
    * GPT-5 only: Controls the verbosity of the model's responses. Ignored for non-GPT-5 models.
    */
   verbosity?: GPT5Verbosity;
+
+  /**
+   * When true, omit hardcoded defaults for temperature, max_tokens, top_p, etc.
+   * Only values explicitly set via config or environment variables will be sent.
+   * Used by proxy providers (e.g. LiteLLM) that want the upstream API/proxy to
+   * apply its own defaults.
+   */
+  omitDefaults?: boolean;
 };
 
 // =============================================================================
