@@ -1,0 +1,73 @@
+.quote {
+  margin: 2.5rem 0 0;
+  padding: 1.5rem 0 0;
+  border-top: 1px solid var(--ifm-toc-border-color);
+}
+
+.quoteText {
+  margin: 0;
+  padding: 0 0 0 1.25rem;
+  border-left: 3px solid var(--ifm-color-primary);
+  color: var(--ifm-color-emphasis-800);
+  font-size: 1.1rem;
+  font-style: italic;
+  line-height: 1.8;
+  text-wrap: pretty;
+}
+
+.quoteAttribution {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-left: 1.25rem;
+}
+
+.quoteAvatar {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
+.quoteAuthor {
+  color: var(--ifm-font-color-base);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.quoteRole {
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.8rem;
+  margin-top: 0.1rem;
+}
+
+.signature {
+  display: inline-block;
+  margin-top: 1rem;
+}
+
+.signatureName {
+  color: var(--ifm-font-color-base);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.signatureTitle {
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.9rem;
+  margin-top: 0.15rem;
+}
+
+.legalNote {
+  margin-top: 1.5rem;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.88rem;
+}
+
+@media (max-width: 640px) {
+  .signature {
+    width: 100%;
+  }
+}
