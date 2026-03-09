@@ -377,6 +377,15 @@
         "OPENAI_ORGANIZATION": {
           "type": "string"
         },
+        "CLAWDBOT_GATEWAY_PASSWORD": {
+          "type": "string"
+        },
+        "CLAWDBOT_GATEWAY_TOKEN": {
+          "type": "string"
+        },
+        "CLAWDBOT_GATEWAY_URL": {
+          "type": "string"
+        },
         "CODEX_API_KEY": {
           "type": "string"
         },
@@ -1669,6 +1678,15 @@
                       "type": "string"
                     },
                     "OPENAI_ORGANIZATION": {
+                      "type": "string"
+                    },
+                    "CLAWDBOT_GATEWAY_PASSWORD": {
+                      "type": "string"
+                    },
+                    "CLAWDBOT_GATEWAY_TOKEN": {
+                      "type": "string"
+                    },
+                    "CLAWDBOT_GATEWAY_URL": {
                       "type": "string"
                     },
                     "CODEX_API_KEY": {

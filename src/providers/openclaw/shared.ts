@@ -304,14 +304,20 @@ function resolveGatewayTransportUrl(
   transport: GatewayTransport,
 ): string {
   // 1. Explicit config
-  if (config?.gateway_url) {
-    return normalizeGatewayUrl(config.gateway_url, transport) || config.gateway_url;
+  const configUrl = config?.gateway_url?.trim();
+  if (configUrl) {
+    return normalizeGatewayUrl(configUrl, transport) || configUrl;
   }
 
   // 2. Per-provider env overrides, then process environment variable
-  const envUrl = env?.OPENCLAW_GATEWAY_URL || getEnvString('OPENCLAW_GATEWAY_URL');
-  if (envUrl) {
-    return normalizeGatewayUrl(envUrl, transport) || envUrl;
+  const envUrl =
+    env?.OPENCLAW_GATEWAY_URL ||
+    getEnvString('OPENCLAW_GATEWAY_URL') ||
+    env?.CLAWDBOT_GATEWAY_URL ||
+    getEnvString('CLAWDBOT_GATEWAY_URL');
+  const trimmedEnvUrl = envUrl?.trim();
+  if (trimmedEnvUrl) {
+    return normalizeGatewayUrl(trimmedEnvUrl, transport) || trimmedEnvUrl;
   }
 
   // 3. Auto-detect from the active OpenClaw config file
@@ -403,7 +409,10 @@ export function buildOpenClawProviderOptions(
   const config = (providerOptions.config || {}) as Record<string, unknown>;
   const env = providerOptions.env as Record<string, string | undefined> | undefined;
   const gatewayUrl = resolveGatewayUrl(config as { gateway_url?: string }, env);
-  const authToken = resolveAuthToken(config as { auth_token?: string }, env);
+  const authToken = resolveAuthToken(
+    config as { auth_password?: string; auth_token?: string },
+    env,
+  );
 
   return {
     ...providerOptions,

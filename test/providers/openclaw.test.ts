@@ -11,6 +11,7 @@ import {
   resetConfigCache,
   resolveAuthToken,
   resolveGatewayUrl,
+  resolveGatewayWsUrl,
 } from '../../src/providers/openclaw';
 
 vi.mock('../../src/envars', async (importOriginal) => {
@@ -64,6 +65,7 @@ describe('OpenClaw Provider', () => {
     process.env = { ...originalEnv };
     delete process.env.CLAWDBOT_GATEWAY_PASSWORD;
     delete process.env.CLAWDBOT_GATEWAY_TOKEN;
+    delete process.env.CLAWDBOT_GATEWAY_URL;
     delete process.env.OPENCLAW_CONFIG_PATH;
     delete process.env.OPENCLAW_GATEWAY_PASSWORD;
     delete process.env.OPENCLAW_GATEWAY_URL;
@@ -293,6 +295,11 @@ describe('OpenClaw Provider', () => {
       expect(resolveGatewayUrl()).toBe('http://env-host:8888');
     });
 
+    it('should fall back to legacy CLAWDBOT gateway URL environment variable', () => {
+      process.env.CLAWDBOT_GATEWAY_URL = 'http://legacy-host:8888';
+      expect(resolveGatewayUrl()).toBe('http://legacy-host:8888');
+    });
+
     it('should auto-detect from config file third', () => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(true);
       vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 9000 } as fs.Stats);
@@ -403,6 +410,43 @@ describe('OpenClaw Provider', () => {
     it('should fall back to default', () => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(false);
       expect(resolveGatewayUrl()).toBe('http://127.0.0.1:18789');
+    });
+
+    it('should ignore whitespace-only explicit gateway URLs', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+      expect(resolveGatewayUrl({ gateway_url: '   ' })).toBe('http://127.0.0.1:18789');
+    });
+  });
+
+  describe('resolveGatewayWsUrl', () => {
+    it('should convert explicit http URLs to ws', () => {
+      expect(resolveGatewayWsUrl({ gateway_url: 'http://host:1234' })).toBe('ws://host:1234');
+    });
+
+    it('should convert explicit https URLs to wss', () => {
+      expect(resolveGatewayWsUrl({ gateway_url: 'https://host:1234' })).toBe('wss://host:1234');
+    });
+
+    it('should use wss when local gateway TLS is enabled', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10270 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({ gateway: { port: 20000, tls: { enabled: true } } }),
+      );
+
+      expect(resolveGatewayWsUrl()).toBe('wss://127.0.0.1:20000');
+    });
+
+    it('should preserve remote wss URLs in remote mode', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10280 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({
+          gateway: { mode: 'remote', remote: { url: 'wss://remote.example:443' } },
+        }),
+      );
+
+      expect(resolveGatewayWsUrl()).toBe('wss://remote.example:443');
     });
   });
 

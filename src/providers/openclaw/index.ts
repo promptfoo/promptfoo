@@ -12,8 +12,10 @@ export { OpenClawResponsesProvider } from './responses';
 export {
   readOpenClawConfig,
   resetConfigCache,
+  resolveAuthSecret,
   resolveAuthToken,
   resolveGatewayUrl,
+  resolveGatewayWsUrl,
 } from './shared';
 export { OpenClawToolInvokeProvider } from './tools';
 

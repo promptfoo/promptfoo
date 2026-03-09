@@ -256,7 +256,7 @@ tests:
       task: What files are in the current directory?
 ```
 
-### Tool Invoke (Red Team)
+### Tool Invoke
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
