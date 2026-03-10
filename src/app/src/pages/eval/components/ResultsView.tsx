@@ -547,6 +547,7 @@ export default function ResultsView({
   // can produce meaningful uniform scores (e.g., 0.85) that users want to visualize.
   const hasMeaningfulUniformScore =
     uniqueScores.size === 1 && ![0, 1].includes([...uniqueScores][0]);
+  const isRedteamEval = config?.redteam !== undefined;
 
   const resultsChartsUnavailableReasons = React.useMemo(() => {
     const reasons: string[] = [];
@@ -571,7 +572,9 @@ export default function ResultsView({
   }, [config, hasMeaningfulUniformScore, hasVariedScores, resultsChartsScores.length, table]);
 
   const canRenderResultsCharts = resultsChartsUnavailableReasons.length === 0;
-  const shouldRenderResultsChartsByDefault = window.innerHeight >= 1100 && canRenderResultsCharts;
+  const showResultsChartsControl = !isRedteamEval;
+  const shouldRenderResultsChartsByDefault =
+    showResultsChartsControl && window.innerHeight >= 1100 && canRenderResultsCharts;
   const [hasUserToggledResultsCharts, setHasUserToggledResultsCharts] = React.useState(false);
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(
     shouldRenderResultsChartsByDefault,
@@ -706,17 +709,19 @@ export default function ResultsView({
                     </TooltipTrigger>
                     <TooltipContent>Edit table view settings</TooltipContent>
                   </Tooltip>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setHasUserToggledResultsCharts(true);
-                      setRenderResultsCharts((prev) => !prev);
-                    }}
-                  >
-                    <BarChart className="size-4 mr-2" />
-                    {renderResultsCharts ? 'Hide Charts' : 'Show Charts'}
-                  </Button>
+                  {showResultsChartsControl && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setHasUserToggledResultsCharts(true);
+                        setRenderResultsCharts((prev) => !prev);
+                      }}
+                    >
+                      <BarChart className="size-4 mr-2" />
+                      {renderResultsCharts ? 'Hide Charts' : 'Show Charts'}
+                    </Button>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2 items-center">
                   <span className="text-xs font-medium text-muted-foreground">Display:</span>
@@ -875,10 +880,14 @@ export default function ResultsView({
                   )}
                 </div>
               </div>
-              {renderResultsCharts &&
+              {showResultsChartsControl &&
+                renderResultsCharts &&
                 (canRenderResultsCharts ? (
                   <ResultsCharts
-                    handleHideCharts={() => setRenderResultsCharts(false)}
+                    handleHideCharts={() => {
+                      setHasUserToggledResultsCharts(true);
+                      setRenderResultsCharts(false);
+                    }}
                     scores={resultsChartsScores}
                   />
                 ) : (

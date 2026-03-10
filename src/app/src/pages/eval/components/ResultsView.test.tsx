@@ -3,7 +3,7 @@ import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
@@ -175,6 +175,10 @@ const renderWithRouter = (component: React.ReactElement) => {
   return renderWithProviders(<MemoryRouter>{component}</MemoryRouter>);
 };
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
@@ -315,11 +319,12 @@ describe('ResultsView Share Button', () => {
 describe('ResultsView Copy Eval', () => {
   const mockOnRecentEvalSelected = vi.fn();
   const mockCallApi = vi.mocked(callApi);
-  const mockWindowOpen = vi.spyOn(window, 'open');
+  let mockWindowOpen: ReturnType<typeof vi.spyOn<typeof window, 'open'>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
+    mockWindowOpen = vi.spyOn(window, 'open');
     mockWindowOpen.mockImplementation(() => null);
 
     mockCallApi.mockResolvedValue({
@@ -1427,6 +1432,69 @@ describe('ResultsView Chart Rendering', () => {
     expect(
       screen.getByText('Charts require at least one valid numeric score.'),
     ).toBeInTheDocument();
+  });
+
+  it('hides chart controls entirely for redteam evals', () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [
+          { outputs: [{ score: 0.4 }, { score: 0.8 }] },
+          { outputs: [{ score: 0.5 }, { score: 0.9 }] },
+        ],
+      },
+      config: {
+        description: 'Redteam Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+        redteam: {
+          plugins: [],
+        },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    expect(screen.queryByText('Show Charts')).toBeNull();
+    expect(screen.queryByText('Hide Charts')).toBeNull();
+    expect(screen.queryByTestId('results-charts')).toBeNull();
+    expect(screen.queryByText('Charts are unavailable for this evaluation')).toBeNull();
   });
 });
 
