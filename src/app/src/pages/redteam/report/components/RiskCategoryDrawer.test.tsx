@@ -1,15 +1,10 @@
 import { renderWithProviders } from '@app/utils/testutils';
 import { fireEvent, screen } from '@testing-library/react';
-import { useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
 import type { AtomicTestCase, EvaluateResult, ResultFailureReason } from '@promptfoo/types';
 
 // Mock dependencies
-vi.mock('react-router-dom', () => ({
-  useNavigate: vi.fn(),
-}));
-
 vi.mock('../../../eval/components/EvalOutputPromptDialog', () => ({
   default: () => null,
 }));
@@ -23,8 +18,6 @@ vi.mock('./SuggestionsDialog', () => ({
 }));
 
 describe('RiskCategoryDrawer Component Navigation', () => {
-  const mockNavigate = vi.fn();
-
   // Create a mock test case
   const mockTestCase: AtomicTestCase = {
     vars: {},
@@ -79,47 +72,32 @@ describe('RiskCategoryDrawer Component Navigation', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
-
-    // Mock window.open
-    global.window.open = vi.fn();
   });
 
-  it('should navigate to eval page when clicking View All Logs button', () => {
+  it('renders outside a router provider and links to filtered eval logs', () => {
     renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
 
-    const viewAllLogsButton = screen.getByText('View All Logs');
-
-    // Test normal click - should use navigate
-    fireEvent.click(viewAllLogsButton);
-
+    const viewAllLogsLink = screen.getByRole('link', { name: 'View All Logs' });
     const expectedUrl =
       '/eval/test-eval-123?filter=%5B%7B%22type%22%3A%22plugin%22%2C%22operator%22%3A%22equals%22%2C%22value%22%3A%22bola%22%7D%5D';
-    expect(mockNavigate).toHaveBeenCalledWith(expectedUrl);
-    expect(window.open).not.toHaveBeenCalled();
+    expect(viewAllLogsLink).toHaveAttribute('href', expectedUrl);
   });
 
-  it('should open in new tab when ctrl/cmd clicking View All Logs button', () => {
-    renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
+  it('falls back to the eval page when no plugin filter is available', () => {
+    const propsWithoutPluginId = {
+      ...defaultProps,
+      failures: [
+        {
+          ...defaultProps.failures[0],
+          result: createMockEvaluateResult({}),
+        },
+      ],
+    };
 
-    const viewAllLogsButton = screen.getByText('View All Logs');
+    renderWithProviders(<RiskCategoryDrawer {...propsWithoutPluginId} />);
 
-    // Test Ctrl+click - should open new tab
-    fireEvent.click(viewAllLogsButton, { ctrlKey: true });
-
-    const expectedUrl =
-      '/eval/test-eval-123?filter=%5B%7B%22type%22%3A%22plugin%22%2C%22operator%22%3A%22equals%22%2C%22value%22%3A%22bola%22%7D%5D';
-    expect(window.open).toHaveBeenCalledWith(expectedUrl, '_blank');
-    expect(mockNavigate).not.toHaveBeenCalled();
-
-    // Reset mocks
-    vi.clearAllMocks();
-
-    // Test Cmd+click (Mac) - should also open new tab
-    fireEvent.click(viewAllLogsButton, { metaKey: true });
-
-    expect(window.open).toHaveBeenCalledWith(expectedUrl, '_blank');
-    expect(mockNavigate).not.toHaveBeenCalled();
+    const viewAllLogsLink = screen.getByRole('link', { name: 'View All Logs' });
+    expect(viewAllLogsLink).toHaveAttribute('href', '/eval/test-eval-123');
   });
 
   it('should close drawer when close button is clicked', () => {
