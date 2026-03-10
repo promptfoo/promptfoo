@@ -319,7 +319,7 @@ describe('ResultsView Share Button', () => {
 describe('ResultsView Copy Eval', () => {
   const mockOnRecentEvalSelected = vi.fn();
   const mockCallApi = vi.mocked(callApi);
-  let mockWindowOpen: ReturnType<typeof vi.spyOn<typeof window, 'open'>>;
+  let mockWindowOpen: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -899,7 +899,7 @@ describe('ResultsView', () => {
 
     expect(screen.queryByTestId('results-charts')).toBeNull();
     expect(screen.getByText('Show Charts')).toBeInTheDocument();
-    expect(screen.queryByText('Charts are unavailable for this evaluation')).toBeNull();
+    expect(screen.getByText('Charts are unavailable for this evaluation')).not.toBeVisible();
   });
 
   it('shows an explanatory message when scores are all the same binary edge value', async () => {
@@ -971,7 +971,7 @@ describe('ResultsView', () => {
     const showChartsButton = screen.getByText('Show Charts');
     expect(showChartsButton).toBeInTheDocument();
     expect(screen.queryByTestId('results-charts')).toBeNull();
-    expect(screen.queryByText('Charts are unavailable for this evaluation')).toBeNull();
+    expect(screen.getByText('Charts are unavailable for this evaluation')).not.toBeVisible();
 
     await userEvent.click(showChartsButton);
 
@@ -1369,6 +1369,119 @@ describe('ResultsView Chart Rendering', () => {
 
     expect(screen.getByText('Hide Charts')).toBeInTheDocument();
     expect(screen.getByTestId('results-charts')).toBeInTheDocument();
+  });
+
+  it('hides the charts panel when navigating from an eligible eval to an ineligible eval', () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
+    let tableStoreValue = {
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Prompt 1',
+            },
+            {
+              label: 'Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [
+          { outputs: [{ score: 0.4 }, { score: 0.8 }] },
+          { outputs: [{ score: 0.5 }, { score: 0.9 }] },
+        ],
+      },
+      config: {
+        description: 'Eligible Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'eval-eligible',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => tableStoreValue as any);
+
+    const { rerender } = renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="eval-eligible"
+      />,
+    );
+
+    expect(screen.getByText('Hide Charts')).toBeInTheDocument();
+    expect(screen.getByTestId('results-charts')).toBeInTheDocument();
+
+    tableStoreValue = {
+      ...tableStoreValue,
+      evalId: 'eval-ineligible',
+    };
+
+    rerender(
+      <MemoryRouter>
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="eval-ineligible"
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Hide Charts')).toBeInTheDocument();
+
+    tableStoreValue = {
+      ...tableStoreValue,
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Only Prompt',
+              provider: 'openai:gpt-4',
+              raw: 'Only Prompt',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [{ outputs: [{ score: 0.8 }] }],
+      },
+      config: {
+        description: 'Ineligible Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+    };
+
+    rerender(
+      <MemoryRouter>
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="eval-ineligible"
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Show Charts')).toBeInTheDocument();
+    expect(screen.queryByTestId('results-charts')).toBeNull();
+    expect(screen.getByText('Charts are unavailable for this evaluation')).not.toBeVisible();
   });
 
   it('shows an explanatory message if there are no valid scores', async () => {

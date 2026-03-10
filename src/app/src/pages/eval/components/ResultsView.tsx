@@ -50,6 +50,7 @@ import type { CopyEvalResponse } from '@promptfoo/types/api/eval';
 import type { VisibilityState } from '@tanstack/table-core';
 
 import type { ActiveView } from './EvalHeader';
+import type { ResultsFilter } from './store';
 
 const Report = React.lazy(() => import('@app/pages/redteam/report/components/Report'));
 
@@ -64,6 +65,105 @@ interface ResultsChartsSectionProps {
   isRedteamEval: boolean;
   resultsChartsScores: number[];
   resultsChartsUnavailableReasons: string[];
+  children: (toggleButton: React.ReactNode) => React.ReactNode;
+}
+
+interface AppliedFilterBadgesProps {
+  filters: ResultsFilter[];
+  isRedteamEval: boolean;
+  onRemoveFilter: (id: string) => void;
+  policyIdToNameMap?: Record<string, string | undefined>;
+}
+
+function getAppliedFilterLabel(
+  filter: ResultsFilter,
+  policyIdToNameMap?: Record<string, string | undefined>,
+): string | null {
+  if (filter.type === 'metadata' && filter.operator === 'exists') {
+    return filter.field ? `Metadata: ${filter.field}` : null;
+  }
+
+  if (filter.type === 'metric' && filter.operator === 'is_defined') {
+    return filter.field ? `Metric: ${filter.field}` : null;
+  }
+
+  if (filter.type === 'metadata' || filter.type === 'metric') {
+    if (!filter.value || !filter.field) {
+      return null;
+    }
+  } else if (!filter.value) {
+    return null;
+  }
+
+  const truncatedValue =
+    filter.value.length > 50 ? `${filter.value.slice(0, 50)}...` : filter.value;
+
+  if (filter.type === 'metric') {
+    const operatorSymbols: Record<string, string> = {
+      is_defined: 'is defined',
+      eq: '==',
+      neq: '!=',
+      gt: '>',
+      gte: '≥',
+      lt: '<',
+      lte: '≤',
+    };
+    const operatorDisplay = operatorSymbols[filter.operator] || filter.operator;
+    return `${filter.field} ${operatorDisplay} ${truncatedValue}`;
+  }
+
+  if (filter.type === 'plugin') {
+    const displayName =
+      displayNameOverrides[filter.value as keyof typeof displayNameOverrides] || filter.value;
+    return filter.operator === 'not_equals' ? `Plugin != ${displayName}` : `Plugin: ${displayName}`;
+  }
+
+  if (filter.type === 'strategy') {
+    const displayName =
+      displayNameOverrides[filter.value as keyof typeof displayNameOverrides] || filter.value;
+    return `Strategy: ${displayName}`;
+  }
+
+  if (filter.type === 'severity') {
+    return `Severity: ${filter.value.charAt(0).toUpperCase() + filter.value.slice(1)}`;
+  }
+
+  if (filter.type === 'policy') {
+    return formatPolicyIdentifierAsMetric(policyIdToNameMap?.[filter.value] ?? filter.value);
+  }
+
+  return `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+}
+
+function AppliedFilterBadges({
+  filters,
+  isRedteamEval,
+  onRemoveFilter,
+  policyIdToNameMap,
+}: AppliedFilterBadgesProps) {
+  return filters.map((filter) => {
+    if (isRedteamEval && filter.type === 'metric' && filter.operator === 'is_defined') {
+      return null;
+    }
+
+    const label = getAppliedFilterLabel(filter, policyIdToNameMap);
+    if (!label) {
+      return null;
+    }
+
+    return (
+      <Badge key={filter.id} variant="secondary" className="text-xs h-5 gap-1" title={filter.value}>
+        {label}
+        <button
+          type="button"
+          onClick={() => onRemoveFilter(filter.id)}
+          className="ml-1 hover:bg-muted rounded-full"
+        >
+          <X className="size-3" />
+        </button>
+      </Badge>
+    );
+  });
 }
 
 function ResultsChartsSection({
@@ -71,6 +171,7 @@ function ResultsChartsSection({
   isRedteamEval,
   resultsChartsScores,
   resultsChartsUnavailableReasons,
+  children,
 }: ResultsChartsSectionProps) {
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(
     !isRedteamEval && window.innerHeight >= 1100 && canRenderResultsCharts,
@@ -80,18 +181,28 @@ function ResultsChartsSection({
     return null;
   }
 
+  const toggleButton = (
+    <Button variant="ghost" size="sm" onClick={() => setRenderResultsCharts((prev) => !prev)}>
+      <BarChart className="size-4 mr-2" />
+      {renderResultsCharts ? 'Hide Charts' : 'Show Charts'}
+    </Button>
+  );
+
   return (
     <>
-      <Button variant="ghost" size="sm" onClick={() => setRenderResultsCharts((prev) => !prev)}>
-        <BarChart className="size-4 mr-2" />
-        {renderResultsCharts ? 'Hide Charts' : 'Show Charts'}
-      </Button>
-      {renderResultsCharts &&
-        (canRenderResultsCharts ? (
-          <ResultsCharts
-            handleHideCharts={() => setRenderResultsCharts(false)}
-            scores={resultsChartsScores}
-          />
+      {children(toggleButton)}
+      <div
+        aria-hidden={!renderResultsCharts}
+        className="overflow-hidden transition-all duration-200 ease-out motion-reduce:transition-none"
+        style={{
+          maxHeight: renderResultsCharts ? '1200px' : '0px',
+          opacity: renderResultsCharts ? 1 : 0,
+          transform: renderResultsCharts ? 'translateY(0)' : 'translateY(-4px)',
+          pointerEvents: renderResultsCharts ? 'auto' : 'none',
+        }}
+      >
+        {canRenderResultsCharts ? (
+          <ResultsCharts scores={resultsChartsScores} />
         ) : (
           <Alert variant="info" className="mt-4 items-start">
             <BarChart className="size-4 mt-0.5" />
@@ -110,7 +221,8 @@ function ResultsChartsSection({
               </AlertDescription>
             </AlertContent>
           </Alert>
-        ))}
+        )}
+      </div>
     </>
   );
 }
@@ -628,6 +740,7 @@ export default function ResultsView({
   }, [config, hasMeaningfulUniformScore, hasVariedScores, resultsChartsScores.length, table]);
 
   const canRenderResultsCharts = resultsChartsUnavailableReasons.length === 0;
+  const appliedFilters = React.useMemo(() => Object.values(filters.values), [filters.values]);
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
 
@@ -688,225 +801,143 @@ export default function ResultsView({
           contentClassName={activeView === 'report' ? 'max-w-7xl mx-auto w-full' : undefined}
         >
           {activeView === 'results' && (
-            <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-border/50">
-              <div className="flex flex-wrap gap-2 items-center">
-                <SearchInput
-                  value={searchInputValue}
-                  onChange={(value) => {
-                    setSearchInputValue(value);
-                    debouncedUpdate(value);
-                  }}
-                  onClear={handleClearSearch}
-                  containerClassName="w-[200px]"
-                  className="h-8 text-xs"
-                />
-                <FiltersForm />
-                <div className="flex-1" />
-                <Select
-                  value={String(resultsTableZoom)}
-                  onValueChange={(val) => setResultsTableZoom(Number(val))}
-                >
-                  <SelectTrigger className="w-[115px] h-8 text-xs">
-                    <span>
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        ZOOM
-                      </span>{' '}
-                      {Math.round(resultsTableZoom * 100)}%
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="0.5">50%</SelectItem>
-                    <SelectItem value="0.75">75%</SelectItem>
-                    <SelectItem value="0.9">90%</SelectItem>
-                    <SelectItem value="1">100%</SelectItem>
-                    <SelectItem value="1.25">125%</SelectItem>
-                    <SelectItem value="1.5">150%</SelectItem>
-                    <SelectItem value="2">200%</SelectItem>
-                  </SelectContent>
-                </Select>
-                <ColumnSelector
-                  columnData={columnData}
-                  selectedColumns={currentColumnState.selectedColumns}
-                  onChange={handleChange}
-                />
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setViewSettingsModalOpen(true)}
+            <ResultsChartsSection
+              key={`${currentEvalId}:${isRedteamEval ? 'redteam' : canRenderResultsCharts ? 'eligible' : 'ineligible'}`}
+              canRenderResultsCharts={canRenderResultsCharts}
+              isRedteamEval={isRedteamEval}
+              resultsChartsScores={resultsChartsScores}
+              resultsChartsUnavailableReasons={resultsChartsUnavailableReasons}
+            >
+              {(chartsToggleButton) => (
+                <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-border/50">
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <SearchInput
+                      value={searchInputValue}
+                      onChange={(value) => {
+                        setSearchInputValue(value);
+                        debouncedUpdate(value);
+                      }}
+                      onClear={handleClearSearch}
+                      containerClassName="w-[200px]"
+                      className="h-8 text-xs"
+                    />
+                    <FiltersForm />
+                    <div className="flex-1" />
+                    <Select
+                      value={String(resultsTableZoom)}
+                      onValueChange={(val) => setResultsTableZoom(Number(val))}
                     >
-                      <Settings className="size-4 mr-2" />
-                      Table Settings
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Edit table view settings</TooltipContent>
-                </Tooltip>
-                <ResultsChartsSection
-                  key={currentEvalId}
-                  canRenderResultsCharts={canRenderResultsCharts}
-                  isRedteamEval={isRedteamEval}
-                  resultsChartsScores={resultsChartsScores}
-                  resultsChartsUnavailableReasons={resultsChartsUnavailableReasons}
-                />
-              </div>
-              <div className="flex flex-wrap gap-2 items-center">
-                <span className="text-xs font-medium text-muted-foreground">Display:</span>
-                <FilterModeSelector
-                  filterMode={filterMode}
-                  onChange={handleFilterModeChange}
-                  showDifferentOption={visiblePromptCount > 1}
-                />
-                {config?.redteam !== undefined && (
-                  <>
-                    <Separator orientation="vertical" className="h-5 mx-1" />
-                    <FilterChips />
-                  </>
-                )}
-                {debouncedSearchText && (
-                  <Badge variant="secondary" className="text-xs h-5 gap-1">
-                    Search:{' '}
-                    {debouncedSearchText.length > 4
-                      ? debouncedSearchText.substring(0, 5) + '...'
-                      : debouncedSearchText}
-                    <button
-                      type="button"
-                      onClick={handleClearSearch}
-                      className="ml-1 hover:bg-muted rounded-full"
-                    >
-                      <X className="size-3" />
-                    </button>
-                  </Badge>
-                )}
-                {filterMode !== 'all' && (
-                  <Badge variant="secondary" className="text-xs h-5 gap-1">
-                    Filter: {filterMode}
-                    <button
-                      type="button"
-                      onClick={() => setFilterMode('all')}
-                      className="ml-1 hover:bg-muted rounded-full"
-                    >
-                      <X className="size-3" />
-                    </button>
-                  </Badge>
-                )}
-                {filters.appliedCount > 0 &&
-                  Object.values(filters.values).map((filter) => {
-                    // For red team evals, skip metric filter badges since FilterChips already shows them
-                    const isRedteamEval = config?.redteam !== undefined;
-                    if (
-                      isRedteamEval &&
-                      filter.type === 'metric' &&
-                      filter.operator === 'is_defined'
-                    ) {
-                      return null;
-                    }
-
-                    if (filter.type === 'metadata' && filter.operator === 'exists') {
-                      if (!filter.field) {
-                        return null;
-                      }
-                    } else if (filter.type === 'metric' && filter.operator === 'is_defined') {
-                      if (!filter.field) {
-                        return null;
-                      }
-                    } else if (filter.type === 'metadata' || filter.type === 'metric') {
-                      if (!filter.value || !filter.field) {
-                        return null;
-                      }
-                    } else if (!filter.value) {
-                      return null;
-                    }
-
-                    const truncatedValue =
-                      filter.value.length > 50 ? filter.value.slice(0, 50) + '...' : filter.value;
-
-                    let label: string;
-                    if (filter.type === 'metric') {
-                      const operatorSymbols: Record<string, string> = {
-                        is_defined: 'is defined',
-                        eq: '==',
-                        neq: '!=',
-                        gt: '>',
-                        gte: '≥',
-                        lt: '<',
-                        lte: '≤',
-                      };
-                      const operatorDisplay = operatorSymbols[filter.operator] || filter.operator;
-                      if (filter.operator === 'is_defined') {
-                        label = `Metric: ${filter.field}`;
-                      } else {
-                        label = `${filter.field} ${operatorDisplay} ${truncatedValue}`;
-                      }
-                    } else if (filter.type === 'plugin') {
-                      const displayName =
-                        displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
-                        filter.value;
-                      label =
-                        filter.operator === 'not_equals'
-                          ? `Plugin != ${displayName}`
-                          : `Plugin: ${displayName}`;
-                    } else if (filter.type === 'strategy') {
-                      const displayName =
-                        displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
-                        filter.value;
-                      label = `Strategy: ${displayName}`;
-                    } else if (filter.type === 'severity') {
-                      const severityDisplay =
-                        filter.value.charAt(0).toUpperCase() + filter.value.slice(1);
-                      label = `Severity: ${severityDisplay}`;
-                    } else if (filter.type === 'policy') {
-                      const policyName = filters.policyIdToNameMap?.[filter.value];
-                      label = formatPolicyIdentifierAsMetric(policyName ?? filter.value);
-                    } else {
-                      if (filter.operator === 'exists') {
-                        label = `Metadata: ${filter.field}`;
-                      } else {
-                        label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
-                      }
-                    }
-
-                    return (
-                      <Badge
-                        key={filter.id}
-                        variant="secondary"
-                        className="text-xs h-5 gap-1"
-                        title={filter.value}
-                      >
-                        {label}
+                      <SelectTrigger className="w-[115px] h-8 text-xs">
+                        <span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            ZOOM
+                          </span>{' '}
+                          {Math.round(resultsTableZoom * 100)}%
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0.5">50%</SelectItem>
+                        <SelectItem value="0.75">75%</SelectItem>
+                        <SelectItem value="0.9">90%</SelectItem>
+                        <SelectItem value="1">100%</SelectItem>
+                        <SelectItem value="1.25">125%</SelectItem>
+                        <SelectItem value="1.5">150%</SelectItem>
+                        <SelectItem value="2">200%</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <ColumnSelector
+                      columnData={columnData}
+                      selectedColumns={currentColumnState.selectedColumns}
+                      onChange={handleChange}
+                    />
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setViewSettingsModalOpen(true)}
+                        >
+                          <Settings className="size-4 mr-2" />
+                          Table Settings
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Edit table view settings</TooltipContent>
+                    </Tooltip>
+                    {chartsToggleButton}
+                  </div>
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <span className="text-xs font-medium text-muted-foreground">Display:</span>
+                    <FilterModeSelector
+                      filterMode={filterMode}
+                      onChange={handleFilterModeChange}
+                      showDifferentOption={visiblePromptCount > 1}
+                    />
+                    {config?.redteam !== undefined && (
+                      <>
+                        <Separator orientation="vertical" className="h-5 mx-1" />
+                        <FilterChips />
+                      </>
+                    )}
+                    {debouncedSearchText && (
+                      <Badge variant="secondary" className="text-xs h-5 gap-1">
+                        Search:{' '}
+                        {debouncedSearchText.length > 4
+                          ? debouncedSearchText.substring(0, 5) + '...'
+                          : debouncedSearchText}
                         <button
                           type="button"
-                          onClick={() => removeFilter(filter.id)}
+                          onClick={handleClearSearch}
                           className="ml-1 hover:bg-muted rounded-full"
                         >
                           <X className="size-3" />
                         </button>
                       </Badge>
-                    );
-                  })}
-                {highlightedResultsCount > 0 && (
-                  <Badge className="bg-primary/10 text-primary border border-primary/20 font-medium">
-                    {highlightedResultsCount} highlighted
-                  </Badge>
-                )}
-                {userRatedResultsCount > 0 && (
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <Badge
-                        className="bg-purple-50 text-purple-700 border border-purple-200 font-medium cursor-pointer hover:bg-purple-100 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800 dark:hover:bg-purple-950/50"
-                        onClick={() => setFilterMode('user-rated')}
-                      >
-                        {userRatedResultsCount} user-rated
+                    )}
+                    {filterMode !== 'all' && (
+                      <Badge variant="secondary" className="text-xs h-5 gap-1">
+                        Filter: {filterMode}
+                        <button
+                          type="button"
+                          onClick={() => setFilterMode('all')}
+                          className="ml-1 hover:bg-muted rounded-full"
+                        >
+                          <X className="size-3" />
+                        </button>
                       </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {userRatedResultsCount} output{userRatedResultsCount !== 1 ? 's' : ''} with
-                      user ratings. Click to filter.
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-              </div>
-            </div>
+                    )}
+                    {filters.appliedCount > 0 && (
+                      <AppliedFilterBadges
+                        filters={appliedFilters}
+                        isRedteamEval={isRedteamEval}
+                        onRemoveFilter={removeFilter}
+                        policyIdToNameMap={filters.policyIdToNameMap}
+                      />
+                    )}
+                    {highlightedResultsCount > 0 && (
+                      <Badge className="bg-primary/10 text-primary border border-primary/20 font-medium">
+                        {highlightedResultsCount} highlighted
+                      </Badge>
+                    )}
+                    {userRatedResultsCount > 0 && (
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Badge
+                            className="bg-purple-50 text-purple-700 border border-purple-200 font-medium cursor-pointer hover:bg-purple-100 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800 dark:hover:bg-purple-950/50"
+                            onClick={() => setFilterMode('user-rated')}
+                          >
+                            {userRatedResultsCount} user-rated
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {userRatedResultsCount} output{userRatedResultsCount !== 1 ? 's' : ''}{' '}
+                          with user ratings. Click to filter.
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </div>
+                </div>
+              )}
+            </ResultsChartsSection>
           )}
           {currentColumnState.selectedColumns.length < columnData.length && (
             <div className="flex flex-wrap gap-2 items-center mt-2">
