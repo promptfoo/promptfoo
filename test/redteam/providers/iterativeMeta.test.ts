@@ -6,6 +6,11 @@ import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src
 const mockGetProvider = vi.hoisted(() => vi.fn<() => Promise<any>>());
 const mockGetTargetResponse = vi.hoisted(() => vi.fn<() => Promise<any>>());
 
+vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
+}));
+
 vi.mock('../../../src/redteam/providers/shared', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -137,7 +142,7 @@ describe('RedteamIterativeMetaProvider', () => {
   });
 
   // Note: Constructor tests omitted as they require complex module mocking
-  // The provider requires cloud access, so testing focuses on the core function
+  // The provider requires remote generation, so testing focuses on the core function
 
   describe('runMetaAgentRedteam', () => {
     it('should execute iterations and call cloud for decisions', async () => {

@@ -214,6 +214,11 @@
       "groupName": "undici"
     },
     {
+      "description": "Keep dedent in sync across all workspaces",
+      "matchPackageNames": ["dedent"],
+      "groupName": "dedent"
+    },
+    {
       "description": "Group all @types packages together",
       "matchPackagePatterns": ["^@types/"],
       "groupName": "Type definitions",
@@ -292,6 +297,12 @@
     {
       "description": "framer-motion: monthly updates (animation library, low urgency)",
       "matchPackageNames": ["framer-motion"],
+      "schedule": ["before 6am on the first day of the month"],
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "satori: monthly updates to reduce noise from frequent patch releases",
+      "matchPackageNames": ["satori"],
       "schedule": ["before 6am on the first day of the month"],
       "minimumReleaseAge": "7 days"
     },

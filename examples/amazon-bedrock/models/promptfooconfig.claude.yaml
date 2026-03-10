@@ -1,0 +1,77 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Claude Eval'
+prompts:
+  - 'Write a tweet about {{topic}}'
+providers:
+  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-4-6-v1
+    label: Claude Opus 4.6
+    config:
+      temperature: 1
+      max_tokens: 2048
+      region: us-east-2
+      inferenceModelType: claude
+  - id: bedrock:us.anthropic.claude-opus-4-1-20250805-v1:0
+    label: Claude Opus 4.1
+    config:
+      temperature: 1
+      max_tokens: 2048
+      region: us-west-2
+  - id: bedrock:us.anthropic.claude-opus-4-20250514-v1:0
+    label: Claude Opus 4
+    config:
+      temperature: 1
+      max_tokens: 2048
+      region: us-west-2
+  - id: bedrock:us.anthropic.claude-haiku-4-5-20251001-v1:0
+    label: Claude Haiku 4.5
+    config:
+      temperature: 1
+      max_tokens: 2048
+      region: us-west-2
+  - id: bedrock:us.anthropic.claude-sonnet-4-6
+    label: Claude Sonnet 4.6 with Thinking
+    config:
+      temperature: 1
+      max_tokens: 2048
+      region: us-west-2
+      showThinking: true
+      thinking:
+        type: enabled
+        budget_tokens: 1024
+  - id: bedrock:us.anthropic.claude-opus-4-6-v1
+    label: Claude Opus 4.6 (inference profile)
+    config:
+      temperature: 1
+      max_tokens: 2048
+      region: us-west-2
+tests:
+  - vars:
+      topic: Our eco-friendly packaging
+  - vars:
+      topic: A sneak peek at our secret menu item
+  - vars:
+      topic: Behind-the-scenes at our latest photoshoot
+  - vars:
+      topic: the impact of autonomous drones on wildlife conservation
+  - vars:
+      topic: the emerging trend of virtual reality courtrooms
+  - vars:
+      topic: the ethical implications of AI-generated art
+  - vars:
+      topic: the unexpected health benefits of daily meditation
+  - vars:
+      topic: how AI is changing the way we play board games
+  - vars:
+      topic: unconventional productivity hacks involving household items
+  - vars:
+      topic: An underground art exhibition in an abandoned subway station
+  - vars:
+      topic: A webinar on the impact of AI on traditional marketing strategies
+  - vars:
+      topic: The launch of a new eco-friendly sneaker made from ocean plastic
+  - vars:
+      topic: the correlation between social media usage and self-esteem in teenagers
+  - vars:
+      topic: the impact of urban noise pollution on migratory bird patterns
+  - vars:
+      topic: the role of gut microbiota in moderating anxiety and depression

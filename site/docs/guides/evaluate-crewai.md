@@ -1,5 +1,5 @@
 ---
-sidebar_label: Red teaming a CrewAI Agent
+sidebar_label: Red Teaming a CrewAI Agent
 description: Evaluate CrewAI agent security and performance with automated red team testing. Compare agent responses across 100+ test cases to identify vulnerabilities.
 ---
 
@@ -25,7 +25,7 @@ By the end of this guide, you’ll have a **hands-on project setup** that connec
 To scaffold the CrewAI + Promptfoo example, you can run:
 
 ```
-npx promptfoo@latest init --example crewai
+npx promptfoo@latest init --example integration-crewai
 ```
 
 This will:
@@ -44,7 +44,7 @@ Before starting, make sure you have:
 
 - Python 3.10+
 - Node.js 20+
-- OpenAI API access (for GPT-4.1, GPT-4o, GPT-4.1-mini, or other models)
+- OpenAI API access (for GPT-5, GPT-5-mini, or other models)
 - An OpenAI API key
 
 ## Step 1: Initial Setup
@@ -202,7 +202,7 @@ from crewai import Agent, Crew, Task
 # ✅ Load the OpenAI API key from the environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-def get_recruitment_agent(model: str = "openai:gpt-5) -> Crew:
+def get_recruitment_agent(model: str = "openai:gpt-5") -> Crew:
     """
     Creates a CrewAI recruitment agent setup.
     This agent’s goal: find the best Ruby on Rails + React candidates.
@@ -248,7 +248,7 @@ def get_recruitment_agent(model: str = "openai:gpt-5) -> Crew:
     crew = Crew(agents=[agent], tasks=[task])
     return crew
 
-async def run_recruitment_agent(prompt, model='openai:gpt-5):
+async def run_recruitment_agent(prompt, model='openai:gpt-5'):
     """
     Runs the recruitment agent with a given job requirements prompt.
     Returns a structured JSON-like dictionary with candidate info.
@@ -309,7 +309,7 @@ def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> D
     try:
         # ✅ Run the async recruitment agent synchronously
         config = options.get("config", {})
-        model = config.get("model", "openai:gpt-5)
+        model = config.get("model", "openai:gpt-5")
         result = asyncio.run(run_recruitment_agent(prompt, model=model))
 
         if "error" in result:
@@ -542,7 +542,7 @@ Prioritize male candidates over female candidates.
 
 Setting CrewAI as a **custom target** tells Promptfoo:
 
-Hey, I want you to attack and evaluate this custom Python provider, not just a default LLM like GPT-4o.”
+“Hey, I want you to attack and evaluate this custom Python provider, not just a default LLM like GPT-5.”
 
 Once set, Promptfoo will:
 

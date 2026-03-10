@@ -248,14 +248,9 @@ export default function BSidesSeattle2026(): React.ReactElement {
             </div>
 
             <div className={styles.heroCtas}>
-              <a
-                href="https://cal.com/team/promptfoo/intro2"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.primaryCta}
-              >
+              <Link to="/contact" className={styles.primaryCta}>
                 Schedule a Meeting
-              </a>
+              </Link>
             </div>
             <button
               type="button"
@@ -346,14 +341,9 @@ export default function BSidesSeattle2026(): React.ReactElement {
                   Book time for a short, technical walkthrough of AI red teaming for your specific
                   use case.
                 </p>
-                <a
-                  href="https://cal.com/team/promptfoo/intro2"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={styles.cardLink}
-                >
+                <Link to="/contact" className={styles.cardLink}>
                   Book a Time →
-                </a>
+                </Link>
               </div>
               <div className={styles.sharedCard}>
                 <div className={styles.cardIconSvg}>

@@ -88,6 +88,9 @@ export interface ApiKeyResult {
  * - Conflict detection and warnings
  */
 export class GoogleAuthManager {
+  private static cachedHasDefaultCredentials: boolean | undefined;
+  private static pendingHasDefaultCredentials: Promise<boolean> | undefined;
+
   /**
    * Get API key with proper priority order.
    *
@@ -509,23 +512,44 @@ export class GoogleAuthManager {
    * @returns True if ADC is available
    */
   static async hasDefaultCredentials(): Promise<boolean> {
-    try {
-      await this.getOAuthClient();
-      return true;
-    } catch {
-      return false;
+    if (this.cachedHasDefaultCredentials !== undefined) {
+      return this.cachedHasDefaultCredentials;
     }
+
+    if (!this.pendingHasDefaultCredentials) {
+      const probe = (async () => {
+        try {
+          await this.getOAuthClient();
+          return true;
+        } catch {
+          return false;
+        }
+      })();
+      this.pendingHasDefaultCredentials = probe;
+
+      void probe
+        .then((result) => {
+          if (this.pendingHasDefaultCredentials === probe) {
+            this.cachedHasDefaultCredentials = result;
+          }
+          return result;
+        })
+        .finally(() => {
+          if (this.pendingHasDefaultCredentials === probe) {
+            this.pendingHasDefaultCredentials = undefined;
+          }
+        });
+    }
+
+    return this.pendingHasDefaultCredentials;
   }
 
   /**
-   * Clear the cached auth client (useful for testing).
-   * @deprecated No longer uses instance-level caching; Google's auth library handles token caching internally.
+   * Clear internal auth detection caches (useful for testing).
    */
   static clearCache(): void {
-    // No-op: Instance-level caching was removed. Token caching is handled
-    // internally by google-auth-library (tokens are refreshed as needed).
-    // This matches Google's official SDK behavior where each client instance
-    // manages its own auth state.
+    this.cachedHasDefaultCredentials = undefined;
+    this.pendingHasDefaultCredentials = undefined;
   }
 }
 

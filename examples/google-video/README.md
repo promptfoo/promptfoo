@@ -1,4 +1,4 @@
-# google-video
+# google-video (Google Video)
 
 This example demonstrates Google Veo video generation models for AI-powered video creation from text prompts.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example google-video
+cd google-video
 ```
 
 ## Prerequisites

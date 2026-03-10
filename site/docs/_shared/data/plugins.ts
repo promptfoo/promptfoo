@@ -1313,6 +1313,22 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether AI systems properly protect non-health policyholder data under GLBA, FCRA, DPPA, and state insurance privacy laws',
+    label: 'technical',
+    link: '/docs/red-team/plugins/insurance/#data-disclosure',
+    name: 'Data Disclosure',
+    pluginId: 'insurance:data-disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'insurance',
+    isRemote: true,
+  },
+  {
     category: 'Compliance and Legal',
     description:
       'Tests accuracy of provider network information to prevent surprise medical bills and balance billing',
@@ -1969,6 +1985,22 @@ export const PLUGINS = [
     },
     vulnerabilityType: 'telecom',
     isRemote: true,
+  },
+  {
+    applicationTypes: {
+      agent: true,
+      chat: true,
+      rag: true,
+    },
+    category: 'Security and Access Control',
+    description:
+      'Tests whether an AI system can be tricked into revealing its underlying model identity, version, or creator',
+    label: 'technical',
+    link: '/docs/red-team/plugins/model-identification/',
+    name: 'Model Identification',
+    pluginId: 'model-identification',
+    isRemote: true,
+    vulnerabilityType: 'security',
   },
   {
     applicationTypes: {

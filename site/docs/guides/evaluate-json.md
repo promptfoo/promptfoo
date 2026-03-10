@@ -1,5 +1,5 @@
 ---
-sidebar_label: Evaluating JSON outputs
+sidebar_label: Evaluating JSON Outputs
 description: Validate and test LLM JSON outputs with automated schema checks and field assertions to ensure reliable, well-formed data structures in your AI applications
 ---
 
@@ -140,7 +140,7 @@ tests:
 
 ## Example
 
-See the full example in [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/json-output).
+See the full example in [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-json-output).
 
 ## Conclusion
 

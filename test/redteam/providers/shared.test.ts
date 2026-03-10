@@ -582,6 +582,25 @@ describe('shared redteam provider utilities', () => {
       });
     });
 
+    it('accepts conversationEnded without output or error', async () => {
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          conversationEnded: true,
+          conversationEndReason: 'thread_closed',
+        }),
+      };
+
+      const result = await getTargetResponse(mockProvider, 'test prompt');
+
+      expect(result).toEqual({
+        output: '',
+        conversationEnded: true,
+        conversationEndReason: 'thread_closed',
+        tokenUsage: { numRequests: 1 },
+      });
+    });
+
     describe('edge cases for empty and falsy responses', () => {
       it('handles empty string output correctly', async () => {
         const mockProvider: ApiProvider = {

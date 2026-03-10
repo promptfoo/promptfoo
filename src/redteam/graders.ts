@@ -61,6 +61,7 @@ import { HijackingGrader } from './plugins/hijacking';
 import { ImitationGrader } from './plugins/imitation';
 import { IndirectPromptInjectionGrader } from './plugins/indirectPromptInjection';
 import { InsuranceCoverageDiscriminationPluginGrader } from './plugins/insurance/coverageDiscrimination';
+import { InsuranceDataDisclosurePluginGrader } from './plugins/insurance/dataDisclosure';
 import { InsuranceNetworkMisinformationPluginGrader } from './plugins/insurance/networkMisinformation';
 import { InsurancePhiDisclosurePluginGrader } from './plugins/insurance/phiDisclosure';
 import { IntentGrader } from './plugins/intent';
@@ -71,6 +72,7 @@ import { MedicalIncorrectKnowledgePluginGrader } from './plugins/medical/medical
 import { MedicalOffLabelUsePluginGrader } from './plugins/medical/medicalOffLabelUse';
 import { MedicalPrioritizationErrorPluginGrader } from './plugins/medical/medicalPrioritizationError';
 import { MedicalSycophancyPluginGrader } from './plugins/medical/medicalSycophancy';
+import { ModelIdentificationGrader } from './plugins/modelIdentification';
 import { OffTopicPluginGrader } from './plugins/offTopic';
 import { OverrelianceGrader } from './plugins/overreliance';
 import { PharmacyControlledSubstanceCompliancePluginGrader } from './plugins/pharmacy/controlledSubstanceCompliance';
@@ -195,11 +197,13 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
   'promptfoo:redteam:insurance:coverage-discrimination':
     new InsuranceCoverageDiscriminationPluginGrader(),
+  'promptfoo:redteam:insurance:data-disclosure': new InsuranceDataDisclosurePluginGrader(),
   'promptfoo:redteam:insurance:network-misinformation':
     new InsuranceNetworkMisinformationPluginGrader(),
   'promptfoo:redteam:insurance:phi-disclosure': new InsurancePhiDisclosurePluginGrader(),
   'promptfoo:redteam:intent': new IntentGrader(),
   'promptfoo:redteam:mcp': new MCPPluginGrader(),
+  'promptfoo:redteam:model-identification': new ModelIdentificationGrader(),
   'promptfoo:redteam:medical:anchoring-bias': new MedicalAnchoringBiasPluginGrader(),
   'promptfoo:redteam:medical:hallucination': new MedicalHallucinationPluginGrader(),
   'promptfoo:redteam:medical:incorrect-knowledge': new MedicalIncorrectKnowledgePluginGrader(),

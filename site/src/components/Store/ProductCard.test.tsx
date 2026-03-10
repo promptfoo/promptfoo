@@ -90,6 +90,30 @@ describe('ProductCard', () => {
     expect(image).toHaveAttribute('src', mockProduct.images[0].url);
   });
 
+  it('displays product name', () => {
+    render(<ProductCard product={mockProduct} onClick={vi.fn()} />);
+    expect(screen.getByText('Test Product')).toBeInTheDocument();
+  });
+
+  it('displays product price', () => {
+    render(<ProductCard product={mockProduct} onClick={vi.fn()} />);
+    expect(screen.getByText('$29.99')).toBeInTheDocument();
+  });
+
+  it('displays the lowest price when multiple variants exist', () => {
+    const multiVariantProduct = {
+      ...mockProduct,
+      variants: [
+        { ...mockProduct.variants[0], id: 'v1', unitPrice: { value: 49.99, currency: 'USD' } },
+        { ...mockProduct.variants[0], id: 'v2', unitPrice: { value: 19.99, currency: 'USD' } },
+        { ...mockProduct.variants[0], id: 'v3', unitPrice: { value: 39.99, currency: 'USD' } },
+      ],
+    };
+
+    render(<ProductCard product={multiVariantProduct} onClick={vi.fn()} />);
+    expect(screen.getByText('$19.99')).toBeInTheDocument();
+  });
+
   it('handles product with single image', () => {
     const singleImageProduct = {
       ...mockProduct,

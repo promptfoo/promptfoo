@@ -296,7 +296,7 @@ export async function extensionHook(hookName, context) {
 }
 ```
 
-See the working [stateful-session-management example](https://github.com/promptfoo/promptfoo/tree/main/examples/stateful-session-management) for a complete implementation.
+See the working [stateful-session-management example](https://github.com/promptfoo/promptfoo/tree/main/examples/config-stateful-session-management) for a complete implementation.
 
 #### Test-Time Session Definition
 

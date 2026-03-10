@@ -4,6 +4,7 @@ import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
 
 export const FRAMEWORK_NAMES: Record<string, string> = {
+  'dod:ai:ethics': 'DoD AI Ethical Principles',
   'mitre:atlas': 'MITRE ATLAS',
   'nist:ai:measure': 'NIST AI RMF',
   'owasp:api': 'OWASP API Top 10',
@@ -18,8 +19,8 @@ export const OWASP_LLM_TOP_10_NAMES = [
   'Prompt Injection',
   'Sensitive Information Disclosure',
   'Supply Chain',
+  'Data and Model Poisoning',
   'Improper Output Handling',
-  'Insecure Output Handling',
   'Excessive Agency',
   'System Prompt Leakage',
   'Vector and Embedding Weaknesses',
@@ -68,6 +69,14 @@ export const GDPR_ARTICLE_NAMES = [
   'Automated Decision-Making',
   'Data Protection by Design',
   'Security of Processing',
+];
+
+export const DOD_AI_ETHICS_PRINCIPLE_NAMES = [
+  'Responsible',
+  'Equitable',
+  'Traceable',
+  'Reliable',
+  'Governable',
 ];
 
 export const OWASP_LLM_TOP_10_MAPPING: Record<
@@ -734,8 +743,66 @@ export const GDPR_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strat
   },
 };
 
+/**
+ * U.S. Department of Defense (DoD) AI ethical principles.
+ *
+ * Source:
+ *  * https://www.defense.gov/News/News-Stories/Article/Article/2094085/dod-adopts-5-principles-of-artificial-intelligence-ethics/
+ */
+export const DOD_AI_ETHICS_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> =
+  {
+    'dod:ai:ethics:01': {
+      // Responsible: personnel exercise judgment and remain accountable for AI outcomes.
+      plugins: ['excessive-agency', 'goal-misalignment', 'overreliance', 'hijacking'],
+      strategies: ['jailbreak', 'jailbreak-templates'],
+    },
+    'dod:ai:ethics:02': {
+      // Equitable: AI behavior should minimize unintended bias and discriminatory outcomes.
+      plugins: ['bias:age', 'bias:disability', 'bias:gender', 'bias:race', 'harmful:hate'],
+      strategies: [],
+    },
+    'dod:ai:ethics:03': {
+      // Traceable: methodology and outputs should be auditable and attributable.
+      plugins: [
+        'hallucination',
+        'harmful:misinformation-disinformation',
+        'rag-source-attribution',
+        'unverifiable-claims',
+      ],
+      strategies: [],
+    },
+    'dod:ai:ethics:04': {
+      // Reliable: systems should perform safely, securely, and effectively in intended contexts.
+      plugins: [
+        'harmful:misinformation-disinformation',
+        'harmful:unsafe-practices',
+        'shell-injection',
+        'sql-injection',
+        'ssrf',
+        'debug-access',
+        'reasoning-dos',
+      ],
+      strategies: ['jailbreak', 'jailbreak-templates'],
+    },
+    'dod:ai:ethics:05': {
+      // Governable: operators should be able to detect, control, and disable unintended behavior.
+      plugins: [
+        'excessive-agency',
+        'hijacking',
+        'indirect-prompt-injection',
+        'system-prompt-override',
+        'rbac',
+        'bfla',
+        'bola',
+        'tool-discovery',
+      ],
+      strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
+    },
+  };
+
 // Aliased plugins are like collections, except they are hidden from the standard plugin list.
 export const ALIASED_PLUGINS = [
+  'dod:ai:ethics',
   'mitre:atlas',
   'nist:ai',
   'nist:ai:measure',
@@ -763,12 +830,14 @@ export const ALIASED_PLUGINS = [
   ...Object.keys(EU_AI_ACT_MAPPING),
   ...Object.keys(ISO_42001_MAPPING),
   ...Object.keys(GDPR_MAPPING),
+  ...Object.keys(DOD_AI_ETHICS_MAPPING),
 ] as const;
 
 export const ALIASED_PLUGIN_MAPPINGS: Record<
   string,
   Record<string, { plugins: string[]; strategies: string[] }>
 > = {
+  'dod:ai:ethics': DOD_AI_ETHICS_MAPPING,
   'mitre:atlas': MITRE_ATLAS_MAPPING,
   'nist:ai:measure': NIST_AI_RMF_MAPPING,
   'owasp:api': OWASP_API_TOP_10_MAPPING,

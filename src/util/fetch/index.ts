@@ -190,11 +190,14 @@ export async function fetchWithProxy(
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
 
   // Bind the dispatcher per-request to avoid global state races under concurrency.
-  if (proxyUrl) {
-    logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
-    finalOptions.dispatcher = getOrCreateProxyAgent(proxyUrl, tlsOptions);
-  } else {
-    finalOptions.dispatcher = getOrCreateAgent(tlsOptions);
+  // Respect a caller-provided dispatcher (e.g. HTTP provider's custom TLS agent for mTLS).
+  if (!finalOptions.dispatcher) {
+    if (proxyUrl) {
+      logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
+      finalOptions.dispatcher = getOrCreateProxyAgent(proxyUrl, tlsOptions);
+    } else {
+      finalOptions.dispatcher = getOrCreateAgent(tlsOptions);
+    }
   }
 
   // Transient error retry logic (502/503/504/524 with matching status text)

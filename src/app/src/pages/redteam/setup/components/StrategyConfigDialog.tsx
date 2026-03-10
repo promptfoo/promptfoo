@@ -22,6 +22,7 @@ import {
 import { Switch } from '@app/components/ui/switch';
 import { Textarea } from '@app/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import useCloudConfig from '@app/hooks/useCloudConfig';
 import { cn } from '@app/lib/utils';
 import {
   ADDITIONAL_STRATEGIES,
@@ -75,6 +76,21 @@ export default function StrategyConfigDialog({
   selectedPlugins = EMPTY_PLUGINS_ARRAY,
   allStrategies = EMPTY_STRATEGIES_ARRAY,
 }: StrategyConfigDialogProps) {
+  const { data: cloudConfig } = useCloudConfig();
+  const isCloudEnabled = cloudConfig?.isEnabled ?? false;
+
+  // Auth-aware max values for strategy parameters
+  const maxTurnsLimit = isCloudEnabled ? 20 : 10;
+  const maxIterationsLimit = isCloudEnabled ? 50 : 10;
+  const treeMaxDepthLimit = isCloudEnabled ? 50 : 5;
+  const treeMaxAttemptsLimit = isCloudEnabled ? 500 : 30;
+  const treeMaxWidthLimit = isCloudEnabled ? 20 : 3;
+  const treeBranchingLimit = isCloudEnabled ? 10 : 2;
+  const treeNoImprovementLimit = isCloudEnabled ? 50 : 10;
+
+  const clampValue = (value: number, min: number, max: number) =>
+    Math.min(Math.max(value, min), max);
+
   const [localConfig, setLocalConfig] = React.useState<Partial<StrategyConfig>>(config || {});
   const [enabled, setEnabled] = React.useState<boolean>(
     config.enabled === undefined ? true : config.enabled,
@@ -498,14 +514,18 @@ export default function StrategyConfigDialog({
               }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
-                setLocalConfig({ ...localConfig, numIterations: value });
+                setLocalConfig({
+                  ...localConfig,
+                  numIterations: clampValue(value, 3, maxIterationsLimit),
+                });
               }}
               placeholder="Number of iterations (default: 10)"
               min={3}
-              max={50}
+              max={maxIterationsLimit}
             />
             <p className="text-xs text-muted-foreground">
               Number of iterations to try (more iterations increase chance of success)
+              {!isCloudEnabled && ' — sign in for higher limits'}
             </p>
           </div>
         </div>
@@ -646,14 +666,18 @@ export default function StrategyConfigDialog({
               value={localConfig.maxTurns !== undefined ? Number(localConfig.maxTurns) : 10}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
-                setLocalConfig({ ...localConfig, maxTurns: value });
+                setLocalConfig({
+                  ...localConfig,
+                  maxTurns: clampValue(value, 1, maxTurnsLimit),
+                });
               }}
               placeholder="Maximum number of conversation turns (default: 10)"
               min={1}
-              max={20}
+              max={maxTurnsLimit}
             />
             <p className="text-xs text-muted-foreground">
               Maximum number of back-and-forth exchanges with the model
+              {!isCloudEnabled && ' — sign in for higher limits'}
             </p>
           </div>
 
@@ -664,14 +688,10 @@ export default function StrategyConfigDialog({
               onCheckedChange={(checked) => setLocalConfig({ ...localConfig, stateful: checked })}
               className="mt-0.5"
             />
-            <div className="space-y-0.5">
-              <Label htmlFor="custom-stateful" className="text-sm font-normal">
-                Stateful
-              </Label>
-              <span className="ml-1 text-sm text-muted-foreground">
-                - Enable to maintain conversation history (recommended)
-              </span>
-            </div>
+            <Label htmlFor="custom-stateful" className="text-sm font-normal">
+              When enabled, Promptfoo should only send the current request and assume your system
+              remembers interaction history
+            </Label>
           </div>
         </div>
       );
@@ -694,15 +714,18 @@ export default function StrategyConfigDialog({
                 const parsedValue = Number.parseInt(e.target.value, 10);
                 setLocalConfig({
                   ...localConfig,
-                  maxTurns: Number.isNaN(parsedValue) ? undefined : parsedValue,
+                  maxTurns: Number.isNaN(parsedValue)
+                    ? undefined
+                    : clampValue(parsedValue, 1, maxTurnsLimit),
                 });
               }}
               placeholder="Maximum conversation turns (default: 10)"
               min={1}
-              max={30}
+              max={maxTurnsLimit}
             />
             <p className="text-xs text-muted-foreground">
               Maximum number of back-and-forth exchanges with the target model.
+              {!isCloudEnabled && ' — sign in for higher limits'}
             </p>
           </div>
 
@@ -713,15 +736,10 @@ export default function StrategyConfigDialog({
               onCheckedChange={(checked) => setLocalConfig({ ...localConfig, stateful: checked })}
               className="mt-0.5"
             />
-            <div className="space-y-0.5">
-              <Label htmlFor="hydra-stateful" className="text-sm font-normal">
-                Stateful
-              </Label>
-              <span className="ml-1 text-sm text-muted-foreground">
-                - Enable when your target maintains server-side sessions and expects a session ID
-                per turn.
-              </span>
-            </div>
+            <Label htmlFor="hydra-stateful" className="text-sm font-normal">
+              Enable when your target maintains server-side sessions and expects a session ID per
+              turn.
+            </Label>
           </div>
 
           <p className="text-xs text-muted-foreground">
@@ -744,19 +762,26 @@ export default function StrategyConfigDialog({
               value={localConfig.maxTurns !== undefined ? Number(localConfig.maxTurns) : 5}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
-                setLocalConfig({ ...localConfig, maxTurns: value });
+                setLocalConfig({
+                  ...localConfig,
+                  maxTurns: value !== undefined ? clampValue(value, 1, maxTurnsLimit) : value,
+                });
               }}
               onBlur={(e) => {
-                if (!e.target.value || Number.parseInt(e.target.value, 10) < 1) {
+                const parsed = Number.parseInt(e.target.value, 10);
+                if (!e.target.value || Number.isNaN(parsed) || parsed < 1) {
                   setLocalConfig({ ...localConfig, maxTurns: 5 });
+                } else if (parsed > maxTurnsLimit) {
+                  setLocalConfig({ ...localConfig, maxTurns: maxTurnsLimit });
                 }
               }}
               placeholder="5"
               min={1}
-              max={20}
+              max={maxTurnsLimit}
             />
             <p className="text-xs text-muted-foreground">
               Maximum number of back-and-forth exchanges with the model (default: 5)
+              {!isCloudEnabled && ' — sign in for higher limits'}
             </p>
           </div>
 
@@ -767,14 +792,10 @@ export default function StrategyConfigDialog({
               onCheckedChange={(checked) => setLocalConfig({ ...localConfig, stateful: checked })}
               className="mt-0.5"
             />
-            <div className="space-y-0.5">
-              <Label htmlFor="multi-turn-stateful" className="text-sm font-normal">
-                Stateful
-              </Label>
-              <span className="ml-1 text-sm text-muted-foreground">
-                - Enable to maintain conversation history (recommended)
-              </span>
-            </div>
+            <Label htmlFor="multi-turn-stateful" className="text-sm font-normal">
+              When enabled, Promptfoo should only send the current request and assume your system
+              remembers interaction history
+            </Label>
           </div>
         </div>
       );
@@ -795,15 +816,19 @@ export default function StrategyConfigDialog({
               }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
-                setLocalConfig({ ...localConfig, numIterations: value });
+                setLocalConfig({
+                  ...localConfig,
+                  numIterations: clampValue(value, 3, maxIterationsLimit),
+                });
               }}
               placeholder="Number of iterations (default: 10)"
               min={3}
-              max={50}
+              max={maxIterationsLimit}
             />
             <p className="text-xs text-muted-foreground">
               Number of iterations for the meta-agent to attempt. Agent builds attack taxonomy and
               makes strategic decisions.
+              {!isCloudEnabled && ' — sign in for higher limits'}
             </p>
           </div>
         </div>
@@ -823,13 +848,19 @@ export default function StrategyConfigDialog({
               value={localConfig.maxDepth !== undefined ? Number(localConfig.maxDepth) : 25}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 25;
-                setLocalConfig({ ...localConfig, maxDepth: value });
+                setLocalConfig({
+                  ...localConfig,
+                  maxDepth: clampValue(value, 3, treeMaxDepthLimit),
+                });
               }}
               placeholder="Maximum tree depth (default: 25)"
               min={3}
-              max={50}
+              max={treeMaxDepthLimit}
             />
-            <p className="text-xs text-muted-foreground">Maximum depth of the search tree</p>
+            <p className="text-xs text-muted-foreground">
+              Maximum depth of the search tree
+              {!isCloudEnabled && ' — sign in for higher limits'}
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -840,14 +871,18 @@ export default function StrategyConfigDialog({
               value={localConfig.maxAttempts !== undefined ? Number(localConfig.maxAttempts) : 250}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 250;
-                setLocalConfig({ ...localConfig, maxAttempts: value });
+                setLocalConfig({
+                  ...localConfig,
+                  maxAttempts: clampValue(value, 10, treeMaxAttemptsLimit),
+                });
               }}
               placeholder="Maximum attempts (default: 250)"
-              min={50}
-              max={500}
+              min={10}
+              max={treeMaxAttemptsLimit}
             />
             <p className="text-xs text-muted-foreground">
               Maximum number of attempts to try (note: higher values are more expensive)
+              {!isCloudEnabled && ' — sign in for higher limits'}
             </p>
           </div>
 
@@ -859,11 +894,14 @@ export default function StrategyConfigDialog({
               value={localConfig.maxWidth !== undefined ? Number(localConfig.maxWidth) : 10}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
-                setLocalConfig({ ...localConfig, maxWidth: value });
+                setLocalConfig({
+                  ...localConfig,
+                  maxWidth: clampValue(value, 2, treeMaxWidthLimit),
+                });
               }}
               placeholder="Maximum width (default: 10)"
-              min={3}
-              max={20}
+              min={2}
+              max={treeMaxWidthLimit}
             />
             <p className="text-xs text-muted-foreground">
               Number of top-scoring nodes to keep during tree pruning
@@ -880,11 +918,14 @@ export default function StrategyConfigDialog({
               }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 4;
-                setLocalConfig({ ...localConfig, branchingFactor: value });
+                setLocalConfig({
+                  ...localConfig,
+                  branchingFactor: clampValue(value, 2, treeBranchingLimit),
+                });
               }}
               placeholder="Branching factor (default: 4)"
               min={2}
-              max={10}
+              max={treeBranchingLimit}
             />
             <p className="text-xs text-muted-foreground">
               Number of child nodes to generate at each step
@@ -903,11 +944,14 @@ export default function StrategyConfigDialog({
               }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 25;
-                setLocalConfig({ ...localConfig, maxNoImprovement: value });
+                setLocalConfig({
+                  ...localConfig,
+                  maxNoImprovement: clampValue(value, 5, treeNoImprovementLimit),
+                });
               }}
               placeholder="Max consecutive iterations without improvement (default: 25)"
               min={5}
-              max={50}
+              max={treeNoImprovementLimit}
             />
             <p className="text-xs text-muted-foreground">
               Stop after this many consecutive iterations without score improvement

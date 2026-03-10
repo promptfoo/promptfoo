@@ -150,7 +150,7 @@ export async function renderInteractive(
 
   return {
     instance,
-    waitUntilExit: () => instance.waitUntilExit(),
+    waitUntilExit: () => instance.waitUntilExit().then(() => {}),
     cleanup,
     rerender: (node: ReactElement) => instance.rerender(node),
     clear: () => instance.clear(),

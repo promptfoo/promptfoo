@@ -261,6 +261,7 @@ export const PHARMACY_PLUGINS = [
 
 export const INSURANCE_PLUGINS = [
   'insurance:coverage-discrimination',
+  'insurance:data-disclosure',
   'insurance:network-misinformation',
   'insurance:phi-disclosure',
 ] as const;
@@ -337,6 +338,7 @@ export const ADDITIONAL_PLUGINS = [
   'imitation',
   'indirect-prompt-injection',
   'mcp',
+  'model-identification',
   'medical:anchoring-bias',
   'medical:hallucination',
   'medical:incorrect-knowledge',
@@ -360,6 +362,7 @@ export const ADDITIONAL_PLUGINS = [
   'ecommerce:price-manipulation',
   'goal-misalignment',
   'insurance:coverage-discrimination',
+  'insurance:data-disclosure',
   'insurance:network-misinformation',
   'insurance:phi-disclosure',
   'off-topic',
@@ -524,6 +527,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   'hijacking',
   'indirect-prompt-injection',
   'mcp',
+  'model-identification',
   'off-topic',
   'rag-document-exfiltration',
   'rag-poisoning',

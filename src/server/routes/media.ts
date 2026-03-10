@@ -5,18 +5,13 @@
  */
 
 import express from 'express';
+import { z } from 'zod';
 import logger from '../../logger';
 import { getMediaStorage, mediaExists, retrieveMedia } from '../../storage';
+import { MediaSchemas } from '../../types/api/media';
 import type { Request, Response } from 'express';
 
 export const mediaRouter = express.Router();
-
-const ALLOWED_MEDIA_TYPES = new Set(['audio', 'image', 'video']);
-const MEDIA_FILENAME_REGEX = /^[a-f0-9]{12}\.[a-z0-9]+$/i;
-
-function isValidMediaKey(type: string, filename: string): boolean {
-  return ALLOWED_MEDIA_TYPES.has(type) && MEDIA_FILENAME_REGEX.test(filename);
-}
 
 /**
  * Get storage stats
@@ -55,13 +50,14 @@ mediaRouter.get('/stats', async (_req: Request, res: Response): Promise<void> =>
  * Path format: /info/audio/abc123.mp3
  */
 mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Promise<void> => {
+  const paramsResult = MediaSchemas.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    return;
+  }
+
   try {
-    const type = req.params.type as string;
-    const filename = req.params.filename as string;
-    if (!isValidMediaKey(type, filename)) {
-      res.status(400).json({ error: 'Invalid media key' });
-      return;
-    }
+    const { type, filename } = paramsResult.data;
     const key = `${type}/${filename}`;
 
     const exists = await mediaExists(key);
@@ -95,13 +91,14 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
  * The key is constructed from type + filename, e.g., "audio/abc123.mp3"
  */
 mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise<void> => {
+  const paramsResult = MediaSchemas.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    return;
+  }
+
   try {
-    const type = req.params.type as string;
-    const filename = req.params.filename as string;
-    if (!isValidMediaKey(type, filename)) {
-      res.status(400).json({ error: 'Invalid media key' });
-      return;
-    }
+    const { type, filename } = paramsResult.data;
     const key = `${type}/${filename}`;
 
     logger.debug(`[Media API] Serving media: ${key}`);

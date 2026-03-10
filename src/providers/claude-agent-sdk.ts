@@ -7,6 +7,7 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
+import { safeResolve } from '../util/pathUtils';
 import { cacheResponse, getCachedResponse, initializeAgenticCache } from './agentic-utils';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
@@ -33,6 +34,19 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../types/index';
+
+/**
+ * Represents a single tool call captured during a Claude Agent SDK session.
+ * Available in `response.metadata.toolCalls` after a session completes.
+ */
+export interface ToolCallEntry {
+  id: string;
+  name: string;
+  input: unknown;
+  output: unknown;
+  is_error: boolean;
+  parentToolUseId: string | null;
+}
 
 /**
  * Claude Agent SDK Provider
@@ -699,11 +713,13 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       ? Array.from(new Set(config.disallowed_tools)).sort()
       : undefined;
 
+    const basePath = cliState.basePath ? path.resolve(cliState.basePath) : process.cwd();
+
     let isTempDir = false;
     let workingDir: string | undefined;
 
     if (config.working_dir) {
-      workingDir = config.working_dir;
+      workingDir = safeResolve(basePath, config.working_dir);
     } else {
       isTempDir = true;
     }
@@ -736,9 +752,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       maxThinkingTokens: config.max_thinking_tokens,
       allowedTools,
       disallowedTools,
-      plugins: config.plugins,
+      plugins: config.plugins?.map((plugin) => ({
+        ...plugin,
+        path: safeResolve(basePath, plugin.path),
+      })),
       maxBudgetUsd: config.max_budget_usd,
-      additionalDirectories: config.additional_directories,
+      additionalDirectories: config.additional_directories?.map((dir) =>
+        safeResolve(basePath, dir),
+      ),
       resume: config.resume,
       forkSession: config.fork_session,
       resumeSessionAt: config.resume_session_at,
@@ -753,14 +774,16 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       agent: config.agent,
       sessionId: config.session_id,
       debug: config.debug,
-      debugFile: config.debug_file,
+      debugFile: config.debug_file ? safeResolve(basePath, config.debug_file) : undefined,
       sandbox: config.sandbox,
       allowDangerouslySkipPermissions: config.allow_dangerously_skip_permissions,
       permissionPromptToolName: config.permission_prompt_tool_name,
       executable: config.executable,
       executableArgs: config.executable_args,
       extraArgs: config.extra_args,
-      pathToClaudeCodeExecutable: config.path_to_claude_code_executable,
+      pathToClaudeCodeExecutable: config.path_to_claude_code_executable
+        ? safeResolve(basePath, config.path_to_claude_code_executable)
+        : undefined,
       settingSources: config.setting_sources,
       tools: config.tools,
       enableFileCheckpointing: config.enable_file_checkpointing,
@@ -772,7 +795,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     const cacheResult = await initializeAgenticCache(
       {
         cacheKeyPrefix: 'anthropic:claude-agent-sdk',
-        workingDir: config.working_dir,
+        workingDir,
         bustCache: context?.bustCache,
         mcp: config.mcp?.servers?.length ? config.mcp : undefined,
         cacheMcp: config.cache_mcp,
@@ -859,8 +882,39 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
       const res = await this.claudeCodeModule.query(queryParams);
 
+      // Collect tool calls and results from intermediate messages
+      const toolCallsMap = new Map<string, ToolCallEntry>();
+
       for await (const msg of res) {
-        if (msg.type == 'result') {
+        if (msg.type === 'assistant') {
+          // Extract tool_use content blocks from assistant messages
+          for (const block of msg.message.content) {
+            if (block.type === 'tool_use') {
+              toolCallsMap.set(block.id, {
+                id: block.id,
+                name: block.name,
+                input: block.input,
+                output: undefined,
+                is_error: false,
+                parentToolUseId: msg.parent_tool_use_id,
+              });
+            }
+          }
+        } else if (msg.type === 'user') {
+          // Extract tool_result content blocks and match to tool calls
+          const content = msg.message?.content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === 'tool_result') {
+                const entry = toolCallsMap.get(block.tool_use_id);
+                if (entry) {
+                  entry.output = block.content;
+                  entry.is_error = block.is_error ?? false;
+                }
+              }
+            }
+          }
+        } else if (msg.type === 'result') {
           const raw = JSON.stringify(msg);
           const tokenUsage: ProviderResponse['tokenUsage'] = {
             prompt: msg.usage?.input_tokens,
@@ -872,7 +926,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           };
           const cost = msg.total_cost_usd ?? 0;
           const sessionId = msg.session_id;
-          if (msg.subtype == 'success') {
+
+          const toolCallsArray = Array.from(toolCallsMap.values());
+
+          if (msg.subtype === 'success') {
             logger.debug(`Claude Agent SDK response: ${raw}`);
             // When structured output is enabled and available, use it as the output
             // Otherwise fall back to the text result
@@ -883,14 +940,18 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               cost,
               raw,
               sessionId,
+              metadata: {
+                toolCalls: toolCallsArray,
+                numTurns: msg.num_turns,
+                durationMs: msg.duration_ms,
+                durationApiMs: msg.duration_api_ms,
+                modelUsage: msg.modelUsage,
+                permissionDenials: msg.permission_denials,
+                ...(msg.structured_output !== undefined
+                  ? { structuredOutput: msg.structured_output }
+                  : {}),
+              },
             };
-            // Include structured output in metadata if available
-            if (msg.structured_output !== undefined) {
-              response.metadata = {
-                ...response.metadata,
-                structuredOutput: msg.structured_output,
-              };
-            }
 
             // Cache the response using shared utilities
             await cacheResponse(cacheResult, response, 'Claude Agent SDK');
@@ -902,6 +963,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               cost,
               raw,
               sessionId,
+              metadata: {
+                toolCalls: toolCallsArray,
+                numTurns: msg.num_turns,
+                durationMs: msg.duration_ms,
+                durationApiMs: msg.duration_api_ms,
+                modelUsage: msg.modelUsage,
+                permissionDenials: msg.permission_denials,
+              },
             };
           }
         }

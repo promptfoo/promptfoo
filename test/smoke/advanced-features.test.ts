@@ -94,6 +94,33 @@ describe('Advanced Features Smoke Tests', () => {
       expect(output).toContain('sk-test-12345');
       expect(output).toContain('super-secret-value');
     });
+
+    it('1.4.8b - --env-file resolves env placeholders in file:// provider references', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/file-provider-env-7079.yaml');
+      const envFilePath = path.join(FIXTURES_DIR, 'data/file-provider-env-7079.env');
+      const outputPath = path.join(OUTPUT_DIR, 'file-provider-env-7079-output.json');
+
+      const { exitCode } = runCli([
+        'eval',
+        '-c',
+        configPath,
+        '--env-file',
+        envFilePath,
+        '-o',
+        outputPath,
+        '--no-cache',
+      ]);
+
+      expect(exitCode).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      const result = parsed.results.results[0];
+
+      expect(result.provider.id).toBe('echo');
+      expect(result.provider.label).toBe('Smoke Provider Label');
+      expect(result.response.output).toContain('Hello World');
+    });
   });
 
   describe('1.10.1 Delay Between Tests', () => {
