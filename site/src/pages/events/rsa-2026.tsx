@@ -166,14 +166,9 @@ export default function RSA2026(): React.ReactElement {
 
             <div className={styles.heroCtas}>
               <p className={styles.ctaBlurb}>Book a time to talk to us</p>
-              <a
-                href="https://cal.com/team/promptfoo/intro2"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.primaryCta}
-              >
+              <Link to="/contact" className={styles.primaryCta}>
                 Schedule a Meeting
-              </a>
+              </Link>
             </div>
           </div>
         </section>
@@ -226,14 +221,9 @@ export default function RSA2026(): React.ReactElement {
                 <p className={styles.ctaCardText}>
                   Book a time to meet with our AI security and red teaming experts at the event.
                 </p>
-                <a
-                  href="https://cal.com/team/promptfoo/intro2"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={styles.primaryCta}
-                >
+                <Link to="/contact" className={styles.primaryCta}>
                   Schedule a Meeting
-                </a>
+                </Link>
               </div>
               <div className={styles.ctaCard}>
                 <h3 className={styles.ctaCardTitle}>Can't make it?</h3>

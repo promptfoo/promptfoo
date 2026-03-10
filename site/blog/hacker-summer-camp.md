@@ -43,15 +43,7 @@ We'll be in the Black Hat Business Hall on August 6th and 7th. You can also atte
 - **Booth**: AI Zone Pavilion, Booth #4712
 - **Dates**: Wednesday, August 6th and Thursday, August 7th
 
-Want a deeper-dive demo? You can also book a 30-minute demo slot to see Promptfoo in action and learn how the platform can accelerate your AI security strategy.
-
-<iframe
-  src="https://cal.com/team/promptfoo/promptfoo-at-blackhat?embed=true"
-  width="100%"
-  height="600px"
-  frameBorder="0"
-  title="Book a meeting with Promptfoo"
-/>
+Want a deeper-dive demo? [Reach out to the team](/contact/) to see Promptfoo in action and learn how the platform can accelerate your AI security strategy.
 
 ## Try the Tool at Arsenal Labs
 
