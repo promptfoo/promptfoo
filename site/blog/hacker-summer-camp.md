@@ -82,6 +82,12 @@ We're throwing an open bar [party](https://promptfoo.dev/events/defcon-2025) at 
   tabIndex="0"
 />
 
+## Explore Career Opportunities
+
+We're also expanding the team! If you're looking for a new role as an AI red teamer, deployment engineer, or software engineer, we would love to talk with you.
+
+[View open positions on our careers page →](https://openai.com/careers/search/)
+
 ## See You There
 
 Hacker Summer Camp is the ultimate playground for security professionals, and we're ready to bring the heat. Stop by and meet the team shaping the future of AI security. See you in Vegas!

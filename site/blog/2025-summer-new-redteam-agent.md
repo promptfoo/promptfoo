@@ -237,7 +237,7 @@ At Promptfoo, we've raised the bar for what enterprise-grade LLM security looks 
 
 - **Persistent Memory**: Information retention across testing phases, empowering sophisticated multi-step exploitation strategies and enabling deep, cumulative learning about target systems.
 
-If you're interested in bringing this level of testing to your team, [book a demo](https://www.promptfoo.dev/contact/).
+If you're interested in helping us build cool stuff like this, check out our [careers page](https://openai.com/careers/search/).
 
 ## Who Am I?
 

@@ -100,8 +100,9 @@ By making security testing as natural as running unit tests, we help developers:
 
 The best time to secure your AI is now:
 
-→ **[Try our open source tools](https://github.com/promptfoo/promptfoo)** - Free forever  
-→ **[Request an enterprise demo](https://promptfoo.dev/contact)** - See how Fortune 500s secure their AI
+→ **[Try our open source tools](https://github.com/promptfoo/promptfoo)** - Free forever<br />
+→ **[Request an enterprise demo](https://promptfoo.dev/contact)** - See how Fortune 500s secure their AI<br />
+→ **[Join our team](https://openai.com/careers/search/)** - We're hiring!
 
 ---
 
