@@ -59,7 +59,6 @@
   --ifm-color-primary-lighter: #ffc6c6;
   --ifm-color-primary-lightest: #ffd9d9;
   --ifm-button-color: #fff;
-  /* Use a more specific selector so the light-mode :root value cannot override this in the built CSS. */
   --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.08);
 
   /* Update background colors */
