@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import {
@@ -187,7 +187,6 @@ export default function ResultsView({
   const [downloadDialogOpen, setDownloadDialogOpen] = React.useState(false);
 
   const currentEvalId = evalId || defaultEvalId || 'default';
-
   const validEvalId = evalId || defaultEvalId;
 
   const handleShareButtonClick = async () => {
@@ -549,15 +548,49 @@ export default function ResultsView({
   const hasMeaningfulUniformScore =
     uniqueScores.size === 1 && ![0, 1].includes([...uniqueScores][0]);
 
-  const canRenderResultsCharts =
-    table &&
-    config &&
-    table.head.prompts.length > 1 &&
-    // No valid scores available
-    resultsChartsScores.length > 0 &&
-    // Show charts if scores vary OR if uniform score is meaningful (not binary 0/1)
-    (hasVariedScores || hasMeaningfulUniformScore);
-  const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
+  const resultsChartsUnavailableReasons = React.useMemo(() => {
+    const reasons: string[] = [];
+
+    if (!config) {
+      reasons.push('This evaluation is still loading its chart configuration.');
+    }
+
+    if (table.head.prompts.length <= 1) {
+      reasons.push('Charts require at least two prompts to compare side by side.');
+    }
+
+    if (resultsChartsScores.length === 0) {
+      reasons.push('Charts require at least one valid numeric score.');
+    } else if (!hasVariedScores && !hasMeaningfulUniformScore) {
+      reasons.push(
+        'All scores are the same binary edge value (0 or 1), so there is no meaningful distribution to visualize.',
+      );
+    }
+
+    return reasons;
+  }, [config, hasMeaningfulUniformScore, hasVariedScores, resultsChartsScores.length, table]);
+
+  const canRenderResultsCharts = resultsChartsUnavailableReasons.length === 0;
+  const shouldRenderResultsChartsByDefault = window.innerHeight >= 1100 && canRenderResultsCharts;
+  const [hasUserToggledResultsCharts, setHasUserToggledResultsCharts] = React.useState(false);
+  const [renderResultsCharts, setRenderResultsCharts] = React.useState(
+    shouldRenderResultsChartsByDefault,
+  );
+  const previousEvalIdRef = React.useRef(currentEvalId);
+
+  React.useEffect(() => {
+    if (previousEvalIdRef.current !== currentEvalId) {
+      previousEvalIdRef.current = currentEvalId;
+      setHasUserToggledResultsCharts(false);
+      setRenderResultsCharts(shouldRenderResultsChartsByDefault);
+    }
+  }, [currentEvalId, shouldRenderResultsChartsByDefault]);
+
+  React.useEffect(() => {
+    if (!hasUserToggledResultsCharts) {
+      setRenderResultsCharts(shouldRenderResultsChartsByDefault);
+    }
+  }, [hasUserToggledResultsCharts, shouldRenderResultsChartsByDefault]);
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
 
@@ -673,16 +706,17 @@ export default function ResultsView({
                     </TooltipTrigger>
                     <TooltipContent>Edit table view settings</TooltipContent>
                   </Tooltip>
-                  {canRenderResultsCharts && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setRenderResultsCharts((prev) => !prev)}
-                    >
-                      <BarChart className="size-4 mr-2" />
-                      {renderResultsCharts ? 'Hide Charts' : 'Show Charts'}
-                    </Button>
-                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setHasUserToggledResultsCharts(true);
+                      setRenderResultsCharts((prev) => !prev);
+                    }}
+                  >
+                    <BarChart className="size-4 mr-2" />
+                    {renderResultsCharts ? 'Hide Charts' : 'Show Charts'}
+                  </Button>
                 </div>
                 <div className="flex flex-wrap gap-2 items-center">
                   <span className="text-xs font-medium text-muted-foreground">Display:</span>
@@ -841,12 +875,31 @@ export default function ResultsView({
                   )}
                 </div>
               </div>
-              {canRenderResultsCharts && renderResultsCharts && (
-                <ResultsCharts
-                  handleHideCharts={() => setRenderResultsCharts(false)}
-                  scores={resultsChartsScores}
-                />
-              )}
+              {renderResultsCharts &&
+                (canRenderResultsCharts ? (
+                  <ResultsCharts
+                    handleHideCharts={() => setRenderResultsCharts(false)}
+                    scores={resultsChartsScores}
+                  />
+                ) : (
+                  <Alert variant="info" className="mt-4 items-start">
+                    <BarChart className="size-4 mt-0.5" />
+                    <AlertContent>
+                      <AlertTitle>Charts are unavailable for this evaluation</AlertTitle>
+                      <AlertDescription className="space-y-3">
+                        <p>
+                          We can show charts when the results include comparable prompts and
+                          chartable scores.
+                        </p>
+                        <ul className="list-disc pl-5 space-y-1">
+                          {resultsChartsUnavailableReasons.map((reason) => (
+                            <li key={reason}>{reason}</li>
+                          ))}
+                        </ul>
+                      </AlertDescription>
+                    </AlertContent>
+                  </Alert>
+                ))}
             </>
           )}
           {currentColumnState.selectedColumns.length < columnData.length && (
