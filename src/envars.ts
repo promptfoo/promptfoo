@@ -361,7 +361,14 @@ type EnvVars = {
   // OpenAI Codex SDK
   CODEX_API_KEY?: string;
 
+  // ClawdBot legacy OpenClaw compatibility
+  CLAWDBOT_GATEWAY_PASSWORD?: string;
+  CLAWDBOT_GATEWAY_TOKEN?: string;
+  CLAWDBOT_GATEWAY_URL?: string;
+
   // OpenClaw
+  OPENCLAW_CONFIG_PATH?: string;
+  OPENCLAW_GATEWAY_PASSWORD?: string;
   OPENCLAW_GATEWAY_TOKEN?: string;
   OPENCLAW_GATEWAY_URL?: string;
 

@@ -64,7 +64,7 @@ It works on the command line too:
 
 It also can generate [security vulnerability reports](https://www.promptfoo.dev/docs/red-team/):
 
-<img src="https://www.promptfoo.dev/img/riskreport-1@2x.png" alt="gen ai red team" width="700">
+<img src="https://www.promptfoo.dev/img/redteam-dashboard@2x.jpg" alt="gen ai red team" width="700">
 
 ## Why Promptfoo?
 

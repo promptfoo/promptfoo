@@ -78,6 +78,14 @@ const config: Config = {
   ],
 
   themeConfig: {
+    announcementBar: {
+      id: 'joining-openai',
+      content:
+        '<strong>Promptfoo will be joining OpenAI.</strong> <a href="/blog/promptfoo-joining-openai">Read the announcement →</a>',
+      backgroundColor: '#dc2626',
+      textColor: '#ffffff',
+      isCloseable: false,
+    },
     image: 'img/thumbnail.png',
     colorMode: {
       defaultMode: 'light',

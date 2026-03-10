@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example compare-gpt-5-vs-gpt-5-mini-mmlu
+cd compare-gpt-5-vs-gpt-5-mini-mmlu
 ```
 
 This example demonstrates how to benchmark OpenAI's GPT-5 against GPT-5-mini using the Massive Multitask Language Understanding (MMLU) benchmark, focusing on reasoning-heavy academic subjects.

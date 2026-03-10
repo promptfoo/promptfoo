@@ -87,11 +87,35 @@ export function CartDrawer() {
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              height: '200px',
-              color: 'text.secondary',
+              height: '260px',
+              gap: 1.5,
+              px: 3,
             }}
           >
-            <Typography variant="body1">Your cart is empty</Typography>
+            <Typography
+              variant="body1"
+              sx={{ color: 'var(--ifm-color-emphasis-600)', fontWeight: 500 }}
+            >
+              Your cart is empty
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={closeCart}
+              sx={{
+                borderColor: 'var(--ifm-color-emphasis-400)',
+                color: 'var(--ifm-font-color-base)',
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 500,
+                '&:hover': {
+                  borderColor: 'var(--ifm-color-emphasis-600)',
+                  backgroundColor: 'var(--ifm-background-surface-color)',
+                },
+              }}
+            >
+              Continue shopping
+            </Button>
           </Box>
         ) : (
           <Box
@@ -150,9 +174,6 @@ export function CartDrawer() {
                       sx={{
                         fontWeight: 600,
                         mb: 0.5,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
                       }}
                     >
                       {productName}
@@ -197,7 +218,7 @@ export function CartDrawer() {
                         disabled={isLoading || item.quantity <= 1}
                         sx={{
                           border: '1px solid var(--ifm-color-emphasis-300)',
-                          borderRadius: 0,
+                          borderRadius: '4px',
                           p: 0.5,
                           minWidth: 36,
                           minHeight: 36,
@@ -218,7 +239,7 @@ export function CartDrawer() {
                         disabled={isLoading}
                         sx={{
                           border: '1px solid var(--ifm-color-emphasis-300)',
-                          borderRadius: 0,
+                          borderRadius: '4px',
                           p: 0.5,
                           minWidth: 36,
                           minHeight: 36,
@@ -288,7 +309,7 @@ export function CartDrawer() {
               py: { xs: 1.75, sm: 1.5 },
               minHeight: { xs: 48, sm: 44 },
               backgroundColor: 'var(--ifm-color-primary-darker)',
-              borderRadius: 0,
+              borderRadius: '8px',
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
               touchAction: 'manipulation',

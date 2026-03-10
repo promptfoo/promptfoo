@@ -1,4 +1,4 @@
-# opus-4-6-coding (Claude Opus 4.6 Advanced Coding)
+# anthropic/opus-4-6-coding (Claude Opus 4.6 Advanced Coding)
 
 This example demonstrates Claude Opus 4.6's state-of-the-art coding and reasoning capabilities, showcasing its ability to handle complex software engineering tasks with ambiguity and tradeoff analysis.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example anthropic/opus-4-6-coding
+cd anthropic/opus-4-6-coding
 ```
 
 ## What This Tests

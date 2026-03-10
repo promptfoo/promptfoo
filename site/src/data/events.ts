@@ -427,7 +427,6 @@ export const events: Event[] = [
         url: 'https://www.blackhat.com/us-25/arsenal/schedule/#promptfoo-47875',
       },
     ],
-    meetingUrl: 'https://cal.com/team/promptfoo/promptfoo-at-blackhat',
     customPageUrl: '/events/blackhat-2025',
   },
   {

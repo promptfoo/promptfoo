@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-replicate/llama4-scout
+cd provider-replicate/llama4-scout
 ```
 
 This example demonstrates how to use Replicate to run the new **Llama 4 Scout** model, a cutting-edge 17 billion parameter model with 16 experts using mixture-of-experts architecture.

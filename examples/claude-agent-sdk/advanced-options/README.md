@@ -1,9 +1,10 @@
-# advanced-options (Claude Agent SDK Advanced Options)
+# claude-agent-sdk/advanced-options (Claude Agent SDK Advanced Options)
 
 This example demonstrates advanced Claude Agent SDK configuration options including sandbox settings, runtime configuration, and CLI arguments.
 
 ```bash
-npx promptfoo@latest init --example claude-agent-sdk
+npx promptfoo@latest init --example claude-agent-sdk/advanced-options
+cd claude-agent-sdk/advanced-options
 ```
 
 ## Setup

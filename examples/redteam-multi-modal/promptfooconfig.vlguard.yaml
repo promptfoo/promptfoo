@@ -7,7 +7,7 @@ prompts:
 
 targets:
   # You can use any multi-modal model
-  - openai:gpt-4o
+  - openai:gpt-5
   # - anthropic:claude-sonnet-4-6
 
 redteam:

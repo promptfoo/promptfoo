@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-replicate/quickstart
+cd provider-replicate/quickstart
 ```
 
 This is a minimal example to test the Replicate provider with promptfoo.

@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-python-test-cases
+cd config-python-test-cases
 ```
 
 This example demonstrates how to use Python functions to generate test cases with configurable parameters using the new TestGeneratorConfig feature.

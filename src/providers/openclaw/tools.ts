@@ -10,14 +10,19 @@ import type { OpenClawConfig } from './types';
  * OpenClaw Tool Invoke Provider
  *
  * Simple HTTP provider for direct tool invocation via POST /tools/invoke.
- * The tool name is extracted from the provider path: openclaw:tools:bash → tool="bash"
+ * The tool name is extracted from the provider path:
+ * openclaw:tools:sessions_list → tool="sessions_list"
  *
  * The prompt is parsed as JSON for tool arguments. If it's not valid JSON,
  * it's passed as a single `input` argument.
  *
  * Usage:
- *   openclaw:tools:bash        - invoke the bash tool
- *   openclaw:tools:agents_list - invoke the agents_list tool
+ *   openclaw:tools:sessions_list - invoke the sessions_list tool
+ *   openclaw:tools:session_status - invoke the session_status tool
+ *
+ * Optional config:
+ *   action  - tool sub-action, forwarded as body.action
+ *   dry_run - dry-run hint, forwarded as body.dryRun
  */
 export class OpenClawToolInvokeProvider implements ApiProvider {
   private toolName: string;
@@ -58,6 +63,7 @@ export class OpenClawToolInvokeProvider implements ApiProvider {
     const url = `${this.gatewayUrl}/tools/invoke`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      ...(this.openclawConfig.headers || {}),
     };
     if (this.authToken) {
       headers['Authorization'] = `Bearer ${this.authToken}`;
@@ -65,7 +71,11 @@ export class OpenClawToolInvokeProvider implements ApiProvider {
 
     const body = {
       tool: this.toolName,
+      ...(this.openclawConfig.action && { action: this.openclawConfig.action }),
       args,
+      ...(typeof this.openclawConfig.dry_run === 'boolean' && {
+        dryRun: this.openclawConfig.dry_run,
+      }),
       ...(this.openclawConfig.session_key && { sessionKey: this.openclawConfig.session_key }),
     };
 

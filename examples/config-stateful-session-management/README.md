@@ -1,4 +1,4 @@
-# config-stateful-session-management
+# config-stateful-session-management (Stateful Session Management)
 
 This example demonstrates how to use server-generated UUIDs to identify test cases and maintain server-side conversation history when a test case has multiple turns. It is useful when your provider/target generates unique identifiers to stitch together messages into a conversation "threads".
 
@@ -6,6 +6,7 @@ This example demonstrates how to use server-generated UUIDs to identify test cas
 
 ```sh
 npx promptfoo@latest init --example config-stateful-session-management
+cd config-stateful-session-management
 ```
 
 ## Requirements

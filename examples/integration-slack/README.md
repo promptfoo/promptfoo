@@ -1,4 +1,4 @@
-# integration-slack
+# integration-slack (Slack Integration)
 
 This example shows how to collect human feedback via Slack for evaluating AI responses.
 
@@ -47,6 +47,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example integration-slack
+cd integration-slack
 ```
 
 Then update the channel ID in `promptfooconfig.yaml` and run:
