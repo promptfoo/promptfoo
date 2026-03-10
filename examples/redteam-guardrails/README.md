@@ -1,4 +1,4 @@
-# Guardrails Evaluation Preset
+# redteam-guardrails (Guardrails Evaluation)
 
 This preset provides a comprehensive testing suite for evaluating guardrails effectiveness against the most critical security threats and harmful content that guardrails are designed to prevent. Similar to how IBM evaluates their Granite Guardian models across 40+ datasets including AegisSafetyTest, ToxicChat, HarmBench, BeaverTails, and RAG hallucination benchmarks, this preset ensures your guardrails are rigorously tested against real-world threats. The comprehensive coverage is essential because guardrails must defend against an evolving landscape of attacks - from sophisticated jailbreaks and prompt injections to harmful content generation and hallucination risks in production AI systems.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-guardrails
+cd redteam-guardrails
 ```
 
 ## What it Tests

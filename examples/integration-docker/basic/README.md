@@ -1,4 +1,4 @@
-# Docker Comparison
+# integration-docker/basic (Docker Comparison)
 
 [Docker Model Runner](https://docs.docker.com/ai/model-runner/) makes it easy to manage, run, and deploy AI models using Docker. Designed for developers, Docker Model Runner streamlines the process of pulling, running, and serving large language models (LLMs) and other AI models directly from Docker Hub or any OCI-compliant registry.
 
@@ -8,7 +8,7 @@
 
 ```bash
 npx promptfoo@latest init --example integration-docker/basic
-cd docker
+cd integration-docker/basic
 ```
 
 2. Enable Docker Model Runner in Docker Desktop or Docker Engine per https://docs.docker.com/ai/model-runner/#enable-docker-model-runner.

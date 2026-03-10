@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-http/auth-signature
+cd provider-http/auth-signature
 ```
 
 ## Introduction

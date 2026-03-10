@@ -207,25 +207,18 @@ export function ProductModal() {
       open={isOpen}
       onClose={closeProductModal}
       maxWidth={false}
-      fullScreen
       PaperProps={{
         sx: {
-          // Fullscreen on mobile, constrained on larger screens
-          width: { xs: '100%', sm: '90vw' },
-          maxWidth: { xs: '100%', sm: '1000px' },
-          height: { xs: '100%', sm: '85vh' },
-          maxHeight: { xs: '100%', sm: '800px' },
-          m: { xs: 0, sm: 2 },
-          borderRadius: 0,
+          width: { xs: '100vw', sm: '90vw' },
+          maxWidth: { xs: '100vw', sm: '1000px' },
+          height: { xs: '100vh', sm: '85vh' },
+          maxHeight: { xs: '100vh', sm: '800px' },
+          m: 0,
+          borderRadius: { xs: 0, sm: '8px' },
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-        },
-      }}
-      sx={{
-        // Override fullScreen on larger viewports
-        '& .MuiDialog-container': {
-          alignItems: { xs: 'stretch', sm: 'center' },
+          color: 'var(--ifm-font-color-base, #1c1e21)',
         },
       }}
     >
@@ -265,7 +258,7 @@ export function ProductModal() {
           sx={{
             color: 'var(--ifm-button-color, #fff)',
             '&:hover': {
-              backgroundColor: 'var(--ifm-color-emphasis-200)',
+              backgroundColor: 'rgba(255, 255, 255, 0.15)',
             },
           }}
           aria-label="Close"
@@ -281,6 +274,7 @@ export function ProductModal() {
           flexDirection: { xs: 'column', md: 'row' },
           flex: 1,
           overflow: 'hidden',
+          backgroundColor: 'var(--ifm-background-color, #ffffff)',
         }}
       >
         {/* Image carousel */}
@@ -325,7 +319,7 @@ export function ProductModal() {
                   left: 8,
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  backgroundColor: 'var(--ifm-background-color)',
+                  backgroundColor: 'var(--ifm-background-color, #ffffff)',
                   border: '1px solid var(--ifm-color-emphasis-300)',
                   '&:hover': {
                     backgroundColor: 'var(--ifm-background-surface-color)',
@@ -342,7 +336,7 @@ export function ProductModal() {
                   right: 8,
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  backgroundColor: 'var(--ifm-background-color)',
+                  backgroundColor: 'var(--ifm-background-color, #ffffff)',
                   border: '1px solid var(--ifm-color-emphasis-300)',
                   '&:hover': {
                     backgroundColor: 'var(--ifm-background-surface-color)',
@@ -353,53 +347,27 @@ export function ProductModal() {
                 <ChevronRightIcon />
               </IconButton>
 
-              {/* Image indicators */}
-              <Box
-                component="nav"
-                aria-label="Image navigation"
+              {/* Image counter */}
+              <Typography
+                variant="caption"
+                aria-live="polite"
                 sx={{
                   position: 'absolute',
-                  bottom: 16,
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  display: 'flex',
-                  gap: 1,
+                  bottom: 12,
+                  right: 12,
+                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                  color: '#fff',
+                  px: 1,
+                  py: 0.25,
+                  borderRadius: '4px',
+                  fontSize: '0.75rem',
+                  fontWeight: 500,
+                  fontVariantNumeric: 'tabular-nums',
+                  userSelect: 'none',
                 }}
               >
-                {images.map((_, index) => (
-                  <Box
-                    key={index}
-                    component="button"
-                    type="button"
-                    onClick={() => setCurrentImageIndex(index)}
-                    aria-label={`Go to image ${index + 1} of ${images.length}`}
-                    aria-current={index === currentImageIndex ? 'true' : undefined}
-                    sx={{
-                      width: 8,
-                      height: 8,
-                      padding: 0,
-                      border: 'none',
-                      borderRadius: '50%',
-                      backgroundColor:
-                        index === currentImageIndex
-                          ? 'var(--ifm-color-primary-darkest)'
-                          : 'var(--ifm-color-emphasis-400)',
-                      cursor: 'pointer',
-                      transition: 'background-color 0.2s',
-                      '&:hover': {
-                        backgroundColor:
-                          index === currentImageIndex
-                            ? 'var(--ifm-color-primary-darkest)'
-                            : 'var(--ifm-color-emphasis-500)',
-                      },
-                      '&:focus-visible': {
-                        outline: '2px solid var(--ifm-color-primary)',
-                        outlineOffset: 2,
-                      },
-                    }}
-                  />
-                ))}
-              </Box>
+                {currentImageIndex + 1} / {images.length}
+              </Typography>
             </>
           )}
         </Box>
@@ -513,7 +481,7 @@ export function ProductModal() {
               minHeight: { xs: 48, sm: 44 },
               fontSize: { xs: '0.875rem', sm: '1rem' },
               backgroundColor: 'var(--ifm-color-primary-darker)',
-              borderRadius: 0,
+              borderRadius: '8px',
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
               // Prevent iOS zoom on input

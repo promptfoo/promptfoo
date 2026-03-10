@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example compare-gpt-vs-claude-vs-gemini
+cd compare-gpt-vs-claude-vs-gemini
 ```
 
 See the [guide](https://www.promptfoo.dev/docs/guides/gpt-vs-claude-vs-gemini/) for more details.

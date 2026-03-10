@@ -8,6 +8,7 @@ See the [guide](https://www.promptfoo.dev/docs/guides/compare-open-source-models
 
 ```sh
 npx promptfoo@latest init --example compare-open-source-models
+cd compare-open-source-models
 ```
 
 Set the required environment variable:

@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.121.1](https://github.com/promptfoo/promptfoo/compare/0.121.0...0.121.1) (2026-03-09)
+
+### Bug Fixes
+
+- **providers:** support newer opencode sdk api ([#8060](https://github.com/promptfoo/promptfoo/issues/8060)) ([7ec80b2](https://github.com/promptfoo/promptfoo/commit/7ec80b2e173dc99438002c8f5d16feb7b6643aa1))
+
+## [0.121.0](https://github.com/promptfoo/promptfoo/compare/0.120.27...0.121.0) (2026-03-09)
+
+### ⚠ BREAKING CHANGES
+
+- **providers:** resolve relative config paths against config dir in claude-agent-sdk ([#8030](https://github.com/promptfoo/promptfoo/issues/8030))
+
+### Features
+
+- **redteam:** generalize insurance plugins for all insurance types ([#8002](https://github.com/promptfoo/promptfoo/issues/8002)) ([945c3bc](https://github.com/promptfoo/promptfoo/commit/945c3bc6725ca8bc7369f7d0efed6f8394da98fa))
+- stop multi-turn redteam attacks when target closes thread ([#7942](https://github.com/promptfoo/promptfoo/issues/7942)) ([d849923](https://github.com/promptfoo/promptfoo/commit/d84992322a2442f6d1a71a744f297d5e808ab770))
+
+### Bug Fixes
+
+- **app:** enforce strategy config limits via onChange clamping ([#8045](https://github.com/promptfoo/promptfoo/issues/8045)) ([9b8920d](https://github.com/promptfoo/promptfoo/commit/9b8920d97a3a8cd4091e7e5b6ff20efff74e2ded))
+- **app:** restore composite jailbreak strategy visibility ([#8013](https://github.com/promptfoo/promptfoo/issues/8013)) ([a34ec66](https://github.com/promptfoo/promptfoo/commit/a34ec664ece825532bcd14c31b79ddf0afab9dbc))
+- **ci:** skip email verification API call in CI environments ([#8034](https://github.com/promptfoo/promptfoo/issues/8034)) ([594a4a7](https://github.com/promptfoo/promptfoo/commit/594a4a7ad46203d2c5d3ac833c25ecfd14295847))
+- **cli:** cap agent fs reads before loading file ([#8050](https://github.com/promptfoo/promptfoo/issues/8050)) ([d39c41b](https://github.com/promptfoo/promptfoo/commit/d39c41b89262fafeced2778801e2e637eab8d19a))
+- **deps:** update dependency @opencode-ai/sdk to ^1.2.19 ([#8052](https://github.com/promptfoo/promptfoo/issues/8052)) ([995f94c](https://github.com/promptfoo/promptfoo/commit/995f94cef32c953de83d3e35cd273c09fad34472))
+- **deps:** update dependency fast-xml-parser to ^5.4.2 ([#8042](https://github.com/promptfoo/promptfoo/issues/8042)) ([8be46a5](https://github.com/promptfoo/promptfoo/commit/8be46a5b096092cf68ef1cf989e706b461807d0c))
+- **deps:** update opentelemetry ([#8056](https://github.com/promptfoo/promptfoo/issues/8056)) ([6b4ed86](https://github.com/promptfoo/promptfoo/commit/6b4ed863686fa49e922d697bbf725555cd8adaa0))
+- make quoted comma parsing consistent across contains assertions ([#8041](https://github.com/promptfoo/promptfoo/issues/8041)) ([3c1ad55](https://github.com/promptfoo/promptfoo/commit/3c1ad55811347febe7479b4bfb77887b7dc5003e))
+- **providers:** resolve relative config paths against config dir in claude-agent-sdk ([#8030](https://github.com/promptfoo/promptfoo/issues/8030)) ([2e8a976](https://github.com/promptfoo/promptfoo/commit/2e8a9763ee2e663473f915b18417abdbaf408634))
+
 ## [0.120.27](https://github.com/promptfoo/promptfoo/compare/0.120.26...0.120.27) (2026-03-06)
 
 ### Features
