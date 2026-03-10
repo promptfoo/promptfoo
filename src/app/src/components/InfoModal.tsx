@@ -10,7 +10,6 @@ import {
 import { cn } from '@app/lib/utils';
 import {
   BookOpen,
-  Briefcase,
   Bug,
   Calendar,
   ExternalLink,
@@ -43,11 +42,6 @@ const links: { icon: React.ReactElement; text: string; href: string }[] = [
     icon: <Calendar className="size-4" />,
     text: 'Book a Meeting',
     href: 'https://cal.com/team/promptfoo/intro2',
-  },
-  {
-    icon: <Briefcase className="size-4" />,
-    text: 'Careers',
-    href: 'https://www.promptfoo.dev/careers/',
   },
 ];
 
