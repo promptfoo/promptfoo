@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 
 import ReactMarkdown from 'react-markdown';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
@@ -8,6 +8,7 @@ import TruncatedText from './TruncatedText';
 interface VariableMarkdownCellProps {
   value: string;
   maxTextLength: number;
+  onImageClick?: (src?: string) => void;
 }
 
 /**
@@ -24,11 +25,31 @@ interface VariableMarkdownCellProps {
 const VariableMarkdownCell = React.memo(function VariableMarkdownCell({
   value,
   maxTextLength,
+  onImageClick,
 }: VariableMarkdownCellProps) {
+  const markdownComponents = useMemo(
+    () => ({
+      img: ({ src, alt }: { src?: string; alt?: string }) => (
+        <img
+          loading="lazy"
+          src={src}
+          alt={alt}
+          onClick={() => onImageClick?.(src)}
+          style={onImageClick ? { cursor: 'pointer' } : undefined}
+        />
+      ),
+    }),
+    [onImageClick],
+  );
+
   return (
     <MarkdownErrorBoundary fallback={value}>
       <TruncatedText
-        text={<ReactMarkdown remarkPlugins={REMARK_PLUGINS}>{value}</ReactMarkdown>}
+        text={
+          <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={markdownComponents}>
+            {value}
+          </ReactMarkdown>
+        }
         maxLength={maxTextLength}
       />
     </MarkdownErrorBoundary>
