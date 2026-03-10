@@ -9,11 +9,11 @@ import {
 } from '@app/components/ui/collapsible';
 import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
-import { EVAL_ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
 import { getActualPrompt } from '@app/utils/providerResponse';
 import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
 import { ChevronDown, Lightbulb } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import ChatMessages, { type Message } from '../../../eval/components/ChatMessages';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
@@ -143,13 +143,7 @@ const RiskCategoryDrawer = ({
   numPassed,
   numFailed,
 }: RiskCategoryDrawerProps) => {
-  // Validate category BEFORE any hooks to comply with Rules of Hooks
-  const categoryName = categoryAliases[category as keyof typeof categoryAliases];
-  if (!categoryName) {
-    console.error('[RiskCategoryDrawer] Could not load category', category);
-    return null;
-  }
-
+  const navigate = useNavigate();
   const [suggestionsDialogOpen, setSuggestionsDialogOpen] = React.useState(false);
   const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(
     undefined,
@@ -161,6 +155,12 @@ const RiskCategoryDrawer = ({
   const sortedFailures = React.useMemo(() => {
     return [...failures].sort(sortByPriorityStrategies);
   }, [failures]);
+
+  const categoryName = categoryAliases[category as keyof typeof categoryAliases];
+  if (!categoryName) {
+    console.error('[RiskCategoryDrawer] Could not load category', category);
+    return null;
+  }
 
   const displayName =
     displayNameOverrides[category as keyof typeof displayNameOverrides] || categoryName;
@@ -321,12 +321,11 @@ const RiskCategoryDrawer = ({
                 ]),
               );
 
-              const evalDetailUrl = EVAL_ROUTES.DETAIL(evalId);
-              const url = pluginId ? `${evalDetailUrl}?filter=${filterParam}` : evalDetailUrl;
+              const url = pluginId ? `/eval/${evalId}?filter=${filterParam}` : `/eval/${evalId}`;
               if (event.ctrlKey || event.metaKey) {
                 window.open(url, '_blank');
               } else {
-                window.location.assign(url);
+                navigate(url);
               }
             }}
           >
