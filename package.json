@@ -166,7 +166,7 @@
     "playwright-extra": "^4.3.6",
     "prettier": "^3.8.1",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "read-excel-file": "^7.0.1",
+    "read-excel-file": "^7.0.2",
     "sharp": "^0.34.5",
     "shx": "^0.4.0",
     "source-map-support": "^0.5.21",
@@ -213,7 +213,7 @@
     "playwright": "^1.58.2",
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "read-excel-file": "^7.0.1",
+    "read-excel-file": "^7.0.2",
     "sharp": "^0.34.5"
   },
   "dependencies": {
