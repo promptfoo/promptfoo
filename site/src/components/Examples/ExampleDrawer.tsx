@@ -1,9 +1,11 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 
 import Drawer from '@mui/material/Drawer';
 import styles from './ExampleDrawer.module.css';
 
 import type { ExampleData } from '../../data/examples';
+
+type InstallMethod = 'npx' | 'npm' | 'brew';
 
 const TAG_COLORS: Record<string, string> = {
   'Getting Started': '#16a34a',
@@ -29,22 +31,39 @@ interface ExampleDrawerProps {
   onClose: () => void;
 }
 
+function getCommand(slug: string, method: InstallMethod): string {
+  switch (method) {
+    case 'npx':
+      return `npx promptfoo@latest init --example ${slug}`;
+    case 'npm':
+      return `promptfoo init --example ${slug}`;
+    case 'brew':
+      return `promptfoo init --example ${slug}`;
+  }
+}
+
 export default function ExampleDrawer({
   example,
   open,
   onClose,
 }: ExampleDrawerProps): React.ReactElement {
   const [copied, setCopied] = useState(false);
+  const [installMethod, setInstallMethod] = useState<InstallMethod>('npx');
+
+  const command = useMemo(
+    () => (example ? getCommand(example.slug, installMethod) : ''),
+    [example, installMethod],
+  );
 
   const handleCopy = useCallback(() => {
-    if (!example) {
+    if (!command) {
       return;
     }
-    navigator.clipboard.writeText(example.initCommand).then(() => {
+    navigator.clipboard.writeText(command).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
-  }, [example]);
+  }, [command]);
 
   if (!example) {
     return null;
@@ -90,8 +109,20 @@ export default function ExampleDrawer({
           {/* Init command */}
           <div className={styles.commandSection}>
             <span className={styles.commandLabel}>Get started</span>
+            <div className={styles.methodTabs}>
+              {(['npx', 'npm', 'brew'] as const).map((method) => (
+                <button
+                  key={method}
+                  type="button"
+                  className={`${styles.methodTab} ${installMethod === method ? styles.methodTabActive : ''}`}
+                  onClick={() => setInstallMethod(method)}
+                >
+                  {method}
+                </button>
+              ))}
+            </div>
             <div className={styles.commandBox}>
-              <code className={styles.commandText}>{example.initCommand}</code>
+              <code className={styles.commandText}>{command}</code>
               <button type="button" className={styles.copyButton} onClick={handleCopy}>
                 {copied ? (
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
