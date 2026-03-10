@@ -15,6 +15,12 @@ export default function Careers(): React.ReactElement {
     script.async = true;
 
     document.body.appendChild(script);
+
+    return () => {
+      if (script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+    };
   }, []);
 
   return (

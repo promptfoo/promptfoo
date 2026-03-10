@@ -6,13 +6,23 @@ description: Privacy policy for promptfoo services - we don't collect PII, API k
 
 This Privacy Policy describes how your personal information is collected, used, and shared when you use Promptfoo Command Line Interface (CLI), library, and website.
 
-## We do not collect Personal Information
+## Personal Information — CLI and Library
 
-Promptfoo does not collect any personally identifiable information (PII) when you use our CLI, library, or website. The source code is executed on your machine and any call to Language Model (LLM) APIs (OpenAI, Anthropic, etc.) are sent directly to the LLM provider. We do not have access to these requests or responses. Additionally, we do not sell or trade data to outside parties.
+Promptfoo does not collect any personally identifiable information (PII) when you use our CLI or library. The source code is executed on your machine and any call to Language Model (LLM) APIs (OpenAI, Anthropic, etc.) are sent directly to the LLM provider. We do not have access to these requests or responses. Additionally, we do not sell or trade data to outside parties.
 
 API keys are set as local environment variables and never transmitted to anywhere besides the LLM API directly (OpenAI, Anthropic, etc).
 
 Promptfoo runs locally and all data remains on your local machine, ensuring that your LLM inputs and outputs are not stored or transmitted elsewhere.
+
+## Website Analytics and Marketing
+
+Our website (promptfoo.dev) uses the following third-party services, which are loaded only with your consent:
+
+**Analytics** (usage measurement): Google Analytics and PostHog are used to understand how visitors use our site. These services may collect anonymized usage data such as pages visited, time on site, and general location.
+
+**Marketing** (advertising and visitor identification): Google Ads, Vector.co, and Reo.dev are used for advertising measurement and visitor identification. These services may set cookies and collect browsing data for ad targeting purposes.
+
+You can manage your cookie preferences at any time by clicking "Cookie Settings" or "Do Not Sell or Share My Personal Information" in the site footer. Visitors in the EU/EEA, UK, Switzerland, Brazil, and Canada must explicitly opt in before any analytics or marketing scripts are loaded. US visitors may opt out at any time, and the Global Privacy Control (GPC) signal is honored automatically.
 
 ## Sharing and Storage of Information
 
@@ -34,6 +44,8 @@ The CLI checks NPM's package registry for updates. If there is a newer version a
 
 ## GDPR and Data Processing Agreement
 
-Promptfoo is designed to be compliant with the General Data Protection Regulation (GDPR). As we do not collect or process any personally identifiable information (PII), and all operations are conducted locally on your machine with data not transmitted or stored elsewhere, the typical need for a Data Processing Agreement (DPA) under GDPR is not applicable in this instance.
+The Promptfoo CLI and library do not collect or process personally identifiable information (PII). All operations are conducted locally on your machine.
 
-However, we are committed to ensuring the privacy and protection of all users and their data. If you have any questions or concerns regarding GDPR compliance, please get in touch via GitHub or Discord.
+Our website uses consent-based analytics and marketing tools as described above. Visitors in GDPR-regulated regions must explicitly opt in before any tracking scripts are loaded. We support granular consent (analytics and marketing can be controlled independently), consent withdrawal, and the Global Privacy Control (GPC) signal.
+
+If you have any questions or concerns regarding GDPR compliance, please get in touch via GitHub or Discord.
