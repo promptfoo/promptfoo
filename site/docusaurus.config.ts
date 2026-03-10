@@ -193,11 +193,6 @@ const config: Config = {
               description: 'Meet the team at conferences and events',
             },
             {
-              href: '/careers/',
-              label: 'Careers',
-              description: 'Join our growing team',
-            },
-            {
               to: '/store/',
               label: 'Swag',
               description: 'Official Promptfoo merch and swag',
@@ -360,10 +355,6 @@ const config: Config = {
             {
               label: 'Contact',
               to: '/contact/',
-            },
-            {
-              label: 'Careers',
-              to: '/careers/',
             },
             {
               label: 'Swag',

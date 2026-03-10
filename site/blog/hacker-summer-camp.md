@@ -78,7 +78,7 @@ We're throwing an open bar [party](https://promptfoo.dev/events/defcon-2025) at 
 
 We're also expanding the team! If you're looking for a new role as an AI red teamer, deployment engineer, or software engineer, we would love to talk with you.
 
-[View open positions on our careers page →](https://promptfoo.dev/careers)
+[View open positions on our careers page →](https://openai.com/careers/search/)
 
 ## See You There
 
