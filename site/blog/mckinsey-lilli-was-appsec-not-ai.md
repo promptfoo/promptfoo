@@ -92,11 +92,19 @@ CodeWall's own site describes the company as [an autonomous offensive security p
 
 The right response is not "buy one AI security product." The right response is to stack ordinary AppSec controls with AI-specific integrity testing.
 
+More specifically: no single tool category would have reliably caught this whole chain. You want four layers working together:
+
+1. Code scanning for unsafe SQL construction and missing auth invariants
+2. API runtime testing for exposed routes and authorization flaws
+3. API discovery and posture management for unauthenticated or shadow endpoints
+4. Exploit-validated offensive testing for weird multi-step chains that static or default scans miss
+
 ### Traditional AppSec and API controls
 
-- **SAST for unsafe query construction**: tools like [Semgrep](https://semgrep.dev/) and [CodeQL](https://codeql.github.com/codeql-query-help/javascript/js-sql-injection/) are useful for catching dynamic SQL patterns before they ship.
-- **DAST and manual API testing**: [OWASP ZAP](https://www.zaproxy.org/) and Burp are still table stakes, especially for exposed API surfaces and auth mistakes. They will not catch every unusual query-shape issue, but not running them is inexcusable.
-- **Schema-aware API fuzzing**: [Schemathesis](https://schemathesis.io/) is useful for exercising OpenAPI-described endpoints in ways ordinary happy-path tests never will.
+- **Code scanning for dynamic SQL and auth invariants**: tools like [Semgrep](https://semgrep.dev/docs/learn/vulnerabilities/sql-injection) and [CodeQL](https://docs.github.com/code-security/code-scanning/introduction-to-code-scanning/about-code-scanning-with-codeql) are useful here, but only if you go beyond the defaults. For a chain like this, add project-specific rules that flag request keys or JSON map keys flowing into raw SQL identifiers and enforce mandatory auth and role checks on every route.
+- **DAST and human-in-the-loop API testing**: Burp, [OWASP ZAP](https://www.zaproxy.org/), and schema-aware fuzzing tools like [Schemathesis](https://schemathesis.io/) are still table stakes for exposed API surfaces and auth mistakes. But this is also a good reminder that odd runtime shapes, like attacker-controlled JSON keys becoming SQL syntax, often need manual or custom fuzzing rather than default scanner coverage alone.
+- **API discovery and posture management**: if your team does not have a trustworthy inventory of public, internal, authenticated, unauthenticated, and deprecated endpoints, fix that first. A surprising number of AI breaches still start with "we exposed a route we did not realize was reachable."
+- **Exploit-validated offensive testing**: this is where agentic or human-led offensive testing earns its keep. The problem is not just finding one bug. The problem is chaining missing auth, odd injection behavior, verbose errors, and broken object-level authorization into a working path.
 - **Authorization testing**: OWASP's [API1:2023 Broken Object Level Authorization](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/) should be mandatory reading for any team shipping internal AI assistants over sensitive data.
 - **Database hardening**: suppress raw database errors, use least-privilege DB roles, split read and write paths, and keep attacker-controlled identifiers out of SQL syntax entirely.
 
@@ -104,6 +112,7 @@ The right response is not "buy one AI security product." The right response is t
 
 - **Prompt and config integrity**: prompts, model routing rules, and guardrail configs should live in versioned config management with change approval, not as loose mutable rows with weak auditability.
 - **RAG access control at retrieval time**: enforce document authorization before context assembly. Do not ask the model to "respect permissions" after retrieval.
+- **AI-assisted code review is a complement, not a replacement**: repository-aware security review agents can be useful for targeted audits of auth flows or dangerous data paths, but they do not remove the need for conventional SAST, DAST, and API posture tooling.
 - **Promptfoo red teaming**: use Promptfoo to test the AI layer for [OWASP API risks](/docs/red-team/owasp-api-top-10/), [prompt extraction](/docs/red-team/plugins/prompt-extraction/), [RAG poisoning](/docs/red-team/plugins/rag-poisoning/), and [unauthorized data access via `pii:api-db`](/docs/red-team/plugins/pii/).
 
 Here is a reasonable starting point for an internal enterprise assistant:
