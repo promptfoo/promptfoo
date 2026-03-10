@@ -97,8 +97,8 @@
 
 .slug {
   font-size: 0.75rem;
-  color: var(--ifm-color-emphasis-500);
-  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-emphasis-700);
+  background: var(--ifm-color-emphasis-200);
   padding: 3px 8px;
   border-radius: 6px;
   display: inline-block;

@@ -63,8 +63,7 @@ export default function ExampleFilters({
       </div>
 
       {/* Tag Filter */}
-      <div className={styles.filterGroup}>
-        <span className={styles.filterLabel}>Filter</span>
+      <div className={styles.filterGroup} role="group" aria-label="Filter by tag">
         <div className={styles.filterButtons}>
           <button
             className={`${styles.filterButton} ${selectedTag === 'all' ? styles.active : ''}`}

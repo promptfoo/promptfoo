@@ -1,26 +1,9 @@
 import React from 'react';
 
 import styles from './ExampleCard.module.css';
+import { TAG_COLORS } from './tagColors';
 
 import type { ExampleData } from '../../data/examples';
-
-const TAG_COLORS: Record<string, string> = {
-  'Getting Started': '#16a34a',
-  Configuration: '#2563eb',
-  Evaluation: '#7c3aed',
-  'Model Comparison': '#d97706',
-  'Red Teaming': '#dc2626',
-  Integrations: '#0891b2',
-  OpenAI: '#475569',
-  Providers: '#9333ea',
-  Agents: '#059669',
-  Multimodal: '#c026d3',
-  'Tool Use': '#0d9488',
-  RAG: '#4f46e5',
-  MCP: '#ea580c',
-  Audio: '#0284c7',
-  'Structured Output': '#6d28d9',
-};
 
 interface ExampleCardProps {
   example: ExampleData;

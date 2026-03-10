@@ -165,7 +165,7 @@ function scanExamples() {
       humanName,
       description,
       tags,
-      initCommand: `npx promptfoo@latest init --example ${slug}`,
+      initCommand: `promptfoo init --example ${slug}`,
       githubUrl: `${GITHUB_BASE}/${slug}`,
     });
   }
