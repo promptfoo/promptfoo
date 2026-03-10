@@ -4,6 +4,18 @@
  * work well for content-centric websites.
  */
 
+/* Self-hosted Inter variable font (GDPR: avoids Google Fonts CDN) */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('/fonts/Inter-Variable-Latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 /* You can override the default Infima variables here. */
 :root {
   /* Primary red color palette */
@@ -35,10 +47,14 @@
     BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif, 'Apple Color Emoji',
     'Segoe UI Emoji', 'Segoe UI Symbol';
   --docusaurus-highlighted-code-line-bg: #fffbdc;
+
+  /* Store page tokens */
+  --store-card-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  --store-card-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.1);
 }
 
 /* For readability concerns, you should choose a lighter palette in dark mode. */
-[data-theme='dark'] {
+:root[data-theme='dark'] {
   --ifm-color-primary: #ff7a7a;
   --ifm-color-primary-dark: #e53a3a;
   --ifm-color-primary-darker: #cb3434;
@@ -47,11 +63,15 @@
   --ifm-color-primary-lighter: #ffc6c6;
   --ifm-color-primary-lightest: #ffd9d9;
   --ifm-button-color: #fff;
-  --docusaurus-highlighted-code-line-bg: #353531;
+  --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.08);
 
   /* Update background colors */
   --ifm-background-color: #10191c;
   --ifm-background-surface-color: #17252b;
+
+  /* Store page tokens */
+  --store-card-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --store-card-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 code p {
@@ -206,5 +226,204 @@ html:not(.docs-wrapper) .DocSearch {
   }
 }
 
+/* ── Sidebar refinements ── */
+
+/* Subtle off-white background for the sidebar */
+.theme-doc-sidebar-container {
+  background: #f8f9fa;
+  border-right: 1px solid #e9ecef;
+}
+
+[data-theme='dark'] .theme-doc-sidebar-container {
+  background: var(--ifm-background-surface-color);
+  border-right-color: #1e2d33;
+}
+
+/* Tighter vertical spacing on sidebar items */
+.menu__link {
+  padding: 0.3rem 0.75rem;
+  font-size: 0.9375rem;
+  border-radius: 6px;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+/* Active item: colored left border accent */
+.menu__link--active {
+  background: var(--pf-red-ultra-light);
+  border-left: 3px solid var(--pf-red-base);
+  padding-left: calc(0.75rem - 3px);
+  font-weight: 600;
+}
+
+[data-theme='dark'] .menu__link--active {
+  background: rgba(255, 122, 122, 0.1);
+  border-left-color: var(--pf-red-light);
+}
+
+/* When a child is also active, suppress the parent category accent */
+.menu__list-item:has(> .menu__list .menu__link--active) > div > .menu__link--active,
+.menu__list-item:has(> .menu__list .menu__link--active) > .menu__link--active {
+  background: none;
+  border-left: none;
+  padding-left: 0.75rem;
+}
+
+/* Hover state */
+.menu__link:hover:not(.menu__link--active) {
+  background: #eef0f2;
+}
+
+[data-theme='dark'] .menu__link:hover:not(.menu__link--active) {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Smooth expand/collapse transition for categories */
+.menu__list {
+  transition: height 0.2s ease;
+}
+
+/* ── Admonition refinements ── */
+
+/* Base: strip default Docusaurus/Infima alert styling */
+.theme-admonition {
+  border: none;
+  border-left: 3px solid;
+  border-radius: 0 8px 8px 0;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  box-shadow: none;
+  --ifm-alert-padding-horizontal: 1.25rem;
+  --ifm-alert-padding-vertical: 1rem;
+}
+
+/* Heading: uppercase small label */
+[class*='admonitionHeading'] {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+
+/* Icon: slightly smaller */
+[class*='admonitionIcon'] svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Content: tighter typography */
+[class*='admonitionContent'] > :last-child {
+  margin-bottom: 0;
+}
+
+/* ── Per-type colors ── */
+
+/* Note (gray) */
+.theme-admonition-note {
+  border-left-color: #868e96;
+  background: #f8f9fa;
+}
+[data-theme='dark'] .theme-admonition-note {
+  border-left-color: #adb5bd;
+  background: rgba(173, 181, 189, 0.08);
+}
+
+/* Tip (green) */
+.theme-admonition-tip {
+  border-left-color: #2f9e44;
+  background: #ebfbee;
+}
+[data-theme='dark'] .theme-admonition-tip {
+  border-left-color: #51cf66;
+  background: rgba(47, 158, 68, 0.08);
+}
+
+/* Info (blue) */
+.theme-admonition-info,
+.theme-admonition-important {
+  border-left-color: #1971c2;
+  background: #e7f5ff;
+}
+[data-theme='dark'] .theme-admonition-info,
+[data-theme='dark'] .theme-admonition-important {
+  border-left-color: #4dabf7;
+  background: rgba(25, 113, 194, 0.08);
+}
+
+/* Warning / Caution (amber) */
+.theme-admonition-warning,
+.theme-admonition-caution {
+  border-left-color: #e8590c;
+  background: #fff4e6;
+}
+[data-theme='dark'] .theme-admonition-warning,
+[data-theme='dark'] .theme-admonition-caution {
+  border-left-color: #ff922b;
+  background: rgba(232, 89, 12, 0.08);
+}
+
+/* Danger (red) */
+.theme-admonition-danger {
+  border-left-color: #c92a2a;
+  background: #fff5f5;
+}
+[data-theme='dark'] .theme-admonition-danger {
+  border-left-color: #ff6b6b;
+  background: rgba(201, 42, 42, 0.08);
+}
+
+/* Add breathing room between content and TOC */
+.theme-doc-toc-desktop {
+  padding-left: 1.5rem;
+}
+
+/* Constrain doc content area for readability */
+[class*='docMainContainer'] > .container {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+/* Remove pill background from active breadcrumb item */
+.breadcrumbs__item--active .breadcrumbs__link {
+  background: none;
+  padding: 0;
+}
+
+/* Prevent iOS zoom on input focus within MUI overlays */
+[class*='MuiDrawer'] input,
+[class*='MuiDrawer'] select,
+[class*='MuiDrawer'] textarea,
+[class*='MuiDialog'] input,
+[class*='MuiDialog'] select,
+[class*='MuiDialog'] textarea {
+  font-size: 16px !important;
+}
+
+/* Print styles — hide MUI overlays */
+@media print {
+  .MuiDrawer-root,
+  .MuiDialog-root,
+  .MuiFab-root {
+    display: none !important;
+  }
+}
+
 /* Import custom pagination styles */
 @import url('./custom-pagination.css');
+
+/* Announcement bar link styling */
+div[class*='announcementBar'] a {
+  color: #ffffff;
+  text-decoration: none;
+  text-underline-offset: 2px;
+  opacity: 0.85;
+  transition: opacity 0.15s;
+}
+
+div[class*='announcementBar'] a:hover {
+  color: #ffffff;
+  text-decoration: underline;
+  opacity: 1;
+}

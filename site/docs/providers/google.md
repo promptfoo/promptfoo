@@ -270,6 +270,7 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 
 ### Chat and Multimodal Models
 
+- `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `google:gemini-3-flash-preview` - Gemini 3.0 Flash preview with frontier intelligence, Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
 - `google:gemini-3-pro-preview` - Gemini 3.0 Pro preview with advanced reasoning, multimodal understanding, and agentic capabilities
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
@@ -353,27 +354,40 @@ See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main
 
 Gemini models can generate images natively using the `generateContent` API. Models with `-image` in the name automatically enable image generation:
 
-- `google:gemini-3-pro-image-preview` - Gemini 3 Pro with advanced image generation (~$0.13/image)
+- `google:gemini-3.1-flash-image-preview` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K)
+- `google:gemini-3-pro-image-preview` - Gemini 3 Pro with advanced image generation (~$0.05/image, estimated)
 - `google:gemini-2.5-flash-image` - Gemini 2.5 Flash with image generation (~$0.04/image)
 
 Configuration options:
 
 ```yaml
 providers:
-  - id: google:gemini-3-pro-image-preview
+  - id: google:gemini-3.1-flash-image-preview
     config:
-      imageAspectRatio: '16:9' # 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9
-      imageSize: '2K' # 1K, 2K, 4K
+      imageAspectRatio: '16:9' # 1:1, 1:4, 1:8, 2:3, 3:2, 3:4, 4:1, 4:3, 4:5, 5:4, 8:1, 9:16, 16:9, 21:9
+      imageSize: '2K' # 512px (3.1 only), 1K, 2K, 4K
       temperature: 0.7
 ```
 
 Key differences from Imagen:
 
 - Uses same namespace as Gemini chat (`google:model-name`)
-- More aspect ratio options (includes 2:3, 3:2, 4:5, 5:4, 21:9)
-- Resolution control via `imageSize` (1K, 2K, 4K) - Gemini 3 models only
+- More aspect ratio options (includes 1:4, 1:8, 2:3, 3:2, 4:1, 4:5, 5:4, 8:1, 21:9)
+- Resolution control via `imageSize` (`512px`, `1K`, `2K`, `4K`) - `512px` is Gemini 3.1 only
 - Can return both text and images in the same response
 - Uses same authentication as Gemini chat models
+- Supports Google Search grounding via `tools`
+
+Google Search grounding lets the model use real-time search results to inform image generation:
+
+```yaml
+providers:
+  - id: google:gemini-3.1-flash-image-preview
+    config:
+      imageAspectRatio: '16:9'
+      tools:
+        - googleSearch: {}
+```
 
 See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen) for Gemini image generation configurations.
 
@@ -622,7 +636,7 @@ providers:
     config:
       safetySettings:
         - category: HARM_CATEGORY_DANGEROUS_CONTENT
-          probability: BLOCK_ONLY_HIGH # or other thresholds
+          threshold: BLOCK_ONLY_HIGH # or other thresholds
 ```
 
 ### System Instructions
@@ -1136,7 +1150,7 @@ Try the examples:
 promptfoo init --example google-live
 
 # Function calling and tools example
-promptfoo init --example google-live-tools
+promptfoo init --example google-live
 
 # Audio generation example
 promptfoo init --example google-live-audio

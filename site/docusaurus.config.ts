@@ -36,34 +36,11 @@ const config: Config = {
     locales: ['en'],
   },
 
-  headTags: [
-    {
-      tagName: 'link',
-      attributes: {
-        rel: 'preconnect',
-        href: 'https://fonts.googleapis.com',
-      },
-    },
-    {
-      tagName: 'link',
-      attributes: {
-        rel: 'preconnect',
-        href: 'https://fonts.gstatic.com',
-        crossorigin: 'true',
-      },
-    },
-    {
-      tagName: 'link',
-      attributes: {
-        rel: 'stylesheet',
-        href: 'https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap',
-      },
-    },
-  ],
+  headTags: [],
 
   scripts: [
     {
-      src: '/js/scripts.js',
+      src: '/js/consent.js',
       async: true,
     },
   ],
@@ -74,8 +51,7 @@ const config: Config = {
       {
         docs: {
           sidebarPath: require.resolve('./sidebars.js'),
-          // Remove this to remove the "edit this page" links.
-          editUrl: 'https://github.com/promptfoo/promptfoo/tree/main/site',
+          editUrl: undefined,
           sidebarCollapsed: false,
           showLastUpdateAuthor: true,
           showLastUpdateTime: true,
@@ -96,12 +72,20 @@ const config: Config = {
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
         },
-        // gtag disabled in preset - added as standalone plugin below for production only
+        // gtag loaded conditionally via consent.js (GDPR)
       } satisfies Preset.Options,
     ],
   ],
 
   themeConfig: {
+    announcementBar: {
+      id: 'joining-openai',
+      content:
+        '<strong>Promptfoo will be joining OpenAI.</strong> <a href="/blog/promptfoo-joining-openai">Read the announcement →</a>',
+      backgroundColor: '#dc2626',
+      textColor: '#ffffff',
+      isCloseable: false,
+    },
     image: 'img/thumbnail.png',
     colorMode: {
       defaultMode: 'light',
@@ -207,11 +191,6 @@ const config: Config = {
               href: '/events/',
               label: 'Events',
               description: 'Meet the team at conferences and events',
-            },
-            {
-              href: '/careers/',
-              label: 'Careers',
-              description: 'Join our growing team',
             },
             {
               to: '/store/',
@@ -330,7 +309,7 @@ const config: Config = {
             },
             {
               label: 'Running Benchmarks',
-              to: '/docs/guides/llama2-uncensored-benchmark-ollama',
+              to: '/docs/guides/censored-vs-uncensored-ollama',
             },
             {
               label: 'Evaluating Factuality',
@@ -378,10 +357,6 @@ const config: Config = {
               to: '/contact/',
             },
             {
-              label: 'Careers',
-              to: '/careers/',
-            },
-            {
               label: 'Swag',
               to: '/store/',
             },
@@ -396,7 +371,7 @@ const config: Config = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/promptfoo/promptfoo',
+              href: 'https://github.com/promptfoo/promptfoo#readme',
             },
             {
               label: 'Discord',
@@ -417,6 +392,9 @@ const config: Config = {
             {
               label: 'Trust Center',
               href: 'https://trust.promptfoo.dev',
+            },
+            {
+              html: '<a href="#manage-cookies" class="footer__link-item">Cookie Settings</a>',
             },
             {
               html: `
@@ -463,18 +441,7 @@ const config: Config = {
   plugins: [
     require.resolve('docusaurus-plugin-image-zoom'),
     require.resolve('./src/plugins/docusaurus-plugin-og-image'),
-    // Only load gtag in production to avoid "window.gtag is not a function" errors in dev
-    ...(process.env.NODE_ENV === 'development'
-      ? []
-      : [
-          [
-            '@docusaurus/plugin-google-gtag',
-            {
-              trackingID: ['G-3TS8QLZQ93', 'G-3YM29CN26E', 'AW-17347444171'],
-              anonymizeIP: true,
-            },
-          ],
-        ]),
+    // GA/analytics loaded conditionally via consent.js (GDPR)
     [
       '@docusaurus/plugin-client-redirects',
       {
@@ -498,6 +465,101 @@ const config: Config = {
           {
             from: '/docs/guides/prevent-llm-hallucations',
             to: '/docs/guides/prevent-llm-hallucinations',
+          },
+          {
+            from: '/docs/category/guides',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/gpt-5-vs-gpt-5-mini-mmlu',
+            to: '/docs/guides/gpt-mmlu-comparison',
+          },
+          {
+            from: '/docs/guides/gpt-5.2-vs-o3',
+            to: '/docs/guides/gpt-vs-reasoning-model',
+          },
+          {
+            from: '/docs/guides/llama2-uncensored-benchmark-ollama',
+            to: '/docs/guides/censored-vs-uncensored-ollama',
+          },
+          {
+            from: '/docs/red-team/guardrails',
+            to: '/docs/enterprise/guardrails',
+          },
+          // Deleted guides consolidated into gpt-vs-claude-vs-gemini
+          {
+            from: '/docs/guides/claude-vs-gpt',
+            to: '/docs/guides/gpt-vs-claude-vs-gemini',
+          },
+          {
+            from: '/docs/guides/gemini-vs-gpt',
+            to: '/docs/guides/gpt-vs-claude-vs-gemini',
+          },
+          // Deleted guides consolidated into compare-open-source-models
+          {
+            from: '/docs/guides/compare-llama2-vs-gpt',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          {
+            from: '/docs/guides/gemma-vs-llama',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          {
+            from: '/docs/guides/gemma-vs-mistral',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          {
+            from: '/docs/guides/mistral-vs-llama',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          {
+            from: '/docs/guides/phi-vs-llama',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          // Deleted guides consolidated into choosing-best-gpt-model
+          {
+            from: '/docs/guides/gpt-3.5-vs-gpt-4',
+            to: '/docs/guides/choosing-best-gpt-model',
+          },
+          {
+            from: '/docs/guides/gpt-4-vs-gpt-4o',
+            to: '/docs/guides/choosing-best-gpt-model',
+          },
+          // Deleted guides consolidated into gpt-vs-reasoning-model
+          {
+            from: '/docs/guides/gpt-vs-o1',
+            to: '/docs/guides/gpt-vs-reasoning-model',
+          },
+          // Deleted guides consolidated into gpt-mmlu-comparison
+          {
+            from: '/docs/guides/gpt-4.1-vs-gpt-4o-mmlu',
+            to: '/docs/guides/gpt-mmlu-comparison',
+          },
+          // Deleted guides redirected to guides index
+          {
+            from: '/docs/guides/cohere-command-r-benchmark',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/dbrx-benchmark',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/evaluate-replicate-lifeboat',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/building-trust-in-ai-with-portkey-and-promptfoo',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/mistral-magistral-aime2024',
+            to: '/docs/guides',
+          },
+          // Renamed guide: agent-eval -> evaluate-coding-agents
+          {
+            from: '/docs/guides/agent-eval',
+            to: '/docs/guides/evaluate-coding-agents',
           },
         ],
       },

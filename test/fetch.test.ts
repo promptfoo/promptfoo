@@ -709,6 +709,22 @@ describe('fetchWithProxy', () => {
     }
   });
 
+  it('should preserve a caller-provided dispatcher instead of overwriting it', async () => {
+    const customDispatcher = { custom: true };
+    let receivedDispatcher: unknown;
+    const mockFetch = vi.fn().mockImplementation((_url: string, opts: any) => {
+      receivedDispatcher = opts?.dispatcher;
+      return Promise.resolve(new Response());
+    });
+    global.fetch = mockFetch;
+
+    await fetchWithProxy('https://example.com/api', { dispatcher: customDispatcher } as any);
+
+    expect(receivedDispatcher).toBe(customDispatcher);
+    // Should not create a default agent when caller provides a dispatcher
+    expect(Agent).not.toHaveBeenCalled();
+  });
+
   describe('Abort Signal Handling', () => {
     it('should pass abortSignal parameter to fetch', async () => {
       const abortController = new AbortController();

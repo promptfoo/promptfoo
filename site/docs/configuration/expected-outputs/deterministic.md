@@ -1267,7 +1267,7 @@ The F-score will be calculated automatically after the eval completes. A score c
 
 This is particularly useful for evaluating classification tasks like sentiment analysis, where you want to measure both the precision (accuracy of positive predictions) and recall (ability to find all positive cases).
 
-See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/f-score) for a complete example.
+See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-f-score) for a complete example.
 
 ### Finish Reason
 

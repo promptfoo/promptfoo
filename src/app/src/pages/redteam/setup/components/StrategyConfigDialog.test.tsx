@@ -310,8 +310,8 @@ describe('StrategyConfigDialog', () => {
   });
 
   it("should render the number of iterations input and update local config when changed for the 'jailbreak' strategy", () => {
-    const initialConfig = { numIterations: 10 };
-    const newNumIterations = 20;
+    const initialConfig = { numIterations: 5 };
+    const newNumIterations = 8;
 
     renderWithProviders(
       <StrategyConfigDialog
@@ -467,30 +467,30 @@ describe('StrategyConfigDialog', () => {
     );
 
     const maxDepthInput = screen.getByLabelText('Maximum Depth');
-    fireEvent.change(maxDepthInput, { target: { value: '30' } });
+    fireEvent.change(maxDepthInput, { target: { value: '4' } });
 
     const maxAttemptsInput = screen.getByLabelText('Maximum Attempts');
-    fireEvent.change(maxAttemptsInput, { target: { value: '300' } });
+    fireEvent.change(maxAttemptsInput, { target: { value: '25' } });
 
     const maxWidthInput = screen.getByLabelText('Max Width');
-    fireEvent.change(maxWidthInput, { target: { value: '15' } });
+    fireEvent.change(maxWidthInput, { target: { value: '3' } });
 
     const branchingFactorInput = screen.getByLabelText('Branching Factor');
-    fireEvent.change(branchingFactorInput, { target: { value: '5' } });
+    fireEvent.change(branchingFactorInput, { target: { value: '2' } });
 
     const maxNoImprovementInput = screen.getByLabelText('Max No Improvement');
-    fireEvent.change(maxNoImprovementInput, { target: { value: '30' } });
+    fireEvent.change(maxNoImprovementInput, { target: { value: '8' } });
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
     fireEvent.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
     expect(mockOnSave).toHaveBeenCalledWith('jailbreak:tree', {
-      maxDepth: 30,
-      maxAttempts: 300,
-      maxWidth: 15,
-      branchingFactor: 5,
-      maxNoImprovement: 30,
+      maxDepth: 4,
+      maxAttempts: 25,
+      maxWidth: 3,
+      branchingFactor: 2,
+      maxNoImprovement: 8,
     });
 
     expect(mockOnClose).toHaveBeenCalledTimes(1);
@@ -510,10 +510,12 @@ describe('StrategyConfigDialog', () => {
 
     const customMaxTurnsInput = screen.getByLabelText('Max Turns');
     expect(customMaxTurnsInput).toHaveValue(4);
-    fireEvent.change(customMaxTurnsInput, { target: { value: '12' } });
-    expect(customMaxTurnsInput).toHaveValue(12);
+    fireEvent.change(customMaxTurnsInput, { target: { value: '8' } });
+    expect(customMaxTurnsInput).toHaveValue(8);
 
-    const customStatefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    const customStatefulSwitch = screen.getByRole('switch', {
+      name: /When enabled, Promptfoo should only send/,
+    });
     expect(customStatefulSwitch).toBeChecked();
 
     rerender(
@@ -530,7 +532,9 @@ describe('StrategyConfigDialog', () => {
     const goatMaxTurnsInput = screen.getByLabelText('Max Turns');
     expect(goatMaxTurnsInput).toHaveValue(3);
 
-    const goatStatefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    const goatStatefulSwitch = screen.getByRole('switch', {
+      name: /When enabled, Promptfoo should only send/,
+    });
     expect(goatStatefulSwitch).not.toBeChecked();
   });
 
@@ -556,7 +560,9 @@ describe('StrategyConfigDialog', () => {
     expect(maxTurnsInput).toHaveValue(10);
 
     expect(screen.queryByLabelText('Max Backtracks')).not.toBeInTheDocument();
-    const statefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    const statefulSwitch = screen.getByRole('switch', {
+      name: /Enable when your target maintains server-side sessions/,
+    });
     expect(statefulSwitch).not.toBeChecked();
   });
 
@@ -577,16 +583,18 @@ describe('StrategyConfigDialog', () => {
     );
 
     const maxTurnsInput = screen.getByLabelText('Max Turns');
-    fireEvent.change(maxTurnsInput, { target: { value: '15' } });
+    fireEvent.change(maxTurnsInput, { target: { value: '8' } });
 
-    const statefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    const statefulSwitch = screen.getByRole('switch', {
+      name: /Enable when your target maintains server-side sessions/,
+    });
     fireEvent.click(statefulSwitch);
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
     fireEvent.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledWith('jailbreak:hydra', {
-      maxTurns: 15,
+      maxTurns: 8,
       stateful: true,
     });
     expect(mockOnClose).toHaveBeenCalledTimes(1);
@@ -647,7 +655,9 @@ describe('StrategyConfigDialog', () => {
     const maxTurnsInput = screen.queryByLabelText('Max Turns');
     expect(maxTurnsInput).toBeNull();
 
-    const statefulSwitch = screen.queryByRole('switch', { name: /Stateful/ });
+    const statefulSwitch = screen.queryByRole('switch', {
+      name: /When enabled, Promptfoo should only send/,
+    });
     expect(statefulSwitch).toBeNull();
 
     const noConfigMessage = screen.queryByText(
@@ -721,7 +731,7 @@ describe('StrategyConfigDialog', () => {
 
   it("should call onSave with localConfig and the strategy string when Save is clicked for the 'jailbreak:meta' strategy", () => {
     const initialConfig = {};
-    const numIterations = 25;
+    const numIterations = 8;
 
     renderWithProviders(
       <StrategyConfigDialog
@@ -783,7 +793,7 @@ describe('StrategyConfigDialog', () => {
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:meta"
-        config={{ numIterations: 20 }}
+        config={{ numIterations: 8 }}
         onClose={mockOnClose}
         onSave={mockOnSave}
         strategyData={{
@@ -795,7 +805,7 @@ describe('StrategyConfigDialog', () => {
     );
 
     const numIterationsInput1 = screen.getByLabelText('Number of Iterations');
-    expect(numIterationsInput1).toHaveValue(20);
+    expect(numIterationsInput1).toHaveValue(8);
 
     rerender(
       <StrategyConfigDialog
@@ -818,11 +828,11 @@ describe('StrategyConfigDialog', () => {
 
   it('should preserve other config properties when saving numIterations for jailbreak:meta', () => {
     const initialConfig = {
-      numIterations: 10,
+      numIterations: 5,
       someOtherField: 'someValue',
       anotherField: 123,
     };
-    const newNumIterations = 20;
+    const newNumIterations = 8;
 
     renderWithProviders(
       <StrategyConfigDialog
@@ -855,8 +865,8 @@ describe('StrategyConfigDialog', () => {
   });
 
   it("should call onSave with the updated numIterations and then onClose when Save is clicked for the 'jailbreak:meta' strategy", () => {
-    const initialConfig = { numIterations: 10 };
-    const newNumIterations = 20;
+    const initialConfig = { numIterations: 5 };
+    const newNumIterations = 8;
 
     renderWithProviders(
       <StrategyConfigDialog

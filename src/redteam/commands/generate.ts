@@ -35,6 +35,7 @@ import { getCustomPolicies } from '../../util/generation';
 import { printBorder, setupEnv } from '../../util/index';
 import invariant from '../../util/invariant';
 import { promptfooCommand } from '../../util/promptfooCommand';
+import { checkRedteamProbeLimit, MONTHLY_PROBE_LIMIT } from '../../util/redteamProbeLimit';
 import { isUuid } from '../../util/uuid';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
 import {
@@ -157,6 +158,24 @@ export async function doGenerateRedteam(
   if (!options.cache) {
     logger.info('Cache is disabled');
     disableCache();
+  }
+
+  // Check monthly probe limit for non-cloud users
+  const probeLimitResult = checkRedteamProbeLimit();
+  if (!probeLimitResult.withinLimit) {
+    logger.error(dedent`
+      ${chalk.red.bold('Monthly probe limit reached')}
+
+      You've used ${chalk.bold(probeLimitResult.used.toLocaleString())} of your ${chalk.bold(MONTHLY_PROBE_LIMIT.toLocaleString())} free monthly probes.
+
+      To continue, please log in to Promptfoo Cloud:
+
+        ${chalk.cyan('promptfoo auth login')}
+
+      For enterprise plans, contact ${chalk.cyan('inquiries@promptfoo.dev')}
+    `);
+    process.exitCode = 1;
+    return null;
   }
 
   let testSuite: TestSuite;

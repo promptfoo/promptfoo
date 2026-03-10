@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Similarity assertions with Voyage AI'
+
+prompts:
+  - 'Output the color of {{item}}'
+
+providers:
+  - 'anthropic:claude-haiku-4-5-20251001'
+
+defaultTest:
+  options:
+    provider:
+      embedding: 'voyage:voyage-3-large'
+
+tests:
+  - vars:
+      item: bananas
+    assert:
+      - type: similar
+        value: 'yellowish'
+        threshold: 0.5

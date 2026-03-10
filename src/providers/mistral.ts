@@ -231,6 +231,10 @@ export class MistralChatCompletionProvider implements ApiProvider {
     );
   }
 
+  requiresApiKey(): boolean {
+    return true;
+  }
+
   getApiKey(): string | undefined {
     logger.debug(`Mistral apiKeyenvar: ${this.config.apiKeyEnvar}`);
     const apiKeyCandidate =
@@ -429,6 +433,10 @@ export class MistralEmbeddingProvider implements ApiProvider {
       getEnvString('MISTRAL_API_BASE_URL') ||
       this.getApiUrlDefault()
     );
+  }
+
+  requiresApiKey(): boolean {
+    return true;
   }
 
   getApiKey(): string | undefined {

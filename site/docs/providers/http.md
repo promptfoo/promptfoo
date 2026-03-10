@@ -40,6 +40,14 @@ tests:
       language: 'French'
 ```
 
+When available, Promptfoo also injects runtime variables such as `{{evaluationId}}`, which is useful for correlating downstream logs with a specific eval run:
+
+```yaml
+body:
+  prompt: '{{prompt}}'
+  evaluation_id: '{{evaluationId}}'
+```
+
 `body` can be a string or JSON object. If the body is a string, the `Content-Type` header defaults to `text/plain` unless specified otherwise. If the body is an object, then content type is automatically set to `application/json`.
 
 ### JSON Example
@@ -424,6 +432,8 @@ interface ProviderResponse {
   output?: string | any;
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
+  conversationEnded?: boolean;
+  conversationEndReason?: string;
   sessionId?: string;
   guardrails?: GuardrailResponse;
   audio?: {
@@ -526,6 +536,29 @@ providers:
           guardrails: { flagged: context.response.headers['x-content-filtered'] === 'true' }
         }
 ```
+
+### Ending Multi-turn Conversations
+
+For stateful red team strategies, you can signal that the target intentionally closed the active thread by returning:
+
+- `conversationEnded: true`
+- Optional `conversationEndReason` for debugging (for example, `thread_closed`)
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      transformResponse: |
+        {
+          output: json.message || '',
+          sessionId: json.sessionId,
+          conversationEnded: json.threadClosed === true,
+          conversationEndReason: json.threadClosed ? 'thread_closed' : undefined
+        }
+```
+
+When this flag is set, multi-turn red team attackers stop gracefully instead of continuing into timeout/error turns.
 
 ### Interaction with Test Transforms
 

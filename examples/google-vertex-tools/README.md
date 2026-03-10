@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example google-vertex-tools
+cd google-vertex-tools
 ```
 
 ## Purpose

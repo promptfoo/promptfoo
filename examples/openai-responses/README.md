@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example openai-responses
+cd openai-responses
 ```
 
 ## Examples
@@ -117,6 +118,7 @@ npx promptfoo eval -c promptfooconfig.gpt-5.1.yaml
 
 # GPT-5.2 example
 npx promptfoo eval -c promptfooconfig.gpt-5.2.yaml
+
 ```
 
 ## Prerequisites

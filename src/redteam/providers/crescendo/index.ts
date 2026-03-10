@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { renderPrompt } from '../../../evaluatorHelpers';
+import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import {
@@ -33,7 +34,9 @@ import {
   externalizeResponseForRedteamHistory,
   getLastMessageContent,
   getTargetResponse,
+  isConversationEndedResponse,
   isValidChatMessageArray,
+  type RoundBacktrackingStopReason,
   redteamProviderManager,
   type TargetResponse,
   tryUnblocking,
@@ -65,8 +68,6 @@ import type { Message } from '../shared';
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
 
-type StopReason = 'Grader failed' | 'Max rounds reached' | 'Max backtracks reached';
-
 /**
  * Represents metadata for the Crescendo conversation process.
  */
@@ -75,7 +76,7 @@ interface CrescendoMetadata extends BaseRedteamMetadata {
   crescendoBacktrackCount: number;
   crescendoResult: boolean;
   crescendoConfidence: number | null;
-  stopReason: StopReason;
+  stopReason: RoundBacktrackingStopReason;
   successfulAttacks?: Array<{
     turn: number;
     prompt: string;
@@ -166,6 +167,11 @@ export class CrescendoProvider implements ApiProvider {
     // Support backwards compatibility: use maxRounds if maxTurns is not provided
     this.maxTurns = config.maxTurns || config.maxRounds || DEFAULT_MAX_TURNS;
     this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
+
+    // Cap turns for unauthenticated users
+    if (!isLoggedIntoCloud()) {
+      this.maxTurns = Math.min(this.maxTurns, 10);
+    }
     this.nunjucks = getNunjucksEngine();
     this.memory = new MemorySystem();
     this.targetConversationId = crypto.randomUUID();
@@ -288,7 +294,7 @@ export class CrescendoProvider implements ApiProvider {
     let objectiveScore: { value: number; rationale: string } | undefined;
     let storedGraderResult: any = undefined;
 
-    let exitReason: StopReason = 'Max rounds reached';
+    let exitReason: RoundBacktrackingStopReason = 'Max rounds reached';
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
@@ -445,6 +451,15 @@ export class CrescendoProvider implements ApiProvider {
           context.vars['sessionId'] = lastResponse.sessionId;
         }
 
+        if (isConversationEndedResponse(lastResponse)) {
+          logger.info('[Crescendo] Target ended conversation', {
+            round: roundNum,
+            reason: lastResponse.conversationEndReason,
+          });
+          exitReason = 'Target ended conversation';
+          break;
+        }
+
         // Check if the target is asking a blocking question that needs an answer to proceed
         const unblockingResult = await tryUnblocking({
           messages: this.memory.getConversation(this.targetConversationId),
@@ -478,6 +493,15 @@ export class CrescendoProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          if (isConversationEndedResponse(lastResponse)) {
+            logger.info('[Crescendo] Target ended conversation during unblocking', {
+              round: roundNum,
+              reason: lastResponse.conversationEndReason,
+            });
+            exitReason = 'Target ended conversation';
+            break;
+          }
+
           if (lastResponse.sessionId && this.stateful) {
             vars['sessionId'] = lastResponse.sessionId;
             if (context) {

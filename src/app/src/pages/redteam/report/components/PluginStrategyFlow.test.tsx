@@ -34,7 +34,12 @@ vi.mock('recharts', () => ({
     <div data-testid="tooltip">
       {props.content && typeof props.content === 'function'
         ? props.content({
-            payload: [{ source: { name: 'PluginA' }, target: { name: 'StrategyX' }, value: 1 }],
+            payload: [
+              {
+                value: 1,
+                payload: { source: { name: 'PluginA' }, target: { name: 'StrategyX' }, value: 1 },
+              },
+            ],
           })
         : 'Tooltip Content'}
     </div>

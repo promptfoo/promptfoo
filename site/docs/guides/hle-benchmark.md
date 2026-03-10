@@ -43,30 +43,31 @@ HLE addresses benchmark saturation - the phenomenon where advanced models achiev
 - Questions resist simple web search solutions
 - Focuses on verifiable, closed-ended problems
 
-**Current model performance:**
+**Current model performance (from the [Scale AI leaderboard](https://scale.com/leaderboard/humanitys_last_exam)):**
 
-| Model                | Accuracy | Notes                      |
-| -------------------- | -------- | -------------------------- |
-| OpenAI Deep Research | 26.6%    | With search capabilities   |
-| o4-mini              | ~13%     | Official benchmark results |
-| DeepSeek-R1          | 8.5%     | Text-only evaluation       |
-| o1                   | 8.0%     | Previous generation        |
-| Gemini 2.0 Flash     | 6.6%     | Multimodal support         |
-| Claude 3.5 Sonnet    | 4.1%     | Base model                 |
-
-_Official model performance on full HLE dataset_
+| Model                          | Accuracy | Notes                  |
+| ------------------------------ | -------- | ---------------------- |
+| Gemini 3 Pro Preview           | 37.5%    | Current leader         |
+| Claude Opus 4.6 (Thinking Max) | 34.4%    | Extended thinking mode |
+| GPT-5 Pro                      | 31.6%    | Reasoning model        |
+| GPT-5.2                        | 27.8%    | Standard model         |
+| o3 (high)                      | 20.3%    | Reasoning model        |
+| o4-mini (high)                 | 18.1%    | Reasoning model        |
+| DeepSeek-R1                    | 9.4%     | Text-only evaluation   |
+| Gemini 2.0 Flash Thinking      | 6.6%     | Multimodal support     |
+| Claude Sonnet 4                | 5.5%     | Non-thinking mode      |
 
 ## Running the Eval
 
 Set up your HLE eval with these commands:
 
 ```bash
-npx promptfoo@latest init --example huggingface-hle
-cd huggingface-hle
+npx promptfoo@latest init --example huggingface/hle
+cd huggingface/hle
 npx promptfoo@latest eval
 ```
 
-See the complete example at [examples/huggingface-hle](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface-hle) for all configuration files and implementation details.
+See the complete example at [examples/huggingface/hle](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface/hle) for all configuration files and implementation details.
 
 Set these API keys before running:
 
@@ -205,7 +206,7 @@ tests:
 
 ```yaml
 providers:
-  - anthropic:claude-sonnet-4-5-20250929
+  - anthropic:claude-sonnet-4-6
   - openai:o4-mini
   - deepseek:deepseek-reasoner
 ```
@@ -214,7 +215,7 @@ providers:
 
 ```yaml
 providers:
-  - id: anthropic:claude-sonnet-4-5-20250929
+  - id: anthropic:claude-sonnet-4-6
     config:
       thinking:
         budget_tokens: 8000 # For complex proofs
@@ -223,7 +224,7 @@ providers:
 
 ## Eval Limitations
 
-Keep in mind these results are preliminary - we only tested 50 questions per model in a single run. That's a pretty small sample from HLE's 14,000+ questions, and we didn't optimize our approach much (token budgets, prompts, etc. were chosen somewhat arbitrarily).
+Keep in mind these results are preliminary - we only tested 50 questions per model in a single run. That's a pretty small sample from HLE's 3,000+ questions, and we didn't optimize our approach much (token budgets, prompts, etc. were chosen somewhat arbitrarily).
 
 o4-mini's 42% success rate stands out and requires validation through larger samples and multiple runs. Performance will likely vary considerably across different subjects and question formats.
 

@@ -226,13 +226,21 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
+    const maxTokensDefault = config.omitDefaults
+      ? getEnvString('OPENAI_MAX_TOKENS') !== undefined
+        ? getEnvInt('OPENAI_MAX_TOKENS')
+        : undefined
+      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
     const maxTokens =
-      isReasoningModel || isGPT5Model
-        ? undefined
-        : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
+      isReasoningModel || isGPT5Model ? undefined : (config.max_tokens ?? maxTokensDefault);
 
+    const temperatureDefault = config.omitDefaults
+      ? getEnvString('OPENAI_TEMPERATURE') !== undefined
+        ? getEnvFloat('OPENAI_TEMPERATURE')
+        : undefined
+      : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature = this.supportsTemperature()
-      ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
+      ? (config.temperature ?? temperatureDefault)
       : undefined;
     const reasoningEffort = isReasoningModel
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
@@ -805,6 +813,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             statusText,
             headers: responseHeaders ?? {},
           },
+          // Include all choices for multi-response requests (n > 1)
+          ...(data.choices.length > 1 && { choices: data.choices }),
         },
       };
     } catch (err) {

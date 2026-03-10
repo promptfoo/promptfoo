@@ -19,6 +19,8 @@ import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from '.
 
 import type { GlobalConfig } from '../configTypes';
 
+const CI_PLACEHOLDER_EMAIL = 'ci-placeholder@promptfoo.dev';
+
 export function getUserId(): string {
   let globalConfig = readGlobalConfig();
   if (!globalConfig?.id) {
@@ -129,13 +131,24 @@ export async function checkEmailStatus(options?: {
   validate?: boolean;
 }): Promise<EmailStatusResult> {
   const { default: telemetry } = await import('../telemetry');
-  const userEmail = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
+  const ciMode = isCI();
+  const userEmail = ciMode ? CI_PLACEHOLDER_EMAIL : getUserEmail();
 
   if (!userEmail) {
     return {
       status: NO_EMAIL_STATUS,
       hasEmail: false,
       message: 'Redteam evals require email verification. Please enter your work email:',
+    };
+  }
+
+  if (ciMode) {
+    // CI uses a synthetic placeholder to avoid interactive prompts. Treat it as
+    // already validated so test runs do not depend on live account state.
+    return {
+      status: EmailValidationStatus.OK,
+      hasEmail: true,
+      email: userEmail,
     };
   }
 
@@ -163,16 +176,26 @@ export async function checkEmailStatus(options?: {
     };
 
     if (options?.validate) {
-      const riskyStatuses: Set<EmailValidationStatus> = new Set([
+      const invalidStatuses: Set<EmailValidationStatus> = new Set([
         EmailValidationStatus.RISKY_EMAIL,
         EmailValidationStatus.DISPOSABLE_EMAIL,
+        EmailValidationStatus.EMAIL_VERIFICATION_REQUIRED,
       ]);
-      if (riskyStatuses.has(data.status)) {
+      if (invalidStatuses.has(data.status)) {
+        if (data.status === EmailValidationStatus.EMAIL_VERIFICATION_REQUIRED) {
+          setUserEmailValidated(false);
+          setUserEmailNeedsValidation(true);
+        }
         // Tracking filtered emails via this telemetry endpoint for now to guage sensitivity of validation
         // We should take it out once we're happy with the sensitivity
-        await telemetry.saveConsent(userEmail, {
-          source: 'filteredInvalidEmail',
-        });
+        if (
+          data.status === EmailValidationStatus.RISKY_EMAIL ||
+          data.status === EmailValidationStatus.DISPOSABLE_EMAIL
+        ) {
+          await telemetry.saveConsent(userEmail, {
+            source: 'filteredInvalidEmail',
+          });
+        }
       } else {
         setUserEmailValidated(true);
         // Track the validated email via telemetry
@@ -184,7 +207,7 @@ export async function checkEmailStatus(options?: {
 
     return {
       status: data.status,
-      message: data.message,
+      message: data.message ?? data.error,
       email: userEmail,
       hasEmail: true,
     };
@@ -202,10 +225,11 @@ export async function checkEmailStatus(options?: {
 
 export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation: boolean }> {
   const { default: telemetry } = await import('../telemetry');
+  const ciMode = isCI();
   const existingEmail = getUserEmail();
-  let email = isCI() ? 'ci-placeholder@promptfoo.dev' : existingEmail;
-  const existingEmailNeedsValidation = !isCI() && getUserEmailNeedsValidation();
-  const existingEmailValidated = isCI() || getUserEmailValidated();
+  let email = ciMode ? CI_PLACEHOLDER_EMAIL : existingEmail;
+  const existingEmailNeedsValidation = !ciMode && getUserEmailNeedsValidation();
+  const existingEmailValidated = ciMode || getUserEmailValidated();
 
   let emailNeedsValidation = existingEmailNeedsValidation && !existingEmailValidated;
 
@@ -259,6 +283,11 @@ export async function checkEmailStatusAndMaybeExit(options?: {
   validate?: boolean;
 }): Promise<EmailOkStatus | BadEmailResult> {
   const result = await checkEmailStatus(options);
+  // In CI, checkEmailStatus already returns OK for the placeholder email.
+  // This guard ensures we never accidentally exit in CI even if the above logic changes.
+  if (isCI()) {
+    return EMAIL_OK_STATUS;
+  }
   if (
     result.status === EmailValidationStatus.RISKY_EMAIL ||
     result.status === EmailValidationStatus.DISPOSABLE_EMAIL
@@ -272,6 +301,19 @@ export async function checkEmailStatusAndMaybeExit(options?: {
     logger.error(
       'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
     );
+    process.exit(1);
+  }
+
+  if (result.status === EmailValidationStatus.EMAIL_VERIFICATION_REQUIRED) {
+    setUserEmailNeedsValidation(true);
+    setUserEmailValidated(false);
+    const message =
+      result.message ||
+      'Your email address is not verified. Check your inbox for a verification link, then rerun the command.';
+    logger.error(message, {
+      status: result.status,
+      hasEmail: result.hasEmail,
+    });
     process.exit(1);
   }
 

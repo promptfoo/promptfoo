@@ -319,6 +319,71 @@ describe('Cloud blob upload', () => {
     );
   });
 
+  it('should externalize image data URIs to blobRefs', async () => {
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
+
+    const largeBase64 = Buffer.alloc(2000).toString('base64');
+    const response: ProviderResponse = {
+      output: 'text output',
+      images: [{ data: `data:image/png;base64,${largeBase64}`, mimeType: 'image/png' }],
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+    expect(result?.images?.[0].data).toBeUndefined();
+    expect(result?.images?.[0].blobRef).toBeDefined();
+    expect(result?.images?.[0].blobRef?.uri).toContain('promptfoo://blob/');
+  });
+
+  it('should pass through images without data URIs unchanged', async () => {
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
+
+    const response: ProviderResponse = {
+      output: 'text output',
+      images: [
+        {
+          blobRef: {
+            uri: 'promptfoo://blob/existing',
+            hash: 'existing',
+            mimeType: 'image/png',
+            sizeBytes: 100,
+            provider: 'local',
+          },
+        },
+      ],
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+    expect(result).toEqual(response);
+  });
+
+  it('should handle mixed images: externalize data URIs but keep existing blobRefs', async () => {
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
+
+    const largeBase64 = Buffer.alloc(2000).toString('base64');
+    const response: ProviderResponse = {
+      output: 'text output',
+      images: [
+        { data: `data:image/png;base64,${largeBase64}`, mimeType: 'image/png' },
+        {
+          blobRef: {
+            uri: 'promptfoo://blob/existing',
+            hash: 'existing',
+            mimeType: 'image/jpeg',
+            sizeBytes: 100,
+            provider: 'local',
+          },
+        },
+      ],
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+    // First image externalized
+    expect(result?.images?.[0].data).toBeUndefined();
+    expect(result?.images?.[0].blobRef).toBeDefined();
+    // Second image kept as-is
+    expect(result?.images?.[1].blobRef?.hash).toBe('existing');
+  });
+
   it('should attempt cloud upload for audio data', async () => {
     mockShouldAttemptRemoteBlobUpload.mockReturnValue(true);
 
