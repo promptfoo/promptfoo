@@ -10,6 +10,7 @@ const orderRedTeam = (redteam: Partial<RedteamFileConfig>): Record<string, unkno
   const redTeamOrder = [
     'purpose',
     'provider',
+    'frameworks',
     'entities',
     'plugins',
     'testGenerationInstructions',
@@ -22,6 +23,12 @@ const orderRedTeam = (redteam: Partial<RedteamFileConfig>): Record<string, unkno
   redTeamOrder.forEach((key) => {
     if (Object.prototype.hasOwnProperty.call(redteam, key)) {
       orderedRedTeam[key] = redteam[key];
+    }
+  });
+
+  Object.keys(redteam).forEach((key) => {
+    if (!redTeamOrder.includes(key as (typeof redTeamOrder)[number])) {
+      orderedRedTeam[key] = redteam[key as keyof typeof redteam];
     }
   });
 

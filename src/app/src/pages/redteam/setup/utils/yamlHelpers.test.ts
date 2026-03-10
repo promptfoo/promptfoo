@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Config } from '../types';
 import { generateOrderedYaml } from './yamlHelpers';
+
+import type { Config } from '../types';
 
 // Mock the external dependencies
 vi.mock('@promptfoo/redteam/constants', () => ({
@@ -27,6 +28,8 @@ import yaml from 'js-yaml';
 describe('yamlHelpers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getUnifiedConfig).mockReset();
+    vi.mocked(yaml.dump).mockReset();
   });
 
   describe('generateOrderedYaml', () => {
@@ -155,6 +158,70 @@ describe('yamlHelpers', () => {
       generateOrderedYaml(mockConfig);
 
       expect(yaml.dump).toHaveBeenCalledWith(expect.any(Object), { noRefs: true, lineWidth: -1 });
+    });
+
+    it('should order top-level and redteam keys before dumping', () => {
+      const mockConfig: Config = {
+        description: 'Ordered config',
+        prompts: ['prompt1'],
+        target: { id: 'test-target', config: {} },
+        plugins: [{ id: 'plugin-1' }],
+        strategies: ['strategy-1'],
+        applicationDefinition: {},
+        entities: ['entity-1'],
+        purpose: 'Security testing',
+      };
+
+      const mockUnifiedConfig = {
+        defaultTest: { assert: [] },
+        customKey: true,
+        prompts: ['prompt1'],
+        description: 'Ordered config',
+        redteam: {
+          numTests: 3,
+          sharing: true,
+          strategies: ['strategy-1'],
+          plugins: [{ id: 'plugin-1' }],
+          entities: ['stale-entity'],
+          frameworks: ['owasp:llm'],
+          language: 'en',
+          purpose: 'stale purpose',
+          provider: { id: 'provider' },
+        },
+        targets: [{ id: 'test-target' }],
+        extensions: ['ext'],
+      };
+
+      vi.mocked(getUnifiedConfig).mockReturnValue(mockUnifiedConfig as any);
+      vi.mocked(yaml.dump).mockReturnValue('description: Ordered config\n');
+
+      generateOrderedYaml(mockConfig);
+
+      const dumpedConfig = vi.mocked(yaml.dump).mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(Object.keys(dumpedConfig)).toEqual([
+        'description',
+        'targets',
+        'prompts',
+        'extensions',
+        'redteam',
+        'defaultTest',
+        'customKey',
+      ]);
+      expect(Object.keys(dumpedConfig.redteam as Record<string, unknown>)).toEqual([
+        'purpose',
+        'provider',
+        'frameworks',
+        'entities',
+        'plugins',
+        'strategies',
+        'language',
+        'numTests',
+        'sharing',
+      ]);
+      expect((dumpedConfig.redteam as Record<string, unknown>).purpose).toBe('Security testing');
+      expect((dumpedConfig.redteam as Record<string, unknown>).entities).toEqual(['entity-1']);
+      expect((dumpedConfig.redteam as Record<string, unknown>).frameworks).toEqual(['owasp:llm']);
+      expect((dumpedConfig.redteam as Record<string, unknown>).sharing).toBe(true);
     });
 
     it('should add comments for plugin descriptions', () => {

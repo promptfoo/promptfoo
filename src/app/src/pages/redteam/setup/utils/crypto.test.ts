@@ -1,12 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { convertStringKeyToPem, validatePrivateKey } from './crypto';
 
-// Mock atob globally
 const mockAtob = vi.fn();
-global.atob = mockAtob;
+const nativeAtob = globalThis.atob;
 
 describe('crypto utils', () => {
   beforeEach(() => {
+    vi.stubGlobal('atob', mockAtob);
     vi.clearAllMocks();
     // Default atob behavior: decode base64
     mockAtob.mockImplementation((str: string) => {
@@ -17,6 +17,10 @@ describe('crypto utils', () => {
       }
       return 'decoded';
     });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   describe('convertStringKeyToPem', () => {
@@ -82,6 +86,12 @@ Invalid@#$Characters
       await expect(convertStringKeyToPem('Invalid@#$Characters')).rejects.toThrow(
         'Invalid base64 encoding in private key',
       );
+    });
+
+    it('should reject malformed base64 that only native atob catches', async () => {
+      mockAtob.mockImplementation((input: string) => nativeAtob(input));
+
+      await expect(convertStringKeyToPem('AAAAA')).rejects.toThrow(/Invalid private key format/);
     });
 
     it('should handle PEM with different key types (PKCS#1)', async () => {
