@@ -8,14 +8,7 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { cn } from '@app/lib/utils';
-import {
-  BookOpen,
-  Bug,
-  Calendar,
-  ExternalLink,
-  Github,
-  MessageCircle,
-} from 'lucide-react';
+import { BookOpen, Bug, Calendar, ExternalLink, Github, MessageCircle } from 'lucide-react';
 
 const links: { icon: React.ReactElement; text: string; href: string }[] = [
   {
