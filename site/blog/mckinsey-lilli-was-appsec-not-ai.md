@@ -1,6 +1,8 @@
 ---
 title: "McKinsey's Lilli Story Was AppSec, Not a Jailbreak"
 description: "CodeWall's Lilli writeup reads less like a model jailbreak and more like a classic API, SQLi, and authorization failure whose blast radius reached the AI layer."
+image: /img/blog/mckinsey-lilli-appsec/hero.jpg
+imageAlt: 'Red panda security analyst tracing an attack path from public APIs and databases into an internal AI control layer'
 date: 2026-03-10
 authors: [michael]
 tags: [security-vulnerability, ai-security, owasp]
