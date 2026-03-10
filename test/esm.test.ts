@@ -204,6 +204,26 @@ describe('ESM utilities', () => {
       expect(result()).toBe('esm default test result');
     });
 
+    it('sets error.cause with both ESM and CJS errors when combined error is thrown', () => {
+      const esmError = new Error('require is not defined');
+      const cjsError = new Error('Cannot find module');
+      const combinedError = new Error(
+        'Failed to load module test.js:\n' +
+          '  ESM import error: require is not defined\n' +
+          '  CJS fallback error: Cannot find module',
+        { cause: { esmError, cjsError } },
+      );
+
+      expect(combinedError).toBeInstanceOf(Error);
+      expect(combinedError.message).toContain('Failed to load module');
+      expect(combinedError.message).toContain('ESM import error');
+      expect(combinedError.message).toContain('CJS fallback error');
+      expect(combinedError.cause).toBeDefined();
+      const cause = combinedError.cause as { esmError: Error; cjsError: Error };
+      expect(cause.esmError).toBe(esmError);
+      expect(cause.cjsError).toBe(cjsError);
+    });
+
     describe('CJS fallback for .js files', () => {
       it('loads CommonJS .js files via CJS fallback when ESM fails', async () => {
         const modulePath = path.resolve(testDir, '__fixtures__/testModuleCjsFallback.js');

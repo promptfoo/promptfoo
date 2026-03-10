@@ -145,6 +145,16 @@ type EnvVars = {
   PROMPTFOO_JKS_ALIAS?: string;
 
   //=========================================================================
+  // Server security
+  //=========================================================================
+  /**
+   * Comma-separated list of trusted origins allowed to make cross-site
+   * mutating requests to the promptfoo server.
+   * Example: "https://app.example.com,https://admin.example.com"
+   */
+  PROMPTFOO_CSRF_ALLOWED_ORIGINS?: string;
+
+  //=========================================================================
   // HTTP proxy settings
   //=========================================================================
   ALL_PROXY?: string;
@@ -350,6 +360,17 @@ type EnvVars = {
 
   // OpenAI Codex SDK
   CODEX_API_KEY?: string;
+
+  // ClawdBot legacy OpenClaw compatibility
+  CLAWDBOT_GATEWAY_PASSWORD?: string;
+  CLAWDBOT_GATEWAY_TOKEN?: string;
+  CLAWDBOT_GATEWAY_URL?: string;
+
+  // OpenClaw
+  OPENCLAW_CONFIG_PATH?: string;
+  OPENCLAW_GATEWAY_PASSWORD?: string;
+  OPENCLAW_GATEWAY_TOKEN?: string;
+  OPENCLAW_GATEWAY_URL?: string;
 
   // OpenRouter
   OPENROUTER_API_KEY?: string;

@@ -82,6 +82,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
   'insurance:coverage-discrimination':
     'Tests for discriminatory coverage decisions based on protected characteristics (age, disability, race, etc.)',
+  'insurance:data-disclosure':
+    'Tests for unauthorized disclosure of protected policyholder data including claims history, property details, driving records, and financial information',
   'insurance:network-misinformation': 'Tests for inaccurate provider network information',
   'insurance:phi-disclosure':
     'Tests for unauthorized disclosure of Protected Health Information in violation of HIPAA privacy regulations',
@@ -94,7 +96,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'ecommerce:price-manipulation':
     'Tests for price manipulation through discount abuse, inventory exploits, or unauthorized price modifications',
   intent: 'Tests for manipulation of system behavior via specific prompts',
-  jailbreak: 'Single-shot optimization of safety bypass techniques',
+  jailbreak:
+    '[DEPRECATED] Use jailbreak:meta instead. Single-shot optimization of safety bypass techniques.',
   'jailbreak:composite': 'Combines multiple jailbreak techniques for enhanced effectiveness',
   'jailbreak:hydra':
     'Multi-turn conversational attacks with meta-learning that adapts strategy based on full conversation history',
@@ -133,6 +136,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for fabricated market data, non-existent financial instruments, or fictional company information',
   'financial:impartiality': 'Tests for unauthorized financial advice or transaction facilitation',
   'financial:misconduct': 'Tests for facilitation of financial crimes or market manipulation',
+  'financial:sox-compliance':
+    'Tests for violations of Sarbanes-Oxley requirements including internal controls, financial reporting, and audit integrity',
   'financial:sycophancy':
     'Tests for agreeing with risky investment strategies or validating get-rich-quick schemes',
   'goal-misalignment':
@@ -177,6 +182,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
+  'model-identification':
+    'Tests whether an AI system can be tricked into revealing its underlying model identity',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   'unverifiable-claims': 'Tests for claims that cannot be verified or fact-checked',
@@ -190,7 +197,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   bias: 'Bias detection across protected characteristics',
   medical: 'Medical AI safety testing across healthcare vulnerabilities',
   pharmacy: 'Pharmacy AI safety testing across pharmaceutical vulnerabilities',
-  insurance: 'Insurance AI safety testing across healthcare coverage vulnerabilities',
+  insurance: 'Insurance AI safety testing across all insurance types',
   financial: 'Financial AI safety testing across financial services vulnerabilities',
   ecommerce:
     'E-commerce AI safety testing across payment security and transaction integrity vulnerabilities',
@@ -281,6 +288,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'financial:hallucination': 'Financial Hallucination',
   'financial:impartiality': 'Financial Services Impartiality',
   'financial:misconduct': 'Financial Services Misconduct',
+  'financial:sox-compliance': 'Financial SOX Compliance',
   'financial:sycophancy': 'Financial Sycophancy',
   'goal-misalignment': "Goal Misalignment (Goodhart's Law)",
   'off-topic': 'Off-Topic Manipulation',
@@ -332,6 +340,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   imitation: 'Entity Impersonation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
   'insurance:coverage-discrimination': 'Coverage Discrimination',
+  'insurance:data-disclosure': 'Data Disclosure',
   'insurance:network-misinformation': 'Network Misinformation',
   'insurance:phi-disclosure': 'PHI Disclosure',
   'ecommerce:pci-dss': 'PCI DSS Compliance',
@@ -361,7 +370,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'realestate:advertising-discrimination': 'Advertising Discrimination',
   'realestate:source-of-income': 'Source of Income Discrimination',
   intent: 'Intent',
-  jailbreak: 'Single-shot Optimization',
+  jailbreak: 'Single-shot Optimization [DEPRECATED]',
   'jailbreak:composite': 'Multi-Vector Safety Bypass',
   'jailbreak:hydra': 'Hydra Multi-turn',
   'jailbreak:likert': 'Likert Scale Jailbreak',
@@ -402,6 +411,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
+  'model-identification': 'Model Identification',
   'tool-discovery': 'Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
   'unverifiable-claims': 'Unverifiable Claims',
@@ -462,6 +472,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'financial:hallucination': Severity.Low,
   'financial:impartiality': Severity.Medium,
   'financial:misconduct': Severity.High,
+  'financial:sox-compliance': Severity.High,
   'financial:sycophancy': Severity.Low,
   'goal-misalignment': Severity.Low,
   competitors: Severity.Low,
@@ -483,6 +494,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'off-topic': Severity.Medium,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
+  'model-identification': Severity.Medium,
   'tool-discovery': Severity.Low,
   foundation: Severity.Medium,
   'guardrails-eval': Severity.Medium,
@@ -530,6 +542,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   imitation: Severity.Low,
   'indirect-prompt-injection': Severity.High,
   'insurance:coverage-discrimination': Severity.Critical,
+  'insurance:data-disclosure': Severity.Critical,
   'insurance:network-misinformation': Severity.High,
   'insurance:phi-disclosure': Severity.Critical,
   'ecommerce:pci-dss': Severity.Critical,
@@ -599,6 +612,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'bola',
     'cca',
     'debug-access',
+    'model-identification',
     'hijacking',
     'indirect-prompt-injection',
     'rbac',
@@ -616,6 +630,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'data-exfil',
     'divergent-repetition',
     'harmful:privacy',
+    'insurance:data-disclosure',
     'insurance:phi-disclosure',
     'pii:api-db',
     'pii:direct',
@@ -701,6 +716,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'financial:hallucination',
     'financial:impartiality',
     'financial:misconduct',
+    'financial:sox-compliance',
     'financial:sycophancy',
     'medical:hallucination',
     'medical:anchoring-bias',
@@ -810,6 +826,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'financial:hallucination': 'FinancialHallucination',
   'financial:impartiality': 'FinancialImpartiality',
   'financial:misconduct': 'FinancialMisconduct',
+  'financial:sox-compliance': 'FinancialSoxCompliance',
   'financial:sycophancy': 'FinancialSycophancy',
   'goal-misalignment': 'GoalMisalignment',
   'off-topic': 'OffTopic',
@@ -818,6 +835,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'pharmacy:drug-interaction': 'PharmacyDrugInteraction',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
+  'model-identification': 'ModelIdentification',
   'tool-discovery': 'ToolDiscovery',
   foundation: 'Foundation',
   'guardrails-eval': 'GuardrailsEvaluation',
@@ -888,6 +906,7 @@ export const categoryAliases: Record<Plugin, string> = {
   imitation: 'Imitation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
   'insurance:coverage-discrimination': 'InsuranceCoverageDiscrimination',
+  'insurance:data-disclosure': 'InsuranceDataDisclosure',
   'insurance:network-misinformation': 'InsuranceNetworkMisinformation',
   'insurance:phi-disclosure': 'InsurancePhiDisclosure',
   intent: 'Intent',
@@ -953,6 +972,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'divergent-repetition':
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
+  'model-identification':
+    'Tests whether an AI system reveals its underlying model identity, version, or creator when probed',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
   ferpa: 'Tests for Family Educational Rights and Privacy Act compliance',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
@@ -972,7 +993,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   pharmacy:
     'Comprehensive pharmacy AI safety testing for pharmaceutical vulnerabilities including drug interactions, dosage calculations, and controlled substance compliance',
   insurance:
-    'Comprehensive insurance AI safety testing for healthcare coverage vulnerabilities including coverage discrimination, network misinformation, and PHI disclosure',
+    'Comprehensive insurance AI safety testing across all insurance types including coverage discrimination, network misinformation, PHI disclosure, and policyholder data disclosure',
   financial:
     'Comprehensive financial AI safety testing for financial services vulnerabilities including calculation errors, compliance violations, hallucination, and data leakage',
   ecommerce:
@@ -1050,9 +1071,11 @@ export const pluginDescriptions: Record<Plugin, string> = {
   hijacking: 'Assesses protection against unauthorized resource usage and purpose deviation',
   imitation: 'Tests safeguards against unauthorized entity impersonation attempts',
   'insurance:coverage-discrimination':
-    'Tests for discriminatory coverage or benefit determinations based on protected characteristics (age, disability, race, genetic information, sex) in violation of federal civil rights laws including ADA, Section 1557, GINA, and age discrimination statutes',
+    'Tests for discriminatory coverage, underwriting, or claims determinations based on protected characteristics (age, disability, race, genetic information, sex) in violation of federal civil rights laws including ADA, Section 1557, GINA, Fair Housing Act, ECOA, and state unfair trade practices acts',
+  'insurance:data-disclosure':
+    'Tests for unauthorized disclosure of protected policyholder data including claims history, property details, driving records, beneficiary information, and business data in violation of GLBA, FCRA, DPPA, and state insurance privacy laws',
   'insurance:network-misinformation':
-    'Tests for inaccurate provider network information including wrong network status, terminated contracts, ghost networks, and outdated provider data that could expose members to surprise medical bills and balance billing',
+    'Tests for inaccurate provider or vendor network information including wrong network status, terminated contracts, ghost networks, and outdated provider data that could expose policyholders to unexpected costs, voided warranties, or inadequate service',
   'insurance:phi-disclosure':
     'Tests for unauthorized disclosure of Protected Health Information in violation of HIPAA privacy regulations including cross-member PHI leakage, inadequate authentication, and disclosure to unauthorized third parties',
   'ecommerce:pci-dss':
@@ -1094,6 +1117,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for inappropriate provision of financial advice, investment recommendations, broker suggestions, or transaction facilitation without proper authorization or disclaimers',
   'financial:misconduct':
     'Tests for facilitation of financial crimes including insider trading, market manipulation, front-running, spoofing, bribery, or circumventing financial regulations',
+  'financial:sox-compliance':
+    'Tests for violations of Sarbanes-Oxley requirements including internal controls bypass, financial statement manipulation, CEO/CFO certification fraud, audit obstruction, document retention violations, and whistleblower retaliation',
   'financial:sycophancy':
     'Tests for agreeing with risky trading strategies, unrealistic return expectations, or get-rich-quick schemes',
   'goal-misalignment':
@@ -1167,7 +1192,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   homoglyph:
     'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
   image: 'Tests detection and handling of image-based malicious payloads',
-  jailbreak: 'Optimizes single-turn attacks to bypass security controls',
+  jailbreak:
+    '[DEPRECATED] Use jailbreak:meta instead. Optimizes single-turn attacks to bypass security controls.',
   'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
   'jailbreak:hydra':
     'Multi-turn conversational attacks with meta-learning that adapts strategy based on full conversation history',
@@ -1212,7 +1238,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   hex: 'Hex Encoding',
   homoglyph: 'Homoglyph Encoding',
   image: 'Image',
-  jailbreak: 'Single-shot Optimization',
+  jailbreak: 'Single-shot Optimization [DEPRECATED]',
   'jailbreak:composite': 'Composite Jailbreaks',
   'jailbreak:hydra': 'Hydra Multi-Turn',
   'jailbreak:likert': 'Likert Scale Jailbreak',
@@ -1235,22 +1261,23 @@ export const strategyDisplayNames: Record<Strategy, string> = {
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   Custom: 'Choose your own plugins',
-  'EU AI Act': 'EU AI Act prohibited & high-risk requirements',
-  Foundation: 'Plugins for redteaming foundation models recommended by Promptfoo',
-  GDPR: 'Data protection and privacy requirements',
-  'Guardrails Evaluation': 'Evaluate guardrail effectiveness against common risks',
-  Harmful: 'Harmful content assessment using MLCommons and HarmBench taxonomies',
-  'ISO 42001': 'ISO/IEC 42001 AI management system requirements',
-  'Minimal Test': 'Minimal set of plugins to validate your setup',
-  MITRE: 'MITRE ATLAS framework',
+  'DoD AI Ethical Principles': 'DoD AI ethical principles framework',
+  'EU AI Act': 'Prohibited & high-risk requirements',
+  Foundation: 'Pre-deployment model risks',
+  GDPR: 'Data protection and privacy',
+  'Guardrails Evaluation': 'Test guardrail effectiveness',
+  Harmful: 'MLCommons and HarmBench taxonomies',
+  'ISO 42001': 'AI management system requirements',
+  'Minimal Test': 'Validate your setup quickly',
+  MITRE: 'ATLAS framework coverage',
   NIST: 'NIST AI Risk Management Framework',
-  'OWASP Top 10 for Agentic Applications': 'OWASP Top 10 for Agentic Applications (ASI01-ASI10)',
-  'OWASP API Top 10': 'OWASP API security vulnerabilities framework',
-  'OWASP Gen AI Red Team': 'OWASP Gen AI Red Teaming Best Practices',
-  'OWASP LLM Top 10': 'OWASP LLM security vulnerabilities framework',
-  RAG: 'Recommended plugins plus tests for RAG-specific scenarios like access control',
-  Recommended: 'A broad set of plugins recommended by Promptfoo',
-  MCP: 'A set of plugins for testing MCP-based systems',
+  'OWASP Top 10 for Agentic Applications': 'Agentic security risks',
+  'OWASP API Top 10': 'API security vulnerabilities',
+  'OWASP Gen AI Red Team': 'Red teaming best practices',
+  'OWASP LLM Top 10': 'LLM security vulnerabilities',
+  RAG: 'Retrieval scenarios and access control',
+  Recommended: 'Broad set of plugins by Promptfoo',
+  MCP: 'Plugins for tool-use systems',
 } as const;
 
 export const DEFAULT_OUTPUT_PATH = 'redteam.yaml';

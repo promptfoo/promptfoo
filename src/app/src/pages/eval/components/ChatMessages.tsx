@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 
 import { cn } from '@app/lib/utils';
 import { resolveAudioSource, resolveImageSource } from '@app/utils/media';
+import { Crosshair, Swords } from 'lucide-react';
 import invariant from 'tiny-invariant';
 
 interface BaseMessage {
@@ -30,13 +31,13 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
   const bubbleClasses = cn(
     'p-3 max-w-[70%] overflow-hidden shadow-sm',
     isUser
-      ? 'bg-red-500 rounded-[20px_20px_5px_20px] self-end shadow-[0_2px_8px_rgba(0,0,0,0.1)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.3)]'
+      ? 'bg-zinc-700 dark:bg-zinc-600 rounded-[20px_20px_5px_20px] self-end shadow-[0_2px_8px_rgba(0,0,0,0.1)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.3)]'
       : 'bg-gray-200 dark:bg-gray-800 rounded-[20px_20px_20px_5px] self-start shadow-[0_2px_8px_rgba(0,0,0,0.1)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.3)]',
   );
 
   const textClasses = cn(
     'text-sm whitespace-pre-wrap break-words',
-    isUser ? 'text-white font-medium [text-shadow:0_1px_2px_rgba(0,0,0,0.2)]' : 'dark:text-white',
+    isUser ? 'text-white font-medium' : 'dark:text-white',
   );
 
   /**
@@ -145,9 +146,22 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
 
   return (
     <div
-      className={cn('flex', isUser ? 'justify-end' : 'justify-start')}
+      className={cn('flex flex-col gap-1', isUser ? 'items-end' : 'items-start')}
       data-testid={`chat-message-${index}`}
     >
+      {/* Role label */}
+      <div
+        className={cn(
+          'flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground',
+          isUser ? 'flex-row-reverse' : 'flex-row',
+        )}
+      >
+        {isUser && <Swords className="size-3" />}
+        {isAssistant && <Crosshair className="size-3" />}
+        <span>{isUser ? 'Prompt' : 'Response'}</span>
+      </div>
+
+      {/* Bubble */}
       {message.loading ? (
         <div
           className={cn(bubbleClasses, 'flex items-center justify-center py-3 px-5 max-w-none')}
@@ -165,18 +179,6 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
         </div>
       ) : (
         <div className={bubbleClasses} role="alert">
-          <div className="flex items-center mb-2">
-            {isUser && (
-              <span role="img" aria-label="attacker" className="mr-2">
-                ⚔️
-              </span>
-            )}
-            {isAssistant && (
-              <span role="img" aria-label="target" className="mr-2">
-                🎯
-              </span>
-            )}
-          </div>
           {content}
         </div>
       )}
@@ -212,7 +214,7 @@ export default function ChatMessages({
 
         return shouldDisplayTurnCount ? (
           <div key={index}>
-            <div className="flex items-center w-full text-center my-4 text-xs font-semibold text-gray-400 dark:text-gray-800">
+            <div className="flex items-center w-full text-center my-2 text-xs font-semibold text-gray-400 dark:text-gray-800">
               <div className="flex-1 border-b border-border mr-4" />
               {index / 2 + 1}/{maxTurns}
               <div className="flex-1 border-b border-border ml-4" />

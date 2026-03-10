@@ -2080,6 +2080,7 @@ export class HttpProvider implements ApiProvider {
     const vars = {
       ...(context?.vars || {}),
       prompt,
+      ...(context?.evaluationId ? { evaluationId: context.evaluationId } : {}),
       // Only set tools/tool_choice if defined in config, to avoid overwriting user vars
       ...(transformedTools !== undefined ? { tools: serializeForTemplate(transformedTools) } : {}),
       ...(transformedToolChoice !== undefined
@@ -2519,9 +2520,19 @@ export class HttpProvider implements ApiProvider {
       throw err;
     }
 
+    // Always include HTTP status for error detection (e.g., aborting on non-transient errors)
+    ret.metadata = {
+      ...ret.metadata,
+      http: {
+        status,
+        statusText,
+      },
+    };
+
     if (context?.debug) {
       ret.raw = data;
       ret.metadata = {
+        ...ret.metadata,
         headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
         // If no transform was applied, show the final raw request body with nunjucks applied
         // Otherwise show the transformed prompt

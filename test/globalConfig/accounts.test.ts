@@ -316,22 +316,13 @@ describe('accounts', () => {
       vi.clearAllMocks();
     });
 
-    it('should use CI email when in CI environment', async () => {
+    it('should bypass email verification checks for the CI placeholder email', async () => {
       vi.mocked(isCI).mockReturnValue(true);
-
-      const mockResponse = new Response(JSON.stringify({ status: 'ok' }), {
-        status: 200,
-        statusText: 'OK',
-      });
-      vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
       await checkEmailStatusAndMaybeExit();
 
-      expect(fetchWithTimeout).toHaveBeenCalledWith(
-        expect.stringContaining('/api/users/status?email=ci-placeholder%40promptfoo.dev'),
-        undefined,
-        500,
-      );
+      expect(fetchWithTimeout).not.toHaveBeenCalled();
+      expect(mockExit).not.toHaveBeenCalled();
     });
 
     it('should use user email when not in CI environment', async () => {
@@ -374,6 +365,37 @@ describe('accounts', () => {
       expect(mockExit).toHaveBeenCalledWith(1);
       expect(logger.error).toHaveBeenCalledWith(
         'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
+      );
+    });
+
+    it('should exit if email verification is required', async () => {
+      vi.mocked(isCI).mockReturnValue(false);
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'test@example.com' },
+      });
+
+      const mockResponse = new Response(
+        JSON.stringify({
+          status: 'email_verification_required',
+          error: 'Please verify your email address and try again.',
+        }),
+        {
+          status: 200,
+          statusText: 'OK',
+        },
+      );
+      vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+
+      await checkEmailStatusAndMaybeExit();
+
+      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        'Please verify your email address and try again.',
+        expect.objectContaining({
+          status: 'email_verification_required',
+          hasEmail: true,
+        }),
       );
     });
 
@@ -456,22 +478,12 @@ describe('accounts', () => {
       });
     });
 
-    it('should use CI email when in CI environment', async () => {
+    it('should treat the CI placeholder email as pre-validated', async () => {
       vi.mocked(isCI).mockReturnValue(true);
-
-      const mockResponse = new Response(JSON.stringify({ status: 'ok' }), {
-        status: 200,
-        statusText: 'OK',
-      });
-      vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
       const result = await checkEmailStatus();
 
-      expect(fetchWithTimeout).toHaveBeenCalledWith(
-        expect.stringContaining('/api/users/status?email=ci-placeholder%40promptfoo.dev'),
-        undefined,
-        500,
-      );
+      expect(fetchWithTimeout).not.toHaveBeenCalled();
       expect(result).toEqual({
         status: 'ok',
         hasEmail: true,
@@ -570,6 +582,21 @@ describe('accounts', () => {
         });
       });
 
+      it('should skip remote validation for the CI placeholder email', async () => {
+        vi.mocked(isCI).mockReturnValue(true);
+
+        const result = await checkEmailStatus({ validate: true });
+
+        expect(fetchWithTimeout).not.toHaveBeenCalled();
+        expect(telemetry.saveConsent).not.toHaveBeenCalled();
+        expect(result).toEqual({
+          status: 'ok',
+          hasEmail: true,
+          email: 'ci-placeholder@promptfoo.dev',
+          message: undefined,
+        });
+      });
+
       it('should call saveConsent for invalid email when validate is true', async () => {
         const mockResponse = new Response(JSON.stringify({ status: 'risky_email' }), {
           status: 200,
@@ -582,6 +609,30 @@ describe('accounts', () => {
         expect(telemetry.saveConsent).toHaveBeenCalledWith('test@example.com', {
           source: 'filteredInvalidEmail',
         });
+      });
+
+      it('should not mark email as validated when verification is required', async () => {
+        const mockResponse = new Response(
+          JSON.stringify({
+            status: 'email_verification_required',
+            error: 'Please verify your email address and try again.',
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+          },
+        );
+        vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+
+        const result = await checkEmailStatus({ validate: true });
+
+        expect(result).toEqual({
+          status: 'email_verification_required',
+          hasEmail: true,
+          email: 'test@example.com',
+          message: 'Please verify your email address and try again.',
+        });
+        expect(telemetry.saveConsent).not.toHaveBeenCalled();
       });
 
       it('should not call saveConsent when validate is not provided', async () => {

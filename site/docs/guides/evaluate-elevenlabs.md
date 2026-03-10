@@ -1,17 +1,11 @@
 ---
-title: 'Evaluating ElevenLabs voice AI'
+title: 'Evaluating ElevenLabs Voice AI'
 description: 'Step-by-step guide for testing ElevenLabs voice AI with Promptfoo - from TTS quality testing to conversational agent evaluation'
 ---
 
 # Evaluating ElevenLabs voice AI
 
 This guide walks you through testing ElevenLabs voice AI capabilities using Promptfoo, from basic text-to-speech quality testing to advanced conversational agent evaluation.
-
-## Prerequisites
-
-- Node.js 20+ installed
-- ElevenLabs API key ([get one here](https://elevenlabs.io/app/settings/api-keys))
-- 15 minutes
 
 ## Part 1: Text-to-Speech Quality Testing
 
@@ -267,7 +261,7 @@ providers:
 
           Never make promises you can't keep. Always set clear expectations.
         voiceId: 21m00Tcm4TlvDq8ikWAM # Rachel
-        llmModel: gpt-4o-mini
+        llmModel: gpt-5-mini
 
       # Define evaluation criteria
       evaluationCriteria:
@@ -377,7 +371,7 @@ providers:
         name: Support Agent with Tools
         prompt: You are a support agent. Use the order_lookup tool to check order status.
         voiceId: 21m00Tcm4TlvDq8ikWAM
-        llmModel: gpt-4o
+        llmModel: gpt-5
 
         # Define available tools
         tools:
@@ -456,8 +450,8 @@ You've learned to:
 
 Check out complete examples:
 
-- [examples/elevenlabs-tts-advanced](https://github.com/promptfoo/promptfoo/tree/main/examples/elevenlabs-tts-advanced)
-- [examples/elevenlabs-agents](https://github.com/promptfoo/promptfoo/tree/main/examples/elevenlabs-agents)
+- [examples/provider-elevenlabs/tts-advanced](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-elevenlabs/tts-advanced)
+- [examples/provider-elevenlabs/agents](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-elevenlabs/agents)
 
 ### Resources
 
@@ -477,7 +471,7 @@ Check out complete examples:
 
 **High costs during testing:**
 
-- Use `gpt-4o-mini` instead of `gpt-4o`
+- Use `gpt-5-mini` instead of `gpt-5`
 - Enable caching for repeated tests
 - Implement LLM cascading
 - Test with shorter prompts first

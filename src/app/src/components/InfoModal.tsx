@@ -8,15 +8,7 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { cn } from '@app/lib/utils';
-import {
-  BookOpen,
-  Briefcase,
-  Bug,
-  Calendar,
-  ExternalLink,
-  Github,
-  MessageCircle,
-} from 'lucide-react';
+import { BookOpen, Bug, Calendar, ExternalLink, Github, MessageCircle } from 'lucide-react';
 
 const links: { icon: React.ReactElement; text: string; href: string }[] = [
   {
@@ -43,11 +35,6 @@ const links: { icon: React.ReactElement; text: string; href: string }[] = [
     icon: <Calendar className="size-4" />,
     text: 'Book a Meeting',
     href: 'https://cal.com/team/promptfoo/intro2',
-  },
-  {
-    icon: <Briefcase className="size-4" />,
-    text: 'Careers',
-    href: 'https://www.promptfoo.dev/careers/',
   },
 ];
 

@@ -82,17 +82,6 @@
   background-color: #138496;
 }
 
-@media (prefers-color-scheme: dark) {
-  .buttonSecondary {
-    background-color: var(--button-secondary-bg);
-  }
-
-  .buttonSecondary:hover {
-    background-color: var(--button-secondary-hover);
-    border-color: var(--primary-color);
-  }
-}
-
 .hero {
   padding-top: 4rem;
   background-color: var(--background-color);
@@ -564,6 +553,18 @@
 .faqAnswer {
   padding: 0 1rem 1rem;
   color: var(--text-color);
+}
+
+[data-theme='dark'] .reasonItem {
+  background-color: var(--card-background);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 4px var(--card-shadow);
+}
+
+[data-theme='dark'] .testimonialItem {
+  background-color: var(--card-background);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 6px var(--card-shadow);
 }
 
 [data-theme='dark'] .featureItem {

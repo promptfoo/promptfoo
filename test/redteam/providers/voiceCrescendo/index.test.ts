@@ -6,6 +6,7 @@ import type { ApiProvider, CallApiContextParams } from '../../../../src/types/in
 vi.mock('../../../../src/logger', () => ({
   default: {
     debug: vi.fn(),
+    info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
   },
@@ -17,6 +18,7 @@ vi.mock('../../../../src/redteam/providers/shared', () => ({
     getGradingProvider: vi.fn(),
   },
   getTargetResponse: vi.fn(),
+  externalizeResponseForRedteamHistory: vi.fn(async (response: unknown) => response),
 }));
 
 vi.mock('../../../../src/redteam/remoteGeneration', () => ({
@@ -178,8 +180,9 @@ describe('VoiceCrescendoProvider', () => {
 
     // Verify token usage is accumulated
     expect(result.tokenUsage).toBeDefined();
-    expect(result.tokenUsage?.numRequests).toBeGreaterThan(0);
-    // Token usage should include redteam, target, and evaluation calls
+    // Probe counting should include only target calls.
+    expect(result.tokenUsage?.numRequests).toBe(result.metadata?.voiceCrescendoTurnsCompleted);
+    // Token totals still include internal calls.
     expect(result.tokenUsage?.total).toBeGreaterThan(0);
   });
 
@@ -210,7 +213,7 @@ describe('VoiceCrescendoProvider', () => {
 
     // Should still have token usage from successful calls
     expect(result.tokenUsage).toBeDefined();
-    expect(result.tokenUsage?.numRequests).toBeGreaterThanOrEqual(1);
+    expect(result.tokenUsage?.numRequests).toBe(1);
   });
 
   it('should include metadata with conversation history', async () => {
@@ -268,6 +271,34 @@ describe('VoiceCrescendoProvider', () => {
     // Should still track token usage from attempted calls
     expect(result.tokenUsage).toBeDefined();
     expect(result.tokenUsage?.numRequests).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should stop when target ends conversation', async () => {
+    vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockRedteamProvider);
+
+    vi.mocked(getTargetResponse).mockResolvedValue({
+      output: '',
+      conversationEnded: true,
+      conversationEndReason: 'thread_closed',
+      tokenUsage: { prompt: 5, completion: 0, total: 5, numRequests: 1 },
+    });
+
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 3,
+      delayBetweenTurns: 0,
+    });
+
+    const context: CallApiContextParams = {
+      originalProvider: mockTargetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    const result = await provider.callApi('Test objective', context);
+
+    expect(result.metadata?.stopReason).toBe('Target ended conversation');
+    expect(result.metadata?.voiceCrescendoTurnsCompleted).toBe(1);
   });
 
   it('should respect maxTurns configuration', async () => {

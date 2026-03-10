@@ -1,5 +1,8 @@
 import type {
   ColumnDef,
+  ColumnFiltersState,
+  ExpandedState,
+  Row,
   RowSelectionState,
   SortingState,
   Table,
@@ -16,7 +19,7 @@ declare module '@tanstack/react-table' {
   }
 }
 
-export interface DataTableProps<TData, TValue = unknown> {
+interface DataTablePropsBase<TData, TValue = unknown> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   isLoading?: boolean;
@@ -39,14 +42,58 @@ export interface DataTableProps<TData, TValue = unknown> {
   rowSelection?: RowSelectionState;
   onRowSelectionChange?: (selection: RowSelectionState) => void;
   getRowId?: (row: TData) => string;
+  expanded?: ExpandedState;
+  onExpandedChange?: (expanded: ExpandedState) => void;
+  expandedRowClassName?: string;
   // Custom toolbar actions
   toolbarActions?: React.ReactNode;
   // Fixed height with scroll
   maxHeight?: string;
+  // Row expansion
+  renderSubComponent?: (row: Row<TData>) => React.ReactNode;
+  singleExpand?: boolean;
+  getRowCanExpand?: (row: Row<TData>) => boolean;
+  // Server-side pagination
+  pageCount?: number;
+  pageIndex?: number;
+  pageSize?: number;
+  onPaginationChange?: (pagination: { pageIndex: number; pageSize: number }) => void;
+  onPageSizeChange?: (pageSize: number) => void;
 }
+
+export interface DataTableManualPaginationProps<TData, TValue = unknown>
+  extends DataTablePropsBase<TData, TValue> {
+  /**
+   * `true` enables server-driven/manual pagination: the caller owns pagination state
+   * and provides the current page rows, total row count, and pagination handlers.
+   */
+  manualPagination: true;
+  rowCount: number;
+  pageCount: number;
+  pageIndex: number;
+  pageSize: number;
+  onPaginationChange: (pagination: { pageIndex: number; pageSize: number }) => void;
+  onPageSizeChange: (pageSize: number) => void;
+}
+
+export interface DataTableAutoPaginationProps<TData, TValue = unknown>
+  extends DataTablePropsBase<TData, TValue> {
+  manualPagination?: false;
+  rowCount?: never;
+  pageCount?: never;
+  pageIndex?: never;
+  pageSize?: never;
+  onPaginationChange?: never;
+  onPageSizeChange?: never;
+}
+
+export type DataTableProps<TData, TValue = unknown> =
+  | DataTableManualPaginationProps<TData, TValue>
+  | DataTableAutoPaginationProps<TData, TValue>;
 
 export interface DataTableToolbarProps<TData> {
   table: Table<TData>;
+  columnFilters: ColumnFiltersState;
   globalFilter: string;
   setGlobalFilter: (value: string) => void;
   showColumnToggle?: boolean;

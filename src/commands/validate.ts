@@ -249,7 +249,9 @@ async function loadProvidersForTesting(
   } else {
     // Load all providers from config
     if (!config.providers || (Array.isArray(config.providers) && config.providers.length === 0)) {
-      logger.info('No providers found in configuration to test.');
+      logger.info(
+        'No providers found in configuration to test. Add providers to your config or run `promptfoo validate -t <provider-id>` to test a specific provider.',
+      );
       return [];
     }
 

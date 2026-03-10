@@ -83,6 +83,7 @@
 /site/src/pages/**/*.tsx    @swarnap @typpo @mldangelo      # Landing page content
 /site/src/pages/**/*.md     @swarnap @typpo @mldangelo      # Landing page markdown
 /site/blog/                 @swarnap @mldangelo             # Blog posts
+/SECURITY.md                @mldangelo @JustinBeckwith       # Security policy
 /CONTRIBUTING.md            @mldangelo                      # Contributing guide
 /site/docs/contributing.md  @mldangelo                      # Contributing docs
 

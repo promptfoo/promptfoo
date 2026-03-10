@@ -207,25 +207,18 @@ export function ProductModal() {
       open={isOpen}
       onClose={closeProductModal}
       maxWidth={false}
-      fullScreen
       PaperProps={{
         sx: {
-          // Fullscreen on mobile, constrained on larger screens
-          width: { xs: '100%', sm: '90vw' },
-          maxWidth: { xs: '100%', sm: '1000px' },
-          height: { xs: '100%', sm: '85vh' },
-          maxHeight: { xs: '100%', sm: '800px' },
-          m: { xs: 0, sm: 2 },
-          borderRadius: 0,
+          width: { xs: '100vw', sm: '90vw' },
+          maxWidth: { xs: '100vw', sm: '1000px' },
+          height: { xs: '100vh', sm: '85vh' },
+          maxHeight: { xs: '100vh', sm: '800px' },
+          m: 0,
+          borderRadius: { xs: 0, sm: '8px' },
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-        },
-      }}
-      sx={{
-        // Override fullScreen on larger viewports
-        '& .MuiDialog-container': {
-          alignItems: { xs: 'stretch', sm: 'center' },
+          color: 'var(--ifm-font-color-base, #1c1e21)',
         },
       }}
     >
@@ -237,8 +230,8 @@ export function ProductModal() {
           justifyContent: 'space-between',
           px: { xs: 1.5, sm: 2 },
           py: 1.5,
-          backgroundColor: '#1a1a2e',
-          color: '#fff',
+          backgroundColor: 'var(--ifm-color-primary-darker)',
+          color: 'var(--ifm-button-color, #fff)',
           flexShrink: 0,
           gap: 1,
         }}
@@ -263,9 +256,9 @@ export function ProductModal() {
           onClick={closeProductModal}
           size="small"
           sx={{
-            color: '#fff',
+            color: 'var(--ifm-button-color, #fff)',
             '&:hover': {
-              backgroundColor: 'rgba(255,255,255,0.1)',
+              backgroundColor: 'rgba(255, 255, 255, 0.15)',
             },
           }}
           aria-label="Close"
@@ -281,6 +274,7 @@ export function ProductModal() {
           flexDirection: { xs: 'column', md: 'row' },
           flex: 1,
           overflow: 'hidden',
+          backgroundColor: 'var(--ifm-background-color, #ffffff)',
         }}
       >
         {/* Image carousel */}
@@ -291,7 +285,7 @@ export function ProductModal() {
           sx={{
             flex: { xs: '0 0 auto', md: '1 1 60%' },
             position: 'relative',
-            backgroundColor: '#f5f5f5',
+            backgroundColor: 'var(--ifm-background-surface-color)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -325,9 +319,10 @@ export function ProductModal() {
                   left: 8,
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  backgroundColor: 'rgba(255,255,255,0.9)',
+                  backgroundColor: 'var(--ifm-background-color, #ffffff)',
+                  border: '1px solid var(--ifm-color-emphasis-300)',
                   '&:hover': {
-                    backgroundColor: '#fff',
+                    backgroundColor: 'var(--ifm-background-surface-color)',
                   },
                 }}
                 aria-label="Previous image"
@@ -341,9 +336,10 @@ export function ProductModal() {
                   right: 8,
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  backgroundColor: 'rgba(255,255,255,0.9)',
+                  backgroundColor: 'var(--ifm-background-color, #ffffff)',
+                  border: '1px solid var(--ifm-color-emphasis-300)',
                   '&:hover': {
-                    backgroundColor: '#fff',
+                    backgroundColor: 'var(--ifm-background-surface-color)',
                   },
                 }}
                 aria-label="Next image"
@@ -351,47 +347,27 @@ export function ProductModal() {
                 <ChevronRightIcon />
               </IconButton>
 
-              {/* Image indicators */}
-              <Box
-                component="nav"
-                aria-label="Image navigation"
+              {/* Image counter */}
+              <Typography
+                variant="caption"
+                aria-live="polite"
                 sx={{
                   position: 'absolute',
-                  bottom: 16,
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  display: 'flex',
-                  gap: 1,
+                  bottom: 12,
+                  right: 12,
+                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                  color: '#fff',
+                  px: 1,
+                  py: 0.25,
+                  borderRadius: '4px',
+                  fontSize: '0.75rem',
+                  fontWeight: 500,
+                  fontVariantNumeric: 'tabular-nums',
+                  userSelect: 'none',
                 }}
               >
-                {images.map((_, index) => (
-                  <Box
-                    key={index}
-                    component="button"
-                    type="button"
-                    onClick={() => setCurrentImageIndex(index)}
-                    aria-label={`Go to image ${index + 1} of ${images.length}`}
-                    aria-current={index === currentImageIndex ? 'true' : undefined}
-                    sx={{
-                      width: 8,
-                      height: 8,
-                      padding: 0,
-                      border: 'none',
-                      borderRadius: '50%',
-                      backgroundColor: index === currentImageIndex ? '#000' : 'rgba(0,0,0,0.3)',
-                      cursor: 'pointer',
-                      transition: 'background-color 0.2s',
-                      '&:hover': {
-                        backgroundColor: index === currentImageIndex ? '#000' : 'rgba(0,0,0,0.5)',
-                      },
-                      '&:focus-visible': {
-                        outline: '2px solid #1a1a2e',
-                        outlineOffset: 2,
-                      },
-                    }}
-                  />
-                ))}
-              </Box>
+                {currentImageIndex + 1} / {images.length}
+              </Typography>
             </>
           )}
         </Box>
@@ -451,7 +427,7 @@ export function ProductModal() {
                                   height: 16,
                                   borderRadius: '50%',
                                   backgroundColor: option.swatch,
-                                  border: '1px solid #ddd',
+                                  border: '1px solid var(--ifm-color-emphasis-300)',
                                 }}
                               />
                             )}
@@ -504,22 +480,22 @@ export function ProductModal() {
               py: { xs: 1.75, sm: 1.5 },
               minHeight: { xs: 48, sm: 44 },
               fontSize: { xs: '0.875rem', sm: '1rem' },
-              backgroundColor: '#1a1a2e',
-              borderRadius: 0,
+              backgroundColor: 'var(--ifm-color-primary-darker)',
+              borderRadius: '8px',
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
               // Prevent iOS zoom on input
               touchAction: 'manipulation',
               '&:hover': {
-                backgroundColor: '#2a2a4e',
+                backgroundColor: 'var(--ifm-color-primary-darkest)',
               },
               '&:disabled': {
-                backgroundColor: '#ccc',
+                backgroundColor: 'var(--ifm-color-emphasis-300)',
               },
             }}
           >
             {isAdding ? (
-              <CircularProgress size={24} sx={{ color: '#fff' }} />
+              <CircularProgress size={24} sx={{ color: 'var(--ifm-button-color, #fff)' }} />
             ) : selectedVariant && isInStock(selectedVariant.stock) ? (
               'Add to Cart'
             ) : (

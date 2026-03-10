@@ -80,6 +80,21 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
     });
 
+    it('should calculate default cost for Claude Opus 4.6 latest model', () => {
+      const cost = calculateAnthropicCost('claude-opus-4-6-latest', {}, 100, 200);
+      expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
+    });
+
+    it('should calculate default cost for Claude Sonnet 4.6 model', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-4-6', {}, 100, 200);
+      expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - $3/MTok input, $15/MTok output
+    });
+
+    it('should calculate default cost for Claude Sonnet 4.6 latest model', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-4-6-latest', {}, 100, 200);
+      expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - $3/MTok input, $15/MTok output
+    });
+
     it('should calculate default cost for Claude Opus 4.5 model', () => {
       const cost = calculateAnthropicCost('claude-opus-4-5-20251101', {}, 100, 200);
       expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
@@ -109,10 +124,30 @@ describe('Anthropic utilities', () => {
     });
 
     it('should calculate tiered cost for Claude Sonnet 4.5 20250929 with > 200k tokens', () => {
-      // Only claude-sonnet-4-5-20250929 has tiered pricing
       const cost = calculateAnthropicCost('claude-sonnet-4-5-20250929', {}, 300_000, 20_000);
       // (6/1e6 * 300,000) + (22.5/1e6 * 20,000) = 1.8 + 0.45 = 2.25
       expect(cost).toBe(2.25);
+    });
+
+    it('should calculate tiered cost for Claude Sonnet 4.5 latest alias', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-4-5-latest', {}, 250_000, 10_000);
+      expect(cost).toBe(1.725); // (6/1e6 * 250,000) + (22.5/1e6 * 10,000) = 1.5 + 0.225 = 1.725
+    });
+
+    it('should calculate tiered cost for Claude Sonnet 4.6 with prompt <= 200k tokens', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-4-6', {}, 150_000, 10_000);
+      expect(cost).toBe(0.6); // (3/1e6 * 150,000) + (15/1e6 * 10,000) = 0.45 + 0.15 = 0.6
+    });
+
+    it('should calculate tiered cost for Claude Sonnet 4.6 with prompt > 200k tokens', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-4-6', {}, 300_000, 20_000);
+      // (6/1e6 * 300,000) + (22.5/1e6 * 20,000) = 1.8 + 0.45 = 2.25
+      expect(cost).toBe(2.25);
+    });
+
+    it('should calculate tiered cost for Claude Sonnet 4.6 latest alias', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-4-6-latest', {}, 250_000, 10_000);
+      expect(cost).toBe(1.725); // (6/1e6 * 250,000) + (22.5/1e6 * 10,000) = 1.5 + 0.225 = 1.725
     });
 
     it('should use base pricing for other Claude Sonnet 4 models', () => {
@@ -160,6 +195,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -185,6 +221,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -213,6 +250,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -234,12 +272,14 @@ describe('Anthropic utilities', () => {
         content: [
           {
             type: 'tool_use',
+            caller: { type: 'direct' },
             id: 'tool1',
             name: 'get_weather',
             input: { location: 'San Francisco, CA' },
           },
           {
             type: 'tool_use',
+            caller: { type: 'direct' },
             id: 'tool2',
             name: 'get_time',
             input: { location: 'New York, NY' },
@@ -251,6 +291,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -265,7 +306,7 @@ describe('Anthropic utilities', () => {
 
       const result = outputFromMessage(message, false);
       expect(result).toBe(
-        '{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\n{"type":"tool_use","id":"tool2","name":"get_time","input":{"location":"New York, NY"}}',
+        '{"type":"tool_use","caller":{"type":"direct"},"id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\n{"type":"tool_use","caller":{"type":"direct"},"id":"tool2","name":"get_time","input":{"location":"New York, NY"}}',
       );
     });
 
@@ -275,6 +316,7 @@ describe('Anthropic utilities', () => {
           { type: 'text', text: 'Hello', citations: [] },
           {
             type: 'tool_use',
+            caller: { type: 'direct' },
             id: 'tool1',
             name: 'get_weather',
             input: { location: 'San Francisco, CA' },
@@ -287,6 +329,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -301,7 +344,7 @@ describe('Anthropic utilities', () => {
 
       const result = outputFromMessage(message, false);
       expect(result).toBe(
-        'Hello\n\n{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\nWorld',
+        'Hello\n\n{"type":"tool_use","caller":{"type":"direct"},"id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\nWorld',
       );
     });
 
@@ -330,6 +373,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -363,6 +407,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -398,6 +443,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -430,6 +476,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -462,6 +509,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
