@@ -325,6 +325,7 @@ function ResultsTable({
     fetchEvalData,
     isFetching,
     filters,
+    filteredMetrics,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
   const { setFilterMode } = useFilterMode();
@@ -339,28 +340,33 @@ function ResultsTable({
     return config?.redteam !== undefined;
   }, [config?.redteam]);
 
-  // Auto-hide prompt columns that have no output data in the current filtered view.
-  // This handles 1:1 configurations where filtered results may leave some prompt columns entirely empty.
+  // Auto-hide prompt columns that have no results in the current filtered view.
+  // Uses filteredMetrics (computed server-side across ALL filtered rows) instead of
+  // scanning the paginated body, which would cause incorrect hiding and flickering
+  // when columns have data on other pages.
   const effectiveColumnVisibility = React.useMemo(() => {
+    if (!filteredMetrics) {
+      return columnVisibility;
+    }
     const visibility: VisibilityState = { ...columnVisibility };
     head.prompts.forEach((_, idx) => {
       const colId = `Prompt ${idx + 1}`;
-      // Only auto-hide if the column is currently set to visible
+      // Respect user's explicit column hiding
       if (visibility[colId] === false) {
         return;
       }
-      const allEmpty =
-        body.length > 0 &&
-        body.every((row) => {
-          const output = row.outputs[idx];
-          return !output || (!output.text && !output.error);
-        });
-      if (allEmpty) {
+      const metrics = filteredMetrics[idx];
+      if (!metrics) {
+        return;
+      }
+      const totalResults =
+        (metrics.testPassCount ?? 0) + (metrics.testFailCount ?? 0) + (metrics.testErrorCount ?? 0);
+      if (totalResults === 0) {
         visibility[colId] = false;
       }
     });
     return visibility;
-  }, [columnVisibility, head.prompts, body]);
+  }, [columnVisibility, head.prompts, filteredMetrics]);
 
   const visiblePromptCount = React.useMemo(
     () =>

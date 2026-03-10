@@ -2305,7 +2305,7 @@ describe('ResultsTable Pass Rate Display', () => {
     }));
   });
 
-  it('displays 0% filtered pass rate when filtered results have zero test cases but total results have some', () => {
+  it('auto-hides prompt column when filtered results have zero test cases', () => {
     const mockTableWithZeroFilteredTestCases = {
       body: Array(10).fill({
         outputs: [
@@ -2357,7 +2357,8 @@ describe('ResultsTable Pass Rate Display', () => {
     }));
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
-    expect(screen.getByText('0.00% passing')).toBeInTheDocument();
+    // Column with zero filtered results is auto-hidden, so pass rate is not displayed
+    expect(screen.queryByText('0.00% passing')).not.toBeInTheDocument();
   });
 });
 
@@ -3618,5 +3619,150 @@ describe('ResultsTable minimal scroll room detection', () => {
     // Note: This would require triggering the sticky behavior,
     // which depends on scroll events in the actual implementation
     expect(stickyContainer.className).toContain('relative');
+  });
+});
+
+describe('ResultsTable - Auto-hide empty prompt columns', () => {
+  const createMockTable = (numPrompts: number) => ({
+    body: [
+      {
+        outputs: Array.from({ length: numPrompts }, (_, i) => ({
+          pass: i === 0,
+          score: i === 0 ? 1 : 0,
+          text: i === 0 ? 'output for prompt 1' : '',
+        })),
+        test: {},
+        vars: [],
+      },
+    ],
+    head: {
+      prompts: Array.from({ length: numPrompts }, (_, i) => ({
+        metrics: {
+          cost: 0.1,
+          namedScores: {},
+          testPassCount: 1,
+          testFailCount: 0,
+          tokenUsage: { completion: 100, total: 200 },
+          totalLatencyMs: 500,
+        },
+        provider: `provider-${i + 1}`,
+      })),
+      vars: [],
+    },
+  });
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: false,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  const localRender = (ui: React.ReactElement) => {
+    return render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
+  };
+
+  it('hides prompt columns with zero results when filteredMetrics is present', () => {
+    const mockTable = createMockTable(2);
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 1,
+      filters: { values: {}, appliedCount: 1, options: { metric: [] } },
+      filteredMetrics: [
+        { cost: 0, namedScores: {}, testPassCount: 1, testFailCount: 0, testErrorCount: 0, tokenUsage: { total: 0 }, totalLatencyMs: 0 },
+        { cost: 0, namedScores: {}, testPassCount: 0, testFailCount: 0, testErrorCount: 0, tokenUsage: { total: 0 }, totalLatencyMs: 0 },
+      ],
+    }));
+
+    localRender(<ResultsTable {...defaultProps} />);
+
+    const outputCells = screen.getAllByTestId('eval-output-cell');
+    // Only 1 column visible (prompt 1 has results, prompt 2 has zero results)
+    expect(outputCells).toHaveLength(1);
+  });
+
+  it('shows all prompt columns when filteredMetrics is null (no filters active)', () => {
+    const mockTable = createMockTable(2);
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 1,
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+      filteredMetrics: null,
+    }));
+
+    localRender(<ResultsTable {...defaultProps} />);
+
+    const outputCells = screen.getAllByTestId('eval-output-cell');
+    // Both columns visible since no filters are active
+    expect(outputCells).toHaveLength(2);
+  });
+
+  it('keeps manually hidden columns hidden regardless of filteredMetrics', () => {
+    const mockTable = createMockTable(2);
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 1,
+      filters: { values: {}, appliedCount: 1, options: { metric: [] } },
+      filteredMetrics: [
+        { cost: 0, namedScores: {}, testPassCount: 1, testFailCount: 0, testErrorCount: 0, tokenUsage: { total: 0 }, totalLatencyMs: 0 },
+        { cost: 0, namedScores: {}, testPassCount: 1, testFailCount: 0, testErrorCount: 0, tokenUsage: { total: 0 }, totalLatencyMs: 0 },
+      ],
+    }));
+
+    // User explicitly hides Prompt 1
+    localRender(<ResultsTable {...defaultProps} columnVisibility={{ 'Prompt 1': false }} />);
+
+    const outputCells = screen.getAllByTestId('eval-output-cell');
+    // Only prompt 2 visible (prompt 1 manually hidden)
+    expect(outputCells).toHaveLength(1);
+  });
+
+  it('shows columns that have results even when other columns are auto-hidden', () => {
+    const mockTable = createMockTable(3);
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 1,
+      filters: { values: {}, appliedCount: 1, options: { metric: [] } },
+      filteredMetrics: [
+        { cost: 0, namedScores: {}, testPassCount: 5, testFailCount: 2, testErrorCount: 0, tokenUsage: { total: 0 }, totalLatencyMs: 0 },
+        { cost: 0, namedScores: {}, testPassCount: 0, testFailCount: 0, testErrorCount: 0, tokenUsage: { total: 0 }, totalLatencyMs: 0 },
+        { cost: 0, namedScores: {}, testPassCount: 0, testFailCount: 0, testErrorCount: 1, tokenUsage: { total: 0 }, totalLatencyMs: 0 },
+      ],
+    }));
+
+    localRender(<ResultsTable {...defaultProps} />);
+
+    const outputCells = screen.getAllByTestId('eval-output-cell');
+    // Prompt 1 (7 results) and Prompt 3 (1 error) visible; Prompt 2 (0 results) hidden
+    expect(outputCells).toHaveLength(2);
   });
 });
