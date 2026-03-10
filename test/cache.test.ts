@@ -48,6 +48,7 @@ const mockFetchWithRetries = vi.mocked(fetchWithRetries);
 vi.mock('cache-manager', () => ({
   createCache: vi.fn().mockImplementation(({ stores }) => {
     const cache = new Map();
+    const inflight = new Map();
     return {
       stores: stores || [],
       get: vi.fn().mockImplementation((key) => cache.get(key)),
@@ -61,16 +62,29 @@ vi.mock('cache-manager', () => ({
       }),
       clear: vi.fn().mockImplementation(() => {
         cache.clear();
+        inflight.clear();
         return Promise.resolve();
       }),
       wrap: vi.fn().mockImplementation(async (key, fn) => {
-        const existing = cache.get(key);
-        if (existing) {
-          return existing;
+        if (cache.has(key)) {
+          return cache.get(key);
         }
-        const value = await fn();
-        cache.set(key, value);
-        return value;
+        if (inflight.has(key)) {
+          return inflight.get(key);
+        }
+        const pending = (async () => {
+          try {
+            const value = await fn();
+            if (value !== undefined) {
+              cache.set(key, value);
+            }
+            return value;
+          } finally {
+            inflight.delete(key);
+          }
+        })();
+        inflight.set(key, pending);
+        return pending;
       }),
       // Add required Cache interface methods
       mget: vi.fn(),
@@ -258,6 +272,84 @@ describe('fetchWithCache', () => {
       expect(result2.status).toBe(400);
       expect(result2.statusText).toBe('Bad Request');
       expect(result2.data).toEqual({ error: 'Bad Request' });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not cache successful responses that contain an error payload', async () => {
+      const mockResponse = mockFetchWithRetriesResponse(true, { error: 'Rate limit exceeded' });
+      mockFetchWithRetries.mockResolvedValue(mockResponse);
+
+      const result = await fetchWithCache(url, {}, 1000);
+      expect(result.status).toBe(200);
+      expect(result.cached).toBe(false);
+      expect(result.data).toEqual({ error: 'Rate limit exceeded' });
+
+      const result2 = await fetchWithCache(url, {}, 1000);
+      expect(result2.status).toBe(200);
+      expect(result2.cached).toBe(false);
+      expect(result2.data).toEqual({ error: 'Rate limit exceeded' });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
+    it('should return non-cacheable successful error payloads to all concurrent callers', async () => {
+      const mockResponse = mockFetchWithRetriesResponse(true, { error: 'Rate limit exceeded' });
+      mockFetchWithRetries.mockResolvedValue(mockResponse);
+
+      const [result1, result2] = await Promise.all([
+        fetchWithCache(url, {}, 1000),
+        fetchWithCache(url, {}, 1000),
+      ]);
+
+      expect(result1).toMatchObject({
+        cached: false,
+        status: 200,
+        data: { error: 'Rate limit exceeded' },
+      });
+      expect(result2).toMatchObject({
+        cached: false,
+        status: 200,
+        data: { error: 'Rate limit exceeded' },
+      });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+
+      const result3 = await fetchWithCache(url, {}, 1000);
+      expect(result3.cached).toBe(false);
+      expect(result3.data).toEqual({ error: 'Rate limit exceeded' });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
+    it('should return failed responses to all concurrent callers without caching them', async () => {
+      const mockResponse = {
+        ok: false,
+        status: 400,
+        statusText: 'Bad Request',
+        text: () => Promise.resolve(JSON.stringify({ error: 'Bad Request' })),
+        json: () => Promise.resolve({ error: 'Bad Request' }),
+        headers: new Headers({
+          'content-type': 'application/json',
+          'x-session-id': '45',
+        }),
+      } as Response;
+      mockFetchWithRetries.mockResolvedValue(mockResponse);
+
+      const [result1, result2] = await Promise.all([
+        fetchWithCache(url, {}, 1000),
+        fetchWithCache(url, {}, 1000),
+      ]);
+
+      expect(result1).toMatchObject({
+        cached: false,
+        status: 400,
+        data: { error: 'Bad Request' },
+      });
+      expect(result2).toMatchObject({
+        cached: false,
+        status: 400,
+        data: { error: 'Bad Request' },
+      });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+
+      await fetchWithCache(url, {}, 1000);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });
 

@@ -123,6 +123,31 @@ export type FetchWithCacheResult<T> = {
   deleteFromCache?: () => Promise<void>;
 };
 
+type SerializedFetchResponse = string;
+
+class NonCacheableResponseError extends Error {
+  constructor(public readonly response: SerializedFetchResponse) {
+    super('Non-cacheable fetch response');
+    this.name = 'NonCacheableResponseError';
+  }
+}
+
+function serializeFetchResponse(
+  data: unknown,
+  status: number,
+  statusText: string,
+  headers: Record<string, string>,
+  latencyMs: number | undefined,
+): SerializedFetchResponse {
+  return JSON.stringify({
+    data,
+    status,
+    statusText,
+    headers,
+    latencyMs,
+  });
+}
+
 async function fetchAndReadBody(
   url: RequestInfo,
   options: RequestInit,
@@ -204,68 +229,84 @@ export async function fetchWithCache<T = unknown>(
   const cache = await getCache();
 
   let cached = true;
-  let errorResponse = null;
   let fetchLatencyMs: number | undefined;
 
   // Use wrap to ensure that the fetch is only done once even for concurrent invocations
-  const cachedResponse = await cache.wrap(cacheKey, async () => {
-    cached = false;
-    const result = await fetchAndReadBody(url, options, timeout, maxRetries, isIdempotent);
-    const response = result.resp;
-    const responseText = result.respText;
-    fetchLatencyMs = result.fetchLatencyMs;
-    const headers = Object.fromEntries(response.headers.entries());
+  let cachedResponse: SerializedFetchResponse | undefined;
+  try {
+    cachedResponse = await cache.wrap(cacheKey, async () => {
+      cached = false;
+      const result = await fetchAndReadBody(url, options, timeout, maxRetries, isIdempotent);
+      const response = result.resp;
+      const responseText = result.respText;
+      fetchLatencyMs = result.fetchLatencyMs;
+      const headers = Object.fromEntries(response.headers.entries());
 
-    try {
-      const parsedData = format === 'json' ? JSON.parse(responseText) : responseText;
-      const data = JSON.stringify({
-        data: parsedData,
-        status: response.status,
-        statusText: response.statusText,
-        headers,
-        latencyMs: fetchLatencyMs,
-      });
-      if (!response.ok) {
-        if (responseText == '') {
-          errorResponse = JSON.stringify({
-            data: `Empty Response: ${response.status}: ${response.statusText}`,
-            status: response.status,
-            statusText: response.statusText,
-            headers,
-            latencyMs: fetchLatencyMs,
-          });
-        } else {
-          errorResponse = data;
+      try {
+        const parsedData = format === 'json' ? JSON.parse(responseText) : responseText;
+        const data = serializeFetchResponse(
+          parsedData,
+          response.status,
+          response.statusText,
+          headers,
+          fetchLatencyMs,
+        );
+        if (!response.ok) {
+          const errorResponse =
+            responseText === ''
+              ? serializeFetchResponse(
+                  `Empty Response: ${response.status}: ${response.statusText}`,
+                  response.status,
+                  response.statusText,
+                  headers,
+                  fetchLatencyMs,
+                )
+              : data;
+          // Don't cache error responses, but do return them to concurrent callers.
+          throw new NonCacheableResponseError(errorResponse);
         }
-        // Don't cache error responses
-        return;
+        if (!data) {
+          // Don't cache empty responses
+          return;
+        }
+        // Don't cache if the parsed data contains an error
+        if (format === 'json' && parsedData?.error) {
+          logger.debug(
+            `Not caching ${url} because it contains an 'error' key: ${parsedData.error}`,
+          );
+          throw new NonCacheableResponseError(data);
+        }
+        logger.debug(`Storing ${url} response in cache with latencyMs=${fetchLatencyMs}: ${data}`);
+        return data;
+      } catch (err) {
+        if (err instanceof NonCacheableResponseError) {
+          throw err;
+        }
+        throw new Error(
+          `Error parsing response from ${url}: ${
+            (err as Error).message
+          }. Received text: ${responseText}`,
+        );
       }
-      if (!data) {
-        // Don't cache empty responses
-        return;
-      }
-      // Don't cache if the parsed data contains an error
-      if (format === 'json' && parsedData?.error) {
-        logger.debug(`Not caching ${url} because it contains an 'error' key: ${parsedData.error}`);
-        errorResponse = data;
-        return;
-      }
-      logger.debug(`Storing ${url} response in cache with latencyMs=${fetchLatencyMs}: ${data}`);
-      return data;
-    } catch (err) {
-      throw new Error(
-        `Error parsing response from ${url}: ${
-          (err as Error).message
-        }. Received text: ${responseText}`,
-      );
+    });
+  } catch (err) {
+    if (err instanceof NonCacheableResponseError) {
+      cached = false;
+      cachedResponse = err.response;
+    } else {
+      throw err;
     }
-  });
+  }
 
   if (cached && cachedResponse) {
     logger.debug(`Returning cached response for ${url}: ${cachedResponse}`);
   }
 
-  const parsedResponse = JSON.parse((cachedResponse ?? errorResponse) as string);
+  if (!cachedResponse) {
+    throw new Error(`No response payload available for ${url}`);
+  }
+
+  const parsedResponse = JSON.parse(cachedResponse);
   return {
     cached,
     data: parsedResponse.data as T,
