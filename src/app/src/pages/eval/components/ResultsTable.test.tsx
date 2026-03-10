@@ -3683,8 +3683,24 @@ describe('ResultsTable - Auto-hide empty prompt columns', () => {
       filteredResultsCount: 1,
       filters: { values: {}, appliedCount: 1, options: { metric: [] } },
       filteredMetrics: [
-        { cost: 0, namedScores: {}, testPassCount: 1, testFailCount: 0, testErrorCount: 0, tokenUsage: { total: 0 }, totalLatencyMs: 0 },
-        { cost: 0, namedScores: {}, testPassCount: 0, testFailCount: 0, testErrorCount: 0, tokenUsage: { total: 0 }, totalLatencyMs: 0 },
+        {
+          cost: 0,
+          namedScores: {},
+          testPassCount: 1,
+          testFailCount: 0,
+          testErrorCount: 0,
+          tokenUsage: { total: 0 },
+          totalLatencyMs: 0,
+        },
+        {
+          cost: 0,
+          namedScores: {},
+          testPassCount: 0,
+          testFailCount: 0,
+          testErrorCount: 0,
+          tokenUsage: { total: 0 },
+          totalLatencyMs: 0,
+        },
       ],
     }));
 
@@ -3728,8 +3744,24 @@ describe('ResultsTable - Auto-hide empty prompt columns', () => {
       filteredResultsCount: 1,
       filters: { values: {}, appliedCount: 1, options: { metric: [] } },
       filteredMetrics: [
-        { cost: 0, namedScores: {}, testPassCount: 1, testFailCount: 0, testErrorCount: 0, tokenUsage: { total: 0 }, totalLatencyMs: 0 },
-        { cost: 0, namedScores: {}, testPassCount: 1, testFailCount: 0, testErrorCount: 0, tokenUsage: { total: 0 }, totalLatencyMs: 0 },
+        {
+          cost: 0,
+          namedScores: {},
+          testPassCount: 1,
+          testFailCount: 0,
+          testErrorCount: 0,
+          tokenUsage: { total: 0 },
+          totalLatencyMs: 0,
+        },
+        {
+          cost: 0,
+          namedScores: {},
+          testPassCount: 1,
+          testFailCount: 0,
+          testErrorCount: 0,
+          tokenUsage: { total: 0 },
+          totalLatencyMs: 0,
+        },
       ],
     }));
 
@@ -3753,9 +3785,33 @@ describe('ResultsTable - Auto-hide empty prompt columns', () => {
       filteredResultsCount: 1,
       filters: { values: {}, appliedCount: 1, options: { metric: [] } },
       filteredMetrics: [
-        { cost: 0, namedScores: {}, testPassCount: 5, testFailCount: 2, testErrorCount: 0, tokenUsage: { total: 0 }, totalLatencyMs: 0 },
-        { cost: 0, namedScores: {}, testPassCount: 0, testFailCount: 0, testErrorCount: 0, tokenUsage: { total: 0 }, totalLatencyMs: 0 },
-        { cost: 0, namedScores: {}, testPassCount: 0, testFailCount: 0, testErrorCount: 1, tokenUsage: { total: 0 }, totalLatencyMs: 0 },
+        {
+          cost: 0,
+          namedScores: {},
+          testPassCount: 5,
+          testFailCount: 2,
+          testErrorCount: 0,
+          tokenUsage: { total: 0 },
+          totalLatencyMs: 0,
+        },
+        {
+          cost: 0,
+          namedScores: {},
+          testPassCount: 0,
+          testFailCount: 0,
+          testErrorCount: 0,
+          tokenUsage: { total: 0 },
+          totalLatencyMs: 0,
+        },
+        {
+          cost: 0,
+          namedScores: {},
+          testPassCount: 0,
+          testFailCount: 0,
+          testErrorCount: 1,
+          tokenUsage: { total: 0 },
+          totalLatencyMs: 0,
+        },
       ],
     }));
 
