@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import RemoveIcon from '@mui/icons-material/Remove';
 import Box from '@mui/material/Box';
@@ -15,8 +16,17 @@ import { useCartContext } from './CartProvider';
 import { formatPrice, getAttributeName, getCheckoutUrl } from './useFourthwall';
 
 export function CartDrawer() {
-  const { cart, isCartOpen, closeCart, removeFromCart, updateQuantity, isLoading } =
+  const { cart, isCartOpen, closeCart, removeFromCart, updateQuantity, isLoading, couponCode } =
     useCartContext();
+  const [copiedInDrawer, setCopiedInDrawer] = useState(false);
+
+  const handleCopyInDrawer = useCallback(() => {
+    if (!couponCode) return;
+    navigator.clipboard.writeText(couponCode).then(() => {
+      setCopiedInDrawer(true);
+      setTimeout(() => setCopiedInDrawer(false), 2000);
+    });
+  }, [couponCode]);
 
   const handleCheckout = () => {
     if (cart?.id) {
@@ -298,6 +308,49 @@ export function CartDrawer() {
           </Typography>
 
           <Divider sx={{ mb: 2 }} />
+
+          {couponCode && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                mb: 2,
+                p: 1.5,
+                backgroundColor: 'var(--ifm-color-success-contrast-background)',
+                borderRadius: '8px',
+                border: '1px solid var(--ifm-color-success-dark)',
+              }}
+            >
+              <Typography
+                variant="caption"
+                sx={{ flex: 1, color: 'var(--ifm-color-success-darkest)' }}
+              >
+                Enter code{' '}
+                <Box component="span" sx={{ fontWeight: 700, fontFamily: 'monospace' }}>
+                  {couponCode}
+                </Box>{' '}
+                at checkout
+              </Typography>
+              <IconButton
+                size="small"
+                onClick={handleCopyInDrawer}
+                aria-label="Copy promo code"
+                title={copiedInDrawer ? 'Copied!' : 'Copy code'}
+                sx={{ color: 'var(--ifm-color-success-darkest)', p: 0.5 }}
+              >
+                <ContentCopyIcon sx={{ fontSize: '0.9rem' }} />
+              </IconButton>
+              {copiedInDrawer && (
+                <Typography
+                  variant="caption"
+                  sx={{ color: 'var(--ifm-color-success-darkest)', fontWeight: 500 }}
+                >
+                  Copied!
+                </Typography>
+              )}
+            </Box>
+          )}
 
           <Button
             variant="contained"
