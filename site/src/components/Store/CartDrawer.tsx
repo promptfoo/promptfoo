@@ -22,10 +22,17 @@ export function CartDrawer() {
 
   const handleCopyInDrawer = useCallback(() => {
     if (!couponCode) return;
-    navigator.clipboard.writeText(couponCode).then(() => {
-      setCopiedInDrawer(true);
-      setTimeout(() => setCopiedInDrawer(false), 2000);
-    });
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(couponCode).then(
+        () => {
+          setCopiedInDrawer(true);
+          setTimeout(() => setCopiedInDrawer(false), 2000);
+        },
+        () => {
+          // Clipboard write denied — ignore silently
+        },
+      );
+    }
   }, [couponCode]);
 
   const handleCheckout = () => {

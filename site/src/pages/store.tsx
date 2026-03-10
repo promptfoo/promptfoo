@@ -63,10 +63,17 @@ function PromoBanner() {
 
   const handleCopy = useCallback(() => {
     if (!couponCode) return;
-    navigator.clipboard.writeText(couponCode).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(couponCode).then(
+        () => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        },
+        () => {
+          // Clipboard write denied — ignore silently
+        },
+      );
+    }
   }, [couponCode]);
 
   if (!couponCode) return null;

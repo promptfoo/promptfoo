@@ -52,9 +52,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [selectedProduct, setSelectedProduct] = useState<FourthwallProduct | null>(null);
   const [couponCode, setCouponCode] = useState<string | null>(null);
 
-  // Read coupon from URL ?coupon= param or localStorage on mount
-  useEffect(() => {
-    // Check URL first
+  const ingestCouponFromUrl = useCallback(() => {
     const params = new URLSearchParams(window.location.search);
     const urlCoupon = params.get('coupon');
     if (urlCoupon) {
@@ -71,19 +69,45 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         ? `${window.location.pathname}?${params.toString()}`
         : window.location.pathname;
       window.history.replaceState({}, '', newUrl);
-      return;
+      return true;
     }
-
-    // Fall back to localStorage
-    try {
-      const stored = localStorage.getItem(COUPON_STORAGE_KEY);
-      if (stored) {
-        setCouponCode(stored);
-      }
-    } catch {
-      // Private browsing
-    }
+    return false;
   }, []);
+
+  // Read coupon from URL or localStorage on mount
+  useEffect(() => {
+    if (!ingestCouponFromUrl()) {
+      // Fall back to localStorage
+      try {
+        const stored = localStorage.getItem(COUPON_STORAGE_KEY);
+        if (stored) {
+          setCouponCode(stored);
+        }
+      } catch {
+        // Private browsing
+      }
+    }
+  }, [ingestCouponFromUrl]);
+
+  // Re-check URL on client-side navigations (Docusaurus SPA route changes)
+  useEffect(() => {
+    const handleRouteChange = () => ingestCouponFromUrl();
+
+    // Docusaurus uses pushState/replaceState for navigation
+    window.addEventListener('popstate', handleRouteChange);
+
+    // Patch pushState to detect Docusaurus client-side navigation
+    const originalPushState = window.history.pushState;
+    window.history.pushState = function (...args) {
+      originalPushState.apply(this, args);
+      handleRouteChange();
+    };
+
+    return () => {
+      window.removeEventListener('popstate', handleRouteChange);
+      window.history.pushState = originalPushState;
+    };
+  }, [ingestCouponFromUrl]);
 
   const clearCoupon = useCallback(() => {
     setCouponCode(null);
