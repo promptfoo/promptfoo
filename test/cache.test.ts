@@ -202,10 +202,10 @@ describe('fetchWithCache', () => {
   const url = 'https://api.example.com/data';
   const response = { data: 'test data' };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetModules();
     mockFetchWithRetries.mockReset();
-    clearCache();
+    await clearCache();
     enableCache();
   });
 
@@ -245,6 +245,33 @@ describe('fetchWithCache', () => {
         cached: true,
       });
       expect(cachedResult.deleteFromCache).toBeInstanceOf(Function);
+    });
+
+    it('should return cached false to all concurrent callers on a cache miss', async () => {
+      const mockResponse = mockFetchWithRetriesResponse(true, response);
+      mockFetchWithRetries.mockResolvedValue(mockResponse);
+
+      const [result1, result2] = await Promise.all([
+        fetchWithCache(url, {}, 1000),
+        fetchWithCache(url, {}, 1000),
+      ]);
+
+      expect(result1).toMatchObject({
+        cached: false,
+        data: response,
+        status: 200,
+      });
+      expect(result2).toMatchObject({
+        cached: false,
+        data: response,
+        status: 200,
+      });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+
+      const cachedResult = await fetchWithCache(url, {}, 1000);
+      expect(cachedResult.cached).toBe(true);
+      expect(cachedResult.data).toEqual(response);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
     });
 
     it('should not cache failed requests', async () => {
@@ -403,6 +430,26 @@ describe('fetchWithCache', () => {
     it('should handle network errors', async () => {
       mockFetchWithRetries.mockRejectedValueOnce(new Error('Network error'));
       await expect(fetchWithCache(url, {}, 100)).rejects.toThrow('Network error');
+    });
+
+    it('should allow retrying after concurrent network failures', async () => {
+      mockFetchWithRetries.mockRejectedValueOnce(new Error('Network error'));
+
+      const [result1, result2] = await Promise.allSettled([
+        fetchWithCache(url, {}, 100),
+        fetchWithCache(url, {}, 100),
+      ]);
+
+      expect(result1.status).toBe('rejected');
+      expect(result2.status).toBe('rejected');
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+
+      mockFetchWithRetries.mockResolvedValueOnce(mockFetchWithRetriesResponse(true, response));
+      const retryResult = await fetchWithCache(url, {}, 1000);
+
+      expect(retryResult.cached).toBe(false);
+      expect(retryResult.data).toEqual(response);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });
 
     it('should handle request options in cache key', async () => {
