@@ -1,4 +1,8 @@
-# RAG Failure Checklist Eval Starter
+# rag-failure-checklist (RAG Failure Checklist Eval Starter)
+
+```bash
+npx promptfoo@latest init --example rag-failure-checklist
+````
 
 This example shows how to model a small set of common RAG and agent failure patterns as reproducible promptfoo evaluations.
 
@@ -6,11 +10,11 @@ The goal is not to define a full benchmarking framework.
 
 Instead, this starter gives users a practical way to test a few high-signal failure modes that often show up in real pipelines:
 
-- retrieval mismatch
-- weak grounding
-- context drift across steps
-- overconfident unsupported answers
-- stale context carryover
+* retrieval mismatch
+* weak grounding
+* context drift across steps
+* overconfident unsupported answers
+* stale context carryover
 
 ## Why this example exists
 
@@ -18,11 +22,11 @@ In many RAG and agent workflows, failures do not look like obvious crashes.
 
 The system may return a fluent answer, but the answer can still be wrong because:
 
-- retrieved context does not match the question
-- the answer is not grounded in the provided evidence
-- later steps drift away from the original task
-- the model sounds confident without support
-- old context leaks into the current turn
+* retrieved context does not match the question
+* the answer is not grounded in the provided evidence
+* later steps drift away from the original task
+* the model sounds confident without support
+* old context leaks into the current turn
 
 This example provides a small eval starter for those patterns.
 
@@ -30,26 +34,26 @@ This example provides a small eval starter for those patterns.
 
 This folder contains:
 
-- `promptfooconfig.yaml` with a small set of starter test cases
-- this README with usage notes and expected interpretation
+* `promptfooconfig.yaml` with a small set of starter test cases
+* this README with usage notes and expected interpretation
 
 ## What this example is for
 
 Use this example if you want to:
 
-- create a lightweight RAG reliability smoke test
-- evaluate common failure patterns before shipping changes
-- adapt a few starter scenarios to your own prompts, tools, or retrieval stack
-- turn vague quality complaints into reproducible eval cases
+* create a lightweight RAG reliability smoke test
+* evaluate common failure patterns before shipping changes
+* adapt a few starter scenarios to your own prompts, tools, or retrieval stack
+* turn vague quality complaints into reproducible eval cases
 
 ## What this example is not
 
 This example is not:
 
-- a complete benchmark for every RAG failure mode
-- tied to any specific vector database or retrieval framework
-- a replacement for end-to-end system tracing
-- a claim that one prompt or one assertion type is sufficient for production evaluation
+* a complete benchmark for every RAG failure mode
+* tied to any specific vector database or retrieval framework
+* a replacement for end-to-end system tracing
+* a claim that one prompt or one assertion type is sufficient for production evaluation
 
 It is intentionally small so that the integration path is easy to review and extend.
 
@@ -61,9 +65,9 @@ The question is reasonable, but the retrieved context does not actually support 
 
 Typical symptom:
 
-- the model answers from the wrong passage
-- the answer follows nearby but irrelevant content
-- the system appears to have "retrieved something" but not the right thing
+* the model answers from the wrong passage
+* the answer follows nearby but irrelevant content
+* the system appears to have "retrieved something" but not the right thing
 
 ### 2. Weak grounding
 
@@ -71,9 +75,9 @@ The answer sounds plausible, but the retrieved context does not justify the clai
 
 Typical symptom:
 
-- correct tone, weak evidence
-- unsupported specifics
-- answer contains details not present in the context
+* correct tone, weak evidence
+* unsupported specifics
+* answer contains details not present in the context
 
 ### 3. Context drift across steps
 
@@ -81,9 +85,9 @@ A later step in the workflow slowly moves away from the original task or instruc
 
 Typical symptom:
 
-- the first response is acceptable
-- follow-up behavior becomes less aligned
-- summaries or intermediate rewrites introduce drift
+* the first response is acceptable
+* follow-up behavior becomes less aligned
+* summaries or intermediate rewrites introduce drift
 
 ### 4. Overconfident unsupported answers
 
@@ -91,9 +95,9 @@ The model responds with high confidence even when the context is incomplete or a
 
 Typical symptom:
 
-- no hedging where uncertainty should exist
-- direct answer when the evidence is missing
-- strong claims without support
+* no hedging where uncertainty should exist
+* direct answer when the evidence is missing
+* strong claims without support
 
 ### 5. Stale context carryover
 
@@ -101,9 +105,9 @@ Context from a previous turn or task leaks into the current response.
 
 Typical symptom:
 
-- old facts appear in a new answer
-- current question is answered using outdated assumptions
-- prior state contaminates an otherwise independent task
+* old facts appear in a new answer
+* current question is answered using outdated assumptions
+* prior state contaminates an otherwise independent task
 
 ## How to run
 
@@ -112,7 +116,7 @@ From the repository root:
 ```bash
 npm install
 npm run local -- eval --config examples/rag-failure-checklist/promptfooconfig.yaml
-````
+```
 
 ## What to look for in results
 
