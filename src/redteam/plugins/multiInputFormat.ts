@@ -193,6 +193,7 @@ export function parseGeneratedInputs(
   // Extract JSON from <Prompt> tags
   const promptStrings = extractAllPromptsFromTags(generatedOutput);
 
+  let droppedCount = 0;
   for (const jsonStr of promptStrings) {
     try {
       const parsed = JSON.parse(jsonStr);
@@ -202,10 +203,23 @@ export function parseGeneratedInputs(
       if (hasAllKeys) {
         // Return the JSON string as the prompt value
         results.push({ __prompt: jsonStr });
+      } else {
+        droppedCount++;
+        const missingKeys = inputKeys.filter((key) => !(key in parsed));
+        logger.debug(
+          `Dropped generated test case missing required keys [${missingKeys.join(', ')}]: ${jsonStr}`,
+        );
       }
     } catch {
+      droppedCount++;
       logger.debug(`Failed to parse JSON from <Prompt> tag: ${jsonStr}`);
     }
+  }
+  if (droppedCount > 0) {
+    logger.warn(
+      `Dropped ${droppedCount} generated test case(s) due to invalid format or missing keys. ` +
+        `Expected keys: [${inputKeys.join(', ')}]. This may result in fewer tests than requested.`,
+    );
   }
 
   // Fallback: allow bare JSON object/array when tags are missing

@@ -222,6 +222,30 @@ describe('RedteamPluginBase', () => {
     expect(provider.callApi).toHaveBeenCalledTimes(4);
   });
 
+  it('should use a larger batch size on retries to improve dedup resilience', async () => {
+    // First batch returns 8/10 prompts (simulating parsing loss via irrelevant lines)
+    const firstBatch = Array(8)
+      .fill(0)
+      .map((_, i) => `Prompt: test prompt ${i}`)
+      .join('\n');
+    // Retry batch should request min(5, n)=5 items, not just the remaining 2
+    const retryBatch = Array(5)
+      .fill(0)
+      .map((_, i) => `Prompt: retry prompt ${i}`)
+      .join('\n');
+
+    vi.spyOn(provider, 'callApi')
+      .mockResolvedValueOnce({ output: firstBatch })
+      .mockResolvedValueOnce({ output: retryBatch });
+
+    const result = await plugin.generateTests(10);
+
+    expect(result).toHaveLength(10);
+    expect(provider.callApi).toHaveBeenCalledTimes(2);
+    // Verify retry batch requested more than just the shortfall (2)
+    expect(provider.callApi).toHaveBeenNthCalledWith(2, expect.stringContaining('for 5 prompts'));
+  });
+
   it('should sample prompts when more are generated than requested', async () => {
     vi.spyOn(provider, 'callApi').mockResolvedValue({
       output: Array(10)
@@ -883,7 +907,10 @@ describe('parseGeneratedInputs', () => {
     expect(result).toEqual([]);
   });
 
-  it('should skip entries with missing required keys', () => {
+  it('should skip entries with missing required keys and log a warning', async () => {
+    const logger = await import('../../../src/logger');
+    const warnSpy = vi.spyOn(logger.default, 'warn');
+
     const inputs = { username: 'The user name', message: 'The message content' };
     const generatedOutput = `
       <Prompt>{"username": "admin", "message": "Complete"}</Prompt>
@@ -893,6 +920,10 @@ describe('parseGeneratedInputs', () => {
     const result = parseGeneratedInputs(generatedOutput, inputs);
     expect(result).toHaveLength(1);
     expect(result[0].__prompt).toBe('{"username": "admin", "message": "Complete"}');
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Dropped 2 generated test case(s)'),
+    );
+    warnSpy.mockRestore();
   });
 
   it('should skip entries with invalid JSON', () => {
