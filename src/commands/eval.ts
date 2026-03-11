@@ -765,6 +765,7 @@ export async function doEval(
       const allResults = await evalRecord.getResults();
       passPowerResult = calculatePassPowerOfNFromResults(allResults, passPower);
       evalRecord.passPowerOfN = passPowerResult;
+      await evalRecord.save();
     }
 
     // Generate and display summary immediately (before share completes)
