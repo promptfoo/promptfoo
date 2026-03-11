@@ -51,7 +51,7 @@ The architectural issue is straightforward. If prompts, routing rules, and retri
   </div>
 </div>
 
-CodeWall also says the agent found cross-user access after the SQLi step. OWASP's current term for that pattern is **BOLA**, broken object-level authorization: the application accepts an object identifier and returns a record without verifying that the caller is allowed to see it. Older writeups often use the term IDOR for the same class of failure.
+CodeWall also says the agent found cross-user access after the SQLi step. OWASP's current term for that pattern is **BOLA**, broken object-level authorization: the application accepts an object identifier and returns a record without verifying that the caller is allowed to see it. Older writeups often use the term IDOR (insecure direct object reference) for the same class of failure.
 
 Because CodeWall did not publish the exact payloads, the public cannot reconstruct each query or iteration step by step. It can still reconstruct the class of bug: public routes, backend injection, and missing object-level authorization.
 
