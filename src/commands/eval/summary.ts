@@ -340,17 +340,17 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
       ? `${chalk.red('✗')} ${chalk.red.bold(errors.toLocaleString())} ${errorLabel}`
       : `${chalk.gray.bold(errors.toLocaleString())} ${errorLabel}`;
 
+  const metricsPart =
+    passPowerOfN != null && !Number.isNaN(passRate)
+      ? ` (${passRateDisplay}, ${chalk.white.bold(`pass^${passPowerOfN.n}: ${passPowerOfN.overallScore.toFixed(2)}%`)})`
+      : !Number.isNaN(passRate)
+        ? ` (${passRateDisplay})`
+        : '';
   const resultsLine = `${passedPart}, ${failedPart}, ${errorsPart}`;
   if (Number.isNaN(passRate)) {
     lines.push(`${chalk.bold('Results:')} ${resultsLine}`);
   } else {
-    lines.push(`${chalk.bold('Results:')} ${resultsLine} (${passRateDisplay})`);
-  }
-
-  if (passPowerOfN) {
-    lines.push(
-      `${chalk.bold(`pass^${passPowerOfN.n}:`)} ${chalk.white.bold(`${passPowerOfN.overallScore.toFixed(2)}%`)}`,
-    );
+    lines.push(`${chalk.bold('Results:')} ${resultsLine}${metricsPart}`);
   }
 
   const durationDisplay = formatDuration(duration);

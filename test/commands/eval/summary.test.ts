@@ -559,7 +559,8 @@ describe('generateEvalSummary', () => {
       const lines = generateEvalSummary(params);
       const plainOutput = stripAnsi(lines.join('\n'));
 
-      expect(plainOutput).toContain('pass^4: 31.64%');
+      expect(plainOutput).toContain('Results:');
+      expect(plainOutput).toContain('(80.00%, pass^4: 31.64%)');
     });
   });
 
