@@ -1,5 +1,6 @@
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
+import { isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
@@ -226,7 +227,8 @@ export async function runMetaAgentRedteam({
 
     // Don't track agent provider calls globally (internal meta-coordination, not user-facing probes)
     // Only accumulate tokens for this test's total
-    accumulateResponseTokenUsage(totalTokenUsage, agentResp);
+    // Agent coordination calls are internal and should not count as target probes.
+    accumulateResponseTokenUsage(totalTokenUsage, agentResp, { countAsRequest: false });
 
     if (agentProvider.delay) {
       logger.debug(`[IterativeMeta] Sleeping for ${agentProvider.delay}ms`);
@@ -637,18 +639,21 @@ class RedteamIterativeMetaProvider implements ApiProvider {
     this.injectVar = config.injectVar;
     this.inputs = config.inputs as Record<string, string> | undefined;
 
-    this.numIterations =
+    const configuredIterations =
       Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 10);
+    this.numIterations = isLoggedIntoCloud()
+      ? configuredIterations
+      : Math.min(configuredIterations, 10);
 
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );
     this.perTurnLayers = (config._perTurnLayers as LayerConfig[]) ?? [];
 
-    // Meta-agent strategy requires cloud
+    // Meta-agent strategy requires remote generation
     if (!shouldGenerateRemote()) {
       throw new Error(
-        'jailbreak:meta strategy requires cloud access. Set PROMPTFOO_REMOTE_GENERATION_URL or log into Promptfoo Cloud.',
+        'jailbreak:meta strategy requires remote generation, which is currently disabled (commonly because OPENAI_API_KEY is set). To fix, unset OPENAI_API_KEY, set PROMPTFOO_REMOTE_GENERATION_URL, or log into Promptfoo Cloud.',
       );
     }
 

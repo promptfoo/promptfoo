@@ -3,7 +3,7 @@ import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
@@ -175,6 +175,10 @@ const renderWithRouter = (component: React.ReactElement) => {
   return renderWithProviders(<MemoryRouter>{component}</MemoryRouter>);
 };
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
@@ -315,11 +319,12 @@ describe('ResultsView Share Button', () => {
 describe('ResultsView Copy Eval', () => {
   const mockOnRecentEvalSelected = vi.fn();
   const mockCallApi = vi.mocked(callApi);
-  const mockWindowOpen = vi.spyOn(window, 'open');
+  let mockWindowOpen: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
+    mockWindowOpen = vi.spyOn(window, 'open');
     mockWindowOpen.mockImplementation(() => null);
 
     mockCallApi.mockResolvedValue({
@@ -452,6 +457,7 @@ describe('ResultsView Copy Menu Item', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(900);
 
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
@@ -892,9 +898,11 @@ describe('ResultsView', () => {
     );
 
     expect(screen.queryByTestId('results-charts')).toBeNull();
+    expect(screen.getByText('Show Charts')).toBeInTheDocument();
+    expect(screen.getByText('Charts are unavailable for this evaluation')).not.toBeVisible();
   });
 
-  it('should not render charts when there are multiple prompts and valid scores, but all scores are the same, even after clicking show charts', async () => {
+  it('shows an explanatory message when scores are all the same binary edge value', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -960,9 +968,19 @@ describe('ResultsView', () => {
       />,
     );
 
-    expect(screen.queryByText('Show Charts')).toBeNull();
-
+    const showChartsButton = screen.getByText('Show Charts');
+    expect(showChartsButton).toBeInTheDocument();
     expect(screen.queryByTestId('results-charts')).toBeNull();
+    expect(screen.getByText('Charts are unavailable for this evaluation')).not.toBeVisible();
+
+    await userEvent.click(showChartsButton);
+
+    expect(screen.getByText('Charts are unavailable for this evaluation')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'All scores are the same binary edge value (0 or 1), so there is no meaningful distribution to visualize.',
+      ),
+    ).toBeInTheDocument();
   });
 });
 describe('ResultsView Chart Rendering', () => {
@@ -1013,7 +1031,7 @@ describe('ResultsView Chart Rendering', () => {
       setFilterMode: vi.fn(),
     });
   });
-  it('should not render ResultsCharts if there is only one prompt', async () => {
+  it('shows an explanatory message if there is only one prompt', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -1058,13 +1076,20 @@ describe('ResultsView Chart Rendering', () => {
     );
 
     const showChartsButton = screen.queryByText('Show Charts');
-    expect(showChartsButton).toBeNull();
+    if (showChartsButton) {
+      await userEvent.click(showChartsButton);
+    } else {
+      expect(screen.getByText('Hide Charts')).toBeInTheDocument();
+    }
 
-    const resultsCharts = screen.queryByTestId('results-charts');
-    expect(resultsCharts).toBeNull();
+    expect(screen.queryByTestId('results-charts')).toBeNull();
+    expect(screen.getByText('Charts are unavailable for this evaluation')).toBeInTheDocument();
+    expect(
+      screen.getByText('Charts require at least two prompts to compare side by side.'),
+    ).toBeInTheDocument();
   });
 
-  it('should not render ResultsCharts if all scores are binary edge values (all 1s)', async () => {
+  it('shows an explanatory message if all scores are binary edge values (all 1s)', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -1114,13 +1139,22 @@ describe('ResultsView Chart Rendering', () => {
     });
 
     const showChartsButton = screen.queryByText('Show Charts');
-    expect(showChartsButton).toBeNull();
+    if (showChartsButton) {
+      await userEvent.click(showChartsButton);
+    } else {
+      expect(screen.getByText('Hide Charts')).toBeInTheDocument();
+    }
 
-    const resultsCharts = screen.queryByTestId('results-charts');
-    expect(resultsCharts).toBeNull();
+    expect(screen.queryByTestId('results-charts')).toBeNull();
+    expect(screen.getByText('Charts are unavailable for this evaluation')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'All scores are the same binary edge value (0 or 1), so there is no meaningful distribution to visualize.',
+      ),
+    ).toBeInTheDocument();
   });
 
-  it('should not render ResultsCharts if all scores are binary edge values (all 0s)', async () => {
+  it('shows an explanatory message if all scores are binary edge values (all 0s)', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -1170,10 +1204,19 @@ describe('ResultsView Chart Rendering', () => {
     });
 
     const showChartsButton = screen.queryByText('Show Charts');
-    expect(showChartsButton).toBeNull();
+    if (showChartsButton) {
+      await userEvent.click(showChartsButton);
+    } else {
+      expect(screen.getByText('Hide Charts')).toBeInTheDocument();
+    }
 
-    const resultsCharts = screen.queryByTestId('results-charts');
-    expect(resultsCharts).toBeNull();
+    expect(screen.queryByTestId('results-charts')).toBeNull();
+    expect(screen.getByText('Charts are unavailable for this evaluation')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'All scores are the same binary edge value (0 or 1), so there is no meaningful distribution to visualize.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('should render ResultsCharts if all scores are uniform but not binary edge values', async () => {
@@ -1232,7 +1275,216 @@ describe('ResultsView Chart Rendering', () => {
     expect(showChartsButton).toBeInTheDocument();
   });
 
-  it('should not render ResultsCharts if there are no valid scores', async () => {
+  it('recomputes the default chart visibility when navigating between evals', async () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
+    let tableStoreValue = {
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Initial Prompt',
+              provider: 'openai:gpt-4',
+              raw: 'Initial prompt',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [{ outputs: [{ score: 0.8 }] }],
+      },
+      config: {
+        description: 'Initial Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'eval-ineligible',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => tableStoreValue as any);
+
+    const { rerender } = renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="eval-ineligible"
+      />,
+    );
+
+    expect(screen.getByText('Show Charts')).toBeInTheDocument();
+    expect(screen.queryByTestId('results-charts')).toBeNull();
+
+    tableStoreValue = {
+      ...tableStoreValue,
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Prompt 1',
+            },
+            {
+              label: 'Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [
+          { outputs: [{ score: 0.4 }, { score: 0.8 }] },
+          { outputs: [{ score: 0.5 }, { score: 0.9 }] },
+        ],
+      },
+      config: {
+        description: 'Eligible Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      evalId: 'eval-eligible',
+    };
+
+    rerender(
+      <MemoryRouter>
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="eval-eligible"
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Hide Charts')).toBeInTheDocument();
+    expect(screen.getByTestId('results-charts')).toBeInTheDocument();
+  });
+
+  it('hides the charts panel when navigating from an eligible eval to an ineligible eval', () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
+    let tableStoreValue = {
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Prompt 1',
+            },
+            {
+              label: 'Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [
+          { outputs: [{ score: 0.4 }, { score: 0.8 }] },
+          { outputs: [{ score: 0.5 }, { score: 0.9 }] },
+        ],
+      },
+      config: {
+        description: 'Eligible Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'eval-eligible',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => tableStoreValue as any);
+
+    const { rerender } = renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="eval-eligible"
+      />,
+    );
+
+    expect(screen.getByText('Hide Charts')).toBeInTheDocument();
+    expect(screen.getByTestId('results-charts')).toBeInTheDocument();
+
+    tableStoreValue = {
+      ...tableStoreValue,
+      evalId: 'eval-ineligible',
+    };
+
+    rerender(
+      <MemoryRouter>
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="eval-ineligible"
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Hide Charts')).toBeInTheDocument();
+
+    tableStoreValue = {
+      ...tableStoreValue,
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Only Prompt',
+              provider: 'openai:gpt-4',
+              raw: 'Only Prompt',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [{ outputs: [{ score: 0.8 }] }],
+      },
+      config: {
+        description: 'Ineligible Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+    };
+
+    rerender(
+      <MemoryRouter>
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="eval-ineligible"
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Show Charts')).toBeInTheDocument();
+    expect(screen.queryByTestId('results-charts')).toBeNull();
+    expect(screen.getByText('Charts are unavailable for this evaluation')).not.toBeVisible();
+  });
+
+  it('shows an explanatory message if there are no valid scores', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -1282,10 +1534,80 @@ describe('ResultsView Chart Rendering', () => {
     );
 
     const showChartsButton = screen.queryByText('Show Charts');
-    expect(showChartsButton).toBeNull();
+    if (showChartsButton) {
+      await userEvent.click(showChartsButton);
+    } else {
+      expect(screen.getByText('Hide Charts')).toBeInTheDocument();
+    }
 
-    const resultsCharts = screen.queryByTestId('results-charts');
-    expect(resultsCharts).toBeNull();
+    expect(screen.queryByTestId('results-charts')).toBeNull();
+    expect(screen.getByText('Charts are unavailable for this evaluation')).toBeInTheDocument();
+    expect(
+      screen.getByText('Charts require at least one valid numeric score.'),
+    ).toBeInTheDocument();
+  });
+
+  it('hides chart controls entirely for redteam evals', () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [
+          { outputs: [{ score: 0.4 }, { score: 0.8 }] },
+          { outputs: [{ score: 0.5 }, { score: 0.9 }] },
+        ],
+      },
+      config: {
+        description: 'Redteam Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+        redteam: {
+          plugins: [],
+        },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    expect(screen.queryByText('Show Charts')).toBeNull();
+    expect(screen.queryByText('Hide Charts')).toBeNull();
+    expect(screen.queryByTestId('results-charts')).toBeNull();
+    expect(screen.queryByText('Charts are unavailable for this evaluation')).toBeNull();
   });
 });
 
@@ -1970,20 +2292,15 @@ describe('ResultsView', () => {
 
 describe('ResultsView Duration Display', () => {
   const mockOnRecentEvalSelected = vi.fn();
-  const mockRecentEvals: ResultLightweightWithLabel[] = [
-    {
-      evalId: 'eval-1',
-      datasetId: null,
-      label: 'Evaluation 1',
-      createdAt: new Date('2023-01-01T00:00:00Z').getTime(),
-      description: 'Test evaluation 1',
-      numTests: 5,
-    },
-  ];
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
 
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
@@ -2030,8 +2347,9 @@ describe('ResultsView Duration Display', () => {
     );
 
     // Should display formatted duration (45000ms = 45.0s)
+    // Duration appears in both the interactive chips and the print-only property grid
     await waitFor(() => {
-      expect(screen.getByText('45.0s')).toBeInTheDocument();
+      expect(screen.getAllByText('45.0s').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2099,9 +2417,9 @@ describe('ResultsView Duration Display', () => {
       />,
     );
 
-    // Should display 500ms
+    // Should display 500ms (appears in both chip and print-only grid)
     await waitFor(() => {
-      expect(screen.getByText('500ms')).toBeInTheDocument();
+      expect(screen.getAllByText('500ms').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2137,7 +2455,7 @@ describe('ResultsView Duration Display', () => {
 
     // Should display 2m 5s (125000ms)
     await waitFor(() => {
-      expect(screen.getByText('2m 5s')).toBeInTheDocument();
+      expect(screen.getAllByText('2m 5s').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2174,7 +2492,7 @@ describe('ResultsView Duration Display', () => {
 
     // Should display 2m (not "1m 60s")
     await waitFor(() => {
-      expect(screen.getByText('2m')).toBeInTheDocument();
+      expect(screen.getAllByText('2m').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2210,7 +2528,7 @@ describe('ResultsView Duration Display', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('1h 1m')).toBeInTheDocument();
+      expect(screen.getAllByText('1h 1m').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2245,11 +2563,15 @@ describe('ResultsView Duration Display', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('0ms')).toBeInTheDocument();
+      expect(screen.getAllByText('0ms').length).toBeGreaterThanOrEqual(1);
     });
   });
 
-  it('should not display duration chip when durationMs is NaN', async () => {
+  it.each([
+    { value: NaN, label: 'NaN' },
+    { value: Infinity, label: 'Infinity' },
+    { value: -5000, label: 'negative' },
+  ])('should not display duration chip when durationMs is $label', async ({ value }) => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2268,7 +2590,7 @@ describe('ResultsView Duration Display', () => {
       highlightedResultsCount: 0,
       filters: { appliedCount: 0, values: {} },
       removeFilter: vi.fn(),
-      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: NaN },
+      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: value },
     });
 
     renderWithRouter(
@@ -2279,75 +2601,6 @@ describe('ResultsView Duration Display', () => {
       />,
     );
 
-    // Duration chip should not be present when durationMs is NaN
-    expect(screen.queryByText(/^\d+(\.\d+)?(ms|s|m|h)/)).toBeNull();
-  });
-
-  it('should not display duration chip when durationMs is Infinity', async () => {
-    vi.mocked(useTableStore).mockReturnValue({
-      author: 'Test Author',
-      table: {
-        head: {
-          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
-          vars: ['input'],
-        },
-        body: [],
-      },
-      config: { description: 'Test Evaluation' },
-      setConfig: vi.fn(),
-      evalId: 'test-eval-id',
-      setAuthor: vi.fn(),
-      filteredResultsCount: 10,
-      totalResultsCount: 15,
-      highlightedResultsCount: 0,
-      filters: { appliedCount: 0, values: {} },
-      removeFilter: vi.fn(),
-      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: Infinity },
-    });
-
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
-
-    // Duration chip should not be present when durationMs is Infinity
-    expect(screen.queryByText(/^\d+(\.\d+)?(ms|s|m|h)/)).toBeNull();
-  });
-
-  it('should not display duration chip when durationMs is negative', async () => {
-    vi.mocked(useTableStore).mockReturnValue({
-      author: 'Test Author',
-      table: {
-        head: {
-          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
-          vars: ['input'],
-        },
-        body: [],
-      },
-      config: { description: 'Test Evaluation' },
-      setConfig: vi.fn(),
-      evalId: 'test-eval-id',
-      setAuthor: vi.fn(),
-      filteredResultsCount: 10,
-      totalResultsCount: 15,
-      highlightedResultsCount: 0,
-      filters: { appliedCount: 0, values: {} },
-      removeFilter: vi.fn(),
-      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: -5000 },
-    });
-
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
-
-    // Duration chip should not be present when durationMs is negative
     expect(screen.queryByText(/^\d+(\.\d+)?(ms|s|m|h)/)).toBeNull();
   });
 
@@ -2383,7 +2636,51 @@ describe('ResultsView Duration Display', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('2h')).toBeInTheDocument();
+      expect(screen.getAllByText('2h').length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('should display duration badge with total time when redteam duration fields are present', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      stats: {
+        successes: 10,
+        failures: 5,
+        errors: 0,
+        tokenUsage: {} as any,
+        durationMs: 600000,
+        generationDurationMs: 360000,
+        evaluationDurationMs: 240000,
+      },
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // Badge shows total duration (600000ms = 10m)
+    await waitFor(() => {
+      expect(screen.getAllByText('10m').length).toBeGreaterThanOrEqual(1);
     });
   });
 });

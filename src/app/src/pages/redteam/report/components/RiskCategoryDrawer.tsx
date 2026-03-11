@@ -1,24 +1,24 @@
-import React, { useCallback, useState } from 'react';
+import React from 'react';
 
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@app/components/ui/collapsible';
 import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import { getActualPrompt } from '@app/utils/providerResponse';
-import {
-  categoryAliases,
-  displayNameOverrides,
-  type Strategy,
-  strategyDescriptions,
-} from '@promptfoo/redteam/constants';
-import { ChevronDown, ChevronUp, Lightbulb } from 'lucide-react';
+import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
+import { ChevronDown, Lightbulb } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import ChatMessages, { type Message } from '../../../eval/components/ChatMessages';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
-import { getStrategyIdFromTest, type TestWithMetadata } from './shared';
+import { getPassRateStyles, getStrategyIdFromTest, type TestWithMetadata } from './shared';
 import type { GradingResult } from '@promptfoo/types';
 
 interface RiskCategoryDrawerProps {
@@ -87,42 +87,50 @@ function getOutputDisplay(output: string | object): string {
   return JSON.stringify(output);
 }
 
-const MAX_TEXT_LENGTH = 300;
-
-interface TruncatableTextProps {
-  text: string;
-  isExpanded: boolean;
-  onToggle: () => void;
+interface RedteamHistoryEntry {
+  prompt?: string;
+  promptAudio?: { data?: string; format?: string };
+  promptImage?: { data?: string; format?: string };
+  output?: string;
+  outputAudio?: { data?: string; format?: string };
+  outputImage?: { data?: string; format?: string };
 }
 
-function TruncatableText({ text, isExpanded, onToggle }: TruncatableTextProps) {
-  const needsTruncation = text.length > MAX_TEXT_LENGTH;
-  const displayText = needsTruncation && !isExpanded ? text.slice(0, MAX_TEXT_LENGTH) : text;
+function buildChatMessages(test: TestWithMetadata): Message[] {
+  const metadata = test.result?.metadata;
+  const redteamHistoryRaw = (metadata?.redteamHistory || metadata?.redteamTreeHistory || []) as
+    | RedteamHistoryEntry[]
+    | unknown[];
 
-  return (
-    <>
-      <span className="whitespace-pre-wrap break-words">{displayText}</span>
-      {needsTruncation && (
-        <button
-          className="ml-1 inline-flex items-center gap-0.5 text-xs font-medium text-primary hover:text-primary/80"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle();
-          }}
-        >
-          {isExpanded ? (
-            <>
-              Show less <ChevronUp className="h-3 w-3" />
-            </>
-          ) : (
-            <>
-              ... Show more <ChevronDown className="h-3 w-3" />
-            </>
-          )}
-        </button>
-      )}
-    </>
-  );
+  const historyMessages = (Array.isArray(redteamHistoryRaw) ? redteamHistoryRaw : [])
+    .filter((entry): entry is RedteamHistoryEntry => {
+      const e = entry as RedteamHistoryEntry;
+      return Boolean(e?.prompt && e?.output);
+    })
+    .flatMap((entry: RedteamHistoryEntry): Message[] => [
+      {
+        role: 'user' as const,
+        content: entry.prompt!,
+        audio: entry.promptAudio,
+        image: entry.promptImage,
+      },
+      {
+        role: 'assistant' as const,
+        content: entry.output!,
+        audio: entry.outputAudio,
+        image: entry.outputImage,
+      },
+    ]);
+
+  if (historyMessages.length > 0) {
+    return historyMessages;
+  }
+
+  // Fallback to last turn
+  return [
+    { role: 'user' as const, content: getPromptDisplayString(test.prompt) },
+    { role: 'assistant' as const, content: getOutputDisplay(test.output) },
+  ];
 }
 
 const RiskCategoryDrawer = ({
@@ -151,33 +159,6 @@ const RiskCategoryDrawer = ({
   const [activeTab, setActiveTab] = React.useState(0);
   const [detailsDialogOpen, setDetailsDialogOpen] = React.useState(false);
   const [selectedTest, setSelectedTest] = React.useState<TestWithMetadata | null>(null);
-  // Track which items have expanded prompt/response
-  const [expandedPrompts, setExpandedPrompts] = useState<Set<string>>(new Set());
-  const [expandedResponses, setExpandedResponses] = useState<Set<string>>(new Set());
-
-  const togglePromptExpanded = useCallback((key: string) => {
-    setExpandedPrompts((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  }, []);
-
-  const toggleResponseExpanded = useCallback((key: string) => {
-    setExpandedResponses((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  }, []);
 
   const sortedFailures = React.useMemo(() => {
     return [...failures].sort(sortByPriorityStrategies);
@@ -213,100 +194,84 @@ const RiskCategoryDrawer = ({
     const hasSuggestions = test.gradingResult?.componentResults?.some(
       (result) => (result.suggestions?.length || 0) > 0,
     );
-    const itemKey = `${isFailed ? 'fail' : 'pass'}-${index}`;
-    const promptText = getPromptDisplayString(test.prompt);
-    const responseText = getOutputDisplay(test.output);
+    const chatMessages = buildChatMessages(test);
+    const maxTurns = Math.ceil(chatMessages.length / 2);
+    const strategyLabel = strategyId
+      ? displayNameOverrides[strategyId as keyof typeof displayNameOverrides] || strategyId
+      : undefined;
 
     return (
-      <div
-        key={index}
-        className="failure-item group relative cursor-pointer rounded-lg border border-border bg-card p-3 transition-colors hover:border-primary/30 hover:shadow-sm"
-        onClick={() => {
-          setSelectedTest(test);
-          setDetailsDialogOpen(true);
-        }}
-      >
-        <div className="flex w-full items-start">
-          <div className="min-w-0 flex-1 space-y-2">
-            {/* Prompt/Input section */}
-            <div className="rounded-md bg-blue-50/50 p-2.5 dark:bg-blue-950/20">
-              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                Prompt
-              </div>
-              <p className="text-sm">
-                <TruncatableText
-                  text={promptText}
-                  isExpanded={expandedPrompts.has(itemKey)}
-                  onToggle={() => togglePromptExpanded(itemKey)}
-                />
-              </p>
-            </div>
-
-            {/* Response/Output section - red for failed, green for passed */}
-            <div
-              className={cn(
-                'rounded-md p-2.5',
-                isFailed
-                  ? 'bg-red-50/50 dark:bg-red-950/20'
-                  : 'bg-emerald-50/50 dark:bg-emerald-950/20',
-              )}
-            >
-              <div
-                className={cn(
-                  'mb-1.5 text-[10px] font-semibold uppercase tracking-wider',
-                  isFailed
-                    ? 'text-red-600 dark:text-red-400'
-                    : 'text-emerald-600 dark:text-emerald-400',
-                )}
-              >
-                Response
-              </div>
-              <p
-                className={cn(
-                  'text-sm',
-                  isFailed
-                    ? 'text-red-700 dark:text-red-300'
-                    : 'text-emerald-700 dark:text-emerald-300',
-                )}
-              >
-                <TruncatableText
-                  text={responseText}
-                  isExpanded={expandedResponses.has(itemKey)}
-                  onToggle={() => toggleResponseExpanded(itemKey)}
-                />
-              </p>
-            </div>
-
-            {test.gradingResult && strategyId && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-block">
-                    <Badge variant="secondary">
-                      {displayNameOverrides[strategyId as keyof typeof displayNameOverrides] ||
-                        strategyId}
-                    </Badge>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {strategyDescriptions[strategyId as Strategy] || ''}
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-          {hasSuggestions && (
+      <Collapsible key={index} defaultOpen={index === 0}>
+        <div className="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-primary/30 hover:shadow-sm">
+          {/* Header */}
+          <CollapsibleTrigger asChild>
             <button
-              className="ml-2 rounded-md p-1.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
-              onClick={(e) => {
-                e.stopPropagation();
-                setCurrentGradingResult(test.gradingResult);
-                setSuggestionsDialogOpen(true);
-              }}
+              type="button"
+              className="flex w-full flex-col gap-1 p-3 text-left cursor-pointer hover:bg-muted/50"
             >
-              <Lightbulb className="size-4 text-primary" />
+              <div className="flex w-full items-center gap-3">
+                <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform [[data-state=closed]_&]:-rotate-90" />
+                <span className="text-sm font-medium text-muted-foreground">#{index + 1}</span>
+                {strategyLabel && (
+                  <Badge variant="secondary" className="text-xs">
+                    {strategyLabel}
+                  </Badge>
+                )}
+                {maxTurns > 1 && (
+                  <span className="text-xs text-muted-foreground">{maxTurns} turns</span>
+                )}
+                <div className="flex-1" />
+                <div className="flex items-center gap-2 shrink-0">
+                  {hasSuggestions && (
+                    <button
+                      className="rounded-md p-1 hover:bg-muted"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentGradingResult(test.gradingResult);
+                        setSuggestionsDialogOpen(true);
+                      }}
+                    >
+                      <Lightbulb className="size-3.5 text-primary" />
+                    </button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedTest(test);
+                      setDetailsDialogOpen(true);
+                    }}
+                  >
+                    Details
+                  </Button>
+                </div>
+              </div>
+              {isFailed && test.gradingResult?.reason && (
+                <div className="ml-7">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-red-600 dark:text-red-400">
+                    Failure Reason
+                  </div>
+                  <p className="text-xs text-red-600 dark:text-red-400">
+                    {test.gradingResult.reason}
+                  </p>
+                </div>
+              )}
             </button>
-          )}
+          </CollapsibleTrigger>
+
+          {/* Collapsible content */}
+          <CollapsibleContent>
+            {/* Chat conversation */}
+            <ChatMessages
+              messages={chatMessages}
+              displayTurnCount={maxTurns > 1}
+              maxTurns={maxTurns}
+            />
+          </CollapsibleContent>
         </div>
-      </div>
+      </Collapsible>
     );
   };
 
@@ -332,14 +297,7 @@ const RiskCategoryDrawer = ({
               <p className="text-sm text-muted-foreground">Total</p>
             </div>
             <div className="flex-1 text-center">
-              <p
-                className={cn(
-                  'text-3xl font-bold',
-                  passPercentage >= 70
-                    ? 'text-emerald-600 dark:text-emerald-500'
-                    : 'text-destructive',
-                )}
-              >
+              <p className={cn('text-3xl font-bold', getPassRateStyles(passPercentage / 100).text)}>
                 {passPercentage}%
               </p>
               <p className="text-sm text-muted-foreground">Pass Rate</p>
@@ -386,7 +344,7 @@ const RiskCategoryDrawer = ({
           >
             <TabsList className="w-full">
               <TabsTrigger value="flagged" className="flex-1">
-                Flagged Tests ({failures.length})
+                Failed Tests ({failures.length})
               </TabsTrigger>
               <TabsTrigger value="passed" className="flex-1">
                 Passed Tests ({passes.length})

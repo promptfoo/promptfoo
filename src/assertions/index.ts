@@ -326,9 +326,9 @@ export async function runAssertion({
       let functionName: string | undefined;
 
       if (fileRef.includes(':')) {
-        const [pathPart, funcPart] = fileRef.split(':');
-        filePath = pathPart;
-        functionName = funcPart;
+        const colonIndex = fileRef.indexOf(':');
+        filePath = fileRef.slice(0, colonIndex);
+        functionName = fileRef.slice(colonIndex + 1);
       }
 
       filePath = path.resolve(basePath, filePath);

@@ -206,7 +206,7 @@ describe('HydraProvider', () => {
       expect(() => {
         new HydraProvider({ injectVar: 'input' });
       }).toThrow(
-        'jailbreak:hydra strategy requires cloud access. Set PROMPTFOO_REMOTE_GENERATION_URL or log into Promptfoo Cloud.',
+        'jailbreak:hydra strategy requires remote generation, which is currently disabled (commonly because OPENAI_API_KEY is set). To fix, unset OPENAI_API_KEY, set PROMPTFOO_REMOTE_GENERATION_URL, or log into Promptfoo Cloud.',
       );
     });
 
@@ -504,6 +504,73 @@ describe('HydraProvider', () => {
       );
       expect(escapedCall).toBeDefined();
     });
+
+    it('should propagate sessionId to context.vars in stateful mode', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        sessionId: 'session-456',
+        tokenUsage: { total: 50, prompt: 25, completion: 25 },
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 2,
+        stateful: true,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(context.vars['sessionId']).toBe('session-456');
+      expect(result.metadata?.sessionId).toBe('session-456');
+    });
+
+    it('should not propagate sessionId to context.vars in stateless mode', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        sessionId: 'session-789',
+        tokenUsage: { total: 50, prompt: 25, completion: 25 },
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+        stateful: false,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      await provider.callApi('', context);
+
+      expect(context.vars['sessionId']).toBeUndefined();
+    });
   });
 
   describe('callApi() - stateless mode', () => {
@@ -757,6 +824,40 @@ describe('HydraProvider', () => {
       expect(result.metadata?.hydraRoundsCompleted).toBeGreaterThanOrEqual(1);
       // Agent is called for each turn + learning update
       expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(3);
+    });
+
+    it('should stop when target ends conversation', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: '',
+        conversationEnded: true,
+        conversationEndReason: 'thread_closed',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 5,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(result.metadata?.stopReason).toBe('Target ended conversation');
+      expect(result.metadata?.hydraRoundsCompleted).toBe(1);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
     });
 
     it('should handle empty target response', async () => {
@@ -1244,13 +1345,15 @@ describe('HydraProvider', () => {
 
       const result = await provider.callApi('', context);
 
-      // Total should be sum of all calls
+      // Total tokens should be sum of all calls
       // Agent: 100 + 150 = 250
       // Target: 80 + 120 = 200
       // Total: 450
       expect(result.tokenUsage?.total).toBe(450);
       expect(result.tokenUsage?.prompt).toBe(225);
       expect(result.tokenUsage?.completion).toBe(225);
+      // Probes should only count target calls.
+      expect(result.tokenUsage?.numRequests).toBe(2);
     });
   });
 

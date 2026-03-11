@@ -11,6 +11,7 @@ import logger from '../../../src/logger';
 import {
   addVideoToBase64,
   createProgressBar,
+  escapeDrawtextString,
   getFallbackBase64,
   writeVideoFile,
 } from '../../../src/redteam/strategies/simpleVideo';
@@ -70,6 +71,52 @@ vi.mock('cli-progress', async (importOriginal) => {
 
     Presets: { shades_classic: {} },
   };
+});
+
+describe('escapeDrawtextString', () => {
+  it('passes plain text through unchanged', () => {
+    expect(escapeDrawtextString('hello world')).toBe('hello world');
+  });
+
+  it('escapes backslashes first', () => {
+    expect(escapeDrawtextString('a\\b')).toBe('a\\\\b');
+  });
+
+  it('escapes single quotes using close-escape-reopen pattern', () => {
+    // "it's" → it'\''s  (no shell involved — FFmpeg filter parser handles \' as literal ')
+    expect(escapeDrawtextString("it's")).toBe("it'\\''s");
+  });
+
+  it('escapes colons as option separators', () => {
+    expect(escapeDrawtextString('10:30')).toBe('10\\:30');
+  });
+
+  it('escapes newlines as \\n', () => {
+    expect(escapeDrawtextString('line1\nline2')).toBe('line1\\nline2');
+  });
+
+  it('escapes percent signs as %% for drawtext expansion safety', () => {
+    expect(escapeDrawtextString('100%')).toBe('100%%');
+  });
+
+  it('double-escapes a backslash immediately before a single quote', () => {
+    // Input runtime string: it\'s  (backslash + apostrophe + s)
+    // Step 1: backslash → \\   gives: it\\'s
+    // Step 2: '        → '\'' gives: it\\'\''s
+    expect(escapeDrawtextString("it\\'s")).toBe("it\\\\'\\''s");
+  });
+
+  it('handles adversarial input with multiple special characters', () => {
+    // Input: ';%{pts}\n[overlay]=value  (apostrophe, semicolon, percent, backslash+n, brackets, equals)
+    const input = "';%{pts}\\n[overlay]=value";
+    const result = escapeDrawtextString(input);
+    // Single quote becomes '\'' pattern
+    expect(result).toContain("'\\''");
+    // Percent becomes %%
+    expect(result).toContain('%%');
+    // Backslash is doubled
+    expect(result).toContain('\\\\');
+  });
 });
 
 describe('simpleVideo strategy', () => {

@@ -162,7 +162,7 @@ export interface ProviderResponse {
     http?: {
       status: number;
       statusText: string;
-      headers: Record<string, string>;
+      headers?: Record<string, string>;
       requestHeaders?: Record<string, string>;
     };
     [key: string]: any;
@@ -186,6 +186,16 @@ export interface ProviderResponse {
   providerTransformedOutput?: string | any;
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
+  /**
+   * Indicates the target intentionally ended the active conversation/session.
+   * Multi-turn redteam strategies can use this to stop probing gracefully.
+   */
+  conversationEnded?: boolean;
+  /**
+   * Optional machine-readable reason explaining why the conversation ended.
+   * Example: `thread_closed`.
+   */
+  conversationEndReason?: string;
   sessionId?: string;
   guardrails?: GuardrailResponse;
   finishReason?: string;
@@ -214,6 +224,13 @@ export interface ProviderResponse {
     aspectRatio?: string; // '16:9' or '9:16' (Veo)
     resolution?: string; // '720p' or '1080p' (Veo)
   };
+  images?: ImageOutput[];
+}
+
+export interface ImageOutput {
+  data?: string; // data URI or base64
+  blobRef?: BlobRef;
+  mimeType?: string;
 }
 
 export interface ProviderEmbeddingResponse {

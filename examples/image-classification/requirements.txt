@@ -1,4 +1,0 @@
-numpy==1.26.4
-pandas==2.3.3
-pillow==11.3.0
-tensorflow==2.20.0

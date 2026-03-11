@@ -143,6 +143,7 @@ export default function AddProviderDialog({
                   setError={setError}
                   validateAll={false}
                   providerType={providerType}
+                  mode="eval"
                 />
               )
             )}
@@ -175,7 +176,7 @@ export default function AddProviderDialog({
   );
 }
 
-function getProviderTypeFromId(id: string | undefined): string | undefined {
+export function getProviderTypeFromId(id: string | undefined): string | undefined {
   if (!id || typeof id !== 'string') {
     return undefined;
   }

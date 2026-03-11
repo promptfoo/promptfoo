@@ -8,6 +8,7 @@ import { doEval } from '../commands/eval';
 import logger, { setLogCallback, setLogLevel } from '../logger';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
+import { formatDuration } from '../util/formatDuration';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { initVerboseToggle } from '../util/verboseToggle';
 import { doGenerateRedteam } from './commands/generate';
@@ -79,6 +80,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   const { maxConcurrency, ...passThroughOptions } = options;
 
   let redteamConfig;
+  const generationStartTime = Date.now();
   try {
     redteamConfig = await doGenerateRedteam({
       ...passThroughOptions,
@@ -107,6 +109,8 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     // Re-throw other errors
     throw error;
   }
+
+  const generationDurationMs = Date.now() - generationStartTime;
 
   // Check if redteam.yaml exists before running evaluation
   if (!redteamConfig || !fs.existsSync(redteamPath)) {
@@ -142,7 +146,31 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     },
   );
 
-  logger.info(chalk.green('\nRed team scan complete!'));
+  // Set generation duration on the eval and save
+  if (evalResult && generationDurationMs >= 0) {
+    evalResult.setGenerationDurationMs(generationDurationMs);
+    if (evalResult.persisted) {
+      await evalResult.save();
+    }
+
+    const totalMs = evalResult.durationMs ?? 0;
+    const evalMs = evalResult.evaluationDurationMs ?? 0;
+    logger.info(
+      chalk.gray(
+        `Total scan time: ${formatDuration(totalMs / 1000)} (generation: ${formatDuration(generationDurationMs / 1000)}, evaluation: ${formatDuration(evalMs / 1000)})`,
+      ),
+    );
+  }
+
+  // Show appropriate completion message based on abort status
+  // Note: Detailed abort information is already shown in the summary, so we just show a brief message here
+  // Check if scan was aborted due to target error (efficient DB query, not loading all results)
+  const hasTargetError = evalResult ? (await evalResult.findTargetErrorStatus()) != null : false;
+  if (hasTargetError) {
+    // Abort details already shown in summary - no need to repeat
+  } else {
+    logger.info(chalk.green('\nRed team scan complete!'));
+  }
   if (!evalResult?.shared) {
     if (options.liveRedteamConfig) {
       logger.info(

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
 import styles from './bsides-seattle-2026.module.css';
@@ -135,13 +136,7 @@ export default function BSidesSeattle2026(): React.ReactElement {
       })),
     [],
   );
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', 'dark');
-    return () => {
-      document.documentElement.removeAttribute('data-theme');
-    };
-  }, []);
+  useForcedTheme('dark');
 
   const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
     e.preventDefault();
@@ -253,14 +248,9 @@ export default function BSidesSeattle2026(): React.ReactElement {
             </div>
 
             <div className={styles.heroCtas}>
-              <a
-                href="https://cal.com/team/promptfoo/intro2"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.primaryCta}
-              >
+              <Link to="/contact" className={styles.primaryCta}>
                 Schedule a Meeting
-              </a>
+              </Link>
             </div>
             <button
               type="button"
@@ -351,14 +341,9 @@ export default function BSidesSeattle2026(): React.ReactElement {
                   Book time for a short, technical walkthrough of AI red teaming for your specific
                   use case.
                 </p>
-                <a
-                  href="https://cal.com/team/promptfoo/intro2"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={styles.cardLink}
-                >
+                <Link to="/contact" className={styles.cardLink}>
                   Book a Time →
-                </a>
+                </Link>
               </div>
               <div className={styles.sharedCard}>
                 <div className={styles.cardIconSvg}>

@@ -2899,6 +2899,61 @@ describe('evaluator', () => {
     );
   });
 
+  it('should apply dynamic prompt function config to provider call', async () => {
+    const mockDynamicConfigProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test response',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockDynamicConfigProvider],
+      prompts: [
+        {
+          raw: 'ignored by prompt function',
+          label: 'Dynamic prompt with config',
+          config: {
+            temperature: 0.1,
+            top_p: 0.9,
+          },
+          function: async () => ({
+            prompt: 'Solve this problem: {{problem}}',
+            config: {
+              temperature: 0.3,
+              response_format: { type: 'json_object' },
+            },
+          }),
+        },
+      ],
+      tests: [
+        {
+          vars: { problem: '8x + 31 = 2' },
+          options: { temperature: 0.7 },
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(mockDynamicConfigProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockDynamicConfigProvider.callApi).toHaveBeenCalledWith(
+      'Solve this problem: 8x + 31 = 2',
+      expect.objectContaining({
+        prompt: expect.objectContaining({
+          config: {
+            temperature: 0.7,
+            top_p: 0.9,
+            response_format: { type: 'json_object' },
+          },
+        }),
+      }),
+      undefined,
+    );
+  });
+
   it('should call runExtensionHook with correct parameters at appropriate times', async () => {
     const mockExtension = 'file:./path/to/extension.js:extensionFunction';
     const testSuite: TestSuite = {
@@ -4195,6 +4250,165 @@ describe('runEval', () => {
     expect(result.response?.output).toBe('Test output');
     expect(result.prompt.label).toBe('test-label');
     expect(mockProvider.callApi).toHaveBeenCalledWith('Test prompt', expect.anything(), undefined);
+  });
+
+  it('should pass dynamic prompt config from prompt functions to the provider', async () => {
+    const dynamicConfig = { temperature: 0.5, tools: [{ name: 'test_tool' }] };
+    const promptWithFunction: Prompt = {
+      raw: 'Dynamic prompt',
+      label: 'dynamic-label',
+      function: async () => ({
+        prompt: 'Rendered dynamic prompt',
+        config: dynamicConfig,
+      }),
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: promptWithFunction,
+      test: {},
+      conversations: {},
+      registers: {},
+    });
+    const result = results[0];
+    expect(result.success).toBe(true);
+
+    // Verify the provider received the dynamic config
+    const callApiMock = vi.mocked(mockProvider.callApi);
+    const callApiArgs = callApiMock.mock.calls[0];
+    expect(callApiArgs).toBeDefined();
+    const context = callApiArgs![1];
+    expect(context).toBeDefined();
+    expect(context!.prompt.config).toEqual(dynamicConfig);
+  });
+
+  it('should merge dynamic prompt config with test.options (test.options takes precedence)', async () => {
+    const promptWithFunction: Prompt = {
+      raw: 'Dynamic prompt',
+      label: 'dynamic-label',
+      function: async () => ({
+        prompt: 'Rendered dynamic prompt',
+        config: { temperature: 0.5, max_tokens: 100 },
+      }),
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: promptWithFunction,
+      test: { options: { temperature: 0.9 } },
+      conversations: {},
+      registers: {},
+    });
+    const result = results[0];
+    expect(result.success).toBe(true);
+
+    // test.options should override dynamic config
+    const callApiMock = vi.mocked(mockProvider.callApi);
+    const callApiArgs = callApiMock.mock.calls[0];
+    expect(callApiArgs).toBeDefined();
+    const context = callApiArgs![1];
+    expect(context).toBeDefined();
+    expect(context!.prompt.config).toEqual({ temperature: 0.9, max_tokens: 100 });
+  });
+
+  it('should not leak dynamic prompt config across runEval calls for a shared prompt object', async () => {
+    const promptWithFunction: Prompt = {
+      raw: 'Dynamic prompt {{mode}}',
+      label: 'dynamic-label',
+      config: { top_p: 0.9 },
+      function: async ({ vars }) => ({
+        prompt: `Rendered dynamic prompt for ${vars.mode}`,
+        config:
+          vars.mode === 'first'
+            ? { temperature: 0.5, response_format: { type: 'json_object' } }
+            : { max_tokens: 100 },
+      }),
+    };
+
+    await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: promptWithFunction,
+      test: { vars: { mode: 'first' } },
+      conversations: {},
+      registers: {},
+    });
+
+    await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: promptWithFunction,
+      test: { vars: { mode: 'second' } },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
+    const callApiMock = vi.mocked(mockProvider.callApi);
+
+    const firstCallArgs = callApiMock.mock.calls[0];
+    const secondCallArgs = callApiMock.mock.calls[1];
+    expect(firstCallArgs).toBeDefined();
+    expect(secondCallArgs).toBeDefined();
+    const firstCallContext = firstCallArgs![1];
+    const secondCallContext = secondCallArgs![1];
+    expect(firstCallContext).toBeDefined();
+    expect(secondCallContext).toBeDefined();
+    expect(firstCallContext!.prompt.config).toEqual({
+      top_p: 0.9,
+      temperature: 0.5,
+      response_format: { type: 'json_object' },
+    });
+    expect(secondCallContext!.prompt.config).toEqual({
+      top_p: 0.9,
+      max_tokens: 100,
+    });
+
+    // The original shared prompt object should remain unchanged.
+    expect(promptWithFunction.config).toEqual({ top_p: 0.9 });
+  });
+
+  it('should keep pre-render fallback config in error result when renderPrompt mutates and throws', async () => {
+    const evalHelpers = await import('../src/evaluatorHelpers');
+    const renderPromptSpy = vi
+      .spyOn(evalHelpers, 'renderPrompt')
+      .mockImplementationOnce(async (promptArg) => {
+        promptArg.config = {
+          ...(promptArg.config ?? {}),
+          response_format: { type: 'mutated-before-throw' },
+        };
+        throw new Error('render failed');
+      });
+
+    const promptWithConfig: Prompt = {
+      raw: 'Test prompt',
+      label: 'test-label',
+      config: { response_format: { type: 'json_object' } },
+    };
+
+    try {
+      const [result] = await runEval({
+        ...defaultOptions,
+        provider: mockProvider,
+        prompt: promptWithConfig,
+        test: { options: { temperature: 0.4 } },
+        conversations: {},
+        registers: {},
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(result.prompt.config).toEqual({
+        response_format: { type: 'json_object' },
+        temperature: 0.4,
+      });
+      expect(promptWithConfig.config).toEqual({ response_format: { type: 'json_object' } });
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+    } finally {
+      renderPromptSpy.mockRestore();
+    }
   });
 
   it('should handle conversation history', async () => {

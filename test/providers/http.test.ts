@@ -298,6 +298,55 @@ describe('HttpProvider', () => {
     );
   });
 
+  it('should expose evaluationId in template vars', async () => {
+    provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Evaluation-Id': '{{evaluationId}}',
+        },
+        body: {
+          query: '{{prompt}}',
+          evaluation_id: '{{evaluationId}}',
+        },
+        transformResponse: (data: any) => data,
+      },
+    });
+    const mockResponse = {
+      data: 'ok',
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt', {
+      vars: {},
+      prompt: { raw: 'test prompt', label: 'test' },
+      evaluationId: 'eval-123',
+    });
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-evaluation-id': 'eval-123',
+        },
+        body: JSON.stringify({
+          query: 'test prompt',
+          evaluation_id: 'eval-123',
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
   it('should throw an error when creating HttpProvider with invalid config', () => {
     const invalidConfig = 'this isnt json';
     expect(() => {

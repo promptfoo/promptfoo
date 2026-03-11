@@ -1,6 +1,7 @@
 import { isBlobStorageEnabled } from '../../../blobs/extractor';
 import { shouldAttemptRemoteBlobUpload } from '../../../blobs/remoteUpload';
 import { renderPrompt } from '../../../evaluatorHelpers';
+import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import {
@@ -31,9 +32,11 @@ import {
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
   getTargetResponse,
+  isConversationEndedResponse,
   isValidChatMessageArray,
   type Message,
   type TargetResponse,
+  type TurnBacktrackingStopReason,
 } from '../shared';
 import { formatTraceForMetadata, formatTraceSummary } from '../traceFormatting';
 import { resolveTracingOptions } from '../tracingOptions';
@@ -59,7 +62,7 @@ interface HydraMetadata extends BaseRedteamMetadata {
   hydraRoundsCompleted: number;
   hydraBacktrackCount: number;
   hydraResult: boolean;
-  stopReason: 'Grader failed' | 'Max turns reached' | 'Max backtracks reached';
+  stopReason: TurnBacktrackingStopReason;
   successfulAttacks?: Array<{
     turn: number;
     message: string;
@@ -144,8 +147,10 @@ export class HydraProvider implements ApiProvider {
     this.config = config;
     this.scanId = config.scanId; // Use scanId from config if provided
     this.injectVar = config.injectVar;
-    this.maxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
+    const configuredMaxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
+    this.maxTurns = isLoggedIntoCloud() ? configuredMaxTurns : Math.min(configuredMaxTurns, 10);
     this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
+
     this.stateful = config.stateful ?? false;
     this.excludeTargetOutputFromAgenticAttackGeneration =
       config.excludeTargetOutputFromAgenticAttackGeneration ?? false;
@@ -155,10 +160,10 @@ export class HydraProvider implements ApiProvider {
       logger.debug('[Hydra] Backtracking disabled in stateful mode');
     }
 
-    // Hydra strategy requires cloud
+    // Hydra strategy requires remote generation
     if (!shouldGenerateRemote()) {
       throw new Error(
-        'jailbreak:hydra strategy requires cloud access. Set PROMPTFOO_REMOTE_GENERATION_URL or log into Promptfoo Cloud.',
+        'jailbreak:hydra strategy requires remote generation, which is currently disabled (commonly because OPENAI_API_KEY is set). To fix, unset OPENAI_API_KEY, set PROMPTFOO_REMOTE_GENERATION_URL, or log into Promptfoo Cloud.',
       );
     }
 
@@ -266,8 +271,7 @@ export class HydraProvider implements ApiProvider {
     const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
 
     let vulnerabilityAchieved = false;
-    let stopReason: 'Grader failed' | 'Max turns reached' | 'Max backtracks reached' =
-      'Max turns reached';
+    let stopReason: TurnBacktrackingStopReason = 'Max turns reached';
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let backtrackCount = 0;
@@ -357,7 +361,8 @@ export class HydraProvider implements ApiProvider {
         options,
       );
 
-      accumulateResponseTokenUsage(totalTokenUsage, agentResp);
+      // Agent coordination calls are internal and should not count as target probes.
+      accumulateResponseTokenUsage(totalTokenUsage, agentResp, { countAsRequest: false });
 
       if (this.agentProvider.delay) {
         await sleep(this.agentProvider.delay);
@@ -599,6 +604,15 @@ export class HydraProvider implements ApiProvider {
         hasTrace: !!traceContext,
       });
 
+      if (isConversationEndedResponse(targetResponse)) {
+        logger.info('[Hydra] Target ended conversation', {
+          turn,
+          reason: targetResponse.conversationEndReason,
+        });
+        stopReason = 'Target ended conversation';
+        break;
+      }
+
       if (targetResponse.error) {
         logger.info('[Hydra] Target error', { turn, error: targetResponse.error });
         continue;
@@ -629,6 +643,14 @@ export class HydraProvider implements ApiProvider {
       if (this.stateful && targetResponse.sessionId) {
         this.sessionId = targetResponse.sessionId;
         sessionIds.push(targetResponse.sessionId);
+        vars['sessionId'] = targetResponse.sessionId;
+        if (!context) {
+          context = {
+            vars: { ...vars, sessionId: targetResponse.sessionId },
+            prompt,
+          };
+        }
+        context.vars['sessionId'] = targetResponse.sessionId;
       }
 
       // Externalize blobs to avoid token bloat in Hydra/meta prompts
@@ -876,7 +898,10 @@ export class HydraProvider implements ApiProvider {
           },
           options,
         );
-        accumulateResponseTokenUsage(totalTokenUsage, learningResponse);
+        // Learning update is an internal cloud call, not a target probe.
+        accumulateResponseTokenUsage(totalTokenUsage, learningResponse, {
+          countAsRequest: false,
+        });
 
         logger.debug('[Hydra] Scan learnings updated', { scanId, testRunId });
       } catch (error) {

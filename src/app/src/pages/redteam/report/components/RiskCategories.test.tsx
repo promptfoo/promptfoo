@@ -35,8 +35,7 @@ describe('RiskCategories', () => {
     vi.clearAllMocks();
     mockUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 1,
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: vi.fn(),
+
       severityFilter: null,
       setSeverityFilter: vi.fn(),
     });
@@ -118,8 +117,7 @@ describe('RiskCategories', () => {
   it('should show check icon for passing categories and X icon for failing', () => {
     mockUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 1, // 100% required to pass
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: vi.fn(),
+
       severityFilter: null,
       setSeverityFilter: vi.fn(),
     });

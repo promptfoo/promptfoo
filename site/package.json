@@ -33,31 +33,33 @@
     "@docusaurus/theme-mermaid": "^3.9.2",
     "@mdx-js/react": "^3.1.1",
     "@monaco-editor/react": "^4.7.0",
-    "@mui/icons-material": "^7.3.7",
-    "@segment/ajv-human-errors": "^2.15.0",
-    "@swc/core": "^1.15.11",
+    "@mui/icons-material": "^7.3.9",
+    "@segment/ajv-human-errors": "^2.16.0",
+    "@swc/core": "^1.15.18",
     "@swc/jest": "^0.2.39",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
-    "@tsconfig/docusaurus": "^2.0.8",
+    "@tsconfig/docusaurus": "^2.0.9",
     "@vitest/coverage-v8": "^4.0.18",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
-    "dedent": "^1.7.1",
+    "dedent": "^1.7.2",
     "docusaurus-plugin-image-zoom": "^3.0.1",
-    "framer-motion": "^12.34.0",
+    "framer-motion": "^12.34.3",
     "gray-matter": "^4.0.3",
-    "jsdom": "^28.0.0",
-    "lucide-react": "^0.563.0",
+    "jsdom": "^28.1.0",
+    "lucide-react": "^0.575.0",
     "prism-react-renderer": "^2.4.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "satori": "^0.19.2",
-    "sharp": "^0.34.5",
+    "satori": "^0.25.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
+  },
+  "optionalDependencies": {
+    "sharp": "^0.34.5"
   },
   "browserslist": {
     "production": [
@@ -72,16 +74,17 @@
     ]
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.20.1"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
-    "@mui/material": "^7.3.7",
-    "@mui/system": "^7.3.7",
-    "@types/react": "19.2.13",
+    "@mui/material": "^7.3.9",
+    "@mui/system": "^7.3.9",
+    "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "dompurify": "^3.3.3",
     "react-countup": "^6.5.3",
-    "swiper": "^12.1.0"
+    "swiper": "^12.1.2"
   }
 }

@@ -40,6 +40,16 @@ const RecommendedBadge = () => (
   </span>
 );
 
+interface StrategyTableProps {
+  shouldRenderCategory?: boolean;
+  shouldRenderStrategy?: boolean;
+  shouldRenderDescription?: boolean;
+  shouldRenderLongDescription?: boolean;
+  shouldRenderCost?: boolean;
+  shouldRenderAsrIncrease?: boolean;
+  showRemoteStatus?: boolean;
+}
+
 const StrategyTable = ({
   shouldRenderCategory = true,
   shouldRenderStrategy = true,
@@ -47,7 +57,8 @@ const StrategyTable = ({
   shouldRenderLongDescription = true,
   shouldRenderCost = true,
   shouldRenderAsrIncrease = true,
-}) => {
+  showRemoteStatus = false,
+}: StrategyTableProps) => {
   return (
     <div className="strategy-table-wrapper">
       <table className="strategy-table">
@@ -104,7 +115,14 @@ const StrategyTable = ({
                         )}
                       </td>
                     )}
-                    {shouldRenderDescription && <td>{strategy.description}</td>}
+                    {shouldRenderDescription && (
+                      <td>
+                        {strategy.description}
+                        {showRemoteStatus && strategy.isRemote && (
+                          <span title="Uses remote inference"> 🌐</span>
+                        )}
+                      </td>
+                    )}
                     {shouldRenderLongDescription && (
                       <td className="details-cell">{strategy.longDescription}</td>
                     )}

@@ -2,6 +2,7 @@ import React from 'react';
 
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import RemoveIcon from '@mui/icons-material/Remove';
 import Box from '@mui/material/Box';
@@ -12,11 +13,13 @@ import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import { useCartContext } from './CartProvider';
+import { useCopyToClipboard } from './useCopyToClipboard';
 import { formatPrice, getAttributeName, getCheckoutUrl } from './useFourthwall';
 
 export function CartDrawer() {
-  const { cart, isCartOpen, closeCart, removeFromCart, updateQuantity, isLoading } =
+  const { cart, isCartOpen, closeCart, removeFromCart, updateQuantity, isLoading, couponCode } =
     useCartContext();
+  const { copied: copiedInDrawer, handleCopy: handleCopyInDrawer } = useCopyToClipboard(couponCode);
 
   const handleCheckout = () => {
     if (cart?.id) {
@@ -49,7 +52,7 @@ export function CartDrawer() {
           justifyContent: 'space-between',
           px: 2,
           py: { xs: 1.5, sm: 2 },
-          borderBottom: '1px solid #eee',
+          borderBottom: '1px solid var(--ifm-color-emphasis-300)',
           minHeight: { xs: 56, sm: 64 },
         }}
       >
@@ -87,11 +90,35 @@ export function CartDrawer() {
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              height: '200px',
-              color: 'text.secondary',
+              height: '260px',
+              gap: 1.5,
+              px: 3,
             }}
           >
-            <Typography variant="body1">Your cart is empty</Typography>
+            <Typography
+              variant="body1"
+              sx={{ color: 'var(--ifm-color-emphasis-600)', fontWeight: 500 }}
+            >
+              Your cart is empty
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={closeCart}
+              sx={{
+                borderColor: 'var(--ifm-color-emphasis-400)',
+                color: 'var(--ifm-font-color-base)',
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 500,
+                '&:hover': {
+                  borderColor: 'var(--ifm-color-emphasis-600)',
+                  backgroundColor: 'var(--ifm-background-surface-color)',
+                },
+              }}
+            >
+              Continue shopping
+            </Button>
           </Box>
         ) : (
           <Box
@@ -116,7 +143,7 @@ export function CartDrawer() {
                     display: 'flex',
                     gap: 2,
                     pb: 2,
-                    borderBottom: '1px solid #f0f0f0',
+                    borderBottom: '1px solid var(--ifm-color-emphasis-200)',
                   }}
                 >
                   {/* Product image */}
@@ -125,7 +152,7 @@ export function CartDrawer() {
                       width: 80,
                       height: 80,
                       flexShrink: 0,
-                      backgroundColor: '#f5f5f5',
+                      backgroundColor: 'var(--ifm-background-surface-color)',
                       overflow: 'hidden',
                     }}
                   >
@@ -150,9 +177,6 @@ export function CartDrawer() {
                       sx={{
                         fontWeight: 600,
                         mb: 0.5,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
                       }}
                     >
                       {productName}
@@ -196,8 +220,8 @@ export function CartDrawer() {
                         }}
                         disabled={isLoading || item.quantity <= 1}
                         sx={{
-                          border: '1px solid #ddd',
-                          borderRadius: 0,
+                          border: '1px solid var(--ifm-color-emphasis-300)',
+                          borderRadius: '4px',
                           p: 0.5,
                           minWidth: 36,
                           minHeight: 36,
@@ -217,8 +241,8 @@ export function CartDrawer() {
                         onClick={() => updateQuantity(item.variant.id, item.quantity + 1)}
                         disabled={isLoading}
                         sx={{
-                          border: '1px solid #ddd',
-                          borderRadius: 0,
+                          border: '1px solid var(--ifm-color-emphasis-300)',
+                          borderRadius: '4px',
                           p: 0.5,
                           minWidth: 36,
                           minHeight: 36,
@@ -254,7 +278,7 @@ export function CartDrawer() {
 
       {/* Footer with total and checkout */}
       {cart && cart.items.length > 0 && (
-        <Box sx={{ p: 2, borderTop: '1px solid #eee' }}>
+        <Box sx={{ p: 2, borderTop: '1px solid var(--ifm-color-emphasis-300)' }}>
           {cart.subtotal && (
             <Box
               sx={{
@@ -278,6 +302,49 @@ export function CartDrawer() {
 
           <Divider sx={{ mb: 2 }} />
 
+          {couponCode && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                mb: 2,
+                p: 1.5,
+                backgroundColor: 'var(--ifm-color-success-contrast-background)',
+                borderRadius: '8px',
+                border: '1px solid var(--ifm-color-success-dark)',
+              }}
+            >
+              <Typography
+                variant="caption"
+                sx={{ flex: 1, color: 'var(--ifm-color-success-darkest)' }}
+              >
+                Enter code{' '}
+                <Box component="span" sx={{ fontWeight: 700, fontFamily: 'monospace' }}>
+                  {couponCode}
+                </Box>{' '}
+                at checkout
+              </Typography>
+              <IconButton
+                size="small"
+                onClick={handleCopyInDrawer}
+                aria-label="Copy promo code"
+                title={copiedInDrawer ? 'Copied!' : 'Copy code'}
+                sx={{ color: 'var(--ifm-color-success-darkest)', p: 0.5 }}
+              >
+                <ContentCopyIcon sx={{ fontSize: '0.9rem' }} />
+              </IconButton>
+              {copiedInDrawer && (
+                <Typography
+                  variant="caption"
+                  sx={{ color: 'var(--ifm-color-success-darkest)', fontWeight: 500 }}
+                >
+                  Copied!
+                </Typography>
+              )}
+            </Box>
+          )}
+
           <Button
             variant="contained"
             fullWidth
@@ -287,17 +354,21 @@ export function CartDrawer() {
             sx={{
               py: { xs: 1.75, sm: 1.5 },
               minHeight: { xs: 48, sm: 44 },
-              backgroundColor: '#1a1a2e',
-              borderRadius: 0,
+              backgroundColor: 'var(--ifm-color-primary-darker)',
+              borderRadius: '8px',
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
               touchAction: 'manipulation',
               '&:hover': {
-                backgroundColor: '#2a2a4e',
+                backgroundColor: 'var(--ifm-color-primary-darkest)',
               },
             }}
           >
-            {isLoading ? <CircularProgress size={20} sx={{ color: 'white' }} /> : 'Checkout'}
+            {isLoading ? (
+              <CircularProgress size={20} sx={{ color: 'var(--ifm-button-color, #fff)' }} />
+            ) : (
+              'Checkout'
+            )}
           </Button>
         </Box>
       )}
