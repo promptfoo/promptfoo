@@ -61,7 +61,9 @@ export function calculatePassPowerOfN(
     return { n, overallScore: 100, groups: [] };
   }
 
-  // Group results by stable test identity, not just vars.
+  // Group results by promptIdx + vars content. testIdx is excluded because the
+  // evaluator assigns a unique testIdx to each repetition, so including it
+  // would create one group per repetition and reduce pass^N to raw pass rate.
   const groups = new Map<
     string,
     { testIdx: number; promptIdx: number; varsKey: string; total: number; passed: number }
@@ -69,7 +71,7 @@ export function calculatePassPowerOfN(
 
   for (const result of results) {
     const varsKey = stableVarsKey(result.vars);
-    const groupKey = `${result.testIdx}:${result.promptIdx}:${varsKey}`;
+    const groupKey = `${result.promptIdx}:${varsKey}`;
 
     let group = groups.get(groupKey);
     if (!group) {
