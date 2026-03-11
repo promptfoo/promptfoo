@@ -54,7 +54,7 @@
 }
 
 /* For readability concerns, you should choose a lighter palette in dark mode. */
-[data-theme='dark'] {
+:root[data-theme='dark'] {
   --ifm-color-primary: #ff7a7a;
   --ifm-color-primary-dark: #e53a3a;
   --ifm-color-primary-darker: #cb3434;
@@ -63,7 +63,7 @@
   --ifm-color-primary-lighter: #ffc6c6;
   --ifm-color-primary-lightest: #ffd9d9;
   --ifm-button-color: #fff;
-  --docusaurus-highlighted-code-line-bg: #353531;
+  --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.08);
 
   /* Update background colors */
   --ifm-background-color: #10191c;
