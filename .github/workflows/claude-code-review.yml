@@ -104,7 +104,7 @@ jobs:
           echo "Head SHA: ${{ steps.review_scope.outputs.head_sha }}"
 
       - name: Run Claude Code Review
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@v1.0.70
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
