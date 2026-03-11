@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React from 'react';
 
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
@@ -13,27 +13,13 @@ import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import { useCartContext } from './CartProvider';
+import { useCopyToClipboard } from './useCopyToClipboard';
 import { formatPrice, getAttributeName, getCheckoutUrl } from './useFourthwall';
 
 export function CartDrawer() {
   const { cart, isCartOpen, closeCart, removeFromCart, updateQuantity, isLoading, couponCode } =
     useCartContext();
-  const [copiedInDrawer, setCopiedInDrawer] = useState(false);
-
-  const handleCopyInDrawer = useCallback(() => {
-    if (!couponCode) return;
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(couponCode).then(
-        () => {
-          setCopiedInDrawer(true);
-          setTimeout(() => setCopiedInDrawer(false), 2000);
-        },
-        () => {
-          // Clipboard write denied — ignore silently
-        },
-      );
-    }
-  }, [couponCode]);
+  const { copied: copiedInDrawer, handleCopy: handleCopyInDrawer } = useCopyToClipboard(couponCode);
 
   const handleCheckout = () => {
     if (cart?.id) {

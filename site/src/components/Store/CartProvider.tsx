@@ -68,7 +68,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const newUrl = params.toString()
         ? `${window.location.pathname}?${params.toString()}`
         : window.location.pathname;
-      window.history.replaceState({}, '', newUrl);
+      window.history.replaceState(window.history.state, '', newUrl);
       return true;
     }
     return false;
@@ -96,16 +96,22 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     // Docusaurus uses pushState/replaceState for navigation
     window.addEventListener('popstate', handleRouteChange);
 
-    // Patch pushState to detect Docusaurus client-side navigation
+    // Patch pushState/replaceState to detect Docusaurus client-side navigation
     const originalPushState = window.history.pushState;
+    const originalReplaceState = window.history.replaceState;
     window.history.pushState = function (...args) {
       originalPushState.apply(this, args);
+      handleRouteChange();
+    };
+    window.history.replaceState = function (...args) {
+      originalReplaceState.apply(this, args);
       handleRouteChange();
     };
 
     return () => {
       window.removeEventListener('popstate', handleRouteChange);
       window.history.pushState = originalPushState;
+      window.history.replaceState = originalReplaceState;
     };
   }, [ingestCouponFromUrl]);
 

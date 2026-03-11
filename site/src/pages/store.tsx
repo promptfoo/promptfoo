@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React from 'react';
 
 import Head from '@docusaurus/Head';
 import CloseIcon from '@mui/icons-material/Close';
@@ -16,6 +16,7 @@ import {
   useCartContext,
   useProducts,
 } from '@site/src/components/Store';
+import { useCopyToClipboard } from '@site/src/components/Store/useCopyToClipboard';
 import Layout from '@theme/Layout';
 
 function FloatingCartButton() {
@@ -59,22 +60,7 @@ function FloatingCartButton() {
 
 function PromoBanner() {
   const { couponCode, clearCoupon } = useCartContext();
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = useCallback(() => {
-    if (!couponCode) return;
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(couponCode).then(
-        () => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        },
-        () => {
-          // Clipboard write denied — ignore silently
-        },
-      );
-    }
-  }, [couponCode]);
+  const { copied, handleCopy } = useCopyToClipboard(couponCode);
 
   if (!couponCode) return null;
 
