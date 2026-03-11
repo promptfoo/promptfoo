@@ -10,7 +10,7 @@ import { getEnvBool } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import { isJavascriptFile } from './fileExtensions';
+import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
 import { renderVarsInObject } from './render';
@@ -86,13 +86,28 @@ export function maybeLoadFromExternalFile(
     return renderedFilePath;
   }
 
-  // In vars contexts, preserve all file:// references for test case expansion
-  // This prevents premature file loading - JS/Python files should be executed at runtime
-  // by renderPrompt in evaluatorHelpers.ts, and glob patterns should be expanded by
-  // generateVarCombinations in evaluator.ts
+  // In vars contexts, preserve only references that must remain as paths for later runtime handling:
+  // - glob patterns for test case expansion
+  // - JS/Python generators executed by renderPrompt
+  // - binary/media-like files that should stay as file references
+  // Static text/JSON/YAML/CSV file refs should be loaded here so nested vars objects work too.
   if (context === 'vars') {
-    logger.debug(`Preserving file reference in vars context: ${renderedFilePath}`);
-    return renderedFilePath;
+    const lowerPath = cleanPath.toLowerCase();
+    const isMediaLikePath =
+      isImageFile(cleanPath) ||
+      isAudioFile(cleanPath) ||
+      isVideoFile(cleanPath) ||
+      lowerPath.endsWith('.pdf');
+    const shouldPreserveForVars =
+      hasMagic(cleanPath) ||
+      isJavascriptFile(cleanPath) ||
+      cleanPath.endsWith('.py') ||
+      isMediaLikePath;
+
+    if (shouldPreserveForVars) {
+      logger.debug(`Preserving file reference in vars context: ${renderedFilePath}`);
+      return renderedFilePath;
+    }
   }
 
   // For Python/JS files with function names, return the original string unchanged
