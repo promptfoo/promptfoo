@@ -365,6 +365,13 @@ function ResultsTable({
         visibility[colId] = false;
       }
     });
+    // Safety net: don't hide ALL prompt columns (e.g. backend error returning all-zero metrics)
+    const allPromptsHidden = head.prompts.every(
+      (_, idx) => visibility[`Prompt ${idx + 1}`] === false,
+    );
+    if (allPromptsHidden && head.prompts.length > 0) {
+      return columnVisibility;
+    }
     return visibility;
   }, [columnVisibility, head.prompts, filteredMetrics]);
 
