@@ -1,17 +1,6 @@
 /**
- * Pre-build script that scans the examples/ directory and reads metadata
- * from .metadata.yaml files in each example directory.
- * Writes results to site/src/.generated-examples.json.
- *
- * Each example directory should contain a .metadata.yaml with:
- *   title: "Human Readable Name"
- *   description: "Short description"
- *   tags:
- *     - Tag One
- *     - Tag Two
- *
- * Falls back to slug-derived name if .metadata.yaml is missing.
- * Always exits 0 — build never fails due to example scanning.
+ * Pre-build script for the examples gallery.
+ * Always exits 0 so docs builds do not fail on missing or malformed metadata.
  */
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -23,11 +12,6 @@ const EXAMPLES_DIR = join(__dirname, '..', '..', 'examples');
 const OUTPUT_PATH = join(__dirname, '..', 'src', '.generated-examples.json');
 const GITHUB_BASE = 'https://github.com/promptfoo/promptfoo/tree/main/examples';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Convert a slug like "eval-rag" to "Eval Rag" */
 function slugToTitle(slug) {
   return slug
     .split('-')
@@ -49,7 +33,6 @@ function parseMetadataYaml(content) {
     result.description = descMatch[1].trim();
   }
 
-  // Parse tags list
   const tagsSection = content.match(/^tags:\s*\n((?:\s+-\s+.+\n?)*)/m);
   if (tagsSection) {
     const tagLines = tagsSection[1].matchAll(/^\s+-\s+(.+)$/gm);
@@ -64,14 +47,12 @@ function parseMetadataYaml(content) {
   return result;
 }
 
-/** Extract description from promptfooconfig.yaml */
 function parseDescription(configContent) {
   if (!configContent) return '';
   const match = configContent.match(/^description:\s*['"]?(.+?)['"]?\s*$/m);
   return match ? match[1].trim() : '';
 }
 
-/** Extract first paragraph from README */
 function getFirstParagraph(readmeContent) {
   const lines = readmeContent.split('\n');
   const paragraphLines = [];
@@ -99,10 +80,6 @@ function getFirstParagraph(readmeContent) {
   }
   return paragraphLines.join(' ');
 }
-
-// ---------------------------------------------------------------------------
-// Per-example metadata loading
-// ---------------------------------------------------------------------------
 
 function readMetadata(dir) {
   const metadataPath = join(dir, '.metadata.yaml');
@@ -135,9 +112,6 @@ function readFallbackDescription(dir) {
   return '';
 }
 
-// ---------------------------------------------------------------------------
-// Main scan
-// ---------------------------------------------------------------------------
 function scanExamples() {
   const entries = readdirSync(EXAMPLES_DIR).filter((name) => {
     if (name.startsWith('.') || name === 'AGENTS.md' || name === 'CLAUDE.md') {
@@ -176,7 +150,6 @@ function scanExamples() {
 function main() {
   const { examples, metadataCount } = scanExamples();
 
-  // Compute tag counts
   const tagCounts = {};
   for (const ex of examples) {
     for (const tag of ex.tags) {
@@ -184,10 +157,9 @@ function main() {
     }
   }
 
-  // Only include tags with 3+ examples as filter chips
   const MIN_TAG_COUNT = 3;
 
-  // Sort: Getting Started first, then alphabetical
+  // Keep filter chips focused and pin the onboarding category first.
   const pinned = ['Getting Started'];
   const tags = Object.entries(tagCounts)
     .filter(([, count]) => count >= MIN_TAG_COUNT)
