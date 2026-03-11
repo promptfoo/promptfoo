@@ -19,11 +19,11 @@ keywords:
   ]
 ---
 
-McKinsey has described Lilli as a large internal knowledge and synthesis system. In one 2024 case study, it said [72 percent of the firm was active on the platform and that Lilli handled more than 500,000 prompts a month](https://www.mckinsey.com/capabilities/mckinsey-digital/how-we-help-clients/rewiring-the-way-mckinsey-works-with-lilli). In another, it said the system had [answered more than 4.5 million queries over more than 200,000 documents](https://www.mckinsey.com/industries/financial-services/our-insights/insurance-blog/the-potential-of-gen-ai-in-insurance-six-traits-of-frontrunners). That scale helps explain why CodeWall's writeup drew attention.
+McKinsey's Lilli looks, on the public record, like an application-security incident that reached an AI system, not a model jailbreak. [CodeWall's March 9, 2026 writeup](https://codewall.ai/blog/how-we-hacked-mckinseys-ai-platform) says its autonomous agent found exposed API documentation, unauthenticated endpoints, a SQL injection condition, and cross-user access. McKinsey told [The Register on March 9, 2026](https://www.theregister.com/2026/03/09/mckinsey_ai_chatbot_hacked/) that it fixed the issues within hours and that a third-party forensic investigation found no evidence that client data or client confidential information were accessed by the researcher or any other unauthorized third party.
 
-[CodeWall's March 9, 2026 writeup](https://codewall.ai/blog/how-we-hacked-mckinseys-ai-platform) says its autonomous agent found exposed API documentation, unauthenticated endpoints, a SQL injection condition, and cross-user access in Lilli. McKinsey told [The Register on March 9, 2026](https://www.theregister.com/2026/03/09/mckinsey_ai_chatbot_hacked/) that it fixed the issues within hours and that a third-party forensic investigation found no evidence that client data or client confidential information were accessed by the researcher or any other unauthorized third party.
+The exact payloads were not published, so the public record does not independently prove every reported row count or every step of exploitation. It does, however, support the shape of the incident. The initial foothold appears to have been a familiar AppSec chain: exposed API surface, missing authentication, unsafe SQL construction, and broken object-level authorization.
 
-The public record supports something narrower than the most dramatic reading of CodeWall's post. It supports a serious API and authorization incident. It does not publicly prove every reported row count or every step of exploitation. But if CodeWall's account is broadly accurate, the initial foothold was not a model exploit. It was a familiar AppSec chain: exposed API surface, missing authentication, unsafe SQL construction, and broken object-level authorization.
+The architectural issue is straightforward. If prompts, routing rules, and retrieval settings live as mutable application data, then database write access can change model behavior without a code deploy. Much of what gets called AI security is still software security, data security, and configuration governance.
 
 <!-- truncate -->
 
@@ -33,30 +33,33 @@ A simplified version of the chain described in public reporting looks like this:
 
 ![Simplified attack chain showing public API exposure leading to backend compromise, shared AI control state, and visible changes in model behavior](/img/blog/mckinsey-lilli-appsec/attack-chain.svg)
 
-According to CodeWall, the chain began with public API documentation and a set of endpoints that did not require authentication. One of those endpoints allegedly wrote search data into the database. The technically interesting part is not just that CodeWall reports SQL injection. It is where the untrusted input appears to have landed. CodeWall says the JSON values were parameterized safely, but attacker-controlled JSON keys or identifiers were still being concatenated into SQL syntax.
+According to CodeWall, the chain began with public API documentation and a set of endpoints that did not require authentication. One of those endpoints allegedly wrote search data into the database.
 
-That detail matters because it is easy to defend values with bind variables and still make mistakes around identifiers. OWASP's [SQL Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html) makes exactly that point: parts of SQL such as table names, column names, and sort-order indicators cannot be treated the same way as ordinary values and usually need redesign or strict allow-lists. Claroty's research on [JSON-based SQL used to bypass WAFs](https://claroty.com/team82/research/js-on-security-off-abusing-json-based-sql-to-bypass-waf) and NVD's writeup for [CVE-2026-25544 in Payload CMS](https://nvd.nist.gov/vuln/detail/CVE-2026-25544) show why this is not just theoretical. JSON-shaped SQL paths have been a real blind spot.
+CodeWall says ordinary JSON values were parameterized, but attacker-controlled JSON keys or identifiers were still concatenated into SQL syntax. OWASP's [SQL Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html) makes the underlying point directly: table names, column names, and sort-order indicators are not protected the same way bind variables protect values. Claroty's research on [JSON-based SQL used to bypass WAFs](https://claroty.com/team82/research/js-on-security-off-abusing-json-based-sql-to-bypass-waf) and NVD's writeup for [CVE-2026-25544 in Payload CMS](https://nvd.nist.gov/vuln/detail/CVE-2026-25544) show why this pattern is plausible rather than exotic.
 
-CodeWall also says the agent found cross-user access after the SQLi step. OWASP's current term for that pattern is **BOLA**, broken object-level authorization. In plain terms, the system accepts an object identifier and returns data it should not return because it never checks whether the caller is allowed to see that object. Older writeups often use the term IDOR for the same class of failure.
+CodeWall also says the agent found cross-user access after the SQLi step. OWASP's current term for that pattern is **BOLA**, broken object-level authorization: the application accepts an object identifier and returns a record without verifying that the caller is allowed to see it. Older writeups often use the term IDOR for the same class of failure.
 
-That is enough to explain the initial compromise without reaching for a model-side exploit.
+Because CodeWall did not publish the exact payloads, the public cannot reconstruct each query or iteration step by step. It can still reconstruct the class of bug: public routes, backend injection, and missing object-level authorization.
 
 ## Why the AI layer changed the impact
 
-The first fix here belongs to AppSec, platform security, and backend engineering. If the compromise starts with exposed API surface, unsafe SQL construction, and BOLA, that is where ownership starts.
+The AI-specific part was not the entry point. It was the blast radius. If the same backend stored prompts, routing rules, retrieval metadata, and user history, then backend access reached the system that shaped Lilli's answers.
 
-The AI lesson comes later, and it is architectural. If prompts, routing rules, and retrieval settings are stored as mutable application data, then database write access can change model behavior without a code deploy. That is what turns an ordinary backend compromise into an AI integrity problem.
+That changes the meaning of a database compromise. A write can become a prompt change. A metadata edit can change what the system retrieves. A permissions flaw can let the assistant synthesize another employee's history into a normal-looking response. The model does not need to be tricked in the usual jailbreak sense if the surrounding system feeds it altered instructions, altered context, or altered permissions.
 
-If CodeWall's description is broadly accurate, the surrounding system may have been made to feed the model compromised instructions, compromised context, and compromised permissions. In that kind of design, a database write can become a prompt rewrite, a metadata change can alter retrieval, and a permissions flaw can let the system synthesize another employee's history into an otherwise ordinary-looking answer.
+This is why the incident mattered beyond McKinsey. The more enterprise assistants are built as thin layers over ordinary web APIs, databases, and access-control systems, the more their failures will follow ordinary software patterns. McKinsey has described Lilli as a firmwide system; in public case studies, it said [72 percent of the firm was active on the platform and that Lilli handled more than 500,000 prompts a month](https://www.mckinsey.com/capabilities/mckinsey-digital/how-we-help-clients/rewiring-the-way-mckinsey-works-with-lilli), and that it had [answered more than 4.5 million queries over more than 200,000 documents](https://www.mckinsey.com/industries/financial-services/our-insights/insurance-blog/the-potential-of-gen-ai-in-insurance-six-traits-of-frontrunners).
 
-The model did not necessarily need to be tricked in the usual jailbreak sense. The system around it only needed to expose the wrong backend primitives.
+## What teams should audit
 
-That is the part many teams still miss when they talk about "AI security." A large share of AI security is still software security, data-plane security, and configuration governance. The difference is that once those layers fail, the compromise is expressed through the model's behavior.
+The practical lesson is to audit the ordinary control points that determine what the assistant can see, write, and retrieve:
+
+- public and undocumented routes that bypass standard authentication and authorization middleware
+- SQL or ORM paths that treat request keys, JSON paths, field names, or sort parameters as dynamic identifiers
+- BOLA coverage for assistants that can read internal knowledge, employee records, or client-linked objects
+- prompts, routing rules, retrieval policy, and access-control metadata stored as mutable rows instead of governed configuration
 
 ## Bottom line
 
-The most useful lesson from Lilli is not that AI introduced a new root cause. It is that AI systems inherit the security of the software and data planes around them.
+The easy mistake is to classify incidents like this as model failures because the model is what users see. The more useful framing is simpler: the model became the interface to a compromised application.
 
-If the public reconstruction is broadly correct, McKinsey's Lilli was not first compromised because of an AI-native weakness. It was compromised because a traditional API and backend security failure path appears to have reached a system whose prompts, retrieval state, and user data were too tightly coupled.
-
-In the AI era, some of the most damaging AI incidents will still begin as ordinary software bugs.
+As more enterprise assistants store prompts, retrieval policy, and user context in ordinary backend systems, more "AI incidents" will start the same way. They will begin as familiar software bugs and end as changes in model behavior.
