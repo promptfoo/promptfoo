@@ -1,0 +1,118 @@
+description: RAG failure checklist eval starter for common retrieval, grounding, and context hygiene failures
+
+providers:
+  - openai:gpt-5-mini
+
+prompts:
+  - |
+      You are evaluating a retrieval-augmented or agentic workflow.
+
+      Follow these rules exactly:
+      1. Answer only from CURRENT_CONTEXT.
+      2. If CURRENT_CONTEXT does not support the answer, reply exactly: INSUFFICIENT_CONTEXT
+      3. Do not use PRIOR_CONTEXT unless the user explicitly asks about it.
+      4. Keep the answer short, at most two sentences.
+      5. Do not invent names, numbers, owners, or versions that are not supported by CURRENT_CONTEXT.
+
+      User question:
+      {{question}}
+
+      PRIOR_CONTEXT:
+      {{prior_context}}
+
+      CURRENT_CONTEXT:
+      {{current_context}}
+
+tests:
+  - description: retrieval mismatch should fail closed when retrieved context is irrelevant
+    metadata:
+      failure_pattern: retrieval-mismatch
+      starter_group: rag-failure-checklist
+    vars:
+      question: What is the enterprise refund window?
+      prior_context: ""
+      current_context: |
+        Shipping policy:
+        Standard delivery takes 3 to 5 business days.
+        Express delivery is available in selected regions.
+        Delivery fees are calculated at checkout.
+    assert:
+      - type: equals
+        value: INSUFFICIENT_CONTEXT
+      - type: not-icontains
+        value: 3 to 5 business days
+
+  - description: weak grounding should return the supported owner, not a guessed team
+    metadata:
+      failure_pattern: weak-grounding
+      starter_group: rag-failure-checklist
+    vars:
+      question: Which team owns the incident paging policy?
+      prior_context: |
+        Earlier brainstorming notes mentioned several possible owners, including Security and Developer Experience.
+      current_context: |
+        The current on-call runbook states:
+        "The incident paging policy is maintained by the Platform Reliability team."
+    assert:
+      - type: icontains
+        value: platform reliability
+      - type: not-icontains
+        value: security
+
+  - description: later-step context should follow the final approved requirement, not older draft notes
+    metadata:
+      failure_pattern: context-drift
+      starter_group: rag-failure-checklist
+    vars:
+      question: Based on the final approved requirement, what should the release note emphasize?
+      prior_context: |
+        Earlier draft:
+        emphasize speed improvements and performance gains in the next release note.
+      current_context: |
+        Final approved requirement:
+        emphasize stability improvements and rollback safety.
+        Avoid performance claims until benchmark validation is complete.
+    assert:
+      - type: contains-all
+        value:
+          - stability
+          - rollback
+      - type: not-icontains
+        value: speed
+
+  - description: unsupported specifics should not be answered with confidence
+    metadata:
+      failure_pattern: overconfident-unsupported-answer
+      starter_group: rag-failure-checklist
+    vars:
+      question: What database version is currently running in production?
+      prior_context: ""
+      current_context: |
+        Migration planning notes:
+        the team proposes moving to PostgreSQL 16 next quarter.
+        The current production database version is not specified in the provided materials.
+    assert:
+      - type: equals
+        value: INSUFFICIENT_CONTEXT
+      - type: not-icontains
+        value: postgresql 16
+
+  - description: stale context carryover should not leak a previous customer's support tier
+    metadata:
+      failure_pattern: stale-context-carryover
+      starter_group: rag-failure-checklist
+    vars:
+      question: What support tier applies to the current ticket?
+      prior_context: |
+        Previous ticket:
+        Acme Corp has premium support with 24/7 response coverage.
+      current_context: |
+        Current ticket:
+        Northwind Traders is on the standard support tier with business-hours response coverage.
+    assert:
+      - type: contains-all
+        value:
+          - standard
+          - support
+      - type: not-icontains
+        value: premium
