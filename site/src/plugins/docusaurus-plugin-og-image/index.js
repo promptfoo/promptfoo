@@ -442,7 +442,7 @@ async function generateCareersTemplate() {
                           marginLeft: 'auto',
                           alignItems: 'center',
                         },
-                        children: ['SOC2', 'ISO 27001', 'HIPAA'].map((badge) => ({
+                        children: ['SOC2', 'ISO 27001'].map((badge) => ({
                           type: 'div',
                           props: {
                             style: {
@@ -1633,16 +1633,6 @@ async function generateSolutionTemplate(options) {
   };
 }
 
-// Healthcare solutions page template
-async function generateHealthcareTemplate() {
-  return generateSolutionTemplate({
-    vertical: 'Healthcare & Life Sciences',
-    headline: 'AI Security for Healthcare',
-    subtitle: 'Red team clinical AI for patient safety, medical accuracy, and PHI protection',
-    badges: ['HIPAA', 'HITRUST', 'FDA SaMD', 'SOC 2'],
-  });
-}
-
 // Finance solutions page template
 async function generateFinanceTemplate() {
   return generateSolutionTemplate({
@@ -1658,8 +1648,8 @@ async function generateInsuranceTemplate() {
   return generateSolutionTemplate({
     vertical: 'Insurance',
     headline: 'AI Security for Insurance',
-    subtitle: 'Red team AI for HIPAA compliance, PHI protection, and coverage discrimination',
-    badges: ['HIPAA', 'MHPAEA', 'CMS', 'State DOI'],
+    subtitle: 'Red team AI for PHI protection, network accuracy, and coverage discrimination',
+    badges: ['PHI', 'MHPAEA', 'CMS', 'State DOI'],
   });
 }
 
@@ -2142,38 +2132,6 @@ async function generateEventsOgImage(outputPath) {
     return true;
   } catch (error) {
     console.error('❌ Failed to generate Events OG image:', error.message);
-    return false;
-  }
-}
-
-// Generate Healthcare solutions OG image using custom template
-async function generateHealthcareOgImage(outputPath) {
-  try {
-    const fonts = await getSatoriFonts();
-    const template = await generateHealthcareTemplate();
-
-    // Generate SVG using Satori
-    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
-
-    // Convert SVG to PNG using Sharp
-    const pngBuffer = await sharp(Buffer.from(svg))
-      .ensureAlpha()
-      .png({
-        quality: 100,
-        compressionLevel: 6,
-        palette: false,
-      })
-      .toBuffer();
-
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-
-    // Write PNG file
-    await fs.writeFile(outputPath, pngBuffer);
-
-    return true;
-  } catch (error) {
-    console.error('❌ Failed to generate Healthcare OG image:', error.message);
     return false;
   }
 }
@@ -2753,17 +2711,6 @@ module.exports = function (context, options) {
       // Generate solutions page OG images
       console.log('🎨 Generating Solutions page OG images...');
 
-      // Healthcare solutions page
-      const healthcareImagePath = path.join(outDir, 'img', 'og', 'solutions-healthcare-og.png');
-      const healthcareSuccess = await generateHealthcareOgImage(healthcareImagePath);
-      if (healthcareSuccess) {
-        generatedImages.set('/solutions/healthcare/', '/img/og/solutions-healthcare-og.png');
-        successCount++;
-        console.log('  ✅ Healthcare solutions OG image generated');
-      } else {
-        failureCount++;
-      }
-
       // Finance solutions page
       const financeImagePath = path.join(outDir, 'img', 'og', 'solutions-finance-og.png');
       const financeSuccess = await generateFinanceOgImage(financeImagePath);
@@ -2807,7 +2754,6 @@ module.exports = function (context, options) {
         '/press/',
         '/store/',
         '/events/',
-        '/solutions/healthcare/',
         '/solutions/finance/',
         '/solutions/insurance/',
         '/solutions/telecom/',
