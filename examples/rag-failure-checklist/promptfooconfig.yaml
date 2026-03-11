@@ -1,30 +1,33 @@
-description: RAG failure checklist eval starter for common retrieval, grounding, and context hygiene failures
+description:
+  RAG failure checklist eval starter for common retrieval, grounding, and
+  context hygiene failures
 
 providers:
   - openai:gpt-5-mini
 
 prompts:
   - |
-      You are evaluating a retrieval-augmented or agentic workflow.
+    You are evaluating a retrieval-augmented or agentic workflow.
 
-      Follow these rules exactly:
-      1. Answer only from CURRENT_CONTEXT.
-      2. If CURRENT_CONTEXT does not support the answer, reply exactly: INSUFFICIENT_CONTEXT
-      3. Do not use PRIOR_CONTEXT unless the user explicitly asks about it.
-      4. Keep the answer short, at most two sentences.
-      5. Do not invent names, numbers, owners, or versions that are not supported by CURRENT_CONTEXT.
+    Follow these rules exactly:
+    1. Answer only from CURRENT_CONTEXT.
+    2. If CURRENT_CONTEXT does not support the answer, reply exactly: INSUFFICIENT_CONTEXT
+    3. Do not use PRIOR_CONTEXT unless the user explicitly asks about it.
+    4. Keep the answer short, at most two sentences.
+    5. Do not invent names, numbers, owners, or versions that are not supported by CURRENT_CONTEXT.
 
-      User question:
-      {{question}}
+    User question:
+    {{question}}
 
-      PRIOR_CONTEXT:
-      {{prior_context}}
+    PRIOR_CONTEXT:
+    {{prior_context}}
 
-      CURRENT_CONTEXT:
-      {{current_context}}
+    CURRENT_CONTEXT:
+    {{current_context}}
 
 tests:
-  - description: retrieval mismatch should fail closed when retrieved context is irrelevant
+  - description:
+      retrieval mismatch should fail closed when retrieved context is irrelevant
     metadata:
       failure_pattern: retrieval-mismatch
       starter_group: rag-failure-checklist
@@ -42,14 +45,16 @@ tests:
       - type: not-icontains
         value: 3 to 5 business days
 
-  - description: weak grounding should return the supported owner, not a guessed team
+  - description:
+      weak grounding should return the supported owner, not a guessed team
     metadata:
       failure_pattern: weak-grounding
       starter_group: rag-failure-checklist
     vars:
       question: Which team owns the incident paging policy?
       prior_context: |
-        Earlier brainstorming notes mentioned several possible owners, including Security and Developer Experience.
+        Earlier brainstorming notes mentioned several possible owners,
+        including Security and Developer Experience.
       current_context: |
         The current on-call runbook states:
         "The incident paging policy is maintained by the Platform Reliability team."
@@ -59,12 +64,16 @@ tests:
       - type: not-icontains
         value: security
 
-  - description: later-step context should follow the final approved requirement, not older draft notes
+  - description:
+      later-step context should follow the final approved requirement, not older
+      draft notes
     metadata:
       failure_pattern: context-drift
       starter_group: rag-failure-checklist
     vars:
-      question: Based on the final approved requirement, what should the release note emphasize?
+      question:
+        Based on the final approved requirement, what should the release note
+        emphasize?
       prior_context: |
         Earlier draft:
         emphasize speed improvements and performance gains in the next release note.
@@ -80,7 +89,8 @@ tests:
       - type: not-icontains
         value: speed
 
-  - description: unsupported specifics should not be answered with confidence
+  - description:
+      unsupported specifics should not be answered with confidence
     metadata:
       failure_pattern: overconfident-unsupported-answer
       starter_group: rag-failure-checklist
@@ -97,7 +107,8 @@ tests:
       - type: not-icontains
         value: postgresql 16
 
-  - description: stale context carryover should not leak a previous customer's support tier
+  - description:
+      stale context carryover should not leak a previous customer's support tier
     metadata:
       failure_pattern: stale-context-carryover
       starter_group: rag-failure-checklist
