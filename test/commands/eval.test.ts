@@ -88,6 +88,11 @@ vi.mock('../../src/database/index', async (importOriginal) => {
           })),
         })),
       })),
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => []),
+        })),
+      })),
     })),
   };
 });
