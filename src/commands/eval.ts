@@ -385,13 +385,17 @@ export async function doEval(
         DEFAULT_MAX_CONCURRENCY;
       delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
       passPower =
-        (cmdObj.passPower != null ? Number(cmdObj.passPower) : undefined) ??
+        (cmdObj.passPower != null && Number.isFinite(Number(cmdObj.passPower))
+          ? Number(cmdObj.passPower)
+          : undefined) ??
         commandLineOptions?.passPower ??
         evaluateOptions.passPower ??
         getEnvFloat('PROMPTFOO_PASS_POWER') ??
         repeat;
       passPowerThreshold =
-        (cmdObj.passPowerThreshold != null ? Number(cmdObj.passPowerThreshold) : undefined) ??
+        (cmdObj.passPowerThreshold != null && Number.isFinite(Number(cmdObj.passPowerThreshold))
+          ? Number(cmdObj.passPowerThreshold)
+          : undefined) ??
         commandLineOptions?.passPowerThreshold ??
         evaluateOptions.passPowerThreshold ??
         getEnvFloat('PROMPTFOO_PASS_POWER_THRESHOLD');
@@ -494,7 +498,7 @@ export async function doEval(
               : true,
       repeat,
       passPower: repeat > 1 ? passPower : undefined,
-      passPowerThreshold,
+      passPowerThreshold: repeat > 1 ? passPowerThreshold : undefined,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       maxConcurrency,
       cache,
