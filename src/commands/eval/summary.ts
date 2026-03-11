@@ -2,8 +2,8 @@ import chalk from 'chalk';
 import { formatDuration } from '../../util/formatDuration';
 
 import type { TokenUsage } from '../../types/index';
-import type { TokenUsageTracker } from '../../util/tokenUsage';
 import type { PassPowerResult } from '../../util/passPowerOfN';
+import type { TokenUsageTracker } from '../../util/tokenUsage';
 
 /**
  * Parameters for generating an evaluation summary report.
@@ -343,9 +343,9 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
   const metricsPart =
     passPowerOfN != null && !Number.isNaN(passRate)
       ? ` (${passRateDisplay}, ${chalk.white.bold(`pass^${passPowerOfN.n}: ${passPowerOfN.overallScore.toFixed(2)}%`)})`
-      : !Number.isNaN(passRate)
-        ? ` (${passRateDisplay})`
-        : '';
+      : Number.isNaN(passRate)
+        ? ''
+        : ` (${passRateDisplay})`;
   const resultsLine = `${passedPart}, ${failedPart}, ${errorsPart}`;
   if (Number.isNaN(passRate)) {
     lines.push(`${chalk.bold('Results:')} ${resultsLine}`);
