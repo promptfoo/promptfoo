@@ -38,7 +38,7 @@ describe('VERTICAL_SUITES', () => {
   it('should have insurance suite with compliance frameworks matching the broadened scope', () => {
     const insuranceSuite = VERTICAL_SUITES.find((suite) => suite.id === 'insurance');
     expect(insuranceSuite?.complianceFrameworks).toEqual([
-      'HIPAA',
+      'Patient Privacy',
       'GLBA',
       'FCRA',
       'DPPA',
