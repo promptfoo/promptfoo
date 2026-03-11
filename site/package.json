@@ -55,9 +55,11 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "satori": "^0.25.0",
-    "sharp": "^0.34.5",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
+  },
+  "optionalDependencies": {
+    "sharp": "^0.34.5"
   },
   "browserslist": {
     "production": [
