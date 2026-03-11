@@ -13,6 +13,7 @@ import { cn } from '@app/lib/utils';
 import { getActualPrompt } from '@app/utils/providerResponse';
 import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
 import { ChevronDown, Lightbulb } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import ChatMessages, { type Message } from '../../../eval/components/ChatMessages';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
@@ -150,6 +151,7 @@ const RiskCategoryDrawer = ({
   }
 
   // All hooks must be called unconditionally after early returns
+  const navigate = useNavigate();
   const [suggestionsDialogOpen, setSuggestionsDialogOpen] = React.useState(false);
   const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(
     undefined,
@@ -167,21 +169,6 @@ const RiskCategoryDrawer = ({
 
   const totalTests = numPassed + numFailed;
   const passPercentage = totalTests > 0 ? Math.round((numPassed / totalTests) * 100) : 0;
-  const firstFailure = failures[0];
-  const firstPass = passes[0];
-  const pluginId = (firstFailure || firstPass)?.result?.metadata?.pluginId;
-  const filterParam = pluginId
-    ? encodeURIComponent(
-        JSON.stringify([
-          {
-            type: 'plugin',
-            operator: 'equals',
-            value: pluginId,
-          },
-        ]),
-      )
-    : null;
-  const viewAllLogsUrl = filterParam ? `/eval/${evalId}?filter=${filterParam}` : `/eval/${evalId}`;
 
   if (totalTests === 0) {
     return (
@@ -317,8 +304,34 @@ const RiskCategoryDrawer = ({
             </div>
           </div>
 
-          <Button variant="outline" className="w-full" asChild>
-            <a href={viewAllLogsUrl}>View All Logs</a>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={(event) => {
+              const firstFailure = failures.length > 0 ? failures[0] : null;
+              const firstPass = passes.length > 0 ? passes[0] : null;
+              const testWithPluginId = firstFailure || firstPass;
+              const pluginId = testWithPluginId?.result?.metadata?.pluginId;
+
+              const filterParam = encodeURIComponent(
+                JSON.stringify([
+                  {
+                    type: 'plugin',
+                    operator: 'equals',
+                    value: pluginId,
+                  },
+                ]),
+              );
+
+              const url = pluginId ? `/eval/${evalId}?filter=${filterParam}` : `/eval/${evalId}`;
+              if (event.ctrlKey || event.metaKey) {
+                window.open(url, '_blank');
+              } else {
+                navigate(url);
+              }
+            }}
+          >
+            View All Logs
           </Button>
 
           <Tabs
