@@ -29,13 +29,27 @@ The architectural issue is straightforward. If prompts, routing rules, and retri
 
 ## The reported chain
 
-A simplified version of the chain described in public reporting looks like this:
-
-![Simplified attack chain showing public API exposure leading to backend compromise, shared AI control state, and visible changes in model behavior](/img/blog/mckinsey-lilli-appsec/attack-chain.svg)
-
-According to CodeWall, the chain began with public API documentation and a set of endpoints that did not require authentication. One of those endpoints allegedly wrote search data into the database.
-
-CodeWall says ordinary JSON values were parameterized, but attacker-controlled JSON keys or identifiers were still concatenated into SQL syntax. OWASP's [SQL Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html) makes the underlying point directly: table names, column names, and sort-order indicators are not protected the same way bind variables protect values. Claroty's research on [JSON-based SQL used to bypass WAFs](https://claroty.com/team82/research/js-on-security-off-abusing-json-based-sql-to-bypass-waf) and NVD's writeup for [CVE-2026-25544 in Payload CMS](https://nvd.nist.gov/vuln/detail/CVE-2026-25544) show why this pattern is plausible rather than exotic.
+<div
+  style={{
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+    gap: '1.25rem',
+    alignItems: 'start',
+    margin: '1rem 0 1.25rem',
+  }}
+>
+  <div>
+    <p>According to CodeWall, the chain began with public API documentation and a set of endpoints that did not require authentication. One of those endpoints allegedly wrote search data into the database.</p>
+    <p>CodeWall says ordinary JSON values were parameterized, but attacker-controlled JSON keys or identifiers were still concatenated into SQL syntax. OWASP's <a href="https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html">SQL Injection Prevention Cheat Sheet</a> makes the underlying point directly: table names, column names, and sort-order indicators are not protected the same way bind variables protect values. Claroty's research on <a href="https://claroty.com/team82/research/js-on-security-off-abusing-json-based-sql-to-bypass-waf">JSON-based SQL used to bypass WAFs</a> and NVD's writeup for <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-25544">CVE-2026-25544 in Payload CMS</a> show why this pattern is plausible rather than exotic.</p>
+  </div>
+  <div>
+    <img
+      src="/img/blog/mckinsey-lilli-appsec/attack-chain.svg"
+      alt="Compact diagram showing the AppSec chain on the left and the AI-layer impact on the right"
+      style={{ width: '100%', height: 'auto', margin: 0 }}
+    />
+  </div>
+</div>
 
 CodeWall also says the agent found cross-user access after the SQLi step. OWASP's current term for that pattern is **BOLA**, broken object-level authorization: the application accepts an object identifier and returns a record without verifying that the caller is allowed to see it. Older writeups often use the term IDOR for the same class of failure.
 
