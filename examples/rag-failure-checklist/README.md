@@ -4,11 +4,13 @@
 npx promptfoo@latest init --example rag-failure-checklist
 ````
 
-This example shows how to model a small set of common RAG and agent failure patterns as reproducible promptfoo evaluations.
+This example shows how to model a small set of common RAG and agent failure
+patterns as reproducible promptfoo evaluations.
 
 The goal is not to define a full benchmarking framework.
 
-Instead, this starter gives users a practical way to test a few high-signal failure modes that often show up in real pipelines:
+Instead, this starter gives users a practical way to test a few high-signal
+failure modes that often show up in real pipelines:
 
 * retrieval mismatch
 * weak grounding
@@ -20,7 +22,8 @@ Instead, this starter gives users a practical way to test a few high-signal fail
 
 In many RAG and agent workflows, failures do not look like obvious crashes.
 
-The system may return a fluent answer, but the answer can still be wrong because:
+The system may return a fluent answer, but the answer can still be wrong
+because:
 
 * retrieved context does not match the question
 * the answer is not grounded in the provided evidence
@@ -53,15 +56,18 @@ This example is not:
 * a complete benchmark for every RAG failure mode
 * tied to any specific vector database or retrieval framework
 * a replacement for end-to-end system tracing
-* a claim that one prompt or one assertion type is sufficient for production evaluation
+* a claim that one prompt or one assertion type is sufficient for production
+  evaluation
 
-It is intentionally small so that the integration path is easy to review and extend.
+It is intentionally small so that the integration path is easy to review and
+extend.
 
 ## Starter failure patterns
 
 ### 1. Retrieval mismatch
 
-The question is reasonable, but the retrieved context does not actually support the expected answer.
+The question is reasonable, but the retrieved context does not actually support
+the expected answer.
 
 Typical symptom:
 
@@ -71,7 +77,8 @@ Typical symptom:
 
 ### 2. Weak grounding
 
-The answer sounds plausible, but the retrieved context does not justify the claim.
+The answer sounds plausible, but the retrieved context does not justify the
+claim.
 
 Typical symptom:
 
@@ -81,7 +88,8 @@ Typical symptom:
 
 ### 3. Context drift across steps
 
-A later step in the workflow slowly moves away from the original task or instruction.
+A later step in the workflow slowly moves away from the original task or
+instruction.
 
 Typical symptom:
 
@@ -91,7 +99,8 @@ Typical symptom:
 
 ### 4. Overconfident unsupported answers
 
-The model responds with high confidence even when the context is incomplete or ambiguous.
+The model responds with high confidence even when the context is incomplete or
+ambiguous.
 
 Typical symptom:
 
@@ -132,14 +141,16 @@ Questions to ask:
 
 ## How to adapt this example
 
-The easiest way to extend this starter is to replace the sample cases with your own:
+The easiest way to extend this starter is to replace the sample cases with your
+own:
 
 * swap in your own retrieved passages
 * use your real prompts or system instructions
 * add assertions that match your reliability requirements
 * duplicate the existing pattern structure for new failure cases
 
-A good next step is to turn your most common support or QA complaints into eval cases.
+A good next step is to turn your most common support or QA complaints into eval
+cases.
 
 ## Suggested extension path
 
@@ -161,4 +172,5 @@ The intended integration path is:
 * make failure patterns concrete
 * let users replace the sample cases with their own RAG or agent workflows
 
-If the shape is useful, it can be extended into a broader set of reusable eval templates later.
+If the shape is useful, it can be extended into a broader set of reusable eval
+templates later.
