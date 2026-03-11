@@ -1,65 +1,72 @@
-<svg width="1200" height="520" viewBox="0 0 1200 520" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+<svg width="900" height="1100" viewBox="0 0 900 1100" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">Simplified Lilli attack chain</title>
-  <desc id="desc">A four-step diagram showing a public API surface, backend compromise, shared AI state, and resulting model behavior changes. The first two boxes are labeled as the root cause, and the last two boxes are labeled as the AI-layer blast radius.</desc>
+  <desc id="desc">A stacked flow diagram showing a root-cause panel with public API exposure and backend compromise, followed by an AI-layer impact panel with shared AI state and observable model behavior changes.</desc>
   <defs>
     <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
       <path d="M0 0L10 5L0 10V0Z" fill="#23313F" />
     </marker>
     <style>
-      .bg { fill: #FAF7F2; }
-      .frame { fill: #FFFFFF; stroke: #D9D4CB; stroke-width: 1.5; }
-      .cardStroke { stroke: #23313F; stroke-width: 2; }
-      .title { font: 700 32px "IBM Plex Sans", "Segoe UI", sans-serif; fill: #16202A; }
-      .subtitle { font: 500 16px "IBM Plex Sans", "Segoe UI", sans-serif; fill: #52606D; }
-      .step { font: 700 15px "IBM Plex Sans", "Segoe UI", sans-serif; fill: #4A5561; letter-spacing: 0.08em; text-transform: uppercase; }
-      .cardTitle { font: 700 24px "IBM Plex Sans", "Segoe UI", sans-serif; fill: #16202A; }
+      .page { fill: #F8F5EF; }
+      .frame { fill: #FFFFFF; stroke: #D8D1C7; stroke-width: 1.5; }
+      .rootPanel { fill: #FBF1DF; stroke: #D4B376; stroke-width: 1.5; }
+      .impactPanel { fill: #EAF2F6; stroke: #8CB3C8; stroke-width: 1.5; }
+      .card { fill: #FFFFFF; stroke: #23313F; stroke-width: 2; }
+      .title { font: 700 34px "IBM Plex Sans", "Segoe UI", sans-serif; fill: #16202A; }
+      .subtitle { font: 500 17px "IBM Plex Sans", "Segoe UI", sans-serif; fill: #52606D; }
+      .panelLabel { font: 700 15px "IBM Plex Sans", "Segoe UI", sans-serif; fill: #16202A; letter-spacing: 0.08em; text-transform: uppercase; }
+      .stepNumber { font: 700 22px "IBM Plex Sans", "Segoe UI", sans-serif; fill: #16202A; }
+      .cardTitle { font: 700 28px "IBM Plex Sans", "Segoe UI", sans-serif; fill: #16202A; }
       .body { font: 500 18px "IBM Plex Sans", "Segoe UI", sans-serif; fill: #23313F; }
       .arrow { stroke: #23313F; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
-      .pillText { font: 700 16px "IBM Plex Sans", "Segoe UI", sans-serif; fill: #16202A; }
+      .pillText { font: 700 14px "IBM Plex Sans", "Segoe UI", sans-serif; fill: #16202A; letter-spacing: 0.06em; text-transform: uppercase; }
     </style>
   </defs>
 
-  <rect class="bg" x="0" y="0" width="1200" height="520" rx="28" />
-  <rect class="frame" x="16" y="16" width="1168" height="488" rx="24" />
+  <rect class="page" x="0" y="0" width="900" height="1100" rx="28" />
+  <rect class="frame" x="18" y="18" width="864" height="1064" rx="24" />
 
-  <text class="title" x="60" y="72">How the reported chain reaches the AI layer</text>
-  <text class="subtitle" x="60" y="102">Based on CodeWall's public writeup and McKinsey's public response.</text>
+  <text class="title" x="60" y="74">How the reported chain reaches the AI layer</text>
+  <text class="subtitle" x="60" y="104">Based on CodeWall's public writeup and McKinsey's public response.</text>
 
-  <text class="step" x="60" y="154">1. Public surface</text>
-  <rect class="cardStroke" x="60" y="170" width="240" height="200" rx="20" fill="#EAF2FF" />
-  <text class="cardTitle" x="84" y="214">Public API</text>
-  <text class="body" x="84" y="252">• Exposed API docs</text>
-  <text class="body" x="84" y="286">• Unauthenticated routes</text>
-  <text class="body" x="84" y="320">• Search-write endpoint</text>
+  <rect class="rootPanel" x="60" y="140" width="780" height="420" rx="28" />
+  <rect x="88" y="164" width="262" height="34" rx="17" fill="#F2DFC0" />
+  <text class="pillText" x="219" y="186" text-anchor="middle">Root cause</text>
 
-  <text class="step" x="340" y="154">2. Backend compromise</text>
-  <rect class="cardStroke" x="340" y="170" width="240" height="200" rx="20" fill="#FFF1E1" />
-  <text class="cardTitle" x="364" y="214">API and DB</text>
-  <text class="body" x="364" y="252">• SQLi through JSON keys</text>
-  <text class="body" x="364" y="286">• Reads and writes</text>
-  <text class="body" x="364" y="320">• BOLA / IDOR on user data</text>
+  <rect class="card" x="100" y="220" width="700" height="132" rx="22" />
+  <circle cx="148" cy="286" r="28" fill="#EAF2FF" stroke="#23313F" stroke-width="2" />
+  <text class="stepNumber" x="148" y="293" text-anchor="middle">1</text>
+  <text class="cardTitle" x="192" y="266">Public API surface</text>
+  <text class="body" x="192" y="294">Exposed API docs and routes that did not require authentication</text>
+  <text class="body" x="192" y="318">According to CodeWall, one route wrote search data</text>
+  <text class="body" x="192" y="342">into the database</text>
 
-  <text class="step" x="620" y="154">3. Shared AI state</text>
-  <rect class="cardStroke" x="620" y="170" width="240" height="200" rx="20" fill="#EDF7EE" />
-  <text class="cardTitle" x="644" y="214">AI control data</text>
-  <text class="body" x="644" y="252">• Prompts and settings</text>
-  <text class="body" x="644" y="286">• Retrieval metadata</text>
-  <text class="body" x="644" y="320">• User history and files</text>
+  <path class="arrow" d="M450 352V402" />
 
-  <text class="step" x="900" y="154">4. Observable impact</text>
-  <rect class="cardStroke" x="900" y="170" width="240" height="200" rx="20" fill="#FCEEE6" />
-  <text class="cardTitle" x="924" y="214">AI behavior</text>
-  <text class="body" x="924" y="252">• Prompt rewrites</text>
-  <text class="body" x="924" y="286">• Retrieval changes</text>
-  <text class="body" x="924" y="320">• Cross-user answers</text>
+  <rect class="card" x="100" y="422" width="700" height="122" rx="22" />
+  <circle cx="148" cy="483" r="28" fill="#FFF1E1" stroke="#23313F" stroke-width="2" />
+  <text class="stepNumber" x="148" y="490" text-anchor="middle">2</text>
+  <text class="cardTitle" x="192" y="466">Backend compromise</text>
+  <text class="body" x="192" y="494">SQLi via JSON keys or identifiers, then database reads and writes</text>
+  <text class="body" x="192" y="518">CodeWall also reports BOLA or IDOR on employee-linked data</text>
 
-  <path class="arrow" d="M300 270H330" />
-  <path class="arrow" d="M580 270H610" />
-  <path class="arrow" d="M860 270H890" />
+  <rect class="impactPanel" x="60" y="590" width="780" height="450" rx="28" />
+  <rect x="88" y="614" width="286" height="34" rx="17" fill="#D7E7F0" />
+  <text class="pillText" x="231" y="636" text-anchor="middle">AI-layer impact</text>
 
-  <rect x="120" y="408" width="400" height="52" rx="26" fill="#F5E3C6" stroke="#C9A86A" stroke-width="1.5" />
-  <text class="pillText" x="320" y="440" text-anchor="middle">Root cause: API and backend security failure</text>
+  <rect class="card" x="100" y="670" width="700" height="148" rx="22" />
+  <circle cx="148" cy="744" r="28" fill="#EDF7EE" stroke="#23313F" stroke-width="2" />
+  <text class="stepNumber" x="148" y="751" text-anchor="middle">3</text>
+  <text class="cardTitle" x="192" y="718">Shared AI state</text>
+  <text class="body" x="192" y="746">If the same backend held prompts, settings, retrieval metadata,</text>
+  <text class="body" x="192" y="770">and user history, database access could change</text>
+  <text class="body" x="192" y="794">how Lilli behaved</text>
 
-  <rect x="680" y="408" width="400" height="52" rx="26" fill="#DDEEF7" stroke="#78A9C5" stroke-width="1.5" />
-  <text class="pillText" x="880" y="440" text-anchor="middle">Blast radius: AI state and behavior</text>
+  <path class="arrow" d="M450 818V878" />
+
+  <rect class="card" x="100" y="898" width="700" height="122" rx="22" />
+  <circle cx="148" cy="959" r="28" fill="#FCEEE6" stroke="#23313F" stroke-width="2" />
+  <text class="stepNumber" x="148" y="966" text-anchor="middle">4</text>
+  <text class="cardTitle" x="192" y="942">Observable impact</text>
+  <text class="body" x="192" y="970">Prompt changes, retrieval changes, and cross-user answers</text>
+  <text class="body" x="192" y="994">would surface through normal-looking model output</text>
 </svg>
