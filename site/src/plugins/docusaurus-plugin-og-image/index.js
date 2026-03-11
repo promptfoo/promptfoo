@@ -2,7 +2,6 @@ const path = require('path');
 const fs = require('fs').promises;
 const { default: satori } = require('satori');
 const matter = require('gray-matter');
-const sharp = require('sharp');
 
 // Constants for image generation
 const WIDTH = 1200;
@@ -13,6 +12,23 @@ const assetCache = {
   logo: null,
   satoriFont: null, // Satori font buffer (not base64)
 };
+
+let sharpModule = null;
+
+function getSharp() {
+  if (sharpModule) {
+    return sharpModule;
+  }
+
+  try {
+    sharpModule = require('sharp');
+    return sharpModule;
+  } catch (_error) {
+    throw new Error(
+      "OG image generation requires the optional 'sharp' dependency. Install it with `npm install --prefix site sharp` or set SKIP_OG_GENERATION=true.",
+    );
+  }
+}
 
 function resolveImageFullPath(imagePath) {
   const cwd = process.cwd();
@@ -120,6 +136,7 @@ async function getImageAsBase64(imagePath, maxWidth = 400, maxHeight = 390) {
     }
 
     // Use sharp to resize and resample images with high quality
+    const sharp = getSharp();
     const resizedBuffer = await sharp(fullPath)
       .resize(maxWidth, maxHeight, {
         fit: 'inside',
@@ -1569,6 +1586,7 @@ async function generateOgImage(metadata, outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -1604,6 +1622,7 @@ async function generatePricingOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -1636,6 +1655,7 @@ async function generateAboutOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -1668,6 +1688,7 @@ async function generateContactOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -1700,6 +1721,7 @@ async function generatePressOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -1732,6 +1754,7 @@ async function generateStoreOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -1764,6 +1787,7 @@ async function generateEventsOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -1796,6 +1820,7 @@ async function generateHealthcareOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -1828,6 +1853,7 @@ async function generateFinanceOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -1860,6 +1886,7 @@ async function generateInsuranceOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -1892,6 +1919,7 @@ async function generateTelecomOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
