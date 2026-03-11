@@ -350,6 +350,8 @@ export async function doEval(
     let cache: boolean | undefined;
     let maxConcurrency: number;
     let delay: number;
+    let passPower: number | undefined;
+    let passPowerThreshold: number | undefined;
     if (resumeRaw) {
       const persisted = (resumeEval?.runtimeOptions ||
         config.evaluateOptions ||
@@ -361,6 +363,14 @@ export async function doEval(
       cache = persisted.cache ?? true;
       maxConcurrency = (persisted.maxConcurrency as number | undefined) ?? DEFAULT_MAX_CONCURRENCY;
       delay = (persisted.delay as number | undefined) ?? 0;
+      passPower =
+        (typeof persisted.passPower === 'number' ? persisted.passPower : undefined) ??
+        getEnvFloat('PROMPTFOO_PASS_POWER') ??
+        repeat;
+      passPowerThreshold =
+        (typeof persisted.passPowerThreshold === 'number'
+          ? persisted.passPowerThreshold
+          : undefined) ?? getEnvFloat('PROMPTFOO_PASS_POWER_THRESHOLD');
     } else {
       // Misc settings with proper CLI vs config priority
       // CLI values explicitly provided by user should override config, but defaults should not
@@ -374,6 +384,17 @@ export async function doEval(
         evaluateOptions.maxConcurrency ??
         DEFAULT_MAX_CONCURRENCY;
       delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
+      passPower =
+        (cmdObj.passPower != null ? Number(cmdObj.passPower) : undefined) ??
+        commandLineOptions?.passPower ??
+        evaluateOptions.passPower ??
+        getEnvFloat('PROMPTFOO_PASS_POWER') ??
+        repeat;
+      passPowerThreshold =
+        (cmdObj.passPowerThreshold != null ? Number(cmdObj.passPowerThreshold) : undefined) ??
+        commandLineOptions?.passPowerThreshold ??
+        evaluateOptions.passPowerThreshold ??
+        getEnvFloat('PROMPTFOO_PASS_POWER_THRESHOLD');
     }
 
     if (cache === false || repeat > 1) {
@@ -472,6 +493,8 @@ export async function doEval(
               ? evaluateOptions.showProgressBar
               : true,
       repeat,
+      passPower: repeat > 1 ? passPower : undefined,
+      passPowerThreshold,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       maxConcurrency,
       cache,
@@ -919,6 +942,34 @@ export async function doEval(
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
         return ret;
       }
+
+      // pass^N consistency check
+      if (repeat > 1 && passPower != null) {
+        const { calculatePassPowerOfNFromResults } = await import('../util/passPowerOfN');
+        const allResults = await evalRecord.getResults();
+        const passPowerResult = calculatePassPowerOfNFromResults(allResults, passPower);
+        evalRecord.passPowerOfN = passPowerResult;
+
+        logger.info(
+          chalk.white(
+            `pass^${passPower} score: ${chalk.bold(passPowerResult.overallScore.toFixed(2))}%`,
+          ),
+        );
+
+        if (
+          passPowerThreshold != null &&
+          passPowerResult.overallScore <
+            (Number.isFinite(passPowerThreshold) ? passPowerThreshold : 100)
+        ) {
+          logger.info(
+            chalk.white(
+              `pass^${passPower} score ${chalk.red.bold(passPowerResult.overallScore.toFixed(2))}${chalk.red('%')} is below the threshold of ${chalk.red.bold(passPowerThreshold)}${chalk.red('%')}`,
+            ),
+          );
+          process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
+          return ret;
+        }
+      }
     }
     if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);
@@ -1013,6 +1064,14 @@ export function evalCommand(
       `Maximum number of concurrent API calls (default: ${DEFAULT_MAX_CONCURRENCY})`,
     )
     .option('--repeat <number>', 'Number of times to run each test (default: 1)')
+    .option(
+      '--pass-power-threshold <number>',
+      'Minimum pass^N score (0-100) for CI gating. Requires --repeat > 1',
+    )
+    .option(
+      '--pass-power <number>',
+      'The N exponent in pass^N consistency metric (default: repeat count)',
+    )
     .option('--delay <number>', 'Delay between each test (in milliseconds) (default: 0)')
     .option(
       '--no-cache',

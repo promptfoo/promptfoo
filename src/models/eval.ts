@@ -40,6 +40,7 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
+import { calculatePassPowerOfNFromResults } from '../util/passPowerOfN';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
@@ -331,6 +332,7 @@ export default class Eval {
   _resultsLoaded: boolean = false;
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
+  passPowerOfN?: EvaluateStats['passPowerOfN'];
   /** Total wall-clock duration. For redteam evals: generationDurationMs + evaluationDurationMs.
    *  For non-redteam evals: equals evaluationDurationMs (generation phase is N/A). */
   durationMs?: number;
@@ -1291,6 +1293,16 @@ export default class Eval {
       stats.errors += prompt.metrics?.testErrorCount ?? 0;
 
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
+    }
+
+    if (this.passPowerOfN) {
+      stats.passPowerOfN = this.passPowerOfN;
+      return stats;
+    }
+
+    const passPower = this.runtimeOptions?.passPower;
+    if (passPower != null && this.results.length > 0) {
+      stats.passPowerOfN = calculatePassPowerOfNFromResults(this.results, passPower);
     }
 
     return stats;

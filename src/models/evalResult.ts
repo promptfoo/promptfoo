@@ -151,7 +151,11 @@ export default class EvalResult {
       provider: sanitizeProvider(provider),
       latencyMs,
       cost,
-      metadata: sanitizeForDb(metadata),
+      metadata: sanitizeForDb(
+        result.repeatIndex != null
+          ? { ...(metadata || {}), repeatIndex: result.repeatIndex }
+          : metadata,
+      ),
       failureReason,
     };
     if (persist) {
@@ -443,6 +447,9 @@ export default class EvalResult {
       vars: shouldStripTestVars ? {} : this.testCase.vars || {},
       metadata: shouldStripMetadata ? {} : this.metadata,
       failureReason: this.failureReason,
+      ...(typeof this.metadata?.repeatIndex === 'number'
+        ? { repeatIndex: this.metadata.repeatIndex }
+        : {}),
     };
   }
 }

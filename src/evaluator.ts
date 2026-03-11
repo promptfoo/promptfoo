@@ -533,6 +533,7 @@ export async function runEval({
       testCase: test,
       promptId: prompt.id || '',
       tokenUsage: createEmptyTokenUsage(),
+      repeatIndex,
     };
 
     if (!ret.metadata?.sessionIds && !ret.metadata?.sessionId) {
@@ -689,6 +690,7 @@ export async function runEval({
         testCase: test,
         promptId: prompt.id || '',
         metadata,
+        repeatIndex,
       },
     ];
   }
@@ -1733,6 +1735,7 @@ class Evaluator {
           testIdx: evalStep.testIdx,
           testCase: sanitizedTestCase,
           promptId: evalStep.prompt.id || '',
+          repeatIndex: evalStep.repeatIndex,
         };
 
         // Add the timeout result to the evaluation record
@@ -2225,6 +2228,7 @@ class Evaluator {
             testIdx: evalStep.testIdx,
             testCase: evalStep.test,
             promptId: evalStep.prompt.id || '',
+            repeatIndex: evalStep.repeatIndex,
           } as EvaluateResult;
 
           await this.evalRecord.addResult(timeoutResult);
