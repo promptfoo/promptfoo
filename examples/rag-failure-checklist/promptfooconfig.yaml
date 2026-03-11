@@ -1,5 +1,4 @@
-description:
-  RAG failure checklist eval starter for common retrieval, grounding, and
+description: RAG failure checklist eval starter for common retrieval, grounding, and
   context hygiene failures
 
 providers:
@@ -26,14 +25,13 @@ prompts:
     {{current_context}}
 
 tests:
-  - description:
-      retrieval mismatch should fail closed when retrieved context is irrelevant
+  - description: retrieval mismatch should fail closed when retrieved context is irrelevant
     metadata:
       failure_pattern: retrieval-mismatch
       starter_group: rag-failure-checklist
     vars:
       question: What is the enterprise refund window?
-      prior_context: ""
+      prior_context: ''
       current_context: |
         Shipping policy:
         Standard delivery takes 3 to 5 business days.
@@ -45,8 +43,7 @@ tests:
       - type: not-icontains
         value: 3 to 5 business days
 
-  - description:
-      weak grounding should return the supported owner, not a guessed team
+  - description: weak grounding should return the supported owner, not a guessed team
     metadata:
       failure_pattern: weak-grounding
       starter_group: rag-failure-checklist
@@ -64,15 +61,13 @@ tests:
       - type: not-icontains
         value: security
 
-  - description:
-      later-step context should follow the final approved requirement, not older
+  - description: later-step context should follow the final approved requirement, not older
       draft notes
     metadata:
       failure_pattern: context-drift
       starter_group: rag-failure-checklist
     vars:
-      question:
-        Based on the final approved requirement, what should the release note
+      question: Based on the final approved requirement, what should the release note
         emphasize?
       prior_context: |
         Earlier draft:
@@ -89,14 +84,13 @@ tests:
       - type: not-icontains
         value: speed
 
-  - description:
-      unsupported specifics should not be answered with confidence
+  - description: unsupported specifics should not be answered with confidence
     metadata:
       failure_pattern: overconfident-unsupported-answer
       starter_group: rag-failure-checklist
     vars:
       question: What database version is currently running in production?
-      prior_context: ""
+      prior_context: ''
       current_context: |
         Migration planning notes:
         the team proposes moving to PostgreSQL 16 next quarter.
@@ -107,8 +101,7 @@ tests:
       - type: not-icontains
         value: postgresql 16
 
-  - description:
-      stale context carryover should not leak a previous customer's support tier
+  - description: stale context carryover should not leak a previous customer's support tier
     metadata:
       failure_pattern: stale-context-carryover
       starter_group: rag-failure-checklist
