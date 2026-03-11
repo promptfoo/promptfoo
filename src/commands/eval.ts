@@ -758,6 +758,14 @@ export async function doEval(
 
     // Check if scan was aborted due to target error (efficient DB query, not loading all results)
     const targetErrorStatus = await evalRecord.findTargetErrorStatus();
+    let passPowerResult = evalRecord.passPowerOfN;
+
+    if (repeat > 1 && passPower != null && !passPowerResult) {
+      const { calculatePassPowerOfNFromResults } = await import('../util/passPowerOfN');
+      const allResults = await evalRecord.getResults();
+      passPowerResult = calculatePassPowerOfNFromResults(allResults, passPower);
+      evalRecord.passPowerOfN = passPowerResult;
+    }
 
     // Generate and display summary immediately (before share completes)
     const summaryLines = generateEvalSummary({
@@ -777,6 +785,7 @@ export async function doEval(
       maxConcurrency,
       tracker,
       targetErrorStatus,
+      passPowerOfN: passPowerResult,
     });
 
     // Special case: show cloud signup instructions when user wants to share but can't
@@ -935,31 +944,9 @@ export async function doEval(
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
       const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
 
-      if (passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100)) {
-        if (getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
-          logger.info(
-            chalk.white(
-              `Pass rate ${chalk.red.bold(passRate.toFixed(2))}${chalk.red('%')} is below the threshold of ${chalk.red.bold(passRateThreshold)}${chalk.red('%')}`,
-            ),
-          );
-        }
-        process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
-        return ret;
-      }
-
-      // pass^N consistency check
-      if (repeat > 1 && passPower != null) {
-        const { calculatePassPowerOfNFromResults } = await import('../util/passPowerOfN');
-        const allResults = await evalRecord.getResults();
-        const passPowerResult = calculatePassPowerOfNFromResults(allResults, passPower);
-        evalRecord.passPowerOfN = passPowerResult;
-
-        logger.info(
-          chalk.white(
-            `pass^${passPower} score: ${chalk.bold(passPowerResult.overallScore.toFixed(2))}%`,
-          ),
-        );
-
+      // pass^N consistency check runs before the pass rate gate so the score
+      // is always computed and displayed when repeat > 1.
+      if (repeat > 1 && passPower != null && passPowerResult != null) {
         if (
           passPowerThreshold != null &&
           passPowerResult.overallScore <
@@ -973,6 +960,18 @@ export async function doEval(
           process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
           return ret;
         }
+      }
+
+      if (passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100)) {
+        if (getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
+          logger.info(
+            chalk.white(
+              `Pass rate ${chalk.red.bold(passRate.toFixed(2))}${chalk.red('%')} is below the threshold of ${chalk.red.bold(passRateThreshold)}${chalk.red('%')}`,
+            ),
+          );
+        }
+        process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
+        return ret;
       }
     }
     if (testSuite.redteam) {

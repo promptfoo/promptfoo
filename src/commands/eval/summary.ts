@@ -3,6 +3,7 @@ import { formatDuration } from '../../util/formatDuration';
 
 import type { TokenUsage } from '../../types/index';
 import type { TokenUsageTracker } from '../../util/tokenUsage';
+import type { PassPowerResult } from '../../util/passPowerOfN';
 
 /**
  * Parameters for generating an evaluation summary report.
@@ -43,6 +44,8 @@ export interface EvalSummaryParams {
   tracker: TokenUsageTracker;
   /** HTTP status code if the scan was aborted due to a non-transient target error (401, 403, 404, 501) */
   targetErrorStatus?: number;
+  /** pass^N consistency metric, when available */
+  passPowerOfN?: PassPowerResult;
 }
 
 /**
@@ -100,6 +103,7 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
     maxConcurrency,
     tracker,
     targetErrorStatus,
+    passPowerOfN,
   } = params;
 
   const lines: string[] = [];
@@ -341,6 +345,12 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
     lines.push(`${chalk.bold('Results:')} ${resultsLine}`);
   } else {
     lines.push(`${chalk.bold('Results:')} ${resultsLine} (${passRateDisplay})`);
+  }
+
+  if (passPowerOfN) {
+    lines.push(
+      `${chalk.bold(`pass^${passPowerOfN.n}:`)} ${chalk.white.bold(`${passPowerOfN.overallScore.toFixed(2)}%`)}`,
+    );
   }
 
   const durationDisplay = formatDuration(duration);
