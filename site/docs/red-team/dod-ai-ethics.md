@@ -211,7 +211,7 @@ DoD AI ethics testing is often paired with security and governance frameworks:
 - [NIST AI RMF](/docs/red-team/nist-ai-rmf/)
 - [OWASP Top 10 for Agentic Applications](/docs/red-team/owasp-agentic-ai/)
 - [ISO 42001](/docs/red-team/iso-42001/)
-- [GDPR](/docs/red-team/gdpr/)
+- [Data Protection](/docs/red-team/gdpr/)
 
 Example combined scan:
 
