@@ -343,6 +343,7 @@ export interface EvaluateResult {
   cost?: number;
   metadata?: Record<string, any>;
   tokenUsage?: Required<TokenUsage>;
+  updatedAt?: string;
 }
 
 export interface EvaluateTableOutput {
