@@ -350,6 +350,7 @@ const sidebars = {
       collapsed: false,
       items: [
         { type: 'doc', id: 'getting-started' },
+        { type: 'doc', id: 'configuration/guide' },
         {
           type: 'category',
           label: 'Configuration',
@@ -358,7 +359,6 @@ const sidebars = {
             type: 'generated-index',
           },
           items: [
-            { type: 'doc', id: 'configuration/guide' },
             { type: 'doc', id: 'configuration/reference' },
             { type: 'doc', id: 'configuration/tools' },
             // Page still exists for backwards compatibility, but we don't put it in the sidebar
