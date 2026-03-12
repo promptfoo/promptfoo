@@ -540,15 +540,30 @@ export const MITRE_ATLAS_MAPPING: Record<string, { plugins: Plugin[]; strategies
 export const EU_AI_ACT_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
   /* ----------  Art. 5 – Prohibited practices  --------------------------------- */
   'eu:ai-act:art5:subliminal-manipulation': {
-    plugins: ['hijacking', 'intent', 'excessive-agency'],
+    plugins: ['hijacking', 'intent', 'excessive-agency', 'harmful:misinformation-disinformation'],
     strategies: ['jailbreak', 'jailbreak:tree', 'jailbreak:composite', 'jailbreak-templates'],
   },
   'eu:ai-act:art5:exploitation-of-vulnerabilities': {
-    plugins: ['hijacking', 'imitation', 'harmful:misinformation-disinformation'],
-    strategies: [],
+    // Art. 5(1)(b) – targets age, disability, social/economic situation
+    plugins: [
+      'hijacking',
+      'imitation',
+      'harmful:misinformation-disinformation',
+      'bias:age',
+      'bias:disability',
+    ],
+    strategies: ['jailbreak'],
   },
   'eu:ai-act:art5:social-scoring': {
-    plugins: ['harmful:misinformation-disinformation', 'overreliance'],
+    // Art. 5(1)(c) – discriminatory classification of persons
+    plugins: [
+      'harmful:misinformation-disinformation',
+      'overreliance',
+      'bias:age',
+      'bias:gender',
+      'bias:race',
+      'bias:disability',
+    ],
     strategies: [],
   },
   'eu:ai-act:art5:biometric-categorisation': {
@@ -574,27 +589,54 @@ export const EU_AI_ACT_MAPPING: Record<string, { plugins: Plugin[]; strategies: 
     strategies: ['jailbreak', 'jailbreak-templates'],
   },
   'eu:ai-act:annex3:education': {
-    plugins: ['harmful:misinformation-disinformation', 'hallucination', 'overreliance'],
+    // Annex III §3 – access to education, learning outcomes, appropriate level
+    plugins: [
+      'harmful:misinformation-disinformation',
+      'hallucination',
+      'overreliance',
+      'bias:race',
+      'bias:gender',
+      'bias:disability',
+    ],
     strategies: [],
   },
   'eu:ai-act:annex3:employment': {
-    plugins: ['imitation', 'pii:direct', 'overreliance'],
+    // Annex III §4 – recruitment, selection, promotion, termination
+    plugins: [
+      'imitation',
+      'pii:direct',
+      'overreliance',
+      'bias:gender',
+      'bias:race',
+      'bias:age',
+      'bias:disability',
+    ],
     strategies: [],
   },
   'eu:ai-act:annex3:essential-services': {
-    plugins: ['pii:direct', 'pii:session', 'excessive-agency'],
+    // Annex III §5 – creditworthiness, emergency dispatch, public services
+    plugins: ['pii:direct', 'pii:session', 'excessive-agency', 'bias:race', 'bias:gender'],
     strategies: [],
   },
   'eu:ai-act:annex3:law-enforcement': {
-    plugins: ['pii:direct', 'pii:api-db', 'harmful:privacy'],
+    // Annex III §6 – risk assessments, profiling, evidence evaluation
+    plugins: ['pii:direct', 'pii:api-db', 'harmful:privacy', 'bias:race'],
     strategies: [],
   },
   'eu:ai-act:annex3:migration-border': {
-    plugins: ['pii:direct', 'harmful:hate', 'harmful:privacy'],
+    // Annex III §7 – verification, risk assessments, document authenticity
+    plugins: ['pii:direct', 'harmful:hate', 'harmful:privacy', 'bias:race'],
     strategies: [],
   },
   'eu:ai-act:annex3:justice-democracy': {
-    plugins: ['hallucination', 'harmful:misinformation-disinformation', 'pii:direct'],
+    // Annex III §8 – interpreting facts/law, applying law to facts
+    plugins: [
+      'hallucination',
+      'harmful:misinformation-disinformation',
+      'pii:direct',
+      'bias:race',
+      'bias:gender',
+    ],
     strategies: [],
   },
 };
