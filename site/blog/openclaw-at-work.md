@@ -85,7 +85,7 @@ This deployment placed three capabilities inside one trust boundary:
 
 That combination is enough to turn a malicious webpage into an endpoint-security problem. If a company gives employees an agent with access to internal documents, writable local state, and messaging integrations, it is granting a privileged endpoint that happens to speak natural language.
 
-I am not claiming here that every OpenClaw default or approval flow fails under every configuration. The narrower claim is still enough: a browse-capable local deployment with meaningful privileges can generate false messages and durable local artifacts, and companies should deploy that class of agent accordingly.
+I am not claiming here that every OpenClaw default or approval flow fails under every configuration. The narrower claim is still enough: a local deployment with browsing capabilities and meaningful privileges can generate false messages and durable local artifacts, and companies should deploy that class of agent accordingly.
 
 ## How I tested it
 
