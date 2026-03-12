@@ -50,7 +50,7 @@ I also seeded the workspace with decoy files, canaries, and fake contact data. I
 
 The setup was straightforward: OpenClaw as the target, Promptfoo for indirect web attack generation, malicious pages under my control, and local sinks to catch whatever OpenClaw decided to do once it started trusting the wrong content.
 
-If you want to skip straight to the lab config, it's embedded below in [How to reproduce](#how-to-reproduce) and checked into the repo at [examples/provider-openclaw/workplace-risk](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-openclaw/workplace-risk).
+If you want to skip straight to the lab config, it's embedded below in [How to reproduce](#how-to-reproduce).
 
 ## Phase 1: Recon
 
