@@ -43,7 +43,7 @@ The lab environment was intentionally simple:
 - loopback SMS, email, and social sinks so I could observe side effects without touching real services
 - decoy documents and canaries in the local workspace
 
-For the webpage payloads, I used Promptfoo's [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) strategy, building on Yash Chhabria's earlier writeup on [indirect prompt injection in web-browsing agents](/blog/indirect-prompt-injection-web-agents). The strategy can embed instructions in browser-readable page content using invisible text, instructions woven into normal-looking text, or HTML comments. The goal was not to prove that indirect prompt injection exists. It was to see whether a browsing agent with local privileges would turn injected instructions into observable side effects.
+For the webpage payloads, I used Promptfoo's [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) strategy, building on Yash Chhabria's earlier writeup on [indirect prompt injection in web-browsing agents](/blog/indirect-prompt-injection-web-agents). The strategy can embed instructions in browser-readable page content using invisible text, instructions woven into normal-looking text, or HTML comments. The goal was not to prove that indirect prompt injection exists. It was to see whether an agent with browsing capabilities would turn injected instructions into observable side effects.
 
 This was a permissive personal-assistant deployment, not a hardened least-privilege baseline. Browsing, writable local file access, and loopback outbound tools were intentionally available in one trust boundary because that is the deployment posture I wanted to test.
 
