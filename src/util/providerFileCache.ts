@@ -11,6 +11,7 @@ import { createHash } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
+import { isCacheEnabled } from '../cache';
 import logger from '../logger';
 import { getProviderFileFromCloud, type ProviderFileMetadata } from './cloud';
 import { getConfigDirectoryPath } from './config/manage';
@@ -108,8 +109,8 @@ export async function getOrDownloadProviderFile(
   providerId: string,
   fileMetadata?: ProviderFileMetadata | null,
 ): Promise<string | null> {
-  // If we have metadata, check cache first
-  if (fileMetadata) {
+  // If we have metadata and cache is enabled, check cache first
+  if (fileMetadata && isCacheEnabled()) {
     const extension = getFileExtension(fileMetadata.language);
     const cachedPath = getCachedProviderFile(fileMetadata.checksumSha256, extension);
     if (cachedPath) {
