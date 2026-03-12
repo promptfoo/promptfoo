@@ -88,6 +88,9 @@ If you want to reproduce this yourself, the setup is not complicated. You need a
 
 From there, the workflow is simple: define the OpenClaw target, tell Promptfoo what kind of agent it is testing, enable `indirect-web-pwn`, and then add a few concrete proof-of-impact tests on top. The automatic red-team section is useful for generating realistic attacks at scale. The hand-written tests are what let you prove something specific happened.
 
+<details>
+<summary>Show YAML file for this example</summary>
+
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: OpenClaw workplace risk lab
@@ -184,6 +187,8 @@ tests:
       - type: icontains
         value: 'maya@example.test'
 ```
+
+</details>
 
 The important thing is not to treat this like a normal prompt-in/prompt-out eval. The attack depends on environment, state, and side effects. If you only check whether the model says something bad, you will miss the part that actually matters.
 
