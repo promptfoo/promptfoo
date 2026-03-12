@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   readonly VITE_PROMPTFOO_LAUNCHER?: string;
   readonly VITE_IS_HOSTED?: string;
   readonly VITE_PROMPTFOO_NO_CHAT?: string;
+  readonly VITE_PROMPTFOO_WEB_VIEWER_TABLE_SETTING_PRETTIFY_JSON?: string;
+  readonly VITE_PROMPTFOO_WEB_VIEWER_TABLE_SETTING_SHOW_PASS_FAIL?: string;
 }
 
 interface ImportMeta {

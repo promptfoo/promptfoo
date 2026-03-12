@@ -220,5 +220,11 @@ export default defineConfig({
       process.env.PROMPTFOO_POSTHOG_HOST || 'https://a.promptfoo.app',
     ),
     'import.meta.env.VITE_PUBLIC_BASENAME': JSON.stringify(process.env.VITE_PUBLIC_BASENAME || ''),
+    'import.meta.env.VITE_PROMPTFOO_WEB_VIEWER_TABLE_SETTING_PRETTIFY_JSON': JSON.stringify(
+      process.env.PROMPTFOO_WEB_VIEWER_TABLE_SETTING_PRETTIFY_JSON || '',
+    ),
+    'import.meta.env.VITE_PROMPTFOO_WEB_VIEWER_TABLE_SETTING_SHOW_PASS_FAIL': JSON.stringify(
+      process.env.PROMPTFOO_WEB_VIEWER_TABLE_SETTING_SHOW_PASS_FAIL || '',
+    ),
   },
 });
