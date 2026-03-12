@@ -513,6 +513,34 @@ Line 2: {{ vars.test }}`),
 Line 2: {{ vars.test }}`);
     });
 
+    it('should render env vars in strings longer than 50000 chars', async () => {
+      process.env.TEST_ENV_VAR = 'env_value';
+      const padding = 'x'.repeat(60000);
+      const template = `${padding} {{ env.TEST_ENV_VAR }} ${padding}`;
+      expect(template.length).toBeGreaterThan(50000);
+      expect(renderEnvOnlyInObject(template)).toBe(`${padding} env_value ${padding}`);
+    });
+
+    it('should preserve non-env templates in long strings', async () => {
+      const padding = 'x'.repeat(60000);
+      const template = `${padding} {{ vars.myVar }} ${padding}`;
+      expect(renderEnvOnlyInObject(template)).toBe(template);
+    });
+
+    it('should handle long strings with mixed env and non-env templates', async () => {
+      process.env.HOST = 'example.com';
+      const padding = 'x'.repeat(60000);
+      const template = `${padding} {{ env.HOST }} {{ vars.test }} ${padding}`;
+      expect(renderEnvOnlyInObject(template)).toBe(
+        `${padding} example.com {{ vars.test }} ${padding}`,
+      );
+    });
+
+    it('should handle long strings with no templates at all', async () => {
+      const longString = 'a'.repeat(100000);
+      expect(renderEnvOnlyInObject(longString)).toBe(longString);
+    });
+
     it('should not confuse env in other contexts', async () => {
       process.env.TEST = 'value';
       // Should not match "environment" or other words containing "env"

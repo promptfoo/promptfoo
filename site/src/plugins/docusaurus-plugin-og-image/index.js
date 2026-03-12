@@ -2,7 +2,6 @@ const path = require('path');
 const fs = require('fs').promises;
 const { default: satori } = require('satori');
 const matter = require('gray-matter');
-const sharp = require('sharp');
 
 // Constants for image generation
 const WIDTH = 1200;
@@ -13,6 +12,23 @@ const assetCache = {
   logo: null,
   satoriFont: null, // Satori font buffer (not base64)
 };
+
+let sharpModule = null;
+
+function getSharp() {
+  if (sharpModule) {
+    return sharpModule;
+  }
+
+  try {
+    sharpModule = require('sharp');
+    return sharpModule;
+  } catch (_error) {
+    throw new Error(
+      "OG image generation requires the optional 'sharp' dependency. Install it with `npm install --prefix site sharp` or set SKIP_OG_GENERATION=true.",
+    );
+  }
+}
 
 function resolveImageFullPath(imagePath) {
   const cwd = process.cwd();
@@ -120,6 +136,7 @@ async function getImageAsBase64(imagePath, maxWidth = 400, maxHeight = 390) {
     }
 
     // Use sharp to resize and resample images with high quality
+    const sharp = getSharp();
     const resizedBuffer = await sharp(fullPath)
       .resize(maxWidth, maxHeight, {
         fit: 'inside',
@@ -175,334 +192,6 @@ try {
   // File may not exist if fetch-stats was skipped; fallback values are fine.
 }
 const SITE_STATS = { ...siteStats, ...generatedStats };
-
-// Generate Satori JSX template for Careers page OG image
-async function generateCareersTemplate() {
-  const logoBase64 = await getLogoAsBase64();
-
-  return {
-    type: 'div',
-    props: {
-      style: {
-        width: WIDTH,
-        height: HEIGHT,
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'linear-gradient(135deg, #10191c 0%, #17252b 100%)',
-        fontFamily: 'Inter',
-      },
-      children: [
-        // Top accent bar
-        {
-          type: 'div',
-          props: {
-            style: {
-              width: '100%',
-              height: 4,
-              background: 'linear-gradient(90deg, #e53a3a 0%, #cb3434 100%)',
-            },
-          },
-        },
-        // Main content card
-        {
-          type: 'div',
-          props: {
-            style: {
-              display: 'flex',
-              flexDirection: 'column',
-              margin: 40,
-              padding: 40,
-              borderRadius: 12,
-              backgroundColor: 'rgba(23, 37, 43, 0.4)',
-              borderLeft: '6px solid #e53a3a',
-              flex: 1,
-            },
-            children: [
-              // Header section (logo + brand + badge)
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    display: 'flex',
-                    alignItems: 'center',
-                    marginBottom: 30,
-                  },
-                  children: [
-                    // Logo
-                    logoBase64
-                      ? {
-                          type: 'img',
-                          props: {
-                            src: logoBase64,
-                            width: 56,
-                            height: 56,
-                            style: { marginRight: 16 },
-                          },
-                        }
-                      : null,
-                    // Brand name
-                    {
-                      type: 'div',
-                      props: {
-                        style: {
-                          fontSize: 24,
-                          fontWeight: 600,
-                          color: '#ff7a7a',
-                          marginRight: 'auto',
-                        },
-                        children: 'promptfoo',
-                      },
-                    },
-                    // Careers badge
-                    {
-                      type: 'div',
-                      props: {
-                        style: {
-                          padding: '8px 20px',
-                          borderRadius: 16,
-                          backgroundColor: 'rgba(229, 58, 58, 0.15)',
-                          border: '1px solid #e53a3a',
-                          fontSize: 14,
-                          fontWeight: 600,
-                          color: '#ff7a7a',
-                        },
-                        children: 'Careers',
-                      },
-                    },
-                  ].filter(Boolean),
-                },
-              },
-              // Main headline
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 48,
-                    fontWeight: 600,
-                    color: 'white',
-                    lineHeight: 1.2,
-                    marginBottom: 16,
-                  },
-                  children: 'Build the Future',
-                },
-              },
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 48,
-                    fontWeight: 600,
-                    color: 'white',
-                    lineHeight: 1.2,
-                    marginBottom: 24,
-                  },
-                  children: 'of AI Security',
-                },
-              },
-              // Subtitle
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    fontSize: 20,
-                    color: 'rgba(255, 255, 255, 0.7)',
-                    marginBottom: 30,
-                  },
-                  children: "Join the team protecting AI at the world's leading companies",
-                },
-              },
-              // Divider
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    width: 60,
-                    height: 4,
-                    backgroundColor: '#e53a3a',
-                    marginBottom: 30,
-                  },
-                },
-              },
-              // Stats row
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    display: 'flex',
-                    gap: 60,
-                    marginBottom: 30,
-                  },
-                  children: [
-                    // Fortune 500
-                    {
-                      type: 'div',
-                      props: {
-                        style: {
-                          display: 'flex',
-                          flexDirection: 'column',
-                        },
-                        children: [
-                          {
-                            type: 'div',
-                            props: {
-                              style: {
-                                fontSize: 36,
-                                fontWeight: 600,
-                                color: 'white',
-                              },
-                              children: String(SITE_STATS.FORTUNE_500_COUNT),
-                            },
-                          },
-                          {
-                            type: 'div',
-                            props: {
-                              style: {
-                                fontSize: 14,
-                                color: 'rgba(255, 255, 255, 0.6)',
-                              },
-                              children: 'of the Fortune 500',
-                            },
-                          },
-                        ],
-                      },
-                    },
-                    // GitHub Stars
-                    {
-                      type: 'div',
-                      props: {
-                        style: {
-                          display: 'flex',
-                          flexDirection: 'column',
-                        },
-                        children: [
-                          {
-                            type: 'div',
-                            props: {
-                              style: {
-                                fontSize: 36,
-                                fontWeight: 600,
-                                color: 'white',
-                              },
-                              children: `${SITE_STATS.GITHUB_STARS_DISPLAY}+`,
-                            },
-                          },
-                          {
-                            type: 'div',
-                            props: {
-                              style: {
-                                fontSize: 14,
-                                color: 'rgba(255, 255, 255, 0.6)',
-                              },
-                              children: 'GitHub Stars',
-                            },
-                          },
-                        ],
-                      },
-                    },
-                    // OSS Users
-                    {
-                      type: 'div',
-                      props: {
-                        style: {
-                          display: 'flex',
-                          flexDirection: 'column',
-                        },
-                        children: [
-                          {
-                            type: 'div',
-                            props: {
-                              style: {
-                                fontSize: 36,
-                                fontWeight: 600,
-                                color: 'white',
-                              },
-                              children: `${SITE_STATS.USER_COUNT_SHORT}+`,
-                            },
-                          },
-                          {
-                            type: 'div',
-                            props: {
-                              style: {
-                                fontSize: 14,
-                                color: 'rgba(255, 255, 255, 0.6)',
-                              },
-                              children: 'OSS Users',
-                            },
-                          },
-                        ],
-                      },
-                    },
-                    // Trust badges section
-                    {
-                      type: 'div',
-                      props: {
-                        style: {
-                          display: 'flex',
-                          gap: 12,
-                          marginLeft: 'auto',
-                          alignItems: 'center',
-                        },
-                        children: ['SOC2', 'ISO 27001', 'HIPAA'].map((badge) => ({
-                          type: 'div',
-                          props: {
-                            style: {
-                              padding: '6px 12px',
-                              borderRadius: 6,
-                              backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                              border: '1px solid rgba(255, 255, 255, 0.2)',
-                              fontSize: 12,
-                              fontWeight: 600,
-                              color: 'rgba(255, 255, 255, 0.8)',
-                            },
-                            children: badge,
-                          },
-                        })),
-                      },
-                    },
-                  ],
-                },
-              },
-              // Footer section
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 6,
-                    marginTop: 'auto',
-                  },
-                  children: [
-                    {
-                      type: 'div',
-                      props: {
-                        style: {
-                          fontSize: 16,
-                          color: 'rgba(255, 255, 255, 0.6)',
-                        },
-                        children: 'Secure and reliable LLM applications',
-                      },
-                    },
-                    {
-                      type: 'div',
-                      props: {
-                        style: {
-                          fontSize: 14,
-                          color: 'rgba(255, 122, 122, 0.8)',
-                        },
-                        children: 'promptfoo.dev/careers',
-                      },
-                    },
-                  ],
-                },
-              },
-            ].filter(Boolean),
-          },
-        },
-      ],
-    },
-  };
-}
 
 // Generate Satori JSX template for Pricing page OG image
 async function generatePricingTemplate() {
@@ -1633,16 +1322,6 @@ async function generateSolutionTemplate(options) {
   };
 }
 
-// Healthcare solutions page template
-async function generateHealthcareTemplate() {
-  return generateSolutionTemplate({
-    vertical: 'Healthcare & Life Sciences',
-    headline: 'AI Security for Healthcare',
-    subtitle: 'Red team clinical AI for patient safety, medical accuracy, and PHI protection',
-    badges: ['HIPAA', 'HITRUST', 'FDA SaMD', 'SOC 2'],
-  });
-}
-
 // Finance solutions page template
 async function generateFinanceTemplate() {
   return generateSolutionTemplate({
@@ -1658,8 +1337,8 @@ async function generateInsuranceTemplate() {
   return generateSolutionTemplate({
     vertical: 'Insurance',
     headline: 'AI Security for Insurance',
-    subtitle: 'Red team AI for HIPAA compliance, PHI protection, and coverage discrimination',
-    badges: ['HIPAA', 'MHPAEA', 'CMS', 'State DOI'],
+    subtitle: 'Red team AI for PHI protection, network accuracy, and coverage discrimination',
+    badges: ['PHI', 'MHPAEA', 'CMS', 'State DOI'],
   });
 }
 
@@ -1897,6 +1576,7 @@ async function generateOgImage(metadata, outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -1922,38 +1602,6 @@ async function generateOgImage(metadata, outputPath) {
   }
 }
 
-// Generate Careers OG image using custom template
-async function generateCareersOgImage(outputPath) {
-  try {
-    const fonts = await getSatoriFonts();
-    const template = await generateCareersTemplate();
-
-    // Generate SVG using Satori
-    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
-
-    // Convert SVG to PNG using Sharp
-    const pngBuffer = await sharp(Buffer.from(svg))
-      .ensureAlpha()
-      .png({
-        quality: 100,
-        compressionLevel: 6,
-        palette: false,
-      })
-      .toBuffer();
-
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-
-    // Write PNG file
-    await fs.writeFile(outputPath, pngBuffer);
-
-    return true;
-  } catch (error) {
-    console.error('❌ Failed to generate Careers OG image:', error.message);
-    return false;
-  }
-}
-
 // Generate Pricing OG image using custom template
 async function generatePricingOgImage(outputPath) {
   try {
@@ -1964,6 +1612,7 @@ async function generatePricingOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -1996,6 +1645,7 @@ async function generateAboutOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -2028,6 +1678,7 @@ async function generateContactOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -2060,6 +1711,7 @@ async function generatePressOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -2092,6 +1744,7 @@ async function generateStoreOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -2124,6 +1777,7 @@ async function generateEventsOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -2146,38 +1800,6 @@ async function generateEventsOgImage(outputPath) {
   }
 }
 
-// Generate Healthcare solutions OG image using custom template
-async function generateHealthcareOgImage(outputPath) {
-  try {
-    const fonts = await getSatoriFonts();
-    const template = await generateHealthcareTemplate();
-
-    // Generate SVG using Satori
-    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
-
-    // Convert SVG to PNG using Sharp
-    const pngBuffer = await sharp(Buffer.from(svg))
-      .ensureAlpha()
-      .png({
-        quality: 100,
-        compressionLevel: 6,
-        palette: false,
-      })
-      .toBuffer();
-
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-
-    // Write PNG file
-    await fs.writeFile(outputPath, pngBuffer);
-
-    return true;
-  } catch (error) {
-    console.error('❌ Failed to generate Healthcare OG image:', error.message);
-    return false;
-  }
-}
-
 // Generate Finance solutions OG image using custom template
 async function generateFinanceOgImage(outputPath) {
   try {
@@ -2188,6 +1810,7 @@ async function generateFinanceOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -2220,6 +1843,7 @@ async function generateInsuranceOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -2252,6 +1876,7 @@ async function generateTelecomOgImage(outputPath) {
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
 
     // Convert SVG to PNG using Sharp
+    const sharp = getSharp();
     const pngBuffer = await sharp(Buffer.from(svg))
       .ensureAlpha()
       .png({
@@ -2666,18 +2291,6 @@ module.exports = function (context, options) {
         );
       }
 
-      // Generate careers page OG image
-      console.log('🎨 Generating Careers page OG image...');
-      const careersImagePath = path.join(outDir, 'img', 'og', 'careers-og.png');
-      const careersSuccess = await generateCareersOgImage(careersImagePath);
-      if (careersSuccess) {
-        generatedImages.set('/careers/', '/img/og/careers-og.png');
-        successCount++;
-        console.log('  ✅ Careers OG image generated');
-      } else {
-        failureCount++;
-      }
-
       // Generate pricing page OG image
       console.log('🎨 Generating Pricing page OG image...');
       const pricingImagePath = path.join(outDir, 'img', 'og', 'pricing-og.png');
@@ -2753,17 +2366,6 @@ module.exports = function (context, options) {
       // Generate solutions page OG images
       console.log('🎨 Generating Solutions page OG images...');
 
-      // Healthcare solutions page
-      const healthcareImagePath = path.join(outDir, 'img', 'og', 'solutions-healthcare-og.png');
-      const healthcareSuccess = await generateHealthcareOgImage(healthcareImagePath);
-      if (healthcareSuccess) {
-        generatedImages.set('/solutions/healthcare/', '/img/og/solutions-healthcare-og.png');
-        successCount++;
-        console.log('  ✅ Healthcare solutions OG image generated');
-      } else {
-        failureCount++;
-      }
-
       // Finance solutions page
       const financeImagePath = path.join(outDir, 'img', 'og', 'solutions-finance-og.png');
       const financeSuccess = await generateFinanceOgImage(financeImagePath);
@@ -2797,17 +2399,15 @@ module.exports = function (context, options) {
         failureCount++;
       }
 
-      // Inject meta tags for special pages (careers, pricing, about, contact, press, store, events, solutions)
+      // Inject meta tags for special pages (pricing, about, contact, press, store, events, solutions)
       console.log('🔄 Injecting OG image meta tags for special pages...');
       const specialPages = [
-        '/careers/',
         '/pricing/',
         '/about/',
         '/contact/',
         '/press/',
         '/store/',
         '/events/',
-        '/solutions/healthcare/',
         '/solutions/finance/',
         '/solutions/insurance/',
         '/solutions/telecom/',
