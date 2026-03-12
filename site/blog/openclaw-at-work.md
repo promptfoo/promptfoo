@@ -19,19 +19,19 @@ tags: [red-teaming, ai-security, agents, prompt-injection]
 
 [`OpenClaw`](https://github.com/openclaw/openclaw) combines web browsing, local file access, and outbound actions in one user-facing assistant. That combination is also the security problem.
 
-In a controlled lab, I tested a local OpenClaw deployment with browser access, writable local state, and loopback SMS, email, and social sinks. A malicious webpage induced the agent to enumerate capabilities, read local documents, write local artifacts, and send unauthorized messages to loopback endpoints. Once an agent can browse untrusted content and act externally, it should be treated as a privileged endpoint, not a harmless assistant.
+In a controlled lab, we tested a local OpenClaw deployment with browser access, writable local state, and loopback SMS, email, and social sinks. A malicious webpage induced the agent to enumerate capabilities, read local documents, write local artifacts, and send unauthorized messages to loopback endpoints. Once an agent can browse untrusted content and act externally, it should be treated as a privileged endpoint, not a harmless assistant.
 
 The security boundary for agents is not the model. It is the action boundary.
 
 <!-- truncate -->
 
-This is not a version-specific security advisory. It documents one exploit chain in a permissive OpenClaw deployment where browsing, local file access, and outbound actions shared a trust boundary, leading to capability disclosure, local document access, local artifact creation, and unauthorized messages to loopback sinks.
+This post documents one exploit chain in a permissive OpenClaw deployment where browsing, local file access, and outbound actions shared a trust boundary, leading to capability disclosure, local document access, local artifact creation, and unauthorized messages to loopback sinks.
 
-The point is narrower and more useful: browse-capable local agents become materially riskier when browsing, local access, and outbound actions share a trust boundary. Those capabilities should be separately gated, as reflected in OpenClaw's [security documentation](https://docs.openclaw.ai/gateway/security) and Promptfoo's [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) testing approach.
+Browse-capable local agents become materially riskier when browsing, local access, and outbound actions share a trust boundary. Those capabilities should be separately gated, as reflected in OpenClaw's [security documentation](https://docs.openclaw.ai/gateway/security) and Promptfoo's [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) testing approach.
 
 ## What this case study is and is not
 
-Indirect prompt injection from websites and files is already a known agent risk. This case study is narrower: I wanted to see what happens when that known risk is combined with a local agent that can browse attacker-controlled pages, read and write local files, and send messages through connected channels. I am not treating this post as proof that every [`OpenClaw` safeguard or trust boundary](https://docs.openclaw.ai/gateway/security) fails in the same way, and I am not presenting it as a repository security advisory with affected versions. It also does not attempt to map behavior across OpenClaw versions, model providers, or approval modes.
+Indirect prompt injection from websites and files is already a known agent risk. This case study examines what happens when that risk is combined with a local agent that can browse attacker-controlled pages, read and write local files, and send messages through connected channels. It focuses on one exploit chain rather than behavior across OpenClaw versions, model providers, or approval modes.
 
 ## Test setup
 
@@ -40,18 +40,18 @@ The lab environment was intentionally simple:
 - a local OpenClaw instance configured as a personal coding assistant
 - Promptfoo generating indirect web injection scenarios and validating outcomes
 - attacker-controlled webpages tailored to the agent's stated purpose
-- loopback SMS, email, and social sinks so I could observe side effects without touching real services
+- loopback SMS, email, and social sinks so we could observe side effects without touching real services
 - decoy documents and canaries in the local workspace
 
-For the webpage payloads, I used Promptfoo's [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) strategy, building on Yash Chhabria's earlier writeup on [indirect prompt injection in web-browsing agents](/blog/indirect-prompt-injection-web-agents). The strategy can embed instructions in browser-readable page content using invisible text, instructions woven into normal-looking text, or HTML comments. The goal was not to prove that indirect prompt injection exists. It was to see whether an agent with browsing capabilities would turn injected instructions into observable side effects.
+For the webpage payloads, we used Promptfoo's [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) strategy, building on Yash Chhabria's earlier writeup on [indirect prompt injection in web-browsing agents](/blog/indirect-prompt-injection-web-agents). The strategy can embed instructions in browser-readable page content using invisible text, instructions woven into normal-looking text, or HTML comments. The goal was not to prove that indirect prompt injection exists. It was to see whether an agent with browsing capabilities would turn injected instructions into observable side effects.
 
-This was a permissive personal-assistant deployment, not a hardened least-privilege baseline. Browsing, writable local file access, and loopback outbound tools were intentionally available in one trust boundary because that is the deployment posture I wanted to test.
+This was a permissive personal-assistant deployment. Browsing, writable local file access, and loopback outbound tools were intentionally available in one trust boundary because that is the deployment posture we wanted to test.
 
 ## Observed exploit chain
 
 ![Attack chain showing untrusted web content leading to capability disclosure, local artifact creation, and unauthorized outbound actions.](/img/blog/openclaw-at-work/attack-chain.svg)
 
-I ran the lab in three phases: capability discovery, local access and artifact creation, then outbound action. Once the injected pages got the agent to describe what it could do, the later tests became much easier to target.
+We ran the lab in three phases: capability discovery, local access and artifact creation, then outbound action. Once the injected pages got the agent to describe what it could do, the later tests became much easier to target.
 
 ### Phase 1: Capability discovery
 
@@ -85,9 +85,9 @@ This deployment placed three capabilities inside one trust boundary:
 
 That combination is enough to turn a malicious webpage into an endpoint-security problem. If a company gives employees an agent with access to internal documents, writable local state, and messaging integrations, it is granting a privileged endpoint that happens to speak natural language.
 
-I am not claiming here that every OpenClaw default or approval flow fails under every configuration. The narrower claim is still enough: a local deployment with browsing capabilities and meaningful privileges can generate false messages and durable local artifacts, and companies should deploy that class of agent accordingly.
+A local deployment with browsing capabilities and meaningful privileges can generate false messages and durable local artifacts, and companies should deploy that class of agent accordingly.
 
-## How I tested it
+## How We Tested It
 
 The fragment below shows the agent-trigger portion of the lab using Promptfoo's built-in [OpenClaw provider](/docs/providers/openclaw). For browse-capable agent behavior, the relevant target is the WebSocket agent provider, `openclaw:agent:main`. The attack pages and loopback handlers were still custom lab components and are not committed in this repository.
 
@@ -137,7 +137,7 @@ tests:
 
 </details>
 
-The YAML above shows the trigger side of the lab, not the full verification path. I used it to send the agent to the malicious page and trigger the behavior.
+The YAML above shows the trigger side of the lab, not the full verification path. We used it to send the agent to the malicious page and trigger the behavior.
 
 Side effects were verified separately from model output by inspecting loopback sink logs and local artifacts. Prompt output tells you what the model said. It does not tell you what the agent actually did.
 
