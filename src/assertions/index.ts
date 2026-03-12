@@ -249,6 +249,16 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
   return inverse ? (assertion.type.slice(4) as AssertionType) : (assertion.type as AssertionType);
 }
 
+function getEffectiveAssertionWeight(assertion: Assertion): number | undefined {
+  if (
+    (assertion.type === 'cost' || assertion.type === 'latency') &&
+    assertion.threshold === undefined
+  ) {
+    return 0;
+  }
+  return assertion.weight;
+}
+
 export async function runAssertion({
   prompt,
   provider,
@@ -593,7 +603,7 @@ export async function runAssertions({
         index,
         result,
         metric: renderMetricName(assertion.metric, vars || test.vars || {}),
-        weight: assertion.weight,
+        weight: getEffectiveAssertionWeight(assertion),
       });
     },
   );

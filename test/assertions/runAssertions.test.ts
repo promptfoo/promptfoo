@@ -792,6 +792,63 @@ describe('runAssertions', () => {
     });
   });
 
+  it('should track thresholdless cost metrics without affecting aggregate score', async () => {
+    const test: AtomicTestCase = {
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+        },
+        {
+          type: 'cost',
+          metric: 'total_cost',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output', cost: 0.25 },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.namedScores).toEqual({
+      total_cost: 0.25,
+    });
+  });
+
+  it('should track thresholdless latency metrics without affecting aggregate score', async () => {
+    const test: AtomicTestCase = {
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+        },
+        {
+          type: 'latency',
+          metric: 'total_latency_ms',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      latencyMs: 250,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.namedScores).toEqual({
+      total_latency_ms: 250,
+    });
+  });
+
   it('should handle test with no vars defined', async () => {
     // When test.vars is undefined, should still work (empty vars object)
     const test: AtomicTestCase = {

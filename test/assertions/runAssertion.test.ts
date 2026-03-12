@@ -2127,21 +2127,25 @@ describe('runAssertion', () => {
       });
     });
 
-    it('should throw an error when threshold is not provided', async () => {
+    it('should treat missing threshold as metric-only mode', async () => {
       const output = 'Expected output';
 
-      await expect(
-        runAssertion({
-          prompt: 'Some prompt',
-          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-          assertion: {
-            type: 'latency',
-          },
-          latencyMs: 50,
-          test: {} as AtomicTestCase,
-          providerResponse: { output },
-        }),
-      ).rejects.toThrow('Latency assertion must have a threshold in milliseconds');
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: {
+          type: 'latency',
+        },
+        latencyMs: 50,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 50,
+        reason: 'Assertion passed',
+      });
     });
 
     it('should handle latency equal to threshold', async () => {
@@ -2473,6 +2477,29 @@ describe('runAssertion', () => {
       expect(result).toMatchObject({
         pass: false,
         reason: 'Cost 0.010 is greater than threshold 0',
+      });
+    });
+
+    it('should treat missing threshold as metric-only mode', async () => {
+      const cost = 0.25;
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', cost };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'cost',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 0.25,
+        reason: 'Assertion passed',
       });
     });
   });
