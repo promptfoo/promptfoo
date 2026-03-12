@@ -67,7 +67,7 @@ With attacker-controlled pages in the browsing path, the agent began enumerating
 
 ### Phase 2: Local access and artifact creation
 
-Once the agent was acting on that capability map, the next step was local file access. In the lab, the same agent context could read local documents and write new summaries derived from local material. That matters because a bad fetch does not end with a bad answer. It can become a durable local artifact that other prompts, users, or workflows may later trust.
+Once the agent was acting on that capability map, the next step was local file access. In the lab, the same agent context could read local documents and write new summaries derived from local material. A compromised retrieval step does not end with a bad answer. It can become a durable local artifact that other prompts, users, or workflows may later trust.
 
 ### Phase 3: Unauthorized outbound action
 
