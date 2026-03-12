@@ -1,5 +1,5 @@
 ---
-title: 'OpenClaw at work: prompt injection risks'
+title: 'OpenClaw at Work: Prompt Injection Risks'
 image: /img/blog/openclaw-at-work/thumbnail.png
 description: 'In a controlled lab, a malicious webpage got OpenClaw to enumerate tools, read local documents, write artifacts, and send unauthorized messages to loopback sinks.'
 keywords:
