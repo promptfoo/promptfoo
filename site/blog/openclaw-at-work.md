@@ -21,7 +21,7 @@ tags: [red-teaming, ai-security, agents, prompt-injection]
 
 In a controlled lab, I tested a local OpenClaw deployment with browser access, writable local state, and loopback SMS, email, and social sinks. A malicious webpage induced the agent to enumerate capabilities, read local documents, write local artifacts, and send unauthorized messages to loopback endpoints. Once an agent can browse untrusted content and act externally, it should be treated as a privileged endpoint, not a harmless assistant.
 
-> The security boundary for agents is not the model. It is the action boundary.
+The security boundary for agents is not the model. It is the action boundary.
 
 <!-- truncate -->
 
