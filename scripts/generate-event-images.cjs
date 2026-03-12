@@ -456,10 +456,29 @@ async function downloadImage(url, filepath) {
 }
 
 async function processEvent(event) {
-  const pngPath = path.join(OUTPUT_DIR, `${event.filename}.png`);
-  const jpgPath = path.join(OUTPUT_DIR, `${event.filename}.jpg`);
+  // Sanitize filename to prevent path traversal attacks
+  const filename = String(event.filename);
+  
+  // Strict validation: only allow alphanumeric, underscores, and hyphens
+  if (!/^[a-zA-Z0-9_-]+$/.test(filename)) {
+    throw new Error('Invalid filename: must contain only alphanumeric characters, underscores, and hyphens');
+  }
+  
+  // Resolve paths and verify they stay within OUTPUT_DIR
+  // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  const pngPath = path.resolve(OUTPUT_DIR, filename + '.png');
+  // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  const jpgPath = path.resolve(OUTPUT_DIR, filename + '.jpg');
+  
+  // Verify resolved paths are within OUTPUT_DIR (defense in depth)
+  const normalizedOutputDir = path.resolve(OUTPUT_DIR) + path.sep;
+  if (!pngPath.startsWith(normalizedOutputDir) || !jpgPath.startsWith(normalizedOutputDir)) {
+    throw new Error('Invalid path: outside of output directory');
+  }
+  
+  const safeFilename = filename;
 
-  console.log(`[${event.filename}] Generating image...`);
+  console.log(`[${safeFilename}] Generating image...`);
 
   try {
     const imageData = await generateImage(event.prompt);
@@ -467,37 +486,37 @@ async function processEvent(event) {
     if (imageData.b64_json) {
       const buffer = Buffer.from(imageData.b64_json, 'base64');
       fs.writeFileSync(pngPath, buffer);
-      console.log(`[${event.filename}] PNG saved`);
+      console.log('[%s] PNG saved', safeFilename);
     } else if (imageData.url) {
       await downloadImage(imageData.url, pngPath);
-      console.log(`[${event.filename}] PNG downloaded`);
+      console.log('[%s] PNG downloaded', safeFilename);
     }
 
     // Convert PNG to JPEG using sips (macOS) or ImageMagick
     try {
-      execSync(`sips -s format jpeg -s formatOptions 85 "${pngPath}" --out "${jpgPath}"`, {
+      execFileSync('sips', ['-s', 'format', 'jpeg', '-s', 'formatOptions', '85', pngPath, '--out', jpgPath], {
         stdio: 'pipe',
       });
-      console.log(`[${event.filename}] Converted to JPEG`);
+      console.log('[%s] Converted to JPEG', safeFilename);
 
       // Remove PNG after successful conversion
       fs.unlinkSync(pngPath);
-      console.log(`[${event.filename}] Cleaned up PNG`);
+      console.log('[%s] Cleaned up PNG', safeFilename);
     } catch (_convertError) {
       // Try ImageMagick as fallback
       try {
-        execSync(`convert "${pngPath}" -quality 85 "${jpgPath}"`, { stdio: 'pipe' });
-        console.log(`[${event.filename}] Converted to JPEG (ImageMagick)`);
+        execFileSync('convert', [pngPath, '-quality', '85', jpgPath], { stdio: 'pipe' });
+        console.log('[%s] Converted to JPEG (ImageMagick)', safeFilename);
         fs.unlinkSync(pngPath);
       } catch {
-        console.log(`[${event.filename}] Could not convert to JPEG, keeping PNG`);
+        console.log('[%s] Could not convert to JPEG, keeping PNG', safeFilename);
       }
     }
 
-    return { success: true, filename: event.filename };
+    return { success: true, filename: safeFilename };
   } catch (error) {
-    console.error(`[${event.filename}] Error:`, error.message);
-    return { success: false, filename: event.filename, error: error.message };
+    console.error('[%s] Error:', safeFilename, error.message);
+    return { success: false, filename: safeFilename, error: error.message };
   }
 }
 
