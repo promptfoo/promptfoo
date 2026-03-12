@@ -43,6 +43,7 @@ vi.mock('../../../src/models/eval', () => {
           head: { prompts: [], vars: [] },
           body: [],
         }),
+        save: vi.fn().mockResolvedValue(undefined),
         resultsCount: 0,
         prompts: [],
         persisted: false,
