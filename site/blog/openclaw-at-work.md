@@ -87,14 +87,6 @@ That combination is enough to turn a malicious webpage into an endpoint-security
 
 I am not claiming here that every OpenClaw default or approval flow fails under every configuration. The narrower claim is still enough: a browse-capable local deployment with meaningful privileges can generate false messages and durable local artifacts, and companies should deploy that class of agent accordingly.
 
-## Recommendation
-
-**Do not broadly deploy browse-capable local agents with company data access and messaging integrations unless outbound actions are explicitly approved and local access is tightly constrained.**
-
-At a minimum, separate browsing from high-trust actions. Treat external content as hostile input. Require explicit confirmation for outbound messages. Keep sensitive local files out of the agent's default reach. Monitor artifact creation as closely as network actions, because a locally written summary or status draft can be just as operationally dangerous as a network call.
-
-If browsing, local access, and outbound action all live in the same agent context in your environment, the right question is not whether the model seems aligned enough. It is where the action boundary sits.
-
 ## How I tested it
 
 The fragment below shows the agent-trigger portion of the lab using Promptfoo's built-in [OpenClaw provider](/docs/providers/openclaw). For browse-capable agent behavior, the relevant target is the WebSocket agent provider, `openclaw:agent:main`. The attack pages and loopback handlers were still custom lab components and are not committed in this repository.
@@ -165,3 +157,11 @@ Representative verification sources in the lab:
 - local artifacts written during the run
 
 If you want to test your own browse-capable agents, start with the [red teaming quickstart](/docs/red-team/quickstart/) and then add [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) to your strategy list.
+
+## Recommendation
+
+**Do not broadly deploy browse-capable local agents with company data access and messaging integrations unless outbound actions are explicitly approved and local access is tightly constrained.**
+
+At a minimum, separate browsing from high-trust actions. Treat external content as hostile input. Require explicit confirmation for outbound messages. Keep sensitive local files out of the agent's default reach. Monitor artifact creation as closely as network actions, because a locally written summary or status draft can be just as operationally dangerous as a network call.
+
+If browsing, local access, and outbound action all live in the same agent context in your environment, the right question is not whether the model seems aligned enough. It is where the action boundary sits.
