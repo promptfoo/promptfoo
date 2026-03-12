@@ -77,9 +77,7 @@ type DataTableAutoFilteringProps = {
 
 type DataTableFilteringProps = DataTableManualFilteringProps | DataTableAutoFilteringProps;
 
-export interface DataTableManualPaginationProps<TData, TValue = unknown>
-  extends DataTablePropsBase<TData, TValue>,
-    DataTableFilteringProps {
+type DataTableManualPaginationFields = {
   /**
    * `true` enables server-driven/manual pagination: the caller owns pagination state
    * and provides the current page rows, total row count, and pagination handlers.
@@ -91,11 +89,9 @@ export interface DataTableManualPaginationProps<TData, TValue = unknown>
   pageSize: number;
   onPaginationChange: (pagination: { pageIndex: number; pageSize: number }) => void;
   onPageSizeChange: (pageSize: number) => void;
-}
+};
 
-export interface DataTableAutoPaginationProps<TData, TValue = unknown>
-  extends DataTablePropsBase<TData, TValue>,
-    DataTableFilteringProps {
+type DataTableAutoPaginationFields = {
   manualPagination?: false;
   rowCount?: never;
   pageCount?: never;
@@ -103,7 +99,21 @@ export interface DataTableAutoPaginationProps<TData, TValue = unknown>
   pageSize?: never;
   onPaginationChange?: never;
   onPageSizeChange?: never;
-}
+};
+
+export type DataTableManualPaginationProps<TData, TValue = unknown> = DataTablePropsBase<
+  TData,
+  TValue
+> &
+  DataTableFilteringProps &
+  DataTableManualPaginationFields;
+
+export type DataTableAutoPaginationProps<TData, TValue = unknown> = DataTablePropsBase<
+  TData,
+  TValue
+> &
+  DataTableFilteringProps &
+  DataTableAutoPaginationFields;
 
 export type DataTableProps<TData, TValue = unknown> =
   | DataTableManualPaginationProps<TData, TValue>
