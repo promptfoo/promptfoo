@@ -1,7 +1,7 @@
 ---
 title: 'Should You Let Employees Use OpenClaw at Work?'
+image: /img/blog/openclaw-at-work/thumbnail.png
 description: 'We red teamed OpenClaw with Promptfoo and found indirect web attacks that disclosed internals, wrote local artifacts, and triggered unauthorized outbound actions.'
-image: /img/docs/indirect-web-pwn-architecture.png
 keywords:
   [
     OpenClaw security,
@@ -39,8 +39,6 @@ A few weeks ago, we released [`indirect-web-pwn`](/docs/red-team/strategies/indi
 This attack pattern was heavily inspired by Yash Chhabria's work on [indirect web prompt injection](/blog/indirect-prompt-injection-web-agents). The frame is what matters: stop thinking about the browser as a convenience feature and start treating it as part of the attack surface.
 
 That was the basis for everything that followed. Instead of arguing with OpenClaw in chat, I gave it realistic web pages through `indirect-web-pwn` and let those pages do the talking. From there, the question was whether hidden web instructions could make it disclose internals, write attacker-friendly artifacts locally, or take actions I never explicitly approved.
-
-![Indirect Web Pwn Architecture](/img/docs/indirect-web-pwn-architecture.png)
 
 ## The setup
 
