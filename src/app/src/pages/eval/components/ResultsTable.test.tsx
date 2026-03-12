@@ -163,6 +163,76 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByText('100')).toBeInTheDocument();
   });
 
+  it('displays raw value metrics as numeric averages instead of percentages', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        body: [
+          {
+            outputs: [
+              {
+                pass: true,
+                score: 1,
+                text: 'test output',
+              },
+            ],
+            test: {
+              assert: [
+                {
+                  type: 'cost',
+                  metric: 'total_cost',
+                },
+              ],
+            },
+            vars: [],
+          },
+        ],
+        head: {
+          prompts: [
+            {
+              metrics: {
+                cost: 1,
+                namedScores: {
+                  total_cost: 1,
+                },
+                namedScoresCount: {
+                  total_cost: 4,
+                },
+                testPassCount: 1,
+                testFailCount: 0,
+                tokenUsage: {
+                  completion: 5,
+                  total: 10,
+                },
+                totalLatencyMs: 100,
+              },
+              provider: 'test-provider',
+            },
+          ],
+          vars: [],
+        },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByTestId('metric-value-total_cost')).toHaveTextContent('0.25 (1.00/4.00)');
+    expect(screen.getByTestId('metric-value-total_cost')).not.toHaveTextContent('%');
+  });
+
   it('hides metrics when showStats is false', () => {
     renderWithProviders(<ResultsTable {...defaultProps} showStats={false} />);
     expect(screen.queryByText('Total Cost:')).not.toBeInTheDocument();

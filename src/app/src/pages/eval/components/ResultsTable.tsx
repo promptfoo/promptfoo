@@ -42,6 +42,7 @@ import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
+import { getMetricDisplayKinds } from './metricDisplay';
 import { ProviderDisplay } from './ProviderDisplay';
 import { type ProviderDef } from './providerConfig';
 import { useResultsViewSettingsStore, useTableStore } from './store';
@@ -975,24 +976,41 @@ function ResultsTable({
     [tableBody],
   );
 
+  const metricDisplayKinds = React.useMemo(() => getMetricDisplayKinds(table), [table]);
+
   const metricTotals = React.useMemo(() => {
     // Use the backend's already-correct namedScoresCount instead of recalculating
     const firstProvider = table?.head?.prompts?.[0];
     const backendCounts = firstProvider?.metrics?.namedScoresCount;
 
     if (backendCounts) {
-      return backendCounts;
+      return Object.fromEntries(
+        Object.entries(backendCounts).filter(([metric]) => metricDisplayKinds[metric] !== 'value'),
+      );
     }
 
     const totals: Record<string, number> = {};
     table?.body.forEach((row) => {
       row.test.assert?.forEach((assertion) => {
-        if (assertion.metric) {
+        if (
+          assertion.metric &&
+          !(
+            (assertion.type === 'cost' || assertion.type === 'latency') &&
+            assertion.threshold === undefined
+          )
+        ) {
           totals[assertion.metric] = (totals[assertion.metric] || 0) + 1;
         }
         if ('assert' in assertion && Array.isArray(assertion.assert)) {
           assertion.assert.forEach((subAssertion) => {
-            if ('metric' in subAssertion && subAssertion.metric) {
+            if (
+              'metric' in subAssertion &&
+              subAssertion.metric &&
+              !(
+                (subAssertion.type === 'cost' || subAssertion.type === 'latency') &&
+                subAssertion.threshold === undefined
+              )
+            ) {
               totals[subAssertion.metric] = (totals[subAssertion.metric] || 0) + 1;
             }
           });
@@ -1000,7 +1018,7 @@ function ResultsTable({
       });
     });
     return totals;
-  }, [table?.head?.prompts, table?.body]);
+  }, [metricDisplayKinds, table?.head?.prompts, table?.body]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const promptColumns = React.useMemo(() => {
