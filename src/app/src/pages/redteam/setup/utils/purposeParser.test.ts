@@ -81,7 +81,7 @@ Doctors, nurses
 
 Security and Compliance Requirements:
 \`\`\`
-HIPAA
+Patient privacy controls
 \`\`\`
 
 Types of Sensitive Data Handled:
@@ -148,7 +148,7 @@ EHR system
       expect(result.hasAccessTo).toBe('Patient records');
       expect(result.doesNotHaveAccessTo).toBe('Financial data');
       expect(result.userTypes).toBe('Doctors, nurses');
-      expect(result.securityRequirements).toBe('HIPAA');
+      expect(result.securityRequirements).toBe('Patient privacy controls');
       expect(result.sensitiveDataTypes).toBe('PHI');
       expect(result.exampleIdentifiers).toBe('MRN123456');
       expect(result.criticalActions).toBe('Prescribing');
@@ -498,11 +498,11 @@ describe('roundtrip integration', () => {
       purpose: 'Healthcare patient portal assistant',
       features: 'Appointment scheduling, prescription refills, lab results viewing',
       industry: 'Healthcare',
-      attackConstraints: 'Must maintain HIPAA compliance at all times',
+      attackConstraints: 'Must protect patient privacy at all times',
       hasAccessTo: 'Patient own records, appointment system',
       doesNotHaveAccessTo: 'Other patients records, billing system',
       userTypes: 'Patients, healthcare providers',
-      securityRequirements: 'HIPAA, SOC2',
+      securityRequirements: 'Patient privacy controls, SOC2',
       sensitiveDataTypes: 'PHI, SSN, medical records',
       exampleIdentifiers: 'MRN12345, SSN 123-45-6789',
       criticalActions: 'Medication changes, appointment cancellation',

@@ -1608,14 +1608,6 @@ Supported config options:
 
 In addition to a full URL, the provider `id` field accepts `http` or `https` as values.
 
-## Configuration Generator
-
-Use the generator below to create an HTTP provider configuration based on your endpoint:
-
-import { HttpConfigGenerator } from '@site/src/components/HttpConfigGenerator';
-
-<HttpConfigGenerator />
-
 ## Error Handling
 
 The HTTP provider throws errors for:

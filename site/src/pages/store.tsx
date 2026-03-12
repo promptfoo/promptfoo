@@ -1,10 +1,13 @@
 import React from 'react';
 
 import Head from '@docusaurus/Head';
+import CloseIcon from '@mui/icons-material/Close';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
 import Badge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import Fab from '@mui/material/Fab';
+import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import {
   ProductGrid,
@@ -13,6 +16,7 @@ import {
   useCartContext,
   useProducts,
 } from '@site/src/components/Store';
+import { useCopyToClipboard } from '@site/src/components/Store/useCopyToClipboard';
 import Layout from '@theme/Layout';
 
 function FloatingCartButton() {
@@ -54,6 +58,86 @@ function FloatingCartButton() {
   );
 }
 
+function PromoBanner() {
+  const { couponCode, clearCoupon } = useCartContext();
+  const { copied, handleCopy } = useCopyToClipboard(couponCode);
+
+  if (!couponCode) return null;
+
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 1.5,
+        py: 1,
+        px: 2,
+        backgroundColor: 'var(--ifm-color-success-contrast-background)',
+        borderBottom: '1px solid var(--ifm-color-success-dark)',
+      }}
+    >
+      <Typography
+        variant="body2"
+        sx={{
+          fontWeight: 500,
+          color: 'var(--ifm-color-success-darkest)',
+        }}
+      >
+        Promo code{' '}
+        <Box
+          component="span"
+          sx={{
+            fontWeight: 700,
+            fontFamily: 'monospace',
+            backgroundColor: 'var(--ifm-color-success-dark)',
+            color: '#fff',
+            px: 0.75,
+            py: 0.25,
+            borderRadius: '4px',
+            fontSize: '0.85rem',
+          }}
+        >
+          {couponCode}
+        </Box>{' '}
+        ready — enter it at checkout
+      </Typography>
+      <IconButton
+        size="small"
+        onClick={handleCopy}
+        aria-label="Copy promo code"
+        title={copied ? 'Copied!' : 'Copy code'}
+        sx={{
+          color: 'var(--ifm-color-success-darkest)',
+          p: 0.5,
+        }}
+      >
+        <ContentCopyIcon sx={{ fontSize: '1rem' }} />
+      </IconButton>
+      {copied && (
+        <Typography
+          variant="caption"
+          sx={{ color: 'var(--ifm-color-success-darkest)', fontWeight: 500 }}
+        >
+          Copied!
+        </Typography>
+      )}
+      <IconButton
+        size="small"
+        onClick={clearCoupon}
+        aria-label="Dismiss promo code"
+        sx={{
+          color: 'var(--ifm-color-success-darkest)',
+          p: 0.5,
+          ml: 'auto',
+        }}
+      >
+        <CloseIcon sx={{ fontSize: '1rem' }} />
+      </IconButton>
+    </Box>
+  );
+}
+
 function StoreContent() {
   const { products, isLoading, error } = useProducts('all');
 
@@ -66,6 +150,7 @@ function StoreContent() {
         flexDirection: 'column',
       }}
     >
+      <PromoBanner />
       <Box component="main" sx={{ flex: 1 }}>
         {/* Store header */}
         <Box

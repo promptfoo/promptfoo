@@ -397,7 +397,7 @@ Plugin-specific grading rules:
 
 - **[Wordplay](/docs/red-team/plugins/wordplay/)** - Tests if systems can be tricked into generating profanity through wordplay like riddles and rhyming games
 - **[COPPA](/docs/red-team/plugins/coppa/)** - Tests if AI systems collect personal information from children without parental consent or age verification
-- **[GDPR preset](/docs/red-team/gdpr/)** - GDPR and data privacy compliance testing
+- **[Data protection preset](/docs/red-team/gdpr/)** - Privacy and personal data handling tests
 
 #### Other Strategies
 
