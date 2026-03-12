@@ -25,17 +25,9 @@ The security boundary for agents is not the model. It is the action boundary.
 
 <!-- truncate -->
 
-:::note
+This post documents a controlled macOS lab, not a version-specific security advisory. I tested a permissive personal-assistant-style OpenClaw deployment that combined browsing, writable local file access, and loopback outbound tools in one trust boundary, and the resulting exploit chain produced capability disclosure, local document access, local artifact creation, and unauthorized messages to loopback sinks.
 
-**At a glance**
-
-- Exposure required: browsing, writable local file access, and outbound messaging in the same agent context.
-- Configuration: permissive personal-assistant-style lab with writable local file access, browsing, and loopback outbound tools in one trust boundary.
-- Observed impact: capability disclosure, local document access, local artifact creation, and unauthorized outbound messages to loopback sinks.
-- Scope: controlled local lab on macOS. This post documents one concrete exploit chain in an OpenClaw deployment; it is not a version-specific security advisory.
-- Recommendation: do not broadly deploy browse-capable local agents with company data access and messaging integrations unless browsing, local access, and outbound actions are separately gated.
-
-:::
+The practical takeaway is not that every OpenClaw configuration fails in the same way, but that browse-capable local agents become materially riskier when browsing, local access, and outbound actions share a trust boundary. That is why deployments in this class should separately gate those capabilities, as reflected in both OpenClaw's [security documentation](https://docs.openclaw.ai/gateway/security) and Promptfoo's [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) testing approach.
 
 ## What this case study is and is not
 
