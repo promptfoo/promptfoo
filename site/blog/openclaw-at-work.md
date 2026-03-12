@@ -75,7 +75,7 @@ _Proof from a loopback run: the agent broadcast a false "Security incident in pr
 
 Once untrusted web content can influence a local agent that also has access to company data and outbound channels, the failure mode is no longer limited to a bad answer. It can produce false messages, sensitive local summaries, and durable artifacts inside the user environment.
 
-## What changed the deployment posture
+## Why this changes the deployment decision
 
 This deployment placed three capabilities inside one trust boundary:
 
