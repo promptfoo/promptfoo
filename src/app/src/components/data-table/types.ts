@@ -53,6 +53,10 @@ interface DataTablePropsBase<TData, TValue = unknown> {
   renderSubComponent?: (row: Row<TData>) => React.ReactNode;
   singleExpand?: boolean;
   getRowCanExpand?: (row: Row<TData>) => boolean;
+  // Server-side filtering
+  manualFiltering?: boolean;
+  columnFilters?: ColumnFiltersState;
+  onColumnFiltersChange?: (filters: ColumnFiltersState) => void;
   // Server-side pagination
   pageCount?: number;
   pageIndex?: number;
