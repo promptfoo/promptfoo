@@ -262,7 +262,7 @@ See [`is-sql`](#is-sql) for advanced usage, including specific database types an
 
 ### Cost
 
-The `cost` assertion checks if the cost of the LLM call is below a specified threshold.
+The `cost` assertion checks if the cost of the LLM call is below a specified threshold. If you omit `threshold` and set `metric`, promptfoo records the raw cost as a named metric instead of using it as a pass/fail guardrail.
 
 This requires LLM providers to return cost information. Currently this is only supported by OpenAI GPT models and custom providers.
 
@@ -276,6 +276,19 @@ assert:
   # Pass if the LLM call costs less than $0.001
   - type: cost
     threshold: 0.001
+```
+
+To track average cost per test case, pair a metric-only `cost` assertion with `derivedMetrics` and `__count`:
+
+```yaml
+tests:
+  - assert:
+      - type: cost
+        metric: total_cost
+
+derivedMetrics:
+  - name: avg_cost
+    value: total_cost / __count
 ```
 
 ### Equality
@@ -648,7 +661,7 @@ See [Javascript assertions](/docs/configuration/expected-outputs/javascript).
 
 ### Latency
 
-The `latency` assertion fails if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds.
+The `latency` assertion fails if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds. If you omit `threshold` and set `metric`, promptfoo records the raw latency as a named metric instead of using it as a pass/fail guardrail.
 
 Example:
 
@@ -657,6 +670,18 @@ assert:
   # Fail if the LLM call takes longer than 5 seconds
   - type: latency
     threshold: 5000
+```
+
+To track average latency per test case, omit `threshold` and aggregate the metric:
+
+```yaml
+assert:
+  - type: latency
+    metric: total_latency_ms
+
+derivedMetrics:
+  - name: avg_latency_ms
+    value: total_latency_ms / __count
 ```
 
 Note that `latency` requires that the [cache is disabled](/docs/configuration/caching) with `promptfoo eval --no-cache` or an equivalent option.

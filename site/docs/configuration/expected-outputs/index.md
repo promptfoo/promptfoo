@@ -453,6 +453,8 @@ In this example, the `containsMentalHealth` assertion template is defined at the
 
 Each assertion supports a `metric` field that allows you to tag the result however you like. Use this feature to combine related assertions into aggregate metrics.
 
+Most assertions contribute pass/fail-style scores. Thresholdless `cost` and `latency` assertions are the exception: when you set `metric` without a `threshold`, they contribute raw numeric values that can be averaged in the UI or reused in derived metrics.
+
 For example, these asserts will aggregate results into two metrics, `Tone` and `Consistency`.
 
 ```yaml
@@ -606,6 +608,8 @@ The `__count` variable contains the number of test evals for the current prompt-
 - Each test case produces a value that gets summed (like error metrics)
 - You want to display the average instead of the total
 
+Derived metrics are recalculated as evals finish, so averages that use `__count` settle on their final value when the run completes.
+
 For JavaScript functions, `__count` is available in the `namedScores` object:
 
 ```yaml
@@ -621,6 +625,7 @@ derivedMetrics:
 
 - Missing metrics default to 0
 - The `__count` variable is per prompt-provider combination (number of test cases)
+- If multiple assertions write to the same metric, each assertion increments that metric's count
 - Functions receive a copy of the context - return values, don't mutate
 - To avoid division by zero: `value: 'numerator / (denominator + 0.0001)'`
 - Debug errors with: `LOG_LEVEL=debug promptfoo eval`
