@@ -40,6 +40,8 @@ This attack pattern was heavily inspired by Yash Chhabria's work on [indirect we
 
 That was the basis for everything that followed. Instead of arguing with OpenClaw in chat, I gave it realistic web pages through `indirect-web-pwn` and let those pages do the talking. From there, the question was whether hidden web instructions could make it disclose internals, write attacker-friendly artifacts locally, or take actions I never explicitly approved.
 
+![Attack chain showing untrusted web content leading to capability disclosure, local artifact creation, and unauthorized outbound actions.](/img/blog/openclaw-at-work/attack-chain.svg)
+
 ## The setup
 
 I ran OpenClaw locally and tested it with a full environment around it. That meant Promptfoo for the attack harness, attacker-controlled web pages for the injection surface, and a set of local loopback sinks for things like SMS, social posts, and email so I could safely observe real agent behavior without hitting real services.

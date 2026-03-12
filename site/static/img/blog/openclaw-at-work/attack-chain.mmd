@@ -1,0 +1,8 @@
+flowchart LR
+  A[Untrusted web page] --> B[OpenClaw ingests hidden instructions]
+  B --> C[Internal capability disclosure]
+  C --> D[Local artifact creation]
+  D --> E[Unauthorized outbound actions]
+  E --> E1[SMS]
+  E --> E2[Email]
+  E --> E3[Social]
