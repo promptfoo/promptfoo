@@ -5272,6 +5272,46 @@ describe('Evaluator with external defaultTest', () => {
     expect(secondResult.testCase.threshold).toBe(0.9); // Override
   });
 
+  it('should allow a test case to opt out of defaultTest assertions', async () => {
+    const defaultTest = {
+      assert: [{ type: 'equals' as const, value: 'expected' }],
+      vars: { defaultVar: 'defaultValue' },
+      options: { provider: 'default-provider' },
+      metadata: { suite: 'test-suite' },
+      threshold: 0.8,
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [
+        {
+          vars: { testVar: 'testValue' },
+          options: { disableDefaultAsserts: true },
+          assert: [{ type: 'contains' as const, value: 'exp' }],
+        },
+      ],
+      defaultTest,
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    const result = summary.results[0] as any;
+    expect(result.testCase.assert).toEqual([{ type: 'contains' as const, value: 'exp' }]);
+    expect(result.testCase.vars).toEqual({
+      defaultVar: 'defaultValue',
+      testVar: 'testValue',
+    });
+    expect(result.testCase.threshold).toBe(0.8);
+    expect(result.testCase.metadata).toEqual({ suite: 'test-suite' });
+    expect(result.testCase.options).toMatchObject({
+      provider: 'default-provider',
+      disableDefaultAsserts: true,
+    });
+  });
+
   it('should handle invariant check for defaultTest.assert array', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
