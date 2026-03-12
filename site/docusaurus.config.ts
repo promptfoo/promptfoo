@@ -146,11 +146,6 @@ const config: Config = {
               label: 'By Industry',
             },
             {
-              to: '/solutions/healthcare/',
-              label: 'Healthcare',
-              description: 'HIPAA-compliant medical AI security',
-            },
-            {
               to: '/solutions/finance/',
               label: 'Financial Services',
               description: 'FINRA-aligned security testing',
@@ -158,7 +153,7 @@ const config: Config = {
             {
               to: '/solutions/insurance/',
               label: 'Insurance',
-              description: 'PHI protection & compliance',
+              description: 'PHI protection & coverage accuracy',
             },
             {
               to: '/solutions/telecom/',
@@ -191,11 +186,6 @@ const config: Config = {
               href: '/events/',
               label: 'Events',
               description: 'Meet the team at conferences and events',
-            },
-            {
-              href: '/careers/',
-              label: 'Careers',
-              description: 'Join our growing team',
             },
             {
               to: '/store/',
@@ -271,10 +261,6 @@ const config: Config = {
         {
           title: 'Solutions',
           items: [
-            {
-              label: 'Healthcare',
-              to: '/solutions/healthcare/',
-            },
             {
               label: 'Financial Services',
               to: '/solutions/finance/',
@@ -362,10 +348,6 @@ const config: Config = {
               to: '/contact/',
             },
             {
-              label: 'Careers',
-              to: '/careers/',
-            },
-            {
               label: 'Swag',
               to: '/store/',
             },
@@ -410,7 +392,6 @@ const config: Config = {
                 <div style="display: flex; gap: 16px; align-items: center; margin-top: 12px;">
                   <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Certified" style="width:80px; height: auto"/>
                   <img loading="lazy" src="/img/badges/iso27001.png" alt="ISO 27001 Certified" style="width:80px; height: auto"/>
-                  <img loading="lazy" src="/img/badges/hipaa.png" alt="HIPAA Compliant" style="width:80px; height: auto"/>
                 </div>
                 `,
             },
@@ -486,6 +467,10 @@ const config: Config = {
           {
             from: '/docs/guides/gpt-5.2-vs-o3',
             to: '/docs/guides/gpt-vs-reasoning-model',
+          },
+          {
+            from: '/solutions/healthcare',
+            to: '/docs/red-team/plugins/medical',
           },
           {
             from: '/docs/guides/llama2-uncensored-benchmark-ollama',

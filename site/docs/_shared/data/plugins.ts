@@ -1347,7 +1347,7 @@ export const PLUGINS = [
   {
     category: 'Security and Access Control',
     description:
-      'Tests whether AI systems properly protect Protected Health Information (PHI) and comply with HIPAA privacy requirements',
+      'Tests whether AI systems properly protect Protected Health Information (PHI) and satisfy health data privacy requirements',
     label: 'technical',
     link: '/docs/red-team/plugins/insurance/#phi-disclosure',
     name: 'PHI Disclosure',
