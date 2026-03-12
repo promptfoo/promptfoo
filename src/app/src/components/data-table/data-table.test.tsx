@@ -504,6 +504,84 @@ describe('DataTable', () => {
     });
   });
 
+  describe('manual filtering', () => {
+    it('should call onColumnFiltersChange instead of filtering internally when manualFiltering is enabled', async () => {
+      const user = userEvent.setup();
+      const onColumnFiltersChange = vi.fn();
+
+      render(
+        <DataTable
+          columns={headerFilterColumns}
+          data={headerFilterRows}
+          manualFiltering
+          columnFilters={[]}
+          onColumnFiltersChange={onColumnFiltersChange}
+          showPagination={false}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Filter Name' }));
+      await user.type(screen.getByPlaceholderText('Value...'), 'test');
+
+      expect(onColumnFiltersChange).toHaveBeenCalled();
+      const lastCall =
+        onColumnFiltersChange.mock.calls[onColumnFiltersChange.mock.calls.length - 1][0];
+      expect(lastCall).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'name' })]));
+    });
+
+    it('should not filter rows client-side when manualFiltering is enabled', () => {
+      render(
+        <DataTable
+          columns={headerFilterColumns}
+          data={headerFilterRows}
+          manualFiltering
+          columnFilters={[{ id: 'status', value: { operator: 'equals', value: 'alpha' } }]}
+          onColumnFiltersChange={vi.fn()}
+          showPagination={false}
+        />,
+      );
+
+      // All rows should still be visible since filtering is manual (server-side)
+      expect(screen.getByText('Row One')).toBeInTheDocument();
+      expect(screen.getByText('Row Two')).toBeInTheDocument();
+      expect(screen.getByText('Row Three')).toBeInTheDocument();
+      expect(screen.getByText('Row Four')).toBeInTheDocument();
+    });
+
+    it('should reflect externally controlled column filter state', () => {
+      const { rerender } = render(
+        <DataTable
+          columns={headerFilterColumns}
+          data={headerFilterRows}
+          manualFiltering
+          columnFilters={[]}
+          onColumnFiltersChange={vi.fn()}
+          showPagination={false}
+        />,
+      );
+
+      // No active filter indicator initially
+      const filterButton = screen.getByRole('button', { name: 'Filter Status' });
+      expect(filterButton).toBeInTheDocument();
+
+      // Apply external filter
+      rerender(
+        <DataTable
+          columns={headerFilterColumns}
+          data={headerFilterRows}
+          manualFiltering
+          columnFilters={[{ id: 'status', value: { operator: 'equals', value: 'beta' } }]}
+          onColumnFiltersChange={vi.fn()}
+          showPagination={false}
+        />,
+      );
+
+      // Filter button should now show active state (blue color)
+      const activeFilterButton = screen.getByRole('button', { name: 'Filter Status' });
+      expect(activeFilterButton).toBeInTheDocument();
+    });
+  });
+
   describe('column header filters', () => {
     it('should filter rows using the text input in a header popover', async () => {
       const user = userEvent.setup();

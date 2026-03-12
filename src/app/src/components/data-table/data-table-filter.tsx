@@ -509,10 +509,10 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
           size="sm"
           aria-label={`Filter ${columnHeader}`}
           className={cn(
-            'h-6 w-6 p-0 transition-opacity',
+            'h-6 w-6 p-0',
             hasActiveFilter
-              ? 'text-blue-700 dark:text-blue-100 opacity-100'
-              : 'text-zinc-400 dark:text-zinc-500 opacity-0 group-hover:opacity-100',
+              ? 'text-blue-700 dark:text-blue-100'
+              : 'text-zinc-400 dark:text-zinc-500',
           )}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
@@ -523,6 +523,19 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
       <PopoverContent
         className="w-fit min-w-[320px] max-w-[min(90vw,560px)] overflow-visible p-3"
         align="start"
+        onInteractOutside={(e) => {
+          // Prevent popover from closing when interacting with portaled Select content.
+          // Radix Select renders its dropdown in a separate portal, which can be interpreted
+          // as an outside click by the parent Popover's DismissableLayer.
+          const target = e.target as HTMLElement | null;
+          if (
+            target?.closest?.(
+              '[role="listbox"], [data-radix-select-viewport], [data-radix-popover-content]',
+            )
+          ) {
+            e.preventDefault();
+          }
+        }}
       >
         <div className="space-y-3">
           <h4 className="text-sm font-medium truncate">{`Filter ${columnHeader}`}</h4>
@@ -922,7 +935,23 @@ export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilter
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[520px] p-3" align="start">
+      <PopoverContent
+        className="w-[520px] p-3"
+        align="start"
+        onInteractOutside={(e) => {
+          // Prevent popover from closing when interacting with portaled Select/Popover content.
+          // Radix Select renders its dropdown in a separate portal, which can be interpreted
+          // as an outside click by the parent Popover's DismissableLayer.
+          const target = e.target as HTMLElement | null;
+          if (
+            target?.closest?.(
+              '[role="listbox"], [data-radix-select-viewport], [data-radix-popover-content]',
+            )
+          ) {
+            e.preventDefault();
+          }
+        }}
+      >
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-medium">Filters</h4>
