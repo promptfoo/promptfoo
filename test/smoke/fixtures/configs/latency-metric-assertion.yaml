@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing metric-only latency assertions
+description: 'Smoke test - latency metric assertion'
+
+providers:
+  - file://../providers/metrics-provider.mjs
+
+prompts:
+  - 'Test prompt for latency metric check'
+
+tests:
+  - vars:
+      delayMs: 5
+    assert:
+      - type: latency
+        metric: total_latency_ms

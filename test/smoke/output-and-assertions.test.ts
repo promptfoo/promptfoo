@@ -151,6 +151,28 @@ describe('Output and Assertion Variants Smoke Tests', () => {
     });
   });
 
+  describe('5.1.11b cost metric Assertion', () => {
+    it('5.1.11b - cost assertion records raw values as named metrics', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/cost-metric-assertion.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'cost-metric-output.json');
+
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
+
+      expect(exitCode).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      const metrics = parsed.results.prompts[0].metrics;
+
+      expect(parsed.results.results).toHaveLength(2);
+      expect(parsed.results.results[0].success).toBe(true);
+      expect(parsed.results.results[1].success).toBe(true);
+      expect(metrics.namedScores.total_cost).toBeCloseTo(0.6, 5);
+      expect(metrics.namedScores.avg_cost).toBeCloseTo(0.3, 5);
+      expect(metrics.namedScoresCount.total_cost).toBe(2);
+    });
+  });
+
   describe('5.1.12 latency Assertion', () => {
     it('5.1.12 - latency assertion checks response time', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/latency-assertion.yaml');
@@ -164,6 +186,25 @@ describe('Output and Assertion Variants Smoke Tests', () => {
       const parsed = JSON.parse(content);
 
       expect(parsed.results.results[0].success).toBe(true);
+    });
+  });
+
+  describe('5.1.12b latency metric Assertion', () => {
+    it('5.1.12b - latency assertion records raw values as named metrics', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/latency-metric-assertion.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'latency-metric-output.json');
+
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
+
+      expect(exitCode).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      const metrics = parsed.results.prompts[0].metrics;
+
+      expect(parsed.results.results[0].success).toBe(true);
+      expect(metrics.namedScores.total_latency_ms).toBeGreaterThan(0);
+      expect(metrics.namedScoresCount.total_latency_ms).toBe(1);
     });
   });
 
