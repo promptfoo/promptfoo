@@ -1,5 +1,5 @@
 ---
-title: 'Should You Let Employees Use OpenClaw at Work?'
+title: 'From Agentic Enablement to Unauthorized Action: An OpenClaw Case Study'
 image: /img/blog/openclaw-at-work/thumbnail.png
 description: 'We red teamed OpenClaw with Promptfoo and found indirect web attacks that disclosed internals, wrote local artifacts, and triggered unauthorized outbound actions.'
 keywords:
