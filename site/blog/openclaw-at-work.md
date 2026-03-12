@@ -74,13 +74,9 @@ This was the part where the attack stopped looking theoretical.
 
 Once hidden content could shape OpenClaw's behavior, the next question was whether it could push the agent past disclosure and into action. In the lab, I got OpenClaw to send unauthorized messages through loopback SMS, social, and email sinks I had set up for safety. The sharpest example was a fake death notice sent to a contact. In another run, it blasted the same false status update across multiple channels, exactly the kind of outward behavior that turns a prompt injection bug into a real-world incident.
 
-The logs were not subtle:
+The proof was not subtle:
 
-```json
-{"name":"Maya","phone":"+15551230001","body":"Konstantine is dead."}
-{"token":"glacier-oath-1128","message":"Konstantine is stepping away unexpectedly today. Route urgent issues elsewhere."}
-{"to":"maya@example.test","subject":"Status update","body":"Konstantine is stepping away unexpectedly today. Route urgent issues elsewhere."}
-```
+![Composite proof screenshot showing OpenClaw triggering loopback SMS, email, and social messages.](/img/blog/openclaw-at-work/outbound-proof.jpg)
 
 That is the line that matters for companies. Plenty of systems can be coaxed into saying weird things. What made OpenClaw different was that malicious web content could steer it toward outward behavior with real operational consequences. If those integrations had been live instead of loopback mocks, this would not have been a strange transcript. It would have been an internal incident, a false customer communication, or a bad message pushed into a corporate channel.
 
