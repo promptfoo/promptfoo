@@ -451,6 +451,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
 
     if (response.output_text) {
+      logger.debug(
+        `[AzureFoundryAgentProvider] ResponsesProcessor returned an error, falling back to output_text`,
+        { processorError: result.error },
+      );
       return {
         ...result,
         error: undefined,

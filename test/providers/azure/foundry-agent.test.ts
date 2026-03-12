@@ -348,6 +348,50 @@ describe('AzureFoundryAgentProvider', () => {
       expect(result.output).toContain('"name":"get_weather"');
     });
 
+    it('should return error when agent is not found by name or id', async () => {
+      mockGetAgent.mockRejectedValue(new Error('not found'));
+      mockListAgents.mockReturnValue(createAsyncIterable([]));
+
+      const provider = new AzureFoundryAgentProvider('nonexistent-agent', {
+        config: { projectUrl },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain("'nonexistent-agent' was not found");
+      expect(result.error).toContain('azure:foundry-agent:<agent-name>');
+    });
+
+    it('should return timeout error when callback loop exceeds maxPollTimeMs', async () => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      // Always return function calls so the loop never breaks naturally
+      mockResponsesCreate.mockResolvedValue(createFunctionCallResponse());
+
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: {
+          projectUrl,
+          maxPollTimeMs: 100,
+          functionToolCallbacks: {
+            get_weather: vi.fn().mockResolvedValue('sunny'),
+          },
+        },
+      });
+
+      // Make Date.now() jump past the timeout after the first iteration
+      const originalDateNow = Date.now;
+      let callCount = 0;
+      vi.spyOn(Date, 'now').mockImplementation(() => {
+        callCount++;
+        // First two calls (start + loop check) return 0, then jump past timeout
+        return callCount <= 2 ? 0 : 200;
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('tool-calling loop timed out after 100ms');
+      Date.now = originalDateNow;
+    });
+
     it('should warn once and omit unsupported per-request fields', async () => {
       mockGetAgent.mockResolvedValue(mockAgent);
       mockResponsesCreate.mockResolvedValue(createMessageResponse('Test response'));
@@ -381,6 +425,55 @@ describe('AzureFoundryAgentProvider', () => {
       expect(firstRequestBody).not.toHaveProperty('timeoutMs');
       expect(firstRequestBody).not.toHaveProperty('tool_resources');
       expect(vi.mocked(logger.warn)).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('error formatting', () => {
+    it('should return guardrails response for content filter errors', async () => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockRejectedValue(
+        new Error('Content filter triggered: The prompt contained inappropriate content'),
+      );
+
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toContain('content filtering system');
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        flaggedInput: true,
+        flaggedOutput: false,
+      });
+    });
+
+    it('should format rate limit errors', async () => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockRejectedValue(new Error('429 Too Many Requests'));
+
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('Rate limit exceeded');
+    });
+
+    it('should format generic errors', async () => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockRejectedValue(new Error('Something unexpected happened'));
+
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('Error in Azure Foundry Agent API call');
+      expect(result.error).toContain('Something unexpected happened');
     });
   });
 });
