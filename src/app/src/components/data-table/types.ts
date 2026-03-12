@@ -53,10 +53,6 @@ interface DataTablePropsBase<TData, TValue = unknown> {
   renderSubComponent?: (row: Row<TData>) => React.ReactNode;
   singleExpand?: boolean;
   getRowCanExpand?: (row: Row<TData>) => boolean;
-  // Server-side filtering
-  manualFiltering?: boolean;
-  columnFilters?: ColumnFiltersState;
-  onColumnFiltersChange?: (filters: ColumnFiltersState) => void;
   // Server-side pagination
   pageCount?: number;
   pageIndex?: number;
@@ -65,8 +61,25 @@ interface DataTablePropsBase<TData, TValue = unknown> {
   onPageSizeChange?: (pageSize: number) => void;
 }
 
+// Discriminated union for filtering — when manualFiltering is true, columnFilters
+// and onColumnFiltersChange are required; otherwise they must not be passed.
+type DataTableManualFilteringProps = {
+  manualFiltering: true;
+  columnFilters: ColumnFiltersState;
+  onColumnFiltersChange: (filters: ColumnFiltersState) => void;
+};
+
+type DataTableAutoFilteringProps = {
+  manualFiltering?: false;
+  columnFilters?: never;
+  onColumnFiltersChange?: never;
+};
+
+type DataTableFilteringProps = DataTableManualFilteringProps | DataTableAutoFilteringProps;
+
 export interface DataTableManualPaginationProps<TData, TValue = unknown>
-  extends DataTablePropsBase<TData, TValue> {
+  extends DataTablePropsBase<TData, TValue>,
+    DataTableFilteringProps {
   /**
    * `true` enables server-driven/manual pagination: the caller owns pagination state
    * and provides the current page rows, total row count, and pagination handlers.
@@ -81,7 +94,8 @@ export interface DataTableManualPaginationProps<TData, TValue = unknown>
 }
 
 export interface DataTableAutoPaginationProps<TData, TValue = unknown>
-  extends DataTablePropsBase<TData, TValue> {
+  extends DataTablePropsBase<TData, TValue>,
+    DataTableFilteringProps {
   manualPagination?: false;
   rowCount?: never;
   pageCount?: never;

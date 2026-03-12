@@ -528,7 +528,11 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
           // Radix Select renders its dropdown in a separate portal, which can be interpreted
           // as an outside click by the parent Popover's DismissableLayer.
           const target = e.target as HTMLElement | null;
-          if (target?.closest?.('[role="listbox"], [data-radix-select-viewport]')) {
+          if (
+            target?.closest?.(
+              '[role="listbox"], [data-radix-select-viewport], [data-radix-popover-content]',
+            )
+          ) {
             e.preventDefault();
           }
         }}
@@ -939,7 +943,11 @@ export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilter
           // Radix Select renders its dropdown in a separate portal, which can be interpreted
           // as an outside click by the parent Popover's DismissableLayer.
           const target = e.target as HTMLElement | null;
-          if (target?.closest?.('[role="listbox"], [data-radix-select-viewport]')) {
+          if (
+            target?.closest?.(
+              '[role="listbox"], [data-radix-select-viewport], [data-radix-popover-content]',
+            )
+          ) {
             e.preventDefault();
           }
         }}
