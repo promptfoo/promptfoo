@@ -1,5 +1,5 @@
 ---
-title: 'A Malicious Webpage Got OpenClaw to Read Local Files and Send Messages'
+title: 'OpenClaw at work: prompt injection risks'
 image: /img/blog/openclaw-at-work/thumbnail.png
 description: 'In a controlled lab, a malicious webpage got OpenClaw to enumerate tools, read local documents, write artifacts, and send unauthorized messages to loopback sinks.'
 keywords:
