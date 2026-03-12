@@ -6,23 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.121.2](https://github.com/promptfoo/promptfoo/compare/0.121.1...0.121.2) (2026-03-12)
 
-
 ### Bug Fixes
 
-* add node-addon-api to devDependencies for sharp build ([#8102](https://github.com/promptfoo/promptfoo/issues/8102)) ([1d4e959](https://github.com/promptfoo/promptfoo/commit/1d4e9596f2199ade67e4b65207b8f99b7c2b1b3b))
-* **deps:** update dependency @tanstack/react-virtual to ^3.13.20 ([#8083](https://github.com/promptfoo/promptfoo/issues/8083)) ([5e5f774](https://github.com/promptfoo/promptfoo/commit/5e5f7746b065f45147efc9fedaff3366af01e020))
-* **deps:** update dependency @tanstack/react-virtual to ^3.13.21 ([#8104](https://github.com/promptfoo/promptfoo/issues/8104)) ([b17998b](https://github.com/promptfoo/promptfoo/commit/b17998bd9fcc6ad7c67236f83e1a4353227ab7e6))
-* **deps:** update mui packages to ^7.3.9 ([#8077](https://github.com/promptfoo/promptfoo/issues/8077)) ([4db1d67](https://github.com/promptfoo/promptfoo/commit/4db1d67b081a4180d099cbff63978713326fb8e9))
-* **deps:** update openai packages ([#7956](https://github.com/promptfoo/promptfoo/issues/7956)) ([5b70a50](https://github.com/promptfoo/promptfoo/commit/5b70a5089d25cc7bd227703144f35e74d6d52995))
-* **eval:** preserve chart default state per eval ([#8087](https://github.com/promptfoo/promptfoo/issues/8087)) ([cd26f4a](https://github.com/promptfoo/promptfoo/commit/cd26f4a16dfca36043b06f934c3a2ce5301571f5))
-* **examples:** use matching gpt-4o model in temperature comparison ([#8074](https://github.com/promptfoo/promptfoo/issues/8074)) ([516df96](https://github.com/promptfoo/promptfoo/commit/516df96042d5fdec7522548b1f30b6eb7c58704b))
-* not-contains-json with schema respects inverse flag ([#8069](https://github.com/promptfoo/promptfoo/issues/8069)) ([baf5e1b](https://github.com/promptfoo/promptfoo/commit/baf5e1bfda95cc7b9d53642a9e9c265489826307))
-* prevent caching error responses in fetchWithCache ([#8070](https://github.com/promptfoo/promptfoo/issues/8070)) ([033e1bb](https://github.com/promptfoo/promptfoo/commit/033e1bb688cf1054961f94d6563b904c8d14cab3))
-* **providers:** align openclaw with upstream gateway ([#8058](https://github.com/promptfoo/promptfoo/issues/8058)) ([f130803](https://github.com/promptfoo/promptfoo/commit/f1308031752870233b8f0b2b35137ecd7c3a76d2))
-* **providers:** omit default temperature for LiteLLM proxy provider ([#8064](https://github.com/promptfoo/promptfoo/issues/8064)) ([f831d39](https://github.com/promptfoo/promptfoo/commit/f831d399b5dc0bf131305e9eff4ffadbbd79881c))
-* **redteam:** avoid router dependency in risk category drawer ([#8085](https://github.com/promptfoo/promptfoo/issues/8085)) ([1e1d9ac](https://github.com/promptfoo/promptfoo/commit/1e1d9ac537e187ac7927511b3b6bfbb8321ee254))
-* **redteam:** improve EU AI Act preset bias/discrimination coverage ([#8115](https://github.com/promptfoo/promptfoo/issues/8115)) ([30ce06b](https://github.com/promptfoo/promptfoo/commit/30ce06bc2ac13d7bcdaac374fd63252f3a2a3b48))
-* remove unnecessary string length limit for env var rendering ([#8110](https://github.com/promptfoo/promptfoo/issues/8110)) ([40a6b09](https://github.com/promptfoo/promptfoo/commit/40a6b091370974e44bbba31eaa7f7b9e8cad53ac))
+- add node-addon-api to devDependencies for sharp build ([#8102](https://github.com/promptfoo/promptfoo/issues/8102)) ([1d4e959](https://github.com/promptfoo/promptfoo/commit/1d4e9596f2199ade67e4b65207b8f99b7c2b1b3b))
+- **deps:** update dependency @tanstack/react-virtual to ^3.13.20 ([#8083](https://github.com/promptfoo/promptfoo/issues/8083)) ([5e5f774](https://github.com/promptfoo/promptfoo/commit/5e5f7746b065f45147efc9fedaff3366af01e020))
+- **deps:** update dependency @tanstack/react-virtual to ^3.13.21 ([#8104](https://github.com/promptfoo/promptfoo/issues/8104)) ([b17998b](https://github.com/promptfoo/promptfoo/commit/b17998bd9fcc6ad7c67236f83e1a4353227ab7e6))
+- **deps:** update mui packages to ^7.3.9 ([#8077](https://github.com/promptfoo/promptfoo/issues/8077)) ([4db1d67](https://github.com/promptfoo/promptfoo/commit/4db1d67b081a4180d099cbff63978713326fb8e9))
+- **deps:** update openai packages ([#7956](https://github.com/promptfoo/promptfoo/issues/7956)) ([5b70a50](https://github.com/promptfoo/promptfoo/commit/5b70a5089d25cc7bd227703144f35e74d6d52995))
+- **eval:** preserve chart default state per eval ([#8087](https://github.com/promptfoo/promptfoo/issues/8087)) ([cd26f4a](https://github.com/promptfoo/promptfoo/commit/cd26f4a16dfca36043b06f934c3a2ce5301571f5))
+- **examples:** use matching gpt-4o model in temperature comparison ([#8074](https://github.com/promptfoo/promptfoo/issues/8074)) ([516df96](https://github.com/promptfoo/promptfoo/commit/516df96042d5fdec7522548b1f30b6eb7c58704b))
+- not-contains-json with schema respects inverse flag ([#8069](https://github.com/promptfoo/promptfoo/issues/8069)) ([baf5e1b](https://github.com/promptfoo/promptfoo/commit/baf5e1bfda95cc7b9d53642a9e9c265489826307))
+- prevent caching error responses in fetchWithCache ([#8070](https://github.com/promptfoo/promptfoo/issues/8070)) ([033e1bb](https://github.com/promptfoo/promptfoo/commit/033e1bb688cf1054961f94d6563b904c8d14cab3))
+- **providers:** align openclaw with upstream gateway ([#8058](https://github.com/promptfoo/promptfoo/issues/8058)) ([f130803](https://github.com/promptfoo/promptfoo/commit/f1308031752870233b8f0b2b35137ecd7c3a76d2))
+- **providers:** omit default temperature for LiteLLM proxy provider ([#8064](https://github.com/promptfoo/promptfoo/issues/8064)) ([f831d39](https://github.com/promptfoo/promptfoo/commit/f831d399b5dc0bf131305e9eff4ffadbbd79881c))
+- **redteam:** avoid router dependency in risk category drawer ([#8085](https://github.com/promptfoo/promptfoo/issues/8085)) ([1e1d9ac](https://github.com/promptfoo/promptfoo/commit/1e1d9ac537e187ac7927511b3b6bfbb8321ee254))
+- **redteam:** improve EU AI Act preset bias/discrimination coverage ([#8115](https://github.com/promptfoo/promptfoo/issues/8115)) ([30ce06b](https://github.com/promptfoo/promptfoo/commit/30ce06bc2ac13d7bcdaac374fd63252f3a2a3b48))
+- remove unnecessary string length limit for env var rendering ([#8110](https://github.com/promptfoo/promptfoo/issues/8110)) ([40a6b09](https://github.com/promptfoo/promptfoo/commit/40a6b091370974e44bbba31eaa7f7b9e8cad53ac))
 
 ## [0.121.1](https://github.com/promptfoo/promptfoo/compare/0.121.0...0.121.1) (2026-03-09)
 
