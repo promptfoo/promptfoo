@@ -104,9 +104,9 @@ If your goal is to test the **prompt inside an n8n AI Agent / OpenAI node** (not
 
 1. Put the agent prompt in a file,
 2. Map incoming n8n fields to `tests.vars`, and
-3. Assert on the exact JSON or tool-call shape that downstream n8n nodes expect.
+3. Assert on the JSON schema or tool-call contract that downstream n8n nodes expect.
 
-This works well when you want to regression-test an agent before wiring it into a larger workflow.
+This works well when you want to regression-test an agent prompt before wiring it into a larger workflow.
 
 ### Validate JSON that downstream n8n nodes consume
 
@@ -127,6 +127,7 @@ tests:
         value:
           type: object
           required: [route, priority, reply]
+          additionalProperties: false
           properties:
             route:
               type: string
@@ -138,11 +139,11 @@ tests:
               type: string
 ```
 
-Use `contains-json` when the model may wrap JSON in prose or a markdown code block. If your node must return **only** JSON, use [`is-json`](/docs/guides/evaluate-json) instead.
+Use `contains-json` when the model may wrap the payload in prose or a markdown code block. If your node must return **only** JSON with no wrapper text, use [`is-json`](/docs/guides/evaluate-json) instead.
 
 ### Validate tool calls for agent workflows
 
-If your n8n setup uses an OpenAI-compatible agent that should call tools before continuing, validate that Promptfoo sees a real tool call and that it matches your schema.
+If your n8n setup uses an OpenAI-compatible agent that should call tools before continuing, validate that Promptfoo sees a real tool call, that it matches your configured schema, and that it chose the expected tool.
 
 ```yaml
 prompts:
@@ -160,9 +161,12 @@ tests:
       - type: finish-reason
         value: tool_calls
       - type: is-valid-openai-tools-call
+      - type: equals
+        value: move_calendar_event
+        transform: output.tool_calls[0].function.name
 ```
 
-That pattern is especially useful when your n8n workflow branches on whether the LLM produced a tool invocation versus a final answer.
+That pattern is especially useful when your n8n workflow branches on whether the LLM produced a tool invocation versus a final answer. Add a `javascript` assertion if you also need to pin specific argument values such as `new_time` or `notify_team`.
 
 ### Useful building blocks
 
