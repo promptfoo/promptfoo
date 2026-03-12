@@ -10,16 +10,17 @@ function resolveMetricTemplate(
     return metric;
   }
 
-  return metric.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (match, key) => {
-    const value = key
-      .split('.')
-      .reduce<unknown>(
-        (current, part) =>
-          current && typeof current === 'object'
-            ? (current as Record<string, unknown>)[part]
-            : undefined,
-        vars,
-      );
+  return metric.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (match: string, key: string) => {
+    let value: unknown = vars;
+
+    for (const part of key.split('.')) {
+      if (!value || typeof value !== 'object') {
+        value = undefined;
+        break;
+      }
+
+      value = (value as Record<string, unknown>)[part];
+    }
 
     return value === undefined || value === null ? match : String(value);
   });
