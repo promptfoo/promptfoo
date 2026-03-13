@@ -17,7 +17,7 @@ authors: [konstantine]
 tags: [red-teaming, ai-security, agents, prompt-injection]
 ---
 
-[`OpenClaw`](https://github.com/openclaw/openclaw) combines web browsing, local file access, and outbound actions in one user-facing assistant. That combination is also the security problem.
+OpenClaw combines web browsing, local file access, and outbound actions in one user-facing assistant. That combination is also the security problem.
 
 In a controlled lab, we tested a local OpenClaw deployment with browser access, writable local state, and loopback SMS, email, and social sinks. A malicious webpage induced the agent to enumerate capabilities, read local documents, write local artifacts, and send unauthorized messages to loopback endpoints. Once an agent can browse untrusted content and act externally, it should be treated as a privileged endpoint, not a harmless assistant.
 
@@ -96,7 +96,7 @@ The fragment below shows the agent-trigger portion of the lab using Promptfoo's 
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: OpenClaw
+description: OpenClaw workplace risk lab
 
 targets:
   - id: openclaw:agent:main
