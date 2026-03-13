@@ -90,6 +90,7 @@ import { handleTraceSpanDuration } from './traceSpanDuration';
 import {
   handleTrajectoryGoalSuccess,
   handleTrajectoryStepCount,
+  handleTrajectoryToolArgsMatch,
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from './trajectory';
@@ -200,6 +201,7 @@ const ASSERTION_HANDLERS: Record<
   'starts-with': handleStartsWith,
   'tool-call-f1': handleToolCallF1,
   'trajectory:goal-success': handleTrajectoryGoalSuccess,
+  'trajectory:tool-args-match': handleTrajectoryToolArgsMatch,
   'trajectory:step-count': handleTrajectoryStepCount,
   'trajectory:tool-sequence': handleTrajectoryToolSequence,
   'trajectory:tool-used': handleTrajectoryToolUsed,

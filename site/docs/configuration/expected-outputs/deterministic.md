@@ -54,6 +54,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
 | [tool-call-f1](#tool-call-f1)                                   | F1 score comparing actual vs expected tool calls                   |
 | [trajectory:tool-used](#trajectorytool-used)                    | Ensure traced tool usage contains expected tools                   |
+| [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads        |
 | [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order             |
 | [trajectory:step-count](#trajectorystep-count)                  | Count normalized trajectory steps by type or pattern               |
 | [is-xml](#is-xml)                                               | output is valid xml                                                |
@@ -673,6 +674,44 @@ tests:
 - A string, such as `search_orders`
 - An array of strings, such as `['search_orders', 'compose_reply']`
 - An object with `pattern`, `min`, and optional `max`
+
+### trajectory:tool-args-match {#trajectorytool-args-match}
+
+The `trajectory:tool-args-match` assertion checks traced tool-call arguments. Use it when the agent must not only invoke the right tool, but also pass the right parameters.
+
+Example:
+
+```yaml
+tests:
+  - vars:
+      order_id: '123'
+    assert:
+      - type: trajectory:tool-args-match
+        value:
+          name: search_orders
+          args:
+            order_id: '{{ order_id }}'
+
+      - type: trajectory:tool-args-match
+        value:
+          pattern: 'compose_*'
+          mode: exact
+          arguments:
+            tone: friendly
+            citations:
+              - doc_1
+              - doc_2
+```
+
+`value` must be an object with:
+
+- `name` or `pattern` to identify the traced tool call
+- `args` or `arguments` containing the expected payload
+- optional `mode`, either `partial` (default) or `exact`
+
+In `partial` mode, object properties are matched recursively as a subset. In `exact` mode, the entire argument payload must match exactly.
+
+Promptfoo looks for tool arguments in span attributes such as `tool.arguments`, `tool.args`, `tool.input`, `function.arguments`, `args`, `arguments`, and `input`. String values are parsed as JSON when possible.
 
 ### trajectory:tool-sequence {#trajectorytool-sequence}
 
