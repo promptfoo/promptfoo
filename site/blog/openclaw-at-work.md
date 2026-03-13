@@ -89,7 +89,7 @@ A local deployment with browsing capabilities and meaningful privileges can gene
 
 ## How We Tested It
 
-The fragment below shows the agent-trigger portion of the lab using Promptfoo's built-in [OpenClaw provider](/docs/providers/openclaw). For browse-capable agent behavior, the relevant target is the WebSocket agent provider, `openclaw:agent:main`. The attack pages and loopback handlers were still custom lab components and are not committed in this repository.
+The fragment below shows the agent-trigger portion of the lab using Promptfoo's built-in [OpenClaw provider](/docs/providers/openclaw). For browse-capable agent behavior, the relevant target is the WebSocket agent provider, `openclaw:agent:main`. The attack pages and loopback handlers were custom lab components and are not part of Promptfoo.
 
 <details>
 <summary>View <code>promptfooconfig.yaml</code></summary>
