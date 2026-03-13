@@ -95,6 +95,36 @@ describe('matchesLlmRubric', () => {
     );
   });
 
+  it('should pass when the grading provider returns a score but not pass', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    };
+
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ score: '0.6', reason: 'Test grading output' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: true,
+        reason: 'Test grading output',
+        score: 0.6,
+        tokensUsed: {
+          total: expect.any(Number),
+          prompt: expect.any(Number),
+          completion: expect.any(Number),
+          cached: expect.any(Number),
+          completionDetails: expect.any(Object),
+          numRequests: 0,
+        },
+      }),
+    );
+  });
+
   it('should handle when provider returns direct object output instead of string', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';
@@ -364,6 +394,66 @@ describe('matchesLlmRubric', () => {
         completionDetails: undefined,
       },
     });
+  });
+
+  it('should fail when the grading provider returns pass false but score more than threshold', async () => {
+    const expected = 'Expected output';
+    const output = 'Different output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    };
+
+    vi.spyOn(Grader, 'callApi').mockResolvedValueOnce({
+      output: JSON.stringify({ pass: false, score: '0.6', reason: 'Grading failed' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: false,
+        reason: 'Grading failed',
+        score: 0.6,
+        tokensUsed: {
+          total: expect.any(Number),
+          prompt: expect.any(Number),
+          completion: expect.any(Number),
+          cached: expect.any(Number),
+          completionDetails: expect.any(Object),
+          numRequests: 0,
+        },
+      }),
+    );
+  });
+
+  it('should fail when the grading provider returns pass true but score less than threshold', async () => {
+    const expected = 'Expected output';
+    const output = 'Different output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    };
+
+    vi.spyOn(Grader, 'callApi').mockResolvedValueOnce({
+      output: JSON.stringify({ pass: true, score: '0.4', reason: 'Grading failed' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: false,
+        reason: 'Grading failed',
+        score: 0.4,
+        tokensUsed: {
+          total: expect.any(Number),
+          prompt: expect.any(Number),
+          completion: expect.any(Number),
+          cached: expect.any(Number),
+          completionDetails: expect.any(Object),
+          numRequests: 0,
+        },
+      }),
+    );
   });
 
   it('should fail when the grading provider returns a failing result', async () => {

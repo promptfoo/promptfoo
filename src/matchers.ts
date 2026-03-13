@@ -716,10 +716,11 @@ export async function matchesLlmRubric(
   }
 
   const threshold =
-    typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
-  if (typeof threshold === 'number' && Number.isFinite(threshold)) {
-    pass = pass && score >= threshold;
-  }
+    (typeof assertion?.threshold === 'string'
+      ? Number(assertion.threshold)
+      : assertion?.threshold) ?? 0.5;
+
+  pass = pass && score >= threshold;
 
   const reason =
     parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`);
