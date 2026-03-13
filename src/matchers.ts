@@ -705,7 +705,14 @@ export async function matchesLlmRubric(
     );
   }
 
-  let pass = parsed.pass ?? true;
+  if (parsed.pass === undefined && parsed.score === undefined) {
+    return fail(
+      `llm-rubric response must contain 'pass' or 'score' field. Output: ${JSON.stringify(parsed)}`,
+      resp.tokenUsage,
+    );
+  }
+
+  let pass = parsed.pass ?? false;
   if (typeof pass !== 'boolean') {
     pass = /^(true|yes|pass|y)$/i.test(String(pass));
   }
@@ -718,7 +725,12 @@ export async function matchesLlmRubric(
   const threshold =
     typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
   if (typeof threshold === 'number' && Number.isFinite(threshold)) {
-    pass = pass && score >= threshold;
+    if (parsed.pass === undefined) {
+      // NOTE: If 'pass' is not explicitly provided, determine it based on the score and threshold
+      pass = score >= threshold;
+    } else {
+      pass = pass && score >= threshold;
+    }
   }
 
   const reason =
