@@ -44,7 +44,7 @@ describe('metricDisplay', () => {
     });
   });
 
-  it('resolves simple templated metric names before classifying them', () => {
+  it('resolves nunjucks metric templates before classifying them', () => {
     const table: EvaluateTable = {
       head: {
         prompts: [],
@@ -58,7 +58,7 @@ describe('metricDisplay', () => {
             assert: [
               {
                 type: 'cost',
-                metric: 'cost_{{customer.tier}}',
+                metric: 'cost_{{ customer.tier | upper }}',
               },
             ],
             vars: {
@@ -74,7 +74,7 @@ describe('metricDisplay', () => {
     };
 
     expect(getMetricDisplayKinds(table)).toEqual({
-      cost_pro: 'value',
+      cost_PRO: 'value',
     });
   });
 

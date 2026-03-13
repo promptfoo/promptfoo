@@ -233,6 +233,94 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByTestId('metric-value-total_cost')).not.toHaveTextContent('%');
   });
 
+  it('uses each prompt metric count when rendering percentage metrics', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        body: [
+          {
+            outputs: [
+              { pass: true, score: 1, text: 'prompt 1 output' },
+              { pass: true, score: 1, text: 'prompt 2 output' },
+            ],
+            test: {
+              assert: [
+                {
+                  type: 'equals',
+                  value: 'ok',
+                  metric: 'accuracy',
+                },
+              ],
+            },
+            vars: [],
+          },
+        ],
+        head: {
+          prompts: [
+            {
+              metrics: {
+                cost: 0,
+                namedScores: {
+                  accuracy: 1,
+                },
+                namedScoresCount: {
+                  accuracy: 2,
+                },
+                testPassCount: 1,
+                testFailCount: 0,
+                tokenUsage: {
+                  completion: 5,
+                  total: 10,
+                },
+                totalLatencyMs: 100,
+              },
+              provider: 'provider-a',
+            },
+            {
+              metrics: {
+                cost: 0,
+                namedScores: {
+                  accuracy: 3,
+                },
+                namedScoresCount: {
+                  accuracy: 4,
+                },
+                testPassCount: 1,
+                testFailCount: 0,
+                tokenUsage: {
+                  completion: 5,
+                  total: 10,
+                },
+                totalLatencyMs: 100,
+              },
+              provider: 'provider-b',
+            },
+          ],
+          vars: [],
+        },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const metricValues = screen.getAllByTestId('metric-value-accuracy');
+    expect(metricValues[0]).toHaveTextContent('50.00% (1.00/2.00)');
+    expect(metricValues[1]).toHaveTextContent('75.00% (3.00/4.00)');
+  });
+
   it('hides metrics when showStats is false', () => {
     renderWithProviders(<ResultsTable {...defaultProps} showStats={false} />);
     expect(screen.queryByText('Total Cost:')).not.toBeInTheDocument();

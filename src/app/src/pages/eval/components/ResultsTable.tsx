@@ -42,7 +42,11 @@ import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
-import { getMetricDisplayKinds, isValueMetricAssertion } from './metricDisplay';
+import {
+  getMetricDisplayKind,
+  getMetricDisplayKinds,
+  isValueMetricAssertion,
+} from './metricDisplay';
 import { ProviderDisplay } from './ProviderDisplay';
 import { type ProviderDef } from './providerConfig';
 import { useResultsViewSettingsStore, useTableStore } from './store';
@@ -978,38 +982,45 @@ function ResultsTable({
 
   const metricDisplayKinds = React.useMemo(() => getMetricDisplayKinds(table), [table]);
 
-  const metricTotals = React.useMemo(() => {
-    // Use the backend's already-correct namedScoresCount instead of recalculating
-    const firstProvider = table?.head?.prompts?.[0];
-    const backendCounts = firstProvider?.metrics?.namedScoresCount;
+  const percentageMetricTotalsByPrompt = React.useMemo(() => {
+    return (
+      table?.head?.prompts?.map((prompt) => {
+        const backendCounts = prompt.metrics?.namedScoresCount;
 
-    if (backendCounts) {
-      return Object.fromEntries(
-        Object.entries(backendCounts).filter(([metric]) => metricDisplayKinds[metric] !== 'value'),
-      );
-    }
-
-    const totals: Record<string, number> = {};
-    table?.body.forEach((row) => {
-      row.test.assert?.forEach((assertion) => {
-        if (assertion.metric && !isValueMetricAssertion(assertion)) {
-          totals[assertion.metric] = (totals[assertion.metric] || 0) + 1;
+        if (backendCounts) {
+          return Object.fromEntries(
+            Object.entries(backendCounts).filter(([metric]) => {
+              const counts = head.prompts.map(
+                (candidatePrompt) => candidatePrompt.metrics?.namedScoresCount?.[metric],
+              );
+              return getMetricDisplayKind(metric, metricDisplayKinds, counts) === 'percentage';
+            }),
+          );
         }
-        if ('assert' in assertion && Array.isArray(assertion.assert)) {
-          assertion.assert.forEach((subAssertion) => {
-            if (
-              'metric' in subAssertion &&
-              subAssertion.metric &&
-              !isValueMetricAssertion(subAssertion)
-            ) {
-              totals[subAssertion.metric] = (totals[subAssertion.metric] || 0) + 1;
+
+        const totals: Record<string, number> = {};
+        table?.body.forEach((row) => {
+          row.test.assert?.forEach((assertion) => {
+            if (assertion.metric && !isValueMetricAssertion(assertion)) {
+              totals[assertion.metric] = (totals[assertion.metric] || 0) + 1;
+            }
+            if ('assert' in assertion && Array.isArray(assertion.assert)) {
+              assertion.assert.forEach((subAssertion) => {
+                if (
+                  'metric' in subAssertion &&
+                  subAssertion.metric &&
+                  !isValueMetricAssertion(subAssertion)
+                ) {
+                  totals[subAssertion.metric] = (totals[subAssertion.metric] || 0) + 1;
+                }
+              });
             }
           });
-        }
-      });
-    });
-    return totals;
-  }, [metricDisplayKinds, table?.head?.prompts, table?.body]);
+        });
+        return totals;
+      }) ?? []
+    );
+  }, [head.prompts, metricDisplayKinds, table?.body, table?.head?.prompts]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const promptColumns = React.useMemo(() => {
@@ -1217,7 +1228,7 @@ function ResultsTable({
                         <CustomMetrics
                           lookup={metrics.namedScores}
                           counts={metrics.namedScoresCount}
-                          metricTotals={metricTotals}
+                          metricTotals={percentageMetricTotalsByPrompt[idx]}
                           onShowMore={() => setCustomMetricsDialogOpen(true)}
                         />
                       </div>
@@ -1298,7 +1309,7 @@ function ResultsTable({
     head,
     head.prompts,
     maxTextLength,
-    metricTotals,
+    percentageMetricTotalsByPrompt,
     numAsserts,
     numGoodAsserts,
     onFailureFilterToggle,
