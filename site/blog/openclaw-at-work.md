@@ -49,13 +49,13 @@ This was a permissive personal-assistant deployment. Browsing, writable local fi
 
 ![Attack chain showing untrusted web content leading to capability disclosure, local artifact creation, and unauthorized outbound actions.](/img/blog/openclaw-at-work/attack-chain.svg)
 
-We ran the lab in three phases: capability discovery, local access and artifact creation, then outbound action. Once the injected pages got the agent to describe what it could do, the later tests became much easier to target.
+We ran the lab in three phases: capability discovery, artifact creation, then outbound action. Once the injected pages got the agent to describe what it could do, the later tests became much easier to target.
 
 ### Phase 1: Capability discovery
 
 With attacker-controlled pages in the browsing path, the agent began enumerating parts of its local capability surface, including file access, shell execution, and session context. That moved the exercise out of the "chatbot says something weird" category and into "the page is steering a high-privilege local agent."
 
-### Phase 2: Local access and artifact creation
+### Phase 2: Artifact creation
 
 Once the agent was acting on that capability map, the next step was local file access. In the lab, the same agent context could read local documents and write new summaries derived from local material. A compromised retrieval step does not end with a bad answer. It can become a durable local artifact that other prompts, users, or workflows may later trust.
 
