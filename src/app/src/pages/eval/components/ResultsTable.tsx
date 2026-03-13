@@ -980,7 +980,10 @@ function ResultsTable({
     [tableBody],
   );
 
-  const metricDisplayKinds = React.useMemo(() => getMetricDisplayKinds(table), [table]);
+  const metricDisplayKinds = React.useMemo(
+    () => getMetricDisplayKinds(table, config),
+    [table, config],
+  );
 
   const percentageMetricTotalsByPrompt = React.useMemo(() => {
     // Pre-compute which metrics are percentage-type to avoid redundant work per prompt

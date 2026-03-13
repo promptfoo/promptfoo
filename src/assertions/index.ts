@@ -255,6 +255,11 @@ export function isMetricOnlyAssertion(assertion: AssertionOrSet): boolean {
     return assertion.threshold === undefined && assertion.assert.every(isMetricOnlyAssertion);
   }
 
+  const inverse = isAssertionInverse(assertion);
+  if (inverse) {
+    return false;
+  }
+
   const baseType = getAssertionBaseType(assertion);
   return (baseType === 'cost' || baseType === 'latency') && assertion.threshold === undefined;
 }

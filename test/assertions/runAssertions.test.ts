@@ -917,7 +917,7 @@ describe('runAssertions', () => {
     expect(result.componentResults?.[1].componentResults).toHaveLength(1);
   });
 
-  it('should suppress aggregate scoring for inverse metric-only cost assertions', async () => {
+  it('should reject not-cost without a threshold', async () => {
     const test: AtomicTestCase = {
       assert: [
         {
@@ -931,18 +931,14 @@ describe('runAssertions', () => {
       ],
     };
 
-    const result: GradingResult = await runAssertions({
-      prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      test,
-      providerResponse: { output: 'Expected output', cost: 0.5 },
-    });
-
-    expect(result.pass).toBe(true);
-    expect(result.score).toBe(1);
-    expect(result.namedScores).toEqual({
-      total_cost: 0.5,
-    });
+    await expect(
+      runAssertions({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        test,
+        providerResponse: { output: 'Expected output', cost: 0.5 },
+      }),
+    ).rejects.toThrow('Cost assertion requires a threshold when using not-cost');
   });
 
   it('should handle test with no vars defined', async () => {

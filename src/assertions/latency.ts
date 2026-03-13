@@ -12,6 +12,14 @@ export const handleLatency = ({
   }
 
   if (assertion.threshold === undefined) {
+    if (inverse) {
+      throw new Error('Latency assertion requires a threshold when using not-latency');
+    }
+    if (!assertion.metric) {
+      throw new Error(
+        'Latency assertion without a threshold must set `metric` to record as a named metric',
+      );
+    }
     return {
       pass: true,
       score: latencyMs,

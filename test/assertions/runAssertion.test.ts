@@ -2127,7 +2127,7 @@ describe('runAssertion', () => {
       });
     });
 
-    it('should treat missing threshold as metric-only mode', async () => {
+    it('should treat missing threshold as metric-only mode when metric is set', async () => {
       const output = 'Expected output';
 
       const result: GradingResult = await runAssertion({
@@ -2135,6 +2135,7 @@ describe('runAssertion', () => {
         provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
         assertion: {
           type: 'latency',
+          metric: 'total_latency_ms',
         },
         latencyMs: 50,
         test: {} as AtomicTestCase,
@@ -2146,6 +2147,41 @@ describe('runAssertion', () => {
         score: 50,
         reason: 'Assertion passed',
       });
+    });
+
+    it('should throw when latency has no threshold and no metric', async () => {
+      const output = 'Expected output';
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion: {
+            type: 'latency',
+          },
+          latencyMs: 50,
+          test: {} as AtomicTestCase,
+          providerResponse: { output },
+        }),
+      ).rejects.toThrow('Latency assertion without a threshold must set `metric`');
+    });
+
+    it('should throw when not-latency has no threshold', async () => {
+      const output = 'Expected output';
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion: {
+            type: 'not-latency',
+            metric: 'total_latency_ms',
+          },
+          latencyMs: 50,
+          test: {} as AtomicTestCase,
+          providerResponse: { output },
+        }),
+      ).rejects.toThrow('Latency assertion requires a threshold when using not-latency');
     });
 
     it('should invert threshold comparisons for not-latency assertions', async () => {
@@ -2502,7 +2538,7 @@ describe('runAssertion', () => {
       });
     });
 
-    it('should treat missing threshold as metric-only mode', async () => {
+    it('should treat missing threshold as metric-only mode when metric is set', async () => {
       const cost = 0.25;
       const provider = {
         callApi: vi.fn().mockResolvedValue({ cost }),
@@ -2513,6 +2549,7 @@ describe('runAssertion', () => {
         provider,
         assertion: {
           type: 'cost',
+          metric: 'total_cost',
         },
         test: {} as AtomicTestCase,
         providerResponse,
@@ -2523,6 +2560,47 @@ describe('runAssertion', () => {
         score: 0.25,
         reason: 'Assertion passed',
       });
+    });
+
+    it('should throw when cost has no threshold and no metric', async () => {
+      const cost = 0.25;
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', cost };
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider,
+          assertion: {
+            type: 'cost',
+          },
+          test: {} as AtomicTestCase,
+          providerResponse,
+        }),
+      ).rejects.toThrow('Cost assertion without a threshold must set `metric`');
+    });
+
+    it('should throw when not-cost has no threshold', async () => {
+      const cost = 0.25;
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', cost };
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider,
+          assertion: {
+            type: 'not-cost',
+            metric: 'total_cost',
+          },
+          test: {} as AtomicTestCase,
+          providerResponse,
+        }),
+      ).rejects.toThrow('Cost assertion requires a threshold when using not-cost');
     });
 
     it('should invert threshold comparisons for not-cost assertions', async () => {

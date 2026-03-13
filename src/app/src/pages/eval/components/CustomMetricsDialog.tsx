@@ -48,7 +48,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
   }
 
   const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
-  const metricKinds = React.useMemo(() => getMetricDisplayKinds(table), [table]);
+  const metricKinds = React.useMemo(() => getMetricDisplayKinds(table, config), [table, config]);
 
   /**
    * Given the pass rate percentages, calculates the Tailwind classes for the cell.

@@ -1,5 +1,5 @@
 import nunjucks from 'nunjucks';
-import type { Assertion, EvaluateTable } from '@promptfoo/types';
+import type { Assertion, EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 
 export type MetricDisplayKind = 'percentage' | 'value';
 
@@ -8,6 +8,9 @@ function getAssertionMetricBaseType(type: string): string {
 }
 
 export function isValueMetricAssertion(assertion: { type: string; threshold?: number }): boolean {
+  if (assertion.type.startsWith('not-')) {
+    return false;
+  }
   const baseType = getAssertionMetricBaseType(assertion.type);
   return (baseType === 'cost' || baseType === 'latency') && assertion.threshold === undefined;
 }
@@ -68,6 +71,7 @@ function collectMetricKinds(
 
 export function getMetricDisplayKinds(
   table: EvaluateTable | null,
+  config?: Partial<UnifiedConfig> | null,
 ): Record<string, MetricDisplayKind> {
   if (!table) {
     return {};
@@ -75,6 +79,26 @@ export function getMetricDisplayKinds(
 
   const metricKinds: Record<string, MetricDisplayKind> = {};
 
+  // Walk config assertions first (always the full set, not affected by pagination)
+  if (config) {
+    const defaultAssert =
+      typeof config.defaultTest === 'object' ? config.defaultTest?.assert : undefined;
+    collectMetricKinds(defaultAssert as Assertion[] | undefined, {}, metricKinds);
+
+    if (Array.isArray(config.tests)) {
+      for (const test of config.tests) {
+        if (typeof test === 'object' && test !== null && 'assert' in test) {
+          collectMetricKinds(
+            test.assert as Assertion[] | undefined,
+            (test.vars ?? {}) as Record<string, unknown>,
+            metricKinds,
+          );
+        }
+      }
+    }
+  }
+
+  // Also walk table body rows (covers runtime-resolved templates)
   table.body.forEach((row) => {
     collectMetricKinds(
       row.test?.assert as Assertion[] | undefined,

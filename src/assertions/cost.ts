@@ -6,6 +6,14 @@ export const handleCost = ({ cost, assertion, inverse }: AssertionParams): Gradi
   }
 
   if (assertion.threshold === undefined) {
+    if (inverse) {
+      throw new Error('Cost assertion requires a threshold when using not-cost');
+    }
+    if (!assertion.metric) {
+      throw new Error(
+        'Cost assertion without a threshold must set `metric` to record as a named metric',
+      );
+    }
     return {
       pass: true,
       score: cost,

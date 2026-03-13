@@ -3,7 +3,7 @@ import { getMetricAverage, getMetricDisplayKind, getMetricDisplayKinds } from '.
 import type { EvaluateTable } from '@promptfoo/types';
 
 describe('metricDisplay', () => {
-  it('classifies thresholdless cost and inverse cost metrics as value metrics', () => {
+  it('classifies thresholdless cost as value and inverse types as percentage', () => {
     const table: EvaluateTable = {
       head: {
         prompts: [],
@@ -20,8 +20,13 @@ describe('metricDisplay', () => {
                 metric: 'total_cost',
               },
               {
-                type: 'not-latency',
+                type: 'latency',
                 metric: 'total_latency_ms',
+              },
+              {
+                type: 'not-latency',
+                threshold: 500,
+                metric: 'latency_check',
               },
               {
                 type: 'equals',
@@ -41,6 +46,7 @@ describe('metricDisplay', () => {
       accuracy: 'percentage',
       total_cost: 'value',
       total_latency_ms: 'value',
+      latency_check: 'percentage',
     });
   });
 
