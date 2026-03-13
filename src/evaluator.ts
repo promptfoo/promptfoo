@@ -326,7 +326,7 @@ export async function runEval({
   const fileMetadata = collectFileMetadata(test.vars || vars);
 
   const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
-  const usesConversation = prompt.raw.includes('_conversation');
+  const usesConversation = prompt.raw.includes('_conversation') && /\b_conversation\b/.test(prompt.raw);
   if (
     !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
     !test.options?.disableConversationVar &&
@@ -1461,7 +1461,7 @@ class Evaluator {
     // Determine run parameters
 
     if (concurrency > 1) {
-      const usesConversation = prompts.some((p) => p.raw.includes('_conversation'));
+      const usesConversation = prompts.some((p) => p.raw.includes('_conversation') && /\b_conversation\b/.test(p.raw));
       const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
       if (usesConversation) {
         logger.info(
@@ -2284,7 +2284,7 @@ class Evaluator {
       this.evalRecord.results.length > 0 ? totalLatencyMs / this.evalRecord.results.length : 0;
 
     // Detect key feature usage patterns
-    const usesConversationVar = prompts.some((p) => p.raw.includes('_conversation'));
+    const usesConversationVar = prompts.some((p) => p.raw.includes('_conversation') && /\b_conversation\b/.test(p.raw));
     const usesTransforms = Boolean(
       tests.some((t) => t.options?.transform || t.options?.postprocess) ||
         testSuite.providers.some((p) => Boolean(p.transform)),
