@@ -53,6 +53,9 @@ These metrics are created by logical tests that are run on LLM output.
 | [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
 | [tool-call-f1](#tool-call-f1)                                   | F1 score comparing actual vs expected tool calls                   |
+| [trajectory:tool-used](#trajectorytool-used)                    | Ensure traced tool usage contains expected tools                   |
+| [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order             |
+| [trajectory:step-count](#trajectorystep-count)                  | Count normalized trajectory steps by type or pattern               |
 | [is-xml](#is-xml)                                               | output is valid xml                                                |
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
@@ -641,6 +644,80 @@ The `threshold` defaults to `1.0` (exact match required). Lower thresholds allow
 | `[get_weather, book_flight]` | `[get_weather]`                      | 1.0       | 0.5    | 0.667 |
 | `[get_weather, book_flight]` | `[get_weather, book_flight, search]` | 0.667     | 1.0    | 0.8   |
 | `[get_weather]`              | `[book_flight]`                      | 0.0       | 0.0    | 0.0   |
+
+### trajectory:tool-used {#trajectorytool-used}
+
+The `trajectory:tool-used` assertion checks traced tool steps rather than the model's final output. It works well for agent evals where the important question is "did the agent actually use the right tool?".
+
+:::note
+Trajectory assertions require trace data. Enable tracing for the eval and use a provider that emits tool-oriented spans or attributes.
+:::
+
+Example:
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:tool-used
+        value: search_orders
+
+      - type: trajectory:tool-used
+        value:
+          pattern: 'search*'
+          min: 2
+          max: 3
+```
+
+`value` may be:
+
+- A string, such as `search_orders`
+- An array of strings, such as `['search_orders', 'compose_reply']`
+- An object with `pattern`, `min`, and optional `max`
+
+### trajectory:tool-sequence {#trajectorytool-sequence}
+
+The `trajectory:tool-sequence` assertion checks the order of traced tool usage. This is useful when an agent must gather information before taking a follow-up action.
+
+Example:
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:tool-sequence
+        value:
+          steps:
+            - search_orders
+            - compose_reply
+
+      - type: trajectory:tool-sequence
+        value:
+          mode: exact
+          steps:
+            - search_orders
+            - compose_reply
+```
+
+`mode: in_order` is the default and allows extra tool steps in between the expected ones. `mode: exact` requires the traced tool sequence to match exactly.
+
+### trajectory:step-count {#trajectorystep-count}
+
+The `trajectory:step-count` assertion counts normalized trajectory steps. It can filter by step type (`tool`, `command`, `search`, `reasoning`, `message`, or `span`) and by glob-style name pattern.
+
+Example:
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:step-count
+        value:
+          type: command
+          max: 3
+
+      - type: trajectory:step-count
+        value:
+          pattern: 'reasoning*'
+          min: 1
+```
 
 ### Javascript
 
