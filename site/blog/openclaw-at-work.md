@@ -25,7 +25,7 @@ In a controlled lab, we tested a local OpenClaw deployment with browser access, 
 
 <!-- truncate -->
 
-This post documents one exploit chain in a permissive OpenClaw deployment where browsing, local file access, and outbound actions shared a trust boundary, leading to capability disclosure, local document access, secret aggregation into new files, and unauthorized messages to loopback sinks.
+This post documents one exploit chain in a permissive OpenClaw deployment where browsing, local file access, and outbound actions shared a trust boundary. That led to capability disclosure, local document access, secret aggregation into new files, and unauthorized messages to loopback sinks.
 
 Indirect prompt injection from websites and files is already a known agent risk. This case study looks at what happens when that risk is combined with a local agent that can browse attacker-controlled pages, read and write local files, and send messages through connected channels. It focuses on one exploit chain rather than behavior across OpenClaw versions, model providers, or approval modes.
 
