@@ -160,7 +160,7 @@ If you want to test your own browse-capable agents, start with the [red teaming 
 
 ## What This Means
 
-**Do not broadly deploy browse-capable local agents with company data access and messaging integrations unless outbound actions are explicitly approved and local access is tightly constrained.**
+**Do not broadly deploy browser-capable local agents with company data access and messaging integrations unless outbound actions are explicitly approved and local access is tightly constrained.**
 
 At a minimum, separate browsing from high-trust actions. Treat external content as hostile input. Require explicit confirmation for outbound messages. Keep sensitive local files out of the agent's default reach. Monitor artifact creation as closely as network actions, because a locally written summary or status draft can be just as operationally dangerous as a network call.
 
