@@ -148,6 +148,43 @@ describe('trajectory utilities', () => {
     ]);
   });
 
+  it('preserves original span order when timestamps are tied', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'tied-1',
+          name: 'tool.call',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'compose_reply',
+          },
+        },
+        {
+          spanId: 'tied-2',
+          name: 'tool.call',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'search_orders',
+          },
+        },
+        {
+          spanId: 'tied-3',
+          name: 'tool.call',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'finalize',
+          },
+        },
+      ],
+    });
+
+    expect(steps.map((step) => step.name)).toEqual(['compose_reply', 'search_orders', 'finalize']);
+  });
+
   it('compacts repeated steps and truncates long judge summaries', () => {
     const trace = {
       ...mockTraceData,
