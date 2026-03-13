@@ -258,6 +258,7 @@ export async function runAssertion({
   latencyMs,
   providerResponse,
   traceId,
+  evaluationId,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -268,6 +269,7 @@ export async function runAssertion({
   latencyMs?: number;
   assertIndex?: number;
   traceId?: string;
+  evaluationId?: string;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
@@ -454,7 +456,9 @@ export async function runAssertion({
         originalProvider: provider,
         prompt: { raw: prompt || '', label: '' },
         vars: resolvedVars,
+        test,
         ...(graderTraceparent && { traceparent: graderTraceparent }),
+        ...(evaluationId && { evaluationId }),
       }
     : undefined;
 
@@ -520,6 +524,7 @@ export async function runAssertions({
   test,
   vars,
   traceId,
+  evaluationId,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -529,6 +534,7 @@ export async function runAssertions({
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   traceId?: string;
+  evaluationId?: string;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -587,6 +593,7 @@ export async function runAssertions({
         latencyMs,
         assertIndex: index,
         traceId,
+        evaluationId,
       });
 
       assertResult.addResult({

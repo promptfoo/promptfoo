@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import cliState from '../cliState';
 import { VERSION } from '../constants';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
@@ -55,7 +56,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
 
   async callApi(
     _prompt: string,
-    _context?: CallApiContextParams,
+    context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse & { output?: string[] }> {
     // Check if remote generation is disabled
@@ -80,6 +81,9 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       purpose: this.purpose,
       version: VERSION,
       config: this.config,
+      ...((context?.evaluationId || cliState.evaluationId) && {
+        evaluationId: context?.evaluationId || cliState.evaluationId,
+      }),
     };
 
     try {
@@ -202,6 +206,15 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       email: getUserEmail(),
       // Pass inputs schema for multi-input mode
       ...(this.options.inputs && { inputs: this.options.inputs }),
+      ...((context?.evaluationId || cliState.evaluationId) && {
+        evaluationId: context?.evaluationId || cliState.evaluationId,
+      }),
+      pluginId: context?.test?.metadata?.pluginId,
+      strategyId: context?.test?.metadata?.strategyId,
+      ...(context?.evaluationId &&
+        context?.testCaseId && {
+          testRunId: `${context.evaluationId}-${context.testCaseId}`,
+        }),
     };
 
     try {
@@ -277,7 +290,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
 
   async callApi(
     prompt: string,
-    _context?: CallApiContextParams,
+    context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Check if this is a redteam task
@@ -317,6 +330,11 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
       history: messages,
       email: getUserEmail(),
       version: VERSION,
+      ...((context?.evaluationId || cliState.evaluationId) && {
+        evaluationId: context?.evaluationId || cliState.evaluationId,
+      }),
+      pluginId: context?.test?.metadata?.pluginId,
+      strategyId: context?.test?.metadata?.strategyId,
     };
 
     try {

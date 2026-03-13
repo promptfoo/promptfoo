@@ -168,6 +168,10 @@ describe('PlinyGrader', () => {
       expect.any(String), // The rendered rubric
       aiOutput,
       expect.any(Object), // GradingConfig with provider
+      undefined,
+      undefined,
+      undefined,
+      expect.any(Object),
     );
   });
 
@@ -192,6 +196,10 @@ describe('PlinyGrader', () => {
       expect.any(String), // The rendered rubric
       aiOutput,
       expect.any(Object), // GradingConfig with provider
+      undefined,
+      undefined,
+      undefined,
+      expect.any(Object),
     );
   });
 

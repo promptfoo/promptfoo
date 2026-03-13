@@ -45,6 +45,9 @@ interface CliState {
 
   // Maximum concurrency from CLI -j flag (propagated to providers like Python)
   maxConcurrency?: number;
+
+  // Current evaluation ID (set by evaluator, used by remote task/grading calls)
+  evaluationId?: string;
 }
 
 const state: CliState = {};
