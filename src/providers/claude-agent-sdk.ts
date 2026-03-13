@@ -1008,6 +1008,15 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
    * For normal Claude Agent SDK support, just use the Anthropic API key
    * Users can also use Bedrock (with CLAUDE_CODE_USE_BEDROCK env var) or Vertex (with CLAUDE_CODE_USE_VERTEX env var)
    */
+  requiresApiKey(): boolean {
+    return !(
+      this.env?.CLAUDE_CODE_USE_BEDROCK ||
+      this.env?.CLAUDE_CODE_USE_VERTEX ||
+      getEnvString('CLAUDE_CODE_USE_BEDROCK') ||
+      getEnvString('CLAUDE_CODE_USE_VERTEX')
+    );
+  }
+
   getApiKey(): string | undefined {
     return this.config?.apiKey || this.env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
   }
