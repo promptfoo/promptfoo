@@ -5,96 +5,60 @@ import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import { sleep } from '../../util/time';
-import { toTitleCase } from '../shared';
+import {
+  maybeLoadResponseFormatFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
+} from '../../util/index';
+import { FunctionCallbackHandler } from '../functionCallbackUtils';
+import { ResponsesProcessor } from '../responses/index';
 import { AzureGenericProvider } from './generic';
+import { calculateAzureCost } from './util';
+import type { Agent, AIProjectClient as AzureAIProjectClient } from '@azure/ai-projects';
+import type {
+  Response as OpenAIResponse,
+  ResponseCreateParamsNonStreaming,
+  ResponseFunctionToolCall,
+  ResponseFunctionToolCallOutputItem,
+} from 'openai/resources/responses/responses';
 
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { CallbackContext } from '../openai/types';
+import type { CallbackContext, ReasoningEffort } from '../openai/types';
 import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types';
 
-// Azure AI Projects SDK types
-interface AIProjectClient {
-  agents: {
-    getAgent(assistantId: string): Promise<Agent>;
-    threads: {
-      create(): Promise<Thread>;
-    };
-    messages: {
-      create(threadId: string, role: string, content: string): Promise<Message>;
-      list(threadId: string, options?: { order: string }): AsyncIterable<Message>;
-    };
-    runs: {
-      create(threadId: string, assistantId: string, options?: any): Promise<Run>;
-      get(threadId: string, runId: string): Promise<Run>;
-      submitToolOutputs(threadId: string, runId: string, toolOutputs: ToolOutput[]): Promise<Run>;
-    };
-  };
-}
+type FoundryAgent = Agent;
+type FoundryResponse = OpenAIResponse;
+type ResponseFunctionCallItem = ResponseFunctionToolCall;
+type EffectiveFoundryConfig = AzureAssistantOptions & Record<string, any>;
+type FunctionToolCallbacks = AzureAssistantOptions['functionToolCallbacks'];
 
-interface Agent {
-  id: string;
+interface AgentReferenceOption {
   name: string;
+  type: 'agent_reference';
 }
 
-interface Thread {
-  id: string;
-}
-
-interface Message {
-  id: string;
-  role: string;
-  content: Array<{
-    type: string;
-    text?: {
-      value: string;
-    };
-  }>;
-}
-
-interface Run {
-  id: string;
-  status: string;
-  lastError?: {
-    code: string;
-    message: string;
+interface FoundryResponseCreateOptions {
+  body?: {
+    agent?: AgentReferenceOption;
   };
-  requiredAction?: {
-    type: string;
-    submitToolOutputs?: {
-      toolCalls: Array<{
-        id: string;
-        type: string;
-        function?: {
-          name: string;
-          arguments: string;
-        };
-      }>;
-    };
-  };
-}
-
-interface ToolOutput {
-  toolCallId: string;
-  output: string;
 }
 
 export class AzureFoundryAgentProvider extends AzureGenericProvider {
   assistantConfig: AzureAssistantOptions;
   private loadedFunctionCallbacks: Record<string, Function> = {};
-  private projectClient: AIProjectClient | null = null;
+  private processor: ResponsesProcessor;
+  private projectClient: AzureAIProjectClient | null = null;
   private projectUrl: string;
+  private resolvedAgent: FoundryAgent | null = null;
+  private warnedUnsupportedFields = new Set<string>();
 
   constructor(deploymentName: string, options: AzureAssistantProviderOptions = {}) {
     super(deploymentName, options);
     this.assistantConfig = options.config || {};
-
-    // Extract project URL from options or use environment variable
     this.projectUrl = options.config?.projectUrl || process.env.AZURE_AI_PROJECT_URL || '';
 
     if (!this.projectUrl) {
@@ -103,44 +67,75 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       );
     }
 
-    // Preload function callbacks if available
+    this.processor = new ResponsesProcessor({
+      modelName: this.assistantConfig.modelName || deploymentName,
+      providerType: 'azure',
+      functionCallbackHandler: new FunctionCallbackHandler(),
+      costCalculator: (_modelName: string, usage: any, requestConfig?: any) =>
+        calculateAzureCost(
+          requestConfig?.model || this.assistantConfig.modelName || this.deploymentName,
+          usage,
+        ) ?? 0,
+    });
+
     if (this.assistantConfig.functionToolCallbacks) {
       void this.preloadFunctionCallbacks();
     }
   }
 
-  /**
-   * Initialize the Azure AI Project client
-   */
-  private async initializeClient() {
+  private async initializeClient(): Promise<AzureAIProjectClient> {
     if (this.projectClient) {
       return this.projectClient;
     }
 
     try {
-      // Dynamic import to avoid bundling issues
       const { AIProjectClient } = await import('@azure/ai-projects');
       const { DefaultAzureCredential } = await import('@azure/identity');
 
-      // Patch: Ensure type compatibility for Agent.name (string | null -> string)
-      // @ts-expect-error: Suppress type incompatibility due to upstream SDK types
-      this.projectClient = new AIProjectClient(this.projectUrl, new DefaultAzureCredential());
-
+      const projectClient = new AIProjectClient(
+        this.projectUrl,
+        new DefaultAzureCredential(),
+      ) as AzureAIProjectClient;
+      this.projectClient = projectClient;
       logger.debug('Azure AI Project client initialized successfully');
-      return this.projectClient;
+      return projectClient;
     } catch (error) {
-      logger.error(
-        `Failed to initialize Azure AI Project client: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      throw new Error(
-        `Failed to initialize Azure AI Project client: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to initialize Azure AI Project client: ${errorMessage}`);
+      throw new Error(`Failed to initialize Azure AI Project client: ${errorMessage}`);
     }
   }
 
-  /**
-   * Preloads all function callbacks to ensure they're ready when needed
-   */
+  private async resolveAgent(client: AzureAIProjectClient): Promise<FoundryAgent> {
+    if (this.resolvedAgent) {
+      return this.resolvedAgent;
+    }
+
+    try {
+      const agent = await client.agents.get(this.deploymentName);
+      this.resolvedAgent = agent;
+      return agent;
+    } catch (error) {
+      logger.debug(
+        `[AzureFoundryAgentProvider] Direct agent lookup failed for '${this.deploymentName}', falling back to list lookup`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
+    }
+
+    for await (const agent of client.agents.list()) {
+      if (agent.id === this.deploymentName || agent.name === this.deploymentName) {
+        this.resolvedAgent = agent;
+        return agent;
+      }
+    }
+
+    throw new Error(
+      `Azure Foundry agent '${this.deploymentName}' was not found by name or legacy ID in project '${this.projectUrl}'. The Azure AI Projects v2 SDK resolves agents by name. Update the provider to use azure:foundry-agent:<agent-name>, or keep using the legacy ID format and ensure the agent still exists in this project.`,
+    );
+  }
+
   private async preloadFunctionCallbacks() {
     if (!this.assistantConfig.functionToolCallbacks) {
       return;
@@ -150,20 +145,13 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     for (const [name, callback] of Object.entries(callbacks)) {
       try {
         if (typeof callback === 'string') {
-          // Check if it's a file reference
-          const callbackStr: string = callback;
-          if (callbackStr.startsWith('file://')) {
-            const fn = await this.loadExternalFunction(callbackStr);
-            this.loadedFunctionCallbacks[name] = fn;
-            logger.debug(`Successfully preloaded function callback '${name}' from file`);
+          if (callback.startsWith('file://')) {
+            this.loadedFunctionCallbacks[name] = await this.loadExternalFunction(callback);
           } else {
-            // It's an inline function string
-            this.loadedFunctionCallbacks[name] = new Function('return ' + callbackStr)();
-            logger.debug(`Successfully preloaded inline function callback '${name}'`);
+            this.loadedFunctionCallbacks[name] = new Function('return ' + callback)();
           }
         } else if (typeof callback === 'function') {
           this.loadedFunctionCallbacks[name] = callback;
-          logger.debug(`Successfully stored function callback '${name}'`);
         }
       } catch (error) {
         logger.error(`Failed to preload function callback '${name}': ${error}`);
@@ -171,11 +159,6 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
   }
 
-  /**
-   * Loads a function from an external file
-   * @param fileRef The file reference in the format 'file://path/to/file:functionName'
-   * @returns The loaded function
-   */
   private async loadExternalFunction(fileRef: string): Promise<Function> {
     let filePath = fileRef.slice('file://'.length);
     let functionName: string | undefined;
@@ -189,15 +172,13 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
 
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      logger.debug(
-        `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
-      );
-
       const requiredModule = await importModule(resolvedPath, functionName);
 
       if (typeof requiredModule === 'function') {
         return requiredModule;
-      } else if (
+      }
+
+      if (
         requiredModule &&
         typeof requiredModule === 'object' &&
         functionName &&
@@ -221,34 +202,30 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
   }
 
-  /**
-   * Executes a function callback with proper error handling
-   */
   private async executeFunctionCallback(
     functionName: string,
     args: string,
     context?: CallbackContext,
+    callbacks?: FunctionToolCallbacks,
   ): Promise<string> {
     try {
-      // Check if we've already loaded this function
       let callback = this.loadedFunctionCallbacks[functionName];
+      const effectiveCallbacks = callbacks || this.assistantConfig.functionToolCallbacks;
 
-      // If not loaded yet, try to load it now
       if (!callback) {
-        const callbackRef = this.assistantConfig.functionToolCallbacks?.[functionName];
+        const callbackRef = effectiveCallbacks?.[functionName];
 
         if (callbackRef && typeof callbackRef === 'string') {
-          const callbackStr: string = callbackRef;
-          if (callbackStr.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackStr);
+          if (callbackRef.startsWith('file://')) {
+            callback = await this.loadExternalFunction(callbackRef);
           } else {
-            callback = new Function('return ' + callbackStr)();
+            callback = new Function('return ' + callbackRef)();
           }
-
-          // Cache for future use
-          this.loadedFunctionCallbacks[functionName] = callback;
         } else if (typeof callbackRef === 'function') {
           callback = callbackRef;
+        }
+
+        if (callback) {
           this.loadedFunctionCallbacks[functionName] = callback;
         }
       }
@@ -257,27 +234,14 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         throw new Error(`No callback found for function '${functionName}'`);
       }
 
-      // Execute the callback with explicit context
-      logger.debug(
-        `Executing function '${functionName}' with args: ${args}${
-          context ? ` and context: ${JSON.stringify(context)}` : ''
-        }`,
-      );
       const result = await callback(args, context);
-
-      // Format the result
       if (result === undefined || result === null) {
         return '';
-      } else if (typeof result === 'object') {
-        try {
-          return JSON.stringify(result);
-        } catch (error) {
-          logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
-          return String(result);
-        }
-      } else {
-        return String(result);
       }
+      if (typeof result === 'object') {
+        return JSON.stringify(result);
+      }
+      return String(result);
     } catch (error: any) {
       logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
       return JSON.stringify({
@@ -286,202 +250,307 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
   }
 
+  private parsePromptInput(prompt: string): string | Array<Record<string, any>> {
+    try {
+      const parsedJson = JSON.parse(prompt);
+      if (Array.isArray(parsedJson)) {
+        return parsedJson;
+      }
+    } catch {
+      // Fall through to message wrapping.
+    }
+
+    return [
+      {
+        type: 'message',
+        role: 'user',
+        content: prompt,
+      },
+    ];
+  }
+
+  private warnForUnsupportedConfig(config: AzureAssistantOptions) {
+    const unsupportedFields = [
+      config.frequency_penalty !== undefined ? 'frequency_penalty' : null,
+      config.presence_penalty !== undefined ? 'presence_penalty' : null,
+      config.retryOptions ? 'retryOptions' : null,
+      config.seed !== undefined ? 'seed' : null,
+      config.stop?.length ? 'stop' : null,
+      config.timeoutMs !== undefined ? 'timeoutMs' : null,
+      config.tool_resources ? 'tool_resources' : null,
+    ].filter(Boolean) as string[];
+
+    if (unsupportedFields.length === 0) {
+      return;
+    }
+
+    const warningKey = unsupportedFields.sort().join(',');
+    if (this.warnedUnsupportedFields.has(warningKey)) {
+      return;
+    }
+    this.warnedUnsupportedFields.add(warningKey);
+
+    logger.warn(
+      `[AzureFoundryAgentProvider] The Azure AI Projects v2 agent runtime ignores these per-request settings: ${unsupportedFields.join(
+        ', ',
+      )}. Configure them on the agent itself, or pass supported Responses API fields instead.`,
+    );
+  }
+
+  private async buildResponsesBody(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<{ body: Record<string, any>; effectiveConfig: EffectiveFoundryConfig }> {
+    const config = {
+      ...this.assistantConfig,
+      ...context?.prompt?.config,
+    };
+
+    this.warnForUnsupportedConfig(config);
+
+    const responseFormat = maybeLoadResponseFormatFromExternalFile(
+      config.response_format,
+      context?.vars,
+    );
+    const loadedTools = config.tools
+      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
+      : undefined;
+    const reasoningEffort = config.reasoning_effort
+      ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
+      : undefined;
+    const maxOutputTokens =
+      config.max_output_tokens ?? config.max_completion_tokens ?? config.max_tokens;
+
+    let text: Record<string, any> | undefined;
+    if (responseFormat?.type === 'json_object') {
+      text = { format: { type: 'json_object' } };
+    } else if (responseFormat?.type === 'json_schema') {
+      const schema = responseFormat.schema || responseFormat.json_schema?.schema;
+      const schemaName =
+        responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
+      const strict = responseFormat.json_schema?.strict ?? responseFormat.strict ?? true;
+      text = {
+        format: {
+          type: 'json_schema',
+          name: schemaName,
+          schema,
+          strict,
+        },
+      };
+    }
+
+    if (config.verbosity) {
+      text = { ...(text || {}), verbosity: config.verbosity };
+    }
+
+    const body = {
+      input: this.parsePromptInput(prompt),
+      ...(config.instructions ? { instructions: config.instructions } : {}),
+      ...(config.metadata ? { metadata: config.metadata } : {}),
+      ...(config.modelName ? { model: config.modelName } : {}),
+      ...(maxOutputTokens !== undefined ? { max_output_tokens: maxOutputTokens } : {}),
+      ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
+      ...(config.temperature !== undefined ? { temperature: config.temperature } : {}),
+      ...(config.top_p !== undefined ? { top_p: config.top_p } : {}),
+      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(loadedTools ? { tools: loadedTools } : {}),
+      ...(text ? { text } : {}),
+      ...(config.passthrough || {}),
+    };
+
+    return {
+      body,
+      effectiveConfig: {
+        ...config,
+        response_format: responseFormat,
+        tools: loadedTools,
+      },
+    };
+  }
+
+  private getFunctionCalls(response: FoundryResponse): ResponseFunctionCallItem[] {
+    return (response.output || []).filter((item): item is ResponseFunctionCallItem => {
+      return (
+        item?.type === 'function_call' &&
+        typeof item.id === 'string' &&
+        typeof item.call_id === 'string' &&
+        typeof item.name === 'string' &&
+        typeof item.arguments === 'string'
+      );
+    });
+  }
+
+  private getCallableFunctionCalls(
+    response: FoundryResponse,
+    callbacks?: FunctionToolCallbacks,
+  ): ResponseFunctionCallItem[] {
+    const functionCalls = this.getFunctionCalls(response);
+
+    if (functionCalls.length === 0 || !callbacks || Object.keys(callbacks).length === 0) {
+      return [];
+    }
+
+    const missingCallbacks = functionCalls.filter((call) => !(call.name in callbacks));
+    if (missingCallbacks.length > 0) {
+      logger.debug(
+        `[AzureFoundryAgentProvider] Returning unresolved function calls because callbacks are missing for: ${missingCallbacks
+          .map((call) => call.name)
+          .join(', ')}`,
+      );
+      return [];
+    }
+
+    return functionCalls;
+  }
+
+  private async buildFunctionCallOutputs(
+    functionCalls: ResponseFunctionCallItem[],
+    response: FoundryResponse,
+    agent: FoundryAgent,
+    callbacks?: FunctionToolCallbacks,
+  ): Promise<Array<{ type: 'function_call_output'; call_id: string; output: string }>> {
+    const callbackContext: CallbackContext = {
+      threadId: response.conversation?.id || response.id,
+      runId: response.id,
+      assistantId: agent.id,
+      provider: 'azure-foundry',
+    };
+
+    return Promise.all(
+      functionCalls.map(async (call) => ({
+        type: 'function_call_output' as const,
+        call_id: call.call_id,
+        output: await this.executeFunctionCallback(
+          call.name,
+          call.arguments,
+          callbackContext,
+          callbacks,
+        ),
+      })),
+    );
+  }
+
+  private getAgentReference(agent: FoundryAgent): FoundryResponseCreateOptions {
+    return {
+      body: {
+        agent: {
+          name: agent.name,
+          type: 'agent_reference',
+        },
+      },
+    };
+  }
+
+  private async processResponse(
+    response: FoundryResponse,
+    effectiveConfig: EffectiveFoundryConfig,
+  ): Promise<ProviderResponse> {
+    const result = await this.processor.processResponseOutput(response, effectiveConfig, false);
+    if (!result.error) {
+      return result;
+    }
+
+    if (response.output_text) {
+      logger.debug(
+        `[AzureFoundryAgentProvider] ResponsesProcessor returned an error, falling back to output_text`,
+        { processorError: result.error },
+      );
+      return {
+        ...result,
+        error: undefined,
+        output: response.output_text,
+        raw: response,
+      };
+    }
+
+    return result;
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Create a simple cache key based on the input and configuration
-    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${JSON.stringify({
-      frequency_penalty: this.assistantConfig.frequency_penalty,
-      instructions: this.assistantConfig.instructions,
-      max_completion_tokens: this.assistantConfig.max_completion_tokens,
-      max_tokens: this.assistantConfig.max_tokens,
-      model: this.assistantConfig.modelName,
-      presence_penalty: this.assistantConfig.presence_penalty,
-      prompt,
-      response_format: this.assistantConfig.response_format,
-      seed: this.assistantConfig.seed,
-      stop: this.assistantConfig.stop,
-      temperature: this.assistantConfig.temperature,
-      tool_choice: this.assistantConfig.tool_choice,
-      tool_resources: this.assistantConfig.tool_resources,
-      tools: JSON.stringify(
-        await maybeLoadToolsFromExternalFile(this.assistantConfig.tools, context?.vars),
-      ),
-      top_p: this.assistantConfig.top_p,
-    })}`;
+    const { body, effectiveConfig } = await this.buildResponsesBody(prompt, context);
+    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${JSON.stringify(body)}`;
 
-    // Check the cache if enabled
     if (isCacheEnabled()) {
       try {
         const cache = await getCache();
         const cachedResult = await cache.get<ProviderResponse>(cacheKey);
-
         if (cachedResult) {
-          logger.debug(`Cache hit for agent prompt: ${prompt.substring(0, 50)}...`);
+          logger.debug(`Cache hit for Foundry agent prompt: ${prompt.substring(0, 50)}...`);
           return { ...cachedResult, cached: true };
         }
-      } catch (err) {
-        logger.warn(`Error checking cache: ${err}`);
-        // Continue if cache check fails
+      } catch (error) {
+        logger.warn(`Error checking cache for Azure Foundry agent response: ${error}`);
       }
     }
 
     try {
-      // Initialize the client
       const client = await this.initializeClient();
-      if (!client) {
-        throw new Error('Failed to initialize Azure AI Project client');
-      }
-      // Get the agent (assistant)
-      const agent = await client.agents.getAgent(this.deploymentName);
-      logger.debug(`Retrieved agent: ${agent.name}`);
+      const agent = await this.resolveAgent(client);
+      const openAIClient = client.getOpenAIClient();
+      const responseOptions = this.getAgentReference(agent);
+      const maxLoopTimeMs = this.assistantConfig.maxPollTimeMs || 300000;
+      const startTime = Date.now();
 
-      // Create a thread
-      const thread = await client.agents.threads.create();
-      logger.debug(`Created thread: ${thread.id}`);
-
-      // Create a message
-      const message = await client.agents.messages.create(thread.id, 'user', prompt);
-      logger.debug(`Created message: ${message.id}`);
-
-      // Prepare run options
-      const runOptions: any = {};
-
-      // Add configuration parameters
-      if (this.assistantConfig.temperature !== undefined) {
-        runOptions.temperature = this.assistantConfig.temperature;
-      }
-      if (this.assistantConfig.top_p !== undefined) {
-        runOptions.top_p = this.assistantConfig.top_p;
-      }
-      if (this.assistantConfig.frequency_penalty !== undefined) {
-        runOptions.frequency_penalty = this.assistantConfig.frequency_penalty;
-      }
-      if (this.assistantConfig.presence_penalty !== undefined) {
-        runOptions.presence_penalty = this.assistantConfig.presence_penalty;
-      }
-      if (this.assistantConfig.max_completion_tokens !== undefined) {
-        runOptions.max_completion_tokens = this.assistantConfig.max_completion_tokens;
-      }
-      if (this.assistantConfig.max_tokens !== undefined) {
-        runOptions.max_tokens = this.assistantConfig.max_tokens;
-      }
-      if (this.assistantConfig.response_format) {
-        runOptions.response_format = this.assistantConfig.response_format;
-      }
-      if (this.assistantConfig.stop) {
-        runOptions.stop = this.assistantConfig.stop;
-      }
-      if (this.assistantConfig.seed !== undefined) {
-        runOptions.seed = this.assistantConfig.seed;
-      }
-      if (this.assistantConfig.tool_resources) {
-        runOptions.tool_resources = this.assistantConfig.tool_resources;
-      }
-      if (this.assistantConfig.tool_choice) {
-        runOptions.tool_choice = this.assistantConfig.tool_choice;
-      }
-      if (this.assistantConfig.tools) {
-        const loadedTools = await maybeLoadToolsFromExternalFile(
-          this.assistantConfig.tools,
-          context?.vars,
+      let response = await openAIClient.responses.create(
+        body as ResponseCreateParamsNonStreaming,
+        responseOptions,
+      );
+      while (Date.now() - startTime <= maxLoopTimeMs) {
+        const functionCalls = this.getCallableFunctionCalls(
+          response,
+          effectiveConfig.functionToolCallbacks,
         );
-        if (loadedTools !== undefined) {
-          runOptions.tools = loadedTools;
+        if (functionCalls.length === 0) {
+          break;
         }
-      }
-      if (this.assistantConfig.modelName) {
-        runOptions.model = this.assistantConfig.modelName;
-      }
-      if (this.assistantConfig.instructions) {
-        runOptions.instructions = this.assistantConfig.instructions;
-      }
 
-      // Create a run
-      const run = await client.agents.runs.create(thread.id, agent.id, runOptions);
-      logger.debug(`Created run: ${run.id}`);
-
-      // Handle function calls if needed or poll for completion
-      let result: ProviderResponse;
-      if (
-        this.assistantConfig.functionToolCallbacks &&
-        Object.keys(this.assistantConfig.functionToolCallbacks).length > 0
-      ) {
-        result = await this.pollRunWithToolCallHandling(client, thread.id, run);
-      } else {
-        // Poll for completion
-        const completedRun = await this.pollRun(client, thread.id, run.id);
-
-        // Process the completed run
-        if (completedRun.status === 'completed') {
-          result = await this.processCompletedRun(client, thread.id, completedRun);
-        } else {
-          if (completedRun.lastError) {
-            // Check if the error is a content filter error
-            const errorCode = completedRun.lastError.code || '';
-            const errorMessage = completedRun.lastError.message || '';
-
-            if (errorCode === 'content_filter' || this.isContentFilterError(errorMessage)) {
-              const lowerErrorMessage = errorMessage.toLowerCase();
-              const isInputFiltered =
-                lowerErrorMessage.includes('prompt') || lowerErrorMessage.includes('input');
-              const isOutputFiltered =
-                lowerErrorMessage.includes('output') || lowerErrorMessage.includes('response');
-
-              // Ensure mutual exclusivity - prioritize input if both are detected
-              const flaggedInput = isInputFiltered;
-              const flaggedOutput = !isInputFiltered && (isOutputFiltered || !isOutputFiltered);
-
-              result = {
-                output:
-                  "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
-                guardrails: {
-                  flagged: true,
-                  flaggedInput,
-                  flaggedOutput,
-                },
-              };
-            } else {
-              result = {
-                error: `Thread run failed: ${errorCode} - ${errorMessage}`,
-              };
-            }
-          } else {
-            result = {
-              error: `Thread run failed with status: ${completedRun.status}`,
-            };
-          }
-        }
+        const outputs = await this.buildFunctionCallOutputs(
+          functionCalls,
+          response,
+          agent,
+          effectiveConfig.functionToolCallbacks,
+        );
+        logger.debug(
+          `[AzureFoundryAgentProvider] Submitting ${outputs.length} function_call_output item(s)`,
+        );
+        response = await openAIClient.responses.create(
+          {
+            input: outputs as ResponseFunctionToolCallOutputItem[],
+            previous_response_id: response.id,
+          } as ResponseCreateParamsNonStreaming,
+          responseOptions,
+        );
       }
 
-      // Cache successful results if caching is enabled
+      if (Date.now() - startTime > maxLoopTimeMs) {
+        return {
+          error: `Azure Foundry agent tool-calling loop timed out after ${maxLoopTimeMs}ms.`,
+        };
+      }
+
+      const result = await this.processResponse(response, effectiveConfig);
       if (isCacheEnabled() && !result.error) {
         try {
           const cache = await getCache();
           await cache.set(cacheKey, result);
-          logger.debug(`Cached agent response for prompt: ${prompt.substring(0, 50)}...`);
-        } catch (err) {
-          logger.warn(`Error caching result: ${err}`);
-          // Continue even if caching fails
+        } catch (error) {
+          logger.warn(`Error caching Azure Foundry agent response: ${error}`);
         }
       }
-
       return result;
-    } catch (err: any) {
-      logger.error(`Error in Azure Foundry Agent API call: ${err}`);
-      return this.formatError(err);
+    } catch (error: any) {
+      logger.error(`Error in Azure Foundry Agent API call: ${error}`);
+      return this.formatError(error);
     }
   }
 
-  /**
-   * Format error responses consistently
-   */
-  private formatError(err: any): ProviderResponse {
-    const errorMessage = err.message || String(err);
+  private formatError(error: unknown): ProviderResponse {
+    const errorMessage = error instanceof Error ? error.message : String(error);
 
-    // Handle content filter errors
     if (this.isContentFilterError(errorMessage)) {
       const lowerErrorMessage = errorMessage.toLowerCase();
       const isInputFiltered =
@@ -495,18 +564,11 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         guardrails: {
           flagged: true,
           flaggedInput: isInputFiltered,
-          flaggedOutput: isOutputFiltered || (!isInputFiltered && !isOutputFiltered), // Default to output if neither is explicitly mentioned
+          flaggedOutput: isOutputFiltered || (!isInputFiltered && !isOutputFiltered),
         },
       };
     }
 
-    // Format specific error types
-    if (
-      errorMessage.includes("Can't add messages to thread") &&
-      errorMessage.includes('while a run')
-    ) {
-      return { error: `Error in Azure Foundry Agent API call: ${errorMessage}` };
-    }
     if (this.isRateLimitError(errorMessage)) {
       return { error: `Rate limit exceeded: ${errorMessage}` };
     }
@@ -517,9 +579,6 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     return { error: `Error in Azure Foundry Agent API call: ${errorMessage}` };
   }
 
-  /**
-   * Helper methods to check for specific error types
-   */
   private isContentFilterError(errorMessage: string): boolean {
     const lowerErrorMessage = errorMessage.toLowerCase();
     return (
@@ -549,317 +608,5 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       errorMessage.includes('Server is busy') ||
       errorMessage.includes('Sorry, something went wrong')
     );
-  }
-
-  private isServerError(errorMessage: string): boolean {
-    return (
-      errorMessage.includes('500') ||
-      errorMessage.includes('502') ||
-      errorMessage.includes('503') ||
-      errorMessage.includes('504')
-    );
-  }
-
-  private isRetryableError(code?: string, message?: string): boolean {
-    if (code === 'rate_limit_exceeded') {
-      return true;
-    }
-    if (!message) {
-      return false;
-    }
-
-    return (
-      this.isRateLimitError(message) || this.isServiceError(message) || this.isServerError(message)
-    );
-  }
-
-  /**
-   * Poll a run until it completes or fails
-   */
-  private async pollRun(
-    client: AIProjectClient,
-    threadId: string,
-    runId: string,
-    pollIntervalMs = 1000,
-  ): Promise<Run> {
-    // Maximum polling time (5 minutes)
-    const maxPollTime = this.assistantConfig.maxPollTimeMs || 300000;
-    const startTime = Date.now();
-
-    // Poll until terminal state
-    let run = await client.agents.runs.get(threadId, runId);
-
-    while (['queued', 'in_progress'].includes(run.status)) {
-      // Check timeout
-      if (Date.now() - startTime > maxPollTime) {
-        throw new Error(`Run polling timed out after ${maxPollTime}ms. Last status: ${run.status}`);
-      }
-
-      await sleep(pollIntervalMs);
-
-      // Get latest status
-      run = await client.agents.runs.get(threadId, runId);
-
-      // Increase polling interval gradually for longer-running operations
-      if (Date.now() - startTime > 30000) {
-        // After 30 seconds
-        pollIntervalMs = Math.min(pollIntervalMs * 1.5, 5000);
-      }
-    }
-
-    return run;
-  }
-
-  /**
-   * Handle tool calls during run polling
-   */
-  private async pollRunWithToolCallHandling(
-    client: AIProjectClient,
-    threadId: string,
-    initialRun: Run,
-  ): Promise<ProviderResponse> {
-    // Maximum polling time (5 minutes)
-    const maxPollTime = this.assistantConfig.maxPollTimeMs || 300000;
-    const startTime = Date.now();
-    let pollIntervalMs = 1000;
-    let run = initialRun;
-
-    // Poll until terminal state
-    while (true) {
-      // Check timeout
-      if (Date.now() - startTime > maxPollTime) {
-        return {
-          error: `Run polling timed out after ${maxPollTime}ms. The operation may still be in progress.`,
-        };
-      }
-
-      try {
-        // Get latest status
-        run = await client.agents.runs.get(threadId, run.id);
-        logger.debug(`Run status: ${run.status}`);
-
-        // Check for required action
-        if (run.status === 'requires_action') {
-          if (
-            run.requiredAction?.type === 'submit_tool_outputs' &&
-            run.requiredAction.submitToolOutputs?.toolCalls
-          ) {
-            const toolCalls = run.requiredAction.submitToolOutputs.toolCalls;
-
-            // Filter for function calls that have callbacks
-            const functionCallsWithCallbacks = toolCalls.filter((toolCall) => {
-              return (
-                toolCall.type === 'function' &&
-                toolCall.function &&
-                toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {})
-              );
-            });
-
-            if (functionCallsWithCallbacks.length === 0) {
-              // No matching callbacks found, but we should still handle the required action
-              logger.debug(
-                `No matching callbacks found for tool calls. Available functions: ${Object.keys(
-                  this.assistantConfig.functionToolCallbacks || {},
-                ).join(', ')}. Tool calls: ${JSON.stringify(toolCalls)}`,
-              );
-
-              // Submit empty outputs for all tool calls
-              const emptyOutputs: ToolOutput[] = toolCalls.map((toolCall) => ({
-                toolCallId: toolCall.id,
-                output: JSON.stringify({
-                  message: `No callback registered for function ${toolCall.type === 'function' ? toolCall.function?.name : toolCall.type}`,
-                }),
-              }));
-
-              // Submit the empty outputs to continue the run
-              try {
-                await client.agents.runs.submitToolOutputs(threadId, run.id, emptyOutputs);
-                // Continue polling after submission
-                await sleep(pollIntervalMs);
-                continue;
-              } catch (error: any) {
-                logger.error(`Error submitting empty tool outputs: ${error.message}`);
-                return {
-                  error: `Error submitting empty tool outputs: ${error.message}`,
-                };
-              }
-            }
-
-            // Build context for function callbacks
-            const callbackContext: CallbackContext = {
-              threadId,
-              runId: run.id,
-              assistantId: this.deploymentName,
-              provider: 'azure-foundry',
-            };
-
-            // Process tool calls that have matching callbacks
-            const toolOutputs: ToolOutput[] = await Promise.all(
-              functionCallsWithCallbacks.map(async (toolCall) => {
-                const functionName = toolCall.function!.name;
-                const functionArgs = toolCall.function!.arguments;
-
-                try {
-                  logger.debug(`Calling function ${functionName} with args: ${functionArgs}`);
-
-                  // Use our executeFunctionCallback method with context
-                  const outputResult = await this.executeFunctionCallback(
-                    functionName,
-                    functionArgs,
-                    callbackContext,
-                  );
-
-                  logger.debug(`Function ${functionName} result: ${outputResult}`);
-                  return {
-                    toolCallId: toolCall.id,
-                    output: outputResult,
-                  };
-                } catch (error) {
-                  logger.error(`Error calling function ${functionName}: ${error}`);
-                  return {
-                    toolCallId: toolCall.id,
-                    output: JSON.stringify({ error: String(error) }),
-                  };
-                }
-              }),
-            );
-
-            // Submit tool outputs
-            if (toolOutputs.length === 0) {
-              logger.error('No valid tool outputs to submit');
-              break;
-            }
-
-            logger.debug(`Submitting tool outputs: ${JSON.stringify(toolOutputs)}`);
-
-            // Submit tool outputs
-            try {
-              await client.agents.runs.submitToolOutputs(threadId, run.id, toolOutputs);
-            } catch (error: any) {
-              logger.error(`Error submitting tool outputs: ${error.message}`);
-              return {
-                error: `Error submitting tool outputs: ${error.message}`,
-              };
-            }
-          } else {
-            logger.error(`Unknown required action type: ${run.requiredAction?.type}`);
-            break;
-          }
-        } else if (['completed', 'failed', 'cancelled', 'expired'].includes(run.status)) {
-          // Run is in a terminal state
-          if (run.status !== 'completed') {
-            // Return error for failed runs
-            if (run.lastError) {
-              const errorCode = run.lastError.code || '';
-              const errorMessage = run.lastError.message || '';
-
-              if (errorCode === 'content_filter' || this.isContentFilterError(errorMessage)) {
-                const lowerErrorMessage = errorMessage.toLowerCase();
-                const isInputFiltered =
-                  lowerErrorMessage.includes('prompt') || lowerErrorMessage.includes('input');
-                const isOutputFiltered =
-                  lowerErrorMessage.includes('output') || lowerErrorMessage.includes('response');
-
-                // Ensure mutual exclusivity - prioritize input if both are detected
-                const flaggedInput = isInputFiltered;
-                const flaggedOutput = !isInputFiltered && (isOutputFiltered || !isOutputFiltered);
-
-                return {
-                  output:
-                    "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
-                  guardrails: {
-                    flagged: true,
-                    flaggedInput,
-                    flaggedOutput,
-                  },
-                };
-              }
-
-              return {
-                error: `Thread run failed: ${errorCode} - ${errorMessage}`,
-              };
-            }
-
-            return {
-              error: `Thread run failed with status: ${run.status}`,
-            };
-          }
-
-          break; // Exit the loop if completed successfully
-        }
-
-        // Wait before polling again
-        await sleep(pollIntervalMs);
-
-        // Increase polling interval gradually for longer-running operations
-        if (Date.now() - startTime > 30000) {
-          // After 30 seconds
-          pollIntervalMs = Math.min(pollIntervalMs * 1.5, 5000);
-        }
-      } catch (error: any) {
-        // Handle error during polling
-        logger.error(`Error polling run status: ${error}`);
-        const errorMessage = error.message || String(error);
-
-        // For transient errors, return a retryable error response
-        if (this.isRetryableError('', errorMessage)) {
-          return {
-            error: `Error polling run status: ${errorMessage}`,
-          };
-        }
-
-        // For other errors, just return the error without marking as retryable
-        return {
-          error: `Error polling run status: ${errorMessage}`,
-        };
-      }
-    }
-
-    // Process the completed run
-    return await this.processCompletedRun(client, threadId, run);
-  }
-
-  /**
-   * Process a completed run to extract messages
-   */
-  private async processCompletedRun(
-    client: AIProjectClient,
-    threadId: string,
-    _run: Run,
-  ): Promise<ProviderResponse> {
-    try {
-      // Get all messages in the thread
-      const messages: Message[] = [];
-      for await (const message of client.agents.messages.list(threadId, { order: 'asc' })) {
-        messages.push(message);
-      }
-
-      // Process messages to create output
-      const outputBlocks: string[] = [];
-
-      // Sort messages by creation time if needed (they should already be sorted by 'asc' order)
-      messages.forEach((message) => {
-        const contentBlocks = message.content
-          .map((content) =>
-            content.type === 'text' && content.text
-              ? content.text.value
-              : `<${content.type} output>`,
-          )
-          .join('\n');
-
-        outputBlocks.push(`[${toTitleCase(message.role)}] ${contentBlocks}`);
-      });
-
-      return {
-        output: outputBlocks.join('\n\n').trim(),
-      };
-    } catch (err: any) {
-      logger.error(`Error processing run results: ${err}`);
-      const errorMessage = err.message || String(err);
-
-      return {
-        error: `Error processing run results: ${errorMessage}`,
-      };
-    }
   }
 }
