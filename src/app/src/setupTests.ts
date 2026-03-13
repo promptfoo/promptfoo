@@ -1,4 +1,3 @@
-import '@testing-library/jest-dom/vitest';
 // Ensure Prism is initialized before any language components are loaded
 import 'prismjs';
 import 'prismjs/components/prism-clike';
@@ -25,7 +24,8 @@ if (!globalThis.crypto?.subtle) {
   });
 }
 
-// Extend vitest's expect with jest-dom matchers
+// Use the workspace Vitest instance instead of jest-dom's side-effect helper so
+// expect is extended against the same runner version that executes the tests.
 expect.extend(matchers);
 
 import { cleanup } from '@testing-library/react';

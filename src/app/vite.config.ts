@@ -6,7 +6,8 @@ import path from 'path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-import react from '@vitejs/plugin-react';
+import babel from '@rolldown/plugin-babel';
+import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vitest/config';
 import packageJson from '../../package.json' with { type: 'json' };
 
@@ -91,10 +92,9 @@ export default defineConfig({
   base: process.env.VITE_PUBLIC_BASENAME || '/',
   plugins: [
     browserModulesPlugin(),
-    react({
-      babel: {
-        plugins: [['babel-plugin-react-compiler', {}]],
-      },
+    react(),
+    babel({
+      presets: [reactCompilerPreset()],
     }),
   ],
   resolve: {
@@ -111,15 +111,32 @@ export default defineConfig({
     outDir: '../../dist/src/app',
     // Enable source maps for production debugging
     sourcemap: process.env.NODE_ENV === 'production' ? 'hidden' : true,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        // Manual chunking to split vendor libraries
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-charts': ['recharts', 'chart.js'],
-          'vendor-utils': ['js-yaml', 'diff'],
-          'vendor-syntax': ['prismjs'],
-          'vendor-markdown': ['react-markdown', 'remark-gfm'],
+        // Rolldown replaces Rollup's manualChunks with code splitting groups.
+        codeSplitting: {
+          groups: [
+            {
+              name: 'vendor-react',
+              test: /[\\/]node_modules[\\/](?:react|react-dom|react-router-dom)[\\/]/,
+            },
+            {
+              name: 'vendor-charts',
+              test: /[\\/]node_modules[\\/](?:recharts|chart\.js)[\\/]/,
+            },
+            {
+              name: 'vendor-utils',
+              test: /[\\/]node_modules[\\/](?:js-yaml|diff)[\\/]/,
+            },
+            {
+              name: 'vendor-syntax',
+              test: /[\\/]node_modules[\\/]prismjs[\\/]/,
+            },
+            {
+              name: 'vendor-markdown',
+              test: /[\\/]node_modules[\\/](?:react-markdown|remark-gfm)[\\/]/,
+            },
+          ],
         },
       },
     },
