@@ -175,11 +175,6 @@ describe('AzureFoundryAgentProvider', () => {
           ],
           temperature: 0.2,
           top_p: 0.8,
-          text: {
-            format: {
-              type: 'text',
-            },
-          },
         }),
         {
           body: {

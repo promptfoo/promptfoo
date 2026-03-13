@@ -321,7 +321,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     const maxOutputTokens =
       config.max_output_tokens ?? config.max_completion_tokens ?? config.max_tokens;
 
-    let text: Record<string, any> = { format: { type: 'text' } };
+    let text: Record<string, any> | undefined;
     if (responseFormat?.type === 'json_object') {
       text = { format: { type: 'json_object' } };
     } else if (responseFormat?.type === 'json_schema') {
@@ -340,7 +340,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
 
     if (config.verbosity) {
-      text = { ...text, verbosity: config.verbosity };
+      text = { ...(text || {}), verbosity: config.verbosity };
     }
 
     const body = {
@@ -354,7 +354,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       ...(config.top_p !== undefined ? { top_p: config.top_p } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(loadedTools ? { tools: loadedTools } : {}),
-      text,
+      ...(text ? { text } : {}),
       ...(config.passthrough || {}),
     };
 
