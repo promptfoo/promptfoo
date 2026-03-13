@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import {
+  isMetricOnlyAssertion,
   MODEL_GRADED_ASSERTION_TYPES,
   renderMetricName,
   runAssertions,
@@ -1632,9 +1633,13 @@ class Evaluator {
           }
         }
         metrics.assertPassCount +=
-          row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
+          row.gradingResult?.componentResults?.filter(
+            (r) => r.assertion && !isMetricOnlyAssertion(r.assertion) && r.pass,
+          ).length || 0;
         metrics.assertFailCount +=
-          row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
+          row.gradingResult?.componentResults?.filter(
+            (r) => r.assertion && !isMetricOnlyAssertion(r.assertion) && !r.pass,
+          ).length || 0;
         metrics.totalLatencyMs += row.latencyMs || 0;
         accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
 

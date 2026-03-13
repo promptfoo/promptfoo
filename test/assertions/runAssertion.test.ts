@@ -2148,6 +2148,28 @@ describe('runAssertion', () => {
       });
     });
 
+    it('should invert threshold comparisons for not-latency assertions', async () => {
+      const output = 'Expected output';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: {
+          type: 'not-latency',
+          threshold: 100,
+        },
+        latencyMs: 150,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+      });
+    });
+
     it('should handle latency equal to threshold', async () => {
       const output = 'Expected output';
 
@@ -2499,6 +2521,30 @@ describe('runAssertion', () => {
       expect(result).toMatchObject({
         pass: true,
         score: 0.25,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should invert threshold comparisons for not-cost assertions', async () => {
+      const cost = 0.25;
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', cost };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'not-cost',
+          threshold: 0.1,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 1,
         reason: 'Assertion passed',
       });
     });

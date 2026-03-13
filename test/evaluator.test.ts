@@ -1966,9 +1966,12 @@ describe('evaluator', () => {
 
     const metrics = evalRecord.prompts[0]?.metrics;
     expect(metrics).toBeDefined();
+    expect(metrics!.score).toBe(2);
     expect(metrics!.namedScores.total_cost).toBeCloseTo(0.5, 10);
     expect(metrics!.namedScoresCount.total_cost).toBe(2);
     expect(metrics!.namedScores.avg_cost).toBeCloseTo(0.25, 10);
+    expect(metrics!.assertPassCount).toBe(0);
+    expect(metrics!.assertFailCount).toBe(0);
   });
 
   it('evaluator should pass __count to JavaScript function derived metrics', async () => {

@@ -249,10 +249,17 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
   return inverse ? (assertion.type.slice(4) as AssertionType) : (assertion.type as AssertionType);
 }
 
-function getEffectiveAssertionWeight(assertion: Assertion): number | undefined {
-  const baseType = getAssertionBaseType(assertion);
+export function isMetricOnlyAssertion(assertion: Assertion): boolean {
+  if (assertion.type === 'assert-set') {
+    return assertion.threshold === undefined && assertion.assert.every(isMetricOnlyAssertion);
+  }
 
-  if ((baseType === 'cost' || baseType === 'latency') && assertion.threshold === undefined) {
+  const baseType = getAssertionBaseType(assertion);
+  return (baseType === 'cost' || baseType === 'latency') && assertion.threshold === undefined;
+}
+
+export function getEffectiveAssertionWeight(assertion: Assertion): number | undefined {
+  if (isMetricOnlyAssertion(assertion)) {
     return 0;
   }
   return assertion.weight;
@@ -608,7 +615,11 @@ export async function runAssertions({
   );
 
   await async.forEach(subAssertResults, async (subAssertResult) => {
-    const result = await subAssertResult.testResult();
+    const assertionSet = subAssertResult.parentAssertionSet!.assertionSet;
+    const result = {
+      ...(await subAssertResult.testResult()),
+      assertion: assertionSet,
+    };
     const {
       index,
       assertionSet: { metric, weight },

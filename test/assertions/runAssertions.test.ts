@@ -820,6 +820,30 @@ describe('runAssertions', () => {
     });
   });
 
+  it('should keep pure metric-only cost tests score-neutral', async () => {
+    const test: AtomicTestCase = {
+      assert: [
+        {
+          type: 'cost',
+          metric: 'total_cost',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output', cost: 0.25 },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.namedScores).toEqual({
+      total_cost: 0.25,
+    });
+  });
+
   it('should track thresholdless latency metrics without affecting aggregate score', async () => {
     const test: AtomicTestCase = {
       assert: [
@@ -846,6 +870,41 @@ describe('runAssertions', () => {
     expect(result.score).toBe(1);
     expect(result.namedScores).toEqual({
       total_latency_ms: 250,
+    });
+  });
+
+  it('should keep metric-only assert-sets from affecting aggregate score', async () => {
+    const test: AtomicTestCase = {
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+        },
+        {
+          type: 'assert-set',
+          metric: 'cost_metrics',
+          assert: [
+            {
+              type: 'cost',
+              metric: 'total_cost',
+            },
+          ],
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output', cost: 0.25 },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.namedScores).toEqual({
+      cost_metrics: 1,
+      total_cost: 0.25,
     });
   });
 

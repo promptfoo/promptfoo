@@ -192,6 +192,27 @@ describe('AssertionsResult', () => {
       expect(result.pass).toBe(true);
       expect(result.reason).toBe(GUARDRAIL_BLOCKED_REASON);
     });
+
+    it('should treat zero-weight passing assertions as score-neutral', async () => {
+      const assertionsResult = new AssertionsResult({});
+
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 0.25,
+          reason: 'Metric-only assertion',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 0,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+      expect(result.reason).toBe('All assertions passed');
+    });
   });
 
   describe('parentAssertionSet', () => {
