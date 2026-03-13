@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { and, eq, inArray } from 'drizzle-orm';
-import { isMetricOnlyAssertion, renderMetricName } from '../assertions/index';
+import { renderMetricName } from '../assertions/index';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -169,10 +169,10 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         // Update assertion counts
         if (result.gradingResult?.componentResults) {
           metrics.assertPassCount += result.gradingResult.componentResults.filter(
-            (r) => r.assertion && !isMetricOnlyAssertion(r.assertion) && r.pass,
+            (r) => !r.metadata?.isMetricOnly && r.pass,
           ).length;
           metrics.assertFailCount += result.gradingResult.componentResults.filter(
-            (r) => r.assertion && !isMetricOnlyAssertion(r.assertion) && !r.pass,
+            (r) => !r.metadata?.isMetricOnly && !r.pass,
           ).length;
         }
 

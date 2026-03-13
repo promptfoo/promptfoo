@@ -490,6 +490,7 @@ export interface GradingResult {
     renderedAssertionValue?: string;
     // Full grading prompt sent to the grading LLM (for debugging)
     renderedGradingPrompt?: string;
+    isMetricOnly?: boolean;
     [key: string]: any;
   };
 }

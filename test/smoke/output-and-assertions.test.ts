@@ -167,9 +167,14 @@ describe('Output and Assertion Variants Smoke Tests', () => {
       expect(parsed.results.results).toHaveLength(2);
       expect(parsed.results.results[0].success).toBe(true);
       expect(parsed.results.results[1].success).toBe(true);
+      expect(parsed.results.results[0].score).toBe(1);
+      expect(parsed.results.results[1].score).toBe(1);
+      expect(metrics.score).toBe(2);
       expect(metrics.namedScores.total_cost).toBeCloseTo(0.6, 5);
       expect(metrics.namedScores.avg_cost).toBeCloseTo(0.3, 5);
       expect(metrics.namedScoresCount.total_cost).toBe(2);
+      expect(metrics.assertPassCount).toBe(0);
+      expect(metrics.assertFailCount).toBe(0);
     });
   });
 
@@ -203,8 +208,12 @@ describe('Output and Assertion Variants Smoke Tests', () => {
       const metrics = parsed.results.prompts[0].metrics;
 
       expect(parsed.results.results[0].success).toBe(true);
+      expect(parsed.results.results[0].score).toBe(1);
+      expect(metrics.score).toBe(1);
       expect(metrics.namedScores.total_latency_ms).toBeGreaterThan(0);
       expect(metrics.namedScoresCount.total_latency_ms).toBe(1);
+      expect(metrics.assertPassCount).toBe(0);
+      expect(metrics.assertFailCount).toBe(0);
     });
   });
 
