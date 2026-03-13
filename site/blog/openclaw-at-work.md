@@ -27,11 +27,11 @@ This post documents one exploit chain in a permissive OpenClaw deployment where 
 
 Browse-capable local agents become materially riskier when browsing, local access, and outbound actions share a trust boundary. Those capabilities should be separately gated, as reflected in OpenClaw's [security documentation](https://docs.openclaw.ai/gateway/security) and Promptfoo's [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) testing approach.
 
-## What this case study is and is not
+## What This Case Study Is and Is Not
 
 Indirect prompt injection from websites and files is already a known agent risk. This case study examines what happens when that risk is combined with a local agent that can browse attacker-controlled pages, read and write local files, and send messages through connected channels. It focuses on one exploit chain rather than behavior across OpenClaw versions, model providers, or approval modes.
 
-## Test setup
+## Test Setup
 
 The lab environment was intentionally simple:
 
@@ -45,25 +45,25 @@ For the webpage payloads, we used Promptfoo's [`indirect-web-pwn`](/docs/red-tea
 
 This was a permissive personal-assistant deployment. Browsing, writable local file access, and loopback outbound tools were intentionally available in one trust boundary because that is the deployment posture we wanted to test.
 
-## Observed exploit chain
+## Observed Exploit Chain
 
 ![Attack chain showing untrusted web content leading to capability disclosure, local artifact creation, and unauthorized outbound actions.](/img/blog/openclaw-at-work/attack-chain.svg)
 
 We ran the lab in three phases: capability discovery, artifact creation, then outbound action. Once the injected pages got the agent to describe what it could do, the later tests became much easier to target.
 
-### Phase 1: Capability discovery
+### Phase 1: Capability Discovery
 
 With attacker-controlled pages in the browsing path, the agent began enumerating parts of its local capability surface, including file access, shell execution, and session context. That moved the exercise out of the "chatbot says something weird" category and into "the page is steering a high-privilege local agent."
 
-### Phase 2: Artifact creation
+### Phase 2: Artifact Creation
 
 Once the agent was acting on that capability map, the next step was local file access. In the lab, the same agent context could read local documents and write new summaries derived from local material. A compromised retrieval step does not end with a bad answer. It can become a durable local artifact that other prompts, users, or workflows may later trust.
 
-### Phase 3: Unauthorized outbound action
+### Phase 3: Unauthorized Outbound Action
 
 The last step was testing whether the same context could move from local access into external action. In the documented run below, it did.
 
-## Evidence from a documented run
+## Evidence From a Documented Run
 
 In one documented run, the malicious page pushed the agent from browsing into false incident communications. The agent sent a loopback status broadcast to SMS recipients, an email list, and a social sink using a shared incident narrative.
 
@@ -73,7 +73,7 @@ _Proof from a loopback run: the agent broadcast a false "Security incident in pr
 
 Once untrusted web content can influence a local agent that also has access to company data and outbound channels, the failure mode is no longer limited to a bad answer. It can produce false messages, sensitive local summaries, and durable artifacts inside the user environment.
 
-## Why this changes the deployment decision
+## Why This Changes the Deployment Decision
 
 This deployment placed three capabilities inside one trust boundary:
 
