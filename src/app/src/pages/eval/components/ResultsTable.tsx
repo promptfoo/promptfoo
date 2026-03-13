@@ -983,18 +983,31 @@ function ResultsTable({
   const metricDisplayKinds = React.useMemo(() => getMetricDisplayKinds(table), [table]);
 
   const percentageMetricTotalsByPrompt = React.useMemo(() => {
+    // Pre-compute which metrics are percentage-type to avoid redundant work per prompt
+    const allMetrics = new Set<string>();
+    table?.head?.prompts?.forEach((prompt) => {
+      if (prompt.metrics?.namedScoresCount) {
+        for (const metric of Object.keys(prompt.metrics.namedScoresCount)) {
+          allMetrics.add(metric);
+        }
+      }
+    });
+    const isPercentageMetric: Record<string, boolean> = {};
+    for (const metric of allMetrics) {
+      const counts = head.prompts.map(
+        (candidatePrompt) => candidatePrompt.metrics?.namedScoresCount?.[metric],
+      );
+      isPercentageMetric[metric] =
+        getMetricDisplayKind(metric, metricDisplayKinds, counts) === 'percentage';
+    }
+
     return (
       table?.head?.prompts?.map((prompt) => {
         const backendCounts = prompt.metrics?.namedScoresCount;
 
         if (backendCounts) {
           return Object.fromEntries(
-            Object.entries(backendCounts).filter(([metric]) => {
-              const counts = head.prompts.map(
-                (candidatePrompt) => candidatePrompt.metrics?.namedScoresCount?.[metric],
-              );
-              return getMetricDisplayKind(metric, metricDisplayKinds, counts) === 'percentage';
-            }),
+            Object.entries(backendCounts).filter(([metric]) => isPercentageMetric[metric]),
           );
         }
 

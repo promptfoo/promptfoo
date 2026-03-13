@@ -263,8 +263,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
           );
         }
 
-        const percentage = average;
-        const classes = getPercentageClasses(percentage);
+        const classes = getPercentageClasses(average);
 
         return (
           <div className="flex justify-end items-center h-full">
@@ -274,7 +273,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
                 classes,
               )}
             >
-              {percentage.toFixed(2)}%
+              {average.toFixed(2)}%
             </span>
           </div>
         );
