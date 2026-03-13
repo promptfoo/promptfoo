@@ -139,14 +139,17 @@ function formatSingleResult(
       totalAssertions: result.testCase.assert?.length || 0,
       passedAssertions: componentResults.filter((r) => r.pass).length,
       failedAssertions: componentResults.filter((r) => !r.pass).length,
-      componentResults: componentResults.slice(0, assertionLimit).map((cr, idx) => ({
-        index: idx,
-        type: result.testCase.assert?.[idx]?.type || 'unknown',
-        pass: cr.pass,
-        score: cr.score,
-        reason: truncateText(cr.reason || '', 100),
-        metric: result.testCase.assert?.[idx]?.metric,
-      })),
+      componentResults: componentResults.slice(0, assertionLimit).map((cr, idx) => {
+        const fallbackAssertion = result.testCase.assert?.[idx];
+        return {
+          index: idx,
+          type: cr.assertion?.type || fallbackAssertion?.type || 'unknown',
+          pass: cr.pass,
+          score: cr.score,
+          reason: truncateText(cr.reason || '', 100),
+          metric: cr.assertion?.metric || fallbackAssertion?.metric,
+        };
+      }),
     };
   }
 

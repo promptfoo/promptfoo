@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import path from 'path';
 
+import { collectAssertedComponentResults } from './assertions/componentResults';
 import { serializeContext } from './assertions/contextUtils';
 import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
@@ -1677,10 +1678,9 @@ export async function selectMaxScore(
     // Get component results from gradingResult if available
     const componentResults = result.gradingResult?.componentResults || [];
 
-    // Filter out max-score and select-best assertions
-    const relevantResults = componentResults.filter(
+    const relevantResults = collectAssertedComponentResults(componentResults).filter(
       (r: GradingResult) =>
-        r.assertion && r.assertion.type !== 'max-score' && r.assertion.type !== 'select-best',
+        r.assertion?.type !== 'max-score' && r.assertion?.type !== 'select-best',
     );
 
     if (relevantResults.length === 0) {

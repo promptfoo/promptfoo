@@ -136,9 +136,10 @@ export class AssertionsResult {
       reason = GUARDRAIL_BLOCKED_REASON;
     }
 
-    // Flatten nested component results, and copy the assertion into the child results.
+    // Flatten nested component results only when the parent has a real assertion for
+    // children to inherit. Assert-set aggregate results do not carry one.
     const flattenedComponentResults = this.componentResults.flatMap((result) => {
-      if (result.componentResults) {
+      if (result.componentResults && result.assertion) {
         return [
           result,
           ...result.componentResults.map((subResult) => ({
