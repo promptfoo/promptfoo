@@ -226,12 +226,11 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       _providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const { ClaudeCodeSDKProvider } = await import('./claude-agent-sdk');
       return new ClaudeCodeSDKProvider({
         ...providerOptions,
-        env: context.env,
       });
     },
   },

@@ -14,6 +14,7 @@ import { checkProviderApiKeys } from '../../src/util/provider';
 import type { NonNullableUsage, Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { MockInstance } from 'vitest';
 
+import type { EnvOverrides } from '../../src/types/env';
 import type { CallApiContextParams } from '../../src/types/index';
 
 const testBasePath = path.resolve('/test/basePath');
@@ -471,6 +472,24 @@ describe('ClaudeCodeSDKProvider', () => {
         const result = checkProviderApiKeys([provider]);
         expect(result.size).toBe(1);
         expect(result.get('ANTHROPIC_API_KEY')).toEqual(['anthropic:claude-agent-sdk']);
+      });
+    });
+
+    describe('provider-level env overrides via loadApiProvider', () => {
+      it('should pass provider-level env through to the provider', async () => {
+        delete process.env.ANTHROPIC_API_KEY;
+        delete process.env.CLAUDE_CODE_USE_VERTEX;
+
+        const { loadApiProvider } = await import('../../src/providers/index');
+        const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
+          options: {
+            env: { CLAUDE_CODE_USE_VERTEX: 'true' } as EnvOverrides,
+          },
+        });
+
+        // Provider should have received the env override through the registry
+        const result = checkProviderApiKeys([provider]);
+        expect(result.size).toBe(0);
       });
     });
 
