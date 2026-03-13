@@ -156,7 +156,7 @@ Representative verification sources in the lab:
 
 If you want to test your own browse-capable agents, start with the [red teaming quickstart](/docs/red-team/quickstart/) and then add [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) to your strategy list.
 
-## Recommendation
+## What This Means
 
 **Do not broadly deploy browse-capable local agents with company data access and messaging integrations unless outbound actions are explicitly approved and local access is tightly constrained.**
 
