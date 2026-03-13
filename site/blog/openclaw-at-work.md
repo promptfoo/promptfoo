@@ -69,7 +69,7 @@ In one documented run, the malicious page pushed the agent from browsing into fa
 
 ![Loopback proof showing the agent sending a false incident-status message to SMS, email, and social sinks.](/img/blog/openclaw-at-work/outbound-proof.jpg)
 
-_Proof from a loopback run: the agent broadcast a false "Security incident in progress. Freeze deploys..." message to two SMS contacts, an email list, and a social sink. These were test endpoints, not live services._
+_Proof from a loopback run: the agent broadcast a false "Security incident in progress. Freeze deploys..." message to two SMS contacts, an email list, and a social sink._
 
 Once untrusted web content can influence a local agent that also has access to company data and outbound channels, the failure mode is no longer limited to a bad answer. It can produce false messages, sensitive local summaries, and durable artifacts inside the user environment.
 
