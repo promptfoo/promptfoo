@@ -26,9 +26,9 @@ function HeroSection() {
     <section className={styles.heroSection}>
       <div className="container">
         <img
-          srcSet="/img/riskreport-1.png 1x, /img/riskreport-1@2x.png 2x"
-          src="/img/riskreport-1.png"
-          alt="Red Teaming for AI"
+          srcSet="/img/redteam-homepage-report-cropped-balanced.png 1x, /img/redteam-homepage-report-cropped-balanced.png 2x"
+          src="/img/redteam-homepage-report-cropped-balanced.png"
+          alt="Red team vulnerability report"
           className={styles.heroImage}
         />
         <div className={styles.logoSection}>

@@ -167,8 +167,8 @@ function HomepageWalkthrough() {
       id: 1,
       caption: 'Red Teaming',
       mobileCaption: 'Red Team',
-      image: '/img/redteam-dashboard@2x.jpg',
-      image2x: '/img/redteam-dashboard@2x.jpg',
+      image: '/img/redteam-homepage-report-cropped-balanced.png',
+      image2x: '/img/redteam-homepage-report-cropped-balanced.png',
       description: (
         <>
           <p className={styles.walkthroughHeading}>Automated red teaming for agents & RAGs</p>
