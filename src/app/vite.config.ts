@@ -4,11 +4,11 @@ import { fileURLToPath } from 'node:url';
 import os from 'os';
 import path from 'path';
 
-import { transformAsync } from '@babel/core';
+import { type TransformOptions, transformAsync } from '@babel/core';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-import react from '@vitejs/plugin-react';
+import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vitest/config';
 import packageJson from '../../package.json' with { type: 'json' };
 
@@ -66,6 +66,14 @@ function browserModulesPlugin(): Plugin {
   };
 }
 
+const reactCompilerConfig = reactCompilerPreset() as {
+  preset: () => { plugins: TransformOptions['plugins'] };
+  rolldown?: { filter?: { code?: RegExp } };
+};
+const reactCompilerPlugins = reactCompilerConfig.preset().plugins;
+const reactCompilerCodeFilter = reactCompilerConfig.rolldown?.filter?.code;
+const reactCompilerFileFilter = /\.[jt]sx?$/;
+
 function reactCompilerPlugin(): Plugin {
   return {
     name: 'react-compiler',
@@ -73,7 +81,12 @@ function reactCompilerPlugin(): Plugin {
     async transform(code, id) {
       const cleanId = id.split('?')[0];
 
-      if (!cleanId || cleanId.includes('/node_modules/') || !/\.[jt]sx$/.test(cleanId)) {
+      if (
+        !cleanId ||
+        cleanId.includes('/node_modules/') ||
+        !reactCompilerFileFilter.test(cleanId) ||
+        (reactCompilerCodeFilter && !reactCompilerCodeFilter.test(code))
+      ) {
         return null;
       }
 
@@ -85,17 +98,10 @@ function reactCompilerPlugin(): Plugin {
         parserOpts: {
           plugins: ['jsx', 'typescript'],
         },
-        plugins: [['babel-plugin-react-compiler', {}]],
+        plugins: reactCompilerPlugins,
       });
 
-      if (!result?.code) {
-        return null;
-      }
-
-      return {
-        code: result.code,
-        map: result.map,
-      };
+      return result?.code ? { code: result.code, map: result.map } : null;
     },
   };
 }
