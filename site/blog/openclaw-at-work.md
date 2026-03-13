@@ -67,7 +67,7 @@ The last step was testing whether the same context could move from local access 
 
 ## Documented Run
 
-In one documented run, the malicious page pushed the agent from browsing into false incident communications. The agent sent a loopback status broadcast to SMS recipients, an email list, and a social sink using a shared incident narrative.
+In one run, the malicious page pushed the agent from browsing into false incident communications. The agent sent a loopback status broadcast to SMS recipients, an email list, and a social sink using a shared incident narrative.
 
 ![Loopback proof showing the agent sending a false incident-status message to SMS, email, and social sinks.](/img/blog/openclaw-at-work/outbound-proof.jpg)
 
