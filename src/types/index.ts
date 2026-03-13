@@ -569,6 +569,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'trace-span-count',
   'trace-span-duration',
   'search-rubric',
+  'video-rubric',
   'webhook',
   'word-count',
 ]);

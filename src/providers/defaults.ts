@@ -15,6 +15,7 @@ import {
   DefaultLlmRubricProvider as GoogleAiStudioLlmRubricProvider,
   DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
   DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
+  DefaultVideoGradingProvider as GoogleAiStudioVideoGradingProvider,
 } from './google/ai.studio';
 import { hasGoogleDefaultCredentials } from './google/util';
 import {
@@ -159,6 +160,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: GoogleAiStudioSuggestionsProvider,
       synthesizeProvider: GoogleAiStudioSynthesizeProvider,
+      videoGradingProvider: GoogleAiStudioVideoGradingProvider,
     };
   } else if (
     !hasOpenAiCredentials &&

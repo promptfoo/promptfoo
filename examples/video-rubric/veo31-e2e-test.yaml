@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: E2E test for video-rubric with Google Veo 3.1
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: vertex:video:veo-3.1-generate-preview
+    config:
+      aspectRatio: '16:9'
+      resolution: '720p'
+      durationSeconds: 4
+
+# Use Vertex AI (Gemini) for video grading since it supports video understanding
+# Requires: gcloud auth application-default login
+defaultTest:
+  options:
+    provider:
+      id: vertex:gemini-2.5-flash
+      config:
+        generationConfig:
+          response_mime_type: application/json
+
+tests:
+  - vars:
+      prompt: A serene forest path with sunlight filtering through trees and butterflies flying
+    assert:
+      - type: video-rubric
+        # Override grading provider to use Vertex AI Gemini
+        provider: vertex:gemini-2.5-flash
+        value: |
+          Evaluate the video based on the following criteria:
+          1. Scene: A forest with trees visible
+          2. Lighting: Sunlight filtering through trees/leaves
+          3. Motion: Movement of some kind (butterflies, light, leaves)
+          4. Quality: Clear video without major artifacts
+          Score 1.0 if all criteria are met, 0.5 if partially met, 0.0 if none are met.
+          Return JSON with fields: pass (boolean), score (number 0-1), reason (string).

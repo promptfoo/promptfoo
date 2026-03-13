@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Video generation with LLM-as-a-judge evaluation using video-rubric
+
+prompts:
+  - 'Generate a video: {{prompt}}'
+
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      aspectRatio: '16:9'
+      resolution: '720p'
+      durationSeconds: 6
+
+tests:
+  - vars:
+      prompt: A serene mountain landscape with clouds drifting slowly across the peaks at sunset
+    assert:
+      - type: video-rubric
+        value: |
+          Evaluate the video based on the following criteria:
+          1. Scene Content: The video should show mountains with clouds and a sunset setting
+          2. Visual Quality: The video should be clear and not blurry or distorted
+          3. Motion Smoothness: Camera movement or cloud motion should be smooth
+          4. Lighting: The sunset lighting should be visible with warm colors
+          Score 1.0 if all criteria are met, 0.5 if partially met, 0.0 if none are met.
+  - vars:
+      prompt: A cat playing with a ball of yarn on a cozy living room floor
+    assert:
+      - type: video-rubric
+        value: |
+          Evaluate the video based on the following criteria:
+          1. Subject: A cat should be visible in the video
+          2. Action: The cat should be interacting with yarn or a ball
+          3. Setting: The scene should appear to be indoors, like a living room
+          4. Quality: The video should be clear with good detail on the cat
+          Score 1.0 if all criteria are met, 0.5 if partially met, 0.0 if none are met.
+  - vars:
+      prompt: Ocean waves gently rolling onto a sandy beach with palm trees swaying
+    assert:
+      - type: video-rubric
+        value: |
+          Evaluate the video based on the following criteria:
+          1. Scene: Beach with ocean waves and palm trees visible
+          2. Motion: Waves should be rolling and/or trees should be swaying
+          3. Audio/Visual: The scene should evoke a calm, tropical atmosphere
+          4. Quality: Clear video without artifacts or distortion
+          Score 1.0 if all criteria are met, 0.5 if partially met, 0.0 if none are met.

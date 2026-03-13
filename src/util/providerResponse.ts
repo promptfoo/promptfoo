@@ -28,7 +28,7 @@ export function getActualPrompt(
   // Check response.prompt first (provider-reported)
   if (response.prompt !== undefined) {
     if (typeof response.prompt === 'string') {
-      // Empty string is valid - provider explicitly set it
+      // Return the prompt if non-empty, otherwise undefined (empty string is not useful)
       return response.prompt || undefined;
     }
     // Array of chat messages - stringify
