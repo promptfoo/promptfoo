@@ -10,6 +10,7 @@ import {
   FS_READONLY_ALLOWED_TOOLS,
 } from '../../src/providers/claude-agent-sdk';
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
+import { checkProviderApiKeys } from '../../src/util/provider';
 import type { NonNullableUsage, Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { MockInstance } from 'vitest';
 
@@ -435,6 +436,41 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(result.output).toBe('Response');
 
         delete process.env.CLAUDE_CODE_USE_BEDROCK;
+      });
+    });
+
+    describe('checkProviderApiKeys pre-check', () => {
+      it('should not report missing key when CLAUDE_CODE_USE_VERTEX is set in process.env', () => {
+        delete process.env.ANTHROPIC_API_KEY;
+        process.env.CLAUDE_CODE_USE_VERTEX = 'true';
+
+        const provider = new ClaudeCodeSDKProvider();
+        const result = checkProviderApiKeys([provider]);
+        expect(result.size).toBe(0);
+
+        delete process.env.CLAUDE_CODE_USE_VERTEX;
+      });
+
+      it('should not report missing key when CLAUDE_CODE_USE_BEDROCK is set in process.env', () => {
+        delete process.env.ANTHROPIC_API_KEY;
+        process.env.CLAUDE_CODE_USE_BEDROCK = 'true';
+
+        const provider = new ClaudeCodeSDKProvider();
+        const result = checkProviderApiKeys([provider]);
+        expect(result.size).toBe(0);
+
+        delete process.env.CLAUDE_CODE_USE_BEDROCK;
+      });
+
+      it('should report missing key when no Vertex/Bedrock env is set', () => {
+        delete process.env.ANTHROPIC_API_KEY;
+        delete process.env.CLAUDE_CODE_USE_VERTEX;
+        delete process.env.CLAUDE_CODE_USE_BEDROCK;
+
+        const provider = new ClaudeCodeSDKProvider();
+        const result = checkProviderApiKeys([provider]);
+        expect(result.size).toBe(1);
+        expect(result.get('ANTHROPIC_API_KEY')).toEqual(['anthropic:claude-agent-sdk']);
       });
     });
 
