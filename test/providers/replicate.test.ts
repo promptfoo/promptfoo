@@ -62,6 +62,54 @@ describe('ReplicateProvider', () => {
     );
   });
 
+  it('should preserve explicit zero-valued config instead of replacing it with env defaults', async () => {
+    const originalTemperature = process.env.REPLICATE_TEMPERATURE;
+    const originalSeed = process.env.REPLICATE_SEED;
+    process.env.REPLICATE_TEMPERATURE = '0.9';
+    process.env.REPLICATE_SEED = '123';
+
+    mockedFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'test-id',
+        status: 'succeeded',
+        output: 'test response',
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    try {
+      const provider = new ReplicateProvider('test-model', {
+        config: {
+          apiKey: mockApiKey,
+          temperature: 0,
+          seed: 0,
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      const request = mockedFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(request[1].body);
+
+      expect(body.input.temperature).toBe(0);
+      expect(body.input.seed).toBe(0);
+    } finally {
+      if (originalTemperature === undefined) {
+        delete process.env.REPLICATE_TEMPERATURE;
+      } else {
+        process.env.REPLICATE_TEMPERATURE = originalTemperature;
+      }
+
+      if (originalSeed === undefined) {
+        delete process.env.REPLICATE_SEED;
+      } else {
+        process.env.REPLICATE_SEED = originalSeed;
+      }
+    }
+  });
+
   it('should handle API errors', async () => {
     mockedFetchWithCache.mockRejectedValue(new Error('API Error'));
 
