@@ -126,6 +126,21 @@ describe('MetricsTable', () => {
     expect(dataTable).toBeInTheDocument();
   });
 
+  it('should retain pass-rate headers when all metrics are percentage metrics', async () => {
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+    expect(
+      await screen.findByRole('columnheader', { name: 'Test Provider - Pass Rate' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('columnheader', { name: 'Test Provider - Pass Count' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('columnheader', { name: 'Test Provider - Test Count' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Avg. Pass Rate' })).toBeInTheDocument();
+  });
+
   it('should return null when promptMetricNames is empty', () => {
     vi.mocked(useTableStore).mockReturnValue({
       table: {

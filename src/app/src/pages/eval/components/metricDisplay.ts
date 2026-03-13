@@ -2,6 +2,15 @@ import type { Assertion, EvaluateTable } from '@promptfoo/types';
 
 export type MetricDisplayKind = 'percentage' | 'value';
 
+function getAssertionMetricBaseType(type: string): string {
+  return type.startsWith('not-') ? type.slice(4) : type;
+}
+
+export function isValueMetricAssertion(assertion: { type: string; threshold?: number }): boolean {
+  const baseType = getAssertionMetricBaseType(assertion.type);
+  return (baseType === 'cost' || baseType === 'latency') && assertion.threshold === undefined;
+}
+
 function resolveMetricTemplate(
   metric: string | undefined,
   vars: Record<string, unknown>,
@@ -58,11 +67,7 @@ function collectMetricKinds(
     }
 
     const renderedMetric = resolveMetricTemplate(assertion.metric, vars);
-    const kind =
-      (assertion.type === 'cost' || assertion.type === 'latency') &&
-      assertion.threshold === undefined
-        ? 'value'
-        : 'percentage';
+    const kind = isValueMetricAssertion(assertion) ? 'value' : 'percentage';
 
     addMetricKind(metricKinds, renderedMetric, kind);
   });

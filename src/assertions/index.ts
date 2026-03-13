@@ -250,10 +250,9 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
 }
 
 function getEffectiveAssertionWeight(assertion: Assertion): number | undefined {
-  if (
-    (assertion.type === 'cost' || assertion.type === 'latency') &&
-    assertion.threshold === undefined
-  ) {
+  const baseType = getAssertionBaseType(assertion);
+
+  if ((baseType === 'cost' || baseType === 'latency') && assertion.threshold === undefined) {
     return 0;
   }
   return assertion.weight;

@@ -42,7 +42,7 @@ import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
-import { getMetricDisplayKinds } from './metricDisplay';
+import { getMetricDisplayKinds, isValueMetricAssertion } from './metricDisplay';
 import { ProviderDisplay } from './ProviderDisplay';
 import { type ProviderDef } from './providerConfig';
 import { useResultsViewSettingsStore, useTableStore } from './store';
@@ -992,13 +992,7 @@ function ResultsTable({
     const totals: Record<string, number> = {};
     table?.body.forEach((row) => {
       row.test.assert?.forEach((assertion) => {
-        if (
-          assertion.metric &&
-          !(
-            (assertion.type === 'cost' || assertion.type === 'latency') &&
-            assertion.threshold === undefined
-          )
-        ) {
+        if (assertion.metric && !isValueMetricAssertion(assertion)) {
           totals[assertion.metric] = (totals[assertion.metric] || 0) + 1;
         }
         if ('assert' in assertion && Array.isArray(assertion.assert)) {
@@ -1006,10 +1000,7 @@ function ResultsTable({
             if (
               'metric' in subAssertion &&
               subAssertion.metric &&
-              !(
-                (subAssertion.type === 'cost' || subAssertion.type === 'latency') &&
-                subAssertion.threshold === undefined
-              )
+              !isValueMetricAssertion(subAssertion)
             ) {
               totals[subAssertion.metric] = (totals[subAssertion.metric] || 0) + 1;
             }

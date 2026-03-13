@@ -849,6 +849,34 @@ describe('runAssertions', () => {
     });
   });
 
+  it('should suppress aggregate scoring for inverse metric-only cost assertions', async () => {
+    const test: AtomicTestCase = {
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+        },
+        {
+          type: 'not-cost',
+          metric: 'total_cost',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output', cost: 0.5 },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.namedScores).toEqual({
+      total_cost: 0.5,
+    });
+  });
+
   it('should handle test with no vars defined', async () => {
     // When test.vars is undefined, should still work (empty vars object)
     const test: AtomicTestCase = {
