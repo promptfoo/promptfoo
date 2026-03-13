@@ -96,7 +96,7 @@ The fragment below shows the agent-trigger portion of the lab using Promptfoo's 
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: OpenClaw workplace risk lab
+description: OpenClaw
 
 targets:
   - id: openclaw:agent:main
