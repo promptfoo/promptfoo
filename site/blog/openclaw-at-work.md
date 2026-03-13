@@ -21,6 +21,14 @@ tags: [red-teaming, ai-security, agents, prompt-injection]
 
 In a controlled lab, we tested a local OpenClaw deployment with browser access, writable local state, and loopback SMS, email, and social sinks. A malicious webpage induced the agent to enumerate capabilities, read local documents, write local artifacts, and send unauthorized messages. Once an agent can browse untrusted content and act externally, the relevant security boundary is its action boundary, not the model itself.
 
+**In one documented run, OpenClaw enumerated capabilities, wrote local artifacts, and sent false incident messages after visiting a malicious page.**
+
+In one run, the agent:
+
+- enumerated local capabilities
+- wrote artifacts derived from local material
+- sent false incident messages through connected channels
+
 <!-- truncate -->
 
 This post documents one exploit chain in a permissive OpenClaw deployment where browsing, local file access, and outbound actions shared a trust boundary, leading to capability disclosure, local document access, local artifact creation, and unauthorized messages to loopback sinks.
