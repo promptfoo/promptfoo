@@ -63,7 +63,7 @@ Once the agent was acting on that capability map, the next step was local file a
 
 The last step was testing whether the same context could move from local access into external action. In the documented run below, it did.
 
-## Evidence from one documented run
+## Evidence from a documented run
 
 In one documented run, the malicious page pushed the agent from browsing into false incident communications. The agent sent a loopback status broadcast to SMS recipients, an email list, and a social sink using a shared incident narrative.
 
