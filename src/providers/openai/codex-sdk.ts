@@ -870,6 +870,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         if (typeof item.tool === 'string') {
           attrs['codex.mcp.tool'] = item.tool;
         }
+        {
+          const serializedArgs = this.serializeItemValue(item.arguments ?? item.args ?? item.input);
+          if (serializedArgs) {
+            attrs['codex.mcp.input'] = serializedArgs;
+          }
+        }
         break;
       case 'web_search':
         if (typeof item.query === 'string') {
@@ -901,6 +907,23 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
 
     return attrs;
+  }
+
+  private serializeItemValue(value: unknown): string | undefined {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed || undefined;
+    }
+
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return undefined;
+    }
   }
 
   /**
@@ -939,6 +962,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         }
         if (typeof item.error?.message === 'string') {
           attrs['codex.error'] = item.error.message;
+        }
+        {
+          const serializedArgs = this.serializeItemValue(item.arguments ?? item.args ?? item.input);
+          if (serializedArgs) {
+            attrs['codex.mcp.input'] = serializedArgs;
+          }
         }
         break;
       case 'agent_message':
