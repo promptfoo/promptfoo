@@ -29,7 +29,7 @@ This post documents one exploit chain in a permissive OpenClaw deployment where 
 
 Browse-capable local agents become materially riskier when browsing, local access, and outbound actions share a trust boundary. Those capabilities should be separately gated, as reflected in OpenClaw's [security documentation](https://docs.openclaw.ai/gateway/security) and Promptfoo's [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) testing approach.
 
-## Scope
+## What This Case Study Is and Is Not
 
 Indirect prompt injection from websites and files is already a known agent risk. This case study examines what happens when that risk is combined with a local agent that can browse attacker-controlled pages, read and write local files, and send messages through connected channels. It focuses on one exploit chain rather than behavior across OpenClaw versions, model providers, or approval modes.
 
