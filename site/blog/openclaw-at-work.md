@@ -17,25 +17,23 @@ authors: [konstantine]
 tags: [red-teaming, ai-security, agents, prompt-injection]
 ---
 
-[OpenClaw](https://github.com/openclaw/openclaw) combines web browsing, local file access, and outbound actions in one user-facing assistant. That combination is also the security problem.
+[OpenClaw](https://github.com/openclaw/openclaw) combines web browsing, local file access, and outbound actions in one user-facing assistant. The capabilities that make OpenClaw valuable for work also increase the security risk.
 
 In a controlled lab, we tested a local OpenClaw deployment with browser access, writable local state, and loopback SMS, email, and social sinks. A malicious webpage induced the agent to enumerate capabilities, read local documents, write local artifacts, and send unauthorized messages. Once an agent can browse untrusted content and act externally, the relevant security boundary is its action boundary, not the model itself.
 
-**In one documented run, OpenClaw enumerated capabilities, wrote local artifacts, and sent false incident messages after visiting a malicious page.**
+**We used Promptfoo's OpenClaw provider to evaluate a local agent, sent it to a malicious page, and observed capability enumeration, local artifact creation, and false incident messages.**
 
 <!-- truncate -->
 
 This post documents one exploit chain in a permissive OpenClaw deployment where browsing, local file access, and outbound actions shared a trust boundary, leading to capability disclosure, local document access, local artifact creation, and unauthorized messages to loopback sinks.
 
-Browse-capable local agents become materially riskier when browsing, local access, and outbound actions share a trust boundary. Those capabilities should be separately gated, as reflected in OpenClaw's [security documentation](https://docs.openclaw.ai/gateway/security) and Promptfoo's [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) testing approach.
+Indirect prompt injection from websites and files is already a known agent risk. This case study looks at what happens when that risk is combined with a local agent that can browse attacker-controlled pages, read and write local files, and send messages through connected channels. It focuses on one exploit chain rather than behavior across OpenClaw versions, model providers, or approval modes.
 
-## What This Case Study Is and Is Not
-
-Indirect prompt injection from websites and files is already a known agent risk. This case study examines what happens when that risk is combined with a local agent that can browse attacker-controlled pages, read and write local files, and send messages through connected channels. It focuses on one exploit chain rather than behavior across OpenClaw versions, model providers, or approval modes.
+Browse-capable local agents become materially riskier when browsing, local file access, and outbound actions share a trust boundary. Those capabilities should be separately gated, as reflected in OpenClaw's [security documentation](https://docs.openclaw.ai/gateway/security) and in Promptfoo's [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) strategy for testing browse-capable agents.
 
 ## Test Setup
 
-The lab environment was intentionally simple:
+The eval setup had five parts:
 
 - a local OpenClaw instance configured as a personal coding assistant
 - Promptfoo generating indirect web injection scenarios and validating outcomes
@@ -43,7 +41,7 @@ The lab environment was intentionally simple:
 - loopback SMS, email, and social sinks so we could observe side effects without touching real services
 - decoy documents and canaries in the local workspace
 
-For the webpage payloads, we used Promptfoo's [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) strategy, building on Yash Chhabria's earlier writeup on [indirect prompt injection in web-browsing agents](/blog/indirect-prompt-injection-web-agents). The strategy can embed instructions in browser-readable page content using invisible text, instructions woven into normal-looking text, or HTML comments. The goal was not to prove that indirect prompt injection exists. It was to see whether an agent with browsing capabilities would turn injected instructions into observable side effects.
+For the webpage payloads, we used Promptfoo's [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) strategy, building on Yash Chhabria's earlier write-up on [indirect prompt injection in web-browsing agents](/blog/indirect-prompt-injection-web-agents). The strategy can embed instructions in browser-readable page content using invisible text, instructions woven into normal-looking text, or HTML comments. The goal was not to prove that indirect prompt injection exists. It was to see whether an agent with browsing capabilities would turn injected instructions into observable side effects.
 
 This was a permissive personal-assistant deployment. Browsing, writable local file access, and loopback outbound tools were intentionally available in one trust boundary because that is the deployment posture we wanted to test.
 
@@ -85,9 +83,15 @@ This deployment placed three capabilities inside one trust boundary:
 
 That combination is enough to turn a malicious webpage into an endpoint-security problem. An agent with access to internal documents, writable local state, and messaging integrations is a privileged endpoint that happens to speak natural language.
 
-A local deployment with browsing capabilities and meaningful privileges can generate false messages and durable local artifacts, and companies should deploy that class of agent accordingly.
+A local deployment with browsing capabilities and meaningful privileges can generate false messages and durable local artifacts.
 
-## How We Tested It
+**Do not broadly deploy browser-capable local agents with company data access and messaging integrations unless outbound actions are explicitly approved and local access is tightly constrained.**
+
+At a minimum, separate browsing from high-trust actions. Treat external content as hostile input. Require explicit confirmation for outbound messages. Keep sensitive local files out of the agent's default reach. Monitor artifact creation as closely as network actions, because a locally written summary or status draft can be just as operationally dangerous as a network call.
+
+If browsing, local access, and outbound action all live in the same agent context in your environment, the right question is not whether the model seems aligned enough. It is where the action boundary sits.
+
+## Appendix: How We Tested It
 
 The fragment below shows the agent-trigger portion of the lab using Promptfoo's built-in [OpenClaw provider](/docs/providers/openclaw). For browser-capable agent behavior, the relevant target is the WebSocket agent provider, `openclaw:agent:main`. The attack pages and loopback handlers were custom lab components and are not part of Promptfoo.
 
@@ -157,11 +161,3 @@ Representative verification sources in the lab:
 - local artifacts written during the run
 
 If you want to test your own browser-capable agents, start with the [red teaming quickstart](/docs/red-team/quickstart/) and then add [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) to your strategy list.
-
-## What This Means
-
-**Do not broadly deploy browser-capable local agents with company data access and messaging integrations unless outbound actions are explicitly approved and local access is tightly constrained.**
-
-At a minimum, separate browsing from high-trust actions. Treat external content as hostile input. Require explicit confirmation for outbound messages. Keep sensitive local files out of the agent's default reach. Monitor artifact creation as closely as network actions, because a locally written summary or status draft can be just as operationally dangerous as a network call.
-
-If browsing, local access, and outbound action all live in the same agent context in your environment, the right question is not whether the model seems aligned enough. It is where the action boundary sits.
