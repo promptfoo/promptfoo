@@ -17,7 +17,7 @@ authors: [konstantine]
 tags: [red-teaming, ai-security, agents, prompt-injection]
 ---
 
-OpenClaw combines web browsing, local file access, and outbound actions in one user-facing assistant. That combination is also the security problem.
+[OpenClaw](https://github.com/openclaw/openclaw) combines web browsing, local file access, and outbound actions in one user-facing assistant. That combination is also the security problem.
 
 In a controlled lab, we tested a local OpenClaw deployment with browser access, writable local state, and loopback SMS, email, and social sinks. A malicious webpage induced the agent to enumerate capabilities, read local documents, write local artifacts, and send unauthorized messages. Once an agent can browse untrusted content and act externally, the relevant security boundary is its action boundary, not the model itself.
 
