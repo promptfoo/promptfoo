@@ -2,7 +2,10 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
-import { collectAssertedComponentResults } from './assertions/componentResults';
+import {
+  collectAssertedComponentResults,
+  collectCountableComponentResults,
+} from './assertions/componentResults';
 import {
   MODEL_GRADED_ASSERTION_TYPES,
   renderMetricName,
@@ -1632,13 +1635,13 @@ class Evaluator {
             metrics.testFailCount += 1;
           }
         }
-        const assertedComponentResults = collectAssertedComponentResults(
+        const countableComponentResults = collectCountableComponentResults(
           row.gradingResult?.componentResults,
         );
-        metrics.assertPassCount += assertedComponentResults.filter(
+        metrics.assertPassCount += countableComponentResults.filter(
           (r) => !r.metadata?.isMetricOnly && r.pass,
         ).length;
-        metrics.assertFailCount += assertedComponentResults.filter(
+        metrics.assertFailCount += countableComponentResults.filter(
           (r) => !r.metadata?.isMetricOnly && !r.pass,
         ).length;
         metrics.totalLatencyMs += row.latencyMs || 0;
