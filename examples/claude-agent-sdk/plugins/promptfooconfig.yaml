@@ -1,6 +1,9 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Plugin-based skills testing with Claude Agent SDK
 
+prompts:
+  - '{{prompt}}'
+
 providers:
   - id: anthropic:claude-agent-sdk
     config:
@@ -15,11 +18,8 @@ providers:
         - Glob
       persist_session: false
 
-prompts:
-  - '{{prompt}}'
-
 tests:
-  - description: Should use the skill from the plugin and notice that the project has a README but lacks a LICENSE
+  - description: Should use the skill from the plugin and notice that the project lacks a README
     vars:
       prompt: Check this project for compliance with our standards
     assert:
@@ -28,6 +28,6 @@ tests:
         value: |
           const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
           return toolCalls.some(t => t.name === 'Skill' && t.input?.skill === 'project-standards:standards-check');
-      # The skill should ensure the agent notes the absence of a LICENSE file
+      # The skill should ensure the agent notes the absence of a README file
       - type: icontains
-        value: LICENSE
+        value: README
