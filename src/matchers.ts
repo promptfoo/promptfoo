@@ -633,9 +633,17 @@ export async function matchesLlmRubric(
   }
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, DEFAULT_GRADING_PROMPT);
+
+  // Render the rubric value with vars so that template variables like {{myVar}}
+  // are expanded before being passed to the grading LLM.
+  const renderedRubric =
+    typeof rubric === 'string'
+      ? nunjucks.renderString(rubric, vars || {})
+      : JSON.stringify(rubric);
+
   const prompt = await renderLlmRubricPrompt(rubricPrompt, {
     output: tryParse(llmOutput),
-    rubric,
+    rubric: renderedRubric,
     ...(vars || {}),
   });
 
@@ -654,7 +662,7 @@ export async function matchesLlmRubric(
     'llm-rubric',
     {
       output: tryParse(llmOutput),
-      rubric,
+      rubric: renderedRubric,
       ...(vars || {}),
     },
     providerCallContext,
