@@ -7,7 +7,7 @@ keywords:
     OpenClaw security,
     indirect prompt injection,
     AI agent security,
-    browse-capable agents,
+    browser-capable agents,
     local file access,
     unauthorized messaging,
   ]
@@ -89,7 +89,7 @@ A local deployment with browsing capabilities and meaningful privileges can gene
 
 ## How We Tested It
 
-The fragment below shows the agent-trigger portion of the lab using Promptfoo's built-in [OpenClaw provider](/docs/providers/openclaw). For browse-capable agent behavior, the relevant target is the WebSocket agent provider, `openclaw:agent:main`. The attack pages and loopback handlers were custom lab components and are not part of Promptfoo.
+The fragment below shows the agent-trigger portion of the lab using Promptfoo's built-in [OpenClaw provider](/docs/providers/openclaw). For browser-capable agent behavior, the relevant target is the WebSocket agent provider, `openclaw:agent:main`. The attack pages and loopback handlers were custom lab components and are not part of Promptfoo.
 
 <details>
 <summary>View <code>promptfooconfig.yaml</code></summary>
@@ -156,7 +156,7 @@ Representative verification sources in the lab:
 - social sink log for the broadcast token and message
 - local artifacts written during the run
 
-If you want to test your own browse-capable agents, start with the [red teaming quickstart](/docs/red-team/quickstart/) and then add [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) to your strategy list.
+If you want to test your own browser-capable agents, start with the [red teaming quickstart](/docs/red-team/quickstart/) and then add [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) to your strategy list.
 
 ## What This Means
 
