@@ -4,10 +4,11 @@ import { fileURLToPath } from 'node:url';
 import os from 'os';
 import path from 'path';
 
+import { transformAsync } from '@babel/core';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-import babel from '@rolldown/plugin-babel';
-import react, { reactCompilerPreset } from '@vitejs/plugin-react';
+import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vitest/config';
 import packageJson from '../../package.json' with { type: 'json' };
 
@@ -65,6 +66,40 @@ function browserModulesPlugin(): Plugin {
   };
 }
 
+function reactCompilerPlugin(): Plugin {
+  return {
+    name: 'react-compiler',
+    enforce: 'pre',
+    async transform(code, id) {
+      const cleanId = id.split('?')[0];
+
+      if (!cleanId || cleanId.includes('/node_modules/') || !/\.[jt]sx$/.test(cleanId)) {
+        return null;
+      }
+
+      const result = await transformAsync(code, {
+        filename: cleanId,
+        babelrc: false,
+        configFile: false,
+        sourceMaps: true,
+        parserOpts: {
+          plugins: ['jsx', 'typescript'],
+        },
+        plugins: [['babel-plugin-react-compiler', {}]],
+      });
+
+      if (!result?.code) {
+        return null;
+      }
+
+      return {
+        code: result.code,
+        map: result.map,
+      };
+    },
+  };
+}
+
 // Calculate max forks for test parallelization
 const cpuCount = os.cpus().length;
 // Use more cores in CI where performance is critical
@@ -90,13 +125,7 @@ export default defineConfig({
     port: 3000,
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
-  plugins: [
-    browserModulesPlugin(),
-    react(),
-    babel({
-      presets: [reactCompilerPreset()],
-    }),
-  ],
+  plugins: [browserModulesPlugin(), reactCompilerPlugin(), react()],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),

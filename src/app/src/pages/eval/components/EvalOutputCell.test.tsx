@@ -25,19 +25,36 @@ const renderWithProviders = (ui: React.ReactElement) => {
   return baseRender(<ShiftKeyProvider>{ui}</ShiftKeyProvider>);
 };
 
+const defaultResultsViewSettings = {
+  prettifyJson: false,
+  renderMarkdown: true,
+  showPassFail: true,
+  showPassReasons: false,
+  showPrompts: true,
+  maxImageWidth: 256,
+  maxImageHeight: 256,
+};
+
+const defaultTableStoreState = {
+  shouldHighlightSearchText: false,
+};
+
+const mockResultsViewSettings = {
+  ...defaultResultsViewSettings,
+};
+
+const mockTableStoreState = {
+  ...defaultTableStoreState,
+};
+
+const resetMockStoreState = () => {
+  Object.assign(mockResultsViewSettings, defaultResultsViewSettings);
+  Object.assign(mockTableStoreState, defaultTableStoreState);
+};
+
 vi.mock('./store', () => ({
-  useResultsViewSettingsStore: () => ({
-    prettifyJson: false,
-    renderMarkdown: true,
-    showPassFail: true,
-    showPassReasons: false,
-    showPrompts: true,
-    maxImageWidth: 256,
-    maxImageHeight: 256,
-  }),
-  useTableStore: () => ({
-    shouldHighlightSearchText: false,
-  }),
+  useResultsViewSettingsStore: () => mockResultsViewSettings,
+  useTableStore: () => mockTableStoreState,
 }));
 
 vi.mock('../../../hooks/useShiftKey', () => ({
@@ -135,6 +152,7 @@ describe('EvalOutputCell', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetMockStoreState();
   });
 
   it('passes metadata correctly to the dialog', async () => {
@@ -767,19 +785,7 @@ describe('EvalOutputCell', () => {
   });
 
   it('does not highlight text when shouldHighlightSearchText is true but searchText is empty', () => {
-    vi.mock('./store', () => ({
-      useResultsViewSettingsStore: () => ({
-        prettifyJson: false,
-        renderMarkdown: true,
-        showPassFail: true,
-        showPrompts: true,
-        maxImageWidth: 256,
-        maxImageHeight: 256,
-      }),
-      useTableStore: () => ({
-        shouldHighlightSearchText: true,
-      }),
-    }));
+    mockTableStoreState.shouldHighlightSearchText = true;
 
     const { container } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
     const highlightedText = container.querySelector('.search-highlight');
@@ -1010,20 +1016,8 @@ describe('EvalOutputCell search highlighting boundary conditions', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-
-    vi.mock('./store', () => ({
-      useResultsViewSettingsStore: () => ({
-        prettifyJson: false,
-        renderMarkdown: true,
-        showPassFail: true,
-        showPrompts: true,
-        maxImageWidth: 256,
-        maxImageHeight: 256,
-      }),
-      useTableStore: () => ({
-        shouldHighlightSearchText: true,
-      }),
-    }));
+    resetMockStoreState();
+    mockTableStoreState.shouldHighlightSearchText = true;
   });
 
   it('should highlight when searchText matches the beginning of the output text', () => {
@@ -1129,20 +1123,10 @@ describe('EvalOutputCell with prettified JSON', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-
-    vi.mock('./store', () => ({
-      useResultsViewSettingsStore: () => ({
-        prettifyJson: true,
-        renderMarkdown: false,
-        showPassFail: true,
-        showPrompts: true,
-        maxImageWidth: 256,
-        maxImageHeight: 256,
-      }),
-      useTableStore: () => ({
-        shouldHighlightSearchText: true,
-      }),
-    }));
+    resetMockStoreState();
+    mockResultsViewSettings.prettifyJson = true;
+    mockResultsViewSettings.renderMarkdown = false;
+    mockTableStoreState.shouldHighlightSearchText = true;
   });
 
   it('highlights search matches in prettified JSON content', () => {
