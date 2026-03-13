@@ -217,6 +217,52 @@ describe('Output and Assertion Variants Smoke Tests', () => {
     });
   });
 
+  describe('5.1.12c metric-only assert-set export shape', () => {
+    it('5.1.12c - assert-set keeps nested metric-only results grouped in exported componentResults', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/assert-set-metric-assertion.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'assert-set-metric-output.json');
+
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
+
+      expect(exitCode).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      const result = parsed.results.results[0];
+      const metrics = parsed.results.prompts[0].metrics;
+
+      expect(result.success).toBe(true);
+      expect(result.score).toBe(1);
+      expect(result.gradingResult.componentResults).toHaveLength(3);
+      expect(result.gradingResult.componentResults[2].componentResults).toHaveLength(1);
+      expect(result.gradingResult.componentResults[2].componentResults[0].assertion.type).toBe(
+        'cost',
+      );
+      expect(metrics.assertPassCount).toBe(0);
+      expect(metrics.assertFailCount).toBe(0);
+    });
+  });
+
+  describe('5.1.12d assert-set prompt assertion counts', () => {
+    it('5.1.12d - prompt metrics still count nested assert-set children as assertions', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/assert-set-counts.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'assert-set-counts-output.json');
+
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
+
+      expect(exitCode).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      const metrics = parsed.results.prompts[0].metrics;
+
+      expect(parsed.results.results[0].success).toBe(true);
+      expect(parsed.results.results[0].gradingResult.componentResults).toHaveLength(1);
+      expect(metrics.assertPassCount).toBe(2);
+      expect(metrics.assertFailCount).toBe(0);
+    });
+  });
+
   describe('5.1.7b contains-json with JSON Schema', () => {
     it('5.1.7b - contains-json validates against JSON Schema', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/json-schema-assertion.yaml');

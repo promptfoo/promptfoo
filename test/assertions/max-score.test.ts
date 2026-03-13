@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { runAssertions } from '../../src/assertions/index';
+import { selectMaxScore } from '../../src/matchers';
 
-import type { Assertion } from '../../src/types/index';
+import type { Assertion, GradingResult } from '../../src/types/index';
 
 describe('max-score assertion integration', () => {
   it('should exclude max-score from regular assertion processing', async () => {
@@ -43,5 +44,62 @@ describe('max-score assertion integration', () => {
     expect(result.componentResults).toHaveLength(2);
     const processedTypes = result.componentResults!.map((cr) => cr.assertion?.type);
     expect(processedTypes).toEqual(['contains', 'equals']);
+  });
+
+  it('should include nested assert-set child scores when selecting the max score', async () => {
+    const assertion = {
+      type: 'max-score',
+      value: { method: 'average' },
+    } as Assertion;
+
+    const results = await selectMaxScore(
+      ['first output', 'second output'],
+      [
+        {
+          gradingResult: {
+            componentResults: [
+              {
+                pass: true,
+                score: 1,
+                reason: 'Assert-set passed',
+                componentResults: [
+                  {
+                    pass: true,
+                    score: 0.9,
+                    reason: 'Nested assertion passed',
+                    assertion: { type: 'equals', value: 'first' } as Assertion,
+                  },
+                ],
+              } satisfies GradingResult,
+            ],
+          },
+        },
+        {
+          gradingResult: {
+            componentResults: [
+              {
+                pass: true,
+                score: 1,
+                reason: 'Assert-set passed',
+                componentResults: [
+                  {
+                    pass: true,
+                    score: 0.3,
+                    reason: 'Nested assertion passed',
+                    assertion: { type: 'equals', value: 'second' } as Assertion,
+                  },
+                ],
+              } satisfies GradingResult,
+            ],
+          },
+        },
+      ],
+      assertion,
+    );
+
+    expect(results[0].pass).toBe(true);
+    expect(results[1].pass).toBe(false);
+    expect(results[0].score).toBe(1);
+    expect(results[1].score).toBe(0);
   });
 });

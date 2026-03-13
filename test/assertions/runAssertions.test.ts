@@ -906,6 +906,15 @@ describe('runAssertions', () => {
       cost_metrics: 1,
       total_cost: 0.25,
     });
+    expect(result.componentResults).toHaveLength(2);
+    expect(result.componentResults?.[1]).toMatchObject({
+      pass: true,
+      score: 1,
+      metadata: {
+        isMetricOnly: true,
+      },
+    });
+    expect(result.componentResults?.[1].componentResults).toHaveLength(1);
   });
 
   it('should suppress aggregate scoring for inverse metric-only cost assertions', async () => {

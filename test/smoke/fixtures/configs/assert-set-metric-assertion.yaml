@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing metric-only assert-set exports
+description: 'Smoke test - assert-set metric assertion'
+
+providers:
+  - file://../providers/metrics-provider.mjs
+
+prompts:
+  - 'Test prompt for {{label}} nested metric check'
+
+tests:
+  - vars:
+      label: first
+      cost: 0.2
+      delayMs: 5
+    assert:
+      - type: cost
+        metric: total_cost
+      - type: latency
+        metric: total_latency_ms
+      - type: assert-set
+        assert:
+          - type: cost
+            metric: nested_cost

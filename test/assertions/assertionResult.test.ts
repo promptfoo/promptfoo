@@ -197,6 +197,35 @@ describe('AssertionsResult', () => {
     });
   });
 
+  it('keeps nested componentResults grouped when the parent has no assertion', async () => {
+    assertionsResult = new AssertionsResult();
+
+    const nestedResult: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'Nested assertion passed',
+      componentResults: [
+        {
+          pass: true,
+          score: 0.9,
+          reason: 'Sub-assertion 1 passed',
+          assertion: { type: 'equals', value: 'test' },
+        },
+      ],
+    };
+
+    assertionsResult.addResult({
+      index: 0,
+      result: nestedResult,
+    });
+
+    const result = await assertionsResult.testResult();
+
+    expect(result.componentResults).toBeDefined();
+    expect(result.componentResults).toHaveLength(1);
+    expect(result.componentResults?.[0]).toEqual(nestedResult);
+  });
+
   describe('noAssertsResult', () => {
     it('returns correct value', () => {
       expect(AssertionsResult.noAssertsResult()).toEqual({
