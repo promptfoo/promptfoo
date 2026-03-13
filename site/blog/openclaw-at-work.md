@@ -23,19 +23,13 @@ In a controlled lab, we tested a local OpenClaw deployment with browser access, 
 
 **In one documented run, OpenClaw enumerated capabilities, wrote local artifacts, and sent false incident messages after visiting a malicious page.**
 
-In one run, the agent:
-
-- enumerated local capabilities
-- wrote artifacts derived from local material
-- sent false incident messages through connected channels
-
 <!-- truncate -->
 
 This post documents one exploit chain in a permissive OpenClaw deployment where browsing, local file access, and outbound actions shared a trust boundary, leading to capability disclosure, local document access, local artifact creation, and unauthorized messages to loopback sinks.
 
 Browse-capable local agents become materially riskier when browsing, local access, and outbound actions share a trust boundary. Those capabilities should be separately gated, as reflected in OpenClaw's [security documentation](https://docs.openclaw.ai/gateway/security) and Promptfoo's [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn) testing approach.
 
-## What This Case Study Is and Is Not
+## Scope
 
 Indirect prompt injection from websites and files is already a known agent risk. This case study examines what happens when that risk is combined with a local agent that can browse attacker-controlled pages, read and write local files, and send messages through connected channels. It focuses on one exploit chain rather than behavior across OpenClaw versions, model providers, or approval modes.
 
@@ -71,7 +65,7 @@ Once the agent was acting on that capability map, the next step was local file a
 
 The last step was testing whether the same context could move from local access into external action. In the documented run below, it did.
 
-## Evidence From a Documented Run
+## Documented Run
 
 In one documented run, the malicious page pushed the agent from browsing into false incident communications. The agent sent a loopback status broadcast to SMS recipients, an email list, and a social sink using a shared incident narrative.
 
@@ -81,7 +75,7 @@ _Proof from a loopback run: the agent broadcast a false "Security incident in pr
 
 Once untrusted web content can influence a local agent that also has access to company data and outbound channels, the failure mode is no longer limited to a bad answer. It can produce false messages, sensitive local summaries, and durable artifacts inside the user environment.
 
-## Why This Changes the Deployment Decision
+## Deployment Decision
 
 This deployment placed three capabilities inside one trust boundary:
 
