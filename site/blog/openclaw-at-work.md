@@ -81,7 +81,7 @@ This deployment placed three capabilities inside one trust boundary:
 - local file access
 - external action
 
-That combination is enough to turn a malicious webpage into an endpoint-security problem. If a company gives employees an agent with access to internal documents, writable local state, and messaging integrations, it is granting a privileged endpoint that happens to speak natural language.
+That combination is enough to turn a malicious webpage into an endpoint-security problem. An agent with access to internal documents, writable local state, and messaging integrations is a privileged endpoint that happens to speak natural language.
 
 A local deployment with browsing capabilities and meaningful privileges can generate false messages and durable local artifacts, and companies should deploy that class of agent accordingly.
 
