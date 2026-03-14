@@ -252,7 +252,8 @@ function matchesExpectedArgsPartial(actual: unknown, expected: unknown): boolean
 
     return Object.entries(expected).every(
       ([key, expectedValue]) =>
-        Object.hasOwn(actual, key) && matchesExpectedArgsPartial(actual[key], expectedValue),
+        Object.prototype.hasOwnProperty.call(actual, key) &&
+        matchesExpectedArgsPartial(actual[key], expectedValue),
     );
   }
 
@@ -279,7 +280,7 @@ function resolveToolArgsMatchValue(value: unknown) {
   const matcher = normalizeTrajectoryMatcher(value as TrajectoryStepMatcher, 'tool');
   requireNamedTrajectoryMatcher(matcher, 'trajectory:tool-args-match');
 
-  const expectedArgs = Object.hasOwn(value, 'args')
+  const expectedArgs = Object.prototype.hasOwnProperty.call(value, 'args')
     ? (value as TrajectoryToolArgsMatchValue).args
     : (value as TrajectoryToolArgsMatchValue).arguments;
 
