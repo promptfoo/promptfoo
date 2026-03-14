@@ -216,7 +216,7 @@ export interface ProviderResponse {
     storageRef?: { key?: string }; // Storage reference for video file (Sora)
     url?: string; // Storage ref URL (e.g., storageRef:video/abc123.mp4) or blob URI
     format?: string; // 'mp4'
-    size?: string; // '1280x720' or '720x1280'
+    size?: string; // '1280x720', '720x1280', '1792x1024', or '1024x1792'
     duration?: number; // Seconds
     thumbnail?: string; // Storage ref URL for thumbnail (Sora)
     spritesheet?: string; // Storage ref URL for spritesheet (Sora)
