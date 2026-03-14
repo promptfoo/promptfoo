@@ -149,7 +149,7 @@
     "@types/semver": "^7.7.1",
     "@types/source-map-support": "^0.5.10",
     "@types/supertest": "^6.0.3",
-    "@vitest/coverage-v8": "^4.0.18",
+    "@vitest/coverage-v8": "^4.1.0",
     "concurrently": "^9.2.1",
     "depcheck": "^1.4.7",
     "drizzle-kit": "^0.31.9",
@@ -173,7 +173,7 @@
     "ts-dedent": "^2.2.0",
     "tsdown": "0.21.2",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.18",
+    "vitest": "^4.1.0",
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
