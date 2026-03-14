@@ -11,11 +11,8 @@ providers:
       plugins:
         - type: local
           path: ./sample-plugin
-      custom_allowed_tools:
+      append_allowed_tools:
         - Skill
-        - Read
-        - Grep
-        - Glob
       persist_session: false
 
 tests:
