@@ -757,7 +757,7 @@ OpenAI supports video generation via `openai:video:<model>`. Supported models in
 providers:
   - id: openai:video:sora-2
     config:
-      size: 1792x1024 # 1280x720, 720x1280, 1792x1024, or 1024x1792
+      size: 1280x720 # 1280x720, 720x1280, 1792x1024, or 1024x1792
       seconds: 8 # Duration: 4, 8, or 12 seconds
 ```
 
@@ -783,11 +783,11 @@ prompts:
 providers:
   - id: openai:video:sora-2
     config:
-      size: 1792x1024
+      size: 1280x720
       seconds: 4
   - id: openai:video:sora-2-pro
     config:
-      size: 1024x1792
+      size: 720x1280
       seconds: 8
 
 tests:
