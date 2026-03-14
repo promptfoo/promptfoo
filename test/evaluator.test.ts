@@ -2152,6 +2152,41 @@ describe('evaluator', () => {
     expect(summary.results[1].response?.output).toBe('Second run First run ');
   });
 
+  it('does not force concurrency to 1 for similarly named variables', async () => {
+    let activeCalls = 0;
+    let maxActiveCalls = 0;
+
+    const concurrentProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('concurrent-provider'),
+      callApi: vi.fn().mockImplementation(async (prompt) => {
+        activeCalls += 1;
+        maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        activeCalls -= 1;
+
+        return {
+          output: prompt,
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [concurrentProvider],
+      prompts: [toPrompt('{{ pre_conversation_context }}')],
+      tests: [
+        { vars: { pre_conversation_context: 'first' } },
+        { vars: { pre_conversation_context: 'second' } },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+
+    expect(concurrentProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(maxActiveCalls).toBe(2);
+  });
+
   it('evaluate with labeled and unlabeled providers and providerPromptMap', async () => {
     const mockLabeledProvider: ApiProvider = {
       id: () => 'labeled-provider-id',
