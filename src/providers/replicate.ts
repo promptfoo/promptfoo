@@ -105,7 +105,7 @@ export class ReplicateProvider implements ApiProvider {
       providerId: this.id(),
       temperature: this.config.temperature,
       topP: this.config.top_p,
-      maxTokens: this.config.max_tokens || this.config.max_length || this.config.max_new_tokens,
+      maxTokens: this.config.max_tokens ?? this.config.max_length ?? this.config.max_new_tokens,
       testIndex: context?.test?.vars?.__testIdx as number | undefined,
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
@@ -168,15 +168,15 @@ export class ReplicateProvider implements ApiProvider {
     let response;
     try {
       const inputOptions = {
-        max_length: this.config.max_length || getEnvInt('REPLICATE_MAX_LENGTH'),
-        max_new_tokens: this.config.max_new_tokens || getEnvInt('REPLICATE_MAX_NEW_TOKENS'),
-        temperature: this.config.temperature || getEnvFloat('REPLICATE_TEMPERATURE'),
-        top_p: this.config.top_p || getEnvFloat('REPLICATE_TOP_P'),
-        top_k: this.config.top_k || getEnvInt('REPLICATE_TOP_K'),
+        max_length: this.config.max_length ?? getEnvInt('REPLICATE_MAX_LENGTH'),
+        max_new_tokens: this.config.max_new_tokens ?? getEnvInt('REPLICATE_MAX_NEW_TOKENS'),
+        temperature: this.config.temperature ?? getEnvFloat('REPLICATE_TEMPERATURE'),
+        top_p: this.config.top_p ?? getEnvFloat('REPLICATE_TOP_P'),
+        top_k: this.config.top_k ?? getEnvInt('REPLICATE_TOP_K'),
         repetition_penalty:
-          this.config.repetition_penalty || getEnvFloat('REPLICATE_REPETITION_PENALTY'),
-        stop_sequences: this.config.stop_sequences || getEnvString('REPLICATE_STOP_SEQUENCES'),
-        seed: this.config.seed || getEnvInt('REPLICATE_SEED'),
+          this.config.repetition_penalty ?? getEnvFloat('REPLICATE_REPETITION_PENALTY'),
+        stop_sequences: this.config.stop_sequences ?? getEnvString('REPLICATE_STOP_SEQUENCES'),
+        seed: this.config.seed ?? getEnvInt('REPLICATE_SEED'),
         system_prompt: systemPrompt,
         prompt: userPrompt,
       };

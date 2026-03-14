@@ -45,7 +45,7 @@ tests:
 | ---------------- | ------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | type             | string             | Yes      | Type of assertion                                                                                                                                                                                                                                                                      |
 | value            | string             | No       | The expected value, if applicable                                                                                                                                                                                                                                                      |
-| threshold        | number             | No       | The threshold value, applicable to certain types such as `similar`, `javascript`, and `python`. For `cost` and `latency`, omitting `threshold` records a raw numeric metric when `metric` is set.                                                                                      |
+| threshold        | number             | No       | The threshold value, applicable to certain types such as `similar`, `javascript`, and `python`. For `cost` and `latency`, omitting `threshold` records a raw numeric metric when `metric` is set. `not-cost` and `not-latency` still require a threshold.                              |
 | weight           | number             | No       | How heavily to weigh the assertion. Defaults to 1.0                                                                                                                                                                                                                                    |
 | provider         | string             | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                                                                   |
 | rubricPrompt     | string \| string[] | No       | Model-graded LLM prompt                                                                                                                                                                                                                                                                |
@@ -149,10 +149,13 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [trace-span-count](/docs/configuration/expected-outputs/deterministic/#trace-span-count)                           | Count spans matching patterns with min/max thresholds                                     |
 | [trace-span-duration](/docs/configuration/expected-outputs/deterministic/#trace-span-duration)                     | Check span durations with percentile support                                              |
 | [trace-error-spans](/docs/configuration/expected-outputs/deterministic/#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages                         |
+| [trajectory:tool-used](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used)                    | Ensure a traced agent trajectory used specific tools                                      |
+| [trajectory:tool-sequence](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence)            | Ensure traced tool usage happened in the expected order                                   |
+| [trajectory:step-count](/docs/configuration/expected-outputs/deterministic/#trajectorystep-count)                  | Count normalized trajectory steps by type or name pattern                                 |
 | [guardrails](/docs/configuration/expected-outputs/guardrails)                                                      | Ensure that the output does not contain harmful content                                   |
 
 :::tip
-Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
+Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`. `cost` and `latency` still require a `threshold` when used with `not-`.
 :::
 
 ### Model-assisted eval metrics
@@ -161,22 +164,23 @@ These metrics are model-assisted, and rely on LLMs or other machine learning mod
 
 See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [classification](/docs/configuration/expected-outputs/classifier), and [similarity](/docs/configuration/expected-outputs/similar) docs for more information.
 
-| Assertion Type                                                                        | Method                                                                           |
-| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| [similar](/docs/configuration/expected-outputs/similar)                               | Embeddings and cosine similarity are above a threshold                           |
-| [classifier](/docs/configuration/expected-outputs/classifier)                         | Run LLM output through a classifier                                              |
-| [llm-rubric](/docs/configuration/expected-outputs/model-graded)                       | LLM output matches a given rubric, using a Language Model to grade output        |
-| [g-eval](/docs/configuration/expected-outputs/model-graded/g-eval)                    | Chain-of-thought evaluation based on custom criteria using the G-Eval framework  |
-| [answer-relevance](/docs/configuration/expected-outputs/model-graded)                 | Ensure that LLM output is related to original query                              |
-| [context-faithfulness](/docs/configuration/expected-outputs/model-graded)             | Ensure that LLM output uses the context                                          |
-| [context-recall](/docs/configuration/expected-outputs/model-graded)                   | Ensure that ground truth appears in context                                      |
-| [context-relevance](/docs/configuration/expected-outputs/model-graded)                | Ensure that context is relevant to original query                                |
-| [conversation-relevance](/docs/configuration/expected-outputs/model-graded)           | Ensure that responses remain relevant throughout a conversation                  |
-| [factuality](/docs/configuration/expected-outputs/model-graded)                       | LLM output adheres to the given facts, using Factuality method from OpenAI eval  |
-| [model-graded-closedqa](/docs/configuration/expected-outputs/model-graded)            | LLM output adheres to given criteria, using Closed QA method from OpenAI eval    |
-| [pi](/docs/configuration/expected-outputs/model-graded/pi)                            | Alternative scoring approach that uses a dedicated model for evaluating criteria |
-| [select-best](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded) | Compare multiple outputs for a test case and pick the best one                   |
-| [max-score](/docs/configuration/expected-outputs/model-graded/max-score)              | Select output with highest aggregate score from other assertions                 |
+| Assertion Type                                                                                       | Method                                                                           |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [similar](/docs/configuration/expected-outputs/similar)                                              | Embeddings and cosine similarity are above a threshold                           |
+| [classifier](/docs/configuration/expected-outputs/classifier)                                        | Run LLM output through a classifier                                              |
+| [llm-rubric](/docs/configuration/expected-outputs/model-graded)                                      | LLM output matches a given rubric, using a Language Model to grade output        |
+| [g-eval](/docs/configuration/expected-outputs/model-graded/g-eval)                                   | Chain-of-thought evaluation based on custom criteria using the G-Eval framework  |
+| [answer-relevance](/docs/configuration/expected-outputs/model-graded)                                | Ensure that LLM output is related to original query                              |
+| [context-faithfulness](/docs/configuration/expected-outputs/model-graded)                            | Ensure that LLM output uses the context                                          |
+| [context-recall](/docs/configuration/expected-outputs/model-graded)                                  | Ensure that ground truth appears in context                                      |
+| [context-relevance](/docs/configuration/expected-outputs/model-graded)                               | Ensure that context is relevant to original query                                |
+| [conversation-relevance](/docs/configuration/expected-outputs/model-graded)                          | Ensure that responses remain relevant throughout a conversation                  |
+| [trajectory:goal-success](/docs/configuration/expected-outputs/model-graded/#trajectorygoal-success) | Use an LLM judge to decide whether the traced agent run achieved its goal        |
+| [factuality](/docs/configuration/expected-outputs/model-graded)                                      | LLM output adheres to the given facts, using Factuality method from OpenAI eval  |
+| [model-graded-closedqa](/docs/configuration/expected-outputs/model-graded)                           | LLM output adheres to given criteria, using Closed QA method from OpenAI eval    |
+| [pi](/docs/configuration/expected-outputs/model-graded/pi)                                           | Alternative scoring approach that uses a dedicated model for evaluating criteria |
+| [select-best](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)                | Compare multiple outputs for a test case and pick the best one                   |
+| [max-score](/docs/configuration/expected-outputs/model-graded/max-score)                             | Select output with highest aggregate score from other assertions                 |
 
 ## Weighted assertions
 

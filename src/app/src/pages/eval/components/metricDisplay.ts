@@ -69,6 +69,41 @@ function collectMetricKinds(
   });
 }
 
+function collectMetricKindsFromConfig(
+  config: Partial<UnifiedConfig>,
+  metricKinds: Record<string, MetricDisplayKind>,
+) {
+  const defaultAssert =
+    typeof config.defaultTest === 'object'
+      ? (config.defaultTest?.assert as Assertion[] | undefined)
+      : undefined;
+
+  let appliedDefaultAssertWithTestVars = false;
+
+  if (Array.isArray(config.tests)) {
+    for (const test of config.tests) {
+      if (typeof test !== 'object' || test === null) {
+        continue;
+      }
+
+      const vars = (test.vars ?? {}) as Record<string, unknown>;
+
+      if (defaultAssert) {
+        collectMetricKinds(defaultAssert, vars, metricKinds);
+        appliedDefaultAssertWithTestVars = true;
+      }
+
+      if ('assert' in test) {
+        collectMetricKinds(test.assert as Assertion[] | undefined, vars, metricKinds);
+      }
+    }
+  }
+
+  if (!appliedDefaultAssertWithTestVars) {
+    collectMetricKinds(defaultAssert, {}, metricKinds);
+  }
+}
+
 export function getMetricDisplayKinds(
   table: EvaluateTable | null,
   config?: Partial<UnifiedConfig> | null,
@@ -81,21 +116,7 @@ export function getMetricDisplayKinds(
 
   // Walk config assertions first (always the full set, not affected by pagination)
   if (config) {
-    const defaultAssert =
-      typeof config.defaultTest === 'object' ? config.defaultTest?.assert : undefined;
-    collectMetricKinds(defaultAssert as Assertion[] | undefined, {}, metricKinds);
-
-    if (Array.isArray(config.tests)) {
-      for (const test of config.tests) {
-        if (typeof test === 'object' && test !== null && 'assert' in test) {
-          collectMetricKinds(
-            test.assert as Assertion[] | undefined,
-            (test.vars ?? {}) as Record<string, unknown>,
-            metricKinds,
-          );
-        }
-      }
-    }
+    collectMetricKindsFromConfig(config, metricKinds);
   }
 
   // Also walk table body rows (covers runtime-resolved templates)

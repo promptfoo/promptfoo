@@ -233,6 +233,110 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByTestId('metric-value-total_cost')).not.toHaveTextContent('%');
   });
 
+  it('uses config test vars to preserve hidden defaultTest value metrics across pagination', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {
+        defaultTest: {
+          assert: [
+            {
+              type: 'cost',
+              metric: 'cost_{{ customer.tier | upper }}',
+            },
+          ],
+        },
+        tests: [
+          {
+            vars: {
+              customer: {
+                tier: 'pro',
+              },
+            },
+          },
+          {
+            vars: {
+              customer: {
+                tier: 'enterprise',
+              },
+            },
+          },
+        ],
+      },
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        body: [
+          {
+            outputs: [
+              {
+                pass: true,
+                score: 1,
+                text: 'test output',
+              },
+            ],
+            test: {
+              assert: [
+                {
+                  type: 'cost',
+                  metric: 'cost_PRO',
+                },
+              ],
+              vars: {
+                customer: {
+                  tier: 'pro',
+                },
+              },
+            },
+            vars: [],
+          },
+        ],
+        head: {
+          prompts: [
+            {
+              metrics: {
+                cost: 1,
+                namedScores: {
+                  cost_PRO: 1,
+                  cost_ENTERPRISE: 1,
+                },
+                namedScoresCount: {
+                  cost_PRO: 4,
+                  cost_ENTERPRISE: 2,
+                },
+                testPassCount: 1,
+                testFailCount: 0,
+                tokenUsage: {
+                  completion: 5,
+                  total: 10,
+                },
+                totalLatencyMs: 100,
+              },
+              provider: 'test-provider',
+            },
+          ],
+          vars: [],
+        },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByTestId('metric-value-cost_ENTERPRISE')).toHaveTextContent(
+      '0.50 (1.00/2.00)',
+    );
+    expect(screen.getByTestId('metric-value-cost_ENTERPRISE')).not.toHaveTextContent('%');
+  });
+
   it('uses each prompt metric count when rendering percentage metrics', () => {
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},

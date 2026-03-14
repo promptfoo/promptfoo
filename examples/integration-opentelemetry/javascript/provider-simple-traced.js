@@ -186,6 +186,7 @@ class SimpleTracedProvider {
                 {
                   'document.index': i,
                   'search.query': userIntent.entities.join(' '),
+                  'tool.name': 'search_corpus',
                 },
                 async () => {
                   const docSpan = trace.getSpan(context.active());
@@ -305,6 +306,7 @@ class SimpleTracedProvider {
           {
             'generation.type': 'augmented_response',
             'model.name': 'gpt-4',
+            'tool.name': 'compose_answer',
           },
           async () => {
             const span = trace.getSpan(context.active());

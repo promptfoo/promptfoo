@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getMetricAverage, getMetricDisplayKind, getMetricDisplayKinds } from './metricDisplay';
-import type { EvaluateTable } from '@promptfoo/types';
+import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 
 describe('metricDisplay', () => {
   it('classifies thresholdless cost as value and inverse types as percentage', () => {
@@ -80,6 +80,67 @@ describe('metricDisplay', () => {
     };
 
     expect(getMetricDisplayKinds(table)).toEqual({
+      cost_PRO: 'value',
+    });
+  });
+
+  it('classifies defaultTest metric templates for hidden rows using config test vars', () => {
+    const table: EvaluateTable = {
+      head: {
+        prompts: [],
+        vars: [],
+      },
+      body: [
+        {
+          description: 'row 1',
+          outputs: [],
+          test: {
+            assert: [
+              {
+                type: 'cost',
+                metric: 'cost_PRO',
+              },
+            ],
+            vars: {
+              customer: {
+                tier: 'pro',
+              },
+            },
+          },
+          testIdx: 0,
+          vars: [],
+        },
+      ],
+    };
+    const config: Partial<UnifiedConfig> = {
+      defaultTest: {
+        assert: [
+          {
+            type: 'cost',
+            metric: 'cost_{{ customer.tier | upper }}',
+          },
+        ],
+      },
+      tests: [
+        {
+          vars: {
+            customer: {
+              tier: 'pro',
+            },
+          },
+        },
+        {
+          vars: {
+            customer: {
+              tier: 'enterprise',
+            },
+          },
+        },
+      ],
+    };
+
+    expect(getMetricDisplayKinds(table, config)).toEqual({
+      cost_ENTERPRISE: 'value',
       cost_PRO: 'value',
     });
   });
