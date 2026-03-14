@@ -20,7 +20,7 @@ jobs:
     steps:
       # Use GitHub App token so the created PR triggers CI workflows
       # (PRs created with GITHUB_TOKEN don't trigger workflows to prevent loops)
-      - uses: actions/create-github-app-token@v2
+      - uses: actions/create-github-app-token@v3
         id: app-token
         with:
           app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
