@@ -42,8 +42,8 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
-    "@vitest/browser-playwright": "^4.0.18",
-    "@vitest/coverage-v8": "^4.0.18",
+    "@vitest/browser-playwright": "^4.1.0",
+    "@vitest/coverage-v8": "^4.1.0",
     "ansi-to-html": "^0.7.2",
     "autoprefixer": "^10.4.27",
     "babel-plugin-react-compiler": "^1.0.0",
@@ -76,7 +76,7 @@
     "typescript": "^5.9.3",
     "use-debounce": "^10.1.0",
     "vite": "^8.0.0",
-    "vitest": "^4.0.18",
+    "vitest": "^4.1.0",
     "zustand": "^5.0.11"
   },
   "dependencies": {
@@ -98,6 +98,6 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-virtual": "^3.13.21",
-    "lightningcss": "^1.31.1"
+    "lightningcss": "^1.32.0"
   }
 }

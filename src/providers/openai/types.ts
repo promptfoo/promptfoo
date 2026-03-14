@@ -207,7 +207,7 @@ export type OpenAiVideoModel = 'sora-2' | 'sora-2-pro';
 /**
  * Supported video sizes (aspect ratios)
  */
-export type OpenAiVideoSize = '1280x720' | '720x1280';
+export type OpenAiVideoSize = '1280x720' | '720x1280' | '1792x1024' | '1024x1792';
 
 /**
  * Valid video duration in seconds (Sora API only accepts these values)

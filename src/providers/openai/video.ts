@@ -49,7 +49,12 @@ export const SORA_COSTS: Record<OpenAiVideoModel, number> = {
 /**
  * Valid video sizes (aspect ratios) for OpenAI Sora
  */
-const VALID_VIDEO_SIZES: readonly OpenAiVideoSize[] = ['1280x720', '720x1280'] as const;
+const VALID_VIDEO_SIZES: readonly OpenAiVideoSize[] = [
+  '1280x720',
+  '720x1280',
+  '1792x1024',
+  '1024x1792',
+] as const;
 
 /**
  * Valid video durations in seconds for OpenAI Sora

@@ -154,6 +154,7 @@ prompts:
 | `strict_mcp_config`                  | boolean      | Only allow configured MCP servers                                                                            | true                     |
 | `cache_mcp`                          | boolean      | Enable caching when MCP is configured (for deterministic MCP tools)                                          | false                    |
 | `setting_sources`                    | string[]     | Where SDK looks for settings, CLAUDE.md, and slash commands                                                  | None (disabled)          |
+| `plugins`                            | array        | Local [plugins](#plugins) to load for the session                                                            | None                     |
 | `output_format`                      | object       | Structured output configuration with JSON schema                                                             | None                     |
 | `agents`                             | object       | Programmatic agent definitions for custom subagents                                                          | None                     |
 | `hooks`                              | object       | Event hooks for intercepting tool calls and other events                                                     | None                     |
@@ -344,13 +345,76 @@ Available values:
 - `project` - Project-level settings
 - `local` - Local directory settings
 
+## Plugins
+
+[Plugins](https://code.claude.com/docs/en/plugins) extend the agent with additional skills, agents, hooks, and MCP servers. While `setting_sources` discovers skills from the standard settings hierarchy (project/local/user), plugins are self-contained directories that bundle capabilities together and namespace their skills—mirroring how marketplace-installed plugins work.
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./my-project
+      plugins:
+        - type: local
+          path: ./my-plugin
+      append_allowed_tools: ['Skill', 'Read']
+```
+
+:::note
+Only the `local` type is currently supported. Relative paths in `path` resolve against the config file's directory.
+:::
+
+### Plugin Structure
+
+A plugin is a directory containing a `.claude-plugin/plugin.json` manifest:
+
+```text
+my-plugin/
+├── .claude-plugin/
+│   └── plugin.json
+└── skills/
+    └── code-review/
+        └── SKILL.md
+```
+
+The manifest defines the plugin's name and description:
+
+```json title="my-plugin/.claude-plugin/plugin.json"
+{
+  "name": "my-plugin",
+  "description": "A plugin that provides code review skills"
+}
+```
+
+### Skill Namespacing
+
+Skills from plugins are namespaced with the plugin name. For example, a `standards-check` skill in a plugin named `project-standards` becomes `project-standards:standards-check`. Use this namespaced name when asserting on skill invocations:
+
+```yaml
+assert:
+  - type: javascript
+    value: |
+      const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
+      const skillCalls = toolCalls.filter(t => t.name === 'Skill');
+      return skillCalls.some(t => t.input?.skill === 'project-standards:standards-check');
+```
+
+### Plugins vs Setting Sources
+
+Both `plugins` and `setting_sources` can provide skills, but they serve different purposes:
+
+- **`setting_sources`**: Discovers skills from the standard settings hierarchy—project, local, and user-level `.claude/skills/` directories. Skills are not namespaced.
+- **`plugins`**: Loads self-contained plugin directories, mirroring how marketplace-installed plugins work. Skills are namespaced with the plugin name (`plugin:skill`).
+
+You can use both together — skills from both sources are available in the same session.
+
 ## Testing Skills
 
-[Agent Skills](https://platform.claude.com/docs/en/agent-sdk/skills) are reusable capabilities that extend Claude's functionality. They are defined as `SKILL.md` files in `.claude/skills/` directories and can be tested using the Claude Agent SDK provider.
+[Agent Skills](https://platform.claude.com/docs/en/agent-sdk/skills) are reusable capabilities that extend Claude's functionality. They are defined as `SKILL.md` files and can be tested using the Claude Agent SDK provider. Skills can be loaded via `setting_sources` (from the standard settings hierarchy) or from [plugins](#plugins).
 
 ### Enabling Skills
 
-To test skills, you need to configure both `setting_sources` (to load skills from the filesystem) and include `Skill` in the allowed tools:
+To test skills, load them via `setting_sources` or `plugins`, and include `Skill` in the allowed tools. Using `setting_sources`:
 
 ```yaml
 providers:
@@ -877,10 +941,12 @@ Here are a few complete example implementations:
 - [Advanced options](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#advanced-options) - Sandbox, runtime configuration, and CLI arguments
 - [AskUserQuestion handling](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#askuserquestion-handling) - Automated handling of user questions in evaluations
 - [Skills testing](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#skills-testing) - Testing Agent Skills with the SDK
+- [Plugins](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#plugins) - Loading plugins to extend agent capabilities
 
 ## See Also
 
 - [Claude Agent SDK documentation](https://docs.claude.com/en/api/agent-sdk)
 - [Agent Skills in the SDK](https://platform.claude.com/docs/en/agent-sdk/skills) - Testing and using skills with the SDK
 - [Claude Code skills documentation](https://code.claude.com/docs/en/skills) - Creating custom skills
+- [Claude Code plugins](https://code.claude.com/docs/en/plugins) - Creating and using plugins
 - [Standard Anthropic provider](/docs/providers/anthropic/) - For text-only interactions

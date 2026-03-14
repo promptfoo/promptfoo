@@ -757,22 +757,22 @@ OpenAI supports video generation via `openai:video:<model>`. Supported models in
 providers:
   - id: openai:video:sora-2
     config:
-      size: 1280x720 # 1280x720 (landscape) or 720x1280 (portrait)
+      size: 1280x720 # 1280x720, 720x1280, 1792x1024, or 1024x1792
       seconds: 8 # Duration: 4, 8, or 12 seconds
 ```
 
 ### Configuration Options
 
-| Parameter              | Description                                       | Default    |
-| ---------------------- | ------------------------------------------------- | ---------- |
-| `size`                 | Video dimensions                                  | `1280x720` |
-| `seconds`              | Duration in seconds (4, 8, or 12)                 | `8`        |
-| `input_reference`      | Base64 image data or file path for image-to-video | -          |
-| `remix_video_id`       | ID of a previous Sora video to remix              | -          |
-| `poll_interval_ms`     | Polling interval for job status                   | `10000`    |
-| `max_poll_time_ms`     | Maximum time to wait for video generation         | `600000`   |
-| `download_thumbnail`   | Download thumbnail preview                        | `true`     |
-| `download_spritesheet` | Download spritesheet preview                      | `true`     |
+| Parameter              | Description                                                         | Default    |
+| ---------------------- | ------------------------------------------------------------------- | ---------- |
+| `size`                 | Video dimensions (`1280x720`, `720x1280`, `1792x1024`, `1024x1792`) | `1280x720` |
+| `seconds`              | Duration in seconds (4, 8, or 12)                                   | `8`        |
+| `input_reference`      | Base64 image data or file path for image-to-video                   | -          |
+| `remix_video_id`       | ID of a previous Sora video to remix                                | -          |
+| `poll_interval_ms`     | Polling interval for job status                                     | `10000`    |
+| `max_poll_time_ms`     | Maximum time to wait for video generation                           | `600000`   |
+| `download_thumbnail`   | Download thumbnail preview                                          | `true`     |
+| `download_spritesheet` | Download spritesheet preview                                        | `true`     |
 
 ### Example Configuration
 

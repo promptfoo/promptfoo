@@ -95,8 +95,16 @@ describe('OpenAiVideoProvider', () => {
       expect(validateVideoSize('1280x720')).toEqual({ valid: true });
     });
 
+    it('should accept valid widescreen size', () => {
+      expect(validateVideoSize('1792x1024')).toEqual({ valid: true });
+    });
+
     it('should accept valid portrait size', () => {
       expect(validateVideoSize('720x1280')).toEqual({ valid: true });
+    });
+
+    it('should accept valid tall portrait size', () => {
+      expect(validateVideoSize('1024x1792')).toEqual({ valid: true });
     });
 
     it('should reject invalid size', () => {
@@ -436,7 +444,7 @@ describe('OpenAiVideoProvider', () => {
 
     it('should use specified size and seconds', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
-        config: { apiKey: 'test-key', size: '720x1280', seconds: 12 },
+        config: { apiKey: 'test-key', size: '1792x1024', seconds: 12 },
       });
 
       setupMocksForSuccess();
@@ -446,7 +454,7 @@ describe('OpenAiVideoProvider', () => {
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
         expect.stringContaining('/videos'),
         expect.objectContaining({
-          body: expect.stringContaining('"size":"720x1280"'),
+          body: expect.stringContaining('"size":"1792x1024"'),
         }),
       );
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
@@ -455,7 +463,7 @@ describe('OpenAiVideoProvider', () => {
           body: expect.stringContaining('"seconds":"12"'),
         }),
       );
-      expect(result.video?.size).toBe('720x1280');
+      expect(result.video?.size).toBe('1792x1024');
       expect(result.video?.duration).toBe(12);
     });
 
