@@ -373,9 +373,9 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     const message = data.choices[0].message;
     let output: string | object;
-    if (message.content && message.tool_calls) {
+    if (message.content && message.tool_calls?.length) {
       output = message;
-    } else if (message.tool_calls) {
+    } else if (message.tool_calls?.length) {
       output = message.tool_calls;
     } else {
       output = message.content;
