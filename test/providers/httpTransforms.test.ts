@@ -88,6 +88,52 @@ describe('createTransformResponse', () => {
     const result = parser(null, 'raw text');
     expect(result.output).toBe('raw text');
   });
+
+  it('should strip trailing semicolon from arrow function expression', async () => {
+    const parser = await createTransformResponse('(json) => json.data;');
+    const result = parser({ data: 'value' }, '');
+    expect(result.output).toBe('value');
+  });
+
+  it('should strip trailing semicolon from multi-line arrow function', async () => {
+    const parser = await createTransformResponse(`(json, text) => {
+      return json.result;
+    };`);
+    const result = parser({ result: 'success' }, '');
+    expect(result.output).toBe('success');
+  });
+
+  it('should strip trailing semicolon from regular function expression', async () => {
+    const parser = await createTransformResponse('function(json) { return json.data; };');
+    const result = parser({ data: 'value' }, '');
+    expect(result.output).toBe('value');
+  });
+
+  it('should handle function body with return statements (no function wrapper)', async () => {
+    const parser = await createTransformResponse(`
+      const value = json.data;
+      if (value) {
+        return value.toUpperCase();
+      }
+      return text;
+    `);
+    const result = parser({ data: 'hello' }, 'fallback');
+    expect(result.output).toBe('HELLO');
+  });
+
+  it('should handle multi-line function body with complex logic', async () => {
+    const parser = await createTransformResponse(`
+      if (json && json.result) {
+        return json.result;
+      }
+      if (text) {
+        return text;
+      }
+      return 'no data';
+    `);
+    const result = parser({ result: 'success' }, '');
+    expect(result.output).toBe('success');
+  });
 });
 
 describe('createTransformRequest', () => {
@@ -208,5 +254,27 @@ describe('createTransformRequest', () => {
     const transform = await createTransformRequest('({ text: prompt, extra: vars.extra })');
     const result = await transform('hello', { extra: 'data' } as any);
     expect(result).toEqual({ text: 'hello', extra: 'data' });
+  });
+
+  it('should strip trailing semicolon from arrow function expression', async () => {
+    const transform = await createTransformRequest('(prompt) => prompt.toUpperCase();');
+    const result = await transform('hello', {} as any);
+    expect(result).toBe('HELLO');
+  });
+
+  it('should strip trailing semicolon from multi-line arrow function', async () => {
+    const transform = await createTransformRequest(`(prompt, vars) => {
+      return { text: prompt.toUpperCase() };
+    };`);
+    const result = await transform('hello', {} as any);
+    expect(result).toEqual({ text: 'HELLO' });
+  });
+
+  it('should strip trailing semicolon from regular function expression', async () => {
+    const transform = await createTransformRequest(
+      'function(prompt) { return prompt.toUpperCase(); };',
+    );
+    const result = await transform('hello', {} as any);
+    expect(result).toBe('HELLO');
   });
 });
