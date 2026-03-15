@@ -14,7 +14,7 @@ import {
   getTraceparent,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { REDACTED, normalizeFieldName, sanitizeObject } from '../../util/sanitizer';
+import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -940,10 +940,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   private redactTracePii(value: unknown): unknown {
-    if (
-      typeof value === 'string' &&
-      /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(value)
-    ) {
+    if (typeof value === 'string' && /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(value)) {
       return REDACTED;
     }
 
