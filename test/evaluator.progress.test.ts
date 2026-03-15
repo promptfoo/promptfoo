@@ -1,166 +1,138 @@
-import cliProgress from 'cli-progress';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import readline from 'readline';
 
-import type { RunEvalOptions } from '../src/types/index';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Create hoisted mock functions
-const mockBar = vi.hoisted(() => ({
+const barMethods = vi.hoisted(() => ({
   increment: vi.fn(),
+  render: vi.fn(),
+  setTotal: vi.fn(),
+  start: vi.fn(),
+  stop: vi.fn(),
   update: vi.fn(),
-  getTotal: vi.fn().mockImplementation(function (this: any) {
-    return this._total || 10;
-  }),
 }));
 
-const mockCreate = vi.hoisted(() =>
-  vi.fn().mockImplementation((total: number) => {
-    const bar = { ...mockBar, _total: total };
-    return bar;
-  }),
-);
+const singleBarConstructor = vi.hoisted(() => vi.fn());
+const cursorToMock = vi.hoisted(() => vi.fn());
+const clearLineMock = vi.hoisted(() => vi.fn());
 
-const mockStop = vi.hoisted(() => vi.fn());
-
-// Create a proper class for MultiBar mock
-const MockMultiBar = vi.hoisted(
-  () =>
-    class MockMultiBar {
-      create = mockCreate;
-      stop = mockStop;
-    },
-);
-
-// Mock dependencies
 vi.mock('cli-progress', () => {
+  class MockSingleBar {
+    increment = barMethods.increment;
+    render = barMethods.render;
+    setTotal = barMethods.setTotal;
+    start = barMethods.start;
+    stop = barMethods.stop;
+    update = barMethods.update;
+
+    constructor(options: unknown, preset: unknown) {
+      singleBarConstructor(options, preset);
+    }
+  }
+
   return {
     default: {
-      MultiBar: MockMultiBar,
       Presets: {
         shades_classic: {},
       },
+      SingleBar: MockSingleBar,
     },
   };
 });
 
-vi.mock('../src/logger', () => ({
-  __esModule: true,
+vi.mock('readline', () => ({
+  clearLine: clearLineMock,
+  cursorTo: cursorToMock,
   default: {
-    warn: vi.fn(),
-    debug: vi.fn(),
-    info: vi.fn(),
-    error: vi.fn(),
+    clearLine: clearLineMock,
+    cursorTo: cursorToMock,
   },
-  logger: {
-    warn: vi.fn(),
-    debug: vi.fn(),
-    info: vi.fn(),
-    error: vi.fn(),
-  },
-  setLogLevel: vi.fn(),
 }));
 
-// Import after mocking - we need to extract ProgressBarManager from evaluator
-// Since it's a private class, we'll test it through its usage patterns
+import { ProgressBarManager } from '../src/evaluator';
+import { globalLogCallback, setLogCallback } from '../src/logger';
 
-describe('Progress Bar Management', () => {
+describe('ProgressBarManager', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    setLogCallback(null);
+  });
+
   afterEach(() => {
+    setLogCallback(null);
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 
-  describe('ProgressBarManager Work Distribution', () => {
-    it('should correctly separate serial and group (concurrent) tasks', () => {
-      const runEvalOptions: Partial<RunEvalOptions>[] = [
-        { test: { options: { runSerially: true } } },
-        { test: {} },
-        { test: { options: { runSerially: true } } },
-        { test: {} },
-        { test: {} },
-      ];
+  it('initializes cli-progress on stderr explicitly', async () => {
+    const manager = new ProgressBarManager(false);
 
-      let serialCount = 0;
-      let groupCount = 0;
+    await manager.initialize([], 2, 0);
 
-      for (const option of runEvalOptions) {
-        if (option.test?.options?.runSerially) {
-          serialCount++;
-        } else {
-          groupCount++;
-        }
-      }
-
-      expect(serialCount).toBe(2);
-      expect(groupCount).toBe(3);
+    expect(singleBarConstructor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gracefulExit: true,
+        hideCursor: true,
+        stream: process.stderr,
+      }),
+      expect.anything(),
+    );
+    expect(barMethods.start).toHaveBeenCalledWith(0, 0, {
+      errors: 0,
+      prompt: '',
+      provider: '',
+      vars: '',
     });
+  });
 
-    it('should map indices correctly to execution contexts', () => {
-      const indexToContext = new Map();
-      const runEvalOptions: Partial<RunEvalOptions>[] = [
-        { test: { options: { runSerially: true } } }, // index 0 -> serial
-        { test: {} }, // index 1 -> concurrent bar 0
-        { test: { options: { runSerially: true } } }, // index 2 -> serial
-        { test: {} }, // index 3 -> concurrent bar 1
-        { test: {} }, // index 4 -> concurrent bar 2
-      ];
+  it('clears the progress-bar stream and re-renders around log output', async () => {
+    const previousCallback = vi.fn();
+    setLogCallback(previousCallback);
 
-      let concurrentCount = 0;
-      const concurrency = 3;
-      const maxBars = Math.min(concurrency, 20);
+    const manager = new ProgressBarManager(false);
+    await manager.initialize([], 1, 0);
+    manager.installLogInterceptor();
 
-      for (let i = 0; i < runEvalOptions.length; i++) {
-        const option = runEvalOptions[i];
-        if (option.test?.options?.runSerially) {
-          indexToContext.set(i, { phase: 'serial', barIndex: 0 });
-        } else {
-          indexToContext.set(i, {
-            phase: 'concurrent',
-            barIndex: concurrentCount % maxBars,
-          });
-          concurrentCount++;
-        }
-      }
+    expect(globalLogCallback).not.toBe(previousCallback);
 
-      expect(indexToContext.get(0)).toEqual({ phase: 'serial', barIndex: 0 });
-      expect(indexToContext.get(1)).toEqual({ phase: 'concurrent', barIndex: 0 });
-      expect(indexToContext.get(2)).toEqual({ phase: 'serial', barIndex: 0 });
-      expect(indexToContext.get(3)).toEqual({ phase: 'concurrent', barIndex: 1 });
-      expect(indexToContext.get(4)).toEqual({ phase: 'concurrent', barIndex: 2 });
-    });
+    globalLogCallback?.('provider failed');
+    globalLogCallback?.('provider failed again');
 
-    it('should calculate correct totals for each progress bar', () => {
-      const concurrentCount = 10;
-      const numBars = 3;
+    expect(previousCallback).toHaveBeenCalledTimes(2);
+    expect(previousCallback).toHaveBeenNthCalledWith(1, 'provider failed');
+    expect(previousCallback).toHaveBeenNthCalledWith(2, 'provider failed again');
+    expect(readline.cursorTo).toHaveBeenCalledTimes(2);
+    expect(readline.cursorTo).toHaveBeenCalledWith(process.stderr, 0);
+    expect(readline.clearLine).toHaveBeenCalledTimes(2);
+    expect(readline.clearLine).toHaveBeenCalledWith(process.stderr, 0);
+    expect(barMethods.render).not.toHaveBeenCalled();
 
-      const perBar = Math.floor(concurrentCount / numBars);
-      const remainder = concurrentCount % numBars;
+    vi.runAllTimers();
 
-      const barTotals = [];
-      for (let i = 0; i < numBars; i++) {
-        const total = i < remainder ? perBar + 1 : perBar;
-        barTotals.push(total);
-      }
+    expect(barMethods.render).toHaveBeenCalledTimes(1);
+  });
 
-      expect(barTotals).toEqual([4, 3, 3]);
-      expect(barTotals.reduce((a, b) => a + b, 0)).toBe(concurrentCount);
-    });
+  it('restores the previous log callback and cancels pending renders on cleanup', async () => {
+    const previousCallback = vi.fn();
+    setLogCallback(previousCallback);
 
-    it('should handle dynamic comparison bar creation correctly', () => {
-      // This test validates that comparison bars are created with the correct total
-      // after we know the actual count of comparisons needed
+    const manager = new ProgressBarManager(false);
+    await manager.initialize([], 1, 0);
+    manager.installLogInterceptor();
 
-      const mockMultibar = new cliProgress.MultiBar({});
+    globalLogCallback?.('transient error');
+    manager.removeLogInterceptor();
 
-      // Simulate creating progress bars without knowing comparison count initially
-      mockMultibar.create(2, 0); // 2 serial tasks
-      mockMultibar.create(3, 0); // 3 concurrent tasks
+    expect(globalLogCallback).toBe(previousCallback);
 
-      // Later, when we know we need 5 comparisons, create the comparison bar
-      mockMultibar.create(5, 0);
+    vi.runAllTimers();
 
-      // Verify the create method was called with correct totals
-      expect(mockCreate).toHaveBeenCalledTimes(3);
-      expect(mockCreate).toHaveBeenNthCalledWith(1, 2, 0);
-      expect(mockCreate).toHaveBeenNthCalledWith(2, 3, 0);
-      expect(mockCreate).toHaveBeenNthCalledWith(3, 5, 0);
-    });
+    expect(barMethods.render).not.toHaveBeenCalled();
+
+    globalLogCallback?.('after cleanup');
+
+    expect(previousCallback).toHaveBeenCalledTimes(2);
+    expect(readline.cursorTo).toHaveBeenCalledTimes(1);
+    expect(readline.clearLine).toHaveBeenCalledTimes(1);
   });
 });

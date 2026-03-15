@@ -17,7 +17,7 @@ import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
-import logger, { winstonLogger } from './logger';
+import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers';
 import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
@@ -97,11 +97,12 @@ import type { CallApiContextParams } from './types/providers';
 /**
  * Manages a single progress bar for the evaluation
  */
-class ProgressBarManager {
+export class ProgressBarManager {
   private progressBar: SingleBar | undefined;
   private isWebUI: boolean;
-  // biome-ignore lint/suspicious/noExplicitAny: winston transport write signature is untyped
-  private originalConsoleTransportWrite: ((...args: any[]) => any) | null = null;
+  private originalLogCallback: ((message: string) => void) | null = null;
+  private installedLogCallback: ((message: string) => void) | null = null;
+  private pendingRender: ReturnType<typeof setImmediate> | null = null;
 
   // Track overall progress
   private totalCount: number = 0;
@@ -112,69 +113,65 @@ class ProgressBarManager {
     this.isWebUI = isWebUI;
   }
 
-  /**
-   * Write a message above the progress bar without corrupting its display.
-   * Clears the current progress bar line, writes the message, then re-renders.
-   */
-  log(message: string): void {
-    if (!this.progressBar) {
-      process.stderr.write(message);
+  private clearProgressBarLine(): void {
+    readline.cursorTo(process.stderr, 0);
+    readline.clearLine(process.stderr, 0);
+  }
+
+  private scheduleRender(): void {
+    if (!this.progressBar || this.pendingRender) {
       return;
     }
-    // Clear the current progress bar line
-    readline.cursorTo(process.stdout, 0);
-    readline.clearLine(process.stdout, 0);
-    // Write the log message on its own line
-    process.stderr.write(message + '\n');
-    // Force the progress bar to re-render on the next line
-    // biome-ignore lint/suspicious/noExplicitAny: cli-progress SingleBar.render() is not in public typings
-    (this.progressBar as any).render();
+
+    this.pendingRender = setImmediate(() => {
+      this.pendingRender = null;
+      // biome-ignore lint/suspicious/noExplicitAny: cli-progress SingleBar.render() is not in public typings
+      (this.progressBar as any)?.render();
+    });
+  }
+
+  private handleLogMessage(): void {
+    if (!this.progressBar) {
+      return;
+    }
+
+    // Clear the progress bar's stream before Winston writes to the terminal,
+    // then re-render the bar after the log line has been emitted.
+    this.clearProgressBarLine();
+    this.scheduleRender();
   }
 
   /**
-   * Install a log interceptor that routes winston console output through
-   * the progress bar's log method to prevent visual corruption.
+   * Coordinate console logging with the progress bar to prevent visual corruption.
    */
   installLogInterceptor(): void {
-    if (!this.progressBar || this.isWebUI) {
+    if (!this.progressBar || this.isWebUI || this.installedLogCallback) {
       return;
     }
-    // biome-ignore lint/suspicious/noExplicitAny: winston logger internals lack public typings for transports
-    const consoleTransport = (winstonLogger as any).transports?.[0];
-    if (consoleTransport && typeof consoleTransport.write === 'function') {
-      this.originalConsoleTransportWrite = consoleTransport.write.bind(consoleTransport);
-      // biome-ignore lint/suspicious/noExplicitAny: winston transport info object is untyped
-      consoleTransport.write = (info: any) => {
-        // Format the message using the transport's own format, then route through our log method
-        const output = consoleTransport.format?.transform(info);
-        if (output && typeof output === 'object' && output[Symbol.for('message')]) {
-          this.log(output[Symbol.for('message')]);
-        } else if (this.originalConsoleTransportWrite) {
-          // Fallback: clear line, write normally, re-render
-          readline.cursorTo(process.stdout, 0);
-          readline.clearLine(process.stdout, 0);
-          this.originalConsoleTransportWrite(info);
-          process.stderr.write('\n');
-          // biome-ignore lint/suspicious/noExplicitAny: cli-progress SingleBar.render() is not in public typings
-          (this.progressBar as any)?.render();
-        }
-        return true;
-      };
-    }
+
+    this.originalLogCallback = globalLogCallback;
+    this.installedLogCallback = (message: string) => {
+      this.originalLogCallback?.(message);
+      this.handleLogMessage();
+    };
+    setLogCallback(this.installedLogCallback);
   }
 
   /**
-   * Remove the log interceptor and restore original console transport behavior.
+   * Remove the log interceptor and restore original logger callback behavior.
    */
   removeLogInterceptor(): void {
-    if (this.originalConsoleTransportWrite) {
-      // biome-ignore lint/suspicious/noExplicitAny: winston logger internals lack public typings for transports
-      const consoleTransport = (winstonLogger as any).transports?.[0];
-      if (consoleTransport) {
-        consoleTransport.write = this.originalConsoleTransportWrite;
-      }
-      this.originalConsoleTransportWrite = null;
+    if (this.pendingRender) {
+      clearImmediate(this.pendingRender);
+      this.pendingRender = null;
     }
+
+    if (this.installedLogCallback && globalLogCallback === this.installedLogCallback) {
+      setLogCallback(this.originalLogCallback);
+    }
+
+    this.installedLogCallback = null;
+    this.originalLogCallback = null;
   }
 
   /**
@@ -211,6 +208,7 @@ class ProgressBarManager {
         },
         hideCursor: true,
         gracefulExit: true,
+        stream: process.stderr,
       },
       cliProgress.Presets.shades_classic,
     );
@@ -1814,7 +1812,7 @@ class Evaluator {
       // Use CI-friendly progress reporter
       ciProgressReporter = new CIProgressReporter(runEvalOptions.length);
       ciProgressReporter.start();
-    } else if (this.options.showProgressBar && process.stdout.isTTY) {
+    } else if (this.options.showProgressBar && process.stderr.isTTY) {
       // Use visual progress bars
       progressBarManager = new ProgressBarManager(isWebUI);
     }
