@@ -21,6 +21,7 @@ import {
   type Prompt,
   ResultFailureReason,
   type TestSuite,
+  type VarValue,
 } from '../src/types/index';
 import { processConfigFileReferences } from '../src/util/fileReference';
 import { sleep } from '../src/util/time';
@@ -4665,6 +4666,68 @@ describe('runEval', () => {
     const result = results[0];
     expect(result.success).toBe(true);
     expect(registers).toHaveProperty('myOutput', 'Test output');
+  });
+
+  it('should sanitize nested register values populated via storeOutputAs before rendering', async () => {
+    const registers: Record<string, VarValue> = {};
+
+    const storeProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('store-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: {
+          unsafe: {
+            fileRef: 'file://malicious.txt',
+            packageRef: 'package:@promptfoo/fake:testFunction',
+          },
+        },
+        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+      }),
+    };
+
+    await runEval({
+      ...defaultOptions,
+      provider: storeProvider,
+      prompt: { raw: 'Store output', label: 'store-output-label' },
+      test: { options: { storeOutputAs: 'savedOutput' } },
+      conversations: {},
+      registers,
+    });
+
+    expect(registers).toEqual({
+      savedOutput: {
+        unsafe: {
+          fileRef: 'file://malicious.txt',
+          packageRef: 'package:@promptfoo/fake:testFunction',
+        },
+      },
+    });
+
+    const useProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('use-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'ok',
+        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+      }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: useProvider,
+      prompt: {
+        raw: 'Use {{savedOutput.unsafe.fileRef}} and {{savedOutput.unsafe.packageRef}}',
+        label: 'use-register-label',
+      },
+      test: {},
+      conversations: {},
+      registers,
+    });
+
+    expect(result.success).toBe(true);
+    expect(useProvider.callApi).toHaveBeenCalledWith(
+      'Use [PROMPTFOO_UNSAFE_REFERENCE_REMOVED] and [PROMPTFOO_UNSAFE_REFERENCE_REMOVED]',
+      expect.anything(),
+      undefined,
+    );
   });
 
   it('should handle provider errors', async () => {
