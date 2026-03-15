@@ -1,5 +1,11 @@
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
+
+import { isBlobStorageEnabled } from '../../blobs/extractor';
+import { storeBlob } from '../../blobs/index';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { ellipsize } from '../../util/text';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
@@ -29,6 +35,8 @@ const DALLE2_VALID_SIZES: DallE2Size[] = ['256x256', '512x512', '1024x1024'];
 const DALLE3_VALID_SIZES: DallE3Size[] = ['1024x1024', '1792x1024', '1024x1792'];
 const GPT_IMAGE1_VALID_SIZES: GptImage1Size[] = ['1024x1024', '1024x1536', '1536x1024'];
 const DEFAULT_SIZE = '1024x1024';
+const UNSAFE_EXTERNAL_IMAGE_URL_PLACEHOLDER = '[external image URL omitted for security]';
+const BLOCKED_IMAGE_HOSTNAMES = new Set(['localhost', 'metadata', 'metadata.google.internal']);
 
 export const DALLE2_COSTS: Record<DallE2Size, number> = {
   '256x256': 0.016,
@@ -119,6 +127,8 @@ type DallE2Options = CommonImageOptions & {
 type OpenAiImageOptions = OpenAiSharedOptions & {
   model?: OpenAiImageModel;
 } & (DallE2Options | DallE3Options | GptImage1Options);
+
+type ImageBlobContext = Pick<CallApiContextParams, 'evaluationId' | 'testIdx' | 'promptIdx'>;
 
 // Helper functions to check model types (including dated variants like gpt-image-1.5-2025-12-16)
 function isGptImage1(model: string): boolean {
@@ -213,6 +223,215 @@ function inferMimeTypeFromUrl(url: string): string | undefined {
   return undefined;
 }
 
+function isExternalHttpUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url);
+}
+
+function normalizeExternalImageHostname(hostname: string): string {
+  return hostname.replace(/^\[/, '').replace(/\]$/, '').replace(/\.$/, '').toLowerCase();
+}
+
+function parseIpv4Address(address: string): number[] | null {
+  const parts = address.split('.');
+  if (parts.length !== 4) {
+    return null;
+  }
+
+  const octets = parts.map((part) => {
+    if (!/^\d+$/.test(part)) {
+      return NaN;
+    }
+    return Number.parseInt(part, 10);
+  });
+
+  return octets.every((octet) => octet >= 0 && octet <= 255) ? octets : null;
+}
+
+function extractIpv4MappedIpv6Address(address: string): string | undefined {
+  const lowerAddress = address.toLowerCase();
+  if (!lowerAddress.startsWith('::ffff:')) {
+    return undefined;
+  }
+
+  const ipv4Address = lowerAddress.slice('::ffff:'.length);
+  return parseIpv4Address(ipv4Address) ? ipv4Address : undefined;
+}
+
+function parseIpv6Address(address: string): number[] | null {
+  const sanitizedAddress = address.split('%', 1)[0];
+  const ipv4MappedAddress = extractIpv4MappedIpv6Address(sanitizedAddress);
+  const normalizedAddress = ipv4MappedAddress
+    ? `${sanitizedAddress.slice(0, sanitizedAddress.lastIndexOf(':'))}:${Number.parseInt(ipv4MappedAddress.split('.')[0], 10).toString(16)}${Number.parseInt(ipv4MappedAddress.split('.')[1], 10).toString(16)}:${Number.parseInt(ipv4MappedAddress.split('.')[2], 10).toString(16)}${Number.parseInt(ipv4MappedAddress.split('.')[3], 10).toString(16)}`
+    : sanitizedAddress;
+
+  const parts = normalizedAddress.split('::');
+  if (parts.length > 2) {
+    return null;
+  }
+
+  const left = parts[0] ? parts[0].split(':').filter(Boolean) : [];
+  const right = parts.length === 2 && parts[1] ? parts[1].split(':').filter(Boolean) : [];
+  const hasCompression = parts.length === 2;
+  const missingGroupCount = 8 - (left.length + right.length);
+
+  if ((!hasCompression && missingGroupCount !== 0) || (hasCompression && missingGroupCount < 0)) {
+    return null;
+  }
+
+  const groups = hasCompression
+    ? [...left, ...Array.from({ length: missingGroupCount }, () => '0'), ...right]
+    : left;
+
+  if (groups.length !== 8) {
+    return null;
+  }
+
+  const bytes: number[] = [];
+  for (const group of groups) {
+    if (!/^[0-9a-f]{1,4}$/i.test(group)) {
+      return null;
+    }
+
+    const value = Number.parseInt(group, 16);
+    bytes.push((value >> 8) & 0xff, value & 0xff);
+  }
+
+  return bytes;
+}
+
+function isUnsafeIpv4Address(address: string): boolean {
+  const octets = parseIpv4Address(address);
+  if (!octets) {
+    return true;
+  }
+
+  const [a, b, c] = octets;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 0 && c === 0) ||
+    (a === 192 && b === 0 && c === 2) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && b >= 18 && b <= 19) ||
+    (a === 198 && b === 51 && c === 100) ||
+    (a === 203 && b === 0 && c === 113) ||
+    a >= 224
+  );
+}
+
+function isUnsafeIpv6Address(address: string): boolean {
+  const ipv4MappedAddress = extractIpv4MappedIpv6Address(address);
+  if (ipv4MappedAddress) {
+    return isUnsafeIpv4Address(ipv4MappedAddress);
+  }
+
+  const bytes = parseIpv6Address(address);
+  if (!bytes) {
+    return true;
+  }
+
+  const isAllZeroes = bytes.every((byte) => byte === 0);
+  const isLoopback = bytes.slice(0, 15).every((byte) => byte === 0) && bytes[15] === 1;
+  const isUniqueLocal = (bytes[0] & 0xfe) === 0xfc;
+  const isLinkLocal = bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0x80;
+  const isMulticast = bytes[0] === 0xff;
+  const isDocumentation =
+    bytes[0] === 0x20 && bytes[1] === 0x01 && bytes[2] === 0x0d && bytes[3] === 0xb8;
+
+  return (
+    isAllZeroes || isLoopback || isUniqueLocal || isLinkLocal || isMulticast || isDocumentation
+  );
+}
+
+function getUnsafeIpReason(address: string): string | undefined {
+  const normalizedAddress = normalizeExternalImageHostname(address);
+  switch (isIP(normalizedAddress)) {
+    case 4:
+      return isUnsafeIpv4Address(normalizedAddress)
+        ? `resolved to blocked IPv4 address ${normalizedAddress}`
+        : undefined;
+    case 6:
+      return isUnsafeIpv6Address(normalizedAddress)
+        ? `resolved to blocked IPv6 address ${normalizedAddress}`
+        : undefined;
+    default:
+      return undefined;
+  }
+}
+
+async function getUnsafeExternalImageUrlReason(url: string): Promise<string | undefined> {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    return 'URL is invalid';
+  }
+
+  const hostname = normalizeExternalImageHostname(parsedUrl.hostname);
+  if (!hostname) {
+    return 'URL is missing a hostname';
+  }
+
+  if (parsedUrl.username || parsedUrl.password) {
+    return 'URL credentials are not allowed';
+  }
+
+  if (BLOCKED_IMAGE_HOSTNAMES.has(hostname) || hostname.endsWith('.localhost')) {
+    return `hostname ${hostname} is blocked`;
+  }
+
+  const directIpReason = getUnsafeIpReason(hostname);
+  if (directIpReason) {
+    return directIpReason;
+  }
+
+  if (isIP(hostname)) {
+    return undefined;
+  }
+
+  try {
+    const resolvedAddresses = await lookup(hostname, { all: true, verbatim: true });
+    if (resolvedAddresses.length === 0) {
+      return `hostname ${hostname} did not resolve to any addresses`;
+    }
+
+    for (const resolvedAddress of resolvedAddresses) {
+      const unsafeReason = getUnsafeIpReason(resolvedAddress.address);
+      if (unsafeReason) {
+        return `${hostname} ${unsafeReason}`;
+      }
+    }
+
+    return undefined;
+  } catch (error) {
+    logger.warn('[OpenAI Image] Failed to resolve external image hostname', {
+      url,
+      hostname,
+      error: String(error),
+    });
+    return `hostname ${hostname} could not be resolved`;
+  }
+}
+
+function formatImageMarkdown(prompt: string, imageSrc: string): string {
+  const sanitizedPrompt = prompt
+    .replace(/\r?\n|\r/g, ' ')
+    .replace(/\[/g, '(')
+    .replace(/\]/g, ')');
+  const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
+
+  return `![${ellipsizedPrompt}](${imageSrc})`;
+}
+
+function getPrimaryImageSource(images?: ImageOutput[]): string | undefined {
+  const primaryImage = images?.[0];
+  return primaryImage?.blobRef?.uri || primaryImage?.data;
+}
+
 export function buildStructuredImageOutputs(
   data: any,
   outputFormat?: string,
@@ -229,6 +448,9 @@ export function buildStructuredImageOutputs(
       }
 
       if (item.url) {
+        if (isExternalHttpUrl(item.url)) {
+          return null;
+        }
         const mimeType = inferMimeTypeFromUrl(item.url);
         return mimeType ? { data: item.url, mimeType } : { data: item.url };
       }
@@ -238,33 +460,136 @@ export function buildStructuredImageOutputs(
     .filter((item: ImageOutput | null): item is ImageOutput => item !== null);
 }
 
+async function storeExternalImageUrlAsBlob(
+  url: string,
+  outputFormat?: string,
+  blobContext?: ImageBlobContext,
+  index?: number,
+): Promise<ImageOutput | null> {
+  if (!isBlobStorageEnabled()) {
+    logger.warn('[OpenAI Image] Skipping external image URL because blob storage is disabled', {
+      url,
+    });
+    return null;
+  }
+
+  try {
+    const blockReason = await getUnsafeExternalImageUrlReason(url);
+    if (blockReason) {
+      logger.warn('[OpenAI Image] Blocked unsafe external image URL', {
+        url,
+        reason: blockReason,
+      });
+      return null;
+    }
+
+    const response = await fetchWithProxy(url);
+    if (!response.ok) {
+      logger.warn('[OpenAI Image] Failed to download external image URL', {
+        url,
+        status: response.status,
+        statusText: response.statusText,
+      });
+      return null;
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const responseMimeType = response.headers.get('content-type')?.split(';', 1)[0];
+    const mimeType =
+      responseMimeType || inferMimeTypeFromUrl(url) || getMimeTypeForOutputFormat(outputFormat);
+    const { ref } = await storeBlob(buffer, mimeType, {
+      evalId: blobContext?.evaluationId,
+      testIdx: blobContext?.testIdx,
+      promptIdx: blobContext?.promptIdx,
+      location: index == null ? 'response.images' : `response.images[${index}]`,
+      kind: 'image',
+    });
+
+    return { blobRef: ref, mimeType };
+  } catch (error) {
+    logger.warn('[OpenAI Image] Failed to internalize external image URL', {
+      url,
+      error: String(error),
+    });
+    return null;
+  }
+}
+
+export async function buildSafeStructuredImageOutputs(
+  data: any,
+  outputFormat?: string,
+  blobContext?: ImageBlobContext,
+): Promise<ImageOutput[] | undefined> {
+  if (!Array.isArray(data.data) || data.data.length === 0) {
+    return undefined;
+  }
+
+  const images = await Promise.all(
+    data.data.map(async (item: any, index: number): Promise<ImageOutput | null> => {
+      if (item.b64_json) {
+        const mimeType = getMimeTypeForOutputFormat(outputFormat);
+        return { data: `data:${mimeType};base64,${item.b64_json}`, mimeType };
+      }
+
+      if (!item.url) {
+        return null;
+      }
+
+      if (isExternalHttpUrl(item.url)) {
+        return storeExternalImageUrlAsBlob(item.url, outputFormat, blobContext, index);
+      }
+
+      const mimeType = inferMimeTypeFromUrl(item.url);
+      return mimeType ? { data: item.url, mimeType } : { data: item.url };
+    }),
+  );
+
+  const safeImages = images.filter(
+    (item: ImageOutput | null): item is ImageOutput => item !== null,
+  );
+  return safeImages.length > 0 ? safeImages : undefined;
+}
+
+export function formatStructuredImageOutput(
+  data: any,
+  prompt: string,
+  responseFormat?: string,
+  outputFormat?: string,
+  images?: ImageOutput[],
+): string | { error: string } {
+  const primaryImageSource = getPrimaryImageSource(images);
+  if (primaryImageSource) {
+    return responseFormat === 'b64_json'
+      ? primaryImageSource
+      : formatImageMarkdown(prompt, primaryImageSource);
+  }
+
+  if (responseFormat === 'b64_json') {
+    const b64Json = data.data?.[0]?.b64_json;
+    if (!b64Json) {
+      return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
+    }
+
+    return `data:${getMimeTypeForOutputFormat(outputFormat)};base64,${b64Json}`;
+  }
+
+  const url = data.data?.[0]?.url;
+  if (!url) {
+    return { error: `No image URL found in response: ${JSON.stringify(data)}` };
+  }
+
+  // Avoid returning a live URL when the image could not be internalized safely.
+  return UNSAFE_EXTERNAL_IMAGE_URL_PLACEHOLDER;
+}
+
 export function formatOutput(
   data: any,
   prompt: string,
   responseFormat?: string,
   outputFormat?: string,
 ): string | { error: string } {
-  if (responseFormat === 'b64_json') {
-    const b64Json = data.data[0].b64_json;
-    if (!b64Json) {
-      return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
-    }
-
-    return `data:${getMimeTypeForOutputFormat(outputFormat)};base64,${b64Json}`;
-  } else {
-    const url = data.data[0].url;
-    if (!url) {
-      return { error: `No image URL found in response: ${JSON.stringify(data)}` };
-    }
-
-    const sanitizedPrompt = prompt
-      .replace(/\r?\n|\r/g, ' ')
-      .replace(/\[/g, '(')
-      .replace(/\]/g, ')');
-    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-
-    return `![${ellipsizedPrompt}](${url})`;
-  }
+  const images = buildStructuredImageOutputs(data, outputFormat);
+  return formatStructuredImageOutput(data, prompt, responseFormat, outputFormat, images);
 }
 
 export function prepareRequestBody(
@@ -390,6 +715,7 @@ export async function processApiResponse(
   quality?: string,
   n: number = 1,
   outputFormat?: string,
+  blobContext?: ImageBlobContext,
 ): Promise<ProviderResponse> {
   if (data.error) {
     await data?.deleteFromCache?.();
@@ -399,13 +725,20 @@ export async function processApiResponse(
   }
 
   try {
-    const formattedOutput = formatOutput(data, prompt, responseFormat, outputFormat);
+    const images = await buildSafeStructuredImageOutputs(data, outputFormat, blobContext);
+    const formattedOutput = formatStructuredImageOutput(
+      data,
+      prompt,
+      responseFormat,
+      outputFormat,
+      images,
+    );
     if (typeof formattedOutput === 'object') {
+      await data?.deleteFromCache?.();
       return formattedOutput;
     }
 
     const cost = cached ? 0 : calculateImageCost(model, size, quality, n);
-    const images = buildStructuredImageOutputs(data, outputFormat);
 
     return {
       output: formattedOutput,
@@ -513,6 +846,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       config.quality,
       config.n || 1,
       'output_format' in config ? config.output_format : undefined,
+      context,
     );
   }
 }

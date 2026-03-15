@@ -23,10 +23,6 @@ function resolveImageString(image: string): string | undefined {
   if (image.startsWith('data:')) {
     return image;
   }
-  // Handle HTTP(S) URLs
-  if (/^https?:\/\//.test(image)) {
-    return image;
-  }
   return undefined;
 }
 
@@ -38,9 +34,6 @@ function resolveImageObject(image: {
   // Check data property first
   if (image.data) {
     if (image.data.startsWith('data:')) {
-      return image.data;
-    }
-    if (/^https?:\/\//.test(image.data)) {
       return image.data;
     }
     // Handle storageRef in data property
@@ -312,16 +305,16 @@ describe('extractMarkdownImageSources', () => {
 });
 
 describe('resolveEvalImageOutputSource', () => {
-  it('returns HTTP URL from data string', () => {
+  it('rejects HTTP URL from data string', () => {
     const image = { data: 'https://example.com/image.png', mimeType: 'image/png' };
     const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('https://example.com/image.png');
+    expect(result).toBeUndefined();
   });
 
-  it('returns HTTPS URL from data string', () => {
+  it('rejects HTTPS URL from data string', () => {
     const image = { data: 'https://example.com/image.jpg', mimeType: 'image/jpeg' };
     const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('https://example.com/image.jpg');
+    expect(result).toBeUndefined();
   });
 
   it('falls back to resolveImageSource for data URIs', () => {
@@ -366,25 +359,25 @@ describe('resolveEvalImageOutputSource', () => {
     expect(result).toBeUndefined();
   });
 
-  it('handles HTTP URL with query parameters', () => {
+  it('rejects HTTP URL with query parameters', () => {
     const image = {
       data: 'https://example.com/image.png?size=large&format=webp',
       mimeType: 'image/png',
     };
     const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('https://example.com/image.png?size=large&format=webp');
+    expect(result).toBeUndefined();
   });
 
-  it('handles HTTP URL with fragment', () => {
+  it('rejects HTTP URL with fragment', () => {
     const image = { data: 'https://example.com/image.png#section', mimeType: 'image/png' };
     const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('https://example.com/image.png#section');
+    expect(result).toBeUndefined();
   });
 
-  it('handles lowercase http protocol', () => {
+  it('rejects lowercase http protocol', () => {
     const image = { data: 'http://example.com/image.png', mimeType: 'image/png' };
     const result = resolveEvalImageOutputSource(image);
-    expect(result).toBe('http://example.com/image.png');
+    expect(result).toBeUndefined();
   });
 
   it('rejects uppercase HTTP protocol (implementation uses case-sensitive regex)', () => {

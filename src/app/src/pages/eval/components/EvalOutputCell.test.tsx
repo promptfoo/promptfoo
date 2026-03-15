@@ -588,14 +588,33 @@ describe('EvalOutputCell', () => {
   });
 
   it('deduplicates markdown main image from structured images list', () => {
+    const blobHash = 'abc123def456abc123def456abc123de';
     const propsWithMarkdownImageAndStructuredImages: MockEvalOutputCellProps = {
       ...defaultProps,
       output: {
         ...defaultProps.output,
-        text: '![Main image](https://example.com/main.png)',
+        text: `![Main image](promptfoo://blob/${blobHash})`,
         images: [
-          { data: 'https://example.com/main.png', mimeType: 'image/png' },
-          { data: 'https://example.com/secondary.png', mimeType: 'image/png' },
+          {
+            blobRef: {
+              uri: `promptfoo://blob/${blobHash}`,
+              hash: blobHash,
+              mimeType: 'image/png',
+              sizeBytes: 1024,
+              provider: 'filesystem',
+            },
+            mimeType: 'image/png',
+          },
+          {
+            blobRef: {
+              uri: 'promptfoo://blob/fedcba9876543210fedcba9876543210',
+              hash: 'fedcba9876543210fedcba9876543210',
+              mimeType: 'image/png',
+              sizeBytes: 1024,
+              provider: 'filesystem',
+            },
+            mimeType: 'image/png',
+          },
         ],
       },
     };
@@ -609,8 +628,8 @@ describe('EvalOutputCell', () => {
       .filter((src): src is string => Boolean(src));
 
     expect(renderedSources).toEqual([
-      'https://example.com/main.png',
-      'https://example.com/secondary.png',
+      `/api/blobs/${blobHash}`,
+      '/api/blobs/fedcba9876543210fedcba9876543210',
     ]);
   });
 
@@ -624,7 +643,16 @@ describe('EvalOutputCell', () => {
         text: dataUri,
         images: [
           { data: dataUri, mimeType: 'image/png' },
-          { data: 'https://example.com/secondary-inline.png', mimeType: 'image/png' },
+          {
+            blobRef: {
+              uri: 'promptfoo://blob/00112233445566778899aabbccddeeff',
+              hash: '00112233445566778899aabbccddeeff',
+              mimeType: 'image/png',
+              sizeBytes: 1024,
+              provider: 'filesystem',
+            },
+            mimeType: 'image/png',
+          },
         ],
       },
     };
@@ -637,7 +665,7 @@ describe('EvalOutputCell', () => {
       .map((img) => img.getAttribute('src'))
       .filter((src): src is string => Boolean(src));
 
-    expect(renderedSources).toEqual([dataUri, 'https://example.com/secondary-inline.png']);
+    expect(renderedSources).toEqual([dataUri, '/api/blobs/00112233445566778899aabbccddeeff']);
   });
 
   it('falls back to text when all structured images are invalid/skipped', () => {

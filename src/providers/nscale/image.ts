@@ -1,7 +1,12 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
-import { callOpenAiImageApi, formatOutput, OpenAiImageProvider } from '../openai/image';
+import {
+  buildSafeStructuredImageOutputs,
+  callOpenAiImageApi,
+  formatStructuredImageOutput,
+  OpenAiImageProvider,
+} from '../openai/image';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 
 import type { EnvOverrides } from '../../types/env';
@@ -211,7 +216,14 @@ export class NscaleImageProvider extends OpenAiImageProvider {
     }
 
     try {
-      const formattedOutput = formatOutput(data, prompt, responseFormat);
+      const images = await buildSafeStructuredImageOutputs(data, undefined, context);
+      const formattedOutput = formatStructuredImageOutput(
+        data,
+        prompt,
+        responseFormat,
+        undefined,
+        images,
+      );
       if (typeof formattedOutput === 'object') {
         return formattedOutput;
       }
@@ -220,6 +232,7 @@ export class NscaleImageProvider extends OpenAiImageProvider {
 
       return {
         output: formattedOutput,
+        images,
         cached,
         cost,
         ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
