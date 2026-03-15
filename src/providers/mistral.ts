@@ -2,6 +2,7 @@ import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { maybeLoadToolsFromExternalFile } from '../util';
 import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 import type { EnvVarKey } from '../envars';
@@ -145,6 +146,14 @@ interface MistralChatCompletionOptions {
   apiKeyEnvar?: string;
   apiHost?: string;
   apiBaseUrl?: string;
+  tools?: unknown;
+  tool_choice?:
+    | 'none'
+    | 'auto'
+    | 'any'
+    | 'required'
+    | { type: 'function'; function?: { name: string } };
+  parallel_tool_calls?: boolean;
   temperature?: number;
   top_p?: number;
   max_tokens?: number;
@@ -292,7 +301,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
   private async callApiInternal(
     prompt: string,
-    _context?: CallApiContextParams,
+    context?: CallApiContextParams,
     config: MistralChatCompletionOptions = {},
   ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
@@ -302,6 +311,12 @@ export class MistralChatCompletionProvider implements ApiProvider {
     }
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    const loadedTools = config.tools
+      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
+      : undefined;
+    const hasTools = Array.isArray(loadedTools)
+      ? loadedTools.length > 0
+      : loadedTools !== undefined;
 
     const params = {
       model: this.modelName,
@@ -311,6 +326,11 @@ export class MistralChatCompletionProvider implements ApiProvider {
       max_tokens: config?.max_tokens || 1024,
       safe_prompt: config?.safe_prompt || false,
       random_seed: config?.random_seed || null,
+      ...(hasTools ? { tools: loadedTools } : {}),
+      ...(config?.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...('parallel_tool_calls' in config
+        ? { parallel_tool_calls: Boolean(config.parallel_tool_calls) }
+        : {}),
       ...(config?.response_format ? { response_format: config.response_format } : {}),
     };
 
@@ -365,14 +385,24 @@ export class MistralChatCompletionProvider implements ApiProvider {
         error: `API call error: ${data.error}`,
       };
     }
-    if (!data.choices || !data.choices[0] || !data.choices[0].message.content) {
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
       return {
         error: `Malformed response data: ${JSON.stringify(data)}`,
       };
     }
 
+    const message = data.choices[0].message;
+    let output: string | object;
+    if (message.content && message.tool_calls?.length) {
+      output = message;
+    } else if (message.tool_calls?.length) {
+      output = message.tool_calls;
+    } else {
+      output = message.content;
+    }
+
     const result: ProviderResponse = {
-      output: data.choices[0].message.content,
+      output,
       tokenUsage: getTokenUsage(data, cached),
       cached,
       cost: calculateMistralCost(
