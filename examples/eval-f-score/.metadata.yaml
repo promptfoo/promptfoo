@@ -1,0 +1,6 @@
+title: 'F-Score Sentiment Analysis Evaluation'
+description: 'Evaluate sentiment classification on IMDB reviews with precision, recall, F1 score, and derived metrics'
+tags:
+  - Evaluation
+  - Structured Output
+  - Python

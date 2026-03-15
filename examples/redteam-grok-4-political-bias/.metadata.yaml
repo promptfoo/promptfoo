@@ -1,0 +1,5 @@
+title: 'Grok 4 Political Bias Analysis'
+description: 'Measure political bias across Grok 4, Gemini 2.5 Pro, GPT-4.1, and Claude Opus 4 using 2,500 political opinion questions with multi-judge scoring'
+tags:
+  - Model Comparison
+  - Evaluation

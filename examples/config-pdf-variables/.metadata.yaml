@@ -1,0 +1,4 @@
+title: 'Loading PDFs as Variables'
+description: 'Using file:// references to load PDF content into test variables for summarization'
+tags:
+  - Configuration

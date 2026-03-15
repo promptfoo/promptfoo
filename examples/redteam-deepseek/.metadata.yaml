@@ -1,0 +1,4 @@
+title: 'DeepSeek Censorship Evaluation'
+description: 'Evaluate DeepSeek model censorship behavior using CSV test cases and automated red team testing via OpenRouter'
+tags:
+  - Red Teaming

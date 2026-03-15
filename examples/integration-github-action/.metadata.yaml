@@ -1,0 +1,4 @@
+title: 'GitHub Action for Prompt Testing'
+description: 'Automatically run promptfoo evaluations in CI when pull requests modify prompt files'
+tags:
+  - Integrations

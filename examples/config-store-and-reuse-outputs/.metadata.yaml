@@ -1,0 +1,4 @@
+title: 'Store and Reuse Outputs Across Tests'
+description: 'Using storeOutputAs to chain test outputs as variables in subsequent test cases'
+tags:
+  - Configuration

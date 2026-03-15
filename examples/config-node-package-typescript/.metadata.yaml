@@ -1,0 +1,5 @@
+title: 'Programmatic Evaluation with TypeScript'
+description: 'Running evaluations programmatically using the promptfoo Node.js API with full TypeScript type safety'
+tags:
+  - Configuration
+  - Integrations

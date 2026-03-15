@@ -1,0 +1,5 @@
+title: 'Custom JavaScript/TypeScript Providers'
+description: 'Write custom promptfoo providers in CommonJS, ES modules, and TypeScript with embedding support'
+tags:
+  - Providers
+  - Configuration

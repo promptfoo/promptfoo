@@ -1,0 +1,7 @@
+title: 'Amazon Bedrock Provider'
+description: 'Evaluate LLMs on Amazon Bedrock including model comparisons, Bedrock Agents with tool use, and video generation with Nova Reel.'
+tags:
+  - Providers
+  - Agents
+  - Tool Use
+  - Multimodal
