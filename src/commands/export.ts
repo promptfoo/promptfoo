@@ -119,20 +119,31 @@ export function exportCommand(program: Command) {
 
           logger.info(`Eval with ID ${evalId} has been successfully exported to ${cmdObj.output}.`);
         } else {
-          const summary = await result.toEvaluateSummary();
-          const metadata = createOutputMetadata(result);
-          const jsonData = JSON.stringify(
-            {
-              evalId: result.id,
-              results: summary,
-              config: result.config,
-              shareableUrl: null,
-              metadata,
-            },
-            null,
-            2,
-          );
-          logger.info(jsonData);
+          try {
+            const summary = await result.toEvaluateSummary();
+            const metadata = createOutputMetadata(result);
+            const jsonData = JSON.stringify(
+              {
+                evalId: result.id,
+                results: summary,
+                config: result.config,
+                shareableUrl: null,
+                metadata,
+              },
+              null,
+              2,
+            );
+            logger.info(jsonData);
+          } catch (error) {
+            if (error instanceof RangeError) {
+              logger.error(
+                `Eval too large to output to console. Use -o to export to a file instead:\n\n  promptfoo export eval ${evalId} -o output.jsonl\n`,
+              );
+              process.exitCode = 1;
+              return;
+            }
+            throw error;
+          }
         }
 
         telemetry.record('command_used', {

@@ -371,17 +371,50 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   }
 
   // Default response for table view
-  res.json({
+  // Strip config.tests to avoid RangeError from JSON.stringify on large evals.
+  // The frontend doesn't use config.tests from this endpoint.
+  const { tests: _tests, ...configWithoutTests } = eval_.config;
+  const responsePayload = {
     table: returnTable,
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
     filteredMetrics,
-    config: eval_.config,
+    config: configWithoutTests,
     author: eval_.author || null,
     version: eval_.version(),
     id,
     stats: eval_.getStats(),
-  } as EvalTableDTO);
+  } as EvalTableDTO;
+
+  try {
+    res.json(responsePayload);
+  } catch (error) {
+    if (error instanceof RangeError) {
+      // Payload too large for JSON.stringify (e.g. base64 images in prompts).
+      // Retry with prompt content stripped from individual cells — the frontend
+      // still has the prompt templates in head.prompts.
+      logger.warn('[GET /:id/table] Response too large, retrying without per-cell prompt content', {
+        evalId: id,
+      });
+      for (const row of responsePayload.table.body) {
+        for (const output of row.outputs) {
+          if (output) {
+            output.prompt = '[content too large]';
+          }
+        }
+      }
+      try {
+        res.json(responsePayload);
+      } catch {
+        logger.error('[GET /:id/table] Response still too large after stripping prompts', {
+          evalId: id,
+        });
+        res.status(413).json({ error: 'Eval too large to display. Try reducing the page size.' });
+      }
+    } else {
+      throw error;
+    }
+  }
 });
 
 evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {

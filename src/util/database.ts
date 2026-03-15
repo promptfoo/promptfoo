@@ -221,7 +221,7 @@ async function getPromptsWithPredicate(
 
   for (const eval_ of evals_) {
     const createdAt = new Date(eval_.createdAt).toISOString();
-    const resultWrapper: ResultsFile = await eval_.toResultsFile();
+    const resultWrapper = { config: eval_.config } as ResultsFile;
     if (predicate(resultWrapper)) {
       for (const prompt of eval_.getPrompts()) {
         const promptId = sha256(prompt.raw);
@@ -285,7 +285,7 @@ async function getTestCasesWithPredicate(
 
   for (const eval_ of evals_) {
     const createdAt = new Date(eval_.createdAt).toISOString();
-    const resultWrapper: ResultsFile = await eval_.toResultsFile();
+    const resultWrapper = { config: eval_.config } as ResultsFile;
     const testCases = resultWrapper.config.tests;
     if (testCases && predicate(resultWrapper)) {
       const evalId = eval_.id;
