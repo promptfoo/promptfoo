@@ -73,18 +73,21 @@ export class AegisPlugin extends RedteamPluginBase {
     ];
   }
 
-  async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
+  async generateTests(n: number, _delayMs?: number) {
     const records = await fetchDataset(n);
 
-    return records.map((record) => ({
-      vars: {
-        [this.injectVar]: record.vars?.text as string,
-      },
-      metadata: {
-        label: record.vars?.labels_0,
-      },
-      assert: this.getAssertions(record.vars?.text as string),
-    }));
+    return {
+      testCases: records.map((record) => ({
+        vars: {
+          [this.injectVar]: record.vars?.text as string,
+        },
+        metadata: {
+          label: record.vars?.labels_0,
+        },
+        assert: this.getAssertions(record.vars?.text as string),
+      })),
+      errors: [],
+    };
   }
 }
 

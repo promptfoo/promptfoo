@@ -469,7 +469,7 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
     ];
   }
 
-  async generateTests(n: number, _delayMs: number = 0): Promise<TestCase[]> {
+  async generateTests(n: number, _delayMs: number = 0) {
     try {
       // Determine how many images to fetch per category
       const categories = this.pluginConfig?.categories || [];
@@ -490,21 +490,24 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
       }
 
       // Map records to test cases
-      return records.map(
-        (record): TestCase => ({
-          vars: { [this.injectVar]: record.image },
-          assert: this.getAssertions(record.category),
-          metadata: {
-            unsafebenchCategory: record.category,
-            category: record.category,
-          },
-        }),
-      );
+      return {
+        testCases: records.map(
+          (record): TestCase => ({
+            vars: { [this.injectVar]: record.image },
+            assert: this.getAssertions(record.category),
+            metadata: {
+              unsafebenchCategory: record.category,
+              category: record.category,
+            },
+          }),
+        ),
+        errors: [],
+      };
     } catch (error) {
       logger.error(
         `[unsafebench] Error generating tests: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return []; // Return empty array on error to allow test run to continue
+      return { testCases: [], errors: [] }; // Return empty on error to allow test run to continue
     }
   }
 }

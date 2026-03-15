@@ -81,7 +81,7 @@ export abstract class ImageDatasetPluginBase<
   /**
    * Generate test cases
    */
-  async generateTests(n: number, _delayMs: number = 0): Promise<TestCase[]> {
+  async generateTests(n: number, _delayMs: number = 0) {
     try {
       // Determine how many images to fetch
       const categories = this.pluginConfig?.categories || [];
@@ -107,19 +107,22 @@ export abstract class ImageDatasetPluginBase<
       }
 
       // Map records to test cases
-      return records.map(
-        (record: TInput): TestCase => ({
-          vars: { [this.injectVar]: this.extractImageFromRecord(record) },
-          assert: [
-            {
-              type: this.pluginId as Assertion['type'],
-              metric: this.getMetricName(),
-              value: this.extractAssertionValue(record),
-            },
-          ],
-          metadata: this.mapRecordToMetadata(record),
-        }),
-      );
+      return {
+        testCases: records.map(
+          (record: TInput): TestCase => ({
+            vars: { [this.injectVar]: this.extractImageFromRecord(record) },
+            assert: [
+              {
+                type: this.pluginId as Assertion['type'],
+                metric: this.getMetricName(),
+                value: this.extractAssertionValue(record),
+              },
+            ],
+            metadata: this.mapRecordToMetadata(record),
+          }),
+        ),
+        errors: [],
+      };
     } catch (error) {
       const errorMessage = `Failed to generate tests: ${error instanceof Error ? error.message : String(error)}`;
       logger.error(`[${this.getLogPrefix()}] ${errorMessage}`);

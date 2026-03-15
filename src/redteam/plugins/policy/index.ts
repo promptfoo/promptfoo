@@ -115,17 +115,20 @@ export class PolicyPlugin extends RedteamPluginBase {
     ];
   }
 
-  async generateTests(n: number, delayMs: number): Promise<TestCase[]> {
-    const tests = await super.generateTests(n, delayMs);
-    return tests.map((test) => ({
-      ...test,
-      metadata: {
-        ...test.metadata,
-        policy: this.policy,
-        ...(this.policyId && { policyId: this.policyId }),
-        ...(this.name && { policyName: this.name }),
-      },
-    }));
+  async generateTests(n: number, delayMs: number) {
+    const { testCases: tests, errors } = await super.generateTests(n, delayMs);
+    return {
+      testCases: tests.map((test) => ({
+        ...test,
+        metadata: {
+          ...test.metadata,
+          policy: this.policy,
+          ...(this.policyId && { policyId: this.policyId }),
+          ...(this.name && { policyName: this.name }),
+        },
+      })),
+      errors,
+    };
   }
 }
 

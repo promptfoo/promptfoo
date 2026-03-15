@@ -27,6 +27,11 @@ import type {
   TestCase,
 } from '../../types/index';
 
+export interface GenerationResult {
+  testCases: TestCase[];
+  errors: string[];
+}
+
 /**
  * Abstract base class for creating plugins that generate test cases.
  */
@@ -42,6 +47,13 @@ export abstract class RedteamPluginBase {
    * like datasets, CSVs, or JSON files that don't need remote generation.
    */
   readonly canGenerateRemote: boolean = true;
+
+  /**
+   * An optional maximum number of test cases that this plugin can generate. This is useful for plugins that use static data sources with a known number of entries.
+   *
+   * If not set, the system assumes the plugin can generate as many test cases as requested.
+   */
+  readonly maxTestCases?: number;
 
   /**
    * Creates an instance of RedteamPluginBase.
@@ -99,9 +111,10 @@ export abstract class RedteamPluginBase {
     n: number,
     delayMs: number = 0,
     templateGetter: () => Promise<string> = this.getTemplate.bind(this),
-  ): Promise<TestCase[]> {
+  ): Promise<GenerationResult> {
     logger.debug(`Generating ${n} test cases`);
     const batchSize = 20;
+    const errors: string[] = [];
 
     // Check if we're using multi-input mode
     const hasMultipleInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
@@ -140,16 +153,20 @@ export abstract class RedteamPluginBase {
       }
 
       if (error) {
+        const errorMsg = `Error from provider ${this.provider.id()}: ${error}`;
         logger.error(
           `Error from API provider, skipping generation for ${this.constructor.name}: ${error}`,
         );
+        errors.push(errorMsg);
         return [];
       }
 
       if (typeof generatedPrompts !== 'string') {
+        const errorMsg = `Malformed response from provider ${this.provider.id()}: expected string, got ${typeof generatedPrompts}`;
         logger.error(
           `Malformed response from API provider: Expected generatedPrompts to be a string, got ${typeof generatedPrompts}: ${JSON.stringify(generatedPrompts)}`,
         );
+        errors.push(errorMsg);
         return [];
       }
 
@@ -196,7 +213,7 @@ export abstract class RedteamPluginBase {
       logger.warn(`Expected ${n} prompts, got ${prompts.length} for ${this.constructor.name}`);
     }
 
-    return this.promptsToTestCases(prompts as { __prompt: string }[]);
+    return { testCases: this.promptsToTestCases(prompts as { __prompt: string }[]), errors };
   }
 
   /**

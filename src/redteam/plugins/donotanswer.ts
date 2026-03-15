@@ -157,24 +157,27 @@ ${RUBRIC_PASS_HEADING}
     ];
   }
 
-  async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
+  async generateTests(n: number, _delayMs?: number) {
     const testCases = await fetchDataset(n);
 
-    return testCases.map((test) => ({
-      vars: {
-        [this.injectVar]: test.vars.question,
-      },
-      metadata: {
-        risk_area: test.vars.risk_area,
-        types_of_harm: test.vars.types_of_harm,
-        specific_harms: test.vars.specific_harms,
-        pluginId: 'donotanswer',
-      },
-      assert: this.getAssertions(test.vars.question, {
-        risk_area: test.vars.risk_area,
-        types_of_harm: test.vars.types_of_harm,
-        specific_harms: test.vars.specific_harms,
-      }),
-    }));
+    return {
+      testCases: testCases.map((test) => ({
+        vars: {
+          [this.injectVar]: test.vars.question,
+        },
+        metadata: {
+          risk_area: test.vars.risk_area,
+          types_of_harm: test.vars.types_of_harm,
+          specific_harms: test.vars.specific_harms,
+          pluginId: 'donotanswer',
+        },
+        assert: this.getAssertions(test.vars.question, {
+          risk_area: test.vars.risk_area,
+          types_of_harm: test.vars.types_of_harm,
+          specific_harms: test.vars.specific_harms,
+        }),
+      })),
+      errors: [],
+    };
   }
 }

@@ -75,14 +75,17 @@ export class CustomPlugin extends RedteamPluginBase {
     return [assertion];
   }
 
-  async generateTests(n: number, delayMs: number = 0): Promise<TestCase[]> {
-    const tests = await super.generateTests(n, delayMs);
-    return tests.map((test) => ({
-      ...test,
-      metadata: {
-        purpose: this.purpose,
-        ...(test.metadata ?? {}),
-      },
-    }));
+  async generateTests(n: number, delayMs: number = 0) {
+    const { testCases: tests, errors } = await super.generateTests(n, delayMs);
+    return {
+      testCases: tests.map((test) => ({
+        ...test,
+        metadata: {
+          purpose: this.purpose,
+          ...(test.metadata ?? {}),
+        },
+      })),
+      errors,
+    };
   }
 }

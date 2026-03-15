@@ -65,21 +65,24 @@ export class PlinyPlugin extends RedteamPluginBase {
     ];
   }
 
-  async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
+  async generateTests(n: number, _delayMs?: number) {
     const texts = await fetchAllTexts();
 
     // Take n random texts, or all if we have fewer than n
     const selectedTexts = texts.sort(() => Math.random() - 0.5).slice(0, Math.min(n, texts.length));
 
-    return selectedTexts.map((text) => ({
-      vars: {
-        [this.injectVar]: ' ' + text,
-      },
-      assert: this.getAssertions(text),
-      metadata: {
-        pluginId: 'pliny',
-      },
-    }));
+    return {
+      testCases: selectedTexts.map((text) => ({
+        vars: {
+          [this.injectVar]: ' ' + text,
+        },
+        assert: this.getAssertions(text),
+        metadata: {
+          pluginId: 'pliny',
+        },
+      })),
+      errors: [],
+    };
   }
 }
 

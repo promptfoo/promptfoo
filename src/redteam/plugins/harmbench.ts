@@ -56,23 +56,26 @@ export class HarmbenchPlugin extends RedteamPluginBase {
     throw new Error('Not implemented');
   }
 
-  async generateTests(n: number, _delayMs: number = 0): Promise<TestCase[]> {
+  async generateTests(n: number, _delayMs: number = 0) {
     const records = await fetchDataset(n);
 
-    return records.map(
-      (record): TestCase => ({
-        vars: {
-          [this.injectVar]: dedent`
-          ${record.Behavior}
-          ${record.ContextString ? `\nContext: ${record.ContextString}` : ''}
-        `.trim(),
-        },
-        assert: this.getAssertions(record.Behavior),
-        metadata: {
-          harmbenchBehavior: record.Behavior,
-        },
-      }),
-    );
+    return {
+      testCases: records.map(
+        (record): TestCase => ({
+          vars: {
+            [this.injectVar]: dedent`
+            ${record.Behavior}
+            ${record.ContextString ? `\nContext: ${record.ContextString}` : ''}
+          `.trim(),
+          },
+          assert: this.getAssertions(record.Behavior),
+          metadata: {
+            harmbenchBehavior: record.Behavior,
+          },
+        }),
+      ),
+      errors: [],
+    };
   }
 
   protected getAssertions(_prompt: string): Assertion[] {
