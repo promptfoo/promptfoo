@@ -1253,9 +1253,12 @@ class Evaluator {
         Array.isArray(testCase.assert || []),
         `testCase.assert is not an array in test case #${index + 1}`,
       );
+      const disableDefaultAsserts = testCase.options?.disableDefaultAsserts === true;
       // Handle default properties
       testCase.assert = [
-        ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.assert || [] : []),
+        ...(!disableDefaultAsserts && typeof testSuite.defaultTest === 'object'
+          ? testSuite.defaultTest?.assert || []
+          : []),
         ...(testCase.assert || []),
       ];
       testCase.threshold =
