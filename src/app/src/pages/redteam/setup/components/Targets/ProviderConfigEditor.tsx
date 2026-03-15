@@ -66,7 +66,7 @@ function ProviderConfigEditor({
   }, []);
 
   const updateCustomTarget = (field: string, value: unknown) => {
-    const updatedTarget = { ...provider } as ProviderOptions;
+    const updatedTarget = { ...provider, config: { ...provider.config } } as ProviderOptions;
 
     if (field === 'id') {
       updatedTarget.id = value as string;
@@ -140,7 +140,7 @@ function ProviderConfigEditor({
   };
 
   const updateWebSocketTarget = (field: string, value: unknown) => {
-    const updatedTarget = { ...provider } as ProviderOptions;
+    const updatedTarget = { ...provider, config: { ...provider.config } } as ProviderOptions;
     if (field === 'url') {
       updatedTarget.config.url = value as string;
       if (validateUrl(value as string, 'websocket')) {
