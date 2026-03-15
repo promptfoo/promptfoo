@@ -1445,26 +1445,79 @@ describe('AnthropicMessagesProvider', () => {
   });
 
   describe('temperature: 0 handling', () => {
+    const mockResponse = {
+      content: [{ type: 'text', text: 'Test output' }],
+      model: 'claude-sonnet-4-6',
+      id: 'test-id',
+      role: 'assistant',
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      type: 'message',
+      usage: { input_tokens: 10, output_tokens: 5 },
+    } as Anthropic.Messages.Message;
+
     it('should send temperature: 0 to the API when explicitly configured', async () => {
-      const provider = createProvider('claude-3-5-sonnet-20241022', {
+      const provider = createProvider('claude-sonnet-4-6', {
         config: { temperature: 0 },
       });
-      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
-        content: [{ type: 'text', text: 'Test output' }],
-        model: 'claude-3-5-sonnet-20241022',
-        id: 'test-id',
-        role: 'assistant',
-        stop_reason: 'end_turn',
-        stop_sequence: null,
-        type: 'message',
-        usage: { input_tokens: 10, output_tokens: 5 },
-      } as Anthropic.Messages.Message);
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResponse);
 
       await provider.callApi('Test prompt');
 
       expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
         expect.objectContaining({
           temperature: 0,
+        }),
+        {},
+      );
+    });
+
+    it('should use provider-scoped env temperature when config temperature is not set', async () => {
+      const provider = createProvider('claude-sonnet-4-6', {
+        config: {},
+        env: { ANTHROPIC_TEMPERATURE: '0.42' },
+      });
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResponse);
+
+      await provider.callApi('Test prompt');
+
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          temperature: 0.42,
+        }),
+        {},
+      );
+    });
+
+    it('should use provider-scoped env temperature: 0 when config temperature is not set', async () => {
+      const provider = createProvider('claude-sonnet-4-6', {
+        config: {},
+        env: { ANTHROPIC_TEMPERATURE: '0' },
+      });
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResponse);
+
+      await provider.callApi('Test prompt');
+
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          temperature: 0,
+        }),
+        {},
+      );
+    });
+
+    it('should prefer config temperature over provider-scoped env', async () => {
+      const provider = createProvider('claude-sonnet-4-6', {
+        config: { temperature: 0.1 },
+        env: { ANTHROPIC_TEMPERATURE: '0.9' },
+      });
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResponse);
+
+      await provider.callApi('Test prompt');
+
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          temperature: 0.1,
         }),
         {},
       );
