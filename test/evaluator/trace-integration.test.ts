@@ -38,6 +38,8 @@ describe('evaluator trace integration', () => {
     fetchResultsByTestIdx: vi.fn(),
     setVars: vi.fn(),
     setDurationMs: vi.fn(),
+    setExpectedTestCount: vi.fn(),
+    setEvalStatus: vi.fn(),
     results: [],
     prompts: [],
     persisted: false,

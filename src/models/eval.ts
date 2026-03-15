@@ -338,6 +338,8 @@ export default class Eval {
   generationDurationMs?: number;
   /** Time spent running the evaluation phase. */
   evaluationDurationMs?: number;
+  expectedTestCount?: number;
+  evalStatus?: 'running' | 'complete' | 'canceled';
 
   /**
    * The shareable URL for this evaluation, if it has been shared.
@@ -400,6 +402,23 @@ export default class Eval {
         ? (generationDurationMs ?? 0) + (evaluationDurationMs ?? 0)
         : undefined);
 
+    // Extract expectedTestCount
+    const rawExpectedTestCount =
+      resultsObj && 'expectedTestCount' in resultsObj ? resultsObj.expectedTestCount : undefined;
+    const expectedTestCount =
+      typeof rawExpectedTestCount === 'number' &&
+      Number.isFinite(rawExpectedTestCount) &&
+      rawExpectedTestCount >= 0
+        ? rawExpectedTestCount
+        : undefined;
+
+    // Extract eval status
+    const rawEvalStatus = resultsObj && 'status' in resultsObj ? resultsObj.status : undefined;
+    const evalStatus =
+      rawEvalStatus === 'running' || rawEvalStatus === 'complete' || rawEvalStatus === 'canceled'
+        ? rawEvalStatus
+        : undefined;
+
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,
       createdAt: new Date(eval_.createdAt),
@@ -413,6 +432,8 @@ export default class Eval {
       durationMs,
       generationDurationMs,
       evaluationDurationMs,
+      expectedTestCount,
+      evalStatus,
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
@@ -624,6 +645,8 @@ export default class Eval {
       durationMs?: number;
       generationDurationMs?: number;
       evaluationDurationMs?: number;
+      expectedTestCount?: number;
+      evalStatus?: 'running' | 'complete' | 'canceled';
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -641,6 +664,8 @@ export default class Eval {
     this.durationMs = opts?.durationMs;
     this.generationDurationMs = opts?.generationDurationMs;
     this.evaluationDurationMs = opts?.evaluationDurationMs;
+    this.expectedTestCount = opts?.expectedTestCount;
+    this.evalStatus = opts?.evalStatus;
   }
 
   version() {
@@ -679,7 +704,9 @@ export default class Eval {
     } else if (
       this.durationMs !== undefined ||
       this.generationDurationMs !== undefined ||
-      this.evaluationDurationMs !== undefined
+      this.evaluationDurationMs !== undefined ||
+      this.expectedTestCount !== undefined ||
+      this.evalStatus !== undefined
     ) {
       // For V4 evals, atomically merge duration fields into the results column
       // using json_set so concurrent save() calls don't clobber each other's keys.
@@ -693,6 +720,12 @@ export default class Eval {
       }
       if (this.evaluationDurationMs !== undefined) {
         expr = sql`json_set(${expr}, '$.evaluationDurationMs', ${this.evaluationDurationMs})`;
+      }
+      if (this.expectedTestCount !== undefined) {
+        expr = sql`json_set(${expr}, '$.expectedTestCount', ${this.expectedTestCount})`;
+      }
+      if (this.evalStatus !== undefined) {
+        expr = sql`json_set(${expr}, '$.status', ${this.evalStatus})`;
       }
       updateObj.results = expr;
     }
@@ -724,6 +757,14 @@ export default class Eval {
     }
     this.generationDurationMs = durationMs;
     this.durationMs = durationMs + (this.evaluationDurationMs ?? 0);
+  }
+
+  setExpectedTestCount(count: number) {
+    this.expectedTestCount = count;
+  }
+
+  setEvalStatus(status: 'running' | 'complete' | 'canceled') {
+    this.evalStatus = status;
   }
 
   getPrompts() {
@@ -1283,6 +1324,8 @@ export default class Eval {
       durationMs: this.durationMs,
       generationDurationMs: this.generationDurationMs,
       evaluationDurationMs: this.evaluationDurationMs,
+      expectedTestCount: this.expectedTestCount,
+      status: this.evalStatus,
     };
 
     for (const prompt of this.prompts) {
@@ -1616,6 +1659,10 @@ export async function getEvalSummaries(
       isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
       prompts: evalsTable.prompts,
       config: evalsTable.config,
+      expectedTestCount: sql<
+        number | null
+      >`json_extract(${evalsTable.results}, '$.expectedTestCount')`,
+      evalStatus: sql<string | null>`json_extract(${evalsTable.results}, '$.status')`,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
@@ -1711,6 +1758,18 @@ export async function getEvalSummaries(
       providers: deserializedProviders,
       attackSuccessRate:
         type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined,
+      expectedTestCount:
+        typeof result.expectedTestCount === 'number' &&
+        Number.isFinite(result.expectedTestCount) &&
+        result.expectedTestCount > 0
+          ? result.expectedTestCount
+          : undefined,
+      evalStatus:
+        result.evalStatus === 'running' ||
+        result.evalStatus === 'complete' ||
+        result.evalStatus === 'canceled'
+          ? result.evalStatus
+          : undefined,
     };
   });
 }

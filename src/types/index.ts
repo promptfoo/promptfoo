@@ -253,6 +253,7 @@ export const EvaluateOptionsSchema = z.object({
    * Useful for internal evaluations like provider validation.
    */
   silent: z.boolean().optional(),
+  resume: z.boolean().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 
@@ -414,6 +415,8 @@ export interface EvaluateStats {
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;
+  expectedTestCount?: number;
+  status?: 'running' | 'complete' | 'canceled';
 }
 
 export interface EvaluateSummaryV3 {
@@ -1295,6 +1298,8 @@ export type EvalSummary = ResultLightweightWithLabel & {
     label: string | null;
   }[];
   attackSuccessRate?: number;
+  expectedTestCount?: number;
+  evalStatus?: 'running' | 'complete' | 'canceled';
 };
 
 export interface OutputMetadata {

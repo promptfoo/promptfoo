@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { DataTable } from '@app/components/data-table/data-table';
 import { Badge } from '@app/components/ui/badge';
@@ -13,11 +13,14 @@ import {
 } from '@app/components/ui/dialog';
 import { DeleteIcon } from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { EVAL_ROUTES } from '@app/constants/routes';
+import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import invariant from '@promptfoo/util/invariant';
+import { Loader2, Play } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import type { EvalSummary } from '@promptfoo/types';
 import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
@@ -46,6 +49,9 @@ export default function EvalsTable({
   const [error, setError] = useState<string | null>(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [resumingEvalId, setResumingEvalId] = useState<string | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { showToast } = useToast();
 
   const location = useLocation();
 
@@ -139,6 +145,78 @@ export default function EvalsTable({
     }
   };
 
+  // Clean up polling interval on unmount
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Handle resume for incomplete evals
+  const handleResume = useCallback(
+    async (evalId: string) => {
+      // Guard against overlapping polls
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+
+      setResumingEvalId(evalId);
+      try {
+        const resp = await callApi(`/eval/${evalId}/resume`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+
+        if (!resp.ok) {
+          throw new Error('Failed to start resume');
+        }
+
+        const body = await resp.json();
+        const jobId = body.data?.id ?? body.id;
+
+        pollIntervalRef.current = setInterval(async () => {
+          try {
+            const jobResp = await callApi(`/eval/job/${jobId}`);
+            if (!jobResp.ok) {
+              clearInterval(pollIntervalRef.current!);
+              pollIntervalRef.current = null;
+              setResumingEvalId(null);
+              return;
+            }
+
+            const job = await jobResp.json();
+
+            if (job.status === 'complete') {
+              clearInterval(pollIntervalRef.current!);
+              pollIntervalRef.current = null;
+              setResumingEvalId(null);
+              const abortController = new AbortController();
+              fetchEvals(abortController.signal);
+            } else if (job.status === 'error') {
+              clearInterval(pollIntervalRef.current!);
+              pollIntervalRef.current = null;
+              setResumingEvalId(null);
+              showToast('Evaluation resume failed', 'error');
+            }
+          } catch {
+            clearInterval(pollIntervalRef.current!);
+            pollIntervalRef.current = null;
+            setResumingEvalId(null);
+            showToast('Lost connection while resuming', 'error');
+          }
+        }, 1000);
+      } catch {
+        setResumingEvalId(null);
+        showToast('Failed to resume evaluation', 'error');
+      }
+    },
+    [fetchEvals, showToast],
+  );
+
   // Export CSV handler
   const handleExportCSV = useCallback(() => {
     const headers = ['ID', 'Created', 'Type', 'Description', 'Pass Rate', '# Tests'];
@@ -151,7 +229,11 @@ export default function EvalsTable({
           row.isRedteam ? 'Red Team' : 'Eval',
           `"${(row.description || row.label || '').replace(/"/g, '""')}"`,
           row.passRate.toFixed(2),
-          row.numTests,
+          row.expectedTestCount &&
+          row.evalStatus !== 'complete' &&
+          row.numTests < row.expectedTestCount
+            ? `${row.numTests} / ${row.expectedTestCount}`
+            : row.numTests,
         ].join(','),
       ),
     ];
@@ -261,8 +343,46 @@ export default function EvalsTable({
       {
         accessorKey: 'passRate',
         header: 'Pass Rate',
-        cell: ({ getValue }) => {
-          const rate = getValue<number>();
+        cell: ({ row }) => {
+          const rate = row.original.passRate;
+          const expected = row.original.expectedTestCount;
+          const status = row.original.evalStatus;
+          const evalId = row.original.evalId;
+          const isIncomplete =
+            status !== 'complete' && expected != null && row.original.numTests < expected;
+
+          if (isIncomplete) {
+            const isResuming = resumingEvalId === evalId;
+
+            if (!IS_RUNNING_LOCALLY) {
+              return (
+                <Badge variant="warning" truncate>
+                  Incomplete
+                </Badge>
+              );
+            }
+
+            return (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={isResuming}
+                className="h-auto px-1 py-0 font-mono text-amber-600 hover:text-amber-500 dark:text-amber-400 dark:hover:text-amber-300"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleResume(evalId);
+                }}
+              >
+                {isResuming ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <Play className="size-3 fill-current" />
+                )}
+                {isResuming ? 'Resuming...' : 'Resume'}
+              </Button>
+            );
+          }
+
           const colorClass =
             rate >= 90
               ? 'text-emerald-600 dark:text-emerald-400'
@@ -279,14 +399,26 @@ export default function EvalsTable({
       {
         accessorKey: 'numTests',
         header: '# Tests',
-        cell: ({ getValue }) => (
-          <span className="font-mono tabular-nums">{getValue<number>()}</span>
-        ),
+        cell: ({ row }) => {
+          const numTests = row.original.numTests;
+          const expected = row.original.expectedTestCount;
+          const status = row.original.evalStatus;
+          const isIncomplete = status !== 'complete' && expected != null && numTests < expected;
+
+          if (isIncomplete) {
+            return (
+              <span className="font-mono tabular-nums text-amber-600 dark:text-amber-400">
+                {numTests} / {expected}
+              </span>
+            );
+          }
+          return <span className="font-mono tabular-nums">{numTests}</span>;
+        },
         size: 80,
         meta: { align: 'right' },
       },
     ],
-    [focusedEvalId, onEvalSelected, hasRedteamEvals],
+    [focusedEvalId, onEvalSelected, hasRedteamEvals, resumingEvalId, handleResume],
   );
 
   // Delete button for toolbar
