@@ -1,0 +1,391 @@
+/* Container */
+.container {
+  background: var(--ifm-background-surface-color, #f8fafc);
+  border: 1px solid var(--ifm-color-emphasis-300, #e2e8f0);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin: 2rem 0;
+}
+
+/* Header */
+.header {
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.headerTitle {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--ifm-font-color-base);
+}
+
+.headerSubtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ifm-font-color-secondary, #64748b);
+}
+
+/* Preset Section */
+.presetSection {
+  margin-bottom: 1.25rem;
+}
+
+.presetLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ifm-font-color-secondary, #64748b);
+  margin-bottom: 0.5rem;
+}
+
+.presetGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+}
+
+.presetBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.75rem 0.5rem;
+  background: var(--ifm-background-color, white);
+  border: 1px solid var(--ifm-color-emphasis-300, #e2e8f0);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.presetBtn:hover {
+  border-color: var(--ifm-color-primary, #3b82f6);
+  background: var(--ifm-color-primary-lightest, rgba(59, 130, 246, 0.05));
+}
+
+.presetBtn.presetSelected {
+  border-color: var(--ifm-color-primary, #3b82f6);
+  background: var(--ifm-color-primary-lightest, rgba(59, 130, 246, 0.1));
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.presetIcon {
+  font-size: 1.25rem;
+}
+
+.presetName {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ifm-font-color-base);
+  text-align: center;
+  line-height: 1.2;
+}
+
+.presetDescription {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.85rem;
+  background: var(--ifm-color-emphasis-100, #f1f5f9);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--ifm-font-color-secondary, #475569);
+}
+
+/* Editor Section */
+.editorSection {
+  margin-bottom: 1.25rem;
+}
+
+.editorHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.editorLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ifm-font-color-secondary, #64748b);
+}
+
+.editorHint {
+  font-size: 0.75rem;
+  color: var(--ifm-color-warning-dark, #b45309);
+}
+
+.textarea {
+  width: 100%;
+  padding: 0.85rem;
+  background: var(--ifm-background-color, white);
+  border: 1px solid var(--ifm-color-emphasis-300, #e2e8f0);
+  border-radius: 8px;
+  color: var(--ifm-font-color-base);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  resize: vertical;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--ifm-color-primary, #3b82f6);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* Config Actions */
+.configActions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.toggleBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: 1px solid var(--ifm-color-emphasis-300, #e2e8f0);
+  border-radius: 6px;
+  color: var(--ifm-font-color-secondary, #64748b);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.toggleBtn:hover {
+  background: var(--ifm-color-emphasis-100, #f1f5f9);
+  border-color: var(--ifm-color-emphasis-400, #cbd5e1);
+  color: var(--ifm-font-color-base);
+}
+
+.toggleIcon {
+  font-size: 0.65rem;
+  transition: transform 0.15s ease;
+}
+
+.toggleIcon.expanded {
+  transform: rotate(90deg);
+}
+
+.copyBtn {
+  padding: 0.5rem 1rem;
+  background: var(--ifm-color-primary, #3b82f6);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.copyBtn:hover {
+  background: var(--ifm-color-primary-dark, #2563eb);
+}
+
+/* Config Section */
+.configSection {
+  margin-bottom: 1rem;
+  border: 1px solid var(--ifm-color-emphasis-300, #e2e8f0);
+  border-radius: 8px;
+  overflow: hidden;
+  animation: slideIn 0.2s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.configCode {
+  margin: 0;
+  padding: 1rem;
+  background: var(--ifm-code-background, #f8fafc);
+  color: var(--ifm-font-color-base);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-x: auto;
+  max-height: 400px;
+}
+
+/* Run Section */
+.runSection {
+  padding: 1rem 1.25rem;
+  background: var(--ifm-color-emphasis-100, #f1f5f9);
+  border-radius: 8px;
+}
+
+.runHeader {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ifm-font-color-base);
+  margin-bottom: 0.75rem;
+}
+
+.runSteps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--ifm-font-color-secondary, #64748b);
+}
+
+.runStep {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.stepNum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  background: var(--ifm-color-primary, #3b82f6);
+  color: white;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.runStep code {
+  background: var(--ifm-color-emphasis-200, #e2e8f0);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.runCommand {
+  display: block;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: var(--ifm-background-color, white);
+  border: 1px solid var(--ifm-color-emphasis-300, #e2e8f0);
+  border-radius: 6px;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.9rem;
+  color: var(--ifm-font-color-base);
+}
+
+.runNote {
+  margin: 0.75rem 0 0 0;
+  font-size: 0.8rem;
+  color: var(--ifm-font-color-secondary, #64748b);
+  line-height: 1.5;
+}
+
+.runNote strong {
+  color: var(--ifm-font-color-base);
+}
+
+/* Dark mode */
+[data-theme='dark'] .container {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+[data-theme='dark'] .presetBtn {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+[data-theme='dark'] .presetBtn:hover {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+[data-theme='dark'] .presetBtn.presetSelected {
+  background: rgba(59, 130, 246, 0.15);
+}
+
+[data-theme='dark'] .presetDescription {
+  background: #0f172a;
+}
+
+[data-theme='dark'] .textarea {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+[data-theme='dark'] .toggleBtn {
+  border-color: #334155;
+}
+
+[data-theme='dark'] .toggleBtn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: #475569;
+}
+
+[data-theme='dark'] .configSection {
+  border-color: #334155;
+}
+
+[data-theme='dark'] .configCode {
+  background: #0f172a;
+}
+
+[data-theme='dark'] .runSection {
+  background: #0f172a;
+}
+
+[data-theme='dark'] .runStep code {
+  background: #334155;
+}
+
+[data-theme='dark'] .runCommand {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .container {
+    padding: 1rem;
+  }
+
+  .presetGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .editorHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+
+  .configActions {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .toggleBtn,
+  .copyBtn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .runSteps {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
