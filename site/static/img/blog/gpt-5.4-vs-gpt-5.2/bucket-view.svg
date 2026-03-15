@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 780" role="img" aria-labelledby="title desc">
+  <title id="title">Grouped slices of the fixed benchmark</title>
+  <desc id="desc">A grouped benchmark view comparing GPT-5.2 and GPT-5.4 across selected broader buckets. GPT-5.4 regresses on operational actions and politics/persuasion, stays flat on imitation, and improves on misinformation-related slices.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f6f1e7; }
+      .panel { fill: #fffaf1; stroke: #d8ccb8; stroke-width: 2; }
+      .card { fill: #fdf8ef; stroke: #d8ccb8; stroke-width: 2; }
+      .track { fill: #efe5d4; }
+      .ink { fill: #1f241f; }
+      .muted { fill: #67604f; }
+      .rule { stroke: #d8ccb8; stroke-width: 1.5; }
+      .axis { stroke: #ddd2bf; stroke-width: 1.5; }
+      .g52 { fill: #1f4f46; }
+      .g54 { fill: #b64d2c; }
+      .pill { fill: #efe5d4; }
+      .pill-warn { fill: #f6d7cc; }
+      .pill-good { fill: #dcefe7; }
+      .title { font-size: 34px; font-weight: 700; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .subtitle { font-size: 18px; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .section { font-size: 20px; font-weight: 700; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .label { font-size: 17px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .body { font-size: 15px; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .small { font-size: 14px; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .value { font-size: 15px; font-weight: 700; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+      .center { text-anchor: middle; }
+      .right { text-anchor: end; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1200" height="780" rx="24" />
+  <rect class="panel" x="40" y="40" width="1120" height="700" rx="28" />
+
+  <text class="ink title" x="80" y="96">Grouped Slices of the Fixed Benchmark</text>
+  <text class="muted subtitle" x="80" y="128">These buckets aggregate related plugin families so the category story does not depend only on 4- and 5-prompt cells. They are selected slices, not an exhaustive relabeling of all 611 cases.</text>
+
+  <rect class="pill-good" x="80" y="154" width="128" height="30" rx="15" />
+  <text class="ink small center" x="144" y="173">GPT-5.2</text>
+  <rect class="pill-warn" x="220" y="154" width="128" height="30" rx="15" />
+  <text class="ink small center" x="284" y="173">GPT-5.4</text>
+  <rect class="pill" x="834" y="154" width="286" height="30" rx="15" />
+  <text class="ink small center" x="977" y="173">counts shown as failures / bucket total</text>
+
+  <g transform="translate(80 222)">
+    <text class="muted small" x="0" y="0">Bucket</text>
+    <text class="muted small center" x="460" y="0">0%</text>
+    <text class="muted small center" x="555" y="0">25%</text>
+    <text class="muted small center" x="650" y="0">50%</text>
+    <text class="muted small center" x="745" y="0">75%</text>
+    <text class="muted small center" x="840" y="0">100%</text>
+    <text class="muted small center" x="995" y="0">Delta</text>
+
+    <line class="axis" x1="460" y1="18" x2="840" y2="18" />
+    <line class="axis" x1="460" y1="18" x2="460" y2="548" />
+    <line class="axis" x1="555" y1="18" x2="555" y2="548" />
+    <line class="axis" x1="650" y1="18" x2="650" y2="548" />
+    <line class="axis" x1="745" y1="18" x2="745" y2="548" />
+    <line class="axis" x1="840" y1="18" x2="840" y2="548" />
+
+    <rect class="card" x="0" y="42" width="1040" height="112" rx="24" />
+    <rect class="card" x="0" y="172" width="1040" height="112" rx="24" />
+    <rect class="card" x="0" y="302" width="1040" height="112" rx="24" />
+    <rect class="card" x="0" y="432" width="1040" height="112" rx="24" />
+
+    <text class="ink section" x="24" y="78">Operational actions and commitments</text>
+    <text class="muted body" x="24" y="104">excessive-agency, contracts, coppa</text>
+    <text class="g52 small" x="372" y="82">GPT-5.2</text>
+    <rect class="track" x="460" y="68" width="380" height="14" rx="7" />
+    <rect class="g52" x="460" y="68" width="155" height="14" rx="7" />
+    <text class="ink value right" x="930" y="80">18/44 (40.9%)</text>
+    <text class="g54 small" x="372" y="110">GPT-5.4</text>
+    <rect class="track" x="460" y="96" width="380" height="14" rx="7" />
+    <rect class="g54" x="460" y="96" width="190" height="14" rx="7" />
+    <text class="ink value right" x="930" y="108">22/44 (50.0%)</text>
+    <rect class="pill-warn" x="948" y="72" width="76" height="34" rx="17" />
+    <text class="ink value center" x="986" y="94">+9.1pp</text>
+
+    <text class="ink section" x="24" y="208">Representation and impersonation</text>
+    <text class="muted body" x="24" y="234">imitation</text>
+    <text class="g52 small" x="372" y="212">GPT-5.2</text>
+    <rect class="track" x="460" y="198" width="380" height="14" rx="7" />
+    <rect class="g52" x="460" y="198" width="304" height="14" rx="7" />
+    <text class="ink value right" x="930" y="210">12/15 (80.0%)</text>
+    <text class="g54 small" x="372" y="240">GPT-5.4</text>
+    <rect class="track" x="460" y="226" width="380" height="14" rx="7" />
+    <rect class="g54" x="460" y="226" width="304" height="14" rx="7" />
+    <text class="ink value right" x="930" y="238">12/15 (80.0%)</text>
+    <rect class="pill" x="954" y="202" width="64" height="34" rx="17" />
+    <text class="ink value center" x="986" y="224">flat</text>
+
+    <text class="ink section" x="24" y="338">Misinformation and unsupported claims</text>
+    <text class="muted body" x="24" y="364">misinformation-disinformation, hallucination, unverifiable-claims</text>
+    <text class="g52 small" x="372" y="342">GPT-5.2</text>
+    <rect class="track" x="460" y="328" width="380" height="14" rx="7" />
+    <rect class="g52" x="460" y="328" width="118" height="14" rx="7" />
+    <text class="ink value right" x="930" y="340">14/45 (31.1%)</text>
+    <text class="g54 small" x="372" y="370">GPT-5.4</text>
+    <rect class="track" x="460" y="356" width="380" height="14" rx="7" />
+    <rect class="g54" x="460" y="356" width="101" height="14" rx="7" />
+    <text class="ink value right" x="930" y="368">12/45 (26.7%)</text>
+    <rect class="pill-good" x="948" y="332" width="76" height="34" rx="17" />
+    <text class="ink value center" x="986" y="354">-4.4pp</text>
+
+    <text class="ink section" x="24" y="468">Politics, persuasion, and bias</text>
+    <text class="muted body" x="24" y="494">politics, religion, and selected bias plugins</text>
+    <text class="g52 small" x="372" y="472">GPT-5.2</text>
+    <rect class="track" x="460" y="458" width="380" height="14" rx="7" />
+    <rect class="g52" x="460" y="458" width="172" height="14" rx="7" />
+    <text class="ink value right" x="930" y="470">34/75 (45.3%)</text>
+    <text class="g54 small" x="372" y="500">GPT-5.4</text>
+    <rect class="track" x="460" y="486" width="380" height="14" rx="7" />
+    <rect class="g54" x="460" y="486" width="198" height="14" rx="7" />
+    <text class="ink value right" x="930" y="498">39/75 (52.0%)</text>
+    <rect class="pill-warn" x="948" y="462" width="76" height="34" rx="17" />
+    <text class="ink value center" x="986" y="484">+6.7pp</text>
+  </g>
+
+  <line class="rule" x1="80" y1="696" x2="1120" y2="696" />
+  <text class="muted small" x="80" y="722">Across these broader slices, GPT-5.4 loosened most on operational commitments and persuasion-oriented prompts, stayed flat on imitation, and improved modestly on misinformation-related cases.</text>
+</svg>

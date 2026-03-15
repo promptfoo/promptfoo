@@ -130,15 +130,15 @@ async function main() {
   try {
     console.log('Generating image with gpt-image-1...');
     const imageData = await generateImage();
+    const outputPath = path.join(__dirname, '..', 'site', 'static', 'img', outputDir, filename);
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
     if (imageData.b64_json) {
       // If we get base64 data, save it directly
-      const outputPath = path.join(__dirname, '..', 'site', 'static', 'img', outputDir, filename);
       const buffer = Buffer.from(imageData.b64_json, 'base64');
       fs.writeFileSync(outputPath, buffer);
       console.log(`Image saved to: ${outputPath}`);
     } else if (imageData.url) {
       // If we get a URL, download the image
-      const outputPath = path.join(__dirname, '..', 'site', 'static', 'img', outputDir, filename);
       await downloadImage(imageData.url, outputPath);
       console.log(`Image downloaded and saved to: ${outputPath}`);
     } else {

@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">GPT-5.4 versus GPT-5.2 on the same benchmark</title>
+  <desc id="desc">A benchmark summary comparing GPT-5.2 and GPT-5.4 on the same recovered December benchmark. GPT-5.4 has a higher failure rate overall, driven by baseline and Hydra, while Meta improves slightly.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f6f1e7; }
+      .panel { fill: #fffaf1; stroke: #d8ccb8; stroke-width: 2; }
+      .card { fill: #fdf8ef; stroke: #d8ccb8; stroke-width: 2; }
+      .ink { fill: #1f241f; }
+      .muted { fill: #67604f; }
+      .rule { stroke: #d8ccb8; stroke-width: 1.5; }
+      .g52 { fill: #1f4f46; }
+      .g54 { fill: #b64d2c; }
+      .delta-up { fill: #b64d2c; }
+      .delta-down { fill: #1f4f46; }
+      .pill { fill: #efe5d4; }
+      .pill-warn { fill: #f6d7cc; }
+      .pill-good { fill: #dcefe7; }
+      .title { font-size: 34px; font-weight: 700; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .subtitle { font-size: 18px; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .section { font-size: 22px; font-weight: 700; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .label { font-size: 18px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .body { font-size: 17px; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .value { font-size: 28px; font-weight: 700; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+      .small { font-size: 15px; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .center { text-anchor: middle; }
+      .right { text-anchor: end; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1200" height="760" rx="24" />
+  <rect class="panel" x="40" y="40" width="1120" height="680" rx="28" />
+
+  <text class="ink title" x="80" y="94">Same Benchmark, Same Settings</text>
+  <text class="muted subtitle" x="80" y="126">611 recovered December prompt payloads replayed unchanged against GPT-5.2 and GPT-5.4 with reasoning_effort:none, max_completion_tokens:2048, and the same grader.</text>
+
+  <rect class="card" x="80" y="164" width="1040" height="116" rx="24" />
+  <text class="muted small" x="120" y="204">Headline</text>
+  <text class="ink section" x="120" y="238">GPT-5.4 failed more often on the same benchmark</text>
+  <rect class="pill-good" x="120" y="248" width="252" height="28" rx="14" />
+  <text class="ink small center" x="246" y="267">GPT-5.2: 195/611 (31.9%)</text>
+  <rect class="pill-warn" x="388" y="248" width="258" height="28" rx="14" />
+  <text class="ink small center" x="517" y="267">GPT-5.4: 220/611 (36.0%)</text>
+  <text class="delta-up value right" x="1080" y="242">+25</text>
+  <text class="muted body right" x="1080" y="270">more failures for GPT-5.4</text>
+
+  <text class="muted small" x="128" y="336">Strategy</text>
+  <text class="g52 small center" x="560" y="336">GPT-5.2</text>
+  <text class="g54 small center" x="790" y="336">GPT-5.4</text>
+  <text class="muted small center" x="1000" y="336">Delta</text>
+
+  <line class="rule" x1="120" y1="352" x2="1080" y2="352" />
+
+  <text class="ink label" x="128" y="404">Baseline</text>
+  <text class="g52 value center" x="560" y="404">6/210</text>
+  <text class="g54 value center" x="790" y="404">13/210</text>
+  <text class="delta-up value center" x="1000" y="404">+3.3pp</text>
+  <text class="muted body center" x="560" y="432">2.9%</text>
+  <text class="muted body center" x="790" y="432">6.2%</text>
+  <text class="muted body center" x="1000" y="432">7 more fails</text>
+
+  <line class="rule" x1="120" y1="456" x2="1080" y2="456" />
+
+  <text class="ink label" x="128" y="508">Hydra</text>
+  <text class="g52 value center" x="560" y="508">108/196</text>
+  <text class="g54 value center" x="790" y="508">131/196</text>
+  <text class="delta-up value center" x="1000" y="508">+11.7pp</text>
+  <text class="muted body center" x="560" y="536">55.1%</text>
+  <text class="muted body center" x="790" y="536">66.8%</text>
+  <text class="muted body center" x="1000" y="536">23 more fails</text>
+
+  <line class="rule" x1="120" y1="560" x2="1080" y2="560" />
+
+  <text class="ink label" x="128" y="612">Meta</text>
+  <text class="g52 value center" x="560" y="612">81/205</text>
+  <text class="g54 value center" x="790" y="612">76/205</text>
+  <text class="delta-down value center" x="1000" y="612">-2.4pp</text>
+  <text class="muted body center" x="560" y="640">39.5%</text>
+  <text class="muted body center" x="790" y="640">37.1%</text>
+  <text class="muted body center" x="1000" y="640">5 fewer fails</text>
+
+  <rect class="pill" x="120" y="676" width="960" height="26" rx="13" />
+  <text class="ink small center" x="600" y="694">Largest same-benchmark gap: Hydra. GPT-5.4 regressed on baseline and Hydra, while Meta improved slightly.</text>
+</svg>
