@@ -34,7 +34,7 @@
     "@types/prismjs": "^1.26.6",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "^5.2.0",
+    "@vitejs/plugin-react": "^6.0.1",
     "@vitest/coverage-v8": "^4.1.0",
     "ansi-to-html": "^0.7.2",
     "autoprefixer": "^10.4.27",
