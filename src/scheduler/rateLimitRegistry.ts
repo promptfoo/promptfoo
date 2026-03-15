@@ -1,8 +1,10 @@
 import { EventEmitter } from 'events';
 
 import { getEnvBool, getEnvInt } from '../envars';
+import { runWithFetchRetryContext } from '../util/fetch/retryContext';
 import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
 import { getRateLimitKey } from './rateLimitKey';
+import { DEFAULT_RETRY_POLICY, type RetryPolicy } from './retryPolicy';
 
 import type { ApiProvider } from '../types/providers';
 
@@ -48,9 +50,11 @@ export class RateLimitRegistry extends EventEmitter {
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
     },
   ): Promise<T> {
+    const providerMaxRetries = this.getProviderMaxRetries(provider);
+
     // If disabled, just call directly
     if (!this.enabled) {
-      return callFn();
+      return runWithFetchRetryContext(providerMaxRetries, () => callFn());
     }
 
     const rateLimitKey = getRateLimitKey(provider);
@@ -66,11 +70,15 @@ export class RateLimitRegistry extends EventEmitter {
     });
 
     try {
-      const result = await state.executeWithRetry(requestId, callFn, {
-        getHeaders: options?.getHeaders,
-        isRateLimited: options?.isRateLimited,
-        getRetryAfter: options?.getRetryAfter,
-      });
+      const providerRetryPolicy = this.getProviderRetryPolicy(providerMaxRetries);
+      const result = await runWithFetchRetryContext(providerMaxRetries, () =>
+        state.executeWithRetry(requestId, callFn, {
+          getHeaders: options?.getHeaders,
+          isRateLimited: options?.isRateLimited,
+          getRetryAfter: options?.getRetryAfter,
+          retryPolicy: providerRetryPolicy,
+        }),
+      );
 
       this.emit('request:completed', {
         rateLimitKey,
@@ -86,6 +94,37 @@ export class RateLimitRegistry extends EventEmitter {
       });
       throw error;
     }
+  }
+
+  private getProviderRetryPolicy(maxRetries: number | undefined): RetryPolicy | undefined {
+    if (maxRetries === undefined) {
+      return undefined;
+    }
+    return {
+      ...DEFAULT_RETRY_POLICY,
+      maxRetries,
+    };
+  }
+
+  private getProviderMaxRetries(provider: ApiProvider): number | undefined {
+    const rawMaxRetries: unknown =
+      provider.config && typeof provider.config === 'object'
+        ? (provider.config as { maxRetries?: unknown }).maxRetries
+        : undefined;
+    return this.parseMaxRetries(rawMaxRetries);
+  }
+
+  private parseMaxRetries(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (/^\d+$/.test(trimmed)) {
+        return Number(trimmed);
+      }
+    }
+    return undefined;
   }
 
   /**
