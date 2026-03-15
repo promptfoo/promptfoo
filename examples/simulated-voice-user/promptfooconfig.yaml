@@ -1,0 +1,77 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Simulated voice user for testing realtime voice agents
+
+# The prompt becomes the instructions for the TARGET voice agent
+prompts:
+  - |
+    You are a friendly customer service agent for Acme Bank.
+    Help customers with account inquiries and common banking tasks.
+    Be professional, concise, and helpful.
+
+providers:
+  - id: promptfoo:simulated-voice-user
+    config:
+      # Simulated user configuration
+      instructions: '{{goal}}'
+      maxTurns: 10
+      timeoutMs: 120000
+
+      # Target agent settings (the agent being tested)
+      targetProvider: openai
+      targetModel: gpt-4o-realtime-preview
+      targetVoice: alloy
+
+      # Simulated user voice settings
+      simulatedUserProvider: openai
+      simulatedUserModel: gpt-4o-realtime-preview
+      simulatedUserVoice: echo
+
+      # Audio settings
+      audioFormat: pcm16
+      sampleRate: 24000
+
+      # Turn detection (voice activity detection)
+      turnDetectionMode: server_vad
+      silenceThresholdMs: 500
+      vadThreshold: 0.5
+
+# Test various customer scenarios
+tests:
+  - vars:
+      goal: |
+        You are a customer calling to check your account balance.
+        Be polite and provide your account number when asked (123-456-7890).
+        Once you get the balance information, thank the agent and end the call.
+    assert:
+      - type: contains
+        value: balance
+      - type: llm-rubric
+        value: The conversation shows the agent helping the customer check their balance
+
+  - vars:
+      goal: |
+        You are a customer who wants to report a lost debit card.
+        Explain that you lost your card yesterday.
+        Ask about getting a replacement and any fees involved.
+        End the call once you understand the process.
+    assert:
+      - type: llm-rubric
+        value: The agent helps the customer report a lost card and explains the replacement process
+
+  - vars:
+      goal: |
+        You are a frustrated customer who received an unexpected overdraft fee.
+        Express your frustration politely but firmly.
+        Ask for the fee to be waived as you've been a loyal customer for 10 years.
+    assert:
+      - type: llm-rubric
+        value: The agent handles the complaint professionally and addresses the fee concern
+
+  - vars:
+      goal: |
+        You are a customer asking about wire transfer fees and limits.
+        You want to send $5,000 to a family member overseas.
+        Ask about fees, processing time, and any required documentation.
+    assert:
+      - type: llm-rubric
+        value: The agent provides information about wire transfers including fees and requirements
