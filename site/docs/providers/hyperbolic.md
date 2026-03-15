@@ -187,9 +187,8 @@ providers:
 
 tests:
   - assert:
-      - type: is-valid-image
-      - type: image-width
-        value: 1920
+      - type: not-equals
+        value: ''
 ```
 
 ### Audio Generation Example

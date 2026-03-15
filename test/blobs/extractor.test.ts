@@ -1,9 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Mock envars so we can control PROMPTFOO_INLINE_MEDIA per-test
+vi.mock('../../src/envars', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/envars')>();
+  return {
+    ...actual,
+    getEnvBool: vi.fn().mockImplementation(actual.getEnvBool),
+  };
+});
+
 import {
+  detectImageMimeType,
   extractAndStoreBinaryData,
   isBlobStorageEnabled,
   normalizeAudioMimeType,
 } from '../../src/blobs/extractor';
+import { getEnvBool } from '../../src/envars';
 
 import type { ProviderResponse } from '../../src/types/providers';
 
@@ -407,5 +419,151 @@ describe('Cloud blob upload', () => {
         kind: 'audio',
       }),
     );
+  });
+});
+
+describe('detectImageMimeType', () => {
+  it('should detect JPEG from magic bytes', () => {
+    expect(detectImageMimeType('/9j/4AAQSkZJRg==')).toBe('image/jpeg');
+  });
+
+  it('should detect PNG from magic bytes', () => {
+    expect(detectImageMimeType('iVBORw0KGgoAAAANSUhEUg==')).toBe('image/png');
+  });
+
+  it('should detect WebP from magic bytes', () => {
+    expect(detectImageMimeType('UklGRlYAAABXRUJQ')).toBe('image/webp');
+  });
+
+  it('should detect GIF from magic bytes', () => {
+    expect(detectImageMimeType('R0lGODlhAQABAA==')).toBe('image/gif');
+  });
+
+  it('should fall back to PNG for unknown data', () => {
+    expect(detectImageMimeType('AAAA')).toBe('image/png');
+    expect(detectImageMimeType('')).toBe('image/png');
+  });
+});
+
+describe('Inline b64_json conversion (PROMPTFOO_INLINE_MEDIA=true)', () => {
+  beforeEach(async () => {
+    vi.resetAllMocks();
+
+    // Simulate PROMPTFOO_INLINE_MEDIA=true so isBlobStorageEnabled() returns false
+    vi.mocked(getEnvBool).mockImplementation((key: string, defaultValue?: boolean) => {
+      if (key === 'PROMPTFOO_INLINE_MEDIA') {
+        return true;
+      }
+      return defaultValue ?? false;
+    });
+
+    const remoteUploadModule = await import('../../src/blobs/remoteUpload');
+    vi.mocked(remoteUploadModule.shouldAttemptRemoteBlobUpload).mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('should convert single b64_json PNG to data URI', async () => {
+    // PNG magic bytes: iVBORw0KGgo...
+    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk';
+    const response: ProviderResponse = {
+      output: JSON.stringify({ data: [{ b64_json: pngBase64 }] }),
+      isBase64: true,
+      format: 'json',
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+    expect(result?.output).toBe(`data:image/png;base64,${pngBase64}`);
+  });
+
+  it('should convert single b64_json JPEG to data URI with correct MIME', async () => {
+    // JPEG magic bytes: /9j/...
+    const jpegBase64 = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAA';
+    const response: ProviderResponse = {
+      output: JSON.stringify({ data: [{ b64_json: jpegBase64 }] }),
+      isBase64: true,
+      format: 'json',
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+    expect(result?.output).toBe(`data:image/jpeg;base64,${jpegBase64}`);
+  });
+
+  it('should convert single b64_json WebP to data URI with correct MIME', async () => {
+    // WebP magic bytes: UklGR...
+    const webpBase64 = 'UklGRlYAAABXRUJQVlA4IEoAAADQAQCdASoBAAEAAQ';
+    const response: ProviderResponse = {
+      output: JSON.stringify({ data: [{ b64_json: webpBase64 }] }),
+      isBase64: true,
+      format: 'json',
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+    expect(result?.output).toBe(`data:image/webp;base64,${webpBase64}`);
+  });
+
+  it('should serialize multiple b64_json items as JSON array of data URIs', async () => {
+    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUg';
+    const jpegBase64 = '/9j/4AAQSkZJRgABAQ';
+    const response: ProviderResponse = {
+      output: JSON.stringify({
+        data: [{ b64_json: pngBase64 }, { b64_json: jpegBase64 }],
+      }),
+      isBase64: true,
+      format: 'json',
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+    const parsed = JSON.parse(result?.output as string);
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0]).toBe(`data:image/png;base64,${pngBase64}`);
+    expect(parsed[1]).toBe(`data:image/jpeg;base64,${jpegBase64}`);
+  });
+
+  it('should not modify response when output is not b64_json JSON', async () => {
+    const response: ProviderResponse = {
+      output: 'just a plain text response',
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+    expect(result?.output).toBe('just a plain text response');
+  });
+
+  it('should not modify response when JSON has no data array', async () => {
+    const response: ProviderResponse = {
+      output: JSON.stringify({ error: 'something went wrong' }),
+      isBase64: true,
+      format: 'json',
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+    expect(result?.output).toBe(response.output);
+  });
+
+  it('should handle JSON parse failure gracefully', async () => {
+    const response: ProviderResponse = {
+      output: '{not valid json b64_json',
+      isBase64: true,
+      format: 'json',
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+    expect(result?.output).toBe(response.output);
+  });
+
+  it('should skip items without b64_json field', async () => {
+    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUg';
+    const response: ProviderResponse = {
+      output: JSON.stringify({
+        data: [{ url: 'https://example.com/image.png' }, { b64_json: pngBase64 }],
+      }),
+      isBase64: true,
+      format: 'json',
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+    expect(result?.output).toBe(`data:image/png;base64,${pngBase64}`);
   });
 });

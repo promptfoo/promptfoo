@@ -126,7 +126,18 @@ providers:
 
 **Note:** GPT Image 1.5 uses token-based pricing ($32/1M output image tokens). Prices shown are estimates.
 
+## LLM-as-a-Judge Evaluation
+
+Use `promptfooconfig.judge.yaml` to grade generated images with a vision-capable model:
+
+```bash
+PROMPTFOO_INLINE_MEDIA=true promptfoo eval -c promptfooconfig.judge.yaml
+```
+
+This config uses `llm-rubric` with GPT-5 as a grader to evaluate whether generated images match the prompt. See the [image evaluation guide](https://promptfoo.dev/docs/guides/image-evaluation) for details.
+
 ## Documentation
 
+- [Image Evaluation Guide](https://promptfoo.dev/docs/guides/image-evaluation)
 - [OpenAI Image Generation API Documentation](https://platform.openai.com/docs/guides/images)
 - [promptfoo OpenAI Provider Documentation](https://promptfoo.dev/docs/providers/openai)
