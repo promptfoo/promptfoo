@@ -1,68 +1,18 @@
-/// <reference types="vitest" />
+/// <reference types="vitest/config" />
 
 import { fileURLToPath } from 'node:url';
 import os from 'os';
 import path from 'path';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 import react from '@vitejs/plugin-react';
-import { defineConfig, type Plugin } from 'vitest/config';
 import packageJson from '../../package.json' with { type: 'json' };
+import {
+  browserModulesPlugin,
+  reactCompilerPlugin,
+  vendorCodeSplittingGroups,
+} from './vite.shared';
 
-/**
- * Plugin to replace Node.js modules with browser-compatible versions.
- * This allows us to avoid bundling heavy Node polyfills by providing
- * lightweight browser implementations.
- */
-function browserModulesPlugin(): Plugin {
-  // Map of Node module paths to their browser replacements
-  const replacements: Array<{ nodePath: string; browserPath: string; patterns: string[] }> = [
-    {
-      // logger.ts uses fs, path, winston - replace with console-based logger
-      nodePath: path.resolve(__dirname, '../logger.ts'),
-      browserPath: path.resolve(__dirname, '../logger.browser.ts'),
-      patterns: ['./logger', '../logger', '/logger'],
-    },
-    {
-      // createHash.ts uses Node crypto - replace with pure JS SHA-256
-      nodePath: path.resolve(__dirname, '../util/createHash.ts'),
-      browserPath: path.resolve(__dirname, '../util/createHash.browser.ts'),
-      patterns: ['./createHash', '../createHash', '/createHash'],
-    },
-  ];
-
-  return {
-    name: 'browser-modules',
-    enforce: 'pre',
-    resolveId(source, importer) {
-      if (!importer) {
-        return null;
-      }
-
-      for (const { nodePath, browserPath, patterns } of replacements) {
-        // Check if source matches any of the patterns
-        const matches = patterns.some((p) => source === p || source.endsWith(p));
-        if (!matches) {
-          continue;
-        }
-
-        // Resolve the import path
-        const resolvedPath = path.resolve(path.dirname(importer), source);
-
-        // Check if it matches the node module path (with or without .ts extension)
-        if (
-          resolvedPath === nodePath ||
-          resolvedPath === nodePath.replace('.ts', '') ||
-          resolvedPath + '.ts' === nodePath
-        ) {
-          return browserPath;
-        }
-      }
-      return null;
-    },
-  };
-}
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Calculate max forks for test parallelization
 const cpuCount = os.cpus().length;
@@ -84,19 +34,13 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // https://vitejs.dev/config/
-export default defineConfig({
+// Export a plain object here to avoid CI-only type conflicts from multiple Vite installs in the monorepo.
+export default {
   server: {
     port: 3000,
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
-  plugins: [
-    browserModulesPlugin(),
-    react({
-      babel: {
-        plugins: [['babel-plugin-react-compiler', {}]],
-      },
-    }),
-  ],
+  plugins: [browserModulesPlugin(), reactCompilerPlugin(), ...react()],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),
@@ -111,15 +55,10 @@ export default defineConfig({
     outDir: '../../dist/src/app',
     // Enable source maps for production debugging
     sourcemap: process.env.NODE_ENV === 'production' ? 'hidden' : true,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        // Manual chunking to split vendor libraries
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-charts': ['recharts', 'chart.js'],
-          'vendor-utils': ['js-yaml', 'diff'],
-          'vendor-syntax': ['prismjs'],
-          'vendor-markdown': ['react-markdown', 'remark-gfm'],
+        codeSplitting: {
+          groups: [...vendorCodeSplittingGroups],
         },
       },
     },
@@ -168,9 +107,6 @@ export default defineConfig({
         'src/setupTests.ts',
         'src/**/*.stories.tsx',
       ],
-      // Collect coverage for all files to identify untested files
-      // @ts-expect-error - 'all' is valid in Vitest v8 coverage but types are incomplete
-      all: true,
     },
 
     // Suppress known MUI and React Testing Library warnings that don't indicate real problems
@@ -208,6 +144,8 @@ export default defineConfig({
           return false; // Suppress this log
         }
       }
+
+      return undefined;
     },
   },
   define: {
@@ -221,4 +159,4 @@ export default defineConfig({
     ),
     'import.meta.env.VITE_PUBLIC_BASENAME': JSON.stringify(process.env.VITE_PUBLIC_BASENAME || ''),
   },
-});
+};

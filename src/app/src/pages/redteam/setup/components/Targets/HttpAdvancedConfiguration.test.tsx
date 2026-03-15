@@ -14,22 +14,22 @@ vi.mock('@app/hooks/useToast', () => ({
   }),
 }));
 
-vi.mock('prismjs/components/prism-core', () => ({
-  highlight: vi.fn((code: string) => code),
-  languages: {
-    javascript: {},
-    json: {},
-    http: {},
-    yaml: {},
-    text: {},
-    clike: {},
+vi.mock('@app/lib/prism', () => ({
+  default: {
+    highlight: vi.fn((code: string) => code),
+    languages: {
+      javascript: {},
+      json: {},
+      http: {},
+      yaml: {},
+      text: {},
+      clike: {},
+    },
   },
 }));
 vi.mock('prismjs/themes/prism.css', () => ({
   default: {},
 }));
-vi.mock('prismjs/components/prism-clike', () => ({}));
-vi.mock('prismjs/components/prism-javascript', () => ({}));
 
 vi.mock('../../utils/crypto', () => ({
   convertStringKeyToPem: vi.fn(),
