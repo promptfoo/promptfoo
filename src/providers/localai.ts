@@ -50,7 +50,7 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
     const body = {
       model: this.modelName,
       messages,
-      temperature: this.config.temperature || getEnvFloat('LOCALAI_TEMPERATURE') || 0.7,
+      temperature: this.config.temperature ?? getEnvFloat('LOCALAI_TEMPERATURE') ?? 0.7,
     };
 
     let data;
@@ -130,7 +130,7 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
     const body = {
       model: this.modelName,
       prompt,
-      temperature: this.config.temperature || getEnvFloat('LOCALAI_TEMPERATURE') || 0.7,
+      temperature: this.config.temperature ?? getEnvFloat('LOCALAI_TEMPERATURE') ?? 0.7,
     };
 
     let data;

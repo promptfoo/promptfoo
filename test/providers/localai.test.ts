@@ -1,0 +1,61 @@
+import { describe, expect, it, vi } from 'vitest';
+import { LocalAiChatProvider, LocalAiCompletionProvider } from '../../src/providers/localai';
+
+vi.mock('../../src/cache', () => ({
+  fetchWithCache: vi.fn(),
+}));
+
+import { fetchWithCache } from '../../src/cache';
+
+describe('LocalAI temperature handling', () => {
+  it('should send temperature: 0 to the API when explicitly configured (chat)', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { choices: [{ message: { content: 'Test output' } }] },
+    } as any);
+
+    const provider = new LocalAiChatProvider('test-model', {
+      config: { temperature: 0 },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const callBody = JSON.parse(
+      (vi.mocked(fetchWithCache).mock.calls[0][1] as RequestInit).body as string,
+    );
+    expect(callBody.temperature).toBe(0);
+  });
+
+  it('should send temperature: 0 to the API when explicitly configured (completion)', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { choices: [{ text: 'Test output' }] },
+    } as any);
+
+    const provider = new LocalAiCompletionProvider('test-model', {
+      config: { temperature: 0 },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const callBody = JSON.parse(
+      (vi.mocked(fetchWithCache).mock.calls[0][1] as RequestInit).body as string,
+    );
+    expect(callBody.temperature).toBe(0);
+  });
+
+  it('should fall back to 0.7 when temperature is not configured', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { choices: [{ message: { content: 'Test output' } }] },
+    } as any);
+
+    const provider = new LocalAiChatProvider('test-model', {
+      config: {},
+    });
+
+    await provider.callApi('Test prompt');
+
+    const callBody = JSON.parse(
+      (vi.mocked(fetchWithCache).mock.calls[0][1] as RequestInit).body as string,
+    );
+    expect(callBody.temperature).toBe(0.7);
+  });
+});
