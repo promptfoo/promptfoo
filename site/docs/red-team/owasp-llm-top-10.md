@@ -102,8 +102,8 @@ redteam:
     - pii:social
   strategies:
     # Apply additional techniques to extract PII
-    - prompt-injection
-    - jailbreak
+    - jailbreak:composite
+    - jailbreak:meta
 ```
 
 Or, using the OWASP shorthand:
@@ -167,8 +167,8 @@ redteam:
     - harmful
     - pii
   strategies:
-    - jailbreak
-    - prompt-injection
+    - jailbreak:meta
+    - jailbreak:composite
 ```
 
 For comprehensive supply chain security coverage, see the [LLM Supply Chain Security guide](/docs/red-team/llm-supply-chain/).
@@ -494,8 +494,8 @@ redteam:
   plugins:
     - owasp:llm
   strategies:
-    - prompt-injection
-    - jailbreak
+    - jailbreak:composite
+    - jailbreak:meta
 ```
 
 To learn more about setting up Promptfoo and finding LLM vulnerabilities, see [Introduction to LLM red teaming](/docs/red-team/) and [Configuration details](/docs/red-team/configuration/).
