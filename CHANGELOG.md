@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.121.3](https://github.com/promptfoo/promptfoo/compare/0.121.2...0.121.3) (2026-03-15)
+
+### Features
+
+- **app:** add manual filtering to DataTable and improve filter UX ([#8122](https://github.com/promptfoo/promptfoo/issues/8122)) ([46dfdf5](https://github.com/promptfoo/promptfoo/commit/46dfdf57298b0cd6afa98b2b626bcb53e150cca8))
+- **assertions:** add trajectory eval assertions ([#8040](https://github.com/promptfoo/promptfoo/issues/8040)) ([6567fda](https://github.com/promptfoo/promptfoo/commit/6567fdaf0b381e65110451f802222fc0f861613a))
+- **providers:** support new sora video sizes ([#8147](https://github.com/promptfoo/promptfoo/issues/8147)) ([3e8af4d](https://github.com/promptfoo/promptfoo/commit/3e8af4d571825772c1d93e4729effc58db93255a))
+
+### Bug Fixes
+
+- **assertions:** stabilize trajectory eval assertions ([#8140](https://github.com/promptfoo/promptfoo/issues/8140)) ([a207119](https://github.com/promptfoo/promptfoo/commit/a2071199846ccc0b685cbf2e48e1016ed07d50e4))
+- **deps:** update dependency fast-xml-parser to ^5.5.0 ([#8168](https://github.com/promptfoo/promptfoo/issues/8168)) ([c1e0dcb](https://github.com/promptfoo/promptfoo/commit/c1e0dcbc0e84b19be40fa1898d0ec067298c41f0))
+- **deps:** update dependency lightningcss to ^1.32.0 ([#8149](https://github.com/promptfoo/promptfoo/issues/8149)) ([a5c5c3b](https://github.com/promptfoo/promptfoo/commit/a5c5c3b94685e78074203df886fd45a6e4c20b6e))
+- **examples:** use append_allowed_tools in plugins example ([#8143](https://github.com/promptfoo/promptfoo/issues/8143)) ([3510ba8](https://github.com/promptfoo/promptfoo/commit/3510ba8e42a494cc89bfb7f9bda238586077070e))
+- **mistral:** handle tool call responses where content is null ([#8165](https://github.com/promptfoo/promptfoo/issues/8165)) ([9c93471](https://github.com/promptfoo/promptfoo/commit/9c9347128580d1bd3367be82586f02ffb1e9eff4))
+- **providers:** add requiresApiKey() to claude-agent-sdk for Vertex/Bedrock support ([#8132](https://github.com/promptfoo/promptfoo/issues/8132)) ([49af17b](https://github.com/promptfoo/promptfoo/commit/49af17b51d8d09442e8c36d5d1f46fdc840d934a))
+- **providers:** use merged env for claude-agent-sdk provider registration ([#8134](https://github.com/promptfoo/promptfoo/issues/8134)) ([456199c](https://github.com/promptfoo/promptfoo/commit/456199c953e8bcb554aeada65e64b5973007d179))
+- **providers:** use nullish coalescing for temperature in Anthropic Messages and LocalAI ([#8163](https://github.com/promptfoo/promptfoo/issues/8163)) ([94adbe1](https://github.com/promptfoo/promptfoo/commit/94adbe1c23d8eb5b1fad83853ac2a53e0da5ade8))
+- **providers:** use nullish coalescing for temperature with provider-scoped env support ([#8167](https://github.com/promptfoo/promptfoo/issues/8167)) ([3b20e2b](https://github.com/promptfoo/promptfoo/commit/3b20e2ba606e7121a75c93be6c48174da9d99e23))
+- **redteam:** fix Rules of Hooks violation in RiskCategoryDrawer ([#8072](https://github.com/promptfoo/promptfoo/issues/8072)) ([afb2732](https://github.com/promptfoo/promptfoo/commit/afb2732d823c0c97ef3a4f332e032861739b55ad))
+- **replicate:** preserve zero-valued config ([#8128](https://github.com/promptfoo/promptfoo/issues/8128)) ([14890e6](https://github.com/promptfoo/promptfoo/commit/14890e62a87f7d4e759d1fc6fefb4bc46a53b5a8))
+
 ## [0.121.2](https://github.com/promptfoo/promptfoo/compare/0.121.1...0.121.2) (2026-03-12)
 
 ### Bug Fixes
