@@ -415,6 +415,24 @@ describe('Mistral', () => {
       expect(result.output).toEqual(mockMessage);
       expect(result.error).toBeUndefined();
     });
+
+    it('should return content when tool_calls is an empty array', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: 'Test output', tool_calls: [] } }],
+        usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toBe('Test output');
+      expect(result.error).toBeUndefined();
+    });
   });
 
   describe('MistralEmbeddingProvider', () => {
