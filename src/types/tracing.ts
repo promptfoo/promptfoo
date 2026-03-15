@@ -16,3 +16,26 @@ export interface TraceData {
   metadata?: Record<string, any>;
   spans: TraceSpan[];
 }
+
+export type TrajectoryStepType = 'command' | 'message' | 'reasoning' | 'search' | 'span' | 'tool';
+
+export interface TrajectoryStep {
+  spanId: string;
+  parentSpanId?: string;
+  spanName: string;
+  name: string;
+  type: TrajectoryStepType;
+  aliases: string[];
+  args?: unknown;
+  startTime: number;
+  endTime?: number;
+  statusCode?: number;
+  statusMessage?: string;
+  attributes: Record<string, unknown>;
+}
+
+export interface TraceTrajectory {
+  traceId: string;
+  normalizerVersion: 1;
+  steps: TrajectoryStep[];
+}

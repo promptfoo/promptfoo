@@ -155,6 +155,113 @@ describe('evaluator trace integration', () => {
     );
   });
 
+  it('should fetch trace data once per row across trace, trajectory, and script assertions', async () => {
+    const testTraceId = 'abcdef1234567890abcdef1234567890';
+    mockTraceStore.createTrace.mockResolvedValue(undefined);
+    mockTraceStore.getTrace.mockResolvedValue({
+      traceId: testTraceId,
+      evaluationId: 'test-eval-id',
+      testCaseId: 'test-case-id',
+      spans: [
+        {
+          spanId: 'root-span',
+          name: 'test.operation',
+          startTime: 1000,
+          endTime: 2000,
+        },
+        {
+          spanId: 'tool-span',
+          parentSpanId: 'root-span',
+          name: 'tool.call',
+          startTime: 1100,
+          endTime: 1200,
+          attributes: {
+            'tool.name': 'lookup_order',
+          },
+        },
+      ],
+    });
+
+    vi.mocked(evaluatorTracing.generateTraceContextIfNeeded).mockResolvedValue({
+      traceparent: `00-${testTraceId}-0123456789abcdef-01`,
+      evaluationId: 'test-eval-id',
+      testCaseId: 'test-case-id',
+    });
+
+    const testSuite: TestSuite = {
+      providers: [
+        {
+          id: () => 'mock-provider',
+          callApi: vi.fn().mockResolvedValue({
+            output: 'Test response',
+            tokenUsage: {},
+          }),
+        },
+      ],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [
+        {
+          vars: { input: 'test' },
+          metadata: {
+            tracingEnabled: true,
+            evaluationId: 'test-eval-id',
+          },
+          assert: [
+            {
+              type: 'javascript',
+              value: `
+                return Boolean(
+                  context.trace &&
+                  context.trajectory &&
+                  context.trajectory.steps.some(
+                    (step) => step.type === 'tool' && step.name === 'lookup_order',
+                  )
+                );
+              `,
+            },
+            {
+              type: 'trace-span-count',
+              value: {
+                pattern: '*',
+                min: 2,
+                max: 2,
+              },
+            },
+            {
+              type: 'trajectory:step-count',
+              value: {
+                type: 'tool',
+                min: 1,
+                max: 1,
+              },
+            },
+          ],
+        },
+      ],
+      tracing: {
+        enabled: true,
+        otlp: {
+          http: {
+            enabled: true,
+            port: 4318,
+            host: '0.0.0.0',
+            acceptFormats: ['protobuf'],
+          },
+        },
+      },
+    };
+
+    await evaluate(testSuite, mockEval, { maxConcurrency: 1 });
+
+    expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(2);
+    expect(mockEval.addResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        score: 1,
+      }),
+    );
+  });
+
   it('should handle assertions gracefully when tracing is disabled', async () => {
     // Mock generateTraceContextIfNeeded to return null when tracing is disabled
     vi.mocked(evaluatorTracing.generateTraceContextIfNeeded).mockResolvedValue(null);

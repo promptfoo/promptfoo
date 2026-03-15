@@ -246,6 +246,29 @@ describe('trace assertions', () => {
       expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(3);
     });
 
+    it('should pass trajectory data to javascript assertion', async () => {
+      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: `
+          if (!context.trajectory) return false;
+          return context.trajectory.traceId === 'test-trace-id' &&
+                 context.trajectory.steps.length === 2 &&
+                 context.trajectory.steps[0].spanId === 'span-1';
+        `,
+      };
+
+      const result: GradingResult = await runAssertion({
+        assertion,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
     it('should handle missing trace gracefully', async () => {
       mockTraceStore.getTrace.mockResolvedValue(null);
 
