@@ -26,6 +26,35 @@ import type {
 } from '@promptfoo/types';
 import type { VisibilityState } from '@tanstack/table-core';
 
+function parseBooleanSetting(value: string | undefined, defaultValue: boolean): boolean {
+  if (value === undefined || value.trim() === '') {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+
+  return defaultValue;
+}
+
+export function getResultsViewSettingsDefaults() {
+  return {
+    prettifyJson: parseBooleanSetting(
+      import.meta.env.VITE_PROMPTFOO_WEB_VIEWER_TABLE_SETTING_PRETTIFY_JSON,
+      false,
+    ),
+    showPassFail: parseBooleanSetting(
+      import.meta.env.VITE_PROMPTFOO_WEB_VIEWER_TABLE_SETTING_SHOW_PASS_FAIL,
+      true,
+    ),
+  };
+}
+
 function computeHighlightCount(table: EvaluateTable | null): number {
   if (!table) {
     return 0;
@@ -444,55 +473,59 @@ interface SettingsState {
 
 export const useResultsViewSettingsStore = create<SettingsState>()(
   persist(
-    (set, _get) => ({
-      maxTextLength: 250,
-      setMaxTextLength: (maxTextLength: number) => set(() => ({ maxTextLength })),
-      wordBreak: 'break-word',
-      setWordBreak: (wordBreak: 'break-word' | 'break-all') => set(() => ({ wordBreak })),
-      showInferenceDetails: true,
-      setShowInferenceDetails: (showInferenceDetails: boolean) =>
-        set(() => ({ showInferenceDetails })),
-      renderMarkdown: false,
-      setRenderMarkdown: (renderMarkdown: boolean) => set(() => ({ renderMarkdown })),
-      prettifyJson: false,
-      setPrettifyJson: (prettifyJson: boolean) => set(() => ({ prettifyJson })),
-      showPrompts: false,
-      setShowPrompts: (showPrompts: boolean) => set(() => ({ showPrompts })),
-      showPassFail: true,
-      setShowPassFail: (showPassFail: boolean) => set(() => ({ showPassFail })),
-      showPassReasons: false,
-      setShowPassReasons: (showPassReasons: boolean) => set(() => ({ showPassReasons })),
+    (set, _get) => {
+      const defaults = getResultsViewSettingsDefaults();
 
-      inComparisonMode: false,
-      setInComparisonMode: (inComparisonMode: boolean) => set(() => ({ inComparisonMode })),
-      comparisonEvalIds: [],
-      setComparisonEvalIds: (comparisonEvalIds: string[]) => set(() => ({ comparisonEvalIds })),
-      stickyHeader: true,
-      setStickyHeader: (stickyHeader: boolean) => set(() => ({ stickyHeader })),
+      return {
+        maxTextLength: 250,
+        setMaxTextLength: (maxTextLength: number) => set(() => ({ maxTextLength })),
+        wordBreak: 'break-word',
+        setWordBreak: (wordBreak: 'break-word' | 'break-all') => set(() => ({ wordBreak })),
+        showInferenceDetails: true,
+        setShowInferenceDetails: (showInferenceDetails: boolean) =>
+          set(() => ({ showInferenceDetails })),
+        renderMarkdown: false,
+        setRenderMarkdown: (renderMarkdown: boolean) => set(() => ({ renderMarkdown })),
+        prettifyJson: defaults.prettifyJson,
+        setPrettifyJson: (prettifyJson: boolean) => set(() => ({ prettifyJson })),
+        showPrompts: false,
+        setShowPrompts: (showPrompts: boolean) => set(() => ({ showPrompts })),
+        showPassFail: defaults.showPassFail,
+        setShowPassFail: (showPassFail: boolean) => set(() => ({ showPassFail })),
+        showPassReasons: false,
+        setShowPassReasons: (showPassReasons: boolean) => set(() => ({ showPassReasons })),
 
-      columnStates: {},
-      setColumnState: (evalId: string, state: ColumnState) =>
-        set((prevState) => ({
-          columnStates: {
-            ...prevState.columnStates,
-            [evalId]: state,
-          },
-        })),
+        inComparisonMode: false,
+        setInComparisonMode: (inComparisonMode: boolean) => set(() => ({ inComparisonMode })),
+        comparisonEvalIds: [],
+        setComparisonEvalIds: (comparisonEvalIds: string[]) => set(() => ({ comparisonEvalIds })),
+        stickyHeader: true,
+        setStickyHeader: (stickyHeader: boolean) => set(() => ({ stickyHeader })),
 
-      hiddenVarNamesBySchema: {},
-      setHiddenVarNamesForSchema: (schemaHash: string, hiddenVarNames: string[]) =>
-        set((prevState) => ({
-          hiddenVarNamesBySchema: {
-            ...prevState.hiddenVarNamesBySchema,
-            [schemaHash]: hiddenVarNames,
-          },
-        })),
+        columnStates: {},
+        setColumnState: (evalId: string, state: ColumnState) =>
+          set((prevState) => ({
+            columnStates: {
+              ...prevState.columnStates,
+              [evalId]: state,
+            },
+          })),
 
-      maxImageWidth: 256,
-      setMaxImageWidth: (maxImageWidth: number) => set(() => ({ maxImageWidth })),
-      maxImageHeight: 256,
-      setMaxImageHeight: (maxImageHeight: number) => set(() => ({ maxImageHeight })),
-    }),
+        hiddenVarNamesBySchema: {},
+        setHiddenVarNamesForSchema: (schemaHash: string, hiddenVarNames: string[]) =>
+          set((prevState) => ({
+            hiddenVarNamesBySchema: {
+              ...prevState.hiddenVarNamesBySchema,
+              [schemaHash]: hiddenVarNames,
+            },
+          })),
+
+        maxImageWidth: 256,
+        setMaxImageWidth: (maxImageWidth: number) => set(() => ({ maxImageWidth })),
+        maxImageHeight: 256,
+        setMaxImageHeight: (maxImageHeight: number) => set(() => ({ maxImageHeight })),
+      };
+    },
     {
       name: 'eval-settings',
       version: 2,
