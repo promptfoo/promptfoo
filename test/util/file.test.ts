@@ -937,17 +937,19 @@ describe('file utilities', () => {
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
-      it('should preserve non-glob file references in vars for runtime loading by renderPrompt', () => {
+      it('should load non-glob static text file references in vars', () => {
+        vi.mocked(fs.readFileSync).mockReturnValue('loaded text content');
+
         const config = {
           vars: {
-            content: 'file://content.txt', // No glob pattern - still preserved
+            content: 'file://content.txt',
           },
         };
+
         const result = maybeLoadConfigFromExternalFile(config);
-        // File references in vars should be preserved for runtime loading
-        // JS/Python files will be executed by renderPrompt in evaluatorHelpers.ts
-        expect(result.vars.content).toBe('file://content.txt');
-        expect(fs.readFileSync).not.toHaveBeenCalled();
+
+        expect(result.vars.content).toBe('loaded text content');
+        expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/test', 'content.txt'), 'utf8');
       });
 
       it('should preserve JS file references in vars for runtime execution', () => {
@@ -972,7 +974,7 @@ describe('file utilities', () => {
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
-      it('should preserve all file references in nested test cases loaded from external files', () => {
+      it('should preserve JS/Python file references in nested test cases loaded from external files', () => {
         // This tests the scenario from PR #6393 where test cases are loaded
         // from an external YAML file and contain JS/Python file references in vars
         const testCasesFromExternalFile = [
@@ -1002,9 +1004,11 @@ describe('file utilities', () => {
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
-      it('should preserve plain text file references in vars for consistent runtime loading', () => {
-        // Plain text files are also preserved for runtime loading by renderPrompt
-        // This ensures consistent behavior across all file types
+      it('should load nested static file references inside vars objects', () => {
+        vi.mocked(fs.readFileSync)
+          .mockReturnValueOnce('loaded nested text')
+          .mockReturnValueOnce(JSON.stringify({ answer: 42 }));
+
         const config = {
           tests: [
             {
@@ -1018,8 +1022,30 @@ describe('file utilities', () => {
 
         const result = maybeLoadConfigFromExternalFile(config);
 
-        expect(result.tests[0].vars.content).toBe('file://content.txt');
-        expect(result.tests[0].vars.data).toBe('file://data.json');
+        expect(result.tests[0].vars.content).toBe('loaded nested text');
+        expect(result.tests[0].vars.data).toEqual({ answer: 42 });
+        expect(fs.readFileSync).toHaveBeenNthCalledWith(
+          1,
+          path.resolve('/test', 'content.txt'),
+          'utf8',
+        );
+        expect(fs.readFileSync).toHaveBeenNthCalledWith(
+          2,
+          path.resolve('/test', 'data.json'),
+          'utf8',
+        );
+      });
+
+      it('should preserve media file references in vars for runtime handling', () => {
+        const config = {
+          vars: {
+            image: 'file://diagram.png',
+          },
+        };
+
+        const result = maybeLoadConfigFromExternalFile(config);
+
+        expect(result.vars.image).toBe('file://diagram.png');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
     });
