@@ -362,7 +362,7 @@ describe('evaluator', () => {
 
   afterAll(() => {
     // Clear all module mocks to prevent any lingering state
-    vi.restoreAllMocks();
+    vi.resetAllMocks();
     vi.resetModules();
   });
 
@@ -3564,6 +3564,79 @@ describe('evaluator', () => {
         clearTimeout(longTimer);
       }
     }
+  });
+
+  it('should not produce duplicate results when timed-out provider resolves late', async () => {
+    const mockAddResult = vi.fn().mockResolvedValue(undefined);
+    let resolveProvider: ((value: unknown) => void) | null = null;
+
+    const slowApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('slow-provider'),
+      callApi: vi.fn().mockImplementation(() => {
+        return new Promise((resolve) => {
+          resolveProvider = resolve;
+        });
+      }),
+      cleanup: vi.fn(),
+    };
+
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 0,
+          failures: 0,
+          errors: 1,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: vi.fn().mockResolvedValue(undefined),
+      setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [slowApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 100 });
+    await evalPromise;
+
+    // The timeout result should have been recorded exactly once
+    expect(mockAddResult).toHaveBeenCalledTimes(1);
+    expect(mockAddResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.stringContaining('Evaluation timed out after 100ms'),
+        success: false,
+      }),
+    );
+
+    // Now simulate the slow provider resolving after timeout
+    if (resolveProvider) {
+      resolveProvider({
+        output: 'Late response that should be discarded',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      });
+    }
+
+    // Allow any pending microtasks to settle
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // addResult should still have been called only once (the timeout error),
+    // not twice (which would mean the late response was also recorded)
+    expect(mockAddResult).toHaveBeenCalledTimes(1);
   });
 
   it('should honor external abortSignal when timeoutMs is set', async () => {

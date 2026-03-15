@@ -250,6 +250,10 @@ function updateAssertionMetrics(
   }
 }
 
+function getEvalStepKey(evalStep: Pick<RunEvalOptions, 'testIdx' | 'promptIdx' | 'repeatIndex'>) {
+  return `${evalStep.testIdx}:${evalStep.promptIdx}:${evalStep.repeatIndex}`;
+}
+
 /**
  * Validates if a given prompt is allowed based on the provided list of allowed
  * prompt references. Providers and tests can be configured with a `prompts` attribute,
@@ -961,6 +965,7 @@ class Evaluator {
     let globalTimeout: NodeJS.Timeout | undefined;
     let globalAbortController: AbortController | undefined;
     const processedIndices = new Set<number>();
+    const timedOutSteps = new Set<string>();
 
     // Track target unavailability (non-transient HTTP errors like 401, 403, 404, 501)
     let targetUnavailable = false;
@@ -1482,6 +1487,8 @@ class Evaluator {
         throw new Error('Expected index to be a number');
       }
 
+      const stepKey = getEvalStepKey(evalStep);
+
       const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
         test: evalStep.test,
       });
@@ -1489,7 +1496,17 @@ class Evaluator {
 
       const rows = await runEval(evalStep);
 
+      if (timedOutSteps.has(stepKey)) {
+        logger.warn(`Discarding late results for timed out eval step ${stepKey}`);
+        return;
+      }
+
       for (const row of rows) {
+        if (timedOutSteps.has(stepKey)) {
+          logger.warn(`Discarding late result row for timed out eval step ${stepKey}`);
+          return;
+        }
+
         for (const varName of Object.keys(row.vars)) {
           vars.add(varName);
         }
@@ -1660,6 +1677,7 @@ class Evaluator {
     const processEvalStepWithTimeout = async (evalStep: RunEvalOptions, index: number | string) => {
       // Get timeout value from options or environment, defaults to 0 (no timeout)
       const timeoutMs = options.timeoutMs || getEvalTimeoutMs();
+      const stepKey = getEvalStepKey(evalStep);
 
       if (timeoutMs <= 0) {
         // No timeout, process normally
@@ -1687,16 +1705,18 @@ class Evaluator {
           new Promise<void>((_, reject) => {
             timeoutId = setTimeout(() => {
               didTimeout = true;
+              timedOutSteps.add(stepKey);
               // Abort any ongoing requests
               abortController.abort();
 
               // If the provider has a cleanup method, call it
               if (typeof evalStep.provider.cleanup === 'function') {
-                try {
-                  evalStep.provider.cleanup();
-                } catch (cleanupErr) {
-                  logger.warn(`Error during provider cleanup: ${cleanupErr}`);
-                }
+                const cleanup = evalStep.provider.cleanup;
+                void Promise.resolve()
+                  .then(() => cleanup())
+                  .catch((cleanupErr) => {
+                    logger.warn(`Error during provider cleanup: ${cleanupErr}`);
+                  });
               }
 
               reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
