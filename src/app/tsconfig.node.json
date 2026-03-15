@@ -4,6 +4,7 @@
     "lib": ["ES2023"],
     "module": "ESNext",
     "skipLibCheck": true,
+    "types": ["vitest/config", "node"],
 
     /* Bundler mode */
     "moduleResolution": "bundler",
