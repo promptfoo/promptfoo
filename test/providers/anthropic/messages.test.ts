@@ -1443,4 +1443,31 @@ describe('AnthropicMessagesProvider', () => {
       );
     });
   });
+
+  describe('temperature: 0 handling', () => {
+    it('should send temperature: 0 to the API when explicitly configured', async () => {
+      const provider = createProvider('claude-3-5-sonnet-20241022', {
+        config: { temperature: 0 },
+      });
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test output' }],
+        model: 'claude-3-5-sonnet-20241022',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          temperature: 0,
+        }),
+        {},
+      );
+    });
+  });
 });
