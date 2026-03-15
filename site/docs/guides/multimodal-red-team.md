@@ -546,6 +546,23 @@ Run the audio strategy red team:
 npx promptfoo@latest redteam run -c promptfooconfig.yaml
 ```
 
+## Using Custom Providers
+
+Custom [Python](/docs/providers/python) and [JavaScript](/docs/providers/custom-api) providers receive media data in `context.vars` (`context['vars']` in Python). Read variables directly rather than parsing the rendered prompt:
+
+```python
+def call_api(prompt, options, context):
+    image_data = context['vars'].get('image', '')
+    question = context['vars'].get('question', 'Describe this image')
+    # Build your API call with image_data and question...
+```
+
+:::warning
+Always set `injectVar` explicitly for multimodal prompts. It defaults to the **last** template variable, which may not be the media variable. With `{{image}} {{question}}`, the default is `question`.
+:::
+
+See the [Python provider](/docs/providers/python#handling-multimodal-content) and [JavaScript provider](/docs/providers/custom-api#handling-multimodal-content) docs for complete examples.
+
 ## See Also
 
 - [Red Team Strategies](/docs/red-team/strategies/)

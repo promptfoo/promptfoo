@@ -153,6 +153,55 @@ The reported prompt is used for:
 
 See the [vercel-ai-sdk example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-vercel/ai-sdk) for a complete working example.
 
+### Handling Multimodal Content
+
+When using [image](/docs/red-team/strategies/image), [audio](/docs/red-team/strategies/audio), or [video](/docs/red-team/strategies/video) red team strategies, promptfoo embeds base64-encoded media data into template variables. Custom providers must extract this data from `context.vars` and forward it to the API.
+
+```javascript title="multimodalProvider.js"
+module.exports = class MultimodalProvider {
+  id() {
+    return 'multimodal-provider';
+  }
+
+  async callApi(prompt, context) {
+    const imageBase64 = context.vars.image || '';
+    const question = context.vars.question || 'Describe this image';
+
+    // The image strategy provides raw base64 — wrap it as a data URL for OpenAI
+    const imageUrl = `data:image/png;base64,${imageBase64}`;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'image_url', image_url: { url: imageUrl } },
+              { type: 'text', text: question },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const result = await response.json();
+    return { output: result.choices[0].message.content };
+  }
+};
+```
+
+:::note
+`injectVar` defaults to the **last** template variable in your prompt. With `{{image}} {{question}}`, it defaults to `question` — not `image`. Always set `injectVar` explicitly when using media strategies.
+:::
+
+See the [Python provider multimodal docs](/docs/providers/python#handling-multimodal-content) for a detailed explanation and YAML config example.
+
 ### Two-Stage Provider
 
 ```javascript title="twoStageProvider.js"
