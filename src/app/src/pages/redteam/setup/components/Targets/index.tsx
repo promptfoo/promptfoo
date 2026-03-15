@@ -86,8 +86,7 @@ export default function Targets({ onNext, onBack }: TargetsProps) {
           ? selectedTarget.config.request?.trim() !== ''
           : !!selectedTarget.config.url && selectedTarget.config.url.trim() !== '';
 
-      // For HTTP providers, require both tests to be completed
-      return hasConfig && isTargetTested && isSessionTested;
+      return hasConfig;
     }
 
     if (selectedTarget.id === 'websocket') {
@@ -115,13 +114,13 @@ export default function Targets({ onNext, onBack }: TargetsProps) {
         }
       }
 
-      // Check test requirements for HTTP providers
+      // Keep tests recommended for HTTP providers without blocking progression
       if (!isTargetTested && !isSessionTested) {
-        return 'Please test both your target configuration and session settings before proceeding';
+        return 'Recommended: test both your target configuration and session settings before proceeding';
       } else if (!isTargetTested) {
-        return 'Please test your target configuration before proceeding';
+        return 'Recommended: test your target configuration before proceeding';
       } else if (!isSessionTested) {
-        return 'Please test your session settings before proceeding';
+        return 'Recommended: test your session settings before proceeding';
       }
     }
 

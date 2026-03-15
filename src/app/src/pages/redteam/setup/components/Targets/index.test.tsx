@@ -229,7 +229,7 @@ describe('Targets Component', () => {
   });
 
   describe('HTTP Target Configuration', () => {
-    it('should enable the Next button only when HTTP target has valid URL and both tests pass', async () => {
+    it('should enable the Next button when HTTP target has a valid URL even before tests pass', () => {
       (useRedTeamConfig as any).mockReturnValue({
         config: {
           target: {
@@ -259,42 +259,9 @@ describe('Targets Component', () => {
 
       renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Initially Next button should be disabled (tests not completed)
+      // Next button should be enabled when HTTP configuration is valid
       const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
-      expect(nextButton).toBeDisabled();
-
-      // Test the target configuration
-      const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
-      fireEvent.click(testTargetButton);
-
-      await waitFor(() => {
-        expect(screen.getByText('Test passed!')).toBeInTheDocument();
-      });
-
-      // Still disabled - need session test too
-      expect(nextButton).toBeDisabled();
-
-      // For sessions test, mock the session test endpoint
-      mockCallApi.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          success: true,
-          message: 'Session test passed!',
-        }),
-      });
-
-      // Test the session configuration
-      const testSessionButton = screen.getByRole('button', { name: /Test Session/i });
-      fireEvent.click(testSessionButton);
-
-      await waitFor(() => {
-        expect(screen.getByText('Session test passed!')).toBeInTheDocument();
-      });
-
-      // Now Next button should be enabled
-      await waitFor(() => {
-        expect(nextButton).not.toBeDisabled();
-      });
+      expect(nextButton).not.toBeDisabled();
 
       fireEvent.click(nextButton);
       expect(mockOnNext).toHaveBeenCalledTimes(1);
@@ -344,9 +311,9 @@ describe('Targets Component', () => {
 
       renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // The next button should be disabled and should show warning message in the UI
+      // The next button should be enabled and tests remain visible as a recommendation in the UI
       const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
-      expect(nextButton).toBeDisabled();
+      expect(nextButton).not.toBeDisabled();
 
       // Check for warning message displayed in UI about testing requirements
       expect(screen.getByText(/Test Target Configuration/i)).toBeInTheDocument();
@@ -576,7 +543,7 @@ Content-Type: application/json
       const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]');
       fireEvent.click(httpProviderCard!);
 
-      // For HTTP, Next button should be disabled until tests pass
+      // For HTTP, Next button should be disabled until required fields are valid
       await waitFor(() => {
         const updatedNextButton = screen.getAllByRole('button', { name: /Next/i })[0];
         expect(updatedNextButton).toBeDisabled();
