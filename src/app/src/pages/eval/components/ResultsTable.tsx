@@ -335,9 +335,34 @@ function ResultsTable({
     return config?.redteam !== undefined;
   }, [config?.redteam]);
 
+  // Auto-hide prompt columns that have no output data in the current filtered view.
+  // This handles 1:1 configurations where filtered results may leave some prompt columns entirely empty.
+  const effectiveColumnVisibility = React.useMemo(() => {
+    const visibility: VisibilityState = { ...columnVisibility };
+    head.prompts.forEach((_, idx) => {
+      const colId = `Prompt ${idx + 1}`;
+      // Only auto-hide if the column is currently set to visible
+      if (visibility[colId] === false) {
+        return;
+      }
+      const allEmpty =
+        body.length > 0 &&
+        body.every((row) => {
+          const output = row.outputs[idx];
+          return !output || (!output.text && !output.error);
+        });
+      if (allEmpty) {
+        visibility[colId] = false;
+      }
+    });
+    return visibility;
+  }, [columnVisibility, head.prompts, body]);
+
   const visiblePromptCount = React.useMemo(
-    () => head.prompts.filter((_, idx) => columnVisibility[`Prompt ${idx + 1}`] !== false).length,
-    [head.prompts, columnVisibility],
+    () =>
+      head.prompts.filter((_, idx) => effectiveColumnVisibility[`Prompt ${idx + 1}`] !== false)
+        .length,
+    [head.prompts, effectiveColumnVisibility],
   );
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
@@ -1338,7 +1363,7 @@ function ResultsTable({
     manualPagination: true,
     pageCount,
     state: {
-      columnVisibility,
+      columnVisibility: effectiveColumnVisibility,
       columnSizing,
       pagination,
     },
