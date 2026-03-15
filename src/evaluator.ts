@@ -1711,11 +1711,12 @@ class Evaluator {
 
               // If the provider has a cleanup method, call it
               if (typeof evalStep.provider.cleanup === 'function') {
-                try {
-                  void evalStep.provider.cleanup();
-                } catch (cleanupErr) {
-                  logger.warn(`Error during provider cleanup: ${cleanupErr}`);
-                }
+                const cleanup = evalStep.provider.cleanup;
+                void Promise.resolve()
+                  .then(() => cleanup())
+                  .catch((cleanupErr) => {
+                    logger.warn(`Error during provider cleanup: ${cleanupErr}`);
+                  });
               }
 
               reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
