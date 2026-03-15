@@ -321,6 +321,7 @@ function ResultsTable({
     fetchEvalData,
     isFetching,
     filters,
+    filteredMetrics,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
   const { setFilterMode } = useFilterMode();
@@ -335,9 +336,46 @@ function ResultsTable({
     return config?.redteam !== undefined;
   }, [config?.redteam]);
 
+  // Auto-hide prompt columns that have no results in the current filtered view.
+  // Uses filteredMetrics (computed server-side across ALL filtered rows) instead of
+  // scanning the paginated body, which would cause incorrect hiding and flickering
+  // when columns have data on other pages.
+  const effectiveColumnVisibility = React.useMemo(() => {
+    if (!filteredMetrics) {
+      return columnVisibility;
+    }
+    const visibility: VisibilityState = { ...columnVisibility };
+    head.prompts.forEach((_, idx) => {
+      const colId = `Prompt ${idx + 1}`;
+      // Respect user's explicit column hiding
+      if (visibility[colId] === false) {
+        return;
+      }
+      const metrics = filteredMetrics[idx];
+      if (!metrics) {
+        return;
+      }
+      const totalResults =
+        (metrics.testPassCount ?? 0) + (metrics.testFailCount ?? 0) + (metrics.testErrorCount ?? 0);
+      if (totalResults === 0) {
+        visibility[colId] = false;
+      }
+    });
+    // Safety net: don't hide ALL prompt columns (e.g. backend error returning all-zero metrics)
+    const allPromptsHidden = head.prompts.every(
+      (_, idx) => visibility[`Prompt ${idx + 1}`] === false,
+    );
+    if (allPromptsHidden && head.prompts.length > 0) {
+      return columnVisibility;
+    }
+    return visibility;
+  }, [columnVisibility, head.prompts, filteredMetrics]);
+
   const visiblePromptCount = React.useMemo(
-    () => head.prompts.filter((_, idx) => columnVisibility[`Prompt ${idx + 1}`] !== false).length,
-    [head.prompts, columnVisibility],
+    () =>
+      head.prompts.filter((_, idx) => effectiveColumnVisibility[`Prompt ${idx + 1}`] !== false)
+        .length,
+    [head.prompts, effectiveColumnVisibility],
   );
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
@@ -1338,7 +1376,7 @@ function ResultsTable({
     manualPagination: true,
     pageCount,
     state: {
-      columnVisibility,
+      columnVisibility: effectiveColumnVisibility,
       columnSizing,
       pagination,
     },
