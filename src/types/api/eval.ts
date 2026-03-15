@@ -77,6 +77,36 @@ export type CopyEvalParams = z.infer<typeof CopyEvalParamsSchema>;
 export type CopyEvalRequest = z.infer<typeof CopyEvalRequestSchema>;
 export type CopyEvalResponse = z.infer<typeof CopyEvalResponseSchema>;
 
+// GET /api/results
+
+const BooleanQueryParamSchema = z.preprocess((value) => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === true || value === 'true') {
+    return true;
+  }
+  if (value === false || value === 'false') {
+    return false;
+  }
+  return value;
+}, z.boolean().optional());
+
+export const GetResultsQuerySchema = z
+  .object({
+    datasetId: z.string().optional(),
+    type: z.enum(['redteam', 'eval']).optional(),
+    includeProviders: BooleanQueryParamSchema,
+    limit: z.coerce.number().int().min(1).max(500).optional(),
+    offset: z.coerce.number().int().min(0).optional(),
+  })
+  .refine((value) => value.offset === undefined || value.limit !== undefined, {
+    path: ['offset'],
+    message: 'offset requires limit',
+  });
+
+export type GetResultsQuery = z.infer<typeof GetResultsQuerySchema>;
+
 // GET /api/evals/:id/table
 
 /** Query parameters for eval table endpoint. */
@@ -312,6 +342,9 @@ export const EvalSchemas = {
     Params: CopyEvalParamsSchema,
     Request: CopyEvalRequestSchema,
     Response: CopyEvalResponseSchema,
+  },
+  Results: {
+    Query: GetResultsQuerySchema,
   },
   Table: {
     Params: EvalIdParamSchema,

@@ -1578,22 +1578,13 @@ export default class Eval {
   }
 }
 
-/**
- * Queries summaries of all evals, optionally for a given dataset.
- *
- * @param datasetId - An optional dataset ID to filter by.
- * @param type - An optional eval type to filter by.
- * @param includeProviders - An optional flag to include providers in the summary.
- * @returns A list of eval summaries.
- */
-export async function getEvalSummaries(
-  datasetId?: string,
-  type?: 'redteam' | 'eval',
-  includeProviders: boolean = false,
-): Promise<EvalSummary[]> {
-  const db = getDb();
+interface EvalSummaryPaginationOptions {
+  limit: number;
+  offset: number;
+}
 
-  const whereClauses = [];
+function buildEvalSummariesWhereClauses(datasetId?: string, type?: 'redteam' | 'eval') {
+  const whereClauses: SQL<unknown>[] = [];
 
   if (datasetId) {
     whereClauses.push(eq(evalsToDatasetsTable.datasetId, datasetId));
@@ -1607,7 +1598,28 @@ export async function getEvalSummaries(
     }
   }
 
-  const results = db
+  return whereClauses;
+}
+
+/**
+ * Queries summaries of all evals, optionally for a given dataset.
+ *
+ * @param datasetId - An optional dataset ID to filter by.
+ * @param type - An optional eval type to filter by.
+ * @param includeProviders - An optional flag to include providers in the summary.
+ * @param pagination - Optional limit/offset pagination controls.
+ * @returns A list of eval summaries.
+ */
+export async function getEvalSummaries(
+  datasetId?: string,
+  type?: 'redteam' | 'eval',
+  includeProviders: boolean = false,
+  pagination?: EvalSummaryPaginationOptions,
+): Promise<EvalSummary[]> {
+  const db = getDb();
+  const whereClauses = buildEvalSummariesWhereClauses(datasetId, type);
+
+  const query = db
     .select({
       evalId: evalsTable.id,
       createdAt: evalsTable.createdAt,
@@ -1620,8 +1632,11 @@ export async function getEvalSummaries(
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
     .where(and(...whereClauses))
-    .orderBy(desc(evalsTable.createdAt))
-    .all();
+    .orderBy(desc(evalsTable.createdAt), desc(evalsTable.id));
+
+  const results = pagination
+    ? query.limit(pagination.limit).offset(pagination.offset).all()
+    : query.all();
 
   /**
    * Deserialize the evals. A few things to note:
@@ -1713,4 +1728,26 @@ export async function getEvalSummaries(
         type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined,
     };
   });
+}
+
+/**
+ * Counts eval summaries for the given filters. Useful for server-side pagination metadata.
+ */
+export async function getEvalSummariesCount(
+  datasetId?: string,
+  type?: 'redteam' | 'eval',
+): Promise<number> {
+  const db = getDb();
+  const whereClauses = buildEvalSummariesWhereClauses(datasetId, type);
+
+  const result = db
+    .select({
+      count: sql<number>`count(distinct ${evalsTable.id})`,
+    })
+    .from(evalsTable)
+    .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
+    .where(and(...whereClauses))
+    .get();
+
+  return Number(result?.count ?? 0);
 }

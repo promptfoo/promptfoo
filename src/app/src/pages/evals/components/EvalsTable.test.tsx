@@ -19,6 +19,10 @@ vi.mock('@app/components/data-table/data-table', () => ({
     onRowSelectionChange,
     getRowId,
     toolbarActions,
+    manualPagination,
+    pageIndex,
+    pageSize,
+    onPaginationChange,
   }: any) => {
     if (isLoading) {
       return <div data-testid="loading">Loading...</div>;
@@ -34,6 +38,19 @@ vi.mock('@app/components/data-table/data-table', () => ({
 
     return (
       <div data-testid="data-table">
+        {manualPagination && (
+          <button
+            data-testid="next-page"
+            onClick={() =>
+              onPaginationChange?.({
+                pageIndex: (pageIndex ?? 0) + 1,
+                pageSize: pageSize ?? 50,
+              })
+            }
+          >
+            Next page
+          </button>
+        )}
         {/* Render toolbar actions (like delete button) */}
         {toolbarActions && <div data-testid="toolbar-actions">{toolbarActions}</div>}
         {data.map((row: any) => {
@@ -127,6 +144,7 @@ const mockEvalsWithMultipleDatasets = [
 describe('EvalsTable', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(callApi).mockReset();
   });
 
   it('should fetch data on initial mount', async () => {
@@ -144,7 +162,7 @@ describe('EvalsTable', () => {
 
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledWith(
-        '/results',
+        '/results?limit=50&offset=0',
         expect.objectContaining({
           cache: 'no-store',
           signal: expect.any(AbortSignal),
@@ -154,6 +172,39 @@ describe('EvalsTable', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('data-table')).toBeInTheDocument();
+    });
+  });
+
+  it('should request the next server page when pagination changes', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        data: mockEvals,
+        pagination: { totalCount: 200, limit: 50, offset: 0 },
+      }),
+    };
+    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsTable onEvalSelected={vi.fn()} deletionEnabled={true} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('data-table')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('next-page'));
+
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledWith(
+        '/results?limit=50&offset=50',
+        expect.objectContaining({
+          cache: 'no-store',
+          signal: expect.any(AbortSignal),
+        }),
+      );
     });
   });
 
@@ -185,9 +236,42 @@ describe('EvalsTable', () => {
     );
 
     await waitFor(() => {
+      expect(callApi).toHaveBeenCalledWith(
+        '/results',
+        expect.objectContaining({
+          cache: 'no-store',
+          signal: expect.any(AbortSignal),
+        }),
+      );
+    });
+
+    await waitFor(() => {
       expect(screen.getByTestId('row-eval-1')).toBeInTheDocument();
       expect(screen.getByTestId('row-eval-2')).toBeInTheDocument();
       expect(screen.queryByTestId('row-eval-3')).toBeNull();
+    });
+  });
+
+  it('should not crash when the focused eval is not on the current server-side page', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        data: mockEvals,
+        pagination: { totalCount: 200, limit: 50, offset: 50 },
+      }),
+    };
+    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsTable onEvalSelected={vi.fn()} focusedEvalId="eval-not-on-page" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('data-table')).toBeInTheDocument();
+      expect(screen.getByTestId('row-eval-1')).toBeInTheDocument();
+      expect(screen.getByTestId('row-eval-2')).toBeInTheDocument();
     });
   });
 

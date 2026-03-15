@@ -30,6 +30,17 @@ interface EvalsTableProps {
   deletionEnabled?: boolean;
 }
 
+const DEFAULT_PAGE_SIZE = 50;
+
+interface ResultsResponse {
+  data: EvalSummary[];
+  pagination?: {
+    totalCount: number;
+    limit: number;
+    offset: number;
+  };
+}
+
 export default function EvalsTable({
   onEvalSelected,
   focusedEvalId,
@@ -46,30 +57,48 @@ export default function EvalsTable({
   const [error, setError] = useState<string | null>(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [totalRows, setTotalRows] = useState(0);
+  const [pagination, setPagination] = useState({
+    pageIndex: 0,
+    pageSize: DEFAULT_PAGE_SIZE,
+  });
 
   const location = useLocation();
+  const useServerPagination = !filterByDatasetId;
 
   // Fetch evals from the API
-  const fetchEvals = useCallback(async (signal: AbortSignal) => {
-    try {
-      setIsLoading(true);
-      const response = await callApi('/results', { cache: 'no-store', signal });
-      if (!response.ok) {
-        throw new Error('Failed to fetch evals');
+  const fetchEvals = useCallback(
+    async (signal: AbortSignal) => {
+      try {
+        setIsLoading(true);
+
+        const searchParams = new URLSearchParams();
+        if (useServerPagination) {
+          searchParams.set('limit', String(pagination.pageSize));
+          searchParams.set('offset', String(pagination.pageIndex * pagination.pageSize));
+        }
+
+        const url = searchParams.size > 0 ? `/results?${searchParams.toString()}` : '/results';
+        const response = await callApi(url, { cache: 'no-store', signal });
+        if (!response.ok) {
+          throw new Error('Failed to fetch evals');
+        }
+        const body = (await response.json()) as ResultsResponse;
+        setEvals(body.data);
+        setTotalRows(body.pagination?.totalCount ?? body.data.length);
+        setError(null);
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          setError((err as Error).message);
+        }
+      } finally {
+        if (!signal.aborted) {
+          setIsLoading(false);
+        }
       }
-      const body = (await response.json()) as { data: EvalSummary[] };
-      setEvals(body.data);
-      setError(null);
-    } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        setError((err as Error).message);
-      }
-    } finally {
-      if (!signal.aborted) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
+    },
+    [pagination.pageIndex, pagination.pageSize, useServerPagination],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
@@ -84,13 +113,11 @@ export default function EvalsTable({
   const rows = useMemo(() => {
     let rows_ = evals;
 
-    if (focusedEvalId && rows_.length > 0) {
+    if (filterByDatasetId && focusedEvalId && rows_.length > 0) {
       const focusedEval = rows_.find(({ evalId }) => evalId === focusedEvalId);
       invariant(focusedEval, 'focusedEvalId is not a valid eval ID');
 
-      if (filterByDatasetId) {
-        rows_ = rows_.filter(({ datasetId }) => datasetId === focusedEval.datasetId);
-      }
+      rows_ = rows_.filter(({ datasetId }) => datasetId === focusedEval.datasetId);
     }
 
     return rows_;
@@ -128,9 +155,10 @@ export default function EvalsTable({
         throw new Error('Failed to delete evals');
       }
 
-      setEvals((prev) => prev.filter((e) => !selectedEvalIds.includes(e.evalId)));
       setRowSelection({});
       setConfirmDeleteOpen(false);
+      const refreshController = new AbortController();
+      await fetchEvals(refreshController.signal);
     } catch (err) {
       console.error('Failed to delete evals:', err);
       alert('Failed to delete evals');
@@ -289,6 +317,10 @@ export default function EvalsTable({
     [focusedEvalId, onEvalSelected, hasRedteamEvals],
   );
 
+  const pageCount = useMemo(() => {
+    return Math.max(1, Math.ceil(totalRows / pagination.pageSize));
+  }, [pagination.pageSize, totalRows]);
+
   // Delete button for toolbar
   const deleteButton =
     deletionEnabled && selectedEvalIds.length > 0 ? (
@@ -305,29 +337,66 @@ export default function EvalsTable({
 
   return (
     <>
-      <DataTable
-        columns={columns}
-        data={rows}
-        isLoading={isLoading}
-        error={error}
-        emptyMessage="No evaluations found. Create an eval to get started."
-        onRowClick={(row) => {
-          if (row.evalId !== focusedEvalId) {
-            onEvalSelected(row.evalId);
+      {useServerPagination ? (
+        <DataTable
+          columns={columns}
+          data={rows}
+          isLoading={isLoading}
+          error={error}
+          emptyMessage="No evaluations found. Create an eval to get started."
+          onRowClick={(row) => {
+            if (row.evalId !== focusedEvalId) {
+              onEvalSelected(row.evalId);
+            }
+          }}
+          enableRowSelection={deletionEnabled}
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
+          getRowId={(row) => row.evalId}
+          initialSorting={[{ id: 'createdAt', desc: true }]}
+          initialPageSize={DEFAULT_PAGE_SIZE}
+          showToolbar={showUtilityButtons}
+          showColumnToggle={showUtilityButtons}
+          toolbarActions={deleteButton}
+          showExport={showUtilityButtons}
+          onExportCSV={handleExportCSV}
+          manualPagination={true}
+          rowCount={totalRows}
+          pageCount={pageCount}
+          pageIndex={pagination.pageIndex}
+          pageSize={pagination.pageSize}
+          onPaginationChange={(nextPagination: { pageIndex: number; pageSize: number }) =>
+            setPagination(nextPagination)
           }
-        }}
-        enableRowSelection={deletionEnabled}
-        rowSelection={rowSelection}
-        onRowSelectionChange={setRowSelection}
-        getRowId={(row) => row.evalId}
-        initialSorting={[{ id: 'createdAt', desc: true }]}
-        initialPageSize={50}
-        showToolbar={showUtilityButtons}
-        showColumnToggle={showUtilityButtons}
-        toolbarActions={deleteButton}
-        showExport={showUtilityButtons}
-        onExportCSV={handleExportCSV}
-      />
+          onPageSizeChange={(nextPageSize: number) =>
+            setPagination({ pageIndex: 0, pageSize: nextPageSize })
+          }
+        />
+      ) : (
+        <DataTable
+          columns={columns}
+          data={rows}
+          isLoading={isLoading}
+          error={error}
+          emptyMessage="No evaluations found. Create an eval to get started."
+          onRowClick={(row) => {
+            if (row.evalId !== focusedEvalId) {
+              onEvalSelected(row.evalId);
+            }
+          }}
+          enableRowSelection={deletionEnabled}
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
+          getRowId={(row) => row.evalId}
+          initialSorting={[{ id: 'createdAt', desc: true }]}
+          initialPageSize={DEFAULT_PAGE_SIZE}
+          showToolbar={showUtilityButtons}
+          showColumnToggle={showUtilityButtons}
+          toolbarActions={deleteButton}
+          showExport={showUtilityButtons}
+          onExportCSV={handleExportCSV}
+        />
+      )}
 
       {/* Delete confirmation dialog */}
       <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>

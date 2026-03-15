@@ -53,6 +53,41 @@ describe('eval routes', () => {
     return payload;
   }
 
+  describe('get("/results")', () => {
+    it('should support paginated eval summaries', async () => {
+      const eval1 = await EvalFactory.create();
+      const eval2 = await EvalFactory.create();
+      const eval3 = await EvalFactory.create();
+      testEvalIds.add(eval1.id);
+      testEvalIds.add(eval2.id);
+      testEvalIds.add(eval3.id);
+
+      const allResults = await request(app).get('/api/results');
+      const paginatedResults = await request(app).get('/api/results?limit=2&offset=1');
+
+      expect(allResults.status).toBe(200);
+      expect(paginatedResults.status).toBe(200);
+      expect(paginatedResults.body).toMatchObject({
+        pagination: {
+          totalCount: 3,
+          limit: 2,
+          offset: 1,
+        },
+      });
+      expect(paginatedResults.body.data).toHaveLength(2);
+      expect(paginatedResults.body.data.map((result: { evalId: string }) => result.evalId)).toEqual(
+        allResults.body.data.slice(1, 3).map((result: { evalId: string }) => result.evalId),
+      );
+    });
+
+    it('should validate pagination query parameters', async () => {
+      const res = await request(app).get('/api/results?offset=10');
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('offset requires limit');
+    });
+  });
+
   describe('post("/:evalId/results/:id/rating")', () => {
     it('Passing test and the user marked it as passing (no change)', async () => {
       const eval_ = await EvalFactory.create();

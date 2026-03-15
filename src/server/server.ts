@@ -17,11 +17,12 @@ import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
-import Eval, { getEvalSummaries } from '../models/eval';
+import Eval, { getEvalSummaries, getEvalSummariesCount } from '../models/eval';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry, { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
+import { EvalSchemas } from '../types/api/eval';
 import { checkRemoteHealth } from '../util/apiHealth';
 import {
   getPrompts,
@@ -46,7 +47,6 @@ import versionRouter from './routes/version';
 import type { Request, Response } from 'express';
 
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
-import type { EvalSummary } from '../types/index';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
@@ -146,25 +146,37 @@ export function createApp() {
   /**
    * Fetches summaries of all evals, optionally for a given dataset.
    */
-  app.get(
-    '/api/results',
-    async (
-      req: Request<
-        {},
-        {},
-        {},
-        { datasetId?: string; type?: 'redteam' | 'eval'; includeProviders?: boolean }
-      >,
-      res: Response<{ data: EvalSummary[] }>,
-    ): Promise<void> => {
-      const previousResults = await getEvalSummaries(
-        req.query.datasetId,
-        req.query.type,
-        req.query.includeProviders,
-      );
-      res.json({ data: previousResults });
-    },
-  );
+  app.get('/api/results', async (req: Request, res: Response): Promise<void> => {
+    const queryResult = EvalSchemas.Results.Query.safeParse(req.query);
+    if (!queryResult.success) {
+      res.status(400).json({ error: z.prettifyError(queryResult.error) });
+      return;
+    }
+
+    const { datasetId, type, includeProviders = false, limit, offset } = queryResult.data;
+
+    if (limit !== undefined) {
+      const pagination = {
+        limit,
+        offset: offset ?? 0,
+      };
+      const [previousResults, totalCount] = await Promise.all([
+        getEvalSummaries(datasetId, type, includeProviders, pagination),
+        getEvalSummariesCount(datasetId, type),
+      ]);
+      res.json({
+        data: previousResults,
+        pagination: {
+          totalCount,
+          ...pagination,
+        },
+      });
+      return;
+    }
+
+    const previousResults = await getEvalSummaries(datasetId, type, includeProviders);
+    res.json({ data: previousResults });
+  });
 
   app.get('/api/results/:id', async (req: Request, res: Response): Promise<void> => {
     const id = req.params.id as string;
