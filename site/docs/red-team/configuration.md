@@ -994,7 +994,7 @@ You can set up the provider in several ways:
      provider: file://path/to/provider.yaml
    ```
 
-For more detailed information on configuration options, refer to the [ProviderOptions documentation](/docs/configuration/reference/#provideroptions).
+For more detailed information on configuration options, refer to the [ProviderOptions documentation](/docs/configuration/types#provideroptions).
 
 ### Configuration Precedence
 
