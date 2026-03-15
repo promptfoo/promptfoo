@@ -27,7 +27,7 @@ tests:
         value:
           name: search_corpus
           args:
-            query: quantum computing
+            query: quantum computing classical computing
 
       - type: trajectory:tool-sequence
         value:

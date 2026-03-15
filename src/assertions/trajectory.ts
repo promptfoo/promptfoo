@@ -272,6 +272,20 @@ function matchesToolArgs(
   return matchesExpectedArgsPartial(actual, expected);
 }
 
+function resolveToolArgsMatchMode(
+  mode: TrajectoryToolArgsMatchValue['mode'],
+): NonNullable<TrajectoryToolArgsMatchValue['mode']> {
+  if (mode === undefined) {
+    return 'partial';
+  }
+
+  if (mode === 'partial' || mode === 'exact') {
+    return mode;
+  }
+
+  throw new Error('trajectory:tool-args-match assertion mode must be "partial" or "exact"');
+}
+
 function resolveToolArgsMatchValue(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('trajectory:tool-args-match assertion must have an object value');
@@ -293,7 +307,7 @@ function resolveToolArgsMatchValue(value: unknown) {
   return {
     matcher,
     expectedArgs,
-    mode: (value as TrajectoryToolArgsMatchValue).mode === 'exact' ? 'exact' : 'partial',
+    mode: resolveToolArgsMatchMode((value as TrajectoryToolArgsMatchValue).mode),
   } as const;
 }
 

@@ -580,6 +580,34 @@ describe('trajectory assertions', () => {
         'trajectory:tool-args-match assertion must include an args or arguments property',
       );
     });
+
+    it('rejects invalid mode values', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-args-match',
+        assertion: {
+          type: 'trajectory:tool-args-match',
+          value: {
+            name: 'search_orders',
+            mode: 'excat',
+            args: {
+              order_id: '123',
+            },
+          },
+        },
+        renderedValue: {
+          name: 'search_orders',
+          mode: 'excat',
+          args: {
+            order_id: '123',
+          },
+        },
+      };
+
+      expect(() => handleTrajectoryToolArgsMatch(params)).toThrow(
+        'trajectory:tool-args-match assertion mode must be "partial" or "exact"',
+      );
+    });
   });
 
   describe('trajectory:step-count', () => {

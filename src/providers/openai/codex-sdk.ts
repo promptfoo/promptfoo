@@ -14,6 +14,7 @@ import {
   getTraceparent,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { REDACTED, normalizeFieldName, sanitizeObject } from '../../util/sanitizer';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -912,7 +913,17 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private serializeItemValue(value: unknown): string | undefined {
     if (typeof value === 'string') {
       const trimmed = value.trim();
-      return trimmed || undefined;
+      if (!trimmed) {
+        return undefined;
+      }
+
+      try {
+        return JSON.stringify(this.redactTracePii(sanitizeObject(JSON.parse(trimmed))));
+      } catch {
+        return this.redactTracePii(
+          sanitizeObject(trimmed, { context: 'Codex MCP trace input' }),
+        ) as string;
+      }
     }
 
     if (value === undefined || value === null) {
@@ -920,10 +931,36 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
 
     try {
-      return JSON.stringify(value);
+      return JSON.stringify(
+        this.redactTracePii(sanitizeObject(value, { context: 'Codex MCP trace input' })),
+      );
     } catch {
       return undefined;
     }
+  }
+
+  private redactTracePii(value: unknown): unknown {
+    if (
+      typeof value === 'string' &&
+      /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(value)
+    ) {
+      return REDACTED;
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((item) => this.redactTracePii(item));
+    }
+
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).map(([key, entryValue]) => [
+          key,
+          normalizeFieldName(key).includes('email') ? REDACTED : this.redactTracePii(entryValue),
+        ]),
+      );
+    }
+
+    return value;
   }
 
   /**
