@@ -4,107 +4,16 @@ import { fileURLToPath } from 'node:url';
 import os from 'os';
 import path from 'path';
 
-import { type TransformOptions, transformAsync } from '@babel/core';
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite';
+import packageJson from '../../package.json' with { type: 'json' };
+import {
+  browserModulesPlugin,
+  reactCompilerPlugin,
+  vendorCodeSplittingGroups,
+} from './vite.shared';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-import react, { reactCompilerPreset } from '@vitejs/plugin-react';
-import { defineConfig, type Plugin } from 'vitest/config';
-import packageJson from '../../package.json' with { type: 'json' };
-
-/**
- * Plugin to replace Node.js modules with browser-compatible versions.
- * This allows us to avoid bundling heavy Node polyfills by providing
- * lightweight browser implementations.
- */
-function browserModulesPlugin(): Plugin {
-  // Map of Node module paths to their browser replacements
-  const replacements: Array<{ nodePath: string; browserPath: string; patterns: string[] }> = [
-    {
-      // logger.ts uses fs, path, winston - replace with console-based logger
-      nodePath: path.resolve(__dirname, '../logger.ts'),
-      browserPath: path.resolve(__dirname, '../logger.browser.ts'),
-      patterns: ['./logger', '../logger', '/logger'],
-    },
-    {
-      // createHash.ts uses Node crypto - replace with pure JS SHA-256
-      nodePath: path.resolve(__dirname, '../util/createHash.ts'),
-      browserPath: path.resolve(__dirname, '../util/createHash.browser.ts'),
-      patterns: ['./createHash', '../createHash', '/createHash'],
-    },
-  ];
-
-  return {
-    name: 'browser-modules',
-    enforce: 'pre',
-    resolveId(source, importer) {
-      if (!importer) {
-        return null;
-      }
-
-      for (const { nodePath, browserPath, patterns } of replacements) {
-        // Check if source matches any of the patterns
-        const matches = patterns.some((p) => source === p || source.endsWith(p));
-        if (!matches) {
-          continue;
-        }
-
-        // Resolve the import path
-        const resolvedPath = path.resolve(path.dirname(importer), source);
-
-        // Check if it matches the node module path (with or without .ts extension)
-        if (
-          resolvedPath === nodePath ||
-          resolvedPath === nodePath.replace('.ts', '') ||
-          resolvedPath + '.ts' === nodePath
-        ) {
-          return browserPath;
-        }
-      }
-      return null;
-    },
-  };
-}
-
-const reactCompilerConfig = reactCompilerPreset() as {
-  preset: () => { plugins: TransformOptions['plugins'] };
-  rolldown?: { filter?: { code?: RegExp } };
-};
-const reactCompilerPlugins = reactCompilerConfig.preset().plugins;
-const reactCompilerCodeFilter = reactCompilerConfig.rolldown?.filter?.code;
-const reactCompilerFileFilter = /\.[jt]sx?$/;
-
-function reactCompilerPlugin(): Plugin {
-  return {
-    name: 'react-compiler',
-    enforce: 'pre',
-    async transform(code, id) {
-      const cleanId = id.split('?')[0];
-
-      if (
-        !cleanId ||
-        cleanId.includes('/node_modules/') ||
-        !reactCompilerFileFilter.test(cleanId) ||
-        (reactCompilerCodeFilter && !reactCompilerCodeFilter.test(code))
-      ) {
-        return null;
-      }
-
-      const result = await transformAsync(code, {
-        filename: cleanId,
-        babelrc: false,
-        configFile: false,
-        sourceMaps: true,
-        parserOpts: {
-          plugins: ['jsx', 'typescript'],
-        },
-        plugins: reactCompilerPlugins,
-      });
-
-      return result?.code ? { code: result.code, map: result.map } : null;
-    },
-  };
-}
 
 // Calculate max forks for test parallelization
 const cpuCount = os.cpus().length;
@@ -131,8 +40,7 @@ export default defineConfig({
     port: 3000,
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
-  // Cast: vitest/config re-exports vite 7 Plugin types; app runs vite 8 (rolldown).
-  plugins: [browserModulesPlugin(), reactCompilerPlugin(), react()] as Plugin[],
+  plugins: [browserModulesPlugin(), reactCompilerPlugin(), ...react()],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),
@@ -147,42 +55,13 @@ export default defineConfig({
     outDir: '../../dist/src/app',
     // Enable source maps for production debugging
     sourcemap: process.env.NODE_ENV === 'production' ? 'hidden' : true,
-    // Cast: rolldownOptions is a vite 8 API not present in vite 7 types from vitest/config.
-    ...({
-      rolldownOptions: {
-        output: {
-          codeSplitting: {
-            groups: [
-              {
-                name: 'vendor-react',
-                test: /[\\/]node_modules[\\/](?:react|react-dom|react-router-dom)[\\/]/,
-                priority: 50,
-              },
-              {
-                name: 'vendor-charts',
-                test: /[\\/]node_modules[\\/](?:recharts|chart\.js)[\\/]/,
-                priority: 40,
-              },
-              {
-                name: 'vendor-markdown',
-                test: /[\\/]node_modules[\\/](?:react-markdown|remark-gfm)[\\/]/,
-                priority: 30,
-              },
-              {
-                name: 'vendor-syntax',
-                test: /[\\/]node_modules[\\/]prismjs[\\/]/,
-                priority: 20,
-              },
-              {
-                name: 'vendor-utils',
-                test: /[\\/]node_modules[\\/](?:js-yaml|diff)[\\/]/,
-                priority: 10,
-              },
-            ],
-          },
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [...vendorCodeSplittingGroups],
         },
       },
-    } as Record<string, unknown>),
+    },
     // Increase chunk size warning limit for this development tool
     chunkSizeWarningLimit: 2500,
   },
@@ -265,6 +144,8 @@ export default defineConfig({
           return false; // Suppress this log
         }
       }
+
+      return undefined;
     },
   },
   define: {

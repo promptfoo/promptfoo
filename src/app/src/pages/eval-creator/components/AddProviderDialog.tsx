@@ -1,8 +1,6 @@
 // Import Prism for syntax highlighting in provider configurations
+import '@app/lib/prism';
 import '@app/pages/redteam/setup/components/Targets/syntax-highlighting.css';
-import 'prismjs'; // Core Prism library must be imported first
-import 'prismjs/components/prism-clike';
-import 'prismjs/components/prism-javascript';
 
 import { useEffect, useState } from 'react';
 

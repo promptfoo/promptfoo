@@ -1,7 +1,7 @@
 import React from 'react';
 
+import Prism from '@app/lib/prism';
 import dedent from 'dedent';
-import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
 
 import type { HttpProviderOptions } from '../../../types';
