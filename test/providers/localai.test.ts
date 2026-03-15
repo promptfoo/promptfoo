@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalAiChatProvider, LocalAiCompletionProvider } from '../../src/providers/localai';
 
 vi.mock('../../src/cache', () => ({
@@ -8,6 +8,10 @@ vi.mock('../../src/cache', () => ({
 import { fetchWithCache } from '../../src/cache';
 
 describe('LocalAI temperature handling', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
   it('should send temperature: 0 to the API when explicitly configured (chat)', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: { choices: [{ message: { content: 'Test output' } }] },
