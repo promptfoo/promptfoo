@@ -100,3 +100,19 @@ export function extractVariablesFromTemplates(templates: string[]): string[] {
   }
   return Array.from(variableSet);
 }
+
+function getRootVariableName(variable: string): string | null {
+  const match = variable.match(/^[A-Za-z_][A-Za-z0-9_]*/);
+  return match?.[0] ?? null;
+}
+
+/**
+ * Check whether a Nunjucks template references a specific root variable name.
+ * This avoids false positives from similarly named variables such as
+ * `pre_conversation_context` when checking for `_conversation`.
+ */
+export function templateReferencesVariable(template: string, variableName: string): boolean {
+  return extractVariablesFromTemplate(template).some(
+    (variable) => getRootVariableName(variable) === variableName,
+  );
+}

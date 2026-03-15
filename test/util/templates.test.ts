@@ -5,6 +5,7 @@ import {
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
   getNunjucksEngine,
+  templateReferencesVariable,
 } from '../../src/util/templates';
 
 describe('extractVariablesFromTemplate', () => {
@@ -96,6 +97,27 @@ describe('extractVariablesFromTemplates', () => {
     const result = extractVariablesFromTemplates(templates);
 
     expect(result).toEqual(['name', 'age']);
+  });
+});
+
+describe('templateReferencesVariable', () => {
+  it('matches direct and indexed references to a variable', () => {
+    expect(templateReferencesVariable('{{ _conversation[0].output }}', '_conversation')).toBe(true);
+    expect(
+      templateReferencesVariable(
+        '{% for turn in _conversation %}{{ turn.output }}{% endfor %}',
+        '_conversation',
+      ),
+    ).toBe(true);
+  });
+
+  it('does not false-positive on similarly named variables', () => {
+    expect(templateReferencesVariable('{{ pre_conversation_context }}', '_conversation')).toBe(
+      false,
+    );
+    expect(templateReferencesVariable('{{ user._conversation_label }}', '_conversation')).toBe(
+      false,
+    );
   });
 });
 
