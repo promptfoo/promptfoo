@@ -41,6 +41,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
   'indirect-web-pwn': 'Embeds attack prompts in web pages for indirect prompt injection via fetch',
+  odcv: 'Tests whether AI agents violate constraints under business KPI pressure',
   'guardrails-eval':
     'Comprehensive testing suite for evaluating guardrails effectiveness against prompt injection, jailbreaking, harmful content, and PII leakage',
   hallucination: 'Tests for fabrication of false or misleading information',
@@ -294,6 +295,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'off-topic': 'Off-Topic Manipulation',
   goat: 'Generative Offensive Agent Tester',
   'guardrails-eval': 'Guardrails Evaluation',
+  odcv: 'Outcome-Driven Constraint Violation',
   hallucination: 'Hallucination',
   harmbench: 'Harmbench',
   harmful: 'Malicious Content Suite',
@@ -1188,6 +1190,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
   'indirect-web-pwn':
     'Embeds attack prompts in web pages for indirect prompt injection via web fetch',
+  odcv: 'Tests whether AI agents autonomously violate ethical constraints under escalating business KPI pressure',
   hex: 'Tests detection and handling of hex-encoded malicious payloads',
   homoglyph:
     'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
@@ -1235,6 +1238,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
   'indirect-web-pwn': 'Indirect Web Prompt Injection',
+  odcv: 'Outcome-Driven Constraint Violation',
   hex: 'Hex Encoding',
   homoglyph: 'Homoglyph Encoding',
   image: 'Image',

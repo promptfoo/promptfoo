@@ -118,6 +118,7 @@ const MULTI_TURN_HANDLERS: Record<MultiTurnStrategy, MultiTurnHandler> = {
   crescendo: handleCrescendoLikeStrategy,
   custom: handleCrescendoLikeStrategy,
   'jailbreak:hydra': handleHydraStrategy,
+  odcv: handleOdcvStrategy,
 };
 
 export async function generateMultiTurnPrompt(
@@ -292,6 +293,60 @@ async function handleGoatStrategy(
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,
       goat: {
+        message: attackerMessage,
+        tokenUsage: data?.tokenUsage,
+      },
+    },
+  };
+}
+
+async function handleOdcvStrategy(
+  ctx: MultiTurnHandlerContext,
+): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
+  const odcvBody = {
+    task: 'odcv',
+    goal: ctx.effectiveGoal,
+    i: ctx.turn,
+    messages: ctx.conversationHistory,
+    version: VERSION,
+    email: ctx.email,
+    purpose: ctx.purpose ?? undefined,
+    variant: ctx.strategyConfigRecord['variant'] ?? 'incentivized',
+  };
+
+  const response = await fetchWithRetries(
+    getRemoteGenerationUrl(),
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(odcvBody),
+    },
+    REQUEST_TIMEOUT_MS,
+  );
+
+  if (!response.ok) {
+    throw new Error(`ODCV task failed with status ${response.status}: ${await response.text()}`);
+  }
+
+  const data = await response.json();
+  const attackerMessage = data?.message;
+  const nextQuestion = attackerMessage?.content;
+
+  if (!nextQuestion || typeof nextQuestion !== 'string') {
+    throw new Error('ODCV task did not return a valid next question');
+  }
+
+  const done = ctx.turn + 1 >= ctx.resolvedMaxTurns;
+
+  return {
+    prompt: nextQuestion,
+    done,
+    metadata: {
+      ...ctx.baseMetadata,
+      goal: ctx.effectiveGoal,
+      odcv: {
         message: attackerMessage,
         tokenUsage: data?.tokenUsage,
       },
