@@ -1,4 +1,4 @@
-/// <reference types="vitest" />
+/// <reference types="vitest/config" />
 
 import { fileURLToPath } from 'node:url';
 import os from 'os';
@@ -131,9 +131,7 @@ export default defineConfig({
     port: 3000,
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
-  // The app workspace uses vite 8, but vitest/config re-exports defineConfig from
-  // root vite 7 (npm hoisting). The Plugin types are structurally incompatible between
-  // vite 7 (rollup-based) and vite 8 (rolldown-based), so we cast the plugins array.
+  // Cast: vitest/config re-exports vite 7 Plugin types; app runs vite 8 (rolldown).
   plugins: [browserModulesPlugin(), reactCompilerPlugin(), react()] as Plugin[],
   resolve: {
     alias: {
@@ -149,9 +147,7 @@ export default defineConfig({
     outDir: '../../dist/src/app',
     // Enable source maps for production debugging
     sourcemap: process.env.NODE_ENV === 'production' ? 'hidden' : true,
-    // Vite 8 uses Rolldown instead of Rollup. The vitest/config re-export resolves
-    // to vite 7 types (due to npm hoisting), so rolldownOptions is not in the type
-    // definitions yet. At runtime, vite 8 is used and rolldownOptions works correctly.
+    // Cast: rolldownOptions is a vite 8 API not present in vite 7 types from vitest/config.
     ...({
       rolldownOptions: {
         output: {
@@ -160,22 +156,27 @@ export default defineConfig({
               {
                 name: 'vendor-react',
                 test: /[\\/]node_modules[\\/](?:react|react-dom|react-router-dom)[\\/]/,
+                priority: 50,
               },
               {
                 name: 'vendor-charts',
                 test: /[\\/]node_modules[\\/](?:recharts|chart\.js)[\\/]/,
-              },
-              {
-                name: 'vendor-utils',
-                test: /[\\/]node_modules[\\/](?:js-yaml|diff)[\\/]/,
-              },
-              {
-                name: 'vendor-syntax',
-                test: /[\\/]node_modules[\\/]prismjs[\\/]/,
+                priority: 40,
               },
               {
                 name: 'vendor-markdown',
                 test: /[\\/]node_modules[\\/](?:react-markdown|remark-gfm)[\\/]/,
+                priority: 30,
+              },
+              {
+                name: 'vendor-syntax',
+                test: /[\\/]node_modules[\\/]prismjs[\\/]/,
+                priority: 20,
+              },
+              {
+                name: 'vendor-utils',
+                test: /[\\/]node_modules[\\/](?:js-yaml|diff)[\\/]/,
+                priority: 10,
               },
             ],
           },

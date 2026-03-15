@@ -24,8 +24,8 @@ if (!globalThis.crypto?.subtle) {
   });
 }
 
-// Use the workspace Vitest instance instead of jest-dom's side-effect helper so
-// expect is extended against the same runner version that executes the tests.
+// Extend expect manually instead of importing '@testing-library/jest-dom/vitest'
+// so matchers bind to the workspace vitest instance (avoids version mismatch).
 expect.extend(matchers);
 
 import { cleanup } from '@testing-library/react';
