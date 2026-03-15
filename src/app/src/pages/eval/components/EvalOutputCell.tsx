@@ -298,6 +298,7 @@ function EvalOutputCell({
   const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   const normalizedText = normalizeMediaText(text);
   const inlineImageSrc = resolveImageSource(text);
+  const markdownImageSources = extractMarkdownImageSources(normalizedText);
   const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
   const primaryRenderedAsImage = Boolean(primaryRenderedImageSrc);
   const outputAudioSource = resolveAudioSource(output.audio);
@@ -465,9 +466,11 @@ function EvalOutputCell({
         </div>
       );
     }
-  } else if ((prettifyJson || renderMarkdown) && !showDiffs) {
+  } else if ((prettifyJson || renderMarkdown || markdownImageSources.length > 0) && !showDiffs) {
     // When both prettifyJson and renderMarkdown are enabled,
-    // display as JSON if it's a valid object/array, otherwise render as Markdown
+    // display as JSON if it's a valid object/array, otherwise render as Markdown.
+    // We also force Markdown rendering when the output contains image markdown/HTML so
+    // image previews keep working even if the cell includes surrounding text.
     let isJsonHandled = false;
     if (prettifyJson) {
       try {
@@ -480,7 +483,7 @@ function EvalOutputCell({
         // Not valid JSON, continue to Markdown if enabled
       }
     }
-    if (!isJsonHandled && renderMarkdown) {
+    if (!isJsonHandled && (renderMarkdown || markdownImageSources.length > 0)) {
       renderedMarkdownOutput = true;
       // Use stable constants and memoized components to prevent unnecessary
       // re-renders when parent re-renders due to layout changes.
@@ -503,7 +506,7 @@ function EvalOutputCell({
       renderedImageSrcs.add(normalizeImageSrcForComparison(primaryRenderedImageSrc));
     }
     if (renderedMarkdownOutput) {
-      for (const source of extractMarkdownImageSources(normalizedText)) {
+      for (const source of markdownImageSources) {
         renderedImageSrcs.add(source);
       }
     }

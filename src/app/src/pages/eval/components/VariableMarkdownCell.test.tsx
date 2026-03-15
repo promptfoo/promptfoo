@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import VariableMarkdownCell from './VariableMarkdownCell';
 
@@ -37,6 +38,20 @@ describe('VariableMarkdownCell', () => {
       expect(linkElement).toBeInTheDocument();
       expect(linkElement.tagName).toBe('A');
       expect(linkElement).toHaveAttribute('href', 'https://example.com');
+    });
+
+    it('calls onImageClick for markdown images', async () => {
+      const onImageClick = vi.fn();
+      render(
+        <VariableMarkdownCell
+          value="![Preview](https://example.com/image.png)"
+          maxTextLength={100}
+          onImageClick={onImageClick}
+        />,
+      );
+
+      await userEvent.click(screen.getByAltText('Preview'));
+      expect(onImageClick).toHaveBeenCalledWith('https://example.com/image.png');
     });
 
     it('renders markdown code blocks', () => {

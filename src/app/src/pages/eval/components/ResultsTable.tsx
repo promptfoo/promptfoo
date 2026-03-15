@@ -39,7 +39,7 @@ import { ArrowLeft, ArrowRight, ExternalLink, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import CustomMetrics from './CustomMetrics';
 import CustomMetricsDialog from './CustomMetricsDialog';
-import EvalOutputCell from './EvalOutputCell';
+import EvalOutputCell, { extractMarkdownImageSources } from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
 import { ProviderDisplay } from './ProviderDisplay';
@@ -806,7 +806,11 @@ function ResultsTable({
                 // table layout changes (e.g., column visibility toggles).
                 // @see https://github.com/promptfoo/promptfoo/issues/969
                 const cellContent = renderMarkdown ? (
-                  <VariableMarkdownCell value={value} maxTextLength={maxTextLength} />
+                  <VariableMarkdownCell
+                    value={value}
+                    maxTextLength={maxTextLength}
+                    onImageClick={toggleLightbox}
+                  />
                 ) : (
                   <TruncatedText text={value} maxLength={maxTextLength} />
                 );
@@ -1579,6 +1583,17 @@ function ResultsTable({
                     const value = cell.getValue();
                     const imgSrc =
                       typeof value === 'string' ? resolveImageSource(value) : undefined;
+                    const markdownImageSources =
+                      typeof value === 'string' ? extractMarkdownImageSources(value) : [];
+                    if (!imgSrc && markdownImageSources.length > 0) {
+                      cellContent = (
+                        <VariableMarkdownCell
+                          value={value}
+                          maxTextLength={maxTextLength}
+                          onImageClick={toggleLightbox}
+                        />
+                      );
+                    }
                     if (imgSrc) {
                       // If this is a variable column for the inject var, try to show the original image text
                       let originalImageText: string | undefined;
@@ -1616,19 +1631,6 @@ function ResultsTable({
                             }}
                             onClick={() => toggleLightbox(imgSrc)}
                           />
-                          {lightboxOpen && lightboxImage === imgSrc && (
-                            <div className="lightbox" onClick={() => toggleLightbox()}>
-                              <img
-                                src={lightboxImage}
-                                alt="Lightbox"
-                                style={{
-                                  maxWidth: '90%',
-                                  maxHeight: '90vh',
-                                  objectFit: 'contain',
-                                }}
-                              />
-                            </div>
-                          )}
                           {originalImageText ? (
                             <div className="mt-1.5 text-muted-foreground text-[0.8em]">
                               <strong>Original (image text):</strong>{' '}
@@ -1661,6 +1663,19 @@ function ResultsTable({
           </tbody>
         </table>
       </div>
+      {lightboxOpen && lightboxImage && (
+        <div className="lightbox" onClick={() => toggleLightbox()}>
+          <img
+            src={lightboxImage}
+            alt="Lightbox"
+            style={{
+              maxWidth: '90%',
+              maxHeight: '90vh',
+              objectFit: 'contain',
+            }}
+          />
+        </div>
+      )}
       <div className="pagination sticky bottom-0 z-10 flex items-center gap-4 flex-wrap justify-between bg-background border-t border-border w-screen px-4 -mx-4 shadow-lg py-2">
         <div>
           Showing{' '}
