@@ -362,7 +362,7 @@ describe('evaluator', () => {
 
   afterAll(() => {
     // Clear all module mocks to prevent any lingering state
-    vi.restoreAllMocks();
+    vi.resetAllMocks();
     vi.resetModules();
   });
 
