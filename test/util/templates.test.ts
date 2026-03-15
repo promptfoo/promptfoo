@@ -5,6 +5,7 @@ import {
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
   getNunjucksEngine,
+  templateUsesVariable,
 } from '../../src/util/templates';
 
 describe('extractVariablesFromTemplate', () => {
@@ -96,6 +97,29 @@ describe('extractVariablesFromTemplates', () => {
     const result = extractVariablesFromTemplates(templates);
 
     expect(result).toEqual(['name', 'age']);
+  });
+});
+
+describe('templateUsesVariable', () => {
+  it('should detect direct variable references and for loops', () => {
+    expect(templateUsesVariable('{{ _conversation[0].output }}', '_conversation')).toBe(true);
+    expect(
+      templateUsesVariable(
+        '{% for completion in _conversation %}{{ completion.output }}{% endfor %}',
+        '_conversation',
+      ),
+    ).toBe(true);
+  });
+
+  it('should ignore substring matches, comments, strings, and nested property names', () => {
+    const template = [
+      'Summarize the pre_conversation_context for {{ question }}',
+      '{# _conversation #}',
+      '{{ "_conversation" }}',
+      '{{ foo._conversation }}',
+    ].join(' ');
+
+    expect(templateUsesVariable(template, '_conversation')).toBe(false);
   });
 });
 
