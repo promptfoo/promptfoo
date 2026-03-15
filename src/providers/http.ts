@@ -890,11 +890,11 @@ function contentTypeIsJson(headers: Record<string, string> | undefined) {
   if (!headers) {
     return false;
   }
-  return Object.keys(headers).some((key) => {
-    if (key.toLowerCase().startsWith('content-type')) {
-      return headers?.[key].includes('application/json');
+  return Object.entries(headers).some(([key, value]) => {
+    if (!key.toLowerCase().startsWith('content-type')) {
+      return false;
     }
-    return false;
+    return value.toLowerCase().includes('application/json');
   });
 }
 

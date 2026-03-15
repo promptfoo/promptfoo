@@ -1725,6 +1725,16 @@ describe('HttpProvider', () => {
       }).not.toThrow();
     });
 
+    it('should treat content-type values as case-insensitive', () => {
+      const provider = new HttpProvider(mockUrl, { config: { body: 'test' } });
+      expect(() => {
+        provider['validateContentTypeAndBody'](
+          { 'content-type': 'Application/JSON; Charset=UTF-8' },
+          { key: 'value' },
+        );
+      }).not.toThrow();
+    });
+
     it('should throw for non-json content-type with object body', () => {
       const provider = new HttpProvider(mockUrl, { config: { body: 'test' } });
       expect(() => {
@@ -2159,6 +2169,38 @@ describe('HttpProvider', () => {
         expect.objectContaining({
           method: 'POST',
           headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ key: 'test' }),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should handle mixed-case application/json content-type values', async () => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'Application/JSON; Charset=UTF-8' },
+          body: { key: '{{ prompt }}' },
+        },
+      });
+      const mockResponse = {
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('test');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'content-type': 'Application/JSON; Charset=UTF-8' },
           body: JSON.stringify({ key: 'test' }),
         }),
         expect.any(Number),
