@@ -194,7 +194,7 @@
     "@openai/codex-sdk": "^0.114.0",
     "@playwright/browser-chromium": "^1.58.2",
     "@rollup/rollup-linux-x64-gnu": "^4.59.0",
-    "@slack/web-api": "^7.14.1",
+    "@slack/web-api": "^7.15.0",
     "@smithy/node-http-handler": "^4.4.14",
     "@swc/core": "^1.15.18",
     "@swc/core-darwin-arm64": "^1.15.18",
