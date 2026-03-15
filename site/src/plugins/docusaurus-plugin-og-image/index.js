@@ -1352,6 +1352,24 @@ async function generateTelecomTemplate() {
   });
 }
 
+// Healthcare solutions page template
+async function generateHealthcareTemplate() {
+  return generateSolutionTemplate({
+    vertical: 'Healthcare',
+    headline: 'AI Security for Healthcare',
+    subtitle: 'Red team AI for PHI protection, clinical accuracy, and HIPAA compliance',
+    badges: ['HIPAA', 'HITECH', 'FDA', 'ONC'],
+  });
+}
+
+// Careers page template
+async function generateCareersTemplate() {
+  return generateSpecialPageTemplate({
+    title: 'Careers at Promptfoo',
+    subtitle: 'Join us in building the future of AI security and evaluation',
+  });
+}
+
 // Generate Satori JSX template for OG image
 async function generateSatoriTemplate(metadata = {}) {
   const {
@@ -1899,6 +1917,46 @@ async function generateTelecomOgImage(outputPath) {
   }
 }
 
+// Generate Healthcare OG image using custom template
+async function generateHealthcareOgImage(outputPath) {
+  try {
+    const fonts = await getSatoriFonts();
+    const template = await generateHealthcareTemplate();
+    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
+    const sharp = getSharp();
+    const pngBuffer = await sharp(Buffer.from(svg))
+      .ensureAlpha()
+      .png({ quality: 100, compressionLevel: 6, palette: false })
+      .toBuffer();
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+    await fs.writeFile(outputPath, pngBuffer);
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to generate Healthcare OG image:', error.message);
+    return false;
+  }
+}
+
+// Generate Careers OG image using custom template
+async function generateCareersOgImage(outputPath) {
+  try {
+    const fonts = await getSatoriFonts();
+    const template = await generateCareersTemplate();
+    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
+    const sharp = getSharp();
+    const pngBuffer = await sharp(Buffer.from(svg))
+      .ensureAlpha()
+      .png({ quality: 100, compressionLevel: 6, palette: false })
+      .toBuffer();
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+    await fs.writeFile(outputPath, pngBuffer);
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to generate Careers OG image:', error.message);
+    return false;
+  }
+}
+
 // Extract breadcrumbs from the doc path and sidebar structure
 function extractBreadcrumbs(docPath, sidebarItems) {
   const breadcrumbs = [];
@@ -2016,6 +2074,378 @@ async function extractMetadataFromMarkdown(routePath, outDir) {
   return { title: null };
 }
 
+function shouldSkipOgGeneration() {
+  if (process.env.SKIP_OG_GENERATION !== 'true') {
+    return false;
+  }
+
+  console.log('⏭️  Skipping OG image generation (SKIP_OG_GENERATION=true)');
+  return true;
+}
+
+function addRouteMetadataFromRoutes(routeMetadata, routes) {
+  if (!routes) {
+    return;
+  }
+
+  for (const route of routes) {
+    if (!route.path || !route.modules || !Array.isArray(route.modules)) {
+      continue;
+    }
+
+    const metadataModule = route.modules.find(
+      (module) =>
+        module &&
+        (module.metadata || module.__metadata || (typeof module === 'object' && module.title)),
+    );
+
+    if (!metadataModule) {
+      continue;
+    }
+
+    const metadata = metadataModule.metadata || metadataModule.__metadata || metadataModule;
+    routeMetadata.set(route.path, {
+      title: metadata.title || metadata.frontMatter?.title,
+      description: metadata.description || metadata.frontMatter?.description,
+      breadcrumbs: metadata.breadcrumbs || [],
+    });
+  }
+}
+
+function addDocsPluginMetadata(routeMetadata, plugins) {
+  const docsPlugin = plugins.find((plugin) => plugin.name === '@docusaurus/plugin-content-docs');
+  if (!docsPlugin?.content) {
+    return;
+  }
+
+  const { loadedVersions } = docsPlugin.content;
+  if (!loadedVersions || loadedVersions.length === 0) {
+    return;
+  }
+
+  loadedVersions[0].docs.forEach((doc) => {
+    routeMetadata.set(doc.permalink, {
+      title: doc.title || doc.frontMatter?.title || doc.label,
+      description: doc.description || doc.frontMatter?.description,
+      breadcrumbs: doc.sidebar?.breadcrumbs || [],
+    });
+  });
+}
+
+function addBlogPluginMetadata(routeMetadata, plugins) {
+  const blogPlugin = plugins.find((plugin) => plugin.name === '@docusaurus/plugin-content-blog');
+  if (!blogPlugin?.content?.blogPosts) {
+    return;
+  }
+
+  blogPlugin.content.blogPosts.forEach((post) => {
+    const authors = post.metadata.authors || [];
+    const authorNames = authors
+      .map((author) => (typeof author === 'object' ? author.name || author.key : author))
+      .filter(Boolean)
+      .join(' & ');
+
+    routeMetadata.set(post.metadata.permalink, {
+      title: post.metadata.title,
+      description: post.metadata.description,
+      author: authorNames || null,
+      date: post.metadata.date || post.metadata.formattedDate || null,
+      image: post.metadata.frontMatter?.image || post.metadata.image || null,
+      breadcrumbs: ['Blog'],
+    });
+  });
+}
+
+function createRouteMetadataMap(routes, plugins) {
+  const routeMetadata = new Map();
+  addRouteMetadataFromRoutes(routeMetadata, routes);
+  addDocsPluginMetadata(routeMetadata, plugins);
+  addBlogPluginMetadata(routeMetadata, plugins);
+  return routeMetadata;
+}
+
+function getRoutesToProcess(routesPaths) {
+  return routesPaths.filter(
+    (routePath) => routePath.startsWith('/docs/') || routePath.startsWith('/blog/'),
+  );
+}
+
+function getFallbackTitle(routePath) {
+  const pathParts = routePath.split('/').filter(Boolean);
+  const lastPart = pathParts[pathParts.length - 1];
+
+  return lastPart
+    .split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function getBreadcrumbLabels(routePath, metadata) {
+  if (metadata.breadcrumbs && metadata.breadcrumbs.length > 0) {
+    return metadata.breadcrumbs.map((breadcrumb) => breadcrumb.label || breadcrumb);
+  }
+
+  return extractBreadcrumbs(routePath, []);
+}
+
+async function getFileMetadata(routePath, metadata, outDir) {
+  if (
+    routePath.startsWith('/blog/') ||
+    routePath.startsWith('/docs/') ||
+    routePath.startsWith('/releases/') ||
+    !metadata.title
+  ) {
+    return extractMetadataFromMarkdown(routePath, outDir);
+  }
+
+  return { title: metadata.title };
+}
+
+function getBatchSize() {
+  const parsedBatchSize = Number(process.env.OG_BATCH_SIZE);
+  if (Number.isInteger(parsedBatchSize) && parsedBatchSize > 0) {
+    return parsedBatchSize;
+  }
+
+  if (process.env.OG_BATCH_SIZE) {
+    console.warn(`Invalid OG_BATCH_SIZE="${process.env.OG_BATCH_SIZE}", falling back to 8`);
+  }
+
+  return 8;
+}
+
+function buildRouteMetadata(routePath, metadata, fileMetadata) {
+  const fullMetadata = {
+    ...fileMetadata,
+    ...metadata,
+    title: metadata.title || fileMetadata.title,
+    description: metadata.description || fileMetadata.description,
+    author: fileMetadata.author || metadata.author,
+    date: fileMetadata.date || metadata.date,
+    image: fileMetadata.image || metadata.image,
+  };
+
+  if (!fullMetadata.title) {
+    fullMetadata.title = getFallbackTitle(routePath);
+  }
+
+  fullMetadata.routePath = routePath;
+  fullMetadata.breadcrumbs = getBreadcrumbLabels(routePath, metadata);
+  return fullMetadata;
+}
+
+async function warnAboutMissingLocalImage(routePath, metadata) {
+  if (!routePath.includes('/blog/') || !metadata.image || metadata.image.startsWith('http')) {
+    return;
+  }
+
+  const imagePath = resolveImageFullPath(metadata.image);
+  try {
+    await fs.access(imagePath);
+  } catch {
+    console.log(`⚠️  Missing image for ${routePath}: ${metadata.image}`);
+  }
+}
+
+function getGeneratedImageInfo(routePath, outDir) {
+  const imageFileName =
+    routePath
+      .replace(/^\//, '')
+      .replace(/\//g, '-')
+      .replace(/[^a-zA-Z0-9-]/g, '') + '-og.png';
+
+  return {
+    imagePath: path.join(outDir, 'img', 'og', imageFileName),
+    imageUrl: `/img/og/${imageFileName}`,
+  };
+}
+
+async function injectOgImageUrl({ htmlPath, imageUrl, routePath, siteUrl }) {
+  try {
+    const defaultThumbnailUrl = 'https://www.promptfoo.dev/img/thumbnail.png';
+    const newOgImageUrl = `${siteUrl}${imageUrl}`;
+    let html = await fs.readFile(htmlPath, 'utf8');
+
+    if (!html.includes(defaultThumbnailUrl)) {
+      return;
+    }
+
+    html = html.replaceAll(defaultThumbnailUrl, newOgImageUrl);
+    await fs.writeFile(htmlPath, html);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return;
+    }
+    console.warn(`Could not inject meta tags for ${routePath}:`, error.message);
+  }
+}
+
+async function processRoute(routePath, { generatedImages, outDir, routeMetadata, siteConfig }) {
+  try {
+    const metadata = routeMetadata.get(routePath) || {};
+    const fileMetadata = await getFileMetadata(routePath, metadata, outDir);
+    const fullMetadata = buildRouteMetadata(routePath, metadata, fileMetadata);
+
+    await warnAboutMissingLocalImage(routePath, fullMetadata);
+
+    const { imagePath, imageUrl } = getGeneratedImageInfo(routePath, outDir);
+    const success = await generateOgImage(fullMetadata, imagePath);
+    if (!success) {
+      return false;
+    }
+
+    generatedImages.set(routePath, imageUrl);
+
+    await injectOgImageUrl({
+      htmlPath: path.join(outDir, routePath.slice(1), 'index.html'),
+      imageUrl,
+      routePath,
+      siteUrl: siteConfig.url,
+    });
+
+    return true;
+  } catch (error) {
+    console.error(`Error processing route ${routePath}:`, error);
+    return false;
+  }
+}
+
+async function processRouteBatch(batch, context) {
+  const results = await Promise.all(batch.map((routePath) => processRoute(routePath, context)));
+  const successCount = results.filter(Boolean).length;
+
+  return {
+    successCount,
+    failureCount: results.length - successCount,
+  };
+}
+
+const SPECIAL_PAGE_GENERATORS = [
+  {
+    generator: generateCareersOgImage,
+    imageUrl: '/img/og/careers-og.png',
+    outputFile: 'careers-og.png',
+    routePath: '/careers/',
+    title: 'Careers page',
+  },
+  {
+    generator: generatePricingOgImage,
+    imageUrl: '/img/og/pricing-og.png',
+    outputFile: 'pricing-og.png',
+    routePath: '/pricing/',
+    title: 'Pricing page',
+  },
+  {
+    generator: generateAboutOgImage,
+    imageUrl: '/img/og/about-og.png',
+    outputFile: 'about-og.png',
+    routePath: '/about/',
+    title: 'About page',
+  },
+  {
+    generator: generateContactOgImage,
+    imageUrl: '/img/og/contact-og.png',
+    outputFile: 'contact-og.png',
+    routePath: '/contact/',
+    title: 'Contact page',
+  },
+  {
+    generator: generatePressOgImage,
+    imageUrl: '/img/og/press-og.png',
+    outputFile: 'press-og.png',
+    routePath: '/press/',
+    title: 'Press page',
+  },
+  {
+    generator: generateStoreOgImage,
+    imageUrl: '/img/og/store-og.png',
+    outputFile: 'store-og.png',
+    routePath: '/store/',
+    title: 'Store page',
+  },
+  {
+    generator: generateEventsOgImage,
+    imageUrl: '/img/og/events-og.png',
+    outputFile: 'events-og.png',
+    routePath: '/events/',
+    title: 'Events page',
+  },
+  {
+    generator: generateHealthcareOgImage,
+    imageUrl: '/img/og/solutions-healthcare-og.png',
+    outputFile: 'solutions-healthcare-og.png',
+    routePath: '/solutions/healthcare/',
+    title: 'Healthcare solutions page',
+  },
+  {
+    generator: generateFinanceOgImage,
+    imageUrl: '/img/og/solutions-finance-og.png',
+    outputFile: 'solutions-finance-og.png',
+    routePath: '/solutions/finance/',
+    title: 'Finance solutions page',
+  },
+  {
+    generator: generateInsuranceOgImage,
+    imageUrl: '/img/og/solutions-insurance-og.png',
+    outputFile: 'solutions-insurance-og.png',
+    routePath: '/solutions/insurance/',
+    title: 'Insurance solutions page',
+  },
+  {
+    generator: generateTelecomOgImage,
+    imageUrl: '/img/og/solutions-telecom-og.png',
+    outputFile: 'solutions-telecom-og.png',
+    routePath: '/solutions/telecom/',
+    title: 'Telecom solutions page',
+  },
+];
+
+async function generateSpecialPageImages(outDir, generatedImages) {
+  let successCount = 0;
+  let failureCount = 0;
+
+  for (const page of SPECIAL_PAGE_GENERATORS) {
+    console.log(`🎨 Generating ${page.title} OG image...`);
+
+    const imagePath = path.join(outDir, 'img', 'og', page.outputFile);
+    const success = await page.generator(imagePath);
+
+    if (success) {
+      generatedImages.set(page.routePath, page.imageUrl);
+      successCount++;
+      console.log(`  ✅ ${page.title} OG image generated`);
+      continue;
+    }
+
+    failureCount++;
+  }
+
+  return { successCount, failureCount };
+}
+
+async function injectSpecialPageImages(outDir, siteConfig, generatedImages) {
+  console.log('🔄 Injecting OG image meta tags for special pages...');
+
+  for (const page of SPECIAL_PAGE_GENERATORS) {
+    const imageUrl = generatedImages.get(page.routePath);
+    if (!imageUrl) {
+      continue;
+    }
+
+    await injectOgImageUrl({
+      htmlPath: path.join(outDir, page.routePath.slice(1), 'index.html'),
+      imageUrl,
+      routePath: page.routePath,
+      siteUrl: siteConfig.url,
+    });
+  }
+}
+
+async function writeGeneratedImageManifest(outDir, generatedImages) {
+  const manifestPath = path.join(outDir, 'og-images-manifest.json');
+  await fs.writeFile(manifestPath, JSON.stringify(Object.fromEntries(generatedImages), null, 2));
+}
+
 // Standalone test runner - call this directly to test image generation
 async function runStandaloneTest() {
   const testCases = [
@@ -2078,9 +2508,7 @@ module.exports = function (context, options) {
     },
 
     async postBuild({ siteConfig, routesPaths, outDir, plugins, content, routes }) {
-      // Skip OG image generation if disabled via environment variable
-      if (process.env.SKIP_OG_GENERATION === 'true') {
-        console.log('⏭️  Skipping OG image generation (SKIP_OG_GENERATION=true)');
+      if (shouldSkipOgGeneration()) {
         return;
       }
 
@@ -2089,363 +2517,35 @@ module.exports = function (context, options) {
       const generatedImages = new Map();
       let successCount = 0;
       let failureCount = 0;
-
-      // Create a map of routes to their metadata
-      const routeMetadata = new Map();
-
-      // Process routes to extract metadata
-      if (routes) {
-        for (const route of routes) {
-          if (route.path && route.modules && Array.isArray(route.modules)) {
-            // Look for metadata in route modules
-            const metadataModule = route.modules.find(
-              (m) => m && (m.metadata || m.__metadata || (typeof m === 'object' && m.title)),
-            );
-
-            if (metadataModule) {
-              const metadata =
-                metadataModule.metadata || metadataModule.__metadata || metadataModule;
-              routeMetadata.set(route.path, {
-                title: metadata.title || metadata.frontMatter?.title,
-                description: metadata.description || metadata.frontMatter?.description,
-                breadcrumbs: metadata.breadcrumbs || [],
-              });
-            }
-          }
-        }
-      }
-
-      // Also try to get metadata from docs plugin
-      const docsPlugin = plugins.find(
-        (plugin) => plugin.name === '@docusaurus/plugin-content-docs',
-      );
-      if (docsPlugin && docsPlugin.content) {
-        const { loadedVersions } = docsPlugin.content;
-        if (loadedVersions && loadedVersions.length > 0) {
-          const version = loadedVersions[0];
-          version.docs.forEach((doc) => {
-            routeMetadata.set(doc.permalink, {
-              title: doc.title || doc.frontMatter?.title || doc.label,
-              description: doc.description || doc.frontMatter?.description,
-              breadcrumbs: doc.sidebar?.breadcrumbs || [],
-            });
-          });
-        }
-      }
-
-      // Get blog plugin metadata
-      const blogPlugin = plugins.find(
-        (plugin) => plugin.name === '@docusaurus/plugin-content-blog',
-      );
-      if (blogPlugin && blogPlugin.content) {
-        const { blogPosts } = blogPlugin.content;
-        if (blogPosts) {
-          blogPosts.forEach((post) => {
-            // Extract author information
-            const authors = post.metadata.authors || [];
-            const authorNames = authors
-              .map((a) => (typeof a === 'object' ? a.name || a.key : a))
-              .filter(Boolean)
-              .join(' & ');
-
-            routeMetadata.set(post.metadata.permalink, {
-              title: post.metadata.title,
-              description: post.metadata.description,
-              author: authorNames || null,
-              date: post.metadata.date || post.metadata.formattedDate || null,
-              image: post.metadata.frontMatter?.image || post.metadata.image || null,
-              breadcrumbs: ['Blog'],
-            });
-          });
-        }
-      }
-
-      // Process all documentation routes with improved parallel processing
-      // Satori is faster and has no system font bottleneck, so we can increase batch size
-      const BATCH_SIZE = Number(process.env.OG_BATCH_SIZE) || 8; // Increased from 2 to 8
-      const routesToProcess = routesPaths.filter(
-        (routePath) => routePath.startsWith('/docs/') || routePath.startsWith('/blog/'),
-      );
+      const routeMetadata = createRouteMetadataMap(routes, plugins);
+      const batchSize = getBatchSize();
+      const routesToProcess = getRoutesToProcess(routesPaths);
 
       const totalRoutes = routesToProcess.length;
-      console.log(`📊 Processing ${totalRoutes} routes in batches of ${BATCH_SIZE}...`);
+      console.log(`📊 Processing ${totalRoutes} routes in batches of ${batchSize}...`);
 
-      for (let i = 0; i < routesToProcess.length; i += BATCH_SIZE) {
-        const batch = routesToProcess.slice(i, i + BATCH_SIZE);
-        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-        const totalBatches = Math.ceil(totalRoutes / BATCH_SIZE);
+      for (let i = 0; i < routesToProcess.length; i += batchSize) {
+        const batch = routesToProcess.slice(i, i + batchSize);
+        const batchNum = Math.floor(i / batchSize) + 1;
+        const totalBatches = Math.ceil(totalRoutes / batchSize);
 
         console.log(`⏳ Processing batch ${batchNum}/${totalBatches} (${batch.length} images)...`);
-
-        await Promise.all(
-          batch.map(async (routePath) => {
-            try {
-              // Get metadata for this route
-              const metadata = routeMetadata.get(routePath) || {};
-
-              // Try to get metadata from multiple sources
-              let fileMetadata = { title: metadata.title };
-
-              // For blog posts, always try to read the markdown file to get the image
-              // Blog plugin doesn't expose custom frontmatter fields like image
-              if (routePath.startsWith('/blog/')) {
-                fileMetadata = await extractMetadataFromMarkdown(routePath, outDir);
-              } else if (!fileMetadata.title) {
-                // For docs, only read if we don't have a title
-                fileMetadata = await extractMetadataFromMarkdown(routePath, outDir);
-              }
-
-              // Merge route metadata with file metadata
-              const fullMetadata = {
-                ...fileMetadata,
-                ...metadata,
-                title: metadata.title || fileMetadata.title,
-                description: metadata.description || fileMetadata.description,
-                author: fileMetadata.author || metadata.author,
-                date: fileMetadata.date || metadata.date,
-                image: fileMetadata.image || metadata.image,
-              };
-
-              // Only log if there are image processing issues
-              if (
-                routePath.includes('/blog/') &&
-                fullMetadata.image &&
-                !fullMetadata.image.startsWith('http')
-              ) {
-                const imagePath = resolveImageFullPath(fullMetadata.image);
-                try {
-                  await fs.access(imagePath);
-                } catch {
-                  console.log(`⚠️  Missing image for ${routePath}: ${fullMetadata.image}`);
-                }
-              }
-
-              // Final fallback for title to path parsing
-              if (!fullMetadata.title) {
-                const pathParts = routePath.split('/').filter(Boolean);
-                const lastPart = pathParts[pathParts.length - 1];
-                fullMetadata.title = lastPart
-                  .split('-')
-                  .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                  .join(' ');
-              }
-
-              // Extract breadcrumbs from metadata or path
-              const breadcrumbs =
-                metadata.breadcrumbs && metadata.breadcrumbs.length > 0
-                  ? metadata.breadcrumbs.map((b) => b.label || b)
-                  : extractBreadcrumbs(routePath, []);
-
-              // Add route path to metadata
-              fullMetadata.routePath = routePath;
-              fullMetadata.breadcrumbs = breadcrumbs;
-
-              // Generate unique filename for this route
-              const imageFileName =
-                routePath
-                  .replace(/^\//, '')
-                  .replace(/\//g, '-')
-                  .replace(/[^a-zA-Z0-9-]/g, '') + '-og.png';
-
-              const imagePath = path.join(outDir, 'img', 'og', imageFileName);
-              const imageUrl = `/img/og/${imageFileName}`;
-
-              // Generate the OG image with full metadata
-              const success = await generateOgImage(fullMetadata, imagePath);
-
-              if (success) {
-                generatedImages.set(routePath, imageUrl);
-                successCount++;
-
-                // Inject meta tags into the HTML for this route
-                const htmlPath = path.join(outDir, routePath.slice(1), 'index.html');
-                try {
-                  if (
-                    await fs
-                      .stat(htmlPath)
-                      .then((stat) => stat.isFile())
-                      .catch(() => false)
-                  ) {
-                    let html = await fs.readFile(htmlPath, 'utf8');
-
-                    const newOgImageUrl = `${siteConfig.url}${imageUrl}`;
-                    const defaultThumbnailUrl = 'https://www.promptfoo.dev/img/thumbnail.png';
-
-                    // If HTML contains the default thumbnail URL, replace all instances
-                    if (html.includes(defaultThumbnailUrl)) {
-                      html = html.replaceAll(defaultThumbnailUrl, newOgImageUrl);
-                      await fs.writeFile(htmlPath, html);
-                    }
-                  }
-                } catch (error) {
-                  console.warn(`Could not inject meta tags for ${routePath}:`, error.message);
-                }
-              } else {
-                failureCount++;
-              }
-            } catch (error) {
-              console.error(`Error processing route ${routePath}:`, error);
-              failureCount++;
-            }
-          }),
-        );
+        const batchResults = await processRouteBatch(batch, {
+          generatedImages,
+          outDir,
+          routeMetadata,
+          siteConfig,
+        });
+        successCount += batchResults.successCount;
+        failureCount += batchResults.failureCount;
       }
 
-      // Generate pricing page OG image
-      console.log('🎨 Generating Pricing page OG image...');
-      const pricingImagePath = path.join(outDir, 'img', 'og', 'pricing-og.png');
-      const pricingSuccess = await generatePricingOgImage(pricingImagePath);
-      if (pricingSuccess) {
-        generatedImages.set('/pricing/', '/img/og/pricing-og.png');
-        successCount++;
-        console.log('  ✅ Pricing OG image generated');
-      } else {
-        failureCount++;
-      }
+      const specialPageResults = await generateSpecialPageImages(outDir, generatedImages);
+      successCount += specialPageResults.successCount;
+      failureCount += specialPageResults.failureCount;
 
-      // Generate about page OG image
-      console.log('🎨 Generating About page OG image...');
-      const aboutImagePath = path.join(outDir, 'img', 'og', 'about-og.png');
-      const aboutSuccess = await generateAboutOgImage(aboutImagePath);
-      if (aboutSuccess) {
-        generatedImages.set('/about/', '/img/og/about-og.png');
-        successCount++;
-        console.log('  ✅ About OG image generated');
-      } else {
-        failureCount++;
-      }
-
-      // Generate contact page OG image
-      console.log('🎨 Generating Contact page OG image...');
-      const contactImagePath = path.join(outDir, 'img', 'og', 'contact-og.png');
-      const contactSuccess = await generateContactOgImage(contactImagePath);
-      if (contactSuccess) {
-        generatedImages.set('/contact/', '/img/og/contact-og.png');
-        successCount++;
-        console.log('  ✅ Contact OG image generated');
-      } else {
-        failureCount++;
-      }
-
-      // Generate press page OG image
-      console.log('🎨 Generating Press page OG image...');
-      const pressImagePath = path.join(outDir, 'img', 'og', 'press-og.png');
-      const pressSuccess = await generatePressOgImage(pressImagePath);
-      if (pressSuccess) {
-        generatedImages.set('/press/', '/img/og/press-og.png');
-        successCount++;
-        console.log('  ✅ Press OG image generated');
-      } else {
-        failureCount++;
-      }
-
-      // Generate store page OG image
-      console.log('🎨 Generating Store page OG image...');
-      const storeImagePath = path.join(outDir, 'img', 'og', 'store-og.png');
-      const storeSuccess = await generateStoreOgImage(storeImagePath);
-      if (storeSuccess) {
-        generatedImages.set('/store/', '/img/og/store-og.png');
-        successCount++;
-        console.log('  ✅ Store OG image generated');
-      } else {
-        failureCount++;
-      }
-
-      // Generate events page OG image
-      console.log('🎨 Generating Events page OG image...');
-      const eventsImagePath = path.join(outDir, 'img', 'og', 'events-og.png');
-      const eventsSuccess = await generateEventsOgImage(eventsImagePath);
-      if (eventsSuccess) {
-        generatedImages.set('/events/', '/img/og/events-og.png');
-        successCount++;
-        console.log('  ✅ Events OG image generated');
-      } else {
-        failureCount++;
-      }
-
-      // Generate solutions page OG images
-      console.log('🎨 Generating Solutions page OG images...');
-
-      // Finance solutions page
-      const financeImagePath = path.join(outDir, 'img', 'og', 'solutions-finance-og.png');
-      const financeSuccess = await generateFinanceOgImage(financeImagePath);
-      if (financeSuccess) {
-        generatedImages.set('/solutions/finance/', '/img/og/solutions-finance-og.png');
-        successCount++;
-        console.log('  ✅ Finance solutions OG image generated');
-      } else {
-        failureCount++;
-      }
-
-      // Insurance solutions page
-      const insuranceImagePath = path.join(outDir, 'img', 'og', 'solutions-insurance-og.png');
-      const insuranceSuccess = await generateInsuranceOgImage(insuranceImagePath);
-      if (insuranceSuccess) {
-        generatedImages.set('/solutions/insurance/', '/img/og/solutions-insurance-og.png');
-        successCount++;
-        console.log('  ✅ Insurance solutions OG image generated');
-      } else {
-        failureCount++;
-      }
-
-      // Telecom solutions page
-      const telecomImagePath = path.join(outDir, 'img', 'og', 'solutions-telecom-og.png');
-      const telecomSuccess = await generateTelecomOgImage(telecomImagePath);
-      if (telecomSuccess) {
-        generatedImages.set('/solutions/telecom/', '/img/og/solutions-telecom-og.png');
-        successCount++;
-        console.log('  ✅ Telecom solutions OG image generated');
-      } else {
-        failureCount++;
-      }
-
-      // Inject meta tags for special pages (pricing, about, contact, press, store, events, solutions)
-      console.log('🔄 Injecting OG image meta tags for special pages...');
-      const specialPages = [
-        '/pricing/',
-        '/about/',
-        '/contact/',
-        '/press/',
-        '/store/',
-        '/events/',
-        '/solutions/finance/',
-        '/solutions/insurance/',
-        '/solutions/telecom/',
-      ];
-
-      const defaultThumbnailUrl = 'https://www.promptfoo.dev/img/thumbnail.png';
-      for (const routePath of specialPages) {
-        const imageUrl = generatedImages.get(routePath);
-        if (imageUrl) {
-          const htmlPath = path.join(outDir, routePath.slice(1), 'index.html');
-          try {
-            if (
-              await fs
-                .stat(htmlPath)
-                .then((stat) => stat.isFile())
-                .catch(() => false)
-            ) {
-              let html = await fs.readFile(htmlPath, 'utf8');
-              const newOgImageUrl = `${siteConfig.url}${imageUrl}`;
-
-              // Replace default thumbnail with custom OG image
-              if (html.includes(defaultThumbnailUrl)) {
-                html = html.replaceAll(defaultThumbnailUrl, newOgImageUrl);
-                await fs.writeFile(htmlPath, html);
-              }
-            }
-          } catch (error) {
-            console.warn(`Could not inject meta tags for ${routePath}:`, error.message);
-          }
-        }
-      }
-
-      // Create a manifest file for the generated images
-      const manifestPath = path.join(outDir, 'og-images-manifest.json');
-      await fs.writeFile(
-        manifestPath,
-        JSON.stringify(Object.fromEntries(generatedImages), null, 2),
-      );
+      await injectSpecialPageImages(outDir, siteConfig, generatedImages);
+      await writeGeneratedImageManifest(outDir, generatedImages);
 
       console.log(
         `✅ Generated ${successCount} OG images${failureCount > 0 ? ` (${failureCount} failed)` : ''}`,

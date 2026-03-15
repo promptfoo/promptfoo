@@ -3,9 +3,12 @@
  */
 
 import * as github from '@actions/github';
-import { Octokit } from '@octokit/rest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getGitHubContext, postReviewComments } from '../../code-scan-action/src/github';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  getGitHubContext,
+  getPRFiles,
+  postReviewComments,
+} from '../../code-scan-action/src/github';
 
 // Mock @actions/core
 vi.mock('@actions/core', () => ({
@@ -14,9 +17,14 @@ vi.mock('@actions/core', () => ({
   error: vi.fn(),
 }));
 
+vi.mock('@octokit/rest', () => ({
+  Octokit: class {},
+}));
+
 // Mock @actions/github
 vi.mock('@actions/github', () => ({
   context: {
+    eventName: 'pull_request',
     repo: {
       owner: 'test-owner',
       repo: 'test-repo',
@@ -61,29 +69,62 @@ index abc123..def456 100644
  context line 60
 `;
 
-// Mock Octokit
-vi.mock('@octokit/rest', () => {
+function createMockOctokit(overrides?: {
+  pulls?: Record<string, unknown>;
+  issues?: Record<string, unknown>;
+}) {
   return {
-    Octokit: vi.fn().mockImplementation(() => ({
-      pulls: {
-        createReview: vi.fn().mockResolvedValue({}),
-        get: vi.fn().mockResolvedValue({ data: mockDiff }),
-      },
-      issues: {
-        createComment: vi.fn().mockResolvedValue({}),
-      },
-    })),
+    pulls: {
+      createReview: vi.fn().mockResolvedValue({}),
+      get: vi.fn().mockResolvedValue({ data: mockDiff }),
+      ...overrides?.pulls,
+    },
+    issues: {
+      createComment: vi.fn().mockResolvedValue({}),
+      ...overrides?.issues,
+    },
   };
-});
+}
 
 describe('GitHub API Client', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    github.context.eventName = 'pull_request';
+    github.context.repo = {
+      owner: 'test-owner',
+      repo: 'test-repo',
+    };
+    github.context.payload = {
+      pull_request: {
+        number: 123,
+        head: {
+          sha: 'abc123',
+        },
+      },
+    };
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('getGitHubContext', () => {
     it('should extract context from github.context', async () => {
-      const context = await getGitHubContext('test-token');
+      const context = await getGitHubContext('test-token', undefined, {
+        eventName: 'pull_request',
+        repo: {
+          owner: 'test-owner',
+          repo: 'test-repo',
+        },
+        payload: {
+          pull_request: {
+            number: 123,
+            head: {
+              sha: 'abc123',
+            },
+          },
+        },
+      } as any);
 
       expect(context).toEqual({
         owner: 'test-owner',
@@ -94,14 +135,74 @@ describe('GitHub API Client', () => {
     });
 
     it('should throw error when not in PR context', async () => {
-      const originalPayload = github.context.payload;
-      github.context.payload = {};
-
-      await expect(getGitHubContext('test-token')).rejects.toThrow(
+      await expect(
+        getGitHubContext('test-token', undefined, {
+          eventName: 'pull_request',
+          repo: {
+            owner: 'test-owner',
+            repo: 'test-repo',
+          },
+          payload: {},
+        } as any),
+      ).rejects.toThrow(
         'This action requires a pull_request event or workflow_dispatch with pr_number input',
       );
+    });
 
-      github.context.payload = originalPayload;
+    it('should reject workflow_dispatch pr_number values that are not fully numeric', async () => {
+      await expect(
+        getGitHubContext(
+          'test-token',
+          {
+            pulls: {
+              get: vi.fn(),
+            },
+          } as any,
+          {
+            eventName: 'workflow_dispatch',
+            repo: {
+              owner: 'test-owner',
+              repo: 'test-repo',
+            },
+            payload: {
+              inputs: {
+                pr_number: '123abc',
+              },
+            },
+          } as any,
+        ),
+      ).rejects.toThrow('Invalid pr_number input: "123abc"');
+    });
+  });
+
+  describe('getPRFiles', () => {
+    it('should paginate through all changed files', async () => {
+      const paginate = vi.fn().mockResolvedValue([
+        { filename: 'src/a.ts', status: 'modified' },
+        { filename: 'src/b.ts', status: 'added' },
+      ]);
+
+      const files = await getPRFiles(
+        'test-token',
+        {
+          owner: 'test-owner',
+          repo: 'test-repo',
+          number: 123,
+          sha: 'abc123',
+        },
+        {
+          paginate,
+          pulls: {
+            listFiles: vi.fn(),
+          },
+        } as any,
+      );
+
+      expect(paginate).toHaveBeenCalled();
+      expect(files).toEqual([
+        { path: 'src/a.ts', status: 'modified' },
+        { path: 'src/b.ts', status: 'added' },
+      ]);
     });
   });
 
@@ -115,13 +216,10 @@ describe('GitHub API Client', () => {
 
     it('should post review comments with Octokit', async () => {
       const mockCreateReview = vi.fn().mockResolvedValue({});
-      vi.mocked(Octokit).mockImplementation(function () {
-        return {
-          pulls: {
-            createReview: mockCreateReview,
-            get: vi.fn().mockResolvedValue({ data: mockDiff }),
-          },
-        } as unknown as Octokit;
+      const octokit = createMockOctokit({
+        pulls: {
+          createReview: mockCreateReview,
+        },
       });
 
       const comments = [
@@ -132,7 +230,7 @@ describe('GitHub API Client', () => {
         },
       ];
 
-      await postReviewComments('fake-token', mockContext, comments);
+      await postReviewComments('fake-token', mockContext, comments, octokit as any);
 
       expect(mockCreateReview).toHaveBeenCalledWith({
         owner: 'test-owner',
@@ -154,13 +252,10 @@ describe('GitHub API Client', () => {
 
     it('should handle single line comments when startLine equals line', async () => {
       const mockCreateReview = vi.fn().mockResolvedValue({});
-      vi.mocked(Octokit).mockImplementation(function () {
-        return {
-          pulls: {
-            createReview: mockCreateReview,
-            get: vi.fn().mockResolvedValue({ data: mockDiff }),
-          },
-        } as unknown as Octokit;
+      const octokit = createMockOctokit({
+        pulls: {
+          createReview: mockCreateReview,
+        },
       });
 
       const comments = [
@@ -172,7 +267,7 @@ describe('GitHub API Client', () => {
         },
       ];
 
-      await postReviewComments('fake-token', mockContext, comments);
+      await postReviewComments('fake-token', mockContext, comments, octokit as any);
 
       expect(mockCreateReview).toHaveBeenCalledWith({
         owner: 'test-owner',
@@ -194,13 +289,10 @@ describe('GitHub API Client', () => {
 
     it('should handle line range comments when startLine differs from line', async () => {
       const mockCreateReview = vi.fn().mockResolvedValue({});
-      vi.mocked(Octokit).mockImplementation(function () {
-        return {
-          pulls: {
-            createReview: mockCreateReview,
-            get: vi.fn().mockResolvedValue({ data: mockDiff }),
-          },
-        } as unknown as Octokit;
+      const octokit = createMockOctokit({
+        pulls: {
+          createReview: mockCreateReview,
+        },
       });
 
       const comments = [
@@ -212,7 +304,7 @@ describe('GitHub API Client', () => {
         },
       ];
 
-      await postReviewComments('fake-token', mockContext, comments);
+      await postReviewComments('fake-token', mockContext, comments, octokit as any);
 
       expect(mockCreateReview).toHaveBeenCalledWith({
         owner: 'test-owner',
@@ -234,13 +326,10 @@ describe('GitHub API Client', () => {
 
     it('should handle mixed single line and range comments', async () => {
       const mockCreateReview = vi.fn().mockResolvedValue({});
-      vi.mocked(Octokit).mockImplementation(function () {
-        return {
-          pulls: {
-            createReview: mockCreateReview,
-            get: vi.fn().mockResolvedValue({ data: mockDiff }),
-          },
-        } as unknown as Octokit;
+      const octokit = createMockOctokit({
+        pulls: {
+          createReview: mockCreateReview,
+        },
       });
 
       const comments = [
@@ -264,7 +353,7 @@ describe('GitHub API Client', () => {
         },
       ];
 
-      await postReviewComments('fake-token', mockContext, comments);
+      await postReviewComments('fake-token', mockContext, comments, octokit as any);
 
       expect(mockCreateReview).toHaveBeenCalledWith({
         owner: 'test-owner',
@@ -302,13 +391,10 @@ describe('GitHub API Client', () => {
 
     it('should filter out comments without files', async () => {
       const mockCreateReview = vi.fn().mockResolvedValue({});
-      vi.mocked(Octokit).mockImplementation(function () {
-        return {
-          pulls: {
-            createReview: mockCreateReview,
-            get: vi.fn().mockResolvedValue({ data: mockDiff }),
-          },
-        } as unknown as Octokit;
+      const octokit = createMockOctokit({
+        pulls: {
+          createReview: mockCreateReview,
+        },
       });
 
       const comments = [
@@ -324,7 +410,7 @@ describe('GitHub API Client', () => {
         },
       ];
 
-      await postReviewComments('fake-token', mockContext, comments);
+      await postReviewComments('fake-token', mockContext, comments, octokit as any);
 
       expect(mockCreateReview).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -342,19 +428,42 @@ describe('GitHub API Client', () => {
       );
     });
 
+    it('should preserve file context for file-scoped comments without a line', async () => {
+      const mockCreateComment = vi.fn().mockResolvedValue({});
+      const octokit = createMockOctokit({
+        issues: {
+          createComment: mockCreateComment,
+        },
+      });
+
+      const comments = [
+        {
+          file: 'src/auth.ts',
+          line: null,
+          finding: 'File-scoped issue',
+        },
+      ];
+
+      await postReviewComments('fake-token', mockContext, comments, octokit as any);
+
+      expect(mockCreateComment).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        issue_number: 123,
+        body: expect.stringContaining('**src/auth.ts**'),
+      });
+    });
+
     it('should post summary comment on error', async () => {
       const mockCreateReview = vi.fn().mockRejectedValue(new Error('API error'));
       const mockCreateComment = vi.fn().mockResolvedValue({});
-      vi.mocked(Octokit).mockImplementation(function () {
-        return {
-          pulls: {
-            createReview: mockCreateReview,
-            get: vi.fn().mockResolvedValue({ data: mockDiff }),
-          },
-          issues: {
-            createComment: mockCreateComment,
-          },
-        } as unknown as Octokit;
+      const octokit = createMockOctokit({
+        pulls: {
+          createReview: mockCreateReview,
+        },
+        issues: {
+          createComment: mockCreateComment,
+        },
       });
 
       const comments = [
@@ -365,7 +474,7 @@ describe('GitHub API Client', () => {
         },
       ];
 
-      await postReviewComments('fake-token', mockContext, comments);
+      await postReviewComments('fake-token', mockContext, comments, octokit as any);
 
       expect(mockCreateComment).toHaveBeenCalledWith({
         owner: 'test-owner',

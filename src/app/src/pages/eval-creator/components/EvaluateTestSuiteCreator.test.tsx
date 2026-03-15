@@ -4,6 +4,12 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';
+import {
+  extractVarsFromPrompts,
+  normalizePrompts,
+  normalizeProviders,
+  readFileAsText,
+} from './evalCreatorUtils';
 import type {
   DerivedMetric,
   EnvOverrides,
@@ -294,6 +300,43 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(fileInput.value).toBe('');
   });
 
+  it('should replace stale config fields when uploading YAML', async () => {
+    const user = userEvent.setup();
+
+    useStore.getState().updateConfig({
+      description: 'Old description',
+      prompts: ['Old prompt'],
+      tests: [{ vars: { topic: 'stale' } }],
+      evaluateOptions: { maxConcurrency: 10 },
+    });
+
+    render(<EvaluateTestSuiteCreator />);
+
+    const mockYamlContent = [
+      'description: Fresh Config',
+      'providers:',
+      '  - id: test-provider',
+      'prompts:',
+      '  - raw: "Hello {{name}}"',
+    ].join('\n');
+    const mockFile = new File([mockYamlContent], 'fresh.yaml', { type: 'application/yaml' });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
+    });
+
+    expect(useStore.getState().config).toMatchObject({
+      description: 'Fresh Config',
+      providers: [{ id: 'test-provider' }],
+      prompts: [{ raw: 'Hello {{name}}' }],
+      tests: [],
+      evaluateOptions: {},
+    });
+  });
+
   it('should update state when interacting with components', async () => {
     render(<EvaluateTestSuiteCreator />);
 
@@ -372,4 +415,239 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   // Future test scenarios will be added here
+});
+
+// Tests for extracted helper functions
+describe('normalizeProviders', () => {
+  it('returns empty array for non-array input', () => {
+    expect(normalizeProviders(undefined as any)).toEqual([]);
+    expect(normalizeProviders(null as any)).toEqual([]);
+    expect(normalizeProviders('string' as any)).toEqual([]);
+    expect(normalizeProviders(123 as any)).toEqual([]);
+    expect(normalizeProviders({} as any)).toEqual([]);
+  });
+
+  it('filters out non-object providers', () => {
+    const providers = [
+      { id: 'valid1', config: {} },
+      'string-provider',
+      null,
+      undefined,
+      123,
+      { id: 'valid2', config: {} },
+    ] as any;
+
+    const result = normalizeProviders(providers);
+    expect(result).toEqual([
+      { id: 'valid1', config: {} },
+      { id: 'valid2', config: {} },
+    ]);
+  });
+
+  it('filters out array elements', () => {
+    const providers = [
+      { id: 'valid1', config: {} },
+      ['nested', 'array'],
+      { id: 'valid2', config: {} },
+    ] as any;
+
+    const result = normalizeProviders(providers);
+    expect(result).toEqual([
+      { id: 'valid1', config: {} },
+      { id: 'valid2', config: {} },
+    ]);
+  });
+
+  it('returns empty array when all providers are invalid', () => {
+    const providers = ['string', null, undefined, 123, ['array']] as any;
+    expect(normalizeProviders(providers)).toEqual([]);
+  });
+
+  it('returns all providers when all are valid', () => {
+    const providers = [
+      { id: 'provider1', config: { model: 'gpt-4' } },
+      { id: 'provider2', label: 'Provider 2' },
+      { id: 'provider3', config: {}, label: 'P3' },
+    ] as ProviderOptions[];
+
+    expect(normalizeProviders(providers)).toEqual(providers);
+  });
+
+  it('handles empty array', () => {
+    expect(normalizeProviders([])).toEqual([]);
+  });
+});
+
+describe('normalizePrompts', () => {
+  it('returns empty array for non-array input', () => {
+    expect(normalizePrompts(undefined as any)).toEqual([]);
+    expect(normalizePrompts(null as any)).toEqual([]);
+    expect(normalizePrompts('string' as any)).toEqual([]);
+    expect(normalizePrompts(123 as any)).toEqual([]);
+    expect(normalizePrompts({} as any)).toEqual([]);
+  });
+
+  it('handles string prompts', () => {
+    const prompts = ['prompt1', 'prompt2', 'prompt3'];
+    expect(normalizePrompts(prompts)).toEqual(prompts);
+  });
+
+  it('extracts raw property from prompt objects', () => {
+    const prompts = [
+      'string prompt',
+      { raw: 'object prompt 1' },
+      { raw: 'object prompt 2' },
+    ] as any;
+
+    expect(normalizePrompts(prompts)).toEqual([
+      'string prompt',
+      'object prompt 1',
+      'object prompt 2',
+    ]);
+  });
+
+  it('filters out empty strings and invalid prompt types', () => {
+    const prompts = [
+      'valid prompt',
+      '',
+      { raw: 'valid object prompt' },
+      { notRaw: 'invalid object' },
+      null,
+      undefined,
+      123,
+      { raw: '' },
+    ] as any;
+
+    expect(normalizePrompts(prompts)).toEqual(['valid prompt', 'valid object prompt']);
+  });
+});
+
+describe('readFileAsText', () => {
+  it('resolves with file content when file is read successfully', async () => {
+    const fileContent = 'test file content';
+    const mockFile = new File([fileContent], 'test.txt', { type: 'text/plain' });
+
+    const result = await readFileAsText(mockFile);
+    expect(result).toBe(fileContent);
+  });
+
+  it('handles file content correctly as string', async () => {
+    const fileContent = 'yaml content\nline 2';
+    const mockFile = new File([fileContent], 'config.yaml', { type: 'application/yaml' });
+
+    const result = await readFileAsText(mockFile);
+    expect(result).toBe(fileContent);
+  });
+});
+
+describe('extractVarsFromPrompts', () => {
+  it('extracts variables from simple prompts', () => {
+    const prompts = ['Hello {{name}}', 'Your age is {{age}}'];
+    const result = extractVarsFromPrompts(prompts);
+    expect(result).toContain('name');
+    expect(result).toContain('age');
+    expect(result.length).toBe(2);
+  });
+
+  it('extracts variables with spaces around them', () => {
+    const prompts = ['{{ varWithSpaces }}', '{{  multipleSpaces  }}'];
+    const result = extractVarsFromPrompts(prompts);
+    expect(result).toContain('varWithSpaces');
+    expect(result).toContain('multipleSpaces');
+    expect(result.length).toBe(2);
+  });
+
+  it('handles multiple variables in a single prompt', () => {
+    const prompts = ['{{var1}} and {{var2}} and {{var3}}'];
+    const result = extractVarsFromPrompts(prompts);
+    expect(result).toContain('var1');
+    expect(result).toContain('var2');
+    expect(result).toContain('var3');
+    expect(result.length).toBe(3);
+  });
+
+  it('deduplicates variables across multiple prompts', () => {
+    const prompts = ['{{name}}', '{{name}}', '{{age}}', '{{name}}'];
+    const result = extractVarsFromPrompts(prompts);
+    expect(result).toContain('name');
+    expect(result).toContain('age');
+    expect(result.length).toBe(2);
+  });
+
+  it('returns empty array for prompts without variables', () => {
+    const prompts = ['No variables here', 'Just plain text'];
+    const result = extractVarsFromPrompts(prompts);
+    expect(result).toEqual([]);
+  });
+
+  it('returns empty array for empty prompts array', () => {
+    const result = extractVarsFromPrompts([]);
+    expect(result).toEqual([]);
+  });
+
+  it('ignores incomplete variable syntax', () => {
+    const prompts = ['{{incomplete', 'notcomplete}}', '{{valid}}'];
+    const result = extractVarsFromPrompts(prompts);
+    expect(result).toEqual(['valid']);
+  });
+
+  it('handles nested braces by extracting only the valid variables', () => {
+    const prompts = ['{{{nested}}}', '{{normal}}'];
+    const result = extractVarsFromPrompts(prompts);
+    expect(result).toContain('nested');
+    expect(result).toContain('normal');
+    expect(result.length).toBe(2);
+  });
+});
+
+describe('VariablesList', () => {
+  const VariablesList = ({ varsList }: { varsList: string[] }) => {
+    return varsList.map((variable, index) => (
+      <span key={variable}>
+        <code className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-xs">{variable}</code>
+        {index < varsList.length - 1 ? ', ' : ''}
+      </span>
+    ));
+  };
+
+  it('renders a single variable', () => {
+    const { container } = render(<VariablesList varsList={['var1']} />);
+    const code = container.querySelector('code');
+    expect(code).toHaveTextContent('var1');
+    expect(container.textContent).not.toContain(',');
+  });
+
+  it('renders multiple variables with commas between them', () => {
+    const { container } = render(<VariablesList varsList={['var1', 'var2', 'var3']} />);
+    const codes = container.querySelectorAll('code');
+    expect(codes).toHaveLength(3);
+    expect(codes[0]).toHaveTextContent('var1');
+    expect(codes[1]).toHaveTextContent('var2');
+    expect(codes[2]).toHaveTextContent('var3');
+    expect(container.textContent).toBe('var1, var2, var3');
+  });
+
+  it('renders empty list when varsList is empty', () => {
+    const { container } = render(<VariablesList varsList={[]} />);
+    expect(container.textContent).toBe('');
+  });
+
+  it('applies correct CSS classes to code elements', () => {
+    const { container } = render(<VariablesList varsList={['testVar']} />);
+    const code = container.querySelector('code');
+    expect(code).toHaveClass(
+      'bg-primary/20',
+      'text-primary',
+      'px-1.5',
+      'py-0.5',
+      'rounded',
+      'text-xs',
+    );
+  });
+
+  it('does not add comma after last variable', () => {
+    const { container } = render(<VariablesList varsList={['first', 'second']} />);
+    expect(container.textContent).toBe('first, second');
+    expect(container.textContent).not.toMatch(/second,/);
+  });
 });
