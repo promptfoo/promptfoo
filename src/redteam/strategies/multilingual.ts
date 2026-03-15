@@ -413,7 +413,9 @@ async function translateBatchCore(
           return translations;
         }
       }
-    } catch {}
+    } catch (err) {
+      logger.debug(`Failed to parse translation result as JSON: ${String(err)}`);
+    }
 
     const codeBlockMatch = result.output.match(/```(?:json)?\s*({[\s\S]*?})\s*```/);
     if (codeBlockMatch && codeBlockMatch[1]) {
@@ -430,7 +432,9 @@ async function translateBatchCore(
             return translations;
           }
         }
-      } catch {}
+      } catch (err) {
+        logger.debug(`Failed to parse translation code block as JSON: ${String(err)}`);
+      }
     }
 
     try {
@@ -446,7 +450,9 @@ async function translateBatchCore(
           return translations;
         }
       }
-    } catch {}
+    } catch (err) {
+      logger.debug(`Failed to parse translation result as YAML: ${String(err)}`);
+    }
 
     const translations: Record<string, string> = {};
     const outputSample =

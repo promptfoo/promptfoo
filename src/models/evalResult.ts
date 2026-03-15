@@ -58,7 +58,9 @@ export function sanitizeProvider(
         }),
       };
     }
-  } catch {}
+  } catch (err) {
+    logger.debug(`Failed to sanitize provider object, falling back to safeJsonStringify: ${String(err)}`);
+  }
   return JSON.parse(safeJsonStringify(provider) as string);
 }
 

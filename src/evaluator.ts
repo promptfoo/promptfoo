@@ -385,7 +385,9 @@ export async function runEval({
     let renderedJson = undefined;
     try {
       renderedJson = JSON.parse(renderedPrompt);
-    } catch {}
+    } catch (err) {
+      logger.debug(`Rendered prompt is not valid JSON, using as raw string: ${String(err)}`);
+    }
     setup.prompt.raw = renderedPrompt;
 
     const startTime = Date.now();
