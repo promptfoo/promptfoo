@@ -1188,4 +1188,158 @@ describe('Sharing behavior', () => {
     expect(optionNames).toContain('--share');
     expect(optionNames).toContain('--no-share');
   });
+
+  describe('Scanner selection options', () => {
+    it('should pass --include-scanner option to modelaudit', async () => {
+      const mockChildProcess = {
+        killed: false,
+        kill: vi.fn(),
+        on: vi.fn().mockImplementation(function (event: string, callback: any) {
+          if (event === 'close') {
+            callback(0);
+          }
+          return mockChildProcess;
+        }),
+      } as unknown as ChildProcess;
+
+      (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+
+      modelScanCommand(program);
+      const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+      await command.parseAsync([
+        'node',
+        'scan-model',
+        'model.pkl',
+        '--include-scanner',
+        'PickleScanner',
+        '--include-scanner',
+        'H5Scanner',
+        '--no-write',
+      ]);
+
+      expect(spawn).toHaveBeenCalledWith(
+        'modelaudit',
+        expect.arrayContaining([
+          'scan',
+          'model.pkl',
+          '--include-scanner',
+          'PickleScanner',
+          '--include-scanner',
+          'H5Scanner',
+        ]),
+        expect.any(Object),
+      );
+    });
+
+    it('should pass --exclude-scanner option to modelaudit', async () => {
+      const mockChildProcess = {
+        killed: false,
+        kill: vi.fn(),
+        on: vi.fn().mockImplementation(function (event: string, callback: any) {
+          if (event === 'close') {
+            callback(0);
+          }
+          return mockChildProcess;
+        }),
+      } as unknown as ChildProcess;
+
+      (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+
+      modelScanCommand(program);
+      const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+      await command.parseAsync([
+        'node',
+        'scan-model',
+        'model.pkl',
+        '--exclude-scanner',
+        'WeightDistributionScanner',
+        '--no-write',
+      ]);
+
+      expect(spawn).toHaveBeenCalledWith(
+        'modelaudit',
+        expect.arrayContaining([
+          'scan',
+          'model.pkl',
+          '--exclude-scanner',
+          'WeightDistributionScanner',
+        ]),
+        expect.any(Object),
+      );
+    });
+
+    it('should pass --profile option to modelaudit', async () => {
+      const mockChildProcess = {
+        killed: false,
+        kill: vi.fn(),
+        on: vi.fn().mockImplementation(function (event: string, callback: any) {
+          if (event === 'close') {
+            callback(0);
+          }
+          return mockChildProcess;
+        }),
+      } as unknown as ChildProcess;
+
+      (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+
+      modelScanCommand(program);
+      const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+      await command.parseAsync([
+        'node',
+        'scan-model',
+        'model.pkl',
+        '--profile',
+        'quick-scan',
+        '--no-write',
+      ]);
+
+      expect(spawn).toHaveBeenCalledWith(
+        'modelaudit',
+        expect.arrayContaining(['scan', 'model.pkl', '--profile', 'quick-scan']),
+        expect.any(Object),
+      );
+    });
+
+    it('should register scanner selection options', () => {
+      modelScanCommand(program);
+      const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
+      const options = command?.options || [];
+      const optionNames = options.map((opt) => opt.long);
+
+      expect(optionNames).toContain('--include-scanner');
+      expect(optionNames).toContain('--exclude-scanner');
+      expect(optionNames).toContain('--profile');
+    });
+
+    it('should save scanner selection options to audit metadata', async () => {
+      const ModelAudit = (await import('../../src/models/modelAudit')).default;
+      const createSpy = vi.mocked(ModelAudit.create);
+
+      (spawn as unknown as Mock).mockReturnValue(createMockScanProcess());
+
+      modelScanCommand(program);
+      const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+      await command.parseAsync([
+        'node',
+        'scan-model',
+        'model.pkl',
+        '--include-scanner',
+        'PickleScanner',
+        '--profile',
+        'quick-scan',
+      ]);
+
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            options: expect.objectContaining({
+              includeScanner: ['PickleScanner'],
+              profile: 'quick-scan',
+            }),
+          }),
+        }),
+      );
+    });
+  });
 });
+
