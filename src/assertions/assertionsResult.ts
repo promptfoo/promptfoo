@@ -114,7 +114,8 @@ export class AssertionsResult {
       return this.result;
     }
 
-    const score = this.totalWeight > 0 ? this.totalScore / this.totalWeight : 0;
+    const score =
+      this.totalWeight > 0 ? this.totalScore / this.totalWeight : this.failedReason ? 0 : 1;
 
     let pass = !this.failedReason;
     let reason = this.failedReason ? this.failedReason : 'All assertions passed';
@@ -135,9 +136,10 @@ export class AssertionsResult {
       reason = GUARDRAIL_BLOCKED_REASON;
     }
 
-    // Flatten nested component results, and copy the assertion into the child results.
+    // Flatten nested component results only when the parent has a real assertion for
+    // children to inherit. Assert-set aggregate results do not carry one.
     const flattenedComponentResults = this.componentResults.flatMap((result) => {
-      if (result.componentResults) {
+      if (result.componentResults && result.assertion) {
         return [
           result,
           ...result.componentResults.map((subResult) => ({

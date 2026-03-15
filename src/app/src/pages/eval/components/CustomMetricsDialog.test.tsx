@@ -126,6 +126,21 @@ describe('MetricsTable', () => {
     expect(dataTable).toBeInTheDocument();
   });
 
+  it('should retain pass-rate headers when all metrics are percentage metrics', async () => {
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+    expect(
+      await screen.findByRole('columnheader', { name: 'Test Provider - Pass Rate' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('columnheader', { name: 'Test Provider - Pass Count' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('columnheader', { name: 'Test Provider - Test Count' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Avg. Pass Rate' })).toBeInTheDocument();
+  });
+
   it('should return null when promptMetricNames is empty', () => {
     vi.mocked(useTableStore).mockReturnValue({
       table: {
@@ -314,5 +329,78 @@ describe('MetricsTable', () => {
 
     const accuracyElement = screen.getByText('accuracy');
     expect(accuracyElement).toBeInTheDocument();
+  });
+
+  it('should render raw value metrics with average, total, and count columns', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      table: {
+        head: {
+          prompts: [
+            {
+              raw: 'Prompt 1',
+              label: 'Prompt 1',
+              provider: 'Provider A',
+              metrics: {
+                namedScores: {
+                  total_cost: 1,
+                },
+                namedScoresCount: {
+                  total_cost: 4,
+                },
+                cost: 0,
+                score: 0,
+                testPassCount: 0,
+                testFailCount: 0,
+                testErrorCount: 0,
+                assertPassCount: 0,
+                assertFailCount: 0,
+                totalLatencyMs: 0,
+                tokenUsage: {},
+              },
+            },
+          ],
+          vars: [],
+        },
+        body: [
+          {
+            outputs: [],
+            test: {
+              assert: [
+                {
+                  type: 'cost',
+                  metric: 'total_cost',
+                },
+              ],
+            },
+            vars: [],
+          },
+        ],
+      },
+      config: {
+        redteam: {
+          plugins: [],
+        },
+      },
+      addFilter: mockAddFilter,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+          metadata: [],
+        },
+      },
+    } as any);
+
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+    expect(
+      await screen.findByRole('columnheader', { name: 'Provider A - Average' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Provider A - Total' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Provider A - Count' })).toBeInTheDocument();
+    expect(screen.getAllByText('0.2500')).toHaveLength(2);
+    expect(screen.getByText('1.00')).toBeInTheDocument();
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
   });
 });

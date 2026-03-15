@@ -12,6 +12,12 @@ import {
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { useApplyFilterFromMetric } from './hooks';
+import {
+  getMetricAverage,
+  getMetricDisplayKind,
+  getMetricDisplayKinds,
+  type MetricDisplayKind,
+} from './metricDisplay';
 import { useTableStore } from './store';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -21,10 +27,16 @@ type MetricScore = {
   hasScore: boolean;
 };
 
-interface MetricRow {
+type PromptMetricColumnKey = `prompt_${number}`;
+
+type MetricRow = {
   id: string;
   metric: string;
-  [key: string]: string | MetricScore; // For dynamic prompt columns (prompt_${idx})
+  kind: MetricDisplayKind;
+} & Partial<Record<PromptMetricColumnKey, MetricScore>>;
+
+function formatMetricNumber(value: number): string {
+  return value.toFixed(Math.abs(value) >= 1 ? 2 : 4);
 }
 
 const MetricsTable = ({ onClose }: { onClose: () => void }) => {
@@ -36,6 +48,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
   }
 
   const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
+  const metricKinds = React.useMemo(() => getMetricDisplayKinds(table, config), [table, config]);
 
   /**
    * Given the pass rate percentages, calculates the Tailwind classes for the cell.
@@ -101,9 +114,21 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
     return Array.from(metrics).sort();
   }, [table.head.prompts]);
 
+  const hasValueMetrics = React.useMemo(() => {
+    return promptMetricNames.some((metric) => {
+      const counts = table.head.prompts.map((prompt) => prompt.metrics?.namedScoresCount?.[metric]);
+      return getMetricDisplayKind(metric, metricKinds, counts) === 'value';
+    });
+  }, [metricKinds, promptMetricNames, table.head.prompts]);
+
   // Create columns for DataTable
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const columns: ColumnDef<MetricRow>[] = React.useMemo(() => {
+    const rateHeader = hasValueMetrics ? 'Average' : 'Pass Rate';
+    const totalHeader = hasValueMetrics ? 'Total' : 'Pass Count';
+    const countHeader = hasValueMetrics ? 'Count' : 'Test Count';
+    const overallHeader = hasValueMetrics ? 'Avg.' : 'Avg. Pass Rate';
+
     const cols: ColumnDef<MetricRow>[] = [
       {
         accessorKey: 'metric',
@@ -126,18 +151,38 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
 
     // Add a column for each prompt
     table.head.prompts.forEach((prompt, idx) => {
-      const columnId = `prompt_${idx}`;
+      const columnId = `prompt_${idx}` as PromptMetricColumnKey;
       const providerName = prompt.provider;
 
       cols.push({
         accessorKey: `${columnId}_pass_rate`,
-        header: `${providerName} - Pass Rate`,
+        header: `${providerName} - ${rateHeader}`,
         size: 150,
         cell: ({ row }) => {
-          const metricScore = row.original[columnId] as MetricScore;
+          const metricScore = row.original[columnId];
+          const metricKind = row.original.kind;
+
+          if (!metricScore) {
+            return <span className="text-sm">0</span>;
+          }
+
           const { hasScore, score, count } = metricScore;
-          const percentage =
-            hasScore && typeof count === 'number' && count > 0 ? (score / count) * 100 : 0;
+
+          if (!hasScore) {
+            return <span className="text-sm">0</span>;
+          }
+
+          if (metricKind === 'value') {
+            return (
+              <div className="flex justify-end items-center h-full">
+                <span className="text-sm">
+                  {formatMetricNumber(getMetricAverage('value', score, count))}
+                </span>
+              </div>
+            );
+          }
+
+          const percentage = getMetricAverage('percentage', score, count);
           const classes = getPercentageClasses(percentage);
 
           return (
@@ -156,21 +201,35 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       });
       cols.push({
         accessorKey: `${columnId}_score`,
-        header: `${providerName} - Pass Count`,
+        header: `${providerName} - ${totalHeader}`,
         size: 120,
         cell: ({ row }) => {
-          const metricScore = row.original[columnId] as MetricScore;
+          const metricScore = row.original[columnId];
+
+          if (!metricScore) {
+            return <span className="text-sm">0</span>;
+          }
+
           const { hasScore, score } = metricScore;
-          return <span className="text-sm">{hasScore ? score : 0}</span>;
+          return <span className="text-sm">{hasScore ? formatMetricNumber(score) : '0'}</span>;
         },
       });
       cols.push({
         accessorKey: `${columnId}_count`,
-        header: `${providerName} - Test Count`,
+        header: `${providerName} - ${countHeader}`,
         size: 120,
         cell: ({ row }) => {
-          const metricScore = row.original[columnId] as MetricScore;
+          const metricScore = row.original[columnId];
+          const metricKind = row.original.kind;
+
+          if (!metricScore) {
+            return <span className="text-sm">0</span>;
+          }
+
           const { count } = metricScore;
+          if (metricKind === 'value' && count === 0) {
+            return <span className="text-sm">-</span>;
+          }
           return <span className="text-sm">{count}</span>;
         },
       });
@@ -178,22 +237,33 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
 
     cols.push({
       accessorKey: 'avg_pass_rate',
-      header: 'Avg. Pass Rate',
+      header: overallHeader,
       size: 150,
       cell: ({ row }) => {
         let promptCount = 0;
-        let totalPassRate = 0;
-        Object.entries(row.original).forEach(([key, value]) => {
-          if (key.startsWith('prompt_')) {
-            const { score, count, hasScore } = value as MetricScore;
-            if (hasScore && typeof count === 'number' && count > 0) {
-              promptCount++;
-              totalPassRate += (score / count) * 100;
-            }
+        let totalAverage = 0;
+        const metricKind = row.original.kind;
+
+        table.head.prompts.forEach((_prompt, promptIdx) => {
+          const metricScore = row.original[`prompt_${promptIdx}` as PromptMetricColumnKey];
+          if (!metricScore?.hasScore) {
+            return;
           }
+
+          promptCount++;
+          totalAverage += getMetricAverage(metricKind, metricScore.score, metricScore.count);
         });
-        const percentage = promptCount > 0 ? totalPassRate / promptCount : 0;
-        const classes = getPercentageClasses(percentage);
+        const average = promptCount > 0 ? totalAverage / promptCount : 0;
+
+        if (metricKind === 'value') {
+          return (
+            <div className="flex justify-end items-center h-full">
+              <span className="text-sm">{formatMetricNumber(average)}</span>
+            </div>
+          );
+        }
+
+        const classes = getPercentageClasses(average);
 
         return (
           <div className="flex justify-end items-center h-full">
@@ -203,7 +273,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
                 classes,
               )}
             >
-              {percentage.toFixed(2)}%
+              {average.toFixed(2)}%
             </span>
           </div>
         );
@@ -238,23 +308,28 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
     policiesById,
     getPercentageClasses,
     handleMetricFilterClick,
+    hasValueMetrics,
+    metricKinds,
   ]);
 
   // Create rows for DataTable
   const rows: MetricRow[] = React.useMemo(() => {
     return promptMetricNames.map((metric) => {
+      const counts = table.head.prompts.map((prompt) => prompt.metrics?.namedScoresCount?.[metric]);
       const row: MetricRow = {
         id: metric,
         metric,
+        kind: getMetricDisplayKind(metric, metricKinds, counts),
       };
 
       // Add data for each prompt
       table.head.prompts.forEach((prompt, idx) => {
+        const columnId = `prompt_${idx}` as PromptMetricColumnKey;
         const score = prompt.metrics?.namedScores?.[metric];
         const count = prompt.metrics?.namedScoresCount?.[metric];
         const hasScore = score !== undefined;
 
-        row[`prompt_${idx}`] = {
+        row[columnId] = {
           score: score ?? 0,
           count: count ?? 0,
           hasScore,
@@ -263,7 +338,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
 
       return row;
     });
-  }, [promptMetricNames, table.head.prompts]);
+  }, [metricKinds, promptMetricNames, table.head.prompts]);
 
   if (promptMetricNames.length === 0) {
     return null;

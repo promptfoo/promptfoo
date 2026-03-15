@@ -1933,6 +1933,47 @@ describe('evaluator', () => {
     expect(metrics!.namedScores.MAPE).toBeCloseTo(0.2, 10);
   });
 
+  it('evaluator should aggregate thresholdless cost metrics and derived average cost', async () => {
+    const mockCostProvider: ApiProvider = {
+      id: () => 'cost-provider',
+      callApi: async () => ({
+        output: 'Test output',
+        cost: 0.25,
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockCostProvider],
+      prompts: [toPrompt('Test prompt for cost metrics')],
+      tests: [
+        {
+          assert: [{ type: 'cost', metric: 'total_cost' }],
+        },
+        {
+          assert: [{ type: 'cost', metric: 'total_cost' }],
+        },
+      ],
+      derivedMetrics: [
+        {
+          name: 'avg_cost',
+          value: 'total_cost / __count',
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    const metrics = evalRecord.prompts[0]?.metrics;
+    expect(metrics).toBeDefined();
+    expect(metrics!.score).toBe(2);
+    expect(metrics!.namedScores.total_cost).toBeCloseTo(0.5, 10);
+    expect(metrics!.namedScoresCount.total_cost).toBe(2);
+    expect(metrics!.namedScores.avg_cost).toBeCloseTo(0.25, 10);
+    expect(metrics!.assertPassCount).toBe(0);
+    expect(metrics!.assertFailCount).toBe(0);
+  });
+
   it('evaluator should pass __count to JavaScript function derived metrics', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

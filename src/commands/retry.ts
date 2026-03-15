@@ -1,6 +1,10 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { and, eq, inArray } from 'drizzle-orm';
+import {
+  collectAssertedComponentResults,
+  collectCountableComponentResults,
+} from '../assertions/componentResults';
 import { renderMetricName } from '../assertions/index';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
@@ -156,25 +160,28 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
           // Note: We need to render template variables in assertion metrics before comparing
           const testVars = result.testCase?.vars || {};
           let contributingAssertions = 0;
-          result.gradingResult?.componentResults?.forEach((componentResult) => {
-            const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
-            if (renderedMetric === key) {
-              contributingAssertions++;
-            }
-          });
+          collectAssertedComponentResults(result.gradingResult?.componentResults).forEach(
+            (componentResult) => {
+              const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
+              if (renderedMetric === key) {
+                contributingAssertions++;
+              }
+            },
+          );
           metrics.namedScoresCount[key] =
             (metrics.namedScoresCount[key] || 0) + (contributingAssertions || 1);
         }
 
         // Update assertion counts
-        if (result.gradingResult?.componentResults) {
-          metrics.assertPassCount += result.gradingResult.componentResults.filter(
-            (r) => r.pass,
-          ).length;
-          metrics.assertFailCount += result.gradingResult.componentResults.filter(
-            (r) => !r.pass,
-          ).length;
-        }
+        const countableComponentResults = collectCountableComponentResults(
+          result.gradingResult?.componentResults,
+        );
+        metrics.assertPassCount += countableComponentResults.filter(
+          (r) => !r.metadata?.isMetricOnly && r.pass,
+        ).length;
+        metrics.assertFailCount += countableComponentResults.filter(
+          (r) => !r.metadata?.isMetricOnly && !r.pass,
+        ).length;
 
         // Update token usage
         if (result.response?.tokenUsage) {

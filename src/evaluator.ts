@@ -3,6 +3,10 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import {
+  collectAssertedComponentResults,
+  collectCountableComponentResults,
+} from './assertions/componentResults';
+import {
   MODEL_GRADED_ASSERTION_TYPES,
   renderMetricName,
   runAssertions,
@@ -1575,7 +1579,7 @@ class Evaluator {
           // Note: We need to render template variables in assertion metrics before comparing
           const testVars = row.testCase?.vars || {};
           let contributingAssertions = 0;
-          row.gradingResult?.componentResults?.forEach((result) => {
+          collectAssertedComponentResults(row.gradingResult?.componentResults).forEach((result) => {
             const renderedMetric = renderMetricName(result.assertion?.metric, testVars);
             if (renderedMetric === key) {
               contributingAssertions++;
@@ -1631,10 +1635,15 @@ class Evaluator {
             metrics.testFailCount += 1;
           }
         }
-        metrics.assertPassCount +=
-          row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
-        metrics.assertFailCount +=
-          row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
+        const countableComponentResults = collectCountableComponentResults(
+          row.gradingResult?.componentResults,
+        );
+        metrics.assertPassCount += countableComponentResults.filter(
+          (r) => !r.metadata?.isMetricOnly && r.pass,
+        ).length;
+        metrics.assertFailCount += countableComponentResults.filter(
+          (r) => !r.metadata?.isMetricOnly && !r.pass,
+        ).length;
         metrics.totalLatencyMs += row.latencyMs || 0;
         accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
 

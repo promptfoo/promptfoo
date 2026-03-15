@@ -792,6 +792,155 @@ describe('runAssertions', () => {
     });
   });
 
+  it('should track thresholdless cost metrics without affecting aggregate score', async () => {
+    const test: AtomicTestCase = {
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+        },
+        {
+          type: 'cost',
+          metric: 'total_cost',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output', cost: 0.25 },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.namedScores).toEqual({
+      total_cost: 0.25,
+    });
+  });
+
+  it('should keep pure metric-only cost tests score-neutral', async () => {
+    const test: AtomicTestCase = {
+      assert: [
+        {
+          type: 'cost',
+          metric: 'total_cost',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output', cost: 0.25 },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.namedScores).toEqual({
+      total_cost: 0.25,
+    });
+  });
+
+  it('should track thresholdless latency metrics without affecting aggregate score', async () => {
+    const test: AtomicTestCase = {
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+        },
+        {
+          type: 'latency',
+          metric: 'total_latency_ms',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      latencyMs: 250,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.namedScores).toEqual({
+      total_latency_ms: 250,
+    });
+  });
+
+  it('should keep metric-only assert-sets from affecting aggregate score', async () => {
+    const test: AtomicTestCase = {
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+        },
+        {
+          type: 'assert-set',
+          metric: 'cost_metrics',
+          assert: [
+            {
+              type: 'cost',
+              metric: 'total_cost',
+            },
+          ],
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output', cost: 0.25 },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.namedScores).toEqual({
+      cost_metrics: 1,
+      total_cost: 0.25,
+    });
+    expect(result.componentResults).toHaveLength(2);
+    expect(result.componentResults?.[1]).toMatchObject({
+      pass: true,
+      score: 1,
+      metadata: {
+        isMetricOnly: true,
+      },
+    });
+    expect(result.componentResults?.[1].componentResults).toHaveLength(1);
+  });
+
+  it('should reject not-cost without a threshold', async () => {
+    const test: AtomicTestCase = {
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+        },
+        {
+          type: 'not-cost',
+          metric: 'total_cost',
+        },
+      ],
+    };
+
+    await expect(
+      runAssertions({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        test,
+        providerResponse: { output: 'Expected output', cost: 0.5 },
+      }),
+    ).rejects.toThrow('Cost assertion requires a threshold when using not-cost');
+  });
+
   it('should handle test with no vars defined', async () => {
     // When test.vars is undefined, should still work (empty vars object)
     const test: AtomicTestCase = {

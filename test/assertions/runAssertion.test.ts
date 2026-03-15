@@ -2127,7 +2127,29 @@ describe('runAssertion', () => {
       });
     });
 
-    it('should throw an error when threshold is not provided', async () => {
+    it('should treat missing threshold as metric-only mode when metric is set', async () => {
+      const output = 'Expected output';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: {
+          type: 'latency',
+          metric: 'total_latency_ms',
+        },
+        latencyMs: 50,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 50,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should throw when latency has no threshold and no metric', async () => {
       const output = 'Expected output';
 
       await expect(
@@ -2141,7 +2163,47 @@ describe('runAssertion', () => {
           test: {} as AtomicTestCase,
           providerResponse: { output },
         }),
-      ).rejects.toThrow('Latency assertion must have a threshold in milliseconds');
+      ).rejects.toThrow('Latency assertion without a threshold must set `metric`');
+    });
+
+    it('should throw when not-latency has no threshold', async () => {
+      const output = 'Expected output';
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion: {
+            type: 'not-latency',
+            metric: 'total_latency_ms',
+          },
+          latencyMs: 50,
+          test: {} as AtomicTestCase,
+          providerResponse: { output },
+        }),
+      ).rejects.toThrow('Latency assertion requires a threshold when using not-latency');
+    });
+
+    it('should invert threshold comparisons for not-latency assertions', async () => {
+      const output = 'Expected output';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: {
+          type: 'not-latency',
+          threshold: 100,
+        },
+        latencyMs: 150,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+      });
     });
 
     it('should handle latency equal to threshold', async () => {
@@ -2473,6 +2535,95 @@ describe('runAssertion', () => {
       expect(result).toMatchObject({
         pass: false,
         reason: 'Cost 0.010 is greater than threshold 0',
+      });
+    });
+
+    it('should treat missing threshold as metric-only mode when metric is set', async () => {
+      const cost = 0.25;
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', cost };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'cost',
+          metric: 'total_cost',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 0.25,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should throw when cost has no threshold and no metric', async () => {
+      const cost = 0.25;
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', cost };
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider,
+          assertion: {
+            type: 'cost',
+          },
+          test: {} as AtomicTestCase,
+          providerResponse,
+        }),
+      ).rejects.toThrow('Cost assertion without a threshold must set `metric`');
+    });
+
+    it('should throw when not-cost has no threshold', async () => {
+      const cost = 0.25;
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', cost };
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider,
+          assertion: {
+            type: 'not-cost',
+            metric: 'total_cost',
+          },
+          test: {} as AtomicTestCase,
+          providerResponse,
+        }),
+      ).rejects.toThrow('Cost assertion requires a threshold when using not-cost');
+    });
+
+    it('should invert threshold comparisons for not-cost assertions', async () => {
+      const cost = 0.25;
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', cost };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'not-cost',
+          threshold: 0.1,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
       });
     });
   });

@@ -28,6 +28,7 @@ import { getTraceStore } from '../tracing/store';
 import {
   type ApiProvider,
   type Assertion,
+  type AssertionOrSet,
   type AssertionType,
   type AssertionValue,
   type AtomicTestCase,
@@ -258,6 +259,27 @@ export function isAssertionInverse(assertion: Assertion): boolean {
 export function getAssertionBaseType(assertion: Assertion): AssertionType {
   const inverse = isAssertionInverse(assertion);
   return inverse ? (assertion.type.slice(4) as AssertionType) : (assertion.type as AssertionType);
+}
+
+export function isMetricOnlyAssertion(assertion: AssertionOrSet): boolean {
+  if (assertion.type === 'assert-set') {
+    return assertion.threshold === undefined && assertion.assert.every(isMetricOnlyAssertion);
+  }
+
+  const inverse = isAssertionInverse(assertion);
+  if (inverse) {
+    return false;
+  }
+
+  const baseType = getAssertionBaseType(assertion);
+  return (baseType === 'cost' || baseType === 'latency') && assertion.threshold === undefined;
+}
+
+export function getEffectiveAssertionWeight(assertion: AssertionOrSet): number | undefined {
+  if (isMetricOnlyAssertion(assertion)) {
+    return 0;
+  }
+  return assertion.weight;
 }
 
 export async function runAssertion({
@@ -497,6 +519,11 @@ export async function runAssertion({
   if (handler) {
     const result = await handler(assertionParams);
 
+    if (isMetricOnlyAssertion(assertion)) {
+      result.metadata = result.metadata || {};
+      result.metadata.isMetricOnly = true;
+    }
+
     // Store rendered assertion value in metadata if it differs from the original template
     // This allows the UI to display substituted variable values instead of raw templates
     if (
@@ -604,13 +631,21 @@ export async function runAssertions({
         index,
         result,
         metric: renderMetricName(assertion.metric, vars || test.vars || {}),
-        weight: assertion.weight,
+        weight: getEffectiveAssertionWeight(assertion),
       });
     },
   );
 
   await async.forEach(subAssertResults, async (subAssertResult) => {
-    const result = await subAssertResult.testResult();
+    const assertionSet = subAssertResult.parentAssertionSet!.assertionSet;
+    const subResult = await subAssertResult.testResult();
+    const result = {
+      ...subResult,
+      metadata: {
+        ...subResult.metadata,
+        isMetricOnly: isMetricOnlyAssertion(assertionSet),
+      },
+    };
     const {
       index,
       assertionSet: { metric, weight },

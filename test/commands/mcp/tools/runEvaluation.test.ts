@@ -190,6 +190,58 @@ describe('runEvaluation tool', () => {
       expect(result.results[0].response.output!.length).toBeLessThan(300);
       expect(result.results[0].response.output).toContain('...');
     });
+
+    it('should prefer component assertion metadata when formatting nested results', async () => {
+      const { formatEvaluationResults } = await import(
+        '../../../../src/commands/mcp/lib/resultFormatter'
+      );
+
+      const mockSummary = {
+        version: 3,
+        stats: { successes: 1, failures: 0, errors: 0 },
+        results: [
+          {
+            testCase: {
+              description: 'test',
+              assert: [{ type: 'python', value: 'grader.py' }],
+            },
+            vars: {},
+            prompt: { label: 'test', raw: 'prompt text' },
+            provider: { id: 'provider', label: 'Provider' },
+            response: { output: 'response' },
+            success: true,
+            score: 1,
+            namedScores: {},
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'All assertions passed',
+              componentResults: [
+                {
+                  pass: true,
+                  score: 1,
+                  reason: 'Assertion passed',
+                  assertion: { type: 'python', value: 'grader.py' },
+                },
+                {
+                  pass: true,
+                  score: 1,
+                  reason: 'Nested assertion passed',
+                  assertion: { type: 'equals', metric: 'inner_metric', value: 'ok' },
+                },
+              ],
+            },
+          },
+        ],
+        prompts: [],
+      };
+
+      const formatted = formatEvaluationResults(mockSummary as any);
+      expect(formatted.results[0].assertions?.componentResults).toEqual([
+        expect.objectContaining({ type: 'python' }),
+        expect.objectContaining({ type: 'equals', metric: 'inner_metric' }),
+      ]);
+    });
   });
 
   describe('prompts summary formatting', () => {

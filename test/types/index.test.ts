@@ -54,17 +54,28 @@ describe('AssertionSchema', () => {
     const baseTypes = BaseAssertionTypesSchema.options;
 
     baseTypes.forEach((type) => {
-      const assertion = {
-        type,
-        value: 'test value',
-      };
+      const assertion =
+        type === 'cost'
+          ? {
+              type,
+              metric: 'total_cost',
+            }
+          : type === 'latency'
+            ? {
+                type,
+                metric: 'total_latency_ms',
+              }
+            : {
+                type,
+                value: 'test value',
+              };
 
       const result = AssertionSchema.safeParse(assertion);
       expect(result.success).toBe(true);
     });
   });
 
-  it('should validate "not-" prefixed assertion types', () => {
+  it('should validate all inverse assertion types that require only a type/value pair', () => {
     const notPrefixedAssertion = {
       type: 'not-contains',
       value: 'unwanted value',
@@ -91,6 +102,36 @@ describe('AssertionSchema', () => {
     };
 
     const result = AssertionSchema.safeParse(arrayAssertion);
+    expect(result.success).toBe(true);
+  });
+
+  it('should reject metric-only cost assertions without metric at schema validation time', () => {
+    const result = AssertionSchema.safeParse({
+      type: 'cost',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(['metric']);
+    expect(result.error?.issues[0]?.message).toContain('must set `metric`');
+  });
+
+  it('should reject metric-only inverse cost assertions without threshold at schema validation time', () => {
+    const result = AssertionSchema.safeParse({
+      type: 'not-cost',
+      metric: 'total_cost',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(['threshold']);
+    expect(result.error?.issues[0]?.message).toContain('requires a threshold');
+  });
+
+  it('should validate metric-only latency assertions when metric is set', () => {
+    const result = AssertionSchema.safeParse({
+      type: 'latency',
+      metric: 'total_latency_ms',
+    });
+
     expect(result.success).toBe(true);
   });
 });
