@@ -1448,8 +1448,14 @@ class Evaluator {
           }
         }
         const skipped = originalCount - runEvalOptions.length;
-        if (skipped > 0) {
+        if (skipped > 0 && runEvalOptions.length > 0) {
           logger.info(`Resuming: skipping ${skipped} previously completed cases`);
+        } else if (runEvalOptions.length === 0) {
+          logger.info(
+            `Evaluation ${this.evalRecord.id} is already complete (${originalCount}/${originalCount} cases). Nothing to resume.`,
+          );
+          // Don't return early — let finalization logic (save, hooks, telemetry) still run.
+          // The eval loop will simply not execute any steps with an empty runEvalOptions.
         }
       } catch (err) {
         logger.warn(
