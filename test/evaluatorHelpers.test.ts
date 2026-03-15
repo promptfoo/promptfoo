@@ -3,6 +3,7 @@ import * as fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  type AfterEachExtensionHookContext,
   collectFileMetadata,
   extractTextFromPDF,
   getExtensionHookName,
@@ -922,6 +923,217 @@ describe('evaluatorHelpers', () => {
           context, // LEGACY: context as second arg
           false,
         );
+      });
+    });
+
+    describe('afterEach return value handling', () => {
+      const baseResult = {
+        provider: { id: () => 'test' } as any,
+        prompt: { raw: 'test', label: 'test' } as any,
+        vars: {},
+        response: { output: 'test output' } as any,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        namedScores: { existing_metric: 0.5 },
+        metadata: { existing_key: 'value' },
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: {},
+        cost: 0,
+      } as any;
+
+      it('should merge returned namedScores into the result', async () => {
+        vi.mocked(transform).mockResolvedValue({
+          test: {} as TestCase,
+          result: {
+            namedScores: { num_turns: 3, cost_usd: 0.05 },
+          },
+        });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
+        expect(out.result.namedScores).toEqual({
+          existing_metric: 0.5,
+          num_turns: 3,
+          cost_usd: 0.05,
+        });
+      });
+
+      it('should merge returned metadata into the result', async () => {
+        vi.mocked(transform).mockResolvedValue({
+          test: {} as TestCase,
+          result: {
+            metadata: { session_url: 'https://example.com', tool_calls: 5 },
+          },
+        });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
+        expect(out.result.metadata).toEqual({
+          existing_key: 'value',
+          session_url: 'https://example.com',
+          tool_calls: 5,
+        });
+      });
+
+      it('should preserve existing namedScores and metadata when extension returns none', async () => {
+        vi.mocked(transform).mockResolvedValue(undefined);
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
+        expect(out.result.namedScores).toEqual({ existing_metric: 0.5 });
+        expect(out.result.metadata).toEqual({ existing_key: 'value' });
+      });
+
+      it('should chain multiple extensions correctly', async () => {
+        vi.mocked(transform)
+          .mockResolvedValueOnce({
+            test: {} as TestCase,
+            result: {
+              namedScores: { metric_a: 1 },
+              metadata: { key_a: 'a' },
+            },
+          })
+          .mockResolvedValueOnce({
+            test: {} as TestCase,
+            result: {
+              namedScores: { metric_b: 2 },
+              metadata: { key_b: 'b' },
+            },
+          });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(
+          ['file://hooks1.js:afterEach', 'file://hooks2.js:afterEach'],
+          'afterEach',
+          context,
+        );
+        expect(out.result.namedScores).toEqual({
+          existing_metric: 0.5,
+          metric_a: 1,
+          metric_b: 2,
+        });
+        expect(out.result.metadata).toEqual({
+          existing_key: 'value',
+          key_a: 'a',
+          key_b: 'b',
+        });
+      });
+
+      it('should allow later extensions to override earlier extension values', async () => {
+        vi.mocked(transform)
+          .mockResolvedValueOnce({
+            test: {} as TestCase,
+            result: {
+              namedScores: { shared_metric: 1 },
+            },
+          })
+          .mockResolvedValueOnce({
+            test: {} as TestCase,
+            result: {
+              namedScores: { shared_metric: 99 },
+            },
+          });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(
+          ['file://hooks1.js:afterEach', 'file://hooks2.js:afterEach'],
+          'afterEach',
+          context,
+        );
+        expect(out.result.namedScores.shared_metric).toBe(99);
+      });
+
+      it('should not allow overriding success, score, or response fields via return value', async () => {
+        vi.mocked(transform).mockResolvedValue({
+          test: {} as TestCase,
+          result: {
+            namedScores: { custom: 1 },
+            success: false,
+            score: 0,
+            response: { output: 'hacked' },
+          },
+        });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
+        // success, score, response should remain unchanged
+        expect(out.result.success).toBe(true);
+        expect(out.result.score).toBe(1);
+        expect(out.result.response?.output).toBe('test output');
+        // but namedScores should be merged
+        expect(out.result.namedScores.custom).toBe(1);
+      });
+
+      it('should pass accumulated context to subsequent extensions (chaining input)', async () => {
+        // Extension #2 should receive the context modified by extension #1
+        vi.mocked(transform)
+          .mockImplementationOnce(async (_ext, context) => {
+            // Extension #1: verify it gets the original context, return new namedScores
+            const ctx = context as AfterEachExtensionHookContext;
+            expect(ctx.result.namedScores).toEqual({ existing_metric: 0.5 });
+            return {
+              test: ctx.test,
+              result: {
+                namedScores: { from_ext1: 10 },
+              },
+            };
+          })
+          .mockImplementationOnce(async (_ext, context) => {
+            // Extension #2: should see extension #1's merged namedScores in input
+            const ctx = context as AfterEachExtensionHookContext;
+            expect(ctx.result.namedScores).toEqual({
+              existing_metric: 0.5,
+              from_ext1: 10,
+            });
+            return {
+              test: ctx.test,
+              result: {
+                namedScores: { from_ext2: 20 },
+              },
+            };
+          });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(
+          ['file://hooks1.js:afterEach', 'file://hooks2.js:afterEach'],
+          'afterEach',
+          context,
+        );
+        expect(out.result.namedScores).toEqual({
+          existing_metric: 0.5,
+          from_ext1: 10,
+          from_ext2: 20,
+        });
       });
     });
   });
