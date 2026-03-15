@@ -131,7 +131,10 @@ export default defineConfig({
     port: 3000,
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
-  plugins: [browserModulesPlugin(), reactCompilerPlugin(), react()],
+  // The app workspace uses vite 8, but vitest/config re-exports defineConfig from
+  // root vite 7 (npm hoisting). The Plugin types are structurally incompatible between
+  // vite 7 (rollup-based) and vite 8 (rolldown-based), so we cast the plugins array.
+  plugins: [browserModulesPlugin(), reactCompilerPlugin(), react()] as Plugin[],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),
@@ -146,35 +149,39 @@ export default defineConfig({
     outDir: '../../dist/src/app',
     // Enable source maps for production debugging
     sourcemap: process.env.NODE_ENV === 'production' ? 'hidden' : true,
-    rolldownOptions: {
-      output: {
-        // Rolldown replaces Rollup's manualChunks with code splitting groups.
-        codeSplitting: {
-          groups: [
-            {
-              name: 'vendor-react',
-              test: /[\\/]node_modules[\\/](?:react|react-dom|react-router-dom)[\\/]/,
-            },
-            {
-              name: 'vendor-charts',
-              test: /[\\/]node_modules[\\/](?:recharts|chart\.js)[\\/]/,
-            },
-            {
-              name: 'vendor-utils',
-              test: /[\\/]node_modules[\\/](?:js-yaml|diff)[\\/]/,
-            },
-            {
-              name: 'vendor-syntax',
-              test: /[\\/]node_modules[\\/]prismjs[\\/]/,
-            },
-            {
-              name: 'vendor-markdown',
-              test: /[\\/]node_modules[\\/](?:react-markdown|remark-gfm)[\\/]/,
-            },
-          ],
+    // Vite 8 uses Rolldown instead of Rollup. The vitest/config re-export resolves
+    // to vite 7 types (due to npm hoisting), so rolldownOptions is not in the type
+    // definitions yet. At runtime, vite 8 is used and rolldownOptions works correctly.
+    ...({
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              {
+                name: 'vendor-react',
+                test: /[\\/]node_modules[\\/](?:react|react-dom|react-router-dom)[\\/]/,
+              },
+              {
+                name: 'vendor-charts',
+                test: /[\\/]node_modules[\\/](?:recharts|chart\.js)[\\/]/,
+              },
+              {
+                name: 'vendor-utils',
+                test: /[\\/]node_modules[\\/](?:js-yaml|diff)[\\/]/,
+              },
+              {
+                name: 'vendor-syntax',
+                test: /[\\/]node_modules[\\/]prismjs[\\/]/,
+              },
+              {
+                name: 'vendor-markdown',
+                test: /[\\/]node_modules[\\/](?:react-markdown|remark-gfm)[\\/]/,
+              },
+            ],
+          },
         },
       },
-    },
+    } as Record<string, unknown>),
     // Increase chunk size warning limit for this development tool
     chunkSizeWarningLimit: 2500,
   },
@@ -220,9 +227,6 @@ export default defineConfig({
         'src/setupTests.ts',
         'src/**/*.stories.tsx',
       ],
-      // Collect coverage for all files to identify untested files
-      // @ts-expect-error - 'all' is valid in Vitest v8 coverage but types are incomplete
-      all: true,
     },
 
     // Suppress known MUI and React Testing Library warnings that don't indicate real problems
