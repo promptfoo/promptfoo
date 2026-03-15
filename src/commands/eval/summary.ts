@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import { formatDuration } from '../../util/formatDuration';
 
 import type { TokenUsage } from '../../types/index';
+import type { PassPowerResult } from '../../util/passPowerOfN';
 import type { TokenUsageTracker } from '../../util/tokenUsage';
 
 /**
@@ -43,6 +44,8 @@ export interface EvalSummaryParams {
   tracker: TokenUsageTracker;
   /** HTTP status code if the scan was aborted due to a non-transient target error (401, 403, 404, 501) */
   targetErrorStatus?: number;
+  /** pass^N consistency metric, when available */
+  passPowerOfN?: PassPowerResult;
 }
 
 /**
@@ -100,6 +103,7 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
     maxConcurrency,
     tracker,
     targetErrorStatus,
+    passPowerOfN,
   } = params;
 
   const lines: string[] = [];
@@ -336,11 +340,17 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
       ? `${chalk.red('✗')} ${chalk.red.bold(errors.toLocaleString())} ${errorLabel}`
       : `${chalk.gray.bold(errors.toLocaleString())} ${errorLabel}`;
 
+  const metricsPart =
+    passPowerOfN != null && !Number.isNaN(passRate)
+      ? ` (${passRateDisplay}, ${chalk.white.bold(`pass^${passPowerOfN.n}: ${passPowerOfN.overallScore.toFixed(2)}%`)})`
+      : Number.isNaN(passRate)
+        ? ''
+        : ` (${passRateDisplay})`;
   const resultsLine = `${passedPart}, ${failedPart}, ${errorsPart}`;
   if (Number.isNaN(passRate)) {
     lines.push(`${chalk.bold('Results:')} ${resultsLine}`);
   } else {
-    lines.push(`${chalk.bold('Results:')} ${resultsLine} (${passRateDisplay})`);
+    lines.push(`${chalk.bold('Results:')} ${resultsLine}${metricsPart}`);
   }
 
   const durationDisplay = formatDuration(duration);

@@ -111,6 +111,8 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `-r, --providers <name or path...>` | Provider names or paths to custom API caller modules                                                     |
 | `--remote`                          | Force remote inference wherever possible (used for red teams)                                            |
 | `--repeat <number>`                 | Number of times to run each test                                                                         |
+| `--pass-power <number>`             | The N exponent in pass^N consistency metric (default: repeat count). Requires `--repeat > 1`             |
+| `--pass-power-threshold <number>`   | Minimum pass^N score (0-100) for CI gating. Requires `--repeat > 1`                                      |
 | `--share`                           | Create a shareable URL                                                                                   |
 | `--no-share`                        | Do not create a shareable URL, this overrides the config file                                            |
 | `--suggest-prompts <number>`        | Generate N new prompts and append them to the prompt list                                                |

@@ -532,6 +532,36 @@ describe('generateEvalSummary', () => {
       expect(plainOutput).not.toContain('1 errors');
       expect(plainOutput).toContain('(80.00%)');
     });
+
+    it('should include pass^N when available', () => {
+      const params: EvalSummaryParams = {
+        evalId: 'eval-pass-power',
+        isRedteam: false,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: { total: 0 },
+        successes: 8,
+        failures: 2,
+        errors: 0,
+        duration: 5000,
+        maxConcurrency: 4,
+        tracker: mockTracker,
+        passPowerOfN: {
+          n: 4,
+          overallScore: 31.640625,
+          groups: [],
+        },
+      };
+
+      const lines = generateEvalSummary(params);
+      const plainOutput = stripAnsi(lines.join('\n'));
+
+      expect(plainOutput).toContain('Results:');
+      expect(plainOutput).toContain('(80.00%, pass^4: 31.64%)');
+    });
   });
 
   describe('guidance messages', () => {

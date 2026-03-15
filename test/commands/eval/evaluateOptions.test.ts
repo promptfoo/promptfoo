@@ -28,6 +28,33 @@ vi.mock('../../../src/logger', () => ({
   isDebugEnabled: vi.fn().mockReturnValue(false),
 }));
 
+vi.mock('../../../src/models/eval', () => {
+  return {
+    __esModule: true,
+    default: vi.fn().mockImplementation(function (config: Record<string, unknown>) {
+      return {
+        addResult: vi.fn().mockResolvedValue({}),
+        addPrompts: vi.fn().mockResolvedValue({}),
+        clearResults: vi.fn().mockReturnValue(undefined),
+        setDurationMs: vi.fn(),
+        findTargetErrorStatus: vi.fn().mockResolvedValue(undefined),
+        getResults: vi.fn().mockResolvedValue([]),
+        getTable: vi.fn().mockResolvedValue({
+          head: { prompts: [], vars: [] },
+          body: [],
+        }),
+        save: vi.fn().mockResolvedValue(undefined),
+        resultsCount: 0,
+        prompts: [],
+        persisted: false,
+        results: [],
+        config: config || {},
+        passPowerOfN: undefined,
+      };
+    }),
+  };
+});
+
 vi.mock('../../../src/migrate', async (importOriginal) => {
   return {
     ...(await importOriginal()),

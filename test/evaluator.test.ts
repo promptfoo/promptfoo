@@ -2114,6 +2114,7 @@ describe('evaluator', () => {
     expect(results[0].metadata).toEqual({
       testKey: 'testValue',
       responseKey: 'responseValue',
+      repeatIndex: 0,
       [FILE_METADATA_KEY]: {},
     });
   });

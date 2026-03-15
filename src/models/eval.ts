@@ -40,6 +40,7 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
+import { calculatePassPowerOfNFromResults } from '../util/passPowerOfN';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
@@ -331,6 +332,7 @@ export default class Eval {
   _resultsLoaded: boolean = false;
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
+  passPowerOfN?: EvaluateStats['passPowerOfN'];
   /** Total wall-clock duration. For redteam evals: generationDurationMs + evaluationDurationMs.
    *  For non-redteam evals: equals evaluationDurationMs (generation phase is N/A). */
   durationMs?: number;
@@ -400,6 +402,16 @@ export default class Eval {
         ? (generationDurationMs ?? 0) + (evaluationDurationMs ?? 0)
         : undefined);
 
+    // Extract pass^N results from the results column (persisted by save())
+    const rawPassPowerOfN = resultsObj?.['passPowerOfN'];
+    const passPowerOfN =
+      rawPassPowerOfN != null &&
+      typeof rawPassPowerOfN === 'object' &&
+      'n' in rawPassPowerOfN &&
+      'overallScore' in rawPassPowerOfN
+        ? (rawPassPowerOfN as EvaluateStats['passPowerOfN'])
+        : undefined;
+
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,
       createdAt: new Date(eval_.createdAt),
@@ -410,6 +422,7 @@ export default class Eval {
       persisted: true,
       vars: eval_.vars || [],
       runtimeOptions: eval_.runtimeOptions ?? undefined,
+      passPowerOfN,
       durationMs,
       generationDurationMs,
       evaluationDurationMs,
@@ -621,6 +634,7 @@ export default class Eval {
       persisted?: boolean;
       vars?: string[];
       runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      passPowerOfN?: EvaluateStats['passPowerOfN'];
       durationMs?: number;
       generationDurationMs?: number;
       evaluationDurationMs?: number;
@@ -638,6 +652,7 @@ export default class Eval {
     this._resultsLoaded = false;
     this.vars = opts?.vars || [];
     this.runtimeOptions = opts?.runtimeOptions;
+    this.passPowerOfN = opts?.passPowerOfN;
     this.durationMs = opts?.durationMs;
     this.generationDurationMs = opts?.generationDurationMs;
     this.evaluationDurationMs = opts?.evaluationDurationMs;
@@ -679,7 +694,8 @@ export default class Eval {
     } else if (
       this.durationMs !== undefined ||
       this.generationDurationMs !== undefined ||
-      this.evaluationDurationMs !== undefined
+      this.evaluationDurationMs !== undefined ||
+      this.passPowerOfN !== undefined
     ) {
       // For V4 evals, atomically merge duration fields into the results column
       // using json_set so concurrent save() calls don't clobber each other's keys.
@@ -693,6 +709,9 @@ export default class Eval {
       }
       if (this.evaluationDurationMs !== undefined) {
         expr = sql`json_set(${expr}, '$.evaluationDurationMs', ${this.evaluationDurationMs})`;
+      }
+      if (this.passPowerOfN !== undefined) {
+        expr = sql`json_set(${expr}, '$.passPowerOfN', json(${JSON.stringify(this.passPowerOfN)}))`;
       }
       updateObj.results = expr;
     }
@@ -1291,6 +1310,15 @@ export default class Eval {
       stats.errors += prompt.metrics?.testErrorCount ?? 0;
 
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
+    }
+
+    if (this.passPowerOfN) {
+      stats.passPowerOfN = this.passPowerOfN;
+    } else {
+      const passPower = this.runtimeOptions?.passPower;
+      if (passPower != null && this.results.length > 0) {
+        stats.passPowerOfN = calculatePassPowerOfNFromResults(this.results, passPower);
+      }
     }
 
     return stats;

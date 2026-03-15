@@ -70,6 +70,8 @@ export const CommandLineOptionsSchema = z.object({
   maxConcurrency: z.coerce.number().int().positive().optional(),
   repeat: z.coerce.number().int().positive().optional(),
   delay: z.coerce.number().int().nonnegative().prefault(0),
+  passPower: z.coerce.number().positive().optional(),
+  passPowerThreshold: z.coerce.number().min(0).max(100).optional(),
 
   // Command line only
   vars: z.string().optional(),
@@ -222,6 +224,8 @@ export const EvaluateOptionsSchema = z.object({
    */
   interactiveProviders: z.boolean().optional(),
   maxConcurrency: z.number().optional(),
+  passPower: z.number().positive().optional(),
+  passPowerThreshold: z.number().min(0).max(100).optional(),
   progressCallback: z
     .custom<
       (
@@ -343,6 +347,7 @@ export interface EvaluateResult {
   cost?: number;
   metadata?: Record<string, any>;
   tokenUsage?: Required<TokenUsage>;
+  repeatIndex?: number;
 }
 
 export interface EvaluateTableOutput {
@@ -414,6 +419,19 @@ export interface EvaluateStats {
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;
+  passPowerOfN?: {
+    n: number;
+    overallScore: number;
+    groups: Array<{
+      testIdx: number;
+      promptIdx: number;
+      varsKey: string;
+      passRate: number;
+      passPowerN: number;
+      totalRepetitions: number;
+      successes: number;
+    }>;
+  };
 }
 
 export interface EvaluateSummaryV3 {
