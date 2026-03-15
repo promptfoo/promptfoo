@@ -365,14 +365,24 @@ export class MistralChatCompletionProvider implements ApiProvider {
         error: `API call error: ${data.error}`,
       };
     }
-    if (!data.choices || !data.choices[0] || !data.choices[0].message.content) {
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
       return {
         error: `Malformed response data: ${JSON.stringify(data)}`,
       };
     }
 
+    const message = data.choices[0].message;
+    let output: string | object;
+    if (message.content && message.tool_calls) {
+      output = message;
+    } else if (message.tool_calls) {
+      output = message.tool_calls;
+    } else {
+      output = message.content;
+    }
+
     const result: ProviderResponse = {
-      output: data.choices[0].message.content,
+      output,
       tokenUsage: getTokenUsage(data, cached),
       cached,
       cost: calculateMistralCost(

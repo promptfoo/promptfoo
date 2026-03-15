@@ -307,6 +307,60 @@ describe('Mistral', () => {
         expect.any(Number),
       );
     });
+
+    it('should return tool_calls as output when content is null (tool call response)', async () => {
+      const mockToolCalls = [
+        {
+          id: 'call_123',
+          type: 'function',
+          function: { name: 'get_weather', arguments: '{"location":"Tokyo"}' },
+        },
+      ];
+      const mockResponse = {
+        choices: [{ message: { content: null, tool_calls: mockToolCalls } }],
+        usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toEqual(mockToolCalls);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should return full message when both content and tool_calls are present', async () => {
+      const mockToolCalls = [
+        {
+          id: 'call_456',
+          type: 'function',
+          function: { name: 'search', arguments: '{"query":"test"}' },
+        },
+      ];
+      const mockMessage = {
+        content: 'I will search for that.',
+        tool_calls: mockToolCalls,
+      };
+      const mockResponse = {
+        choices: [{ message: mockMessage }],
+        usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toEqual(mockMessage);
+      expect(result.error).toBeUndefined();
+    });
   });
 
   describe('MistralEmbeddingProvider', () => {
