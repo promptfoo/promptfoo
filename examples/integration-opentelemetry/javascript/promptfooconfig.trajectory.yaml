@@ -23,6 +23,12 @@ tests:
       - type: trajectory:tool-used
         value: compose_answer
 
+      - type: trajectory:tool-args-match
+        value:
+          name: search_corpus
+          args:
+            query: quantum computing classical computing
+
       - type: trajectory:tool-sequence
         value:
           mode: exact

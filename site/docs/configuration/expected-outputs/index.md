@@ -150,6 +150,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [trace-span-duration](/docs/configuration/expected-outputs/deterministic/#trace-span-duration)                     | Check span durations with percentile support                      |
 | [trace-error-spans](/docs/configuration/expected-outputs/deterministic/#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages |
 | [trajectory:tool-used](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used)                    | Ensure a traced agent trajectory used specific tools              |
+| [trajectory:tool-args-match](/docs/configuration/expected-outputs/deterministic/#trajectorytool-args-match)        | Ensure traced tool calls used the expected arguments              |
 | [trajectory:tool-sequence](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence)            | Ensure traced tool usage happened in the expected order           |
 | [trajectory:step-count](/docs/configuration/expected-outputs/deterministic/#trajectorystep-count)                  | Count normalized trajectory steps by type or name pattern         |
 | [guardrails](/docs/configuration/expected-outputs/guardrails)                                                      | Ensure that the output does not contain harmful content           |
