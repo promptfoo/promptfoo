@@ -150,6 +150,14 @@ async function fetchRemoteTestCases(
     }
     const ret = data.result;
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
+
+    if (ret.length < n) {
+      logger.warn(
+        `Remote generation for ${key} returned ${ret.length}/${n} test cases. ` +
+          `Consider increasing numTests for this plugin to compensate.`,
+      );
+    }
+
     return ret;
   } catch (err) {
     logger.error(`Error generating test cases for ${key}: ${err}`);

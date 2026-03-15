@@ -121,7 +121,10 @@ export abstract class RedteamPluginBase {
       currentPrompts: { __prompt: string }[] | Record<string, string>[],
     ): Promise<{ __prompt: string }[] | Record<string, string>[]> => {
       const remainingCount = n - currentPrompts.length;
-      const currentBatchSize = Math.min(remainingCount, batchSize);
+      // On retries, request a larger batch so dedup/parsing has enough candidates.
+      // Asking for just 1-2 items often produces duplicates that get filtered out.
+      const minRetryBatch = currentPrompts.length > 0 ? Math.min(5, n) : 0;
+      const currentBatchSize = Math.min(Math.max(remainingCount, minRetryBatch), batchSize);
 
       logger.debug(`Generating batch of ${currentBatchSize} prompts`);
       const nunjucks = getNunjucksEngine();
