@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example openai-function-call
+cd openai-function-call
 ```
 
 This example demonstrates how to use promptfoo to evaluate OpenAI function calls. It showcases two different methods of defining functions: in an external YAML file and directly in the configuration file.

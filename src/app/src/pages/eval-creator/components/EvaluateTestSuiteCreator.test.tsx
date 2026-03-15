@@ -4,6 +4,12 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';
+import {
+  extractVarsFromPrompts,
+  normalizePrompts,
+  normalizeProviders,
+  readFileAsText,
+} from './evalCreatorUtils';
 import type {
   DerivedMetric,
   EnvOverrides,
@@ -413,17 +419,6 @@ describe('EvaluateTestSuiteCreator', () => {
 
 // Tests for extracted helper functions
 describe('normalizeProviders', () => {
-  // Import the function for testing
-  const normalizeProviders = (providers: any) => {
-    if (!Array.isArray(providers)) {
-      return [];
-    }
-    return providers.filter(
-      (provider: any): provider is ProviderOptions =>
-        typeof provider === 'object' && provider !== null && !Array.isArray(provider),
-    );
-  };
-
   it('returns empty array for non-array input', () => {
     expect(normalizeProviders(undefined as any)).toEqual([]);
     expect(normalizeProviders(null as any)).toEqual([]);
@@ -484,24 +479,6 @@ describe('normalizeProviders', () => {
 });
 
 describe('normalizePrompts', () => {
-  // Import the function for testing
-  const normalizePrompts = (prompts: any) => {
-    if (!Array.isArray(prompts)) {
-      return [];
-    }
-    return prompts
-      .map((prompt: any) => {
-        if (typeof prompt === 'string') {
-          return prompt;
-        }
-        if (typeof prompt === 'object' && prompt !== null && 'raw' in prompt) {
-          return (prompt as { raw: string }).raw;
-        }
-        return '';
-      })
-      .filter((prompt: any): prompt is string => prompt !== '');
-  };
-
   it('returns empty array for non-array input', () => {
     expect(normalizePrompts(undefined as any)).toEqual([]);
     expect(normalizePrompts(null as any)).toEqual([]);
@@ -550,22 +527,7 @@ describe('readFileAsText', () => {
     const fileContent = 'test file content';
     const mockFile = new File([fileContent], 'test.txt', { type: 'text/plain' });
 
-    const result = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const content = event.target?.result;
-        if (typeof content === 'string') {
-          resolve(content);
-          return;
-        }
-        reject(new Error('Invalid file contents'));
-      };
-      reader.onerror = () => {
-        reject(new Error('Failed to read file'));
-      };
-      reader.readAsText(mockFile);
-    });
-
+    const result = await readFileAsText(mockFile);
     expect(result).toBe(fileContent);
   });
 
@@ -573,61 +535,12 @@ describe('readFileAsText', () => {
     const fileContent = 'yaml content\nline 2';
     const mockFile = new File([fileContent], 'config.yaml', { type: 'application/yaml' });
 
-    const result = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const content = event.target?.result;
-        if (typeof content === 'string') {
-          resolve(content);
-          return;
-        }
-        reject(new Error('Invalid file contents'));
-      };
-      reader.onerror = () => {
-        reject(new Error('Failed to read file'));
-      };
-      reader.readAsText(mockFile);
-    });
-
+    const result = await readFileAsText(mockFile);
     expect(result).toBe(fileContent);
-  });
-
-  it('rejects when result is not a string', async () => {
-    const mockFile = new File(['test'], 'test.txt', { type: 'text/plain' });
-
-    await expect(
-      new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (_event) => {
-          // Simulate non-string result
-          const content = null;
-          if (typeof content === 'string') {
-            resolve(content);
-            return;
-          }
-          reject(new Error('Invalid file contents'));
-        };
-        reader.readAsText(mockFile);
-      }),
-    ).rejects.toThrow('Invalid file contents');
   });
 });
 
 describe('extractVarsFromPrompts', () => {
-  const extractVarsFromPrompts = (prompts: string[]): string[] => {
-    const varRegex = /{{\s*(\w+)\s*}}/g;
-    const varsSet = new Set<string>();
-
-    prompts.forEach((prompt) => {
-      let match;
-      while ((match = varRegex.exec(prompt)) !== null) {
-        varsSet.add(match[1]);
-      }
-    });
-
-    return Array.from(varsSet);
-  };
-
   it('extracts variables from simple prompts', () => {
     const prompts = ['Hello {{name}}', 'Your age is {{age}}'];
     const result = extractVarsFromPrompts(prompts);

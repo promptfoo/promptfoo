@@ -4,6 +4,7 @@ The Claude Agent SDK provider (aka Claude Code provider) enables you to run agen
 
 ```bash
 npx promptfoo@latest init --example claude-agent-sdk
+cd claude-agent-sdk
 ```
 
 ## Setup
@@ -157,6 +158,23 @@ This example demonstrates testing [Agent Skills](https://platform.claude.com/doc
 
 ```bash
 (cd skills && promptfoo eval)
+```
+
+### Plugins
+
+This example demonstrates loading skills from a [plugin](https://code.claude.com/docs/en/plugins) instead of from `setting_sources`. Plugins are self-contained directories that bundle skills, agents, hooks, and MCP servers together.
+
+- **Plugin loading**: Uses `plugins: [{type: local, path: ./sample-plugin}]` to load a local plugin
+- **Skill tool**: Enables the `Skill` tool via `append_allowed_tools`
+- **Tool call assertions**: Verifies skill invocation through `metadata.toolCalls`
+- **Sample skill**: A standards-check skill verifies the project has a README.md
+
+**Location**: `./plugins/`
+
+**Usage**:
+
+```bash
+(cd plugins && promptfoo eval)
 ```
 
 ### Cyber Espionage Red Team

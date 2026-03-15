@@ -383,7 +383,7 @@ async function handleScanResults({
     return;
   }
 
-  if (comments.length > 0 && commentsPosted === true) {
+  if ((comments.length > 0 || review) && commentsPosted === true) {
     core.info('✅ Comments posted to PR by scan server');
     return;
   }

@@ -892,6 +892,42 @@ export const WithControlledExpansion: Story = {
   },
 };
 
+// Server-side / manual filtering — parent controls column filters via props.
+export const ManualFiltering: StoryObj<typeof DataTable<Evaluation>> = {
+  render: () => {
+    const [columnFilters, setColumnFilters] = React.useState<{ id: string; value: unknown }[]>([]);
+
+    return (
+      <div className="space-y-4">
+        <div className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p>
+            Column filters are controlled externally. Open a column header filter and change a value
+            — the callback fires but no client-side filtering happens.
+          </p>
+          <pre className="mt-2 rounded bg-muted p-2 text-xs">
+            {JSON.stringify(columnFilters, null, 2)}
+          </pre>
+        </div>
+        <DataTable
+          columns={columns}
+          data={sampleData}
+          manualFiltering
+          columnFilters={columnFilters}
+          onColumnFiltersChange={setColumnFilters}
+        />
+      </div>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Demonstrates manual (server-side) filtering. The parent owns columnFilters state and receives updates via onColumnFiltersChange. No client-side row filtering occurs.',
+      },
+    },
+  },
+};
+
 // Explicit Tailwind utility colors (light and dark variants) are preserved in cell renderers.
 export const WithExplicitTailwindColors: Story = {
   render: () => {

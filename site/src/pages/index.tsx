@@ -6,9 +6,11 @@ import { useColorMode } from '@docusaurus/theme-common';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
+import CheckIcon from '@mui/icons-material/Check';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CodeIcon from '@mui/icons-material/Code';
 import CompareIcon from '@mui/icons-material/Compare';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import DescriptionIcon from '@mui/icons-material/Description';
 import FlightIcon from '@mui/icons-material/Flight';
@@ -110,6 +112,25 @@ function BridgeSection() {
   );
 }
 
+function CopyCodeBox({ command }: { command: string }) {
+  const [copied, setCopied] = React.useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(command);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <pre className={styles.codeBox} onClick={handleCopy} style={{ cursor: 'pointer' }}>
+      <code>{command}</code>
+      <span className={styles.copyButton}>
+        {copied ? <CheckIcon fontSize="small" /> : <ContentCopyIcon fontSize="small" />}
+      </span>
+    </pre>
+  );
+}
+
 function HomepageWalkthrough() {
   const isDarkTheme = useColorMode().colorMode === 'dark';
   const [selectedStep, setSelectedStep] = React.useState(() => {
@@ -146,15 +167,13 @@ function HomepageWalkthrough() {
       id: 1,
       caption: 'Red Teaming',
       mobileCaption: 'Red Team',
-      image: '/img/riskreport-1.png',
-      image2x: '/img/riskreport-1@2x.png',
+      image: '/img/redteam-vulnerability-report-hero.png',
+      image2x: '/img/redteam-vulnerability-report-hero@2x.png',
       description: (
         <>
           <p className={styles.walkthroughHeading}>Automated red teaming for agents & RAGs</p>
           <p>Promptfoo simulates real users to uncover application-specific vulnerabilities:</p>
-          <pre className={styles.codeBox}>
-            <code>npx promptfoo@latest redteam setup</code>
-          </pre>
+          <CopyCodeBox command="npx promptfoo@latest redteam setup" />
           <p>Custom attacks generated for your target:</p>
           <ul>
             <li>Direct and indirect prompt injections</li>
@@ -176,6 +195,33 @@ function HomepageWalkthrough() {
       ),
       icon: <SecurityIcon />,
       destinationUrl: '/red-teaming',
+    },
+    {
+      id: 5,
+      caption: 'Evaluations',
+      mobileCaption: 'Evals',
+      image: '/img/claude-vs-gpt-example.png',
+      image2x: '/img/claude-vs-gpt-example@2x.png',
+      imageDark: '/img/claude-vs-gpt-example-dark.png',
+      image2xDark: '/img/claude-vs-gpt-example-dark@2x.png',
+      description: (
+        <>
+          <p className={styles.walkthroughHeading}>Build reliable prompts, RAGs, and agents</p>
+          <p>Start testing the performance of your models, prompts, and tools in minutes:</p>
+          <CopyCodeBox command="npx promptfoo@latest init" />
+          <p>
+            Promptfoo runs locally and integrates directly with your app - no SDKs, cloud
+            dependencies, or logins.
+          </p>
+          <p>
+            <strong>
+              <Link to="/docs/intro/">&raquo; Get Started with Evaluations</Link>
+            </strong>
+          </p>
+        </>
+      ),
+      icon: <CompareIcon />,
+      destinationUrl: '/docs/intro',
     },
     {
       id: 6,
@@ -243,35 +289,6 @@ function HomepageWalkthrough() {
       ),
       icon: <DescriptionIcon />,
       destinationUrl: '/model-security',
-    },
-    {
-      id: 5,
-      caption: 'Evaluations',
-      mobileCaption: 'Evals',
-      image: '/img/claude-vs-gpt-example.png',
-      image2x: '/img/claude-vs-gpt-example@2x.png',
-      imageDark: '/img/claude-vs-gpt-example-dark.png',
-      image2xDark: '/img/claude-vs-gpt-example-dark@2x.png',
-      description: (
-        <>
-          <p className={styles.walkthroughHeading}>Build reliable prompts, RAGs, and agents</p>
-          <p>Start testing the performance of your models, prompts, and tools in minutes:</p>
-          <pre className={styles.codeBox}>
-            <code>npx promptfoo@latest init</code>
-          </pre>
-          <p>
-            Promptfoo runs locally and integrates directly with your app - no SDKs, cloud
-            dependencies, or logins.
-          </p>
-          <p>
-            <strong>
-              <Link to="/docs/intro/">&raquo; Get Started with Evaluations</Link>
-            </strong>
-          </p>
-        </>
-      ),
-      icon: <CompareIcon />,
-      destinationUrl: '/docs/intro',
     },
     {
       id: 2,

@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-auth
+cd redteam-auth
 ```
 
 This example demonstrates how to configure authentication for red team evaluations against HTTP endpoints. It includes three configuration files showing different authentication methods:

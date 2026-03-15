@@ -68,16 +68,16 @@ async function createSession(config, sessionId) {
   if (response.ok) {
     const sessionData = await response.json();
     console.log(`✅ Session created: ${sessionData.id}`);
-    return true;
+    return 'created';
   }
 
   if (response.status === 422) {
-    console.log(`ℹ️  Session ${sessionId} already exists`);
-    return true;
+    console.log(`ℹ️  Session ${sessionId} already exists, reusing`);
+    return 'exists';
   }
 
   console.log(`⚠️  Failed to create session ${sessionId}: ${response.status}`);
-  return false;
+  return 'failed';
 }
 
 async function setupSessions(context, config) {
@@ -87,7 +87,8 @@ async function setupSessions(context, config) {
 
   try {
     for (const sessionId of sessionIds) {
-      if (await createSession(config, sessionId)) {
+      const result = await createSession(config, sessionId);
+      if (result === 'created') {
         createdSessionIds.push(sessionId);
       }
     }

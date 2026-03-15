@@ -1,11 +1,12 @@
-# foundry-agent (Azure AI Foundry Agent)
+# azure/foundry-agent (Azure AI Foundry Agent)
 
-This example demonstrates how to use the Azure Foundry Agent provider with promptfoo. This provider uses the `@azure/ai-projects` SDK instead of direct HTTP calls to the OpenAI-compatible API.
+This example demonstrates how to use the Azure Foundry Agent provider with promptfoo. This provider uses the `@azure/ai-projects` SDK and the v2 Responses agent runtime instead of the old threads/runs API.
 
 You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example azure/foundry-agent
+cd azure/foundry-agent
 ```
 
 ## Setup
@@ -30,15 +31,15 @@ export AZURE_AI_PROJECT_URL="https://your-project.services.ai.azure.com/api/proj
 
 ## Configuration
 
-The provider uses the `azure:foundry-agent:agent-id` format.
+The provider uses the `azure:foundry-agent:agent-name-or-id` format. Agent names are preferred. Legacy agent IDs still work as a fallback lookup if the agent exists in the project.
 
 ```yaml
 providers:
-  - azure:foundry-agent:asst_uRGMedGFDehLkjJJaq51J9GY:
-      projectUrl: 'https://faiza-m92xlckl-swedencentral.services.ai.azure.com/api/projects/faiza-m92xlckl-swedence-project'
-      config:
-        temperature: 0.7
-        max_tokens: 150
+  - id: azure:foundry-agent:my-foundry-agent
+    config:
+      projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
+      temperature: 0.7
+      max_tokens: 150
 
 tests:
   - vars:
@@ -50,19 +51,32 @@ tests:
 
 ## Configuration Options
 
-All the same configuration options from the regular Azure Assistant provider are supported:
+These per-request settings are supported:
 
-- `temperature`: Controls randomness (0.0 to 2.0)
-- `max_tokens`: Maximum tokens in response
-- `top_p`: Nucleus sampling parameter
-- `tools`: Function tools configuration
-- `tool_choice`: Tool selection strategy
-- `tool_resources`: Resource configuration (file search, etc.)
-- `instructions`: System instructions for the agent
-- `functionToolCallbacks`: Custom function callbacks
-- `timeoutMs`: Request timeout in milliseconds
-- `maxPollTimeMs`: Maximum time to poll for completion
-- `retryOptions`: Retry configuration
+- `instructions`
+- `temperature`
+- `top_p`
+- `max_tokens` / `max_completion_tokens` (mapped to `max_output_tokens`)
+- `response_format`
+- `tools`
+- `tool_choice`
+- `functionToolCallbacks`
+- `modelName`
+- `reasoning_effort`
+- `verbosity`
+- `metadata`
+- `passthrough`
+- `maxPollTimeMs`
+
+These request-time settings are ignored by the v2 runtime and should be configured on the Foundry agent instead:
+
+- `tool_resources`
+- `frequency_penalty`
+- `presence_penalty`
+- `seed`
+- `stop`
+- `timeoutMs`
+- `retryOptions`
 
 ## Function Tool Callbacks
 
@@ -70,15 +84,15 @@ You can provide custom function callbacks just like with the regular Azure Assis
 
 ```yaml
 providers:
-  - azure:foundry-agent:asst_uRGMedGFDehLkjJJaq51J9GY:
+  - id: azure:foundry-agent:my-foundry-agent
+    config:
       projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
-      config:
-        functionToolCallbacks:
-          getCurrentWeather: |
-            (args) => {
-              const { location } = JSON.parse(args);
-              return `The weather in ${location} is sunny and 75°F`;
-            }
+      functionToolCallbacks:
+        getCurrentWeather: |
+          (args) => {
+            const { location } = JSON.parse(args);
+            return `The weather in ${location} is sunny and 75°F`;
+          }
 ```
 
 ## Differences from Regular Azure Assistant Provider
@@ -88,7 +102,8 @@ The main differences are:
 1. **SDK Usage**: Uses `@azure/ai-projects` SDK instead of direct HTTP calls
 2. **Authentication**: Uses `DefaultAzureCredential` for Azure authentication
 3. **Project URL**: Requires an Azure AI Project URL instead of Azure OpenAI endpoint
-4. **Provider Format**: Uses `azure:foundry-agent:agent-id` instead of `azure:assistant:assistant-id`
+4. **Provider Format**: Uses `azure:foundry-agent:agent-name-or-id` instead of `azure:assistant:assistant-id`
+5. **Runtime**: Uses `responses.create(..., agent_reference)` instead of threads/messages/runs
 
 ## Environment Variables
 

@@ -4,7 +4,10 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example compare-phi-vs-llama
+cd compare-phi-vs-llama
 ```
+
+## Usage
 
 To get started:
 
@@ -17,7 +20,7 @@ Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
 promptfoo eval
 ```
 

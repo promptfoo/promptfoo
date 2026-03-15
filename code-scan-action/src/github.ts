@@ -275,6 +275,7 @@ async function postGeneralComments(
 
   core.info(`Posting ${generalComments.length} general PR comment(s)...`);
 
+  let successCount = 0;
   for (const comment of generalComments) {
     try {
       await octokit.issues.createComment({
@@ -283,6 +284,7 @@ async function postGeneralComments(
         issue_number: context.number,
         body: buildIssueCommentBody(comment),
       });
+      successCount++;
     } catch (error) {
       core.warning(
         `Failed to post general comment: ${error instanceof Error ? error.message : String(error)}`,
@@ -290,7 +292,13 @@ async function postGeneralComments(
     }
   }
 
-  core.info(`✅ Posted ${generalComments.length} general comment(s) successfully`);
+  if (successCount === generalComments.length) {
+    core.info(`✅ Posted ${successCount} general comment(s) successfully`);
+  } else {
+    core.warning(
+      `Posted ${successCount}/${generalComments.length} general comment(s) successfully`,
+    );
+  }
 }
 
 async function postFallbackComments(
@@ -370,7 +378,10 @@ export async function postReviewComments(
       comment.severity !== CodeScanSeverity.NONE,
   );
   const generalComments = processedComments.filter(
-    (comment) => (!comment.file || comment.line == null) && comment.finding,
+    (comment) =>
+      (!comment.file || comment.line == null) &&
+      comment.finding &&
+      comment.severity !== CodeScanSeverity.NONE,
   );
 
   await postInlineReviewComments(octokitClient, context, lineComments);

@@ -18,6 +18,12 @@ interface Message {
 
 type PromptScenario = 'login' | 'password-strength' | 'registration';
 
+const PROMPT_LABELS = {
+  login: 'Generate a login validation function',
+  registration: 'Create a user registration route',
+  passwordStrength: 'Add password strength validation',
+} as const;
+
 const GENERATED_FILE_CONTENT: Record<
   PromptScenario,
   {
@@ -348,13 +354,11 @@ module.exports = { validateUser, validatePasswordStrength };`,
 };
 
 function getPromptScenario(promptText: string): PromptScenario {
-  const normalizedPrompt = promptText.toLowerCase();
-
-  if (normalizedPrompt.includes('user registration')) {
+  if (promptText === PROMPT_LABELS.registration) {
     return 'registration';
   }
 
-  if (normalizedPrompt.includes('password strength')) {
+  if (promptText === PROMPT_LABELS.passwordStrength) {
     return 'password-strength';
   }
 
@@ -478,9 +482,9 @@ const VSCodeSimulator: React.FC = () => {
 
   // Predefined prompts
   const prompts = [
-    { id: 'function', text: 'Generate a login validation function' },
-    { id: 'route', text: 'Create a user registration route' },
-    { id: 'security', text: 'Add password strength validation' },
+    { id: 'function', text: PROMPT_LABELS.login },
+    { id: 'route', text: PROMPT_LABELS.registration },
+    { id: 'security', text: PROMPT_LABELS.passwordStrength },
   ];
 
   // Add a message to the chat

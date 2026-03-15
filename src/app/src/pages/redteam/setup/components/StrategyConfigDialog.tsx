@@ -88,6 +88,9 @@ export default function StrategyConfigDialog({
   const treeBranchingLimit = isCloudEnabled ? 10 : 2;
   const treeNoImprovementLimit = isCloudEnabled ? 50 : 10;
 
+  const clampValue = (value: number, min: number, max: number) =>
+    Math.min(Math.max(value, min), max);
+
   const [localConfig, setLocalConfig] = React.useState<Partial<StrategyConfig>>(config || {});
   const [enabled, setEnabled] = React.useState<boolean>(
     config.enabled === undefined ? true : config.enabled,
@@ -511,7 +514,10 @@ export default function StrategyConfigDialog({
               }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
-                setLocalConfig({ ...localConfig, numIterations: value });
+                setLocalConfig({
+                  ...localConfig,
+                  numIterations: clampValue(value, 3, maxIterationsLimit),
+                });
               }}
               placeholder="Number of iterations (default: 10)"
               min={3}
@@ -660,7 +666,10 @@ export default function StrategyConfigDialog({
               value={localConfig.maxTurns !== undefined ? Number(localConfig.maxTurns) : 10}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
-                setLocalConfig({ ...localConfig, maxTurns: value });
+                setLocalConfig({
+                  ...localConfig,
+                  maxTurns: clampValue(value, 1, maxTurnsLimit),
+                });
               }}
               placeholder="Maximum number of conversation turns (default: 10)"
               min={1}
@@ -705,7 +714,9 @@ export default function StrategyConfigDialog({
                 const parsedValue = Number.parseInt(e.target.value, 10);
                 setLocalConfig({
                   ...localConfig,
-                  maxTurns: Number.isNaN(parsedValue) ? undefined : parsedValue,
+                  maxTurns: Number.isNaN(parsedValue)
+                    ? undefined
+                    : clampValue(parsedValue, 1, maxTurnsLimit),
                 });
               }}
               placeholder="Maximum conversation turns (default: 10)"
@@ -751,11 +762,17 @@ export default function StrategyConfigDialog({
               value={localConfig.maxTurns !== undefined ? Number(localConfig.maxTurns) : 5}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
-                setLocalConfig({ ...localConfig, maxTurns: value });
+                setLocalConfig({
+                  ...localConfig,
+                  maxTurns: value !== undefined ? clampValue(value, 1, maxTurnsLimit) : value,
+                });
               }}
               onBlur={(e) => {
-                if (!e.target.value || Number.parseInt(e.target.value, 10) < 1) {
+                const parsed = Number.parseInt(e.target.value, 10);
+                if (!e.target.value || Number.isNaN(parsed) || parsed < 1) {
                   setLocalConfig({ ...localConfig, maxTurns: 5 });
+                } else if (parsed > maxTurnsLimit) {
+                  setLocalConfig({ ...localConfig, maxTurns: maxTurnsLimit });
                 }
               }}
               placeholder="5"
@@ -799,7 +816,10 @@ export default function StrategyConfigDialog({
               }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
-                setLocalConfig({ ...localConfig, numIterations: value });
+                setLocalConfig({
+                  ...localConfig,
+                  numIterations: clampValue(value, 3, maxIterationsLimit),
+                });
               }}
               placeholder="Number of iterations (default: 10)"
               min={3}
@@ -828,7 +848,10 @@ export default function StrategyConfigDialog({
               value={localConfig.maxDepth !== undefined ? Number(localConfig.maxDepth) : 25}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 25;
-                setLocalConfig({ ...localConfig, maxDepth: value });
+                setLocalConfig({
+                  ...localConfig,
+                  maxDepth: clampValue(value, 3, treeMaxDepthLimit),
+                });
               }}
               placeholder="Maximum tree depth (default: 25)"
               min={3}
@@ -848,7 +871,10 @@ export default function StrategyConfigDialog({
               value={localConfig.maxAttempts !== undefined ? Number(localConfig.maxAttempts) : 250}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 250;
-                setLocalConfig({ ...localConfig, maxAttempts: value });
+                setLocalConfig({
+                  ...localConfig,
+                  maxAttempts: clampValue(value, 10, treeMaxAttemptsLimit),
+                });
               }}
               placeholder="Maximum attempts (default: 250)"
               min={10}
@@ -868,7 +894,10 @@ export default function StrategyConfigDialog({
               value={localConfig.maxWidth !== undefined ? Number(localConfig.maxWidth) : 10}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
-                setLocalConfig({ ...localConfig, maxWidth: value });
+                setLocalConfig({
+                  ...localConfig,
+                  maxWidth: clampValue(value, 2, treeMaxWidthLimit),
+                });
               }}
               placeholder="Maximum width (default: 10)"
               min={2}
@@ -889,7 +918,10 @@ export default function StrategyConfigDialog({
               }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 4;
-                setLocalConfig({ ...localConfig, branchingFactor: value });
+                setLocalConfig({
+                  ...localConfig,
+                  branchingFactor: clampValue(value, 2, treeBranchingLimit),
+                });
               }}
               placeholder="Branching factor (default: 4)"
               min={2}
@@ -912,7 +944,10 @@ export default function StrategyConfigDialog({
               }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 25;
-                setLocalConfig({ ...localConfig, maxNoImprovement: value });
+                setLocalConfig({
+                  ...localConfig,
+                  maxNoImprovement: clampValue(value, 5, treeNoImprovementLimit),
+                });
               }}
               placeholder="Max consecutive iterations without improvement (default: 25)"
               min={5}

@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example eval-function-tools-callback
+cd eval-function-tools-callback
 ```
 
 This example demonstrates how to use promptfoo to evaluate OpenAI's function calling capabilities with the gpt-4o, utilizing the `functionToolCallbacks` feature.
@@ -14,7 +15,7 @@ See `promptfooconfig.js` for the full configuration, including prompts, provider
 
 ## Running the Example
 
-```
+```bash
 promptfoo eval -c [path to examples/eval-function-tools-callback/]promptfooconfig.js
 ```
 

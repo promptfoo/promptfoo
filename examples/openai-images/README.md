@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example openai-images
+cd openai-images
 ```
 
 A simple example showing how to evaluate OpenAI's image generation models (GPT Image 1.5, GPT Image 1, GPT Image 1 Mini, DALL-E 3, DALL-E 2) with promptfoo.

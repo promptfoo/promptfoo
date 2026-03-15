@@ -22,6 +22,7 @@ import {
   OPENAI_CLOSED_QA_PROMPT,
   PROMPTFOO_FACTUALITY_PROMPT,
   SELECT_BEST_PROMPT,
+  TRAJECTORY_GOAL_SUCCESS_PROMPT,
 } from './prompts/index';
 import { getDefaultProviders } from './providers/defaults';
 import { loadApiProvider } from './providers/index';
@@ -597,47 +598,72 @@ export async function renderLlmRubricPrompt(
   return nunjucks.renderString(rubricPrompt, processedContext);
 }
 
-export async function matchesLlmRubric(
-  rubric: string | object,
-  llmOutput: string,
-  grading?: GradingConfig,
-  vars?: Record<string, VarValue>,
-  assertion?: Assertion,
-  options?: {
-    throwOnError?: boolean;
-  },
-  providerCallContext?: CallApiContextParams,
-): Promise<GradingResult> {
-  if (!grading) {
-    throw new Error(
-      'Cannot grade output without grading config. Specify --grader option or grading config.',
-    );
-  }
-
-  // Use remote grading only if no provider is explicitly configured and remote generation is enabled
-  if (
-    !grading.rubricPrompt &&
-    !cliState.config?.redteam?.provider &&
-    cliState.config?.redteam &&
-    shouldGenerateRemote()
-  ) {
+function parseJsonGradingResponse(
+  label: string,
+  resp: ProviderResponse,
+): { parsed?: Partial<GradingResult>; failure?: Omit<GradingResult, 'assertion'> } {
+  let jsonObjects: object[] = [];
+  if (typeof resp.output === 'string') {
+    try {
+      jsonObjects = extractJsonObjects(resp.output);
+      if (jsonObjects.length === 0) {
+        return {
+          failure: fail(`Could not extract JSON from ${label} response`, resp.tokenUsage),
+        };
+      }
+    } catch (err) {
+      return {
+        failure: fail(
+          `${label} produced malformed response: ${err}\n\n${resp.output}`,
+          resp.tokenUsage,
+        ),
+      };
+    }
+  } else if (typeof resp.output === 'object') {
+    jsonObjects = [resp.output];
+  } else {
     return {
-      ...(await doRemoteGrading({
-        task: 'llm-rubric',
-        rubric,
-        output: llmOutput,
-        vars: vars || {},
-      })),
-      assertion,
+      failure: fail(
+        `${label} produced malformed response - output must be string or object. Output: ${JSON.stringify(resp.output)}`,
+        resp.tokenUsage,
+      ),
     };
   }
 
-  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, DEFAULT_GRADING_PROMPT);
-  const prompt = await renderLlmRubricPrompt(rubricPrompt, {
-    output: tryParse(llmOutput),
-    rubric,
-    ...(vars || {}),
-  });
+  const parsed = jsonObjects[0] as Partial<GradingResult>;
+  if (typeof parsed !== 'object' || parsed === null || parsed === undefined) {
+    return {
+      failure: fail(
+        `${label} produced malformed response. We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
+        resp.tokenUsage,
+      ),
+    };
+  }
+
+  return { parsed };
+}
+
+async function runJsonGradingPrompt({
+  assertion,
+  checkName,
+  defaultPrompt,
+  grading,
+  label,
+  providerCallContext,
+  throwOnError,
+  vars,
+}: {
+  assertion?: Assertion;
+  checkName: string;
+  defaultPrompt: string;
+  grading: GradingConfig;
+  label: string;
+  providerCallContext?: CallApiContextParams;
+  throwOnError?: boolean;
+  vars: Record<string, VarValue>;
+}): Promise<GradingResult> {
+  const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
+  const prompt = await renderLlmRubricPrompt(rubricPrompt, vars);
 
   const defaultProviders = await getDefaultProviders();
   const defaultProvider =
@@ -646,63 +672,24 @@ export async function matchesLlmRubric(
     'text',
     grading.provider,
     defaultProvider,
-    'llm-rubric check',
+    checkName,
   );
   const resp = await callProviderWithContext(
     finalProvider,
     prompt,
-    'llm-rubric',
-    {
-      output: tryParse(llmOutput),
-      rubric,
-      ...(vars || {}),
-    },
+    label,
+    vars,
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    if (options?.throwOnError) {
-      throw new LlmRubricProviderError(resp.error || 'No output');
+    if (throwOnError) {
+      throw new Error(resp.error || 'No output');
     }
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
-
-  let jsonObjects: object[] = [];
-  if (typeof resp.output === 'string') {
-    try {
-      jsonObjects = extractJsonObjects(resp.output);
-      if (jsonObjects.length === 0) {
-        return fail('Could not extract JSON from llm-rubric response', resp.tokenUsage);
-      }
-    } catch (err) {
-      return fail(
-        `llm-rubric produced malformed response: ${err}\n\n${resp.output}`,
-        resp.tokenUsage,
-      );
-    }
-  } else if (typeof resp.output === 'object') {
-    jsonObjects = [resp.output];
-  } else {
-    return fail(
-      `llm-rubric produced malformed response - output must be string or object. Output: ${JSON.stringify(resp.output)}`,
-      resp.tokenUsage,
-    );
-  }
-
-  if (!Array.isArray(jsonObjects) || jsonObjects.length === 0) {
-    return fail(
-      `llm-rubric produced malformed response - We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
-      resp.tokenUsage,
-    );
-  }
-
-  // expects properties pass, score, and reason
-  const parsed = jsonObjects[0] as Partial<GradingResult>;
-
-  if (typeof parsed !== 'object' || parsed === null || parsed === undefined) {
-    return fail(
-      `llm-rubric produced malformed response. We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
-      resp.tokenUsage,
-    );
+  const { parsed, failure } = parseJsonGradingResponse(label, resp);
+  if (!parsed) {
+    return failure as Omit<GradingResult, 'assertion'>;
   }
 
   let pass = parsed.pass ?? true;
@@ -745,6 +732,95 @@ export async function matchesLlmRubric(
       renderedGradingPrompt: prompt,
     },
   };
+}
+
+export async function matchesLlmRubric(
+  rubric: string | object,
+  llmOutput: string,
+  grading?: GradingConfig,
+  vars?: Record<string, VarValue>,
+  assertion?: Assertion,
+  options?: {
+    throwOnError?: boolean;
+  },
+  providerCallContext?: CallApiContextParams,
+): Promise<GradingResult> {
+  if (!grading) {
+    throw new Error(
+      'Cannot grade output without grading config. Specify --grader option or grading config.',
+    );
+  }
+
+  // Use remote grading only if no provider is explicitly configured and remote generation is enabled
+  if (
+    !grading.rubricPrompt &&
+    !cliState.config?.redteam?.provider &&
+    cliState.config?.redteam &&
+    shouldGenerateRemote()
+  ) {
+    return {
+      ...(await doRemoteGrading({
+        task: 'llm-rubric',
+        rubric,
+        output: llmOutput,
+        vars: vars || {},
+      })),
+      assertion,
+    };
+  }
+
+  try {
+    return await runJsonGradingPrompt({
+      assertion,
+      checkName: 'llm-rubric check',
+      defaultPrompt: DEFAULT_GRADING_PROMPT,
+      grading,
+      label: 'llm-rubric',
+      providerCallContext,
+      throwOnError: options?.throwOnError,
+      vars: {
+        output: tryParse(llmOutput),
+        rubric,
+        ...(vars || {}),
+      },
+    });
+  } catch (error) {
+    if (options?.throwOnError) {
+      throw new LlmRubricProviderError((error as Error).message || 'No output');
+    }
+    throw error;
+  }
+}
+
+export async function matchesTrajectoryGoalSuccess(
+  goal: string,
+  trajectory: string,
+  llmOutput: string,
+  grading?: GradingConfig,
+  vars?: Record<string, VarValue>,
+  assertion?: Assertion,
+  providerCallContext?: CallApiContextParams,
+): Promise<GradingResult> {
+  if (!grading) {
+    throw new Error(
+      'Cannot grade output without grading config. Specify --grader option or grading config.',
+    );
+  }
+
+  return runJsonGradingPrompt({
+    assertion,
+    checkName: 'trajectory:goal-success check',
+    defaultPrompt: TRAJECTORY_GOAL_SUCCESS_PROMPT,
+    grading,
+    label: 'trajectory:goal-success',
+    providerCallContext,
+    vars: {
+      ...(vars || {}),
+      goal,
+      output: tryParse(llmOutput),
+      trajectory,
+    },
+  });
 }
 
 export async function matchesPiScore(

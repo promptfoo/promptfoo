@@ -4,7 +4,10 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-multi-turn
+cd config-multi-turn
 ```
+
+## Usage
 
 To get started, set your OPENAI_API_KEY environment variable.
 
@@ -28,7 +31,7 @@ Use `completion.output` to get the assistant's response to that message.
 
 Then run:
 
-```
+```bash
 promptfoo eval
 ```
 

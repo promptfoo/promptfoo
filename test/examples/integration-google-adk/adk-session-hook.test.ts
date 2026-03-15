@@ -158,4 +158,44 @@ describe('integration-google-adk session hook', () => {
       expect.objectContaining({ method: 'DELETE' }),
     );
   });
+
+  it('does not clean up pre-existing sessions (422 already exists)', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ id: 'session-alpha' }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 422,
+      })
+      .mockResolvedValueOnce({ ok: true });
+
+    vi.stubGlobal('fetch', fetchMock);
+    const { runExtensionHook } = await import('../../../src/evaluatorHelpers');
+
+    const context = {
+      suite: {
+        tests: [
+          { vars: { session_id: 'session-alpha' } },
+          { vars: { session_id: 'session-beta' } },
+        ],
+      },
+    };
+
+    await runExtensionHook([HOOK_EXTENSION], 'beforeAll', context as any);
+    // Only session-alpha was created; session-beta already existed (422)
+    expect(context).toHaveProperty('_adkSessionIds', ['session-alpha']);
+
+    await runExtensionHook([HOOK_EXTENSION], 'afterAll', context as any);
+
+    // Only session-alpha should be deleted, not session-beta
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      'http://localhost:8000/apps/weather_agent/users/test_user/sessions/session-alpha',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
 });

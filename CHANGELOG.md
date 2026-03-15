@@ -4,6 +4,54 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.121.2](https://github.com/promptfoo/promptfoo/compare/0.121.1...0.121.2) (2026-03-12)
+
+### Bug Fixes
+
+- add node-addon-api to devDependencies for sharp build ([#8102](https://github.com/promptfoo/promptfoo/issues/8102)) ([1d4e959](https://github.com/promptfoo/promptfoo/commit/1d4e9596f2199ade67e4b65207b8f99b7c2b1b3b))
+- **deps:** update dependency @tanstack/react-virtual to ^3.13.20 ([#8083](https://github.com/promptfoo/promptfoo/issues/8083)) ([5e5f774](https://github.com/promptfoo/promptfoo/commit/5e5f7746b065f45147efc9fedaff3366af01e020))
+- **deps:** update dependency @tanstack/react-virtual to ^3.13.21 ([#8104](https://github.com/promptfoo/promptfoo/issues/8104)) ([b17998b](https://github.com/promptfoo/promptfoo/commit/b17998bd9fcc6ad7c67236f83e1a4353227ab7e6))
+- **deps:** update mui packages to ^7.3.9 ([#8077](https://github.com/promptfoo/promptfoo/issues/8077)) ([4db1d67](https://github.com/promptfoo/promptfoo/commit/4db1d67b081a4180d099cbff63978713326fb8e9))
+- **deps:** update openai packages ([#7956](https://github.com/promptfoo/promptfoo/issues/7956)) ([5b70a50](https://github.com/promptfoo/promptfoo/commit/5b70a5089d25cc7bd227703144f35e74d6d52995))
+- **eval:** preserve chart default state per eval ([#8087](https://github.com/promptfoo/promptfoo/issues/8087)) ([cd26f4a](https://github.com/promptfoo/promptfoo/commit/cd26f4a16dfca36043b06f934c3a2ce5301571f5))
+- **examples:** use matching gpt-4o model in temperature comparison ([#8074](https://github.com/promptfoo/promptfoo/issues/8074)) ([516df96](https://github.com/promptfoo/promptfoo/commit/516df96042d5fdec7522548b1f30b6eb7c58704b))
+- not-contains-json with schema respects inverse flag ([#8069](https://github.com/promptfoo/promptfoo/issues/8069)) ([baf5e1b](https://github.com/promptfoo/promptfoo/commit/baf5e1bfda95cc7b9d53642a9e9c265489826307))
+- prevent caching error responses in fetchWithCache ([#8070](https://github.com/promptfoo/promptfoo/issues/8070)) ([033e1bb](https://github.com/promptfoo/promptfoo/commit/033e1bb688cf1054961f94d6563b904c8d14cab3))
+- **providers:** align openclaw with upstream gateway ([#8058](https://github.com/promptfoo/promptfoo/issues/8058)) ([f130803](https://github.com/promptfoo/promptfoo/commit/f1308031752870233b8f0b2b35137ecd7c3a76d2))
+- **providers:** omit default temperature for LiteLLM proxy provider ([#8064](https://github.com/promptfoo/promptfoo/issues/8064)) ([f831d39](https://github.com/promptfoo/promptfoo/commit/f831d399b5dc0bf131305e9eff4ffadbbd79881c))
+- **redteam:** avoid router dependency in risk category drawer ([#8085](https://github.com/promptfoo/promptfoo/issues/8085)) ([1e1d9ac](https://github.com/promptfoo/promptfoo/commit/1e1d9ac537e187ac7927511b3b6bfbb8321ee254))
+- **redteam:** improve EU AI Act preset bias/discrimination coverage ([#8115](https://github.com/promptfoo/promptfoo/issues/8115)) ([30ce06b](https://github.com/promptfoo/promptfoo/commit/30ce06bc2ac13d7bcdaac374fd63252f3a2a3b48))
+- remove unnecessary string length limit for env var rendering ([#8110](https://github.com/promptfoo/promptfoo/issues/8110)) ([40a6b09](https://github.com/promptfoo/promptfoo/commit/40a6b091370974e44bbba31eaa7f7b9e8cad53ac))
+
+## [0.121.1](https://github.com/promptfoo/promptfoo/compare/0.121.0...0.121.1) (2026-03-09)
+
+### Bug Fixes
+
+- **providers:** support newer opencode sdk api ([#8060](https://github.com/promptfoo/promptfoo/issues/8060)) ([7ec80b2](https://github.com/promptfoo/promptfoo/commit/7ec80b2e173dc99438002c8f5d16feb7b6643aa1))
+
+## [0.121.0](https://github.com/promptfoo/promptfoo/compare/0.120.27...0.121.0) (2026-03-09)
+
+### ⚠ BREAKING CHANGES
+
+- **providers:** resolve relative config paths against config dir in claude-agent-sdk ([#8030](https://github.com/promptfoo/promptfoo/issues/8030))
+
+### Features
+
+- **redteam:** generalize insurance plugins for all insurance types ([#8002](https://github.com/promptfoo/promptfoo/issues/8002)) ([945c3bc](https://github.com/promptfoo/promptfoo/commit/945c3bc6725ca8bc7369f7d0efed6f8394da98fa))
+- stop multi-turn redteam attacks when target closes thread ([#7942](https://github.com/promptfoo/promptfoo/issues/7942)) ([d849923](https://github.com/promptfoo/promptfoo/commit/d84992322a2442f6d1a71a744f297d5e808ab770))
+
+### Bug Fixes
+
+- **app:** enforce strategy config limits via onChange clamping ([#8045](https://github.com/promptfoo/promptfoo/issues/8045)) ([9b8920d](https://github.com/promptfoo/promptfoo/commit/9b8920d97a3a8cd4091e7e5b6ff20efff74e2ded))
+- **app:** restore composite jailbreak strategy visibility ([#8013](https://github.com/promptfoo/promptfoo/issues/8013)) ([a34ec66](https://github.com/promptfoo/promptfoo/commit/a34ec664ece825532bcd14c31b79ddf0afab9dbc))
+- **ci:** skip email verification API call in CI environments ([#8034](https://github.com/promptfoo/promptfoo/issues/8034)) ([594a4a7](https://github.com/promptfoo/promptfoo/commit/594a4a7ad46203d2c5d3ac833c25ecfd14295847))
+- **cli:** cap agent fs reads before loading file ([#8050](https://github.com/promptfoo/promptfoo/issues/8050)) ([d39c41b](https://github.com/promptfoo/promptfoo/commit/d39c41b89262fafeced2778801e2e637eab8d19a))
+- **deps:** update dependency @opencode-ai/sdk to ^1.2.19 ([#8052](https://github.com/promptfoo/promptfoo/issues/8052)) ([995f94c](https://github.com/promptfoo/promptfoo/commit/995f94cef32c953de83d3e35cd273c09fad34472))
+- **deps:** update dependency fast-xml-parser to ^5.4.2 ([#8042](https://github.com/promptfoo/promptfoo/issues/8042)) ([8be46a5](https://github.com/promptfoo/promptfoo/commit/8be46a5b096092cf68ef1cf989e706b461807d0c))
+- **deps:** update opentelemetry ([#8056](https://github.com/promptfoo/promptfoo/issues/8056)) ([6b4ed86](https://github.com/promptfoo/promptfoo/commit/6b4ed863686fa49e922d697bbf725555cd8adaa0))
+- make quoted comma parsing consistent across contains assertions ([#8041](https://github.com/promptfoo/promptfoo/issues/8041)) ([3c1ad55](https://github.com/promptfoo/promptfoo/commit/3c1ad55811347febe7479b4bfb77887b7dc5003e))
+- **providers:** resolve relative config paths against config dir in claude-agent-sdk ([#8030](https://github.com/promptfoo/promptfoo/issues/8030)) ([2e8a976](https://github.com/promptfoo/promptfoo/commit/2e8a9763ee2e663473f915b18417abdbaf408634))
+
 ## [0.120.27](https://github.com/promptfoo/promptfoo/compare/0.120.26...0.120.27) (2026-03-06)
 
 ### Features

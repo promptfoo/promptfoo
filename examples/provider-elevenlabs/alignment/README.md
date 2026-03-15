@@ -51,7 +51,7 @@ It returns precise timestamps showing when each word was spoken, formatted as su
 
 ### SRT (Standard video subtitles)
 
-```
+```text
 1
 00:00:00,000 --> 00:00:02,500
 That's one small step for man
@@ -63,7 +63,7 @@ one giant leap for mankind
 
 ### VTT (WebVTT for web players)
 
-```
+```text
 WEBVTT
 
 1

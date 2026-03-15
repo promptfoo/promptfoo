@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example google-aistudio-gemini
+cd google-aistudio-gemini
 ```
 
 This example demonstrates using Google's Gemini models with promptfoo to evaluate math puzzle solving capabilities.

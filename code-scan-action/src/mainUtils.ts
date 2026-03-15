@@ -63,10 +63,13 @@ export function buildRichIssueCommentBody(comment: Comment): string {
 }
 
 export function toReviewComment(comment: Comment) {
+  if (!comment.file) {
+    throw new Error('toReviewComment called with a comment missing a file path');
+  }
   const hasRange = Boolean(comment.startLine && comment.line && comment.startLine < comment.line);
 
   return {
-    path: comment.file!,
+    path: comment.file,
     line: comment.line ?? undefined,
     start_line: hasRange && comment.startLine != null ? comment.startLine : undefined,
     side: 'RIGHT' as const,

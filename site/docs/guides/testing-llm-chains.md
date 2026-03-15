@@ -37,18 +37,18 @@ In this example, we'll test LangChain's LLM Math plugin by creating a script tha
 import sys
 import os
 
-from langchain import OpenAI
-from langchain.chains import LLMMathChain
+from langchain_openai import OpenAI
+from langchain.chains.llm_math.base import LLMMathChain
 
 llm = OpenAI(
     temperature=0,
-    openai_api_key=os.getenv('OPENAI_API_KEY')
+    api_key=os.getenv('OPENAI_API_KEY')
 )
 
-llm_math = LLMMathChain(llm=llm, verbose=True)
+llm_math = LLMMathChain.from_llm(llm=llm)
 
 prompt = sys.argv[1]
-llm_math.run(prompt)
+print(llm_math.run(prompt))
 ```
 
 This script is set up so that we can run it like this:
@@ -84,9 +84,9 @@ tests:
 For an in-depth look at configuration, see the [guide](/docs/configuration/guide). Note the following:
 
 - **prompts**: `prompt.txt` is just a file that contains `{{question}}`, since we're passing the question directly through to the provider.
-- **providers**: We list GPT-4 in order to compare its outputs with LangChain's LLMMathChain. We also use the `exec` directive to make promptfoo run the Python script in its eval.
+- **providers**: We list GPT-5 in order to compare its outputs with LangChain's LLMMathChain. We also use the `exec` directive to make promptfoo run the Python script in its eval.
 
-In this example, the end result is a side-by-side comparison of GPT-4 vs. LangChain math performance:
+In this example, the end result is a side-by-side comparison of GPT-5 vs. LangChain math performance:
 
 ![langchain eval](/img/docs/langchain-eval.png)
 

@@ -353,6 +353,46 @@ describe('Combobox', () => {
     });
   });
 
+  describe('inline label', () => {
+    it('renders label inside the trigger when labelPosition is inline', () => {
+      render(
+        <Combobox
+          options={mockOptions}
+          onChange={vi.fn()}
+          label="Category"
+          labelPosition="inline"
+        />,
+      );
+      const label = screen.getByText('Category');
+      expect(label).toBeInTheDocument();
+      // The label should be inside a border wrapper (inline mode uses a different layout)
+      expect(label.tagName).toBe('LABEL');
+      expect(label).toHaveClass('uppercase');
+    });
+
+    it('renders label above by default', () => {
+      render(<Combobox options={mockOptions} onChange={vi.fn()} label="Category" />);
+      const label = screen.getByText('Category');
+      expect(label).toBeInTheDocument();
+      // Above label does not have the uppercase class
+      expect(label).not.toHaveClass('uppercase');
+    });
+
+    it('inline label is associated with input via htmlFor', () => {
+      render(
+        <Combobox
+          options={mockOptions}
+          onChange={vi.fn()}
+          label="Category"
+          labelPosition="inline"
+        />,
+      );
+      const label = screen.getByText('Category');
+      const input = screen.getByRole('combobox');
+      expect(label).toHaveAttribute('for', input.id);
+    });
+  });
+
   describe('keyboard navigation', () => {
     it('opens dropdown on ArrowDown key', async () => {
       const user = userEvent.setup();

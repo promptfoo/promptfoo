@@ -87,6 +87,12 @@ import { handleToolCallF1 } from './toolCallF1';
 import { handleTraceErrorSpans } from './traceErrorSpans';
 import { handleTraceSpanCount } from './traceSpanCount';
 import { handleTraceSpanDuration } from './traceSpanDuration';
+import {
+  handleTrajectoryGoalSuccess,
+  handleTrajectoryStepCount,
+  handleTrajectoryToolSequence,
+  handleTrajectoryToolUsed,
+} from './trajectory';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
@@ -112,6 +118,7 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'model-graded-closedqa',
   'model-graded-factuality',
   'search-rubric',
+  'trajectory:goal-success',
 ]);
 
 const ASSERTION_HANDLERS: Record<
@@ -192,6 +199,10 @@ const ASSERTION_HANDLERS: Record<
   'similar:euclidean': handleSimilar,
   'starts-with': handleStartsWith,
   'tool-call-f1': handleToolCallF1,
+  'trajectory:goal-success': handleTrajectoryGoalSuccess,
+  'trajectory:step-count': handleTrajectoryStepCount,
+  'trajectory:tool-sequence': handleTrajectoryToolSequence,
+  'trajectory:tool-used': handleTrajectoryToolUsed,
   'trace-error-spans': handleTraceErrorSpans,
   'trace-span-count': handleTraceSpanCount,
   'trace-span-duration': handleTraceSpanDuration,
