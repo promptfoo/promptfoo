@@ -98,6 +98,10 @@ describe('handleTrajectoryGoalSuccess', () => {
 
     const params: AssertionParams = {
       ...defaultParams,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        vars: { orderId: '123' },
+      },
       providerCallContext,
       test: {
         vars: { orderId: '123' },
@@ -148,7 +152,38 @@ describe('handleTrajectoryGoalSuccess', () => {
       expect.any(String),
       'test output',
       undefined,
+      {},
+      params.assertion,
       undefined,
+    );
+  });
+
+  it('passes resolved assertion vars instead of the raw test vars', async () => {
+    vi.mocked(matchesTrajectoryGoalSuccess).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Goal achieved',
+    });
+
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        vars: { orderId: 'resolved-123' },
+      },
+      test: {
+        vars: { orderId: '{{ order_id }}' },
+      },
+    };
+
+    await handleTrajectoryGoalSuccess(params);
+
+    expect(matchesTrajectoryGoalSuccess).toHaveBeenCalledWith(
+      'Resolve the order lookup task',
+      expect.any(String),
+      'test output',
+      undefined,
+      { orderId: 'resolved-123' },
       params.assertion,
       undefined,
     );
