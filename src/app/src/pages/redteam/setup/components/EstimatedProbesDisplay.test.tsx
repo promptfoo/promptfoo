@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EstimatedProbesDisplay from './EstimatedProbesDisplay';
 
 import type { Config } from '../types';
@@ -13,13 +13,24 @@ const renderWithProviders = (ui: React.ReactElement) => {
 
 // Mock the utils module
 vi.mock('./strategies/utils', () => ({
-  getEstimatedProbes: vi.fn(),
+  estimateProbeRange: vi.fn(),
 }));
 
 // Import the mocked function for use in tests
-import { getEstimatedProbes } from './strategies/utils';
+import { estimateProbeRange } from './strategies/utils';
 
-const mockGetEstimatedProbes = vi.mocked(getEstimatedProbes);
+const mockEstimateProbeRange = vi.mocked(estimateProbeRange);
+
+const setLikelyProbeCount = (likely: number) => {
+  mockEstimateProbeRange.mockReturnValue({
+    min: likely,
+    likely,
+    max: likely,
+    ceiling: likely,
+    assumptions: ['Assumption'],
+    breakdown: [],
+  });
+};
 
 const mockConfig: Config = {
   description: 'Test Configuration',
@@ -42,8 +53,18 @@ const mockConfig: Config = {
 describe('EstimatedProbesDisplay', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Default mock return value
-    mockGetEstimatedProbes.mockReturnValue(150);
+    mockEstimateProbeRange.mockReturnValue({
+      min: 120,
+      likely: 150,
+      max: 180,
+      ceiling: 220,
+      assumptions: ['Assumption'],
+      breakdown: [],
+    });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('Basic rendering', () => {
@@ -51,10 +72,14 @@ describe('EstimatedProbesDisplay', () => {
       renderWithProviders(<EstimatedProbesDisplay config={mockConfig} />);
 
       expect(screen.getByText('Estimated Probes:')).toBeInTheDocument();
+      expect(screen.getByText(/Range: 120 - 180/)).toBeInTheDocument();
+      expect(screen.getByText(/Ceiling: 220/)).toBeInTheDocument();
+      expect(screen.queryByText('Estimate drivers:')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Assumption/)).not.toBeInTheDocument();
     });
 
     it('displays the probe count value', () => {
-      mockGetEstimatedProbes.mockReturnValue(150);
+      setLikelyProbeCount(150);
       renderWithProviders(<EstimatedProbesDisplay config={mockConfig} />);
 
       expect(screen.getByText('150')).toBeInTheDocument();
@@ -80,35 +105,35 @@ describe('EstimatedProbesDisplay', () => {
 
   describe('Number formatting', () => {
     it('formats numbers with commas for thousands', () => {
-      mockGetEstimatedProbes.mockReturnValue(1234);
+      setLikelyProbeCount(1234);
       renderWithProviders(<EstimatedProbesDisplay config={mockConfig} />);
 
       expect(screen.getByText('1,234')).toBeInTheDocument();
     });
 
     it('formats large numbers with multiple commas', () => {
-      mockGetEstimatedProbes.mockReturnValue(1234567);
+      setLikelyProbeCount(1234567);
       renderWithProviders(<EstimatedProbesDisplay config={mockConfig} />);
 
       expect(screen.getByText('1,234,567')).toBeInTheDocument();
     });
 
     it('handles zero count correctly', () => {
-      mockGetEstimatedProbes.mockReturnValue(0);
+      setLikelyProbeCount(0);
       renderWithProviders(<EstimatedProbesDisplay config={mockConfig} />);
 
       expect(screen.getByText('0')).toBeInTheDocument();
     });
 
     it('handles single digit numbers', () => {
-      mockGetEstimatedProbes.mockReturnValue(5);
+      setLikelyProbeCount(5);
       renderWithProviders(<EstimatedProbesDisplay config={mockConfig} />);
 
       expect(screen.getByText('5')).toBeInTheDocument();
     });
 
     it('handles numbers in the hundreds', () => {
-      mockGetEstimatedProbes.mockReturnValue(999);
+      setLikelyProbeCount(999);
       renderWithProviders(<EstimatedProbesDisplay config={mockConfig} />);
 
       expect(screen.getByText('999')).toBeInTheDocument();
@@ -119,8 +144,8 @@ describe('EstimatedProbesDisplay', () => {
     it('recalculates when config changes', () => {
       const { rerender } = renderWithProviders(<EstimatedProbesDisplay config={mockConfig} />);
 
-      expect(mockGetEstimatedProbes).toHaveBeenCalledWith(mockConfig);
-      expect(mockGetEstimatedProbes).toHaveBeenCalledTimes(1);
+      expect(mockEstimateProbeRange).toHaveBeenCalledWith(mockConfig);
+      expect(mockEstimateProbeRange).toHaveBeenCalledTimes(1);
 
       // Update config with more plugins
       const updatedConfig = {
@@ -129,21 +154,21 @@ describe('EstimatedProbesDisplay', () => {
         numTests: 20,
       };
 
-      mockGetEstimatedProbes.mockReturnValue(500);
+      setLikelyProbeCount(500);
       rerender(
         <TooltipProvider>
           <EstimatedProbesDisplay config={updatedConfig} />
         </TooltipProvider>,
       );
 
-      expect(mockGetEstimatedProbes).toHaveBeenCalledWith(updatedConfig);
+      expect(mockEstimateProbeRange).toHaveBeenCalledWith(updatedConfig);
       expect(screen.getByText('500')).toBeInTheDocument();
     });
 
     it('does not recalculate when config reference is same (memoization)', () => {
       const { rerender } = renderWithProviders(<EstimatedProbesDisplay config={mockConfig} />);
 
-      expect(mockGetEstimatedProbes).toHaveBeenCalledTimes(1);
+      expect(mockEstimateProbeRange).toHaveBeenCalledTimes(1);
 
       // Rerender with same config reference
       rerender(
@@ -153,17 +178,17 @@ describe('EstimatedProbesDisplay', () => {
       );
 
       // Should not call again due to memoization
-      expect(mockGetEstimatedProbes).toHaveBeenCalledTimes(1);
+      expect(mockEstimateProbeRange).toHaveBeenCalledTimes(1);
     });
 
     it('updates display when probe count changes', () => {
-      mockGetEstimatedProbes.mockReturnValue(100);
+      setLikelyProbeCount(100);
       const { rerender } = renderWithProviders(<EstimatedProbesDisplay config={mockConfig} />);
 
       expect(screen.getByText('100')).toBeInTheDocument();
 
       // Change the mock return value and update config
-      mockGetEstimatedProbes.mockReturnValue(200);
+      setLikelyProbeCount(200);
       const newConfig = { ...mockConfig, numTests: 20 };
 
       rerender(
@@ -193,6 +218,8 @@ describe('EstimatedProbesDisplay', () => {
             'Probes are the number of requests to the target application. ' +
               'This is calculated based on your selected plugins, strategies, and number of test cases.',
           );
+          expect(tooltip).toHaveTextContent('Estimate drivers:');
+          expect(tooltip).toHaveTextContent('Assumption');
         });
       }
     });
@@ -255,7 +282,7 @@ describe('EstimatedProbesDisplay', () => {
         plugins: [],
       };
 
-      mockGetEstimatedProbes.mockReturnValue(0);
+      setLikelyProbeCount(0);
       renderWithProviders(<EstimatedProbesDisplay config={emptyConfig} />);
 
       expect(screen.getByText('0')).toBeInTheDocument();
@@ -267,10 +294,10 @@ describe('EstimatedProbesDisplay', () => {
         strategies: [],
       };
 
-      mockGetEstimatedProbes.mockReturnValue(0);
+      setLikelyProbeCount(0);
       renderWithProviders(<EstimatedProbesDisplay config={emptyStrategyConfig} />);
 
-      expect(mockGetEstimatedProbes).toHaveBeenCalledWith(emptyStrategyConfig);
+      expect(mockEstimateProbeRange).toHaveBeenCalledWith(emptyStrategyConfig);
     });
 
     it('handles undefined numTests', () => {
@@ -279,15 +306,15 @@ describe('EstimatedProbesDisplay', () => {
         numTests: undefined as any,
       };
 
-      mockGetEstimatedProbes.mockReturnValue(75);
+      setLikelyProbeCount(75);
       renderWithProviders(<EstimatedProbesDisplay config={configWithoutNumTests} />);
 
-      expect(mockGetEstimatedProbes).toHaveBeenCalledWith(configWithoutNumTests);
+      expect(mockEstimateProbeRange).toHaveBeenCalledWith(configWithoutNumTests);
       expect(screen.getByText('75')).toBeInTheDocument();
     });
 
     it('handles very large probe counts', () => {
-      mockGetEstimatedProbes.mockReturnValue(999999999);
+      setLikelyProbeCount(999999999);
       renderWithProviders(<EstimatedProbesDisplay config={mockConfig} />);
 
       expect(screen.getByText('999,999,999')).toBeInTheDocument();
@@ -312,9 +339,9 @@ describe('EstimatedProbesDisplay', () => {
       expect(outerBox).toBeInTheDocument();
       expect(outerBox?.tagName).toBe('DIV');
 
-      // Check for inner structure - label, value, and tooltip icon
+      // Check for inner structure - header row and summary text.
       const innerElements = outerBox?.children;
-      expect(innerElements?.length).toBeGreaterThanOrEqual(3);
+      expect(innerElements?.length).toBeGreaterThanOrEqual(2);
     });
   });
 
@@ -322,7 +349,7 @@ describe('EstimatedProbesDisplay', () => {
     it('memoizes calculation correctly', () => {
       const { rerender } = renderWithProviders(<EstimatedProbesDisplay config={mockConfig} />);
 
-      expect(mockGetEstimatedProbes).toHaveBeenCalledTimes(1);
+      expect(mockEstimateProbeRange).toHaveBeenCalledTimes(1);
 
       // Multiple rerenders with same config should not recalculate
       for (let i = 0; i < 5; i++) {
@@ -334,13 +361,13 @@ describe('EstimatedProbesDisplay', () => {
       }
 
       // Still should have been called only once
-      expect(mockGetEstimatedProbes).toHaveBeenCalledTimes(1);
+      expect(mockEstimateProbeRange).toHaveBeenCalledTimes(1);
     });
 
     it('only recalculates when config dependency changes', () => {
       const { rerender } = renderWithProviders(<EstimatedProbesDisplay config={mockConfig} />);
 
-      expect(mockGetEstimatedProbes).toHaveBeenCalledTimes(1);
+      expect(mockEstimateProbeRange).toHaveBeenCalledTimes(1);
 
       // Create new config object with same values
       const sameValuesDifferentObject = { ...mockConfig };
@@ -352,13 +379,13 @@ describe('EstimatedProbesDisplay', () => {
       );
 
       // Should recalculate because it's a different object reference
-      expect(mockGetEstimatedProbes).toHaveBeenCalledTimes(2);
+      expect(mockEstimateProbeRange).toHaveBeenCalledTimes(2);
     });
   });
 
   describe('Integration with parent components', () => {
     it('works as a drop-in replacement for inline implementation', () => {
-      mockGetEstimatedProbes.mockReturnValue(250);
+      setLikelyProbeCount(250);
       renderWithProviders(<EstimatedProbesDisplay config={mockConfig} />);
 
       // Should display all the expected elements
@@ -375,7 +402,7 @@ describe('EstimatedProbesDisplay', () => {
       ];
 
       configs.forEach((config, index) => {
-        mockGetEstimatedProbes.mockReturnValue((index + 1) * 100);
+        setLikelyProbeCount((index + 1) * 100);
 
         const { unmount } = renderWithProviders(<EstimatedProbesDisplay config={config} />);
 
