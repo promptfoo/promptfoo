@@ -9,17 +9,20 @@ import {
   type Tracer,
   trace,
 } from '@opentelemetry/api';
+import { ATTR_ERROR_TYPE, ERROR_TYPE_VALUE_OTHER } from '@opentelemetry/semantic-conventions';
 
 import type { TokenUsage } from '../types/shared';
 
 const TRACER_NAME = 'promptfoo.providers';
 const TRACER_VERSION = '1.0.0';
 
-// GenAI Semantic Convention attribute names
+// GenAI Semantic Convention attribute names (OTEL Gen AI spec)
 // See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
 export const GenAIAttributes = {
-  // System identification
+  // System identification (deprecated: use PROVIDER_NAME for spec compliance)
   SYSTEM: 'gen_ai.system',
+  /** Required by spec: Gen AI provider identifier */
+  PROVIDER_NAME: 'gen_ai.provider.name',
   OPERATION_NAME: 'gen_ai.operation.name',
 
   // Request attributes
@@ -48,6 +51,100 @@ export const GenAIAttributes = {
   USAGE_ACCEPTED_PREDICTION_TOKENS: 'gen_ai.usage.accepted_prediction_tokens',
   USAGE_REJECTED_PREDICTION_TOKENS: 'gen_ai.usage.rejected_prediction_tokens',
 } as const;
+
+/** OTEL Gen AI operation names (spec well-known values) */
+export type GenAIOperationName = 'chat' | 'text_completion' | 'embeddings';
+
+/** Legacy operation names accepted for backward compatibility */
+export type LegacyOperationName = 'completion' | 'embedding';
+
+/** Legacy operation names (pre-spec); used when OTEL_SEMCONV_STABILITY_OPT_IN is not set */
+const LEGACY_OPERATION_NAMES: Record<GenAIOperationName, string> = {
+  chat: 'chat',
+  text_completion: 'completion',
+  embeddings: 'embedding',
+};
+
+/** Map legacy operation names to their canonical spec equivalents */
+const LEGACY_TO_CANONICAL: Record<LegacyOperationName, GenAIOperationName> = {
+  completion: 'text_completion',
+  embedding: 'embeddings',
+};
+
+/**
+ * Normalize an operation name, mapping legacy values to canonical spec names.
+ * e.g. 'completion' → 'text_completion', 'embedding' → 'embeddings'
+ */
+export function normalizeOperationName(
+  name: GenAIOperationName | LegacyOperationName,
+): GenAIOperationName {
+  if (Object.prototype.hasOwnProperty.call(LEGACY_TO_CANONICAL, name)) {
+    return LEGACY_TO_CANONICAL[name as LegacyOperationName];
+  }
+  return name as GenAIOperationName;
+}
+
+const GEN_AI_LATEST_OPT_IN = 'gen_ai_latest_experimental';
+
+/**
+ * True when OTEL_SEMCONV_STABILITY_OPT_IN includes gen_ai_latest_experimental.
+ * When false, we emit legacy operation names (completion, embedding) and both
+ * gen_ai.system and gen_ai.provider.name for backward compatibility.
+ */
+export function useGenAILatestExperimental(): boolean {
+  const val = process.env.OTEL_SEMCONV_STABILITY_OPT_IN;
+  if (!val || typeof val !== 'string') {
+    return false;
+  }
+  return val
+    .split(',')
+    .map((s) => s.trim())
+    .includes(GEN_AI_LATEST_OPT_IN);
+}
+
+/**
+ * Operation name to emit on the span (and gen_ai.operation.name).
+ * Uses legacy names when opt-in is not set so existing dashboards keep working.
+ */
+function getEmittedOperationName(operationName: GenAIOperationName): string {
+  return useGenAILatestExperimental() ? operationName : LEGACY_OPERATION_NAMES[operationName];
+}
+
+/**
+ * Map promptfoo provider/system id to OTEL gen_ai.provider.name.
+ * Uses spec well-known values where defined; otherwise returns the system string.
+ */
+export function getGenAIProviderName(system: string): string {
+  // Use segment before ':' for lookup so compound ids (e.g. vertex:palm2) map to same provider
+  const baseSystem = system.includes(':') ? system.split(':')[0]! : system;
+  const normalized = baseSystem.toLowerCase().replace(/[-.]/g, '_');
+  const mapping: Record<string, string> = {
+    openai: 'openai',
+    anthropic: 'anthropic',
+    aws_bedrock: 'aws.bedrock',
+    bedrock: 'aws.bedrock',
+    azure: 'azure.ai.openai',
+    azure_openai: 'azure.ai.openai',
+    vertex: 'gcp.vertex_ai',
+    gcp_vertex_ai: 'gcp.vertex_ai',
+    google: 'gcp.gen_ai',
+    gemini: 'gcp.gemini',
+    cohere: 'cohere',
+    mistral: 'mistral_ai',
+    mistral_ai: 'mistral_ai',
+    ollama: 'ollama',
+    openrouter: 'openrouter',
+    watsonx: 'ibm.watsonx.ai',
+    ibm_watsonx: 'ibm.watsonx.ai',
+    groq: 'groq',
+    deepseek: 'deepseek',
+    replicate: 'replicate',
+    huggingface: 'huggingface',
+    http: 'http',
+  };
+  const key = normalized.replace(/\s+/g, '_');
+  return mapping[key] ?? system;
+}
 
 // Promptfoo-specific attributes
 export const PromptfooAttributes = {
@@ -109,8 +206,8 @@ const SENSITIVE_PATTERNS: Array<{
 export interface GenAISpanContext {
   /** The GenAI system (e.g., 'openai', 'anthropic', 'bedrock') */
   system: string;
-  /** The operation type */
-  operationName: 'chat' | 'completion' | 'embedding';
+  /** The operation type (OTEL spec: chat, text_completion, embeddings). Legacy names (completion, embedding) are also accepted and auto-normalized. */
+  operationName: GenAIOperationName | LegacyOperationName;
   /** The requested model name */
   model: string;
   /** The promptfoo provider ID */
@@ -164,6 +261,35 @@ export function getGenAITracer(): Tracer {
 }
 
 /**
+ * Extract the error type string from a ProviderResponse-style error value.
+ * Prefers provider code/type/status, then HTTP status (4xx/5xx), else 'provider_error'.
+ */
+function extractErrorType(rawError: unknown, metadata?: Record<string, unknown>): string {
+  const errObj =
+    typeof rawError === 'object' && rawError ? (rawError as Record<string, unknown>) : null;
+  const providerCode =
+    errObj && (errObj.code ?? errObj.type ?? errObj.status) != null
+      ? String(errObj.code ?? errObj.type ?? errObj.status)
+      : null;
+  const httpStatus = (metadata as { http?: { status?: number } } | undefined)?.http?.status;
+  return (
+    providerCode ??
+    (typeof httpStatus === 'number' && httpStatus >= 400 ? String(httpStatus) : null) ??
+    'provider_error'
+  );
+}
+
+/**
+ * Extract a human-readable error message from a ProviderResponse error field.
+ */
+function extractErrorMessage(rawError: unknown): string {
+  if (typeof rawError === 'string') {
+    return rawError;
+  }
+  return String((rawError as { message?: string }).message ?? 'Provider error');
+}
+
+/**
  * Execute a function within a GenAI span.
  *
  * This wrapper:
@@ -207,8 +333,13 @@ export async function withGenAISpan<T>(
 ): Promise<T> {
   const tracer = getGenAITracer();
 
+  // Normalize legacy operation names (completion → text_completion, embedding → embeddings)
+  const canonicalOperation = normalizeOperationName(ctx.operationName);
+
   // Span name follows GenAI convention: "{operation} {model}"
-  const spanName = `${ctx.operationName} ${ctx.model}`;
+  // Use emitted operation name (legacy vs latest per OTEL_SEMCONV_STABILITY_OPT_IN)
+  const emittedOperation = getEmittedOperationName(canonicalOperation);
+  const spanName = `${emittedOperation} ${ctx.model}`;
 
   // Extract parent context from traceparent if provided
   // This allows spans to be linked to the evaluation's trace
@@ -232,11 +363,19 @@ export async function withGenAISpan<T>(
       // Check if response contains an error (ProviderResponse pattern)
       // Many providers return { error: "..." } instead of throwing
       const valueAsRecord = value as Record<string, unknown>;
-      if (valueAsRecord && typeof valueAsRecord.error === 'string' && valueAsRecord.error) {
+      const rawError = valueAsRecord?.error;
+      const hasError =
+        (typeof rawError === 'string' && rawError) || (rawError && typeof rawError === 'object');
+
+      if (hasError) {
         span.setStatus({
           code: SpanStatusCode.ERROR,
-          message: valueAsRecord.error,
+          message: extractErrorMessage(rawError),
         });
+        span.setAttribute(
+          ATTR_ERROR_TYPE,
+          extractErrorType(rawError, valueAsRecord?.metadata as Record<string, unknown>),
+        );
       } else {
         span.setStatus({ code: SpanStatusCode.OK });
       }
@@ -246,6 +385,12 @@ export async function withGenAISpan<T>(
         code: SpanStatusCode.ERROR,
         message: error instanceof Error ? error.message : String(error),
       });
+
+      const errorType =
+        error instanceof Error
+          ? ((error.name || (error as { code?: string }).code) ?? ERROR_TYPE_VALUE_OTHER)
+          : ERROR_TYPE_VALUE_OTHER;
+      span.setAttribute(ATTR_ERROR_TYPE, String(errorType));
 
       if (error instanceof Error) {
         span.recordException(error);
@@ -272,10 +417,15 @@ export async function withGenAISpan<T>(
  * Build request attributes for a GenAI span.
  */
 function buildRequestAttributes(ctx: GenAISpanContext): Attributes {
+  const canonicalOperation = normalizeOperationName(ctx.operationName);
+  const emittedOperation = getEmittedOperationName(canonicalOperation);
+  const providerName = getGenAIProviderName(ctx.system);
+
   const attrs: Attributes = {
-    // GenAI semantic conventions
+    // GenAI semantic conventions (dual-emit when not opt-in: both system and provider.name)
     [GenAIAttributes.SYSTEM]: ctx.system,
-    [GenAIAttributes.OPERATION_NAME]: ctx.operationName,
+    [GenAIAttributes.PROVIDER_NAME]: providerName,
+    [GenAIAttributes.OPERATION_NAME]: emittedOperation,
     [GenAIAttributes.REQUEST_MODEL]: ctx.model,
 
     // Promptfoo attributes

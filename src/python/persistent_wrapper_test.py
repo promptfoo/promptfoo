@@ -518,5 +518,166 @@ class TestAsyncFunctionHandling(unittest.TestCase):
         self.assertEqual(response["data"], 12)
 
 
+class TestTracedCall(unittest.TestCase):
+    """Tests for _traced_call tracing logic.
+
+    opentelemetry is an optional dependency (not installed in CI), so we
+    inject fake modules into sys.modules so the lazy imports inside
+    _traced_call resolve without the real package.
+    """
+
+    def setUp(self):
+        """Set up mock tracer, fake OTEL modules, and enable tracing."""
+        self.original_tracing = persistent_wrapper._tracing_enabled
+        self.original_tracer = persistent_wrapper._tracer
+
+        # Build a mock span that supports context manager
+        self.mock_span = MagicMock()
+        self.mock_span.__enter__ = MagicMock(return_value=self.mock_span)
+        self.mock_span.__exit__ = MagicMock(return_value=False)
+
+        self.mock_tracer = MagicMock()
+        self.mock_tracer.start_as_current_span.return_value = self.mock_span
+
+        persistent_wrapper._tracing_enabled = True
+        persistent_wrapper._tracer = self.mock_tracer
+
+        # Inject fake opentelemetry modules so lazy imports succeed
+        # without the real package being installed.
+        self._saved_modules = {}
+        fake_propagate = MagicMock()
+        fake_propagate.extract = MagicMock(return_value=None)
+        fake_trace = MagicMock()
+        fake_trace.SpanKind = MagicMock()
+        fake_trace.SpanKind.CLIENT = 3
+        fake_trace.Status = MagicMock(side_effect=lambda code, msg="": MagicMock())
+        fake_trace.StatusCode = MagicMock()
+        fake_trace.StatusCode.OK = 0
+        fake_trace.StatusCode.ERROR = 1
+
+        for mod_name, mod in [
+            ("opentelemetry", MagicMock()),
+            ("opentelemetry.propagate", fake_propagate),
+            ("opentelemetry.trace", fake_trace),
+        ]:
+            self._saved_modules[mod_name] = sys.modules.get(mod_name)
+            sys.modules[mod_name] = mod
+
+    def tearDown(self):
+        persistent_wrapper._tracing_enabled = self.original_tracing
+        persistent_wrapper._tracer = self.original_tracer
+        os.environ.pop("OTEL_SEMCONV_STABILITY_OPT_IN", None)
+        # Restore original sys.modules state
+        for mod_name, original in self._saved_modules.items():
+            if original is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = original
+
+    def _make_context(self, traceparent="00-abcd1234-5678-01"):
+        """Helper to build a context dict with traceparent."""
+        return {"traceparent": traceparent}
+
+    def test_skips_tracing_when_disabled(self):
+        """When tracing is disabled, should call method directly."""
+        persistent_wrapper._tracing_enabled = False
+        func = MagicMock(return_value="result")
+        result = persistent_wrapper._traced_call(func, ["a"], "call_api")
+        self.assertEqual(result, "result")
+        self.mock_tracer.start_as_current_span.assert_not_called()
+
+    def test_skips_tracing_without_traceparent(self):
+        """Without traceparent in args, should call method directly."""
+        func = MagicMock(return_value="result")
+        # Only 2 args = no context
+        result = persistent_wrapper._traced_call(func, ["prompt", {}], "call_api")
+        self.assertEqual(result, "result")
+        self.mock_tracer.start_as_current_span.assert_not_called()
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
+    )
+    def test_call_api_maps_to_chat(self, _mock_latest):
+        """call_api should map to operation name 'chat' in legacy mode."""
+        func = MagicMock(return_value={"output": "hi"})
+        ctx = self._make_context()
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        self.mock_span.set_attribute.assert_any_call("gen_ai.operation.name", "chat")
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
+    )
+    def test_call_embedding_api_maps_to_embedding(self, _mock_latest):
+        """call_embedding_api should map to 'embedding' in legacy mode."""
+        func = MagicMock(return_value={"output": [0.1, 0.2]})
+        ctx = self._make_context()
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_embedding_api")
+
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.operation.name", "embedding"
+        )
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_call_api_latest_maps_to_chat(self, _mock_latest):
+        """call_api with latest opt-in should still map to 'chat' (not remapped)."""
+        func = MagicMock(return_value={"output": "hi"})
+        ctx = self._make_context()
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        self.mock_span.set_attribute.assert_any_call("gen_ai.operation.name", "chat")
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
+    )
+    def test_call_embedding_latest_maps_to_embeddings(self, _mock_latest):
+        """call_embedding_api with latest opt-in should map to 'embeddings'."""
+        func = MagicMock(return_value={"output": [0.1]})
+        ctx = self._make_context()
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_embedding_api")
+
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.operation.name", "embeddings"
+        )
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
+    )
+    def test_error_dict_sets_error_type(self, _mock_latest):
+        """Error dict with 'code' key should set error.type attribute."""
+        func = MagicMock(return_value={"error": {"code": "rate_limit_exceeded"}})
+        ctx = self._make_context()
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        self.mock_span.set_attribute.assert_any_call(
+            "error.type", "rate_limit_exceeded"
+        )
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
+    )
+    def test_error_string_sets_provider_error(self, _mock_latest):
+        """String error should set error.type to 'provider_error'."""
+        func = MagicMock(return_value={"error": "something failed"})
+        ctx = self._make_context()
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        self.mock_span.set_attribute.assert_any_call("error.type", "provider_error")
+
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
+    )
+    def test_exception_sets_error_type(self, _mock_latest):
+        """Thrown exception should set error.type to exception class name."""
+        func = MagicMock(side_effect=ValueError("boom"))
+        ctx = self._make_context()
+        with self.assertRaises(ValueError):
+            persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        self.mock_span.set_attribute.assert_any_call("error.type", "ValueError")
+
+
 if __name__ == "__main__":
     unittest.main()

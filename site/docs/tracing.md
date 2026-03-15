@@ -63,7 +63,8 @@ Each provider call creates a span with these attributes:
 **Request Attributes:**
 
 - `gen_ai.system` - Provider system (e.g., "openai", "anthropic", "azure", "bedrock")
-- `gen_ai.operation.name` - Operation type ("chat", "completion", "embedding")
+- `gen_ai.provider.name` - OTEL provider identifier (e.g., "openai", "gcp.vertex_ai")
+- `gen_ai.operation.name` - Operation type: "chat", "completion" or "text_completion", "embedding" or "embeddings" (see [Convention version](#convention-version) below)
 - `gen_ai.request.model` - Model name
 - `gen_ai.request.max_tokens` - Max tokens setting
 - `gen_ai.request.temperature` - Temperature setting
@@ -87,6 +88,15 @@ Each provider call creates a span with these attributes:
 - `promptfoo.cache_hit` - Whether the response was served from cache
 - `promptfoo.request.body` - The request body sent to the provider (truncated to 4KB)
 - `promptfoo.response.body` - The response body from the provider (truncated to 4KB)
+
+### Convention version
+
+Built-in instrumentation follows the [OpenTelemetry Gen AI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/). Operation names and some attributes can be emitted in two modes:
+
+- **Default (legacy):** `gen_ai.operation.name` uses "completion" and "embedding"; both `gen_ai.system` and `gen_ai.provider.name` are set. This keeps existing dashboards and queries working.
+- **Latest (opt-in):** Set `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` to emit spec-aligned names ("text_completion", "embeddings") and span names. Use this when you want full alignment with the latest convention.
+
+The built-in OTLP receiver accepts both naming styles and normalizes them for the UI.
 
 ### Example Trace Output
 
@@ -271,6 +281,12 @@ export OTEL_SERVICE_NAME="my-rag-application"
 
 # Authentication headers (if needed)
 export OTEL_EXPORTER_OTLP_HEADERS="api-key=your-key"
+
+# Emit latest Gen AI semantic convention names (optional)
+# When set to gen_ai_latest_experimental, span names and gen_ai.operation.name use the
+# latest OTEL spec values (e.g. text_completion, embeddings). When unset, legacy names
+# (completion, embedding) are emitted for backward compatibility with existing dashboards.
+export OTEL_SEMCONV_STABILITY_OPT_IN="gen_ai_latest_experimental"
 ```
 
 ### Forwarding to External Collectors

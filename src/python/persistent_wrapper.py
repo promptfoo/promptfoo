@@ -178,6 +178,12 @@ def call_method(method_callable, args):
         return method_callable(*args)
 
 
+def _use_gen_ai_latest_experimental():
+    """Check if OTEL_SEMCONV_STABILITY_OPT_IN includes gen_ai_latest_experimental."""
+    val = os.getenv("OTEL_SEMCONV_STABILITY_OPT_IN", "")
+    return "gen_ai_latest_experimental" in [s.strip() for s in val.split(",")]
+
+
 def _truncate_body(text, max_length=4096):
     """Truncate text to max_length, adding indicator if truncated."""
     if not isinstance(text, str):
@@ -225,9 +231,32 @@ def _traced_call(method_callable, args, function_name):
         with _tracer.start_as_current_span(
             span_name, context=parent_ctx, kind=SpanKind.CLIENT
         ) as span:
-            # Set GenAI semantic convention attributes
+            # Set GenAI semantic convention attributes (OTEL spec)
             span.set_attribute("gen_ai.system", "python")
-            span.set_attribute("gen_ai.operation.name", function_name)
+            span.set_attribute("gen_ai.provider.name", "python")
+            # Map function names to GenAI operation names.
+            # Python providers pass call_api / call_embedding_api /
+            # call_classification_api as function_name.
+            # NOTE: currently only call_api passes context with traceparent
+            # (see pythonCompletion.ts), so embedding/classification calls
+            # exit early above and are not traced.  The mappings below are
+            # ready for when context propagation is added to those paths.
+            _FUNC_TO_OP = {
+                "call_api": "chat",
+                "call_embedding_api": "embedding",
+                "call_classification_api": "chat",
+                "completion": "completion",
+                "embedding": "embedding",
+            }
+            # Canonical (latest spec) names used when opted in.
+            _LEGACY_TO_LATEST = {
+                "completion": "text_completion",
+                "embedding": "embeddings",
+            }
+            op_name = _FUNC_TO_OP.get(function_name, function_name)
+            if _use_gen_ai_latest_experimental():
+                op_name = _LEGACY_TO_LATEST.get(op_name, op_name)
+            span.set_attribute("gen_ai.operation.name", op_name)
 
             # Set request attributes from prompt (1st arg)
             if len(args) >= 1:
@@ -299,6 +328,24 @@ def _traced_call(method_callable, args, function_name):
                     # Handle error in result
                     if result.get("error"):
                         span.set_status(Status(StatusCode.ERROR, str(result["error"])))
+                        err = result["error"]
+                        if isinstance(err, dict):
+                            if "code" in err:
+                                error_type = err.get("code")
+                            elif "type" in err:
+                                error_type = err.get("type")
+                            elif "status" in err:
+                                error_type = err.get("status")
+                            else:
+                                error_type = None
+                            error_type_str = (
+                                str(error_type)
+                                if error_type is not None
+                                else "provider_error"
+                            )
+                            span.set_attribute("error.type", error_type_str)
+                        else:
+                            span.set_attribute("error.type", "provider_error")
                     else:
                         span.set_status(Status(StatusCode.OK))
                 else:
@@ -310,6 +357,7 @@ def _traced_call(method_callable, args, function_name):
                 # Record exception and set error status
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, str(e)))
+                span.set_attribute("error.type", type(e).__name__ or "_OTHER")
                 raise
 
     except Exception as tracing_error:

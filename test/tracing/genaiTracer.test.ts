@@ -7,6 +7,7 @@ import {
   getCurrentSpanId,
   getCurrentTraceId,
   getTraceparent,
+  normalizeOperationName,
   PromptfooAttributes,
   setGenAIResponseAttributes,
   withGenAISpan,
@@ -336,6 +337,42 @@ describe('genaiTracer', () => {
       const spanId = getCurrentSpanId();
 
       expect(spanId).toBe('mock-span-id-12345678');
+    });
+  });
+
+  describe('normalizeOperationName', () => {
+    it('should map legacy "completion" to "text_completion"', () => {
+      expect(normalizeOperationName('completion')).toBe('text_completion');
+    });
+
+    it('should map legacy "embedding" to "embeddings"', () => {
+      expect(normalizeOperationName('embedding')).toBe('embeddings');
+    });
+
+    it('should pass through canonical names unchanged', () => {
+      expect(normalizeOperationName('chat')).toBe('chat');
+      expect(normalizeOperationName('text_completion')).toBe('text_completion');
+      expect(normalizeOperationName('embeddings')).toBe('embeddings');
+    });
+
+    it('should normalize legacy names in withGenAISpan', async () => {
+      await withGenAISpan(
+        { system: 'openai', operationName: 'completion', model: 'davinci', providerId: 'test' },
+        async () => ({ output: 'test' }),
+      );
+
+      // Span name should use emitted operation name (legacy by default since env not set)
+      expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
+        'completion davinci',
+        expect.any(Object),
+        expect.anything(),
+        expect.any(Function),
+      );
+
+      // The attribute should also be the emitted (legacy) name
+      const callArgs = mockTracer.startActiveSpan.mock.calls[0];
+      const options = callArgs[1];
+      expect(options.attributes['gen_ai.operation.name']).toBe('completion');
     });
   });
 
