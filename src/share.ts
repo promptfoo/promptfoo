@@ -537,6 +537,15 @@ export function stripAuthFromUrl(urlString: string): string {
 }
 
 async function handleEmailCollection(evalRecord: Eval): Promise<void> {
+  // Skip email collection if author is already set
+  if (evalRecord.author) {
+    logger.debug(`[Share] Skipping email collection because author is already set`, {
+      evalId: evalRecord.id,
+      author: evalRecord.author,
+    });
+    return;
+  }
+
   if (!process.stdout.isTTY || isCI() || getEnvBool('PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST')) {
     return;
   }

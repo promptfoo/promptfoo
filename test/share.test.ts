@@ -55,6 +55,7 @@ function buildMockEval(): Partial<Eval> {
 }
 
 const mockFetch = vi.fn();
+const originalIsTTY = process.stdout.isTTY;
 
 vi.mock('../src/globalConfig/cloud', () => {
   const cloudConfig = {
@@ -141,6 +142,11 @@ describe('stripAuthFromUrl', () => {
   });
 });
 
+afterEach(() => {
+  vi.resetAllMocks();
+  process.stdout.isTTY = originalIsTTY;
+});
+
 describe('isSharingEnabled', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -213,6 +219,7 @@ describe('determineShareDomain', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(envars.getEnvString).mockImplementation((_key: string) => '');
+    vi.mocked(constants.getDefaultShareViewBaseUrl).mockReturnValue('https://promptfoo.app');
   });
 
   it('should use DEFAULT_SHARE_VIEW_BASE_URL when no custom domain is specified', () => {
@@ -298,6 +305,9 @@ describe('createShareableUrl', () => {
     vi.mocked(envars.getEnvString).mockImplementation((_key: string) => '');
     vi.mocked(envars.isCI).mockReturnValue(false);
     vi.mocked(envars.getEnvBool).mockReturnValue(false);
+    vi.mocked(constants.getShareApiBaseUrl).mockReturnValue('https://api.promptfoo.app');
+    vi.mocked(constants.getDefaultShareViewBaseUrl).mockReturnValue('https://promptfoo.app');
+    vi.mocked(constants.getShareViewBaseUrl).mockReturnValue('https://promptfoo.app');
     mockFetch.mockReset();
     // Mock process.stdout.isTTY
     process.stdout.isTTY = false;
@@ -402,6 +412,34 @@ describe('createShareableUrl', () => {
     });
     const result2 = await createShareableUrl(mockEval as Eval);
     expect(result2).not.toEqual(result);
+  });
+
+  it('skips email collection when author is already set', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    process.stdout.isTTY = true;
+    vi.mocked(envars.isCI).mockReturnValue(false);
+    vi.mocked(envars.getEnvBool).mockReturnValue(false);
+
+    const mockEval = buildMockEval();
+    mockEval.author = 'preset-author@example.com';
+
+    // Mock the initial eval send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: mockEval.id }),
+    });
+    // Mock the chunk send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    await createShareableUrl(mockEval as Eval);
+
+    // getUserEmail should not have been called since author was already set
+    expect(getUserEmail).not.toHaveBeenCalled();
+    // The author should remain unchanged
+    expect(mockEval.author).toBe('preset-author@example.com');
   });
 
   describe('chunked sending', () => {

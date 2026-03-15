@@ -69,7 +69,7 @@ export function createOutputMetadata(evalRecord: Eval) {
     arch: os.arch(),
     exportedAt: new Date().toISOString(),
     evaluationCreatedAt,
-    author: evalRecord.author,
+    author: evalRecord.author ?? undefined,
   };
 }
 

@@ -13,7 +13,7 @@ import {
   tagsTable,
 } from '../database/tables';
 import { getEnvBool } from '../envars';
-import { getUserEmail } from '../globalConfig/accounts';
+import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
@@ -318,7 +318,7 @@ export class EvalQueries {
 export default class Eval {
   id: string;
   createdAt: number;
-  author?: string;
+  author: string | null;
   description?: string;
   config: Partial<UnifiedConfig>;
   // If these are empty, you need to call loadResults(). We don't load them by default to save memory.
@@ -403,7 +403,7 @@ export default class Eval {
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,
       createdAt: new Date(eval_.createdAt),
-      author: eval_.author || undefined,
+      author: eval_.author,
       description: eval_.description || undefined,
       prompts: eval_.prompts || [],
       datasetId,
@@ -441,7 +441,7 @@ export default class Eval {
         new Eval(e.config, {
           id: e.id,
           createdAt: new Date(e.createdAt),
-          author: e.author || undefined,
+          author: e.author,
           description: e.description || undefined,
           prompts: e.prompts || [],
           persisted: true,
@@ -471,7 +471,7 @@ export default class Eval {
         new Eval(e.config, {
           id: e.id,
           createdAt: new Date(e.createdAt),
-          author: e.author || undefined,
+          author: e.author,
           description: e.description || undefined,
           prompts: e.prompts || [],
           persisted: true,
@@ -494,7 +494,7 @@ export default class Eval {
     opts?: {
       id?: string;
       createdAt?: Date;
-      author?: string;
+      author?: string | null;
       // Be wary, this is EvalResult[] and not EvaluateResult[]
       results?: EvalResult[];
       vars?: string[];
@@ -504,7 +504,7 @@ export default class Eval {
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
     const evalId = opts?.id || createEvalId(createdAt);
-    const author = opts?.author || getUserEmail();
+    const author = getAuthor(opts?.author);
     const db = getDb();
 
     const datasetId = sha256(JSON.stringify(config.tests || []));
@@ -602,7 +602,7 @@ export default class Eval {
 
     return new Eval(config, {
       id: evalId,
-      author: opts?.author,
+      author,
       createdAt,
       persisted: true,
       runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
@@ -614,7 +614,7 @@ export default class Eval {
     opts?: {
       id?: string;
       createdAt?: Date;
-      author?: string;
+      author?: string | null;
       description?: string;
       prompts?: CompletedPrompt[];
       datasetId?: string;
@@ -629,7 +629,7 @@ export default class Eval {
     const createdAt = opts?.createdAt || new Date();
     this.createdAt = createdAt.getTime();
     this.id = opts?.id || createEvalId(createdAt);
-    this.author = opts?.author;
+    this.author = opts?.author ?? null;
     this.config = config;
     this.results = [];
     this.prompts = opts?.prompts || [];
@@ -1428,7 +1428,7 @@ export default class Eval {
 
     const newPrompts = structuredClone(this.prompts);
     const newVars = this.vars ? structuredClone(this.vars) : [];
-    const author = getUserEmail();
+    const author = getAuthor();
 
     const db = getDb();
 
