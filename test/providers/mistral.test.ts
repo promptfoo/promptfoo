@@ -4,6 +4,7 @@ import {
   MistralChatCompletionProvider,
   MistralEmbeddingProvider,
 } from '../../src/providers/mistral';
+import { maybeLoadToolsFromExternalFile } from '../../src/util';
 
 vi.mock('../../src/cache', async () => ({
   ...(await vi.importActual('../../src/cache')),
@@ -12,12 +13,16 @@ vi.mock('../../src/cache', async () => ({
   isCacheEnabled: vi.fn(),
 }));
 
-vi.mock('../../src/util');
+vi.mock('../../src/util', async () => ({
+  ...(await vi.importActual('../../src/util')),
+  maybeLoadToolsFromExternalFile: vi.fn(),
+}));
 
 describe('Mistral', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fetchWithCache).mockReset();
+    vi.mocked(maybeLoadToolsFromExternalFile).mockImplementation(async (tools) => tools);
     vi.mocked(isCacheEnabled).mockReturnValue(false);
     vi.mocked(getCache).mockReturnValue({
       get: vi.fn().mockResolvedValue(null),
@@ -141,6 +146,55 @@ describe('Mistral', () => {
         },
         cached: false,
         cost: expect.any(Number),
+      });
+    });
+
+    it('should include tools configuration in the request body', async () => {
+      const tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'calculate',
+            description: 'Perform basic math',
+            parameters: {
+              type: 'object',
+              properties: {
+                a: { type: 'number' },
+                b: { type: 'number' },
+              },
+              required: ['a', 'b'],
+            },
+          },
+        },
+      ];
+      const customProvider = new MistralChatCompletionProvider('mistral-medium', {
+        config: {
+          tools,
+          tool_choice: 'any',
+          parallel_tool_calls: false,
+        },
+      });
+      vi.spyOn(customProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: null, tool_calls: tools } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await customProvider.callApi('Test prompt');
+
+      expect(vi.mocked(maybeLoadToolsFromExternalFile)).toHaveBeenCalledWith(tools, undefined);
+      const requestInit = vi.mocked(fetchWithCache).mock.calls[0]?.[1];
+      expect(requestInit).toBeDefined();
+      const requestBody = JSON.parse((requestInit as RequestInit).body as string);
+      expect(requestBody).toMatchObject({
+        tools,
+        tool_choice: 'any',
+        parallel_tool_calls: false,
       });
     });
 
