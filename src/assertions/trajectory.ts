@@ -380,7 +380,7 @@ export const handleTrajectoryGoalSuccess = async (
     trajectory,
     params.outputString,
     params.test.options,
-    params.test.vars,
+    params.assertionValueContext.vars,
     params.assertion,
     params.providerCallContext,
   );

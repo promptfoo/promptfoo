@@ -213,20 +213,22 @@ function isMessageSpan(span: TraceSpan): boolean {
 
 export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
   return [...(trace.spans || [])]
-    .sort((a, b) => {
-      const timeDiff = a.startTime - b.startTime;
+    .map((span, index) => ({ span, index }))
+    .sort((left, right) => {
+      const timeDiff = left.span.startTime - right.span.startTime;
       if (timeDiff !== 0) {
         return timeDiff;
       }
 
-      const endDiff = (a.endTime ?? a.startTime) - (b.endTime ?? b.startTime);
+      const endDiff =
+        (left.span.endTime ?? left.span.startTime) - (right.span.endTime ?? right.span.startTime);
       if (endDiff !== 0) {
         return endDiff;
       }
 
-      return a.name.localeCompare(b.name);
+      return left.index - right.index;
     })
-    .map((span) => {
+    .map(({ span }) => {
       const toolName = extractToolName(span);
       const command = extractCommand(span);
       const searchQuery = extractSearchQuery(span);
