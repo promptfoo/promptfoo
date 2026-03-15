@@ -14,6 +14,7 @@ import {
 } from '../util/cloud';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
+import { getOrDownloadProviderFile } from '../util/providerFileCache';
 import { renderEnvOnlyInObject } from '../util/render';
 import { providerMap } from './registry';
 
@@ -67,11 +68,25 @@ export async function loadApiProvider(
   if (isCloudProvider(renderedProviderPath)) {
     const cloudDatabaseId = getCloudDatabaseId(renderedProviderPath);
 
-    const cloudProvider = await getProviderFromCloud(cloudDatabaseId);
+    const { provider: cloudProvider, providerFile } = await getProviderFromCloud(cloudDatabaseId);
     if (isCloudProvider(cloudProvider.id)) {
       throw new Error(
         `This cloud provider ${cloudDatabaseId} points to another cloud provider: ${cloudProvider.id}. This is not allowed. A cloud provider should point to a specific provider, not another cloud provider.`,
       );
+    }
+
+    // If the cloud provider has an uploaded file, download and cache it
+    // The cached file path will be used instead of the provider's id
+    let resolvedProviderId = cloudProvider.id;
+    if (providerFile) {
+      const cachedFilePath = await getOrDownloadProviderFile(cloudDatabaseId, providerFile);
+      if (cachedFilePath) {
+        logger.debug(
+          `[Cloud Provider] Using cached provider file: ${cachedFilePath} (from ${providerFile.filename})`,
+        );
+        // Use file:// prefix for the cached provider script
+        resolvedProviderId = `file://${cachedFilePath}`;
+      }
     }
 
     // Merge local config overrides with cloud provider config
@@ -97,7 +112,7 @@ export async function loadApiProvider(
     };
 
     logger.debug(
-      `[Cloud Provider] Loaded ${cloudDatabaseId}, resolved to ${cloudProvider.id}${options.config ? ' with local config overrides' : ''}`,
+      `[Cloud Provider] Loaded ${cloudDatabaseId}, resolved to ${resolvedProviderId}${options.config ? ' with local config overrides' : ''}`,
     );
 
     const mergedContext = {
@@ -106,7 +121,7 @@ export async function loadApiProvider(
       env: mergedOptions.env,
     };
 
-    return loadApiProvider(cloudProvider.id, mergedContext);
+    return loadApiProvider(resolvedProviderId, mergedContext);
   }
 
   if (

@@ -14,6 +14,7 @@ import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
 import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../src/util/cloud';
 import * as fileUtil from '../src/util/file';
+import { getOrDownloadProviderFile } from '../src/util/providerFileCache';
 
 import type { ProviderOptions } from '../src/types/index';
 
@@ -27,6 +28,7 @@ vi.mock('../src/providers/pythonCompletion');
 vi.mock('../src/providers/scriptCompletion');
 vi.mock('../src/providers/websocket');
 vi.mock('../src/util/cloud');
+vi.mock('../src/util/providerFileCache');
 vi.mock('../src/util/file', async () => {
   const actual = await vi.importActual<typeof import('../src/util/file')>('../src/util/file');
   return {
@@ -47,6 +49,9 @@ describe('loadApiProvider', () => {
     vi.mocked(getCloudDatabaseId).mockImplementation((path: string) =>
       path.slice('promptfoo://provider/'.length),
     );
+
+    // Mock getOrDownloadProviderFile to return null by default (no file downloaded)
+    vi.mocked(getOrDownloadProviderFile).mockResolvedValue(null);
 
     // Reset maybeLoadConfigFromExternalFile mock to default implementation
     vi.mocked(fileUtil.maybeLoadConfigFromExternalFile).mockImplementation((input: any) => input);
@@ -187,11 +192,14 @@ describe('loadApiProvider', () => {
 
   it('should load Provider from cloud', async () => {
     vi.mocked(getProviderFromCloud).mockResolvedValue({
-      id: 'file://path/to/custom_provider.py:call_api',
-      config: {
-        apiKey: 'test-key',
-        temperature: 0.7,
+      provider: {
+        id: 'file://path/to/custom_provider.py:call_api',
+        config: {
+          apiKey: 'test-key',
+          temperature: 0.7,
+        },
       },
+      providerFile: null,
     });
     const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`);
 
@@ -210,12 +218,15 @@ describe('loadApiProvider', () => {
 
   it('should merge local config overrides with cloud provider config', async () => {
     vi.mocked(getProviderFromCloud).mockResolvedValue({
-      id: 'file://providers/custom_llm.py:generate',
-      config: {
-        apiKey: 'cloud-api-key',
-        temperature: 0.7,
-        maxTokens: 1000,
+      provider: {
+        id: 'file://providers/custom_llm.py:generate',
+        config: {
+          apiKey: 'cloud-api-key',
+          temperature: 0.7,
+          maxTokens: 1000,
+        },
       },
+      providerFile: null,
     });
 
     const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
@@ -244,11 +255,14 @@ describe('loadApiProvider', () => {
 
   it('should override cloud provider label with local label', async () => {
     vi.mocked(getProviderFromCloud).mockResolvedValue({
-      id: 'file://models/sentiment.py:analyze',
-      label: 'Cloud Label',
-      config: {
-        apiKey: 'test-key',
+      provider: {
+        id: 'file://models/sentiment.py:analyze',
+        label: 'Cloud Label',
+        config: {
+          apiKey: 'test-key',
+        },
       },
+      providerFile: null,
     });
 
     const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
@@ -263,11 +277,14 @@ describe('loadApiProvider', () => {
 
   it('should override cloud provider transform with local transform', async () => {
     vi.mocked(getProviderFromCloud).mockResolvedValue({
-      id: 'file://adapters/wrapper.py:call_model',
-      transform: 'response.cloudTransform',
-      config: {
-        apiKey: 'test-key',
+      provider: {
+        id: 'file://adapters/wrapper.py:call_model',
+        transform: 'response.cloudTransform',
+        config: {
+          apiKey: 'test-key',
+        },
       },
+      providerFile: null,
     });
 
     const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
@@ -282,11 +299,14 @@ describe('loadApiProvider', () => {
 
   it('should override cloud provider delay with local delay', async () => {
     vi.mocked(getProviderFromCloud).mockResolvedValue({
-      id: 'file://rate_limited/api.py:fetch',
-      delay: 1000,
-      config: {
-        apiKey: 'test-key',
+      provider: {
+        id: 'file://rate_limited/api.py:fetch',
+        delay: 1000,
+        config: {
+          apiKey: 'test-key',
+        },
       },
+      providerFile: null,
     });
 
     const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
@@ -301,14 +321,17 @@ describe('loadApiProvider', () => {
 
   it('should merge cloud provider env with local env overrides', async () => {
     vi.mocked(getProviderFromCloud).mockResolvedValue({
-      id: 'file://integrations/external_api.py:query',
-      config: {
-        apiKey: 'test-key',
+      provider: {
+        id: 'file://integrations/external_api.py:query',
+        config: {
+          apiKey: 'test-key',
+        },
+        env: {
+          ANTHROPIC_API_KEY: 'cloud-anthropic-key',
+          OPENAI_API_KEY: 'cloud-openai-key',
+        },
       },
-      env: {
-        ANTHROPIC_API_KEY: 'cloud-anthropic-key',
-        OPENAI_API_KEY: 'cloud-openai-key',
-      },
+      providerFile: null,
     });
 
     const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
@@ -337,14 +360,17 @@ describe('loadApiProvider', () => {
 
   it('should merge context env, cloud provider env, and local env overrides', async () => {
     vi.mocked(getProviderFromCloud).mockResolvedValue({
-      id: 'file://integrations/external_api.py:query',
-      config: {
-        apiKey: 'test-key',
+      provider: {
+        id: 'file://integrations/external_api.py:query',
+        config: {
+          apiKey: 'test-key',
+        },
+        env: {
+          ANTHROPIC_API_KEY: 'cloud-anthropic-key',
+          OPENAI_API_KEY: 'cloud-openai-key',
+        },
       },
-      env: {
-        ANTHROPIC_API_KEY: 'cloud-anthropic-key',
-        OPENAI_API_KEY: 'cloud-openai-key',
-      },
+      providerFile: null,
     });
 
     const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
@@ -378,14 +404,17 @@ describe('loadApiProvider', () => {
 
   it('should preserve cloud provider config when no local overrides provided', async () => {
     vi.mocked(getProviderFromCloud).mockResolvedValue({
-      id: 'file://enterprise/secure_llm.py:invoke',
-      label: 'Cloud Label',
-      transform: 'response.transform',
-      delay: 500,
-      config: {
-        apiKey: 'cloud-key',
-        temperature: 0.8,
+      provider: {
+        id: 'file://enterprise/secure_llm.py:invoke',
+        label: 'Cloud Label',
+        transform: 'response.transform',
+        delay: 500,
+        config: {
+          apiKey: 'cloud-key',
+          temperature: 0.8,
+        },
       },
+      providerFile: null,
     });
 
     const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`);
@@ -407,11 +436,14 @@ describe('loadApiProvider', () => {
 
   it('should handle cloud provider with empty local config override', async () => {
     vi.mocked(getProviderFromCloud).mockResolvedValue({
-      id: 'file://backend/inference.py:predict',
-      config: {
-        apiKey: 'cloud-key',
-        temperature: 0.7,
+      provider: {
+        id: 'file://backend/inference.py:predict',
+        config: {
+          apiKey: 'cloud-key',
+          temperature: 0.7,
+        },
       },
+      providerFile: null,
     });
 
     const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
@@ -431,6 +463,79 @@ describe('loadApiProvider', () => {
         id: 'file://backend/inference.py:predict',
       }),
     );
+  });
+
+  it('should download and use cached provider file when cloud provider has providerFile', async () => {
+    const providerFileMetadata = {
+      id: 'file-123',
+      filename: 'my_custom_provider.py',
+      language: 'python' as const,
+      contentType: 'text/x-python',
+      sizeBytes: 1024,
+      checksumSha256: 'abc123def456',
+      description: null,
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
+    };
+
+    vi.mocked(getProviderFromCloud).mockResolvedValue({
+      provider: {
+        id: 'openai:chat:gpt-4', // Original provider id from cloud
+        config: {
+          apiKey: 'test-key',
+        },
+      },
+      providerFile: providerFileMetadata,
+    });
+
+    // Mock the file download to return a cached path
+    const cachedFilePath = '/Users/test/.promptfoo/provider-files/abc123def456.py';
+    vi.mocked(getOrDownloadProviderFile).mockResolvedValue(cachedFilePath);
+
+    const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`);
+
+    expect(provider).toBeDefined();
+    // The provider should use the cached file path instead of the original provider id
+    expect(getOrDownloadProviderFile).toHaveBeenCalledWith('123', providerFileMetadata);
+    expect(PythonProvider).toHaveBeenCalledWith(
+      expect.stringMatching(/abc123def456\.py/),
+      expect.objectContaining({
+        config: expect.objectContaining({
+          apiKey: 'test-key',
+        }),
+      }),
+    );
+  });
+
+  it('should use original provider id when providerFile download returns null', async () => {
+    vi.mocked(getProviderFromCloud).mockResolvedValue({
+      provider: {
+        id: 'openai:chat:gpt-4',
+        config: {
+          apiKey: 'test-key',
+        },
+      },
+      providerFile: {
+        id: 'file-123',
+        filename: 'provider.py',
+        language: 'python' as const,
+        contentType: 'text/x-python',
+        sizeBytes: 1024,
+        checksumSha256: 'abc123',
+        description: null,
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+      },
+    });
+
+    // Mock download returning null (file couldn't be downloaded)
+    vi.mocked(getOrDownloadProviderFile).mockResolvedValue(null);
+
+    const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`);
+
+    expect(provider).toBeDefined();
+    // Should fall back to original provider id (openai:chat:gpt-4)
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-4', expect.any(Object));
   });
 
   it('should load OpenAI chat provider', async () => {

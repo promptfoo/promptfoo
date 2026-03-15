@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { z } from 'zod';
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -12,6 +13,30 @@ import type { Plugin, Severity } from '../redteam/constants';
 import type { PoliciesById } from '../redteam/types';
 import type { UnifiedConfig } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
+
+/**
+ * Schema for provider file metadata stored in cloud.
+ */
+export const ProviderFileMetadataSchema = z.object({
+  id: z.string(),
+  filename: z.string(),
+  language: z.enum(['javascript', 'python']),
+  contentType: z.string(),
+  sizeBytes: z.number(),
+  checksumSha256: z.string().regex(/^[0-9a-f]+$/i, 'Invalid SHA256 checksum format'),
+  description: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type ProviderFileMetadata = z.infer<typeof ProviderFileMetadataSchema>;
+
+/**
+ * Provider file with content included.
+ */
+export interface ProviderFileWithContent extends ProviderFileMetadata {
+  content: string;
+}
 
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
 const PERMISSION_CHECK_SERVER_FEATURE_DATE = '2025-09-03T14:49:11Z';
@@ -44,12 +69,20 @@ export function makeRequest(path: string, method: string, body?: any): Promise<R
 }
 
 /**
+ * Result of fetching a provider from cloud, includes config and optional file metadata.
+ */
+export interface CloudProviderResult {
+  provider: ProviderOptions & { id: string };
+  providerFile: ProviderFileMetadata | null;
+}
+
+/**
  * Fetches a provider configuration from PromptFoo Cloud by its ID.
  * @param id - The unique identifier of the cloud provider
- * @returns Promise resolving to provider options with guaranteed id field
+ * @returns Promise resolving to provider options with guaranteed id field, plus optional file metadata
  * @throws Error if cloud is not enabled, provider not found, or request fails
  */
-export async function getProviderFromCloud(id: string): Promise<ProviderOptions & { id: string }> {
+export async function getProviderFromCloud(id: string): Promise<CloudProviderResult> {
   if (!cloudConfig.isEnabled()) {
     throw new Error(
       `Could not fetch Provider ${id} from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
@@ -71,7 +104,25 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
     const provider = ProviderOptionsSchema.parse(body.config);
     // The provider options schema has ID field as optional but we know it's required for cloud providers
     invariant(provider.id, `Provider ${id} has no id in ${body.config}`);
-    return { ...provider, id: provider.id };
+
+    // Extract and validate provider file metadata if present
+    let providerFile: ProviderFileMetadata | null = null;
+    if (body.providerFile) {
+      const parsed = ProviderFileMetadataSchema.safeParse(body.providerFile);
+      if (parsed.success) {
+        providerFile = parsed.data;
+        logger.debug(
+          `[Cloud] Provider ${id} has uploaded file: ${providerFile.filename} (checksum: ${providerFile.checksumSha256})`,
+        );
+      } else {
+        logger.warn(`[Cloud] Provider ${id} has invalid providerFile metadata, ignoring`);
+      }
+    }
+
+    return {
+      provider: { ...provider, id: provider.id },
+      providerFile,
+    };
   } catch (e) {
     logger.error(`Failed to fetch provider from cloud: ${id}.`);
     logger.error(String(e));
@@ -208,6 +259,49 @@ function normalizeEvalConfig(config: Record<string, unknown>): UnifiedConfig {
   delete normalizedConfig.verbose;
 
   return normalizedConfig as UnifiedConfig;
+}
+
+/**
+ * Fetches a provider file (content) from PromptFoo Cloud by provider ID.
+ * @param providerId - The unique identifier of the cloud provider
+ * @returns Promise resolving to provider file with content, or null if no file exists
+ * @throws Error if cloud is not enabled or request fails
+ */
+export async function getProviderFileFromCloud(
+  providerId: string,
+): Promise<ProviderFileWithContent | null> {
+  if (!cloudConfig.isEnabled()) {
+    throw new Error(
+      `Could not fetch provider file from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
+    );
+  }
+  try {
+    const response = await makeRequest(`providers/${providerId}/file`, 'GET');
+
+    if (response.status === 404) {
+      // No file uploaded for this provider
+      return null;
+    }
+
+    if (!response.ok) {
+      const errorMessage = await response.text();
+      logger.error(
+        `[Cloud] Failed to fetch provider file from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`,
+      );
+      throw new Error(`Failed to fetch provider file from cloud: ${response.statusText}`);
+    }
+
+    const body = await response.json();
+    logger.debug(`[Cloud] Provider file fetched for provider ${providerId}: ${body.filename}`);
+    return body as ProviderFileWithContent;
+  } catch (e) {
+    if ((e as Error).message?.includes('404')) {
+      return null;
+    }
+    logger.error(`Failed to fetch provider file from cloud for provider: ${providerId}.`);
+    logger.error(String(e));
+    throw new Error(`Failed to fetch provider file from cloud for provider: ${providerId}.`);
+  }
 }
 
 /**

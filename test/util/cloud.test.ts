@@ -222,7 +222,10 @@ describe('cloud utils', () => {
 
       const result = await getProviderFromCloud('test-provider');
 
-      expect(result).toEqual({ ...mockProvider.config });
+      expect(result).toEqual({
+        provider: { ...mockProvider.config },
+        providerFile: null,
+      });
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/providers/test-provider',
         {
