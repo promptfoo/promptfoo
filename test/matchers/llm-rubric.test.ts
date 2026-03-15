@@ -396,6 +396,65 @@ describe('matchesLlmRubric', () => {
     );
   });
 
+  it('should fail when the grading provider returns no pass and corrupted score', async () => {
+    const expected = 'Expected output';
+    const output = 'Different output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    };
+
+    vi.spyOn(Grader, 'callApi').mockResolvedValueOnce({
+      output: JSON.stringify({ score: 'not a number', reason: 'Grading failed' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: false,
+        reason: 'Grading failed',
+        score: 0,
+        tokensUsed: {
+          total: expect.any(Number),
+          prompt: expect.any(Number),
+          completion: expect.any(Number),
+          cached: expect.any(Number),
+          completionDetails: expect.any(Object),
+          numRequests: 0,
+        },
+      }),
+    );
+  });
+
+  it('should fail when provider returns no score and pass', async () => {
+    const expected = 'Expected output';
+    const output = JSON.stringify({ reason: 'Can not determine pass or score' });
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output,
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason: `llm-rubric response must contain 'pass' or 'score' field. Output: ${output}`,
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        completionDetails: undefined,
+        numRequests: 0,
+      },
+    });
+  });
+
   it('should throw error when throwOnError is true and provider returns an error', async () => {
     const rubric = 'Test rubric';
     const llmOutput = 'Test output';
