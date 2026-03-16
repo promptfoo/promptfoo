@@ -185,7 +185,7 @@ export class OpenAiModerationProvider
     const apiKey = this.getApiKey();
     if (this.requiresApiKey() && !apiKey) {
       return handleApiError(
-        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+        `API key is not set. Set the ${this.config.apiKeyEnvar || 'OPENAI_API_KEY'} environment variable or add \`apiKey\` to the provider config.`,
       );
     }
 
