@@ -240,7 +240,7 @@ export class ProgressBarManager {
 
     this.completedCount++;
     const provider = evalStep.provider.label || evalStep.provider.id();
-    const prompt = `"${evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' ')}"`;
+    const prompt = `"${(evalStep.prompt?.raw ?? '').slice(0, 10).replace(/\n/g, ' ')}"`;
     const vars = formatVarsForDisplay(evalStep.test.vars, 40);
 
     this.progressBar.increment({
@@ -317,6 +317,11 @@ function updateAssertionMetrics(
     // Accumulate assertion tokens using the specialized assertion function
     accumulateAssertionTokenUsage(metrics.tokenUsage.assertions, assertionTokens);
   }
+}
+
+/** Derives a unique key from an eval step's testIdx, promptIdx, and repeatIndex. */
+function getEvalStepKey(evalStep: Pick<RunEvalOptions, 'testIdx' | 'promptIdx' | 'repeatIndex'>) {
+  return `${evalStep.testIdx}:${evalStep.promptIdx}:${evalStep.repeatIndex}`;
 }
 
 /**
@@ -1102,6 +1107,7 @@ class Evaluator {
     let globalTimeout: NodeJS.Timeout | undefined;
     let globalAbortController: AbortController | undefined;
     const processedIndices = new Set<number>();
+    const timedOutSteps = new Set<string>();
 
     // Track target unavailability (non-transient HTTP errors like 401, 403, 404, 501)
     let targetUnavailable = false;
@@ -1626,12 +1632,13 @@ class Evaluator {
     const processEvalStep = async (
       evalStep: RunEvalOptions,
       index: number | string,
-      shouldSkipStaleRows?: () => boolean,
       onRowsReady?: () => void,
     ) => {
       if (typeof index !== 'number') {
         throw new Error('Expected index to be a number');
       }
+
+      const stepKey = getEvalStepKey(evalStep);
 
       const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
         test: evalStep.test,
@@ -1641,10 +1648,14 @@ class Evaluator {
       const rows = await runEval(evalStep);
       onRowsReady?.();
 
+      if (timedOutSteps.has(stepKey)) {
+        logger.warn(`Discarding late results for timed out eval step ${stepKey}`);
+        return;
+      }
+
       for (const row of rows) {
-        if (shouldSkipStaleRows?.()) {
-          // Timed-out provider calls can still settle later; ignore stale rows
-          // so the timeout row remains the canonical result for this test case.
+        if (timedOutSteps.has(stepKey)) {
+          logger.warn(`Discarding late result row for timed out eval step ${stepKey}`);
           return;
         }
 
@@ -1808,6 +1819,7 @@ class Evaluator {
     const processEvalStepWithTimeout = async (evalStep: RunEvalOptions, index: number | string) => {
       // Get timeout value from options or environment, defaults to 0 (no timeout)
       const timeoutMs = options.timeoutMs || getEvalTimeoutMs();
+      const stepKey = getEvalStepKey(evalStep);
 
       if (timeoutMs <= 0) {
         // No timeout, process normally
@@ -1837,12 +1849,23 @@ class Evaluator {
 
       try {
         return await Promise.race([
-          processEvalStep(evalStepWithSignal, index, () => didTimeout, clearEvalStepTimeout),
+          processEvalStep(evalStepWithSignal, index, clearEvalStepTimeout),
           new Promise<void>((_, reject) => {
             timeoutId = setTimeout(() => {
               didTimeout = true;
+              timedOutSteps.add(stepKey);
               // Abort any ongoing requests
               abortController.abort();
+
+              // If the provider has a cleanup method, call it
+              if (typeof evalStep.provider.cleanup === 'function') {
+                const cleanup = evalStep.provider.cleanup;
+                void Promise.resolve()
+                  .then(() => cleanup())
+                  .catch((cleanupErr) => {
+                    logger.warn(`Error during provider cleanup: ${cleanupErr}`);
+                  });
+              }
 
               reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
             }, timeoutMs);
@@ -1863,9 +1886,9 @@ class Evaluator {
             config: evalStep.provider.config,
           },
           prompt: {
-            raw: evalStep.prompt.raw,
-            label: evalStep.prompt.label,
-            config: evalStep.prompt.config,
+            raw: evalStep.prompt?.raw ?? '',
+            label: evalStep.prompt?.label ?? '',
+            config: evalStep.prompt?.config,
           },
           vars: evalStep.test.vars || {},
           error: `Evaluation timed out after ${timeoutMs}ms: ${String(error)}`,
@@ -1877,7 +1900,7 @@ class Evaluator {
           promptIdx: evalStep.promptIdx,
           testIdx: evalStep.testIdx,
           testCase: sanitizedTestCase,
-          promptId: evalStep.prompt.id || '',
+          promptId: evalStep.prompt?.id ?? '',
         };
 
         // Add the timeout result to the evaluation record
@@ -2361,9 +2384,9 @@ class Evaluator {
               config: evalStep.provider.config,
             },
             prompt: {
-              raw: evalStep.prompt.raw,
-              label: evalStep.prompt.label,
-              config: evalStep.prompt.config,
+              raw: evalStep.prompt?.raw ?? '',
+              label: evalStep.prompt?.label ?? '',
+              config: evalStep.prompt?.config,
             },
             vars: evalStep.test.vars || {},
             error: `Evaluation exceeded max duration of ${maxEvalTimeMs}ms`,
@@ -2375,7 +2398,7 @@ class Evaluator {
             promptIdx: evalStep.promptIdx,
             testIdx: evalStep.testIdx,
             testCase: evalStep.test,
-            promptId: evalStep.prompt.id || '',
+            promptId: evalStep.prompt?.id ?? '',
           } as EvaluateResult;
 
           await this.evalRecord.addResult(timeoutResult);
