@@ -4450,9 +4450,7 @@ describe('runEval', () => {
 
   it('should not treat _conversation as a substring match (issue #7845)', async () => {
     const conversations: Record<string, any[]> = {
-      'test-provider:undefined': [
-        { prompt: 'prev', input: 'prev', output: 'prev output' },
-      ],
+      'test-provider:undefined': [{ prompt: 'prev', input: 'prev', output: 'prev output' }],
     };
 
     const results = await runEval({
