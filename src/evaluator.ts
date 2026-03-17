@@ -1923,6 +1923,10 @@ class Evaluator {
           return this.evalRecord;
         }
       } else {
+        if (progressBarManager) {
+          progressBarManager.removeLogInterceptor();
+          progressBarManager.stop();
+        }
         if (ciProgressReporter) {
           ciProgressReporter.error(`Evaluation failed: ${String(err)}`);
         }
