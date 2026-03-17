@@ -79,6 +79,7 @@ import {
 import { ManualInputProvider } from './manualInput';
 import { MCPProvider } from './mcp/index';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
+import { createNovitaProvider } from './novita';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { OpenAiAssistantProvider } from './openai/assistant';
@@ -466,6 +467,19 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       return createCerebrasProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('novita:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createNovitaProvider(providerPath, {
         config: providerOptions,
         env: context.env,
       });
