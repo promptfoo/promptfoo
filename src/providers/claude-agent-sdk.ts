@@ -387,6 +387,21 @@ export interface ClaudeCodeOptions {
   stderr?: (data: string) => void;
 
   /**
+   * Environment variables to pass to the Claude Agent SDK.
+   * These are merged with process.env, with these values taking precedence.
+   * Useful for setting OTEL configuration and other SDK-specific env vars.
+   *
+   * @example
+   * ```yaml
+   * env:
+   *   CLAUDE_CODE_ENABLE_TELEMETRY: "1"
+   *   OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:4318"
+   *   OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
+   * ```
+   */
+  env?: Record<string, string>;
+
+  /**
    * JavaScript runtime to use for executing Claude Code.
    * Auto-detected if not specified.
    */
@@ -640,7 +655,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     };
 
     // Set up env for the Claude Agent SDK call
-    // Pass through entire environment like claude-agent-sdk CLI does, with EnvOverrides taking precedence
+    // Pass through entire environment like claude-agent-sdk CLI does, with config.env and EnvOverrides taking precedence
     // Sort keys for stable cache key generation
     const env: Record<string, string> = {};
     for (const key of Object.keys(process.env).sort()) {
@@ -649,7 +664,17 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       }
     }
 
-    // EnvOverrides take precedence over process.env
+    // Config env takes precedence over process.env
+    if (config.env) {
+      for (const key of Object.keys(config.env).sort()) {
+        const value = config.env[key];
+        if (value !== undefined) {
+          env[key] = value;
+        }
+      }
+    }
+
+    // EnvOverrides take precedence over config.env
     if (this.env) {
       for (const key of Object.keys(this.env).sort()) {
         const value = this.env[key as keyof typeof this.env];
