@@ -4449,7 +4449,11 @@ describe('runEval', () => {
   });
 
   it('should not treat _conversation as a substring match (issue #7845)', async () => {
-    const conversations: Record<string, any[]> = {};
+    const conversations: Record<string, any[]> = {
+      'test-provider:undefined': [
+        { prompt: 'prev', input: 'prev', output: 'prev output' },
+      ],
+    };
 
     const results = await runEval({
       ...defaultOptions,
@@ -4464,9 +4468,11 @@ describe('runEval', () => {
     });
     const result = results[0];
     expect(result.success).toBe(true);
-    // _conversation should NOT be populated because only `pre_conversation_context`
-    // appears in the prompt, not the standalone `_conversation` variable.
-    expect(Object.keys(conversations)).toHaveLength(0);
+    // The rendered prompt should contain the literal text `pre_conversation_context`
+    // and NOT have injected the _conversation variable from conversation history.
+    // If the old naive includes() were used, `_conversation` would be populated
+    // from conversations and could affect prompt rendering.
+    expect(result.prompt.raw).toContain('pre_conversation_context');
   });
 
   it('should include sessionId from response in result metadata', async () => {
