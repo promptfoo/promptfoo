@@ -4448,6 +4448,27 @@ describe('runEval', () => {
     expect(conversations).toHaveProperty('test-provider:custom-id:conv1');
   });
 
+  it('should not treat _conversation as a substring match (issue #7845)', async () => {
+    const conversations: Record<string, any[]> = {};
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: {
+        raw: 'Summarize the pre_conversation_context for: {{ question }}',
+        label: 'test-label',
+      },
+      test: { vars: { question: 'What happened?' } },
+      conversations,
+      registers: {},
+    });
+    const result = results[0];
+    expect(result.success).toBe(true);
+    // _conversation should NOT be populated because only `pre_conversation_context`
+    // appears in the prompt, not the standalone `_conversation` variable.
+    expect(Object.keys(conversations)).toHaveLength(0);
+  });
+
   it('should include sessionId from response in result metadata', async () => {
     const conversations: Record<string, any[]> = {};
 

@@ -94,6 +94,22 @@ import type {
 import type { CallApiContextParams } from './types/providers';
 
 /**
+ * Match `_conversation` as a standalone template variable, not as a substring
+ * of another identifier (e.g. `pre_conversation_context`).
+ *
+ * Matches when preceded by a non-word character or start of string — this
+ * catches Nunjucks patterns like `{{ _conversation }}`, `{{ _conversation[0] }}`,
+ * `{% for x in _conversation %}`, and raw `_conversation` at the start.
+ *
+ * Fixes: https://github.com/promptfoo/promptfoo/issues/7845
+ */
+const CONVERSATION_VAR_RE = /(?<![a-zA-Z0-9])_conversation\b/;
+
+function usesConversationVar(raw: string): boolean {
+  return CONVERSATION_VAR_RE.test(raw);
+}
+
+/**
  * Manages a single progress bar for the evaluation
  */
 class ProgressBarManager {
@@ -326,7 +342,7 @@ export async function runEval({
   const fileMetadata = collectFileMetadata(test.vars || vars);
 
   const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
-  const usesConversation = prompt.raw.includes('_conversation');
+  const usesConversation = usesConversationVar(prompt.raw);
   if (
     !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
     !test.options?.disableConversationVar &&
@@ -1461,7 +1477,7 @@ class Evaluator {
     // Determine run parameters
 
     if (concurrency > 1) {
-      const usesConversation = prompts.some((p) => p.raw.includes('_conversation'));
+      const usesConversation = prompts.some((p) => usesConversationVar(p.raw));
       const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
       if (usesConversation) {
         logger.info(
@@ -2284,7 +2300,7 @@ class Evaluator {
       this.evalRecord.results.length > 0 ? totalLatencyMs / this.evalRecord.results.length : 0;
 
     // Detect key feature usage patterns
-    const usesConversationVar = prompts.some((p) => p.raw.includes('_conversation'));
+    const usesConversationVarTelemetry = prompts.some((p) => usesConversationVar(p.raw));
     const usesTransforms = Boolean(
       tests.some((t) => t.options?.transform || t.options?.postprocess) ||
         testSuite.providers.some((p) => Boolean(p.transform)),
@@ -2368,7 +2384,7 @@ class Evaluator {
       assertionPassRate: totalAssertions > 0 ? passedAssertions / totalAssertions : 0,
 
       // Feature usage
-      usesConversationVar,
+      usesConversationVar: usesConversationVarTelemetry,
       usesTransforms,
       usesScenarios,
       usesExampleProvider,
