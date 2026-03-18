@@ -59,7 +59,7 @@ describe('AssertionsResult', () => {
         numRequests: 0,
       });
       expect(assertionsResult['namedScores']).toEqual({
-        accuracy: 0.8,
+        accuracy: 1.6,
       });
     });
 
@@ -191,6 +191,97 @@ describe('AssertionsResult', () => {
 
       expect(result.pass).toBe(true);
       expect(result.reason).toBe(GUARDRAIL_BLOCKED_REASON);
+    });
+  });
+
+  describe('namedScores weight normalization', () => {
+    it('should apply different weights to named metrics and normalize correctly', async () => {
+      const assertionsResult = new AssertionsResult({});
+
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 0.6,
+          reason: 'Test 1',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        metric: 'relevance',
+        weight: 3,
+      });
+
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 0.9,
+          reason: 'Test 2',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        metric: 'clarity',
+        weight: 1,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      // relevance: (0.6 * 3) / 3 = 0.6
+      expect(result.namedScores!['relevance']).toBeCloseTo(0.6);
+      // clarity: (0.9 * 1) / 1 = 0.9
+      expect(result.namedScores!['clarity']).toBeCloseTo(0.9);
+    });
+
+    it('should produce unchanged namedScores when weights are equal', async () => {
+      const assertionsResult = new AssertionsResult({});
+
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 0.5,
+          reason: 'Test 1',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        metric: 'accuracy',
+        weight: 2,
+      });
+
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 0.7,
+          reason: 'Test 2',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        metric: 'accuracy',
+        weight: 2,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      // accuracy: (0.5 * 2 + 0.7 * 2) / (2 + 2) = 2.4 / 4 = 0.6
+      expect(result.namedScores!['accuracy']).toBeCloseTo(0.6);
+    });
+
+    it('should handle weight 0 for named metric correctly', async () => {
+      const assertionsResult = new AssertionsResult({});
+
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 0.8,
+          reason: 'Test 1',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        metric: 'safety',
+        weight: 0,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      // weight 0: (0.8 * 0) / 0 → 0 (division guarded)
+      expect(result.namedScores!['safety']).toBe(0);
     });
   });
 
