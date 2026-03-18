@@ -124,7 +124,7 @@ providers:
 
 ## Guardrails
 
-Validate tool inputs and outputs with guardrails (added in SDK v0.3.8):
+Validate tool inputs and outputs with guardrails:
 
 ```yaml
 providers:
