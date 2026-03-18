@@ -1736,7 +1736,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
   });
 
-  it('evaluator should correctly count named scores based on contributing assertions', async () => {
+  it('evaluator should count named scores once per test result', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt for namedScoresCount')],
@@ -1777,7 +1777,7 @@ describe('evaluator', () => {
           provider: result.provider.id,
           metrics: expect.objectContaining({
             namedScoresCount: expect.objectContaining({
-              Accuracy: 2,
+              Accuracy: 1,
               Completeness: 1,
             }),
           }),
@@ -1786,7 +1786,7 @@ describe('evaluator', () => {
     );
   });
 
-  it('evaluator should correctly count named scores with template metric variables', async () => {
+  it('evaluator should count named scores with template metric variables per result', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt for template metrics')],
@@ -1829,12 +1829,45 @@ describe('evaluator', () => {
               Accuracy: expect.any(Number),
             }),
             namedScoresCount: expect.objectContaining({
-              Accuracy: 3, // 2 assertions in first test + 1 in second
+              Accuracy: 2, // 1 named score from each of the 2 test results
             }),
           }),
         }),
       ]),
     );
+  });
+
+  it('evaluator should keep weighted named scores aligned with prompt metric counts', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt for weighted metrics')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test output',
+              metric: 'Accuracy',
+              weight: 3,
+            },
+            {
+              type: 'contains',
+              value: 'Missing output',
+              metric: 'Accuracy',
+              weight: 1,
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const results = await evalRecord.getResults();
+    const promptMetrics = evalRecord.prompts[0]?.metrics;
+
+    expect(results[0].namedScores?.Accuracy).toBeCloseTo(0.75, 10);
+    expect(promptMetrics?.namedScores.Accuracy).toBeCloseTo(0.75, 10);
+    expect(promptMetrics?.namedScoresCount.Accuracy).toBe(1);
   });
 
   it('evaluator should handle mixed static and template metrics correctly', async () => {

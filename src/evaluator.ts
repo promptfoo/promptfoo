@@ -4,7 +4,6 @@ import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import {
   MODEL_GRADED_ASSERTION_TYPES,
-  renderMetricName,
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
@@ -1568,22 +1567,11 @@ class Evaluator {
         invariant(metrics, 'Expected prompt.metrics to be set');
         metrics.score += row.score;
         for (const [key, value] of Object.entries(row.namedScores)) {
-          // Update named score value
+          // Each row.namedScores entry is already the aggregated score for this metric within the
+          // test result, so counts should track contributing test results rather than raw
+          // assertions. This keeps prompt-level averages aligned with weighted assertion metrics.
           metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
-
-          // Count assertions contributing to this named score
-          // Note: We need to render template variables in assertion metrics before comparing
-          const testVars = row.testCase?.vars || {};
-          let contributingAssertions = 0;
-          row.gradingResult?.componentResults?.forEach((result) => {
-            const renderedMetric = renderMetricName(result.assertion?.metric, testVars);
-            if (renderedMetric === key) {
-              contributingAssertions++;
-            }
-          });
-
-          metrics.namedScoresCount[key] =
-            (metrics.namedScoresCount[key] || 0) + (contributingAssertions || 1);
+          metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + 1;
         }
 
         if (testSuite.derivedMetrics) {

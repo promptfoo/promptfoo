@@ -1,7 +1,6 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { and, eq, inArray } from 'drizzle-orm';
-import { renderMetricName } from '../assertions/index';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -148,22 +147,12 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         metrics.totalLatencyMs += result.latencyMs || 0;
         metrics.cost += result.cost || 0;
 
-        // Update named scores
+        // Each named score is already aggregated per test result, so counts should reflect the
+        // number of results contributing that metric rather than the number of underlying
+        // assertions.
         for (const [key, value] of Object.entries(result.namedScores || {})) {
           metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
-
-          // Count assertions contributing to this named score
-          // Note: We need to render template variables in assertion metrics before comparing
-          const testVars = result.testCase?.vars || {};
-          let contributingAssertions = 0;
-          result.gradingResult?.componentResults?.forEach((componentResult) => {
-            const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
-            if (renderedMetric === key) {
-              contributingAssertions++;
-            }
-          });
-          metrics.namedScoresCount[key] =
-            (metrics.namedScoresCount[key] || 0) + (contributingAssertions || 1);
+          metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + 1;
         }
 
         // Update assertion counts

@@ -195,6 +195,39 @@ describe('AssertionsResult', () => {
   });
 
   describe('namedScores weight normalization', () => {
+    it('should normalize a shared metric using assertion weights', async () => {
+      const assertionsResult = new AssertionsResult({});
+
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Critical signal passed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        metric: 'accuracy',
+        weight: 3,
+      });
+
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Optional signal failed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        metric: 'accuracy',
+        weight: 1,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      // accuracy: (1 * 3 + 0 * 1) / (3 + 1) = 0.75
+      expect(result.namedScores!['accuracy']).toBeCloseTo(0.75);
+    });
+
     it('should apply different weights to named metrics and normalize correctly', async () => {
       const assertionsResult = new AssertionsResult({});
 
