@@ -83,6 +83,9 @@ reason: string;
 // Map of labeled metrics to values
 namedScores?: Record<string, number>;
 
+// Weighted denominator for namedScores when assertion weights are used
+namedScoreWeights?: Record<string, number>;
+
 // Record of tokens usage for this assertion
 tokensUsed?: Partial<{
 total: number;

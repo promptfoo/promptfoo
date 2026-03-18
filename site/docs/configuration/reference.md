@@ -889,6 +889,8 @@ interface GradingResult {
   pass: boolean;                        # did test pass?
   score: number;                        # score between 0 and 1
   reason: string;                       # plaintext reason for outcome
+  namedScores?: Record<string, number>; # labeled metrics attached to this result
+  namedScoreWeights?: Record<string, number>; # weighted denominator for namedScores
   tokensUsed?: TokenUsage;              # tokens consumed by the test
   componentResults?: GradingResult[];   # if this is a composite score, it can have nested results
   assertion: Assertion | null;          # source of assertion
@@ -920,6 +922,7 @@ interface CompletedPrompt {
     tokenUsage: TokenUsage;
     namedScores: Record<string, number>;
     namedScoresCount: Record<string, number>;
+    namedScoreWeights?: Record<string, number>;
     redteam?: {
       pluginPassCount: Record<string, number>;
       pluginFailCount: Record<string, number>;
