@@ -6,6 +6,7 @@ import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { getOpenAiMissingApiKeyMessage } from './shared';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -2188,7 +2189,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
 
         await expect(provider.callApi('Test prompt')).rejects.toThrow(
-          'API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+          getOpenAiMissingApiKeyMessage(),
         );
       } finally {
         // Restore original environment
@@ -2211,7 +2212,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         });
 
         await expect(provider.callApi('Test prompt')).rejects.toThrow(
-          'API key is not set. Set the CUSTOM_API_KEY environment variable or add `apiKey` to the provider config.',
+          getOpenAiMissingApiKeyMessage('CUSTOM_API_KEY'),
         );
       } finally {
         // Restore original environment
@@ -2252,7 +2253,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
         // Should show generic error message with custom API key variable
         await expect(provider.callApi('Test prompt')).rejects.toThrow(
-          'API key is not set. Set the CUSTOM_PROVIDER_API_KEY environment variable or add `apiKey` to the provider config.',
+          getOpenAiMissingApiKeyMessage('CUSTOM_PROVIDER_API_KEY'),
         );
 
         // Should log generic message for unknown model

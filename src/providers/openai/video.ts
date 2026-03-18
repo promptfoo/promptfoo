@@ -339,9 +339,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
   ): Promise<ProviderResponse> {
     // Validate API key
     if (this.requiresApiKey() && !this.getApiKey()) {
-      throw new Error(
-        `API key is not set. Set the ${this.config.apiKeyEnvar || 'OPENAI_API_KEY'} environment variable or add \`apiKey\` to the provider config.`,
-      );
+      throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
     const config: OpenAiVideoOptions = {

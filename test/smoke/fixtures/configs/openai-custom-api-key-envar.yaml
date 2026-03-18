@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - OpenAI assistant custom apiKeyEnvar missing key error'
+
+providers:
+  - id: openai:assistant:test-assistant-id
+    label: 'OpenAI assistant with custom key'
+    config:
+      apiKeyRequired: false
+      apiKeyEnvar: CUSTOM_ASSISTANT_KEY
+
+prompts:
+  - 'Hello from smoke test'
+
+tests:
+  - vars: {}

@@ -226,9 +226,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
-      throw new Error(
-        `API key is not set. Set the ${this.config.apiKeyEnvar || 'OPENAI_API_KEY'} environment variable or add \`apiKey\` to the provider config.`,
-      );
+      throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
     const openai = new OpenAI({

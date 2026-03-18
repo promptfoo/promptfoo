@@ -9,6 +9,7 @@ import {
   validateVideoSize,
 } from '../../../src/providers/openai/video';
 import { checkVideoCache, generateVideoCacheKey } from '../../../src/providers/video';
+import { getOpenAiMissingApiKeyMessage } from './shared';
 
 // Hoist mock functions so they're available in vi.mock factories
 const {
@@ -388,9 +389,49 @@ describe('OpenAiVideoProvider', () => {
       try {
         const provider = new OpenAiVideoProvider('sora-2');
 
-        await expect(provider.callApi('test prompt')).rejects.toThrow('OpenAI API key is not set');
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage(),
+        );
       } finally {
-        process.env.OPENAI_API_KEY = originalEnv;
+        if (originalEnv !== undefined) {
+          process.env.OPENAI_API_KEY = originalEnv;
+        } else {
+          delete process.env.OPENAI_API_KEY;
+        }
+      }
+    });
+
+    it('should use custom apiKeyEnvar in missing API key errors', async () => {
+      const originalEnv = process.env.OPENAI_API_KEY;
+      const originalCustomEnv = process.env.CUSTOM_VIDEO_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.CUSTOM_VIDEO_API_KEY;
+
+      try {
+        const provider = new OpenAiVideoProvider('sora-2', {
+          config: {
+            apiKeyEnvar: 'CUSTOM_VIDEO_API_KEY',
+          },
+          env: {
+            OPENAI_API_KEY: undefined,
+            CUSTOM_VIDEO_API_KEY: undefined,
+          },
+        });
+
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage('CUSTOM_VIDEO_API_KEY'),
+        );
+      } finally {
+        if (originalEnv !== undefined) {
+          process.env.OPENAI_API_KEY = originalEnv;
+        } else {
+          delete process.env.OPENAI_API_KEY;
+        }
+        if (originalCustomEnv !== undefined) {
+          process.env.CUSTOM_VIDEO_API_KEY = originalCustomEnv;
+        } else {
+          delete process.env.CUSTOM_VIDEO_API_KEY;
+        }
       }
     });
 
