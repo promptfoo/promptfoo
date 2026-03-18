@@ -67,6 +67,7 @@ import {
   isProviderAllowed,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
+import { templateUsesVariable } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
@@ -93,20 +94,10 @@ import type {
 } from './types/index';
 import type { CallApiContextParams } from './types/providers';
 
-/**
- * Match `_conversation` as a standalone template variable, not as a substring
- * of another identifier (e.g. `pre_conversation_context`).
- *
- * Matches when preceded by a non-word character or start of string — this
- * catches Nunjucks patterns like `{{ _conversation }}`, `{{ _conversation[0] }}`,
- * `{% for x in _conversation %}`, and raw `_conversation` at the start.
- *
- * Fixes: https://github.com/promptfoo/promptfoo/issues/7845
- */
-const CONVERSATION_VAR_RE = /(?<![a-zA-Z0-9])_conversation\b/;
+const CONVERSATION_VARIABLE_NAME = '_conversation';
 
 function usesConversationVar(raw: string): boolean {
-  return CONVERSATION_VAR_RE.test(raw);
+  return templateUsesVariable(raw, CONVERSATION_VARIABLE_NAME);
 }
 
 /**
@@ -1481,7 +1472,7 @@ class Evaluator {
       const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
       if (usesConversation) {
         logger.info(
-          `Setting concurrency to 1 because the ${chalk.cyan('_conversation')} variable is used.`,
+          `Setting concurrency to 1 because the ${chalk.cyan(CONVERSATION_VARIABLE_NAME)} variable is used.`,
         );
         concurrency = 1;
       } else if (usesStoreOutputAs) {

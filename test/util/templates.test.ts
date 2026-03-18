@@ -5,6 +5,7 @@ import {
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
   getNunjucksEngine,
+  templateUsesVariable,
 } from '../../src/util/templates';
 
 describe('extractVariablesFromTemplate', () => {
@@ -96,6 +97,35 @@ describe('extractVariablesFromTemplates', () => {
     const result = extractVariablesFromTemplates(templates);
 
     expect(result).toEqual(['name', 'age']);
+  });
+});
+
+describe('templateUsesVariable', () => {
+  it('should detect top-level variable usage', () => {
+    expect(templateUsesVariable('{{ _conversation }}', '_conversation')).toBe(true);
+    expect(templateUsesVariable('{{ _conversation[0].output }}', '_conversation')).toBe(true);
+    expect(templateUsesVariable('{% if _conversation %}used{% endif %}', '_conversation')).toBe(
+      true,
+    );
+    expect(
+      templateUsesVariable(
+        '{% for completion in _conversation %}{{ completion.output }}{% endfor %}',
+        '_conversation',
+      ),
+    ).toBe(true);
+  });
+
+  it('should ignore properties, comments, and substrings', () => {
+    expect(templateUsesVariable('{{ foo._conversation }}', '_conversation')).toBe(false);
+    expect(templateUsesVariable("{{ foo['_conversation'] }}", '_conversation')).toBe(false);
+    expect(templateUsesVariable('{{ __conversation }}', '_conversation')).toBe(false);
+    expect(templateUsesVariable('{# _conversation #}{{ question }}', '_conversation')).toBe(false);
+    expect(
+      templateUsesVariable(
+        'Summarize the pre_conversation_context for: {{ question }}',
+        '_conversation',
+      ),
+    ).toBe(false);
   });
 });
 

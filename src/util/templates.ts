@@ -100,3 +100,23 @@ export function extractVariablesFromTemplates(templates: string[]): string[] {
   }
   return Array.from(variableSet);
 }
+
+function isRootVariableReference(variable: string, variableName: string): boolean {
+  return (
+    variable === variableName ||
+    variable.startsWith(`${variableName}.`) ||
+    variable.startsWith(`${variableName}[`)
+  );
+}
+
+/**
+ * Check whether a template uses a variable as the root of an expression.
+ * @param template - The Nunjucks template string.
+ * @param variableName - The variable name to search for.
+ * @returns True when the variable is referenced directly or as the root object.
+ */
+export function templateUsesVariable(template: string, variableName: string): boolean {
+  return extractVariablesFromTemplate(template).some((variable) =>
+    isRootVariableReference(variable, variableName),
+  );
+}

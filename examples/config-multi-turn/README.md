@@ -29,6 +29,8 @@ When looping through `_conversation`, use `completion.prompt` in the Nunjucks pr
 
 Use `completion.output` to get the assistant's response to that message.
 
+Promptfoo populates `_conversation` when the prompt actually references it. Because this example uses `_conversation` in `prompt.json`, the eval runs serially so each turn sees the correct history.
+
 Then run:
 
 ```bash

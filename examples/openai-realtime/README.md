@@ -78,7 +78,7 @@ The multi-turn conversation example demonstrates how the OpenAI Realtime API can
 
 #### Key Components
 
-1. **Special Variable**: The `_conversation` variable contains all previous turns in the conversation
+1. **Special Variable**: When this prompt function references `vars._conversation`, promptfoo fills it with the previous turns in the conversation
 2. **JavaScript Prompt Function**: The main approach uses a JavaScript function to properly format conversations
 3. **Conversation IDs**: Each test with the same `conversationId` metadata value is part of the same conversation thread
 
@@ -92,7 +92,7 @@ When using `conversationId` in the metadata of tests, promptfoo automatically:
 
 For each conversation turn:
 
-1. The `_conversation` variable is automatically populated with all previous prompts and outputs
+1. Because this prompt function references `vars._conversation`, promptfoo automatically populates it with all previous prompts and outputs
 2. Messages are properly formatted for the Realtime API WebSocket protocol
 3. The model responds with contextually relevant answers based on the conversation history
 
