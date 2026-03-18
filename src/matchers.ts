@@ -1772,7 +1772,7 @@ export async function selectMaxScore(
     relevantResults.forEach((componentResult: GradingResult) => {
       const assertionType = componentResult.assertion?.type || 'unknown';
       const weight =
-        options.weights[assertionType] !== undefined ? options.weights[assertionType] : 1.0; // Default weight is 1
+        options.weights[assertionType] === undefined ? 1.0 : options.weights[assertionType]; // Default weight is 1
 
       const score = componentResult.score || 0;
       totalWeightedScore += score * weight;

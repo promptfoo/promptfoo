@@ -14,6 +14,7 @@ import {
   getTraceparent,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -509,9 +510,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       ...(config.model_reasoning_effort
         ? { modelReasoningEffort: config.model_reasoning_effort }
         : {}),
-      ...(config.network_access_enabled !== undefined
-        ? { networkAccessEnabled: config.network_access_enabled }
-        : {}),
+      ...(config.network_access_enabled === undefined
+        ? {}
+        : { networkAccessEnabled: config.network_access_enabled }),
       ...(config.web_search_mode ? { webSearchMode: config.web_search_mode } : {}),
       ...(config.web_search_enabled !== undefined && !config.web_search_mode
         ? { webSearchEnabled: config.web_search_enabled }
@@ -870,6 +871,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         if (typeof item.tool === 'string') {
           attrs['codex.mcp.tool'] = item.tool;
         }
+        {
+          const serializedArgs = this.serializeItemValue(item.arguments ?? item.args ?? item.input);
+          if (serializedArgs) {
+            attrs['codex.mcp.input'] = serializedArgs;
+          }
+        }
         break;
       case 'web_search':
         if (typeof item.query === 'string') {
@@ -901,6 +908,56 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
 
     return attrs;
+  }
+
+  private serializeItemValue(value: unknown): string | undefined {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return undefined;
+      }
+
+      try {
+        return JSON.stringify(this.redactTracePii(sanitizeObject(JSON.parse(trimmed))));
+      } catch {
+        return this.redactTracePii(
+          sanitizeObject(trimmed, { context: 'Codex MCP trace input' }),
+        ) as string;
+      }
+    }
+
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+
+    try {
+      return JSON.stringify(
+        this.redactTracePii(sanitizeObject(value, { context: 'Codex MCP trace input' })),
+      );
+    } catch {
+      return undefined;
+    }
+  }
+
+  private redactTracePii(value: unknown): unknown {
+    if (typeof value === 'string' && /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(value)) {
+      return REDACTED;
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((item) => this.redactTracePii(item));
+    }
+
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).map(([key, entryValue]) => [
+          key,
+          normalizeFieldName(key).includes('email') ? REDACTED : this.redactTracePii(entryValue),
+        ]),
+      );
+    }
+
+    return value;
   }
 
   /**
@@ -939,6 +996,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         }
         if (typeof item.error?.message === 'string') {
           attrs['codex.error'] = item.error.message;
+        }
+        {
+          const serializedArgs = this.serializeItemValue(item.arguments ?? item.args ?? item.input);
+          if (serializedArgs) {
+            attrs['codex.mcp.input'] = serializedArgs;
+          }
         }
         break;
       case 'agent_message':

@@ -159,6 +159,7 @@ assert:
 The trajectory-specific config at `promptfooconfig.trajectory.yaml` adds:
 
 - `trajectory:tool-used`
+- `trajectory:tool-args-match`
 - `trajectory:tool-sequence`
 - `trajectory:step-count`
 

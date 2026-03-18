@@ -61,18 +61,7 @@ export const handleWordCount = ({
       } else {
         reason = `Word count ${wordCount} is not between ${min} and ${max}`;
       }
-    } else if (min !== undefined) {
-      // Min only
-      const basePass = wordCount >= min;
-      pass = inverse ? !basePass : basePass;
-      if (pass) {
-        reason = 'Assertion passed';
-      } else if (inverse) {
-        reason = `Expected word count to be less than ${min}, but got ${wordCount}`;
-      } else {
-        reason = `Word count ${wordCount} is less than minimum ${min}`;
-      }
-    } else {
+    } else if (min === undefined) {
       // Max only
       const basePass = wordCount <= max!;
       pass = inverse ? !basePass : basePass;
@@ -82,6 +71,17 @@ export const handleWordCount = ({
         reason = `Expected word count to be greater than ${max}, but got ${wordCount}`;
       } else {
         reason = `Word count ${wordCount} is greater than maximum ${max}`;
+      }
+    } else {
+      // Min only
+      const basePass = wordCount >= min;
+      pass = inverse ? !basePass : basePass;
+      if (pass) {
+        reason = 'Assertion passed';
+      } else if (inverse) {
+        reason = `Expected word count to be less than ${min}, but got ${wordCount}`;
+      } else {
+        reason = `Word count ${wordCount} is less than minimum ${min}`;
       }
     }
   } else {

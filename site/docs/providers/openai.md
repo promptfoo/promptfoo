@@ -2251,9 +2251,13 @@ providers:
       agent: file://./agents/support-agent.ts
       tools: file://./tools/support-tools.ts
       maxTurns: 10
+      modelSettings:
+        retry:
+          maxRetries: 2
+          policy: providerSuggested
 ```
 
-See the [OpenAI Agents documentation](/docs/providers/openai-agents) for full configuration options and examples.
+See the [OpenAI Agents documentation](/docs/providers/openai-agents) for full configuration options, retry policies, and examples.
 
 ### Codex SDK
 

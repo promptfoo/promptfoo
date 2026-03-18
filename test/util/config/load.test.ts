@@ -2223,10 +2223,10 @@ describe('readConfig with environment variable substitution', () => {
     vi.restoreAllMocks();
     // Restore or delete environment variables to prevent test pollution
     for (const varName of testEnvVars) {
-      if (originalEnv[varName] !== undefined) {
-        process.env[varName] = originalEnv[varName];
-      } else {
+      if (originalEnv[varName] === undefined) {
         delete process.env[varName];
+      } else {
+        process.env[varName] = originalEnv[varName];
       }
     }
   });

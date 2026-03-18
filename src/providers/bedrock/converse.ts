@@ -808,9 +808,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       stopSequences
     ) {
       return {
-        ...(maxTokens !== undefined ? { maxTokens } : {}),
-        ...(temperature !== undefined ? { temperature } : {}),
-        ...(topP !== undefined ? { topP } : {}),
+        ...(maxTokens === undefined ? {} : { maxTokens }),
+        ...(temperature === undefined ? {} : { temperature }),
+        ...(topP === undefined ? {} : { topP }),
         ...(stopSequences ? { stopSequences } : {}),
       };
     }
@@ -1197,7 +1197,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
           return {
             output: results.join('\n'),
             tokenUsage,
-            ...(cost !== undefined ? { cost } : {}),
+            ...(cost === undefined ? {} : { cost }),
             ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
             ...(guardrails ? { guardrails } : {}),
             ...(malformedError ? { error: malformedError } : {}),
@@ -1212,7 +1212,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     return {
       output,
       tokenUsage,
-      ...(cost !== undefined ? { cost } : {}),
+      ...(cost === undefined ? {} : { cost }),
       ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       ...(guardrails ? { guardrails } : {}),
       ...(malformedError ? { error: malformedError } : {}),
@@ -1392,7 +1392,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       return {
         output: finalOutput,
         tokenUsage,
-        ...(cost !== undefined ? { cost } : {}),
+        ...(cost === undefined ? {} : { cost }),
         ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
         ...(malformedError ? { error: malformedError } : {}),
       };

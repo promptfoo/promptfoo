@@ -685,9 +685,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
         };
         // Include thinking tokens in output cost - Google bills them as output tokens
         const completionForCost =
-          completionTokenCount != null
-            ? completionTokenCount + (thoughtsTokenCount ?? 0)
-            : undefined;
+          completionTokenCount == null
+            ? undefined
+            : completionTokenCount + (thoughtsTokenCount ?? 0);
         const cost = calculateGoogleCost(
           this.modelName,
           config,

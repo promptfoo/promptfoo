@@ -203,14 +203,14 @@ function SelectSeparator({
 
 export {
   Select,
-  SelectGroup,
-  SelectValue,
-  SelectTrigger,
-  selectTriggerVariants,
   SelectContent,
-  SelectLabel,
+  SelectGroup,
   SelectItem,
-  SelectSeparator,
-  SelectScrollUpButton,
+  SelectLabel,
   SelectScrollDownButton,
+  SelectScrollUpButton,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+  selectTriggerVariants,
 };

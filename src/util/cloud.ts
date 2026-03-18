@@ -177,9 +177,9 @@ function normalizeEvalConfig(config: Record<string, unknown>): UnifiedConfig {
 
   const commandLineOptions = {
     ...(isRecord(config.commandLineOptions) ? config.commandLineOptions : {}),
-    ...(config.maxConcurrency != null ? { maxConcurrency: config.maxConcurrency } : {}),
-    ...(config.delay != null ? { delay: config.delay } : {}),
-    ...(config.verbose != null ? { verbose: config.verbose } : {}),
+    ...(config.maxConcurrency == null ? {} : { maxConcurrency: config.maxConcurrency }),
+    ...(config.delay == null ? {} : { delay: config.delay }),
+    ...(config.verbose == null ? {} : { verbose: config.verbose }),
   };
 
   const normalizedConfig: Record<string, unknown> = {

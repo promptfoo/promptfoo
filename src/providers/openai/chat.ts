@@ -227,17 +227,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
     const maxTokensDefault = config.omitDefaults
-      ? getEnvString('OPENAI_MAX_TOKENS') !== undefined
-        ? getEnvInt('OPENAI_MAX_TOKENS')
-        : undefined
+      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
+        ? undefined
+        : getEnvInt('OPENAI_MAX_TOKENS')
       : getEnvInt('OPENAI_MAX_TOKENS', 1024);
     const maxTokens =
       isReasoningModel || isGPT5Model ? undefined : (config.max_tokens ?? maxTokensDefault);
 
     const temperatureDefault = config.omitDefaults
-      ? getEnvString('OPENAI_TEMPERATURE') !== undefined
-        ? getEnvFloat('OPENAI_TEMPERATURE')
-        : undefined
+      ? getEnvString('OPENAI_TEMPERATURE') === undefined
+        ? undefined
+        : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature = this.supportsTemperature()
       ? (config.temperature ?? temperatureDefault)
@@ -260,10 +260,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       model: this.modelName,
       messages,
       seed: config.seed,
-      ...(maxTokens !== undefined ? { max_tokens: maxTokens } : {}),
-      ...(maxCompletionTokens !== undefined ? { max_completion_tokens: maxCompletionTokens } : {}),
+      ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
+      ...(maxCompletionTokens === undefined ? {} : { max_completion_tokens: maxCompletionTokens }),
       ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
-      ...(temperature !== undefined ? { temperature } : {}),
+      ...(temperature === undefined ? {} : { temperature }),
       ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
