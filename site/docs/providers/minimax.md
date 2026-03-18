@@ -1,6 +1,8 @@
 ---
+title: MiniMax Provider
 sidebar_label: MiniMax
-description: Configure MiniMax's OpenAI-compatible API with high-performance M2.7 models featuring 204K context windows and prompt caching for cost-effective LLM testing
+sidebar_position: 50
+description: Configure MiniMax's OpenAI-compatible API with high-performance M2.7 and M2.5 models featuring 204K context windows and prompt caching for LLM testing.
 ---
 
 # MiniMax

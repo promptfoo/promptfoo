@@ -1,5 +1,18 @@
-import { describe, expect, it } from 'vitest';
-import { calculateMiniMaxCost, MINIMAX_CHAT_MODELS } from '../../src/providers/minimax';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  calculateMiniMaxCost,
+  createMiniMaxProvider,
+  MINIMAX_CHAT_MODELS,
+} from '../../src/providers/minimax';
+
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 describe('calculateMiniMaxCost', () => {
   it('should calculate cost without cache for MiniMax-M2.7', () => {
@@ -9,7 +22,7 @@ describe('calculateMiniMaxCost', () => {
 
   it('should calculate cost with cache hits for MiniMax-M2.7', () => {
     const cost = calculateMiniMaxCost('MiniMax-M2.7', {}, 1000000, 1000000, 500000);
-    expect(cost).toBeCloseTo(1.38); // (0.3 * 0.5 + 0.06 * 0.5 + 1.2)
+    expect(cost).toBeCloseTo(1.365); // (0.3 * 0.5 + 0.03 * 0.5 + 1.2)
   });
 
   it('should calculate cost for MiniMax-M2.7-highspeed', () => {
@@ -65,7 +78,7 @@ describe('calculateMiniMaxCost', () => {
 
   it('should calculate cost with 100% cache hits for M2.7', () => {
     const cost = calculateMiniMaxCost('MiniMax-M2.7', {}, 1000000, 1000000, 1000000);
-    expect(cost).toBeCloseTo(1.26); // (0.06 + 1.2) - all input tokens are cached
+    expect(cost).toBeCloseTo(1.23); // (0.03 + 1.2) - all input tokens are cached
   });
 });
 
@@ -75,7 +88,7 @@ describe('MINIMAX_CHAT_MODELS', () => {
     expect(model).toBeDefined();
     expect(model?.cost.input).toBeCloseTo(0.3 / 1e6);
     expect(model?.cost.output).toBeCloseTo(1.2 / 1e6);
-    expect(model?.cost.cache_read).toBeCloseTo(0.06 / 1e6);
+    expect(model?.cost.cache_read).toBeCloseTo(0.03 / 1e6);
   });
 
   it('should have correct pricing for MiniMax-M2.7-highspeed', () => {
@@ -112,5 +125,92 @@ describe('MINIMAX_CHAT_MODELS', () => {
 
   it('should have M2.7-highspeed as second model in the list', () => {
     expect(MINIMAX_CHAT_MODELS[1].id).toBe('MiniMax-M2.7-highspeed');
+  });
+});
+
+describe('createMiniMaxProvider', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should use default model MiniMax-M2.7 when no model specified', () => {
+    const provider = createMiniMaxProvider('minimax');
+    expect(provider.id()).toBe('minimax:MiniMax-M2.7');
+  });
+
+  it('should parse model name from provider path', () => {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M2.5');
+    expect(provider.id()).toBe('minimax:MiniMax-M2.5');
+  });
+
+  it('should handle model names with colons', () => {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7-highspeed');
+    expect(provider.id()).toBe('minimax:MiniMax-M2.7-highspeed');
+  });
+
+  it('should pass options to the provider', () => {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+      config: {
+        config: {
+          temperature: 0.8,
+          max_tokens: 2000,
+        },
+      },
+    });
+    expect(provider.id()).toBe('minimax:MiniMax-M2.7');
+  });
+});
+
+describe('MiniMaxProvider', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should return correct id', () => {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7');
+    expect(provider.id()).toBe('minimax:MiniMax-M2.7');
+  });
+
+  it('should return correct string representation', () => {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7');
+    expect(provider.toString()).toBe('[MiniMax Provider MiniMax-M2.7]');
+  });
+
+  it('should serialize to JSON correctly', () => {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+      config: {
+        config: {
+          temperature: 0.7,
+          max_tokens: 100,
+        },
+      },
+    });
+    const json = (provider as any).toJSON();
+    expect(json.provider).toBe('minimax');
+    expect(json.model).toBe('MiniMax-M2.7');
+  });
+
+  it('should not expose apiKey in JSON serialization', () => {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+      config: {
+        config: {
+          apiKey: 'secret-key',
+        },
+      },
+    });
+    const json = (provider as any).toJSON();
+    expect(json.config.apiKey).toBeUndefined();
+  });
+
+  it('should set apiBaseUrl to MiniMax API endpoint', () => {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7');
+    const json = (provider as any).toJSON();
+    expect(json.config.apiBaseUrl).toBe('https://api.minimax.io/v1');
+  });
+
+  it('should set apiKeyEnvar to MINIMAX_API_KEY', () => {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7');
+    const json = (provider as any).toJSON();
+    expect(json.config.apiKeyEnvar).toBe('MINIMAX_API_KEY');
   });
 });
