@@ -1736,7 +1736,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
   });
 
-  it('evaluator should count named scores once per test result', async () => {
+  it('evaluator should count named score assertions per metric', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt for namedScoresCount')],
@@ -1777,7 +1777,7 @@ describe('evaluator', () => {
           provider: result.provider.id,
           metrics: expect.objectContaining({
             namedScoresCount: expect.objectContaining({
-              Accuracy: 1,
+              Accuracy: 2,
               Completeness: 1,
             }),
           }),
@@ -1786,7 +1786,7 @@ describe('evaluator', () => {
     );
   });
 
-  it('evaluator should count named scores with template metric variables per result', async () => {
+  it('evaluator should count named scores with template metric variables per assertion', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt for template metrics')],
@@ -1829,7 +1829,7 @@ describe('evaluator', () => {
               Accuracy: expect.any(Number),
             }),
             namedScoresCount: expect.objectContaining({
-              Accuracy: 2, // 1 named score from each of the 2 test results
+              Accuracy: 3, // 2 assertions in the first test + 1 in the second
             }),
           }),
         }),
@@ -1837,7 +1837,7 @@ describe('evaluator', () => {
     );
   });
 
-  it('evaluator should keep weighted named scores aligned with prompt metric counts', async () => {
+  it('evaluator should preserve weighted named score totals alongside prompt denominators', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt for weighted metrics')],
@@ -1866,8 +1866,14 @@ describe('evaluator', () => {
     const promptMetrics = evalRecord.prompts[0]?.metrics;
 
     expect(results[0].namedScores?.Accuracy).toBeCloseTo(0.75, 10);
-    expect(promptMetrics?.namedScores.Accuracy).toBeCloseTo(0.75, 10);
-    expect(promptMetrics?.namedScoresCount.Accuracy).toBe(1);
+    expect(results[0].gradingResult?.namedScoreWeights?.Accuracy).toBe(4);
+    expect(promptMetrics?.namedScores.Accuracy).toBeCloseTo(3, 10);
+    expect(promptMetrics?.namedScoresCount.Accuracy).toBe(2);
+    expect(promptMetrics?.namedScoreWeights?.Accuracy).toBe(4);
+    expect(
+      (promptMetrics?.namedScores.Accuracy ?? 0) /
+        (promptMetrics?.namedScoreWeights?.Accuracy ?? 1),
+    ).toBeCloseTo(0.75, 10);
   });
 
   it('evaluator should handle mixed static and template metrics correctly', async () => {

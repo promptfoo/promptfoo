@@ -34,7 +34,10 @@ export function FilterChips() {
         Object.keys(prompt.metrics.namedScores).forEach((metric) => {
           const existing = metricMap.get(metric) || { passCount: 0, testCount: 0 };
           const score = prompt.metrics?.namedScores?.[metric] ?? 0;
-          const count = prompt.metrics?.namedScoresCount?.[metric] ?? 0;
+          const count =
+            prompt.metrics?.namedScoreWeights?.[metric] ??
+            prompt.metrics?.namedScoresCount?.[metric] ??
+            0;
           metricMap.set(metric, {
             passCount: existing.passCount + score,
             testCount: existing.testCount + count,

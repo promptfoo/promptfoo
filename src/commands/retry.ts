@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { and, eq, inArray } from 'drizzle-orm';
+import { renderMetricName } from '../assertions/index';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -94,6 +95,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       tokenUsage: TokenUsage;
       namedScores: Record<string, number>;
       namedScoresCount: Record<string, number>;
+      namedScoreWeights?: Record<string, number>;
       cost: number;
     }
   >();
@@ -111,6 +113,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       tokenUsage: createEmptyTokenUsage(),
       namedScores: {},
       namedScoresCount: {},
+      namedScoreWeights: {},
       cost: 0,
     });
   }
@@ -147,12 +150,35 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         metrics.totalLatencyMs += result.latencyMs || 0;
         metrics.cost += result.cost || 0;
 
-        // Each named score is already aggregated per test result, so counts should reflect the
-        // number of results contributing that metric rather than the number of underlying
-        // assertions.
         for (const [key, value] of Object.entries(result.namedScores || {})) {
-          metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
-          metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + 1;
+          const testVars = result.testCase?.vars || {};
+          let contributingAssertions = 0;
+          result.gradingResult?.componentResults?.forEach((componentResult) => {
+            const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
+            if (renderedMetric === key) {
+              contributingAssertions++;
+            }
+          });
+          const assertionCount = contributingAssertions > 0 ? contributingAssertions : 1;
+
+          const namedScoreWeights = result.gradingResult?.namedScoreWeights;
+          const hasNamedScoreWeight = Object.prototype.hasOwnProperty.call(
+            namedScoreWeights ?? {},
+            key,
+          );
+          const metricWeightTotal = hasNamedScoreWeight
+            ? (namedScoreWeights?.[key] ?? 0)
+            : assertionCount;
+
+          // Newer results store per-row named scores as weighted averages. Convert them back to a
+          // weighted total here so prompt metrics keep the historical sum/denominator contract.
+          metrics.namedScores[key] =
+            (metrics.namedScores[key] || 0) +
+            (hasNamedScoreWeight ? value * metricWeightTotal : value);
+          metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + assertionCount;
+          metrics.namedScoreWeights ||= {};
+          metrics.namedScoreWeights[key] =
+            (metrics.namedScoreWeights[key] || 0) + metricWeightTotal;
         }
 
         // Update assertion counts

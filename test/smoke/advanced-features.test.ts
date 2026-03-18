@@ -293,7 +293,7 @@ describe('Advanced Features Smoke Tests', () => {
       expect(parsed.results.results[0].gradingResult.componentResults.length).toBe(2);
     });
 
-    it('5.3.2 - weighted named metrics stay aligned with prompt counts', () => {
+    it('5.3.2 - weighted named metrics preserve prompt totals and denominators', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/weighted-named-metric.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'weighted-named-metric-output.json');
 
@@ -310,8 +310,14 @@ describe('Advanced Features Smoke Tests', () => {
         0.75,
         10,
       );
-      expect(parsed.results.prompts[0].metrics.namedScores.weightedMetric).toBeCloseTo(0.75, 10);
-      expect(parsed.results.prompts[0].metrics.namedScoresCount.weightedMetric).toBe(1);
+      expect(parsed.results.results[0].gradingResult.namedScoreWeights.weightedMetric).toBe(4);
+      expect(parsed.results.prompts[0].metrics.namedScores.weightedMetric).toBeCloseTo(3, 10);
+      expect(parsed.results.prompts[0].metrics.namedScoresCount.weightedMetric).toBe(2);
+      expect(parsed.results.prompts[0].metrics.namedScoreWeights.weightedMetric).toBe(4);
+      expect(
+        parsed.results.prompts[0].metrics.namedScores.weightedMetric /
+          parsed.results.prompts[0].metrics.namedScoreWeights.weightedMetric,
+      ).toBeCloseTo(0.75, 10);
     });
   });
 

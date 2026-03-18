@@ -4,6 +4,7 @@ import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import {
   MODEL_GRADED_ASSERTION_TYPES,
+  renderMetricName,
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
@@ -1103,6 +1104,7 @@ class Evaluator {
             tokenUsage: createEmptyTokenUsage(),
             namedScores: {},
             namedScoresCount: {},
+            namedScoreWeights: {},
             cost: 0,
           },
         };
@@ -1567,11 +1569,34 @@ class Evaluator {
         invariant(metrics, 'Expected prompt.metrics to be set');
         metrics.score += row.score;
         for (const [key, value] of Object.entries(row.namedScores)) {
-          // Each row.namedScores entry is already the aggregated score for this metric within the
-          // test result, so counts should track contributing test results rather than raw
-          // assertions. This keeps prompt-level averages aligned with weighted assertion metrics.
-          metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
-          metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + 1;
+          const testVars = row.testCase?.vars || {};
+          let contributingAssertions = 0;
+          row.gradingResult?.componentResults?.forEach((result) => {
+            const renderedMetric = renderMetricName(result.assertion?.metric, testVars);
+            if (renderedMetric === key) {
+              contributingAssertions++;
+            }
+          });
+          const assertionCount = contributingAssertions > 0 ? contributingAssertions : 1;
+
+          const namedScoreWeights = row.gradingResult?.namedScoreWeights;
+          const hasNamedScoreWeight = Object.prototype.hasOwnProperty.call(
+            namedScoreWeights ?? {},
+            key,
+          );
+          const metricWeightTotal = hasNamedScoreWeight
+            ? (namedScoreWeights?.[key] ?? 0)
+            : assertionCount;
+
+          // Newer results store per-row named scores as weighted averages. Convert them back to a
+          // weighted total here so prompt metrics keep the historical sum/denominator contract.
+          metrics.namedScores[key] =
+            (metrics.namedScores[key] || 0) +
+            (hasNamedScoreWeight ? value * metricWeightTotal : value);
+          metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + assertionCount;
+          metrics.namedScoreWeights ||= {};
+          metrics.namedScoreWeights[key] =
+            (metrics.namedScoreWeights[key] || 0) + metricWeightTotal;
         }
 
         if (testSuite.derivedMetrics) {
@@ -1762,6 +1787,7 @@ class Evaluator {
               },
               namedScores: {},
               namedScoresCount: {},
+              namedScoreWeights: {},
               cost: 0,
             },
           );

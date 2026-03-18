@@ -226,6 +226,9 @@ describe('AssertionsResult', () => {
 
       // accuracy: (1 * 3 + 0 * 1) / (3 + 1) = 0.75
       expect(result.namedScores!['accuracy']).toBeCloseTo(0.75);
+      expect(result.namedScoreWeights).toEqual({
+        accuracy: 4,
+      });
     });
 
     it('should apply different weights to named metrics and normalize correctly', async () => {
@@ -261,6 +264,10 @@ describe('AssertionsResult', () => {
       expect(result.namedScores!['relevance']).toBeCloseTo(0.6);
       // clarity: (0.9 * 1) / 1 = 0.9
       expect(result.namedScores!['clarity']).toBeCloseTo(0.9);
+      expect(result.namedScoreWeights).toEqual({
+        relevance: 3,
+        clarity: 1,
+      });
     });
 
     it('should produce unchanged namedScores when weights are equal', async () => {
@@ -294,6 +301,45 @@ describe('AssertionsResult', () => {
 
       // accuracy: (0.5 * 2 + 0.7 * 2) / (2 + 2) = 2.4 / 4 = 0.6
       expect(result.namedScores!['accuracy']).toBeCloseTo(0.6);
+      expect(result.namedScoreWeights).toEqual({
+        accuracy: 4,
+      });
+    });
+
+    it('should compute weighted averages for the same metric with unequal weights', async () => {
+      const assertionsResult = new AssertionsResult({});
+
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 0.4,
+          reason: 'Test 1',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        metric: 'accuracy',
+        weight: 1,
+      });
+
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 0.8,
+          reason: 'Test 2',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        metric: 'accuracy',
+        weight: 3,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      // accuracy: (0.4 * 1 + 0.8 * 3) / (1 + 3) = 0.7
+      expect(result.namedScores!['accuracy']).toBeCloseTo(0.7);
+      expect(result.namedScoreWeights).toEqual({
+        accuracy: 4,
+      });
     });
 
     it('should handle weight 0 for named metric correctly', async () => {
@@ -315,6 +361,9 @@ describe('AssertionsResult', () => {
 
       // weight 0: (0.8 * 0) / 0 → 0 (division guarded)
       expect(result.namedScores!['safety']).toBe(0);
+      expect(result.namedScoreWeights).toEqual({
+        safety: 0,
+      });
     });
   });
 

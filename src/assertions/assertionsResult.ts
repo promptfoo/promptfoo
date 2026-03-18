@@ -155,7 +155,7 @@ export class AssertionsResult {
 
     const normalizedNamedScores: Record<string, number> = {};
     for (const [key, value] of Object.entries(this.namedScores)) {
-      const totalWeight = this.namedScoreWeights[key] || 1;
+      const totalWeight = this.namedScoreWeights[key] ?? 0;
       normalizedNamedScores[key] = totalWeight > 0 ? value / totalWeight : 0;
     }
 
@@ -164,6 +164,7 @@ export class AssertionsResult {
       score,
       reason,
       namedScores: normalizedNamedScores,
+      namedScoreWeights: this.namedScoreWeights,
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
     };

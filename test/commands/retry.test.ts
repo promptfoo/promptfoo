@@ -508,7 +508,7 @@ describe('retry command', () => {
       expect(evalRecord.prompts[0].metrics?.namedScoresCount?.relevance).toBe(2);
     });
 
-    it('should count weighted named scores once per result', async () => {
+    it('should preserve weighted named score totals and assertion counts', async () => {
       const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
       const db = getDb();
       const mockProvider = { id: 'test-provider' };
@@ -532,6 +532,9 @@ describe('retry command', () => {
           pass: false,
           score: 0.75,
           reason: 'weighted metric',
+          namedScoreWeights: {
+            accuracy: 4,
+          },
           componentResults: [
             {
               pass: true,
@@ -551,8 +554,9 @@ describe('retry command', () => {
 
       await recalculatePromptMetrics(evalRecord);
 
-      expect(evalRecord.prompts[0].metrics?.namedScores?.accuracy).toBeCloseTo(0.75, 10);
-      expect(evalRecord.prompts[0].metrics?.namedScoresCount?.accuracy).toBe(1);
+      expect(evalRecord.prompts[0].metrics?.namedScores?.accuracy).toBeCloseTo(3, 10);
+      expect(evalRecord.prompts[0].metrics?.namedScoresCount?.accuracy).toBe(2);
+      expect(evalRecord.prompts[0].metrics?.namedScoreWeights?.accuracy).toBe(4);
     });
 
     it('should accumulate metrics correctly across multiple batches', async () => {
