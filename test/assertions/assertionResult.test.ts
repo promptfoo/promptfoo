@@ -22,6 +22,7 @@ describe('AssertionsResult', () => {
     reason: 'All assertions passed',
     componentResults: [succeedingResult],
     namedScores: {},
+    namedScoreWeights: {},
     tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
   };
   let assertionsResult: AssertionsResult;
@@ -77,6 +78,9 @@ describe('AssertionsResult', () => {
     await expect(assertionsResult.testResult()).resolves.toEqual({
       ...testResult,
       namedScores: {
+        [metric]: 1,
+      },
+      namedScoreWeights: {
         [metric]: 1,
       },
     });
@@ -254,6 +258,11 @@ describe('AssertionsResult', () => {
     expect(result.namedScores).toEqual({
       'metric-1': 0.8,
       'metric-2': 0.9,
+      'metric-3': 1,
+    });
+    expect(result.namedScoreWeights).toEqual({
+      'metric-1': 1,
+      'metric-2': 1,
       'metric-3': 1,
     });
   });
