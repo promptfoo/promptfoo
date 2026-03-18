@@ -75,7 +75,7 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
     }
 
     // First row should be headers
-    const headers = rows[0].map((cell) => (cell != null ? String(cell) : ''));
+    const headers = rows[0].map((cell) => (cell == null ? '' : String(cell)));
 
     // Check if the first row has any headers
     if (headers.length === 0 || headers.every((h) => h === '')) {
@@ -93,7 +93,7 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
       headers.forEach((header, index) => {
         // Use empty string as default value (like xlsx's defval: '')
         const cellValue = row[index];
-        obj[header] = cellValue != null ? String(cellValue) : '';
+        obj[header] = cellValue == null ? '' : String(cellValue);
       });
       return obj;
     });

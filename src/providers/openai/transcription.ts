@@ -240,9 +240,9 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
           duration: durationSeconds,
           language: data.language,
           segments: data.segments?.length || 0,
-          ...(avgLogprob !== undefined ? { avgLogprob } : {}),
-          ...(avgCompressionRatio !== undefined ? { avgCompressionRatio } : {}),
-          ...(avgNoSpeechProb !== undefined ? { avgNoSpeechProb } : {}),
+          ...(avgLogprob === undefined ? {} : { avgLogprob }),
+          ...(avgCompressionRatio === undefined ? {} : { avgCompressionRatio }),
+          ...(avgNoSpeechProb === undefined ? {} : { avgNoSpeechProb }),
           ...(this.modelName.includes('diarize') && data.speakers
             ? { speakers: data.speakers }
             : {}),

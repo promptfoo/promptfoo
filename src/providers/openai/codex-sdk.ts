@@ -510,9 +510,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       ...(config.model_reasoning_effort
         ? { modelReasoningEffort: config.model_reasoning_effort }
         : {}),
-      ...(config.network_access_enabled !== undefined
-        ? { networkAccessEnabled: config.network_access_enabled }
-        : {}),
+      ...(config.network_access_enabled === undefined
+        ? {}
+        : { networkAccessEnabled: config.network_access_enabled }),
       ...(config.web_search_mode ? { webSearchMode: config.web_search_mode } : {}),
       ...(config.web_search_enabled !== undefined && !config.web_search_mode
         ? { webSearchEnabled: config.web_search_enabled }

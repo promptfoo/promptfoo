@@ -122,5 +122,7 @@ export function getProcessShim(): typeof process {
 }
 
 // Export for testing purposes
-export { isBrowserEnvironment as _isBrowserEnvironment };
-export { createBrowserProcessShim as _createBrowserProcessShim };
+export {
+  createBrowserProcessShim as _createBrowserProcessShim,
+  isBrowserEnvironment as _isBrowserEnvironment,
+};

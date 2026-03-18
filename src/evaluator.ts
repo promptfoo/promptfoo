@@ -1760,7 +1760,7 @@ class Evaluator {
               // If the provider has a cleanup method, call it
               if (typeof evalStep.provider.cleanup === 'function') {
                 try {
-                  evalStep.provider.cleanup();
+                  void evalStep.provider.cleanup();
                 } catch (cleanupErr) {
                   logger.warn(`Error during provider cleanup: ${cleanupErr}`);
                 }

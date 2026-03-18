@@ -2082,10 +2082,10 @@ export class HttpProvider implements ApiProvider {
       prompt,
       ...(context?.evaluationId ? { evaluationId: context.evaluationId } : {}),
       // Only set tools/tool_choice if defined in config, to avoid overwriting user vars
-      ...(transformedTools !== undefined ? { tools: serializeForTemplate(transformedTools) } : {}),
-      ...(transformedToolChoice !== undefined
-        ? { tool_choice: serializeForTemplate(transformedToolChoice) }
-        : {}),
+      ...(transformedTools === undefined ? {} : { tools: serializeForTemplate(transformedTools) }),
+      ...(transformedToolChoice === undefined
+        ? {}
+        : { tool_choice: serializeForTemplate(transformedToolChoice) }),
     } as Record<string, any>;
 
     if (this.config.auth?.type === 'oauth') {

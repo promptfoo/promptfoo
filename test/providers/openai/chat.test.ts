@@ -2390,10 +2390,10 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         // Provider should not require API key
         expect(provider.requiresApiKey()).toBe(false);
       } finally {
-        if (originalEnv !== undefined) {
-          process.env.CUSTOM_LOCAL_API_KEY = originalEnv;
-        } else {
+        if (originalEnv === undefined) {
           delete process.env.CUSTOM_LOCAL_API_KEY;
+        } else {
+          process.env.CUSTOM_LOCAL_API_KEY = originalEnv;
         }
       }
     });

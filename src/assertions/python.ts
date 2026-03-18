@@ -104,7 +104,7 @@ ${
           `Python assertion must return a boolean, number, or {pass, score, reason} object. Instead got:\n${result}`,
         );
       }
-      pass = assertion.threshold !== undefined ? score >= assertion.threshold : score > 0;
+      pass = assertion.threshold === undefined ? score > 0 : score >= assertion.threshold;
     }
   } catch (err) {
     return {

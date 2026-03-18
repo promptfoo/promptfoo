@@ -190,10 +190,10 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
   const matcherLabel = matcher.pattern || matcher.name || '*';
 
   let reason = `Matched tool "${matcherLabel}" ${count} time(s)`;
-  if (max !== undefined) {
-    reason += ` (expected ${min}-${max})`;
-  } else {
+  if (max === undefined) {
     reason += ` (expected at least ${min})`;
+  } else {
+    reason += ` (expected ${min}-${max})`;
   }
   if (matchingSteps.length > 0) {
     reason += `. Matches: ${matchingSteps.map(formatTrajectoryStep).join(', ')}`;
