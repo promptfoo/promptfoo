@@ -933,7 +933,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             logger.debug(`Claude Agent SDK response: ${raw}`);
             // When structured output is enabled and available, use it as the output
             // Otherwise fall back to the text result
-            const output = msg.structured_output !== undefined ? msg.structured_output : msg.result;
+            const output = msg.structured_output === undefined ? msg.result : msg.structured_output;
             const response: ProviderResponse = {
               output,
               tokenUsage,
@@ -947,9 +947,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 durationApiMs: msg.duration_api_ms,
                 modelUsage: msg.modelUsage,
                 permissionDenials: msg.permission_denials,
-                ...(msg.structured_output !== undefined
-                  ? { structuredOutput: msg.structured_output }
-                  : {}),
+                ...(msg.structured_output === undefined
+                  ? {}
+                  : { structuredOutput: msg.structured_output }),
               },
             };
 

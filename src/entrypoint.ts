@@ -15,7 +15,7 @@ declare const __PROMPTFOO_MIN_NODE_VERSION__: number | undefined;
 
 // Use injected value at build time, fallback to 20 for development/testing
 const minNodeVersion =
-  typeof __PROMPTFOO_MIN_NODE_VERSION__ !== 'undefined' ? __PROMPTFOO_MIN_NODE_VERSION__ : 20;
+  typeof __PROMPTFOO_MIN_NODE_VERSION__ === 'undefined' ? 20 : __PROMPTFOO_MIN_NODE_VERSION__;
 
 // Skip version check for alternative runtimes (Bun, Deno) - they support modern JS features
 const isBun = typeof (globalThis as Record<string, unknown>).Bun !== 'undefined';

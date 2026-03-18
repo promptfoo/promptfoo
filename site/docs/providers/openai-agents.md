@@ -175,6 +175,12 @@ tests:
       - type: trajectory:tool-used
         value: search_orders
 
+      - type: trajectory:tool-args-match
+        value:
+          name: search_orders
+          args:
+            order_id: '123'
+
       - type: trajectory:tool-sequence
         value:
           steps:

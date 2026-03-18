@@ -46,7 +46,7 @@ export function MediaErrorBoundary({
   return (
     <ErrorBoundary
       fallbackRender={
-        fallback != null ? () => fallback : (props) => <MediaErrorFallback {...props} />
+        fallback == null ? (props) => <MediaErrorFallback {...props} /> : () => fallback
       }
       onError={(error, info) => {
         console.error('[MediaErrorBoundary] Caught error:', error, info);

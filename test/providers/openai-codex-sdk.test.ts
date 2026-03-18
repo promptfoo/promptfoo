@@ -1304,6 +1304,91 @@ describe('OpenAICodexSDKProvider', () => {
     });
   });
 
+  describe('trace attribute helpers', () => {
+    it('should serialize MCP tool input for tracing', () => {
+      const provider = new OpenAICodexSDKProvider({
+        env: { OPENAI_API_KEY: 'test-api-key' },
+      });
+
+      expect(
+        (provider as any).getAttributesForItem({
+          type: 'mcp_tool_call',
+          server: 'inventory',
+          tool: 'search_inventory',
+          input: {
+            query: 'quantum computing',
+            limit: 3,
+          },
+        }),
+      ).toEqual({
+        'codex.mcp.server': 'inventory',
+        'codex.mcp.tool': 'search_inventory',
+        'codex.mcp.input': '{"query":"quantum computing","limit":3}',
+      });
+
+      expect(
+        (provider as any).getCompletionAttributesForItem({
+          type: 'mcp_tool_call',
+          status: 'completed',
+          input: {
+            query: 'quantum computing',
+            limit: 3,
+          },
+        }),
+      ).toEqual({
+        'codex.status': 'completed',
+        'codex.mcp.input': '{"query":"quantum computing","limit":3}',
+      });
+    });
+
+    it('should redact sensitive MCP tool input before tracing', () => {
+      const provider = new OpenAICodexSDKProvider({
+        env: { OPENAI_API_KEY: 'test-api-key' },
+      });
+
+      expect(
+        (provider as any).getAttributesForItem({
+          type: 'mcp_tool_call',
+          tool: 'search_inventory',
+          input: {
+            query: 'quantum computing',
+            email: 'user@example.com',
+            apiKey: 'sk-secret-value',
+            headers: {
+              Authorization: 'Bearer secret-token',
+            },
+          },
+        }),
+      ).toEqual({
+        'codex.mcp.tool': 'search_inventory',
+        'codex.mcp.input':
+          '{"query":"quantum computing","email":"[REDACTED]","apiKey":"[REDACTED]","headers":{"Authorization":"[REDACTED]"}}',
+      });
+
+      expect(
+        (provider as any).getCompletionAttributesForItem({
+          type: 'mcp_tool_call',
+          status: 'completed',
+          input: '{"password":"secret","query":"quantum computing"}',
+        }),
+      ).toEqual({
+        'codex.status': 'completed',
+        'codex.mcp.input': '{"password":"[REDACTED]","query":"quantum computing"}',
+      });
+
+      expect(
+        (provider as any).getCompletionAttributesForItem({
+          type: 'mcp_tool_call',
+          status: 'completed',
+          input: 'user@example.com',
+        }),
+      ).toEqual({
+        'codex.status': 'completed',
+        'codex.mcp.input': '[REDACTED]',
+      });
+    });
+  });
+
   describe('cleanup', () => {
     it('should clear threads map', async () => {
       mockRun.mockResolvedValue(createMockResponse('Response'));

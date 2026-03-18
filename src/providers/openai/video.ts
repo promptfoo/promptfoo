@@ -298,7 +298,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     cacheKey: string,
     evalId?: string,
   ): Promise<{ storageRef?: MediaStorageRef; error?: string }> {
-    const url = `${this.getApiUrl()}/videos/${soraVideoId}/content${variant !== 'video' ? `?variant=${variant}` : ''}`;
+    const url = `${this.getApiUrl()}/videos/${soraVideoId}/content${variant === 'video' ? '' : `?variant=${variant}`}`;
     const headers = this.getAuthHeaders();
 
     try {

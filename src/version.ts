@@ -21,9 +21,9 @@ declare const __PROMPTFOO_POSTHOG_KEY__: string | undefined;
  * Injected at build time, or read from npm environment in development.
  */
 export const VERSION: string =
-  typeof __PROMPTFOO_VERSION__ !== 'undefined'
-    ? __PROMPTFOO_VERSION__
-    : (process.env.npm_package_version ?? '0.0.0-development');
+  typeof __PROMPTFOO_VERSION__ === 'undefined'
+    ? (process.env.npm_package_version ?? '0.0.0-development')
+    : __PROMPTFOO_VERSION__;
 
 /**
  * PostHog analytics key.
@@ -31,4 +31,4 @@ export const VERSION: string =
  * Empty string in development/test.
  */
 export const POSTHOG_KEY: string =
-  typeof __PROMPTFOO_POSTHOG_KEY__ !== 'undefined' ? __PROMPTFOO_POSTHOG_KEY__ : '';
+  typeof __PROMPTFOO_POSTHOG_KEY__ === 'undefined' ? '' : __PROMPTFOO_POSTHOG_KEY__;

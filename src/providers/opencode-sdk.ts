@@ -854,10 +854,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
 
     const ignoredSettings = [
-      config.hostname !== undefined ? 'hostname' : undefined,
-      config.port !== undefined ? 'port' : undefined,
-      config.timeout !== undefined ? 'timeout' : undefined,
-      config.log_level !== undefined ? 'log_level' : undefined,
+      config.hostname === undefined ? undefined : 'hostname',
+      config.port === undefined ? undefined : 'port',
+      config.timeout === undefined ? undefined : 'timeout',
+      config.log_level === undefined ? undefined : 'log_level',
       config.mcp ? 'mcp' : undefined,
       config.custom_agent ? 'custom_agent' : undefined,
       config.apiKey ? 'apiKey' : undefined,
@@ -1183,10 +1183,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
 
     if (config.format?.type === 'json_schema') {
-      if (assistantMessage?.structured !== undefined) {
-        output = JSON.stringify(assistantMessage.structured);
-      } else {
+      if (assistantMessage?.structured === undefined) {
         output = normalizeStructuredText(output) ?? output;
+      } else {
+        output = JSON.stringify(assistantMessage.structured);
       }
     }
 
