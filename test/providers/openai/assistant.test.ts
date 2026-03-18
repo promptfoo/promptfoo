@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import { OpenAiAssistantProvider } from '../../../src/providers/openai/assistant';
-import { getOpenAiMissingApiKeyMessage } from './shared';
+import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 import type { CallbackContext } from '../../../src/providers/openai/types';
 
@@ -232,11 +232,7 @@ describe('OpenAI Provider', () => {
           getOpenAiMissingApiKeyMessage(),
         );
       } finally {
-        if (originalOpenAiApiKey !== undefined) {
-          process.env.OPENAI_API_KEY = originalOpenAiApiKey;
-        } else {
-          delete process.env.OPENAI_API_KEY;
-        }
+        restoreEnvVar('OPENAI_API_KEY', originalOpenAiApiKey);
       }
     });
 
@@ -261,16 +257,8 @@ describe('OpenAI Provider', () => {
           getOpenAiMissingApiKeyMessage('CUSTOM_ASSISTANT_API_KEY'),
         );
       } finally {
-        if (originalOpenAiApiKey !== undefined) {
-          process.env.OPENAI_API_KEY = originalOpenAiApiKey;
-        } else {
-          delete process.env.OPENAI_API_KEY;
-        }
-        if (originalCustomApiKey !== undefined) {
-          process.env.CUSTOM_ASSISTANT_API_KEY = originalCustomApiKey;
-        } else {
-          delete process.env.CUSTOM_ASSISTANT_API_KEY;
-        }
+        restoreEnvVar('OPENAI_API_KEY', originalOpenAiApiKey);
+        restoreEnvVar('CUSTOM_ASSISTANT_API_KEY', originalCustomApiKey);
       }
     });
   });

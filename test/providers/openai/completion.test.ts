@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiCompletionProvider } from '../../../src/providers/openai/completion';
-import { getOpenAiMissingApiKeyMessage } from './shared';
+import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 vi.mock('../../../src/cache');
 vi.mock('../../../src/logger');
@@ -93,12 +93,7 @@ describe('OpenAI Provider', () => {
           getOpenAiMissingApiKeyMessage(),
         );
       } finally {
-        // Restore the original env var
-        if (originalApiKey !== undefined) {
-          process.env.OPENAI_API_KEY = originalApiKey;
-        } else {
-          delete process.env.OPENAI_API_KEY;
-        }
+        restoreEnvVar('OPENAI_API_KEY', originalApiKey);
       }
     });
 
@@ -123,17 +118,8 @@ describe('OpenAI Provider', () => {
           getOpenAiMissingApiKeyMessage('CUSTOM_OPENAI_KEY'),
         );
       } finally {
-        // Restore the original env var
-        if (originalApiKey !== undefined) {
-          process.env.OPENAI_API_KEY = originalApiKey;
-        } else {
-          delete process.env.OPENAI_API_KEY;
-        }
-        if (originalCustomApiKey !== undefined) {
-          process.env.CUSTOM_OPENAI_KEY = originalCustomApiKey;
-        } else {
-          delete process.env.CUSTOM_OPENAI_KEY;
-        }
+        restoreEnvVar('OPENAI_API_KEY', originalApiKey);
+        restoreEnvVar('CUSTOM_OPENAI_KEY', originalCustomApiKey);
       }
     });
 

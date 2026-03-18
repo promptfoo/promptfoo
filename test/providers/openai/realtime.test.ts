@@ -3,7 +3,7 @@ import WebSocket from 'ws';
 import { disableCache, enableCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiRealtimeProvider } from '../../../src/providers/openai/realtime';
-import { getOpenAiMissingApiKeyMessage } from './shared';
+import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 import type { OpenAiRealtimeOptions } from '../../../src/providers/openai/realtime';
 
@@ -59,16 +59,8 @@ describe('OpenAI Realtime Provider', () => {
 
   afterEach(() => {
     enableCache();
-    if (originalOpenAiApiKey !== undefined) {
-      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
-    } else {
-      delete process.env.OPENAI_API_KEY;
-    }
-    if (originalCustomRealtimeApiKey !== undefined) {
-      process.env.CUSTOM_REALTIME_API_KEY = originalCustomRealtimeApiKey;
-    } else {
-      delete process.env.CUSTOM_REALTIME_API_KEY;
-    }
+    restoreEnvVar('OPENAI_API_KEY', originalOpenAiApiKey);
+    restoreEnvVar('CUSTOM_REALTIME_API_KEY', originalCustomRealtimeApiKey);
   });
 
   describe('Basic Functionality', () => {

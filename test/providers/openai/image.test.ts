@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiImageProvider } from '../../../src/providers/openai/image';
-import { getOpenAiMissingApiKeyMessage } from './shared';
+import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -160,12 +160,7 @@ describe('OpenAiImageProvider', () => {
           getOpenAiMissingApiKeyMessage(),
         );
       } finally {
-        // Restore the original environment variable
-        if (originalEnv !== undefined) {
-          process.env.OPENAI_API_KEY = originalEnv;
-        } else {
-          delete process.env.OPENAI_API_KEY;
-        }
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
       }
     });
 
@@ -190,16 +185,8 @@ describe('OpenAiImageProvider', () => {
           getOpenAiMissingApiKeyMessage('CUSTOM_IMAGE_API_KEY'),
         );
       } finally {
-        if (originalEnv !== undefined) {
-          process.env.OPENAI_API_KEY = originalEnv;
-        } else {
-          delete process.env.OPENAI_API_KEY;
-        }
-        if (originalCustomEnv !== undefined) {
-          process.env.CUSTOM_IMAGE_API_KEY = originalCustomEnv;
-        } else {
-          delete process.env.CUSTOM_IMAGE_API_KEY;
-        }
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+        restoreEnvVar('CUSTOM_IMAGE_API_KEY', originalCustomEnv);
       }
     });
   });
