@@ -43,7 +43,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "csv-parse": "^6.1.0",
-    "csv-stringify": "^6.6.0",
+    "csv-stringify": "^6.7.0",
     "diff": "^8.0.3",
     "idb-keyval": "^6.2.2",
     "js-yaml": "^4.1.1",
