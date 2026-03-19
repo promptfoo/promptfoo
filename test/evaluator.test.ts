@@ -333,6 +333,27 @@ function toPrompt(text: string): Prompt {
   return { raw: text, label: text };
 }
 
+function createConcurrencyTrackingProvider() {
+  let activeCalls = 0;
+  let maxActiveCalls = 0;
+
+  const provider: ApiProvider = {
+    id: () => 'test-provider',
+    callApi: vi.fn().mockImplementation(async () => {
+      activeCalls++;
+      maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
+      await sleep(25);
+      activeCalls--;
+      return { output: 'Test output' };
+    }),
+  };
+
+  return {
+    provider,
+    getMaxActiveCalls: () => maxActiveCalls,
+  };
+}
+
 describe('evaluator', () => {
   beforeAll(async () => {
     await runDbMigrations();
@@ -4446,6 +4467,80 @@ describe('runEval', () => {
     const result = results[0];
     expect(result.success).toBe(true);
     expect(conversations).toHaveProperty('test-provider:custom-id:conv1');
+  });
+
+  it('should not force concurrency to 1 for _conversation substrings in other identifiers (issue #7845)', async () => {
+    const { provider: concurrentApiProvider, getMaxActiveCalls } =
+      createConcurrencyTrackingProvider();
+
+    const testSuite: TestSuite = {
+      providers: [concurrentApiProvider],
+      prompts: [
+        {
+          raw: 'Summarize the pre_conversation_context for: {{ question }}',
+          label: 'Concurrency test',
+        },
+      ],
+      tests: [
+        { vars: { question: 'Question 1' } },
+        { vars: { question: 'Question 2' } },
+        { vars: { question: 'Question 3' } },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+
+    expect(concurrentApiProvider.callApi).toHaveBeenCalledTimes(3);
+    expect(getMaxActiveCalls()).toBeGreaterThan(1);
+  });
+
+  it('should still force concurrency to 1 when _conversation is actually used', async () => {
+    const { provider: concurrentApiProvider, getMaxActiveCalls } =
+      createConcurrencyTrackingProvider();
+
+    const testSuite: TestSuite = {
+      providers: [concurrentApiProvider],
+      prompts: [
+        {
+          raw: 'Current: {{ question }}{% for completion in _conversation %}\nPrevious: {{ completion.output }}{% endfor %}',
+          label: 'Conversation test',
+        },
+      ],
+      tests: [{ vars: { question: 'Question 1' } }, { vars: { question: 'Question 2' } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+
+    expect(concurrentApiProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(getMaxActiveCalls()).toBe(1);
+  });
+
+  it('should still force concurrency to 1 when a JavaScript prompt function uses vars._conversation', async () => {
+    const { provider: concurrentApiProvider, getMaxActiveCalls } =
+      createConcurrencyTrackingProvider();
+
+    const jsPrompt = async ({ vars }: { vars: Record<string, any> }) =>
+      `${vars.question} previous=${Array.isArray(vars._conversation) ? vars._conversation.length : -1}`;
+
+    const testSuite: TestSuite = {
+      providers: [concurrentApiProvider],
+      prompts: [
+        {
+          raw: jsPrompt.toString(),
+          label: 'JavaScript conversation prompt',
+          function: jsPrompt,
+        },
+      ],
+      tests: [{ vars: { question: 'Question 1' } }, { vars: { question: 'Question 2' } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+
+    expect(concurrentApiProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(getMaxActiveCalls()).toBe(1);
   });
 
   it('should include sessionId from response in result metadata', async () => {

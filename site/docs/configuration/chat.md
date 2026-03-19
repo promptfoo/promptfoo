@@ -154,7 +154,7 @@ If the file is not valid JSON (such as in the case above, due to the nunjucks `{
 
 ## Using the `_conversation` variable {#using-the-conversation-variable}
 
-A built-in `_conversation` variable contains the full prompt and previous turns of a conversation. Use it to reference previous outputs and test an ongoing chat conversation.
+When your prompt references the built-in `_conversation` variable, promptfoo populates it with the full prompt and previous turns of the conversation. Use it to reference previous outputs and test an ongoing chat conversation.
 
 The `_conversation` variable has the following type signature:
 
@@ -226,7 +226,7 @@ The prompt inserts the previous conversation into the test case, creating a full
 Try it yourself by using the [full example config](https://github.com/promptfoo/promptfoo/tree/main/examples/config-multi-turn).
 
 :::info
-When the `_conversation` variable is present, the eval will run single-threaded (concurrency of 1).
+When a prompt references the `_conversation` variable, the eval will run single-threaded (concurrency of 1).
 :::
 
 ## Separating Chat Conversations
