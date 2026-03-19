@@ -67,7 +67,7 @@ import {
   isProviderAllowed,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
-import { templateUsesVariable } from './util/templates';
+import { promptUsesVariable } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
@@ -96,8 +96,8 @@ import type { CallApiContextParams } from './types/providers';
 
 const CONVERSATION_VARIABLE_NAME = '_conversation';
 
-function usesConversationVar(raw: string): boolean {
-  return templateUsesVariable(raw, CONVERSATION_VARIABLE_NAME);
+function usesConversationVar(prompt: Pick<Prompt, 'raw' | 'function'>): boolean {
+  return promptUsesVariable(prompt, CONVERSATION_VARIABLE_NAME);
 }
 
 /**
@@ -333,7 +333,7 @@ export async function runEval({
   const fileMetadata = collectFileMetadata(test.vars || vars);
 
   const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
-  const usesConversation = usesConversationVar(prompt.raw);
+  const usesConversation = usesConversationVar(prompt);
   if (
     !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
     !test.options?.disableConversationVar &&
@@ -1468,7 +1468,7 @@ class Evaluator {
     // Determine run parameters
 
     if (concurrency > 1) {
-      const usesConversation = prompts.some((p) => usesConversationVar(p.raw));
+      const usesConversation = prompts.some((prompt) => usesConversationVar(prompt));
       const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
       if (usesConversation) {
         logger.info(

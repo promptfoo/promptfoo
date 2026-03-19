@@ -60,6 +60,10 @@ export function getNunjucksEngine(
  * @returns An array of variables used in the template.
  */
 export function extractVariablesFromTemplate(template: string): string[] {
+  if (!template) {
+    return [];
+  }
+
   const variableSet = new Set<string>();
   const regex =
     /\{\{[\s]*([^{}\s|]+)[\s]*(?:\|[^}]+)?\}\}|\{%[\s]*(?:if|for)[\s]+([^{}\s]+)[\s]*.*?%\}/g;
@@ -101,11 +105,48 @@ export function extractVariablesFromTemplates(templates: string[]): string[] {
   return Array.from(variableSet);
 }
 
+function escapeRegExp(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function isRootVariableReference(variable: string, variableName: string): boolean {
   return (
     variable === variableName ||
     variable.startsWith(`${variableName}.`) ||
     variable.startsWith(`${variableName}[`)
+  );
+}
+
+function stripJavaScriptComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^\\:])\/\/.*$/gm, '$1 ');
+}
+
+function maskQuotedStrings(source: string): string {
+  return source.replace(/(['"])(?:\\.|(?!\1)[^\\])*\1/g, (match) => {
+    if (match.length <= 2) {
+      return match;
+    }
+
+    return `${match[0]}${' '.repeat(match.length - 2)}${match[match.length - 1]}`;
+  });
+}
+
+function promptFunctionUsesVariable(source: string, variableName: string): boolean {
+  const cleanedSource = stripJavaScriptComments(source);
+  const maskedSource = maskQuotedStrings(cleanedSource);
+  const escapedVariableName = escapeRegExp(variableName);
+
+  return (
+    new RegExp(`\\bvars\\s*(?:\\?\\.)?\\s*\\[\\s*['"]${escapedVariableName}['"]\\s*\\]`).test(
+      cleanedSource,
+    ) ||
+    [
+      new RegExp(`\\bvars\\s*(?:\\?\\.|\\.)\\s*${escapedVariableName}\\b`),
+      new RegExp(`\\bvars\\s*:\\s*{[^}]*\\b${escapedVariableName}\\b`),
+      new RegExp(
+        `\\{[^}]*\\b${escapedVariableName}\\b[^}]*\\}\\s*=\\s*(?:[A-Za-z_$][\\w$]*\\s*\\.\\s*)?vars\\b`,
+      ),
+    ].some((pattern) => pattern.test(maskedSource))
   );
 }
 
@@ -118,5 +159,24 @@ function isRootVariableReference(variable: string, variableName: string): boolea
 export function templateUsesVariable(template: string, variableName: string): boolean {
   return extractVariablesFromTemplate(template).some((variable) =>
     isRootVariableReference(variable, variableName),
+  );
+}
+
+/**
+ * Check whether a prompt uses a variable either through Nunjucks syntax or a JavaScript prompt function.
+ * @param prompt - Prompt source plus optional function marker.
+ * @param variableName - The variable name to search for.
+ * @returns True when the variable is referenced in either supported prompt style.
+ */
+export function promptUsesVariable(
+  prompt: {
+    raw: string;
+    function?: unknown;
+  },
+  variableName: string,
+): boolean {
+  return (
+    templateUsesVariable(prompt.raw ?? '', variableName) ||
+    (Boolean(prompt.function) && promptFunctionUsesVariable(prompt.raw ?? '', variableName))
   );
 }

@@ -5,6 +5,7 @@ import {
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
   getNunjucksEngine,
+  promptUsesVariable,
   templateUsesVariable,
 } from '../../src/util/templates';
 
@@ -123,6 +124,64 @@ describe('templateUsesVariable', () => {
     expect(
       templateUsesVariable(
         'Summarize the pre_conversation_context for: {{ question }}',
+        '_conversation',
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('promptUsesVariable', () => {
+  it('should detect JavaScript prompt functions that use vars._conversation', () => {
+    const prompt = {
+      raw: `async function ({ vars }) {
+        if (vars._conversation?.length) {
+          return vars._conversation[0].output;
+        }
+        return vars.question;
+      }`,
+      function: async () => '',
+    };
+
+    expect(promptUsesVariable(prompt, '_conversation')).toBe(true);
+  });
+
+  it('should detect bracket access and destructuring in JavaScript prompt functions', () => {
+    expect(
+      promptUsesVariable(
+        {
+          raw: `function ({ vars }) {
+            const { _conversation: history } = vars;
+            return history?.[0]?.output ?? vars['_conversation']?.length ?? 0;
+          }`,
+          function: () => '',
+        },
+        '_conversation',
+      ),
+    ).toBe(true);
+
+    expect(
+      promptUsesVariable(
+        {
+          raw: `function ({ vars: { _conversation, question } }) {
+            return _conversation?.length ?? question;
+          }`,
+          function: () => '',
+        },
+        '_conversation',
+      ),
+    ).toBe(true);
+  });
+
+  it('should ignore comments and unrelated strings in JavaScript prompt functions', () => {
+    expect(
+      promptUsesVariable(
+        {
+          raw: `function ({ vars }) {
+            // _conversation is documented here but not used
+            return "vars._conversation stays literal";
+          }`,
+          function: () => '',
+        },
         '_conversation',
       ),
     ).toBe(false);

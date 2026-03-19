@@ -4517,6 +4517,32 @@ describe('runEval', () => {
     expect(getMaxActiveCalls()).toBe(1);
   });
 
+  it('should still force concurrency to 1 when a JavaScript prompt function uses vars._conversation', async () => {
+    const { provider: concurrentApiProvider, getMaxActiveCalls } =
+      createConcurrencyTrackingProvider();
+
+    const jsPrompt = async ({ vars }: { vars: Record<string, any> }) =>
+      `${vars.question} previous=${Array.isArray(vars._conversation) ? vars._conversation.length : -1}`;
+
+    const testSuite: TestSuite = {
+      providers: [concurrentApiProvider],
+      prompts: [
+        {
+          raw: jsPrompt.toString(),
+          label: 'JavaScript conversation prompt',
+          function: jsPrompt,
+        },
+      ],
+      tests: [{ vars: { question: 'Question 1' } }, { vars: { question: 'Question 2' } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+
+    expect(concurrentApiProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(getMaxActiveCalls()).toBe(1);
+  });
+
   it('should include sessionId from response in result metadata', async () => {
     const conversations: Record<string, any[]> = {};
 
