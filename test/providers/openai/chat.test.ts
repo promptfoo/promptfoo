@@ -1624,6 +1624,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const prefixedO4Provider = new OpenAiChatCompletionProvider('openai/o4-mini');
       const prefixedGpt5Provider = new OpenAiChatCompletionProvider('openai/gpt-5');
       const prefixedGpt54MiniProvider = new OpenAiChatCompletionProvider('openai/gpt-5.4-mini');
+      const prefixedGpt54NanoProvider = new OpenAiChatCompletionProvider('openai/gpt-5.4-nano');
       const prefixedGpt5MiniProvider = new OpenAiChatCompletionProvider('openai/gpt-5-mini');
 
       // Non-reasoning prefixed models
@@ -1634,6 +1635,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(prefixedO4Provider['isReasoningModel']()).toBe(true);
       expect(prefixedGpt5Provider['isReasoningModel']()).toBe(true);
       expect(prefixedGpt54MiniProvider['isReasoningModel']()).toBe(true);
+      expect(prefixedGpt54NanoProvider['isReasoningModel']()).toBe(true);
       expect(prefixedGpt5MiniProvider['isReasoningModel']()).toBe(true);
       expect(prefixedGpt4oProvider['isReasoningModel']()).toBe(false);
     });
@@ -1645,6 +1647,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const o1PreviewProvider = new OpenAiChatCompletionProvider('o1-preview');
       const o4MiniProvider = new OpenAiChatCompletionProvider('o4-mini');
       const gpt41Provider = new OpenAiChatCompletionProvider('gpt-4.1');
+      const gpt54MiniProvider = new OpenAiChatCompletionProvider('gpt-5.4-mini');
+      const gpt54NanoProvider = new OpenAiChatCompletionProvider('gpt-5.4-nano');
 
       expect(regularProvider['supportsTemperature']()).toBe(true);
       expect(o1Provider['supportsTemperature']()).toBe(false);
@@ -1652,6 +1656,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(o1PreviewProvider['supportsTemperature']()).toBe(false);
       expect(o4MiniProvider['supportsTemperature']()).toBe(false);
       expect(gpt41Provider['supportsTemperature']()).toBe(true);
+      expect(gpt54MiniProvider['supportsTemperature']()).toBe(false);
+      expect(gpt54NanoProvider['supportsTemperature']()).toBe(false);
     });
 
     it('should respect temperature settings based on model type', async () => {

@@ -117,7 +117,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.76",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.77",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1003.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1003.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -152,7 +152,7 @@
     "@vitest/coverage-v8": "^4.1.0",
     "concurrently": "^9.2.1",
     "depcheck": "^1.4.7",
-    "drizzle-kit": "^0.31.9",
+    "drizzle-kit": "^0.31.10",
     "husky": "^9.1.7",
     "ibm-cloud-sdk-core": "^5.4.9",
     "ink-testing-library": "^4.0.0",
@@ -177,7 +177,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.76",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.77",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1003.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1003.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -240,7 +240,7 @@
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
-    "better-sqlite3": "^12.6.2",
+    "better-sqlite3": "^12.8.0",
     "binary-extensions": "^3.1.0",
     "cache-manager": "^7.2.8",
     "chalk": "^5.6.2",

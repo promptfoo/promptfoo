@@ -5,19 +5,17 @@ prompts:
 
 providers:
   # GPT-5 models with structured output
-  - id: openai:chat:gpt-5-nano
-    label: GPT-5 Nano External Schema
+  - id: openai:chat:gpt-5.4-nano
+    label: GPT-5.4 Nano External Schema
     config:
-      temperature: 0.2
-      max_tokens: 800
+      max_completion_tokens: 800
       seed: 123456
       response_format: file://schema.chat.json # External schema file reference
 
-  - id: openai:chat:gpt-5-mini
-    label: GPT-5 Mini Inline Schema
+  - id: openai:chat:gpt-5.4-mini
+    label: GPT-5.4 Mini Inline Schema
     config:
-      temperature: 0.3
-      max_tokens: 1000
+      max_completion_tokens: 1000
       response_format:
         type: json_schema
         json_schema:
