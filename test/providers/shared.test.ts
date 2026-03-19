@@ -151,6 +151,22 @@ describe('Shared Provider Functions', () => {
       expect(cost).toBe(7.5);
     });
 
+    it('should use inputCost and outputCost if provided', () => {
+      const cost = calculateCost(
+        'model1',
+        { inputCost: 0.01, outputCost: 0.02 },
+        1000,
+        500,
+        models,
+      );
+      expect(cost).toBe(20);
+    });
+
+    it('should fall back to cost for any unset side', () => {
+      const cost = calculateCost('model1', { inputCost: 0.01, cost: 0.03 }, 1000, 500, models);
+      expect(cost).toBe(25);
+    });
+
     it('should return undefined if model not found', () => {
       const cost = calculateCost('nonexistent', {}, 1000, 500, models);
       expect(cost).toBeUndefined();

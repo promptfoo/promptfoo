@@ -28,7 +28,11 @@ interface ProviderModel {
 
 export interface ProviderConfig {
   cost?: number;
+  inputCost?: number;
+  outputCost?: number;
   audioCost?: number;
+  audioInputCost?: number;
+  audioOutputCost?: number;
 }
 
 /**
@@ -62,8 +66,8 @@ export function calculateCost(
     return undefined;
   }
 
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
+  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
+  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
   return inputCost * promptTokens + outputCost * completionTokens;
 }
 
