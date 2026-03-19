@@ -251,7 +251,7 @@
     "compression": "^1.8.1",
     "cors": "^2.8.6",
     "csv-parse": "^6.1.0",
-    "csv-stringify": "^6.6.0",
+    "csv-stringify": "^6.7.0",
     "debounce": "^3.0.0",
     "dedent": "^1.7.2",
     "dotenv": "^17.3.1",
