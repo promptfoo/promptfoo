@@ -52,13 +52,16 @@ providers:
         effort: minimal
 ```
 
-The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai/types.ts#L112-L185), such as `temperature`, `functions`, and `tools`, which can be used to customize the behavior of the model like so:
+The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai/types.ts#L112-L185), such as `temperature`, `max_tokens`, `max_completion_tokens`, `functions`, and `tools`, which can be used to customize model behavior like so:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:gpt-5.4-mini
+  - id: openai:gpt-4.1-mini
     config:
       temperature: 0
+      max_tokens: 1024
+  - id: openai:gpt-5.4-mini
+    config:
       max_completion_tokens: 1024
 ```
 
@@ -70,13 +73,16 @@ For information on setting up chat conversation, see [chat threads](/docs/config
 
 ## Configuring parameters
 
-The `providers` list takes a `config` key that allows you to set parameters like `temperature`, `max_tokens`, and [others](https://platform.openai.com/docs/api-reference/chat/create#chat/create-temperature). For example:
+The `providers` list takes a `config` key that allows you to set parameters like `temperature` for non-reasoning models, `max_tokens`, `max_completion_tokens` for GPT-5 family chat models, and [others](https://platform.openai.com/docs/api-reference/chat/create). For example:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:gpt-5.4-mini
+  - id: openai:gpt-4.1-mini
     config:
       temperature: 0
+      max_tokens: 128
+  - id: openai:gpt-5.4-mini
+    config:
       max_completion_tokens: 128
       apiKey: sk-abc123
 ```
@@ -106,7 +112,7 @@ Supported parameters include:
 | `seed`                  | Seed used for deterministic output.                                                                                                                                                                                                                                                               |
 | `stop`                  | Defines a list of tokens that signal the end of the output.                                                                                                                                                                                                                                       |
 | `store`                 | Whether to store the conversation for future retrieval (boolean).                                                                                                                                                                                                                                 |
-| `temperature`           | Controls the randomness of the AI's output. Higher values (close to 1) make the output more random, while lower values (close to 0) make it more deterministic.                                                                                                                                   |
+| `temperature`           | Controls the randomness of the AI's output for non-reasoning models. Promptfoo omits it for reasoning-capable models (o-series, `codex-mini-latest`, and GPT-5 family) because OpenAI ignores it there.                                                                                           |
 | `tool_choice`           | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                         |
 | `tools`                 | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                                 |
 | `top_p`                 | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                                                                                                                                                     |
@@ -178,8 +184,8 @@ OpenAI updates aliases, dated snapshots, and pricing frequently. Promptfoo suppo
 endpoint syntax like `openai:chat:<model>` and `openai:responses:<model>` for newly released
 models right away, while the tables below call out the common model IDs promptfoo knows about
 for routing and cost estimation. Check the official
-[OpenAI models docs](https://developers.openai.com/api/docs/models) and
-[pricing](https://openai.com/api/pricing/) for the latest availability and rates.
+[OpenAI models docs](https://platform.openai.com/docs/models) and
+[pricing](https://openai.com/pricing) for the latest availability and rates.
 
 ### GPT-4.1
 
@@ -492,21 +498,20 @@ GPT-5.4 is a GPT-5 family model for complex professional work, agentic coding, a
 | ----------------------- | ------------------------------ | --------------------------- |
 | gpt-5.4                 | Standard GPT-5.4 model         | $2.50 / $15 per 1M tokens   |
 | gpt-5.4-2026-03-05      | Dated snapshot of gpt-5.4      | $2.50 / $15 per 1M tokens   |
-| gpt-5.4-mini            | Lower-latency GPT-5.4 variant  | $0.75 / $4.50 per 1M tokens |
+| gpt-5.4-mini            | Smaller GPT-5.4 model          | $0.75 / $4.50 per 1M tokens |
 | gpt-5.4-mini-2026-03-17 | Dated snapshot of gpt-5.4-mini | $0.75 / $4.50 per 1M tokens |
-| gpt-5.4-nano            | Lowest-cost GPT-5.4 variant    | $0.20 / $1.25 per 1M tokens |
+| gpt-5.4-nano            | Lowest-cost GPT-5.4 model      | $0.20 / $1.25 per 1M tokens |
 | gpt-5.4-nano-2026-03-17 | Dated snapshot of gpt-5.4-nano | $0.20 / $1.25 per 1M tokens |
 | gpt-5.4-pro             | Premium GPT-5.4 pro model      | $30.00 / $180 per 1M tokens |
 | gpt-5.4-pro-2026-03-05  | Dated snapshot of gpt-5.4-pro  | $30.00 / $180 per 1M tokens |
 
 #### Key Specifications
 
-- **Context window**: `gpt-5.4` and `gpt-5.4-pro` use a 1,050,000-token window. `gpt-5.4-mini` and `gpt-5.4-nano` use a 400,000-token window.
-- **Max output tokens**: 128,000 tokens across the current GPT-5.4 family.
-- **Reasoning effort**: `gpt-5.4` supports `none`, `low`, `medium`, `high`, `xhigh`. `gpt-5.4-pro` supports `medium`, `high`, `xhigh`.
-- **Variant focus**: `gpt-5.4-mini` is the lower-latency GPT-5.4 option for coding, tools, and sub-agents. `gpt-5.4-nano` is the lowest-cost GPT-5.4 option for high-volume extraction, ranking, and classification workloads.
-- **Endpoint support in promptfoo**: Chat Completions API and Responses API
-- **Cached input**: `gpt-5.4` cached input tokens cost $0.25 per 1M, `gpt-5.4-mini` costs $0.075 per 1M, `gpt-5.4-nano` costs $0.02 per 1M, and `gpt-5.4-pro` has no cached-input discount.
+- **Context window**: `gpt-5.4` and `gpt-5.4-pro` support 1,050,000 tokens. `gpt-5.4-mini` and `gpt-5.4-nano` support 400,000 tokens.
+- **Max output tokens**: 128,000 tokens
+- **Reasoning effort**: `gpt-5.4`, `gpt-5.4-mini`, and `gpt-5.4-nano` support `none`, `low`, `medium`, `high`, `xhigh`. `gpt-5.4-pro` supports `medium`, `high`, `xhigh`.
+- **Endpoint support**: Chat Completions API and Responses API across the GPT-5.4 family. Promptfoo's Codex SDK provider currently supports `gpt-5.4` and `gpt-5.4-pro`.
+- **Cached input**: `gpt-5.4` cached input tokens $0.25 per 1M, `gpt-5.4-mini` $0.075 per 1M, and `gpt-5.4-nano` $0.02 per 1M. `gpt-5.4-pro` has no cached-input discount.
 
 #### Usage Examples
 
@@ -533,6 +538,12 @@ providers:
     config:
       reasoning:
         effort: 'high'
+      max_output_tokens: 4096
+
+  - id: openai:responses:gpt-5.4-mini
+    config:
+      reasoning:
+        effort: 'medium'
       max_output_tokens: 4096
 
   - id: openai:responses:gpt-5.4-pro
@@ -1785,7 +1796,7 @@ The Responses API supports a wide range of models, including:
 
 - `gpt-5.4` - GPT-5.4 model ($2.50/$15 per 1M tokens)
 - `gpt-5.4-2026-03-05` - Dated snapshot of gpt-5.4
-- `gpt-5.4-mini` - Lower-latency GPT-5.4 model ($0.75/$4.50 per 1M tokens)
+- `gpt-5.4-mini` - Smaller GPT-5.4 model ($0.75/$4.50 per 1M tokens)
 - `gpt-5.4-mini-2026-03-17` - Dated snapshot of gpt-5.4-mini
 - `gpt-5.4-nano` - Lowest-cost GPT-5.4 model ($0.20/$1.25 per 1M tokens)
 - `gpt-5.4-nano-2026-03-17` - Dated snapshot of gpt-5.4-nano
