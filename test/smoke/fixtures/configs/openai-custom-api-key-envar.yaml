@@ -5,6 +5,7 @@ providers:
   - id: openai:assistant:test-assistant-id
     label: 'OpenAI assistant with custom key'
     config:
+      # Keep evaluation running so the missing-key message is captured in the output JSON.
       apiKeyRequired: false
       apiKeyEnvar: CUSTOM_ASSISTANT_KEY
 

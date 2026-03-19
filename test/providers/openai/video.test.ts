@@ -9,7 +9,7 @@ import {
   validateVideoSize,
 } from '../../../src/providers/openai/video';
 import { checkVideoCache, generateVideoCacheKey } from '../../../src/providers/video';
-import { getOpenAiMissingApiKeyMessage } from './shared';
+import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 // Hoist mock functions so they're available in vi.mock factories
 const {
@@ -393,11 +393,7 @@ describe('OpenAiVideoProvider', () => {
           getOpenAiMissingApiKeyMessage(),
         );
       } finally {
-        if (originalEnv !== undefined) {
-          process.env.OPENAI_API_KEY = originalEnv;
-        } else {
-          delete process.env.OPENAI_API_KEY;
-        }
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
       }
     });
 
@@ -422,16 +418,8 @@ describe('OpenAiVideoProvider', () => {
           getOpenAiMissingApiKeyMessage('CUSTOM_VIDEO_API_KEY'),
         );
       } finally {
-        if (originalEnv !== undefined) {
-          process.env.OPENAI_API_KEY = originalEnv;
-        } else {
-          delete process.env.OPENAI_API_KEY;
-        }
-        if (originalCustomEnv !== undefined) {
-          process.env.CUSTOM_VIDEO_API_KEY = originalCustomEnv;
-        } else {
-          delete process.env.CUSTOM_VIDEO_API_KEY;
-        }
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+        restoreEnvVar('CUSTOM_VIDEO_API_KEY', originalCustomEnv);
       }
     });
 

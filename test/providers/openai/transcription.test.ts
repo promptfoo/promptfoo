@@ -3,7 +3,7 @@ import fs from 'fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiTranscriptionProvider } from '../../../src/providers/openai/transcription';
-import { getOpenAiMissingApiKeyMessage } from './shared';
+import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -237,11 +237,7 @@ describe('OpenAiTranscriptionProvider', () => {
           getOpenAiMissingApiKeyMessage(),
         );
       } finally {
-        if (originalEnv !== undefined) {
-          process.env.OPENAI_API_KEY = originalEnv;
-        } else {
-          delete process.env.OPENAI_API_KEY;
-        }
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
       }
     });
 
@@ -266,16 +262,8 @@ describe('OpenAiTranscriptionProvider', () => {
           getOpenAiMissingApiKeyMessage('CUSTOM_TRANSCRIPTION_API_KEY'),
         );
       } finally {
-        if (originalEnv !== undefined) {
-          process.env.OPENAI_API_KEY = originalEnv;
-        } else {
-          delete process.env.OPENAI_API_KEY;
-        }
-        if (originalCustomEnv !== undefined) {
-          process.env.CUSTOM_TRANSCRIPTION_API_KEY = originalCustomEnv;
-        } else {
-          delete process.env.CUSTOM_TRANSCRIPTION_API_KEY;
-        }
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+        restoreEnvVar('CUSTOM_TRANSCRIPTION_API_KEY', originalCustomEnv);
       }
     });
   });

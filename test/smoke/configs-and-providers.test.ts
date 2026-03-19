@@ -152,15 +152,12 @@ describe('Provider Smoke Tests', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/openai-custom-api-key-envar.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'openai-custom-api-key-envar-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        {
-          env: {
-            OPENAI_API_KEY: '',
-            CUSTOM_ASSISTANT_KEY: '',
-          },
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        env: {
+          OPENAI_API_KEY: '',
+          CUSTOM_ASSISTANT_KEY: '',
         },
-      );
+      });
 
       expect(exitCode).toBe(100);
 
