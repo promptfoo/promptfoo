@@ -217,8 +217,8 @@ export function calculateHyperbolicCost(
     return undefined;
   }
 
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
+  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
+  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
 
   const inputCostTotal = inputCost * promptTokens;
   const outputCostTotal = outputCost * completionTokens;
