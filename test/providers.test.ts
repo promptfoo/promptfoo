@@ -474,6 +474,7 @@ describe('loadApiProvider', () => {
     const provider = await loadApiProvider('openai:codex:gpt-5.4');
 
     expect(provider).toBeInstanceOf(OpenAICodexSDKProvider);
+    expect(provider.id()).toBe('openai:codex:gpt-5.4');
     expect((provider as OpenAICodexSDKProvider).config.model).toBe('gpt-5.4');
   });
 
@@ -481,6 +482,7 @@ describe('loadApiProvider', () => {
     const provider = await loadApiProvider('openai:codex-sdk:gpt-5.4-pro');
 
     expect(provider).toBeInstanceOf(OpenAICodexSDKProvider);
+    expect(provider.id()).toBe('openai:codex-sdk:gpt-5.4-pro');
     expect((provider as OpenAICodexSDKProvider).config.model).toBe('gpt-5.4-pro');
   });
 
@@ -494,6 +496,7 @@ describe('loadApiProvider', () => {
     });
 
     expect(provider).toBeInstanceOf(OpenAICodexSDKProvider);
+    expect(provider.id()).toBe('openai:codex');
     expect((provider as OpenAICodexSDKProvider).config.model).toBe('gpt-5.4');
   });
 

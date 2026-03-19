@@ -893,8 +893,10 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'codex-sdk' || modelType === 'codex') {
         const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
         const codexModel = modelName || configuredModel;
+        const codexProviderId = providerOptions.id ?? providerPath;
         return new OpenAICodexSDKProvider({
           ...providerOptions,
+          id: codexProviderId,
           config: codexModel
             ? {
                 ...providerOptions.config,
