@@ -2291,7 +2291,7 @@ class Evaluator {
       this.evalRecord.results.length > 0 ? totalLatencyMs / this.evalRecord.results.length : 0;
 
     // Detect key feature usage patterns
-    const usesConversationVarTelemetry = prompts.some((p) => usesConversationVar(p.raw));
+    const usesConversationVarTelemetry = prompts.some((prompt) => usesConversationVar(prompt));
     const usesTransforms = Boolean(
       tests.some((t) => t.options?.transform || t.options?.postprocess) ||
         testSuite.providers.some((p) => Boolean(p.transform)),
