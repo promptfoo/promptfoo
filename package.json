@@ -250,7 +250,7 @@
     "commander": "^14.0.3",
     "compression": "^1.8.1",
     "cors": "^2.8.6",
-    "csv-parse": "^6.1.0",
+    "csv-parse": "^6.2.0",
     "csv-stringify": "^6.7.0",
     "debounce": "^3.0.0",
     "dedent": "^1.7.2",
