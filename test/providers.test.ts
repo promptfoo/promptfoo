@@ -8,6 +8,7 @@ import { CLOUD_PROVIDER_PREFIX } from '../src/constants';
 import { HttpProvider } from '../src/providers/http';
 import { loadApiProvider, loadApiProviders } from '../src/providers/index';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
+import { OpenAICodexSDKProvider } from '../src/providers/openai/codex-sdk';
 import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding';
 import { PythonProvider } from '../src/providers/pythonCompletion';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
@@ -467,6 +468,33 @@ describe('loadApiProvider', () => {
     const provider = await loadApiProvider('openai:chat:gpt-5.4');
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5.4', expect.any(Object));
     expect(provider).toBeDefined();
+  });
+
+  it('should load OpenAI Codex provider with model from provider path', async () => {
+    const provider = await loadApiProvider('openai:codex:gpt-5.4');
+
+    expect(provider).toBeInstanceOf(OpenAICodexSDKProvider);
+    expect((provider as OpenAICodexSDKProvider).config.model).toBe('gpt-5.4');
+  });
+
+  it('should load OpenAI Codex SDK provider with model from provider path', async () => {
+    const provider = await loadApiProvider('openai:codex-sdk:gpt-5.4-pro');
+
+    expect(provider).toBeInstanceOf(OpenAICodexSDKProvider);
+    expect((provider as OpenAICodexSDKProvider).config.model).toBe('gpt-5.4-pro');
+  });
+
+  it('should load OpenAI Codex provider with model from config when ID has no model', async () => {
+    const provider = await loadApiProvider('openai:codex', {
+      options: {
+        config: {
+          model: 'gpt-5.4',
+        },
+      },
+    });
+
+    expect(provider).toBeInstanceOf(OpenAICodexSDKProvider);
+    expect((provider as OpenAICodexSDKProvider).config.model).toBe('gpt-5.4');
   });
 
   it('should load OpenAI GPT-5 nano chat provider', async () => {
