@@ -152,7 +152,7 @@
     "@vitest/coverage-v8": "^4.1.0",
     "concurrently": "^9.2.1",
     "depcheck": "^1.4.7",
-    "drizzle-kit": "^0.31.9",
+    "drizzle-kit": "^0.31.10",
     "husky": "^9.1.7",
     "ibm-cloud-sdk-core": "^5.4.9",
     "ink-testing-library": "^4.0.0",
