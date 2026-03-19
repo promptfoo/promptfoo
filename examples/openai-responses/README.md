@@ -13,7 +13,7 @@ cd openai-responses
 
 ### Basic Responses API (`promptfooconfig.yaml`)
 
-Basic example showing how to use the Responses API with different models and configurations.
+Basic example showing how to use the Responses API with current GPT-5.4 family models and configurations.
 
 ### External Response Format (`promptfooconfig.external-format.yaml`)
 
