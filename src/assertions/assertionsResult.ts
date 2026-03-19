@@ -159,12 +159,14 @@ export class AssertionsResult {
       normalizedNamedScores[key] = totalWeight > 0 ? value / totalWeight : 0;
     }
 
+    const hasNamedScoreWeights = Object.keys(this.namedScoreWeights).length > 0;
+
     this.result = {
       pass,
       score,
       reason,
       namedScores: normalizedNamedScores,
-      namedScoreWeights: this.namedScoreWeights,
+      ...(hasNamedScoreWeights ? { namedScoreWeights: this.namedScoreWeights } : {}),
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
     };

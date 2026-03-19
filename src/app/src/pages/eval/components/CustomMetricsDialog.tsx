@@ -13,6 +13,7 @@ import {
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { useApplyFilterFromMetric } from './hooks';
 import { useTableStore } from './store';
+import { getNamedMetricTotal } from './utils';
 import type { ColumnDef } from '@tanstack/react-table';
 
 type MetricScore = {
@@ -251,8 +252,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       // Add data for each prompt
       table.head.prompts.forEach((prompt, idx) => {
         const score = prompt.metrics?.namedScores?.[metric];
-        const total =
-          prompt.metrics?.namedScoreWeights?.[metric] ?? prompt.metrics?.namedScoresCount?.[metric];
+        const total = getNamedMetricTotal(prompt.metrics, metric);
         const hasScore = score !== undefined;
 
         row[`prompt_${idx}`] = {

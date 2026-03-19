@@ -6,7 +6,6 @@ import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import {
   MODEL_GRADED_ASSERTION_TYPES,
-  renderMetricName,
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
@@ -61,6 +60,7 @@ import { isNonTransientHttpStatus } from './util/fetch/errors';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
+import { accumulateNamedMetric } from './util/namedMetrics';
 import { isPromptAllowed } from './util/promptMatching';
 import {
   isAnthropicProvider,
@@ -1636,34 +1636,12 @@ class Evaluator {
         invariant(metrics, 'Expected prompt.metrics to be set');
         metrics.score += row.score;
         for (const [key, value] of Object.entries(row.namedScores)) {
-          const testVars = row.testCase?.vars || {};
-          let contributingAssertions = 0;
-          row.gradingResult?.componentResults?.forEach((result) => {
-            const renderedMetric = renderMetricName(result.assertion?.metric, testVars);
-            if (renderedMetric === key) {
-              contributingAssertions++;
-            }
+          accumulateNamedMetric(metrics, {
+            metricName: key,
+            metricValue: value,
+            gradingResult: row.gradingResult,
+            testVars: row.testCase?.vars || {},
           });
-          const assertionCount = contributingAssertions > 0 ? contributingAssertions : 1;
-
-          const namedScoreWeights = row.gradingResult?.namedScoreWeights;
-          const hasNamedScoreWeight = Object.prototype.hasOwnProperty.call(
-            namedScoreWeights ?? {},
-            key,
-          );
-          const metricWeightTotal = hasNamedScoreWeight
-            ? (namedScoreWeights?.[key] ?? 0)
-            : assertionCount;
-
-          // Newer results store per-row named scores as weighted averages. Convert them back to a
-          // weighted total here so prompt metrics keep the historical sum/denominator contract.
-          metrics.namedScores[key] =
-            (metrics.namedScores[key] || 0) +
-            (hasNamedScoreWeight ? value * metricWeightTotal : value);
-          metrics.namedScoresCount[key] = (metrics.namedScoresCount[key] || 0) + assertionCount;
-          metrics.namedScoreWeights ||= {};
-          metrics.namedScoreWeights[key] =
-            (metrics.namedScoreWeights[key] || 0) + metricWeightTotal;
         }
 
         if (testSuite.derivedMetrics) {

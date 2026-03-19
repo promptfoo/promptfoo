@@ -61,6 +61,7 @@ import { NumberInput } from '@app/components/ui/number-input';
 import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
+import { getNamedMetricTotals } from './utils';
 
 /**
  * Audio player component that handles both storage refs and base64 data
@@ -978,8 +979,7 @@ function ResultsTable({
   const metricTotals = React.useMemo(() => {
     // Use the backend's already-correct metric totals instead of recalculating
     const firstProvider = table?.head?.prompts?.[0];
-    const backendTotals =
-      firstProvider?.metrics?.namedScoreWeights || firstProvider?.metrics?.namedScoresCount;
+    const backendTotals = getNamedMetricTotals(firstProvider?.metrics);
 
     if (backendTotals) {
       return backendTotals;
@@ -1209,7 +1209,7 @@ function ResultsTable({
                       <div className="collapse-hidden">
                         <CustomMetrics
                           lookup={metrics.namedScores}
-                          counts={metrics.namedScoresCount}
+                          counts={getNamedMetricTotals(metrics)}
                           metricTotals={metricTotals}
                           onShowMore={() => setCustomMetricsDialogOpen(true)}
                         />
