@@ -8,7 +8,6 @@ providers:
   - id: openai:chat:gpt-5.4-mini
     config:
       verbosity: high
-      reasoning_effort: none
       tools:
         [
           {
