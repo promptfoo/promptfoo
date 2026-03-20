@@ -44,9 +44,12 @@ Simple code generation without file system access.
 This example demonstrates evaluating a local Codex skill stored under `.agents/skills/`.
 
 - **Local skill discovery**: Codex discovers `SKILL.md` from the sample project's `.agents/skills/` directory
-- **Skill assertions**: Verifies inferred skill usage with the `skill-used` assertion over normalized `metadata.skillCalls`
+- **Skill assertions**: Verifies confirmed skill usage with the `skill-used` assertion over normalized `metadata.skillCalls`
 - **Trace assertions**: `promptfooconfig.tracing.yaml` enables OTEL deep tracing and asserts on the traced command that reads `SKILL.md`
 - **Isolated Codex home**: Uses a project-local `CODEX_HOME` so personal skills and config do not leak into the eval
+- **Realistic shell environment**: Keeps a normal shell `PATH` available while overriding `CODEX_HOME`, so skill evals do not waste turns on missing `cat` or `sed`
+
+`metadata.skillCalls` only includes confirmed successful skill reads. When Codex references a skill path but the command fails, Promptfoo records that separately as `metadata.attemptedSkillCalls` for debugging.
 
 **Location**: `./skills/`
 
