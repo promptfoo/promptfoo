@@ -22,7 +22,7 @@
   "devDependencies": {
     "@kurkle/color": "^0.4.0",
     "@tailwindcss/postcss": "^4.2.1",
-    "@tanstack/react-query": "^5.90.21",
+    "@tanstack/react-query": "^5.91.0",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/table-core": "^8.21.3",
     "@testing-library/dom": "^10.4.1",
