@@ -1,4 +1,5 @@
 import { getEnvString } from '../envars';
+import { fetchWithProxy } from '../util/fetch/index';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { EnvOverrides } from '../types/env';
@@ -27,10 +28,8 @@ export async function fetchNovitaModels(env?: EnvOverrides): Promise<NovitaModel
       headers['Authorization'] = `Bearer ${apiKey}`;
     }
 
-    const { data } = await fetch(
-      'https://api.novita.ai/v3/openai/models',
-      { headers, timeout: 10000 },
-    );
+    const response = await fetchWithProxy('https://api.novita.ai/v3/openai/models', { headers });
+    const data = await response.json();
 
     const models = data?.data || data?.models || data;
     if (Array.isArray(models)) {
@@ -42,7 +41,7 @@ export async function fetchNovitaModels(env?: EnvOverrides): Promise<NovitaModel
     modelCache = [];
   }
 
-  return modelCache;
+  return modelCache ?? [];
 }
 
 export function createNovitaProvider(
