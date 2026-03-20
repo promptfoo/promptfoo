@@ -324,14 +324,15 @@ describe('OpenAICodexSDKProvider', () => {
         });
       });
 
-      it('should infer skillCalls from files inside a known skill directory', async () => {
+      it('should not infer skillCalls from directory listings without a direct SKILL.md command read', async () => {
         mockRun.mockResolvedValue(
-          createMockResponse('CERULEAN-FALCON-SKILL', undefined, [
+          createMockResponse('LISTED-FILES', undefined, [
             {
               id: 'item-1',
               type: 'command_execution',
-              command: "/bin/zsh -lc 'ls .agents/skills/token-skill'",
-              aggregated_output: 'agents/openai.yaml\nreferences/policy.md\n',
+              command: "/bin/zsh -lc 'find .agents -maxdepth 5 -type f -print'",
+              aggregated_output:
+                '.agents/skills/token-skill/SKILL.md\n.agents/skills/token-skill/agents/openai.yaml\n',
               exit_code: 0,
               status: 'completed',
             },
@@ -341,17 +342,9 @@ describe('OpenAICodexSDKProvider', () => {
         const provider = new OpenAICodexSDKProvider({
           env: { OPENAI_API_KEY: 'test-api-key' },
         });
-        const result = await provider.callApi('Inspect the token-skill directory');
+        const result = await provider.callApi('List the available files');
 
-        expect(result.metadata).toEqual({
-          skillCalls: [
-            {
-              name: 'token-skill',
-              path: '.agents/skills/token-skill/SKILL.md',
-              source: 'heuristic',
-            },
-          ],
-        });
+        expect(result.metadata).toBeUndefined();
       });
 
       it('should omit skillCalls when no skill files are read', async () => {
@@ -1738,6 +1731,8 @@ describe('OpenAICodexSDKProvider', () => {
         (provider as any).getCompletionAttributesForItem(
           {
             type: 'command_execution',
+            command:
+              "/bin/zsh -lc 'cat /tmp/promptfoo-codex-home/skills/token-skill/SKILL.md && cat .agents/skills/repo-skill/SKILL.md'",
             status: 'completed',
             exit_code: 0,
             aggregated_output:

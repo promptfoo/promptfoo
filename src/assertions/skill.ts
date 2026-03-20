@@ -9,10 +9,6 @@ interface SkillCountValue {
   pattern?: string;
 }
 
-function applyInverse(pass: boolean, inverse: boolean) {
-  return inverse ? !pass : pass;
-}
-
 function getSkillCalls(params: AssertionParams): SkillCallEntry[] {
   const rawSkillCalls = params.providerResponse?.metadata?.skillCalls;
   if (!Array.isArray(rawSkillCalls)) {
@@ -48,6 +44,11 @@ function resolveSkillMatchers(
   | { kind: 'list'; matchers: Array<{ name: string }> }
   | { kind: 'count'; matcher: SkillCountValue } {
   const normalizeText = (text: unknown) => (typeof text === 'string' ? text.trim() : undefined);
+  const validateCount = (field: 'max' | 'min', count: unknown) => {
+    if (!Number.isFinite(count) || !Number.isInteger(count) || (count as number) < 0) {
+      throw new Error(`skill-used assertion object ${field} must be a finite non-negative integer`);
+    }
+  };
 
   if (typeof value === 'string' && value.trim()) {
     return {
@@ -68,11 +69,25 @@ function resolveSkillMatchers(
   }
 
   if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const matcher = value as SkillCountValue;
+    const rawMatcher = value as Record<string, unknown>;
+    const matcher = rawMatcher as SkillCountValue;
     const name = normalizeText(matcher.name);
     const pattern = normalizeText(matcher.pattern);
     if (!name && !pattern) {
       throw new Error('skill-used assertion object must include a name or pattern property');
+    }
+    if ('min' in rawMatcher) {
+      validateCount('min', matcher.min);
+    }
+    if ('max' in rawMatcher) {
+      validateCount('max', matcher.max);
+    }
+    if (
+      typeof matcher.min === 'number' &&
+      typeof matcher.max === 'number' &&
+      matcher.max < matcher.min
+    ) {
+      throw new Error('skill-used assertion object max must be greater than or equal to min');
     }
 
     return {
@@ -89,60 +104,31 @@ function resolveSkillMatchers(
   throw new Error('skill-used assertion must have a string, string array, or object value');
 }
 
-export function handleSkillUsed(params: AssertionParams): GradingResult {
-  const skillCalls = getSkillCalls(params);
-  const actualSkills = skillCalls.map(formatSkillCall);
-  const expected = resolveSkillMatchers(params.renderedValue ?? params.assertion.value);
+function handleListSkillAssertion(
+  params: AssertionParams,
+  skillCalls: SkillCallEntry[],
+  actualSkills: string[],
+  expected: { matchers: Array<{ name: string }> },
+): GradingResult {
+  const missing = expected.matchers.filter(
+    (matcher) => !skillCalls.some((skillCall) => matchesSkill(skillCall, matcher)),
+  );
+  const matched = expected.matchers.filter((matcher) =>
+    skillCalls.some((skillCall) => matchesSkill(skillCall, matcher)),
+  );
+  const pass = params.inverse ? matched.length === 0 : missing.length === 0;
+  const expectedSkills = expected.matchers.map((matcher) => matcher.name);
+  const actualSummary = actualSkills.length > 0 ? actualSkills.join(', ') : '(none)';
 
-  if (expected.kind === 'list') {
-    const missing = expected.matchers.filter(
-      (matcher) => !skillCalls.some((skillCall) => matchesSkill(skillCall, matcher)),
-    );
-    const matched = expected.matchers.filter((matcher) =>
-      skillCalls.some((skillCall) => matchesSkill(skillCall, matcher)),
-    );
-    const pass = params.inverse ? matched.length === 0 : missing.length === 0;
-    const expectedSkills = expected.matchers.map((matcher) => matcher.name);
-    const actualSummary = actualSkills.length > 0 ? actualSkills.join(', ') : '(none)';
-
-    let reason: string;
-    if (params.inverse) {
-      reason = pass
-        ? `Forbidden skill(s) were not used: ${expectedSkills.join(', ')}`
-        : `Forbidden skill(s) were used: ${matched.map((matcher) => matcher.name).join(', ')}. Actual skills: ${actualSummary}`;
-    } else if (pass) {
-      reason = `Observed required skill(s): ${expectedSkills.join(', ')}. Actual skills: ${actualSummary}`;
-    } else {
-      reason = `Missing required skill(s): ${missing.map((matcher) => matcher.name).join(', ')}. Actual skills: ${actualSummary}`;
-    }
-
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason,
-      assertion: params.assertion,
-    };
-  }
-
-  const { matcher } = expected;
-  const min = matcher.min ?? 1;
-  const max = matcher.max;
-  const matchingSkillCalls = skillCalls.filter((skillCall) => matchesSkill(skillCall, matcher));
-  const count = matchingSkillCalls.length;
-  const basePass = count >= min && (max === undefined || count <= max);
-  const pass = applyInverse(basePass, params.inverse);
-  const matcherLabel = matcher.pattern || matcher.name || '*';
-
-  let reason = `Matched skill "${matcherLabel}" ${count} time(s)`;
-  reason += max === undefined ? ` (expected at least ${min})` : ` (expected ${min}-${max})`;
-  if (matchingSkillCalls.length > 0) {
-    reason += `. Matches: ${matchingSkillCalls.map(formatSkillCall).join(', ')}`;
-  }
-
+  let reason: string;
   if (params.inverse) {
-    reason = basePass
-      ? `Skill "${matcherLabel}" matched ${count} time(s), which violates the inverse assertion`
-      : `Skill "${matcherLabel}" did not satisfy the forbidden match condition`;
+    reason = pass
+      ? `Forbidden skill(s) were not used: ${expectedSkills.join(', ')}`
+      : `Forbidden skill(s) were used: ${matched.map((matcher) => matcher.name).join(', ')}. Actual skills: ${actualSummary}`;
+  } else if (pass) {
+    reason = `Observed required skill(s): ${expectedSkills.join(', ')}. Actual skills: ${actualSummary}`;
+  } else {
+    reason = `Missing required skill(s): ${missing.map((matcher) => matcher.name).join(', ')}. Actual skills: ${actualSummary}`;
   }
 
   return {
@@ -151,4 +137,66 @@ export function handleSkillUsed(params: AssertionParams): GradingResult {
     reason,
     assertion: params.assertion,
   };
+}
+
+function handleCountSkillAssertion(
+  params: AssertionParams,
+  skillCalls: SkillCallEntry[],
+  actualSkills: string[],
+  matcher: SkillCountValue,
+): GradingResult {
+  const hasExplicitMin = matcher.min !== undefined;
+  const hasExplicitMax = matcher.max !== undefined;
+  const min = matcher.min ?? (hasExplicitMax ? 0 : 1);
+  const max = matcher.max;
+  const matchingSkillCalls = skillCalls.filter((skillCall) => matchesSkill(skillCall, matcher));
+  const count = matchingSkillCalls.length;
+  const matcherLabel = matcher.pattern || matcher.name || '*';
+
+  if (params.inverse) {
+    if (hasExplicitMin || (hasExplicitMax && max !== 0)) {
+      throw new Error(
+        'not-skill-used object assertions only support name/pattern with no count bounds, or max: 0',
+      );
+    }
+
+    const pass = count === 0;
+    const actualSummary = actualSkills.length > 0 ? actualSkills.join(', ') : '(none)';
+
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass
+        ? `Forbidden skill "${matcherLabel}" was not used. Actual skills: ${actualSummary}`
+        : `Forbidden skill "${matcherLabel}" was used ${count} time(s). Matches: ${matchingSkillCalls.map(formatSkillCall).join(', ')}`,
+      assertion: params.assertion,
+    };
+  }
+
+  const pass = count >= min && (max === undefined || count <= max);
+
+  let reason = `Matched skill "${matcherLabel}" ${count} time(s)`;
+  reason += max === undefined ? ` (expected at least ${min})` : ` (expected ${min}-${max})`;
+  if (matchingSkillCalls.length > 0) {
+    reason += `. Matches: ${matchingSkillCalls.map(formatSkillCall).join(', ')}`;
+  }
+
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason,
+    assertion: params.assertion,
+  };
+}
+
+export function handleSkillUsed(params: AssertionParams): GradingResult {
+  const skillCalls = getSkillCalls(params);
+  const actualSkills = skillCalls.map(formatSkillCall);
+  const expected = resolveSkillMatchers(params.renderedValue ?? params.assertion.value);
+
+  if (expected.kind === 'list') {
+    return handleListSkillAssertion(params, skillCalls, actualSkills, expected);
+  }
+
+  return handleCountSkillAssertion(params, skillCalls, actualSkills, expected.matcher);
 }

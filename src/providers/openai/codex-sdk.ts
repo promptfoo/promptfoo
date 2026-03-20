@@ -543,10 +543,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       const repoSkillIndex = normalizedPath.indexOf('.agents/skills/');
       if (repoSkillIndex !== -1) {
         const repoSkillPath = normalizedPath.slice(repoSkillIndex);
-        const repoMatch = repoSkillPath.match(/^\.agents\/skills\/([^/\s]+)(?:\/.*)?$/);
+        const repoMatch = repoSkillPath.match(/^\.agents\/skills\/([^/\s]+)\/SKILL\.md$/);
         if (repoMatch) {
-          const skillPath = `.agents/skills/${repoMatch[1]}/SKILL.md`;
-          matches.set(skillPath, { name: repoMatch[1], path: skillPath });
+          matches.set(repoSkillPath, { name: repoMatch[1], path: repoSkillPath });
         }
         continue;
       }
@@ -559,10 +558,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
 
       const relativeSkillPath = normalizedPath.slice(matchingRoot.length + 1);
-      const customRootMatch = relativeSkillPath.match(/^skills\/([^/\s]+)(?:\/.*)?$/);
+      const customRootMatch = relativeSkillPath.match(/^skills\/([^/\s]+)\/SKILL\.md$/);
       if (customRootMatch) {
-        const skillPath = `${matchingRoot}/skills/${customRootMatch[1]}/SKILL.md`;
-        matches.set(skillPath, { name: customRootMatch[1], path: skillPath });
+        matches.set(normalizedPath, { name: customRootMatch[1], path: normalizedPath });
       }
     }
 
@@ -590,19 +588,19 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         continue;
       }
 
-      const candidateTexts = [item.command, item.aggregated_output].filter(
-        (value): value is string => typeof value === 'string' && value.trim().length > 0,
-      );
+      const command =
+        typeof item.command === 'string' && item.command.trim() ? item.command : undefined;
+      if (!command) {
+        continue;
+      }
 
-      for (const candidateText of candidateTexts) {
-        for (const skillPath of this.extractSkillPathCandidates(candidateText, skillRootPrefixes)) {
-          const existing = skillCalls.get(skillPath.path) ?? {
-            name: skillPath.name,
-            path: skillPath.path,
-          };
+      for (const skillPath of this.extractSkillPathCandidates(command, skillRootPrefixes)) {
+        const existing = skillCalls.get(skillPath.path) ?? {
+          name: skillPath.name,
+          path: skillPath.path,
+        };
 
-          skillCalls.set(skillPath.path, existing);
-        }
+        skillCalls.set(skillPath.path, existing);
       }
     }
 
@@ -1044,13 +1042,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       return {};
     }
 
-    const candidateTexts = [item.command, item.aggregated_output].filter(
-      (value): value is string => typeof value === 'string' && value.trim().length > 0,
-    );
+    const command =
+      typeof item.command === 'string' && item.command.trim() ? item.command : undefined;
     const skillCandidates = new Map<string, { name: string; path: string }>();
 
-    for (const candidateText of candidateTexts) {
-      for (const skill of this.extractSkillPathCandidates(candidateText, skillRootPrefixes)) {
+    if (command) {
+      for (const skill of this.extractSkillPathCandidates(command, skillRootPrefixes)) {
         skillCandidates.set(skill.path, skill);
       }
     }

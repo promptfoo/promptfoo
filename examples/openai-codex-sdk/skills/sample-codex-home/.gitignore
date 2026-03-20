@@ -2,3 +2,5 @@ logs_*.sqlite
 sessions/
 skills/
 state_*.sqlite
+state_*.sqlite-shm
+state_*.sqlite-wal

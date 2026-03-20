@@ -515,7 +515,7 @@ providers:
 
 Codex loads [agent skills](https://developers.openai.com/codex/skills) from `.agents/skills/` directories in the `working_dir` hierarchy. Promptfoo does not enable skills via a provider-specific toggle; instead, you point `working_dir` at a repository that already contains the skill files you want Codex to discover.
 
-Promptfoo exposes inferred skill usage in `response.metadata.skillCalls`. Each entry is derived from Codex command traces that reference a local `SKILL.md` file:
+Promptfoo exposes inferred skill usage in `response.metadata.skillCalls`. Each entry is derived from Codex command text that directly references a local `SKILL.md` file:
 
 | Field    | Type   | Description                                           |
 | -------- | ------ | ----------------------------------------------------- |
@@ -551,7 +551,7 @@ The `CODEX_SKILLS_WORKING_DIR` and `CODEX_HOME_OVERRIDE` variables are optional.
 
 :::note
 
-`metadata.skillCalls` is a heuristic. The Codex SDK currently does not expose a first-class skill invocation event, so promptfoo infers skill usage when Codex reads `.agents/skills/.../SKILL.md` files during the run.
+`metadata.skillCalls` is a heuristic. The Codex SDK currently does not expose a first-class skill invocation event, so promptfoo infers skill usage from commands that directly reference `.agents/skills/.../SKILL.md` files during the run.
 
 :::
 

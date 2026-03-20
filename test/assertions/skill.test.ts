@@ -108,6 +108,81 @@ describe('skill-used assertion', () => {
     expect(result.reason).toContain('Forbidden skill(s) were used: token-skill');
   });
 
+  it('treats not-skill-used object assertions with no count bounds as forbidding any match', async () => {
+    const result = await runSkillAssertion({
+      type: 'not-skill-used',
+      value: {
+        pattern: 'token-*',
+      },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Forbidden skill "token-*" was used 1 time(s)');
+  });
+
+  it('fails not-skill-used object assertions with max: 0 when a matching skill is present', async () => {
+    const result = await runSkillAssertion({
+      type: 'not-skill-used',
+      value: {
+        pattern: 'token-*',
+        max: 0,
+      },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Forbidden skill "token-*" was used 1 time(s)');
+  });
+
+  it('passes not-skill-used object assertions with max: 0 when no matching skill is present', async () => {
+    const result = await runSkillAssertion({
+      type: 'not-skill-used',
+      value: {
+        pattern: 'missing-*',
+        max: 0,
+      },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.reason).toContain('Forbidden skill "missing-*" was not used');
+  });
+
+  it('rejects ambiguous not-skill-used count bounds other than max: 0', async () => {
+    await expect(
+      runSkillAssertion({
+        type: 'not-skill-used',
+        value: {
+          pattern: 'token-*',
+          max: 1,
+        },
+      }),
+    ).rejects.toThrow(
+      'not-skill-used object assertions only support name/pattern with no count bounds, or max: 0',
+    );
+  });
+
+  it('rejects invalid count bounds', async () => {
+    await expect(
+      runSkillAssertion({
+        type: 'skill-used',
+        value: {
+          pattern: 'token-*',
+          min: -1,
+        },
+      }),
+    ).rejects.toThrow('skill-used assertion object min must be a finite non-negative integer');
+
+    await expect(
+      runSkillAssertion({
+        type: 'skill-used',
+        value: {
+          pattern: 'token-*',
+          min: 2,
+          max: 1,
+        },
+      }),
+    ).rejects.toThrow('skill-used assertion object max must be greater than or equal to min');
+  });
+
   it('throws when object values omit name and pattern', async () => {
     await expect(
       runSkillAssertion({

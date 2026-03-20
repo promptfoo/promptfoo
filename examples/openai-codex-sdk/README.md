@@ -63,6 +63,7 @@ This example demonstrates evaluating a local Codex skill stored under `.agents/s
 ```
 
 If you run the config from a different working directory, set `CODEX_SKILLS_WORKING_DIR` and `CODEX_HOME_OVERRIDE` to absolute paths before invoking `promptfoo eval`.
+The default relative paths in these configs are intentionally subdirectory-relative for the `(cd skills && promptfoo eval)` workflow above.
 
 ## Key Features
 
