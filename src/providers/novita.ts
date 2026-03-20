@@ -1,6 +1,8 @@
 import { getEnvString } from '../envars';
 import { fetchWithProxy } from '../util/fetch/index';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiCompletionProvider } from './openai/completion';
+import { OpenAiEmbeddingProvider } from './openai/embedding';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
@@ -52,19 +54,25 @@ export function createNovitaProvider(
   const type = splits[1];
   const modelName = splits.slice(2).join(':');
 
-  const openaiOptions = {
+  const config = options.config?.config || {};
+
+  const novitaOptions = {
     ...options,
     config: {
-      ...(options.config || {}),
+      ...config,
       apiBaseUrl: 'https://api.novita.ai/openai',
       apiKeyEnvar: 'NOVITA_API_KEY',
     } as OpenAiCompletionOptions,
   };
 
   if (type === 'chat') {
-    return new OpenAiChatCompletionProvider(modelName, openaiOptions);
+    return new OpenAiChatCompletionProvider(modelName, novitaOptions);
+  } else if (type === 'completion') {
+    return new OpenAiCompletionProvider(modelName, novitaOptions);
+  } else if (type === 'embedding' || type === 'embeddings') {
+    return new OpenAiEmbeddingProvider(modelName, novitaOptions);
   }
 
   const defaultModel = splits.slice(1).join(':');
-  return new OpenAiChatCompletionProvider(defaultModel, openaiOptions);
+  return new OpenAiChatCompletionProvider(defaultModel, novitaOptions);
 }
