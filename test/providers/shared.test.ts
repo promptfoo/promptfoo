@@ -151,6 +151,48 @@ describe('Shared Provider Functions', () => {
       expect(cost).toBe(7.5);
     });
 
+    it('should use separate inputCost and outputCost if provided', () => {
+      const cost = calculateCost(
+        'model1',
+        { inputCost: 0.002, outputCost: 0.008 },
+        1000,
+        500,
+        models,
+      );
+      // 0.002 * 1000 + 0.008 * 500 = 2 + 4 = 6
+      expect(cost).toBe(6);
+    });
+
+    it('should prefer inputCost/outputCost over cost override', () => {
+      const cost = calculateCost(
+        'model1',
+        { cost: 0.005, inputCost: 0.001, outputCost: 0.01 },
+        1000,
+        500,
+        models,
+      );
+      // inputCost takes precedence: 0.001 * 1000 + 0.010 * 500 = 1 + 5 = 6
+      expect(cost).toBe(6);
+    });
+
+    it('should allow overriding only inputCost while outputCost falls back to cost', () => {
+      const cost = calculateCost('model1', { cost: 0.005, inputCost: 0.001 }, 1000, 500, models);
+      // inputCost: 0.001 * 1000 = 1, outputCost uses config.cost: 0.005 * 500 = 2.5
+      expect(cost).toBe(3.5);
+    });
+
+    it('should allow overriding only outputCost while inputCost falls back to cost', () => {
+      const cost = calculateCost('model1', { cost: 0.005, outputCost: 0.01 }, 1000, 500, models);
+      // inputCost uses config.cost: 0.005 * 1000 = 5, outputCost: 0.010 * 500 = 5
+      expect(cost).toBe(10);
+    });
+
+    it('should fall back to model cost when only inputCost is provided', () => {
+      const cost = calculateCost('model1', { inputCost: 0.002 }, 1000, 500, models);
+      // inputCost: 0.002 * 1000 = 2, outputCost uses model default: 0.002 * 500 = 1
+      expect(cost).toBe(3);
+    });
+
     it('should return undefined if model not found', () => {
       const cost = calculateCost('nonexistent', {}, 1000, 500, models);
       expect(cost).toBeUndefined();

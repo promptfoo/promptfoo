@@ -276,8 +276,10 @@ export function calculateAnthropicCost(
     // Tiered pricing for Claude Sonnet 4.5+:
     // - If prompt > 200k tokens: $6/MTok input, $22.50/MTok output
     // - Otherwise: $3/MTok input, $15/MTok output
-    const inputCost = config.cost ?? (promptTokens > 200_000 ? 6 / 1e6 : 3 / 1e6);
-    const outputCost = config.cost ?? (promptTokens > 200_000 ? 22.5 / 1e6 : 15 / 1e6);
+    const inputCost =
+      config.inputCost ?? config.cost ?? (promptTokens > 200_000 ? 6 / 1e6 : 3 / 1e6);
+    const outputCost =
+      config.outputCost ?? config.cost ?? (promptTokens > 200_000 ? 22.5 / 1e6 : 15 / 1e6);
 
     return inputCost * promptTokens + outputCost * completionTokens;
   }

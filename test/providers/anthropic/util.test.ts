@@ -172,6 +172,28 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(5200); // (0.02 * 250,000) + (0.02 * 10,000) = 5000 + 200 = 5200
     });
 
+    it('should use separate inputCost and outputCost overrides', () => {
+      const cost = calculateAnthropicCost(
+        'claude-sonnet-4-5-20250929',
+        { inputCost: 0.000003, outputCost: 0.000015 },
+        250_000,
+        10_000,
+      );
+      // 0.000003 * 250,000 + 0.000015 * 10,000 = 0.75 + 0.15 = 0.9
+      expect(cost).toBe(0.9);
+    });
+
+    it('should prefer inputCost/outputCost over cost override', () => {
+      const cost = calculateAnthropicCost(
+        'claude-sonnet-4-5-20250929',
+        { cost: 0.02, inputCost: 0.000003, outputCost: 0.000015 },
+        250_000,
+        10_000,
+      );
+      // inputCost/outputCost take precedence over cost
+      expect(cost).toBe(0.9);
+    });
+
     it('should return undefined for missing model', () => {
       const cost = calculateAnthropicCost('non-existent-model', { cost: 0.015 });
 
