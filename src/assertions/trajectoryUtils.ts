@@ -13,6 +13,7 @@ export interface TrajectoryStepMatcher {
 
 export interface TrajectoryStep {
   aliases: string[];
+  args?: unknown;
   attributes: TrajectoryAttributes;
   endTime?: number;
   name: string;
@@ -35,6 +36,34 @@ const TOOL_ATTRIBUTE_KEYS = [
   'agent.tool',
   'agent.tool_name',
   'agent.toolName',
+] as const;
+
+const TOOL_ARGUMENT_ATTRIBUTE_KEYS = [
+  'tool.arguments',
+  'tool.args',
+  'tool.input',
+  'tool_arguments',
+  'tool_args',
+  'tool_input',
+  'function.arguments',
+  'function.args',
+  'function.input',
+  'function_arguments',
+  'function_args',
+  'gen_ai.tool.arguments',
+  'gen_ai.tool.args',
+  'gen_ai.tool.input',
+  'gen_ai.tool.call.arguments',
+  'gen_ai.tool.call.args',
+  'agent.tool.arguments',
+  'agent.tool.args',
+  'agent.tool.input',
+  'codex.mcp.arguments',
+  'codex.mcp.args',
+  'codex.mcp.input',
+  'arguments',
+  'args',
+  'input',
 ] as const;
 
 const COMMAND_ATTRIBUTE_KEYS = [
@@ -82,6 +111,31 @@ function getStringAttribute(
       return value.trim();
     }
   }
+  return undefined;
+}
+
+function normalizeStructuredAttribute(value: unknown): unknown {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return trimmed;
+    }
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'object') {
+    return value;
+  }
+
   return undefined;
 }
 
@@ -142,6 +196,34 @@ function extractToolName(span: TraceSpan): string | undefined {
     const slashIndex = span.name.lastIndexOf('/');
     if (slashIndex !== -1 && slashIndex < span.name.length - 1) {
       return span.name.slice(slashIndex + 1).trim();
+    }
+  }
+
+  return undefined;
+}
+
+function extractToolArgs(span: TraceSpan): unknown {
+  const attributes = span.attributes || {};
+
+  for (const key of TOOL_ARGUMENT_ATTRIBUTE_KEYS) {
+    const value = normalizeStructuredAttribute(attributes[key]);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+
+  for (const [key, rawValue] of Object.entries(attributes)) {
+    if (/result|output|error|status/i.test(key)) {
+      continue;
+    }
+
+    if (!/(^|[._])(arguments|args|input)($|[._])/i.test(key)) {
+      continue;
+    }
+
+    const value = normalizeStructuredAttribute(rawValue);
+    if (value !== undefined) {
+      return value;
     }
   }
 
@@ -236,11 +318,13 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
       let type: TrajectoryStepType = 'span';
       let name = span.name;
       const aliases = new Set<string>([span.name]);
+      let args: unknown;
 
       if (toolName) {
         type = 'tool';
         name = toolName;
         aliases.add(toolName);
+        args = extractToolArgs(span);
       } else if (command) {
         type = 'command';
         name = command;
@@ -265,6 +349,7 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
 
       return {
         aliases: [...aliases],
+        ...(args === undefined ? {} : { args }),
         attributes: span.attributes || {},
         endTime: span.endTime,
         name,
@@ -322,6 +407,21 @@ export function formatTrajectoryStep(step: TrajectoryStep): string {
   return `${step.type}:${step.name}`;
 }
 
+export function formatTrajectoryArgs(args: unknown): string {
+  if (args === undefined) {
+    return '(none)';
+  }
+
+  try {
+    const serialized = JSON.stringify(args);
+    if (serialized !== undefined) {
+      return serialized;
+    }
+  } catch {}
+
+  return String(args);
+}
+
 function compactJudgeTrajectorySteps(steps: JudgeTrajectoryStep[]): JudgeTrajectoryStep[] {
   const compacted: JudgeTrajectoryStep[] = [];
 
@@ -363,7 +463,7 @@ export function summarizeTrajectoryForJudge(trace: TraceData): string {
     index: index + 1,
     type: step.type,
     name: step.name,
-    ...(step.spanName !== step.name ? { spanName: step.spanName } : {}),
+    ...(step.spanName === step.name ? {} : { spanName: step.spanName }),
     ...(getTrajectoryStepStatus(step) ? { status: getTrajectoryStepStatus(step) } : {}),
   }));
   const compactedSteps = compactJudgeTrajectorySteps(rawSteps);

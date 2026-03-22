@@ -1,6 +1,9 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { matchesTrajectoryGoalSuccess } from '../matchers';
 import {
   extractTrajectorySteps,
+  formatTrajectoryArgs,
   formatTrajectoryStep,
   matchesTrajectoryStep,
   normalizeTrajectoryMatcher,
@@ -22,6 +25,12 @@ interface TrajectorySequenceValue {
 
 interface TrajectoryGoalSuccessValue {
   goal: string;
+}
+
+interface TrajectoryToolArgsMatchValue extends TrajectoryStepMatcher {
+  args?: unknown;
+  arguments?: unknown;
+  mode?: 'exact' | 'partial';
 }
 
 function getTraceOrThrow(params: AssertionParams) {
@@ -181,10 +190,10 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
   const matcherLabel = matcher.pattern || matcher.name || '*';
 
   let reason = `Matched tool "${matcherLabel}" ${count} time(s)`;
-  if (max !== undefined) {
-    reason += ` (expected ${min}-${max})`;
-  } else {
+  if (max === undefined) {
     reason += ` (expected at least ${min})`;
+  } else {
+    reason += ` (expected ${min}-${max})`;
   }
   if (matchingSteps.length > 0) {
     reason += `. Matches: ${matchingSteps.map(formatTrajectoryStep).join(', ')}`;
@@ -221,6 +230,85 @@ function resolveSequenceValue(value: unknown): TrajectorySequenceValue {
   }
 
   throw new Error('trajectory:tool-sequence assertion must have an array or object value');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function matchesExpectedArgsPartial(actual: unknown, expected: unknown): boolean {
+  if (Array.isArray(expected)) {
+    return (
+      Array.isArray(actual) &&
+      actual.length === expected.length &&
+      expected.every((item, index) => matchesExpectedArgsPartial(actual[index], item))
+    );
+  }
+
+  if (isRecord(expected)) {
+    if (!isRecord(actual)) {
+      return false;
+    }
+
+    return Object.entries(expected).every(
+      ([key, expectedValue]) =>
+        Object.prototype.hasOwnProperty.call(actual, key) &&
+        matchesExpectedArgsPartial(actual[key], expectedValue),
+    );
+  }
+
+  return isDeepStrictEqual(actual, expected);
+}
+
+function matchesToolArgs(
+  actual: unknown,
+  expected: unknown,
+  mode: NonNullable<TrajectoryToolArgsMatchValue['mode']>,
+): boolean {
+  if (mode === 'exact') {
+    return isDeepStrictEqual(actual, expected);
+  }
+
+  return matchesExpectedArgsPartial(actual, expected);
+}
+
+function resolveToolArgsMatchMode(
+  mode: TrajectoryToolArgsMatchValue['mode'],
+): NonNullable<TrajectoryToolArgsMatchValue['mode']> {
+  if (mode === undefined) {
+    return 'partial';
+  }
+
+  if (mode === 'partial' || mode === 'exact') {
+    return mode;
+  }
+
+  throw new Error('trajectory:tool-args-match assertion mode must be "partial" or "exact"');
+}
+
+function resolveToolArgsMatchValue(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('trajectory:tool-args-match assertion must have an object value');
+  }
+
+  const matcher = normalizeTrajectoryMatcher(value as TrajectoryStepMatcher, 'tool');
+  requireNamedTrajectoryMatcher(matcher, 'trajectory:tool-args-match');
+
+  const expectedArgs = Object.prototype.hasOwnProperty.call(value, 'args')
+    ? (value as TrajectoryToolArgsMatchValue).args
+    : (value as TrajectoryToolArgsMatchValue).arguments;
+
+  if (expectedArgs === undefined) {
+    throw new Error(
+      'trajectory:tool-args-match assertion must include an args or arguments property',
+    );
+  }
+
+  return {
+    matcher,
+    expectedArgs,
+    mode: resolveToolArgsMatchMode((value as TrajectoryToolArgsMatchValue).mode),
+  } as const;
 }
 
 export const handleTrajectoryToolSequence = (params: AssertionParams): GradingResult => {
@@ -284,6 +372,52 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
     reason = basePass
       ? `Forbidden tool sequence was observed. Actual tools: ${formatStepList(actualTools)}`
       : `Forbidden tool sequence was not observed`;
+  }
+
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason,
+    assertion: params.assertion,
+  };
+};
+
+export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingResult => {
+  const trace = getTraceOrThrow(params);
+  const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
+  const { matcher, expectedArgs, mode } = resolveToolArgsMatchValue(
+    params.renderedValue ?? params.assertion.value,
+  );
+  const matcherLabel = matcher.pattern || matcher.name || '*';
+  const actualTools = toolSteps.map(formatTrajectoryStep);
+  const matchingSteps = toolSteps.filter((step) => matchesTrajectoryStep(step, matcher));
+  const stepsWithArgs = matchingSteps.filter((step) => step.args !== undefined);
+  const matchedStep = stepsWithArgs.find((step) => matchesToolArgs(step.args, expectedArgs, mode));
+  const basePass = matchedStep !== undefined;
+  const pass = applyInverse(basePass, params.inverse);
+  const expectedArgsLabel = formatTrajectoryArgs(expectedArgs);
+  const observedArgsLabel =
+    stepsWithArgs.length > 0
+      ? stepsWithArgs.map((step) => formatTrajectoryArgs(step.args)).join(', ')
+      : '(none)';
+
+  let reason: string;
+  if (params.inverse) {
+    if (basePass) {
+      reason = `Forbidden argument match for tool "${matcherLabel}" was observed on ${formatTrajectoryStep(matchedStep!)}. Args: ${formatTrajectoryArgs(matchedStep!.args)}`;
+    } else if (matchingSteps.length === 0) {
+      reason = `Forbidden argument match for tool "${matcherLabel}" was not observed because no tool call matched it`;
+    } else {
+      reason = `Forbidden argument match for tool "${matcherLabel}" was not observed. Observed args: ${observedArgsLabel}`;
+    }
+  } else if (basePass) {
+    reason = `Tool "${matcherLabel}" matched expected arguments (${mode}) on ${formatTrajectoryStep(matchedStep!)}. Args: ${formatTrajectoryArgs(matchedStep!.args)}`;
+  } else if (matchingSteps.length === 0) {
+    reason = `No tool call matched "${matcherLabel}". Actual tools: ${formatStepList(actualTools)}`;
+  } else if (stepsWithArgs.length === 0) {
+    reason = `Tool "${matcherLabel}" was observed but no arguments were captured. Actual tools: ${formatStepList(actualTools)}`;
+  } else {
+    reason = `No call to tool "${matcherLabel}" matched expected arguments (${mode}): ${expectedArgsLabel}. Observed args: ${observedArgsLabel}`;
   }
 
   return {

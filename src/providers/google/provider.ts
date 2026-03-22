@@ -577,9 +577,9 @@ export class GoogleProvider extends GoogleGenericProvider {
 
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
-        tokenUsage.completion != null
-          ? tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0)
-          : undefined;
+        tokenUsage.completion == null
+          ? undefined
+          : tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
       const cost = cached
         ? undefined
         : calculateGoogleCost(

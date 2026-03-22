@@ -16,10 +16,10 @@ The OpenAI Codex SDK is a proprietary package and is not installed by default. Y
 
 ## Provider IDs
 
-You can reference this provider using either:
+You can reference this provider using either base ID, and you can inline the model in the provider path:
 
-- `openai:codex-sdk` (full name)
-- `openai:codex` (alias)
+- `openai:codex-sdk` or `openai:codex-sdk:<model name>` (full name)
+- `openai:codex` or `openai:codex:<model name>` (alias)
 
 ## Installation
 
@@ -75,12 +75,19 @@ Specify which OpenAI model to use for code generation:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:codex-sdk
-    config:
-      model: codex # Or any supported model
+  - openai:codex:gpt-5.4
 
 prompts:
   - 'Write a TypeScript function that validates email addresses'
+```
+
+If you need additional Codex settings, you can still set the model via `config.model`:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: gpt-5.4
 ```
 
 ### With Working Directory

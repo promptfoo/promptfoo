@@ -487,15 +487,13 @@ export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
 export function getEnvInt(key: EnvVarKey): number | undefined;
 export function getEnvInt(key: EnvVarKey, defaultValue: number): number;
 export function getEnvInt(key: EnvVarKey, defaultValue?: number): number | undefined {
-  const value = getEnvString(key) || defaultValue;
-  if (typeof value === 'number') {
-    return Math.floor(value);
+  const str = getEnvString(key);
+  if (str === undefined || str === '') {
+    return defaultValue;
   }
-  if (typeof value === 'string') {
-    const parsedValue = Number.parseInt(value, 10);
-    if (!Number.isNaN(parsedValue)) {
-      return parsedValue;
-    }
+  const parsedValue = Number.parseInt(str, 10);
+  if (!Number.isNaN(parsedValue)) {
+    return parsedValue;
   }
   return defaultValue;
 }
@@ -509,15 +507,13 @@ export function getEnvInt(key: EnvVarKey, defaultValue?: number): number | undef
 export function getEnvFloat(key: EnvVarKey): number | undefined;
 export function getEnvFloat(key: EnvVarKey, defaultValue: number): number;
 export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | undefined {
-  const value = getEnvString(key) || defaultValue;
-  if (typeof value === 'number') {
-    return value;
+  const str = getEnvString(key);
+  if (str === undefined || str === '') {
+    return defaultValue;
   }
-  if (typeof value === 'string') {
-    const parsedValue = Number.parseFloat(value);
-    if (!Number.isNaN(parsedValue)) {
-      return parsedValue;
-    }
+  const parsedValue = Number.parseFloat(str);
+  if (!Number.isNaN(parsedValue)) {
+    return parsedValue;
   }
   return defaultValue;
 }

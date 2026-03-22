@@ -1165,14 +1165,19 @@ function ResultsTable({
                     <div className="summary">
                       <div
                         className={`highlight ${
-                          passRates[idx]?.filtered !== null
-                            ? `success-${Math.round((passRates[idx].filtered ?? 0) / 20) * 20}`
-                            : passRates[idx]?.total
+                          passRates[idx]?.filtered === null
+                            ? passRates[idx]?.total
                               ? `success-${Math.round(passRates[idx].total / 20) * 20}`
                               : 'success-0'
+                            : `success-${Math.round((passRates[idx].filtered ?? 0) / 20) * 20}`
                         }`}
                       >
-                        {passRates[idx]?.filtered !== null ? (
+                        {passRates[idx]?.filtered === null ? (
+                          <>
+                            <strong>{pct}% passing</strong> ({passingTestCounts[idx]?.total}/
+                            {testCounts[idx]?.total} cases)
+                          </>
+                        ) : (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span>
@@ -1186,11 +1191,6 @@ function ResultsTable({
                               {`Filtered: ${passingTestCounts[idx]?.filtered}/${testCounts[idx]?.filtered} passing (${passRates[idx].filtered?.toFixed(2)}%). Total: ${passingTestCounts[idx]?.total}/${testCounts[idx]?.total} passing (${passRates[idx]?.total?.toFixed(2)}%)`}
                             </TooltipContent>
                           </Tooltip>
-                        ) : (
-                          <>
-                            <strong>{pct}% passing</strong> ({passingTestCounts[idx]?.total}/
-                            {testCounts[idx]?.total} cases)
-                          </>
                         )}
                       </div>
                     </div>
@@ -1736,7 +1736,7 @@ function ResultsTable({
             <NumberInput
               value={pagination.pageIndex + 1}
               onChange={(v) => {
-                const page = v !== undefined ? v - 1 : null;
+                const page = v === undefined ? null : v - 1;
                 if (page !== null && page >= 0 && page < pageCount) {
                   setPagination((prev) => ({
                     ...prev,
