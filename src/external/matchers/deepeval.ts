@@ -46,12 +46,13 @@ export async function matchesConversationRelevance(
     'conversation relevancy check',
   );
 
-  // First, render any variables within the messages themselves
+  // Messages contain runtime data (model output in msg.output, conversation prompts in
+  // msg.input) and must NOT be rendered as Nunjucks templates. Rendering untrusted model
+  // output as a template enables SSTI — credential exfiltration via {{env.SECRET}} and
+  // RCE via {{range.constructor(...)()}}. Pass messages through as data only.
   const renderedMessages = messages.map((msg) => ({
-    input:
-      typeof msg.input === 'string' && vars ? nunjucks.renderString(msg.input, vars) : msg.input,
-    output:
-      typeof msg.output === 'string' && vars ? nunjucks.renderString(msg.output, vars) : msg.output,
+    input: msg.input,
+    output: msg.output,
   }));
 
   // Convert messages to the format expected by ConversationRelevancyTemplate
