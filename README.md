@@ -1,5 +1,7 @@
 # Promptfoo: LLM evals & red teaming
 
+[English](README.md) | [中文版](README.zh.md)
+
 <p align="center">
   <a href="https://npmjs.com/package/promptfoo"><img src="https://img.shields.io/npm/v/promptfoo" alt="npm"></a>
   <a href="https://npmjs.com/package/promptfoo"><img src="https://img.shields.io/npm/dm/promptfoo" alt="npm"></a>
