@@ -102,6 +102,60 @@ describe('OpenAI Provider', () => {
       expect(mockClient.beta.threads.messages.retrieve).toHaveBeenCalledTimes(1);
     });
 
+    it('should preserve an explicit temperature of 0', async () => {
+      const mockRun = {
+        id: 'run_123',
+        thread_id: 'thread_123',
+        status: 'completed',
+      };
+
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_1',
+            step_details: {
+              type: 'message_creation',
+              message_creation: {
+                message_id: 'msg_1',
+              },
+            },
+          },
+        ],
+      };
+
+      const mockMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'text',
+            text: {
+              value: 'Test response',
+            },
+          },
+        ],
+      };
+
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+      mockClient.beta.threads.messages.retrieve.mockResolvedValue(mockMessage);
+
+      const provider = new OpenAiAssistantProvider('test-assistant-id', {
+        config: {
+          apiKey: 'test-key',
+          temperature: 0,
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(mockClient.beta.threads.createAndRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          temperature: 0,
+        }),
+      );
+    });
+
     it('should handle function calling', async () => {
       const mockRun = {
         id: 'run_123',
