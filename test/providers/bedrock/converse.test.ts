@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
+import * as genaiTracer from '../../../src/tracing/genaiTracer';
 import type { ContentBlock, StopReason } from '@aws-sdk/client-bedrock-runtime';
 
 // Define mock module type
@@ -894,6 +895,51 @@ Third line`;
           }),
         }),
       );
+    });
+
+    it('should keep tracing inference params aligned with the actual request payload', async () => {
+      let capturedSpanContext: Record<string, unknown> | undefined;
+      const spanSpy = vi
+        .spyOn(genaiTracer, 'withGenAISpan')
+        .mockImplementation(async (spanContext: any, fn: any) => {
+          capturedSpanContext = spanContext;
+          return await fn();
+        });
+
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          maxTokens: 2048,
+          temperature: 0.5,
+          topP: 0.9,
+          stopSequences: ['END'],
+          reasoningConfig: {
+            type: 'enabled',
+            maxReasoningEffort: 'high',
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inferenceConfig: {
+            stopSequences: ['END'],
+          },
+        }),
+      );
+      expect(capturedSpanContext?.maxTokens).toBeUndefined();
+      expect(capturedSpanContext?.temperature).toBeUndefined();
+      expect(capturedSpanContext?.topP).toBeUndefined();
+      expect(capturedSpanContext?.stopSequences).toEqual(['END']);
+
+      spanSpy.mockRestore();
     });
   });
 
