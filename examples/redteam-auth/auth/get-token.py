@@ -1,5 +1,5 @@
-import os
 import json
+import os
 import time
 import urllib.parse
 import urllib.request
@@ -9,7 +9,9 @@ def get_auth(context):
     token_url = "https://example-app.promptfoo.app/oauth/token"
     vars = context.get("vars", {})
     client_id = os.environ.get("PROMPTFOO_TARGET_CLIENT_ID") or vars.get("clientId")
-    client_secret = os.environ.get("PROMPTFOO_TARGET_CLIENT_SECRET") or vars.get("clientSecret")
+    client_secret = os.environ.get("PROMPTFOO_TARGET_CLIENT_SECRET") or vars.get(
+        "clientSecret"
+    )
     scopes = os.environ.get("PROMPTFOO_TARGET_SCOPES") or vars.get("scopes")
 
     body = {
