@@ -541,13 +541,6 @@ export async function tryUnblocking({
   unblockingPrompt?: string;
 }> {
   try {
-    // Check if the server supports unblocking feature
-    const { checkServerFeatureSupport } = await import('../../util/server');
-    const supportsUnblocking = await checkServerFeatureSupport(
-      'blocking-question-analysis',
-      '2025-06-16T14:49:11-07:00',
-    );
-
     // Unblocking is disabled by default, enable via environment variable
     if (!getEnvBool('PROMPTFOO_ENABLE_UNBLOCKING')) {
       logger.debug(
@@ -558,6 +551,13 @@ export async function tryUnblocking({
         success: false,
       };
     }
+
+    // Check if the server supports unblocking feature
+    const { checkServerFeatureSupport } = await import('../../util/server');
+    const supportsUnblocking = await checkServerFeatureSupport(
+      'blocking-question-analysis',
+      '2025-06-16T14:49:11-07:00',
+    );
 
     if (!supportsUnblocking) {
       logger.debug('[Unblocking] Server does not support unblocking, skipping gracefully');

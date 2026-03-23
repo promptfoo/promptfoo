@@ -24,6 +24,7 @@ import type {
 
 // Hoisted mocks for class constructor and loadApiProviders
 const mockLoadApiProviders = vi.hoisted(() => vi.fn());
+const mockCheckServerFeatureSupport = vi.hoisted(() => vi.fn());
 // Create a hoisted mock class that can be instantiated with `new`
 const mockOpenAiInstances: any[] = [];
 const MockOpenAiChatCompletionProvider = vi.hoisted(() => {
@@ -78,9 +79,13 @@ vi.mock('../../../src/providers/openai/chat', () => ({
 vi.mock('../../../src/providers/index', () => ({
   loadApiProviders: mockLoadApiProviders,
 }));
+vi.mock('../../../src/util/server', () => ({
+  checkServerFeatureSupport: mockCheckServerFeatureSupport,
+}));
 
 const mockedSleep = vi.mocked(sleep);
 const mockedLoadApiProviders = mockLoadApiProviders;
+const mockedCheckServerFeatureSupport = mockCheckServerFeatureSupport;
 const _mockedOpenAiProvider = MockOpenAiChatCompletionProvider;
 
 describe('shared redteam provider utilities', () => {
@@ -91,6 +96,7 @@ describe('shared redteam provider utilities', () => {
     // Reset specific mocks
     mockedSleep.mockReset();
     mockedLoadApiProviders.mockReset();
+    mockedCheckServerFeatureSupport.mockReset();
 
     // Clear the instances array
     mockOpenAiInstances.length = 0;
@@ -795,15 +801,12 @@ describe('shared redteam provider utilities', () => {
 
       expect(result.success).toBe(false);
       expect(result.unblockingPrompt).toBeUndefined();
+      expect(mockedCheckServerFeatureSupport).not.toHaveBeenCalled();
     });
 
-    // Skip: This test times out because tryUnblocking makes a real network call when env flag is set.
-    // The first test already verifies the short-circuit behavior when flag is not set.
-    it.skip('does not short-circuit when PROMPTFOO_ENABLE_UNBLOCKING=true', async () => {
+    it('checks server support when PROMPTFOO_ENABLE_UNBLOCKING=true', async () => {
       process.env.PROMPTFOO_ENABLE_UNBLOCKING = 'true';
-
-      // Spy on logger to verify we don't see the "disabled by default" message
-      const loggerSpy = vi.spyOn((await import('../../../src/logger')).default, 'debug');
+      mockedCheckServerFeatureSupport.mockResolvedValue(false);
 
       const result = await tryUnblocking({
         messages: [],
@@ -812,14 +815,11 @@ describe('shared redteam provider utilities', () => {
         purpose: 'test-purpose',
       });
 
-      // Verify we did NOT log the "disabled by default" message
-      expect(loggerSpy).not.toHaveBeenCalledWith(expect.stringContaining('Disabled by default'));
-
-      // The function should still return false (because server feature check will fail in test env)
-      // but for a different reason than the env var check
       expect(result.success).toBe(false);
-
-      loggerSpy.mockRestore();
+      expect(mockedCheckServerFeatureSupport).toHaveBeenCalledWith(
+        'blocking-question-analysis',
+        '2025-06-16T14:49:11-07:00',
+      );
     });
   });
 });
