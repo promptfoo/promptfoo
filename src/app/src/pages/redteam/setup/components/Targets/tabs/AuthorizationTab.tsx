@@ -484,9 +484,16 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                   placeholder="./auth/get-token.ts"
                 />
                 <p className="text-sm text-muted-foreground">
-                  JavaScript and TypeScript files should export a default function. Python files
-                  should define <code>get_auth</code>. The returned token is available as{' '}
-                  <code>{'{{token}}'}</code> in headers, query params, bodies, and raw requests.
+                  Load a token from a JavaScript, TypeScript, or Python auth file. See{' '}
+                  <a
+                    href="https://www.promptfoo.dev/docs/providers/http/#file-based-authentication"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    docs
+                  </a>{' '}
+                  for details.
                 </p>
               </div>
             </div>
