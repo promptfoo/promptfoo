@@ -165,8 +165,8 @@ export class CrescendoProvider implements ApiProvider {
     // Create a copy of config to avoid mutating the original
     this.config = { ...config };
     // Support backwards compatibility: use maxRounds if maxTurns is not provided
-    this.maxTurns = config.maxTurns || config.maxRounds || DEFAULT_MAX_TURNS;
-    this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
+    this.maxTurns = config.maxTurns ?? config.maxRounds ?? DEFAULT_MAX_TURNS;
+    this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
 
     // Cap turns for unauthenticated users
     if (!isLoggedIntoCloud()) {

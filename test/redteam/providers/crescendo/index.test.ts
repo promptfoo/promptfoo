@@ -242,6 +242,30 @@ describe('CrescendoProvider', () => {
     expect(provider['maxTurns']).toBe(12);
   });
 
+  it('should preserve explicit zero values for maxTurns and maxBacktracks', () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 0,
+      maxBacktracks: 0,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+
+    expect(provider['maxTurns']).toBe(0);
+    expect(provider['maxBacktracks']).toBe(0);
+  });
+
+  it('should preserve maxRounds when it is explicitly set to zero', () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxRounds: 0,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+
+    expect(provider['maxTurns']).toBe(0);
+  });
+
   it('should return correct provider id', () => {
     expect(crescendoProvider.id()).toBe('promptfoo:redteam:crescendo');
   });
