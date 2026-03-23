@@ -866,6 +866,35 @@ Third line`;
         }),
       );
     });
+
+    it('should preserve explicit zero-valued inference parameters over env fallbacks', async () => {
+      process.env.AWS_BEDROCK_MAX_TOKENS = '4096';
+      process.env.AWS_BEDROCK_TOP_P = '0.8';
+
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          maxTokens: 0,
+          topP: 0,
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inferenceConfig: expect.objectContaining({
+            maxTokens: 0,
+            topP: 0,
+          }),
+        }),
+      );
+    });
   });
 
   describe('performance and service tier configuration', () => {

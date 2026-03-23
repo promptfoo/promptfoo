@@ -771,15 +771,15 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
     // Get potential values
     const maxTokensValue =
-      this.config.maxTokens ||
-      this.config.max_tokens ||
-      getEnvInt('AWS_BEDROCK_MAX_TOKENS') ||
+      this.config.maxTokens ??
+      this.config.max_tokens ??
+      getEnvInt('AWS_BEDROCK_MAX_TOKENS') ??
       undefined;
 
     const temperatureValue =
       this.config.temperature ?? getEnvFloat('AWS_BEDROCK_TEMPERATURE') ?? undefined;
 
-    const topPValue = this.config.topP || this.config.top_p || getEnvFloat('AWS_BEDROCK_TOP_P');
+    const topPValue = this.config.topP ?? this.config.top_p ?? getEnvFloat('AWS_BEDROCK_TOP_P');
 
     let stopSequences = this.config.stopSequences || this.config.stop;
     if (!stopSequences) {
@@ -917,13 +917,13 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Get inference config for tracing context
     const maxTokens =
-      this.config.maxTokens ||
-      this.config.max_tokens ||
-      getEnvInt('AWS_BEDROCK_MAX_TOKENS') ||
+      this.config.maxTokens ??
+      this.config.max_tokens ??
+      getEnvInt('AWS_BEDROCK_MAX_TOKENS') ??
       undefined;
     const temperature =
       this.config.temperature ?? getEnvFloat('AWS_BEDROCK_TEMPERATURE') ?? undefined;
-    const topP = this.config.topP || this.config.top_p || getEnvFloat('AWS_BEDROCK_TOP_P');
+    const topP = this.config.topP ?? this.config.top_p ?? getEnvFloat('AWS_BEDROCK_TOP_P');
     const stopSequences = this.config.stopSequences || this.config.stop;
 
     // Set up tracing context
