@@ -6473,7 +6473,7 @@ describe('HttpProvider - File Auth', () => {
 
     const rawRequestCall = vi
       .mocked(fetchWithCache)
-      .mock.calls.find((call) => String(call[0]).includes('http://example.com/chat'));
+      .mock.calls.find((call) => String(call[0]) === 'http://example.com/chat');
     expect(rawRequestCall).toBeDefined();
     expect(rawRequestCall?.[1]).toEqual(
       expect.objectContaining({
