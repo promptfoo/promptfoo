@@ -39,6 +39,32 @@ Simple code generation without file system access.
 (cd basic && promptfoo eval)
 ```
 
+### Skills Testing
+
+This example demonstrates evaluating a local Codex skill stored under `.agents/skills/`.
+
+- **Local skill discovery**: Codex discovers `SKILL.md` from the sample project's `.agents/skills/` directory
+- **Skill assertions**: Verifies confirmed skill usage with the `skill-used` assertion over normalized `metadata.skillCalls`
+- **Trace assertions**: `promptfooconfig.tracing.yaml` enables OTEL deep tracing and asserts on the traced command that reads `SKILL.md`
+- **Isolated Codex home**: Uses a project-local `CODEX_HOME` so personal skills and config do not leak into the eval
+- **Realistic shell environment**: The tracing config keeps a normal shell `PATH` available while overriding `CODEX_HOME`, so traced skill evals do not waste turns on missing `cat` or `sed`
+
+`metadata.skillCalls` only includes confirmed successful skill reads. When Codex references a skill path but the command fails, Promptfoo records that separately as `metadata.attemptedSkillCalls` for debugging.
+
+**Location**: `./skills/`
+
+**Usage**:
+
+```bash
+(cd skills && promptfoo eval)
+
+# Trace the skill's internal command activity
+(cd skills && promptfoo eval -c promptfooconfig.tracing.yaml)
+```
+
+If you run the config from a different working directory, set `CODEX_SKILLS_WORKING_DIR` and `CODEX_HOME_OVERRIDE` to absolute paths before invoking `promptfoo eval`.
+The default relative paths in these configs are intentionally subdirectory-relative for the `(cd skills && promptfoo eval)` workflow above.
+
 ## Key Features
 
 - **Thread Persistence**: Conversations saved to `~/.codex/sessions`

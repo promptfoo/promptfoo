@@ -33,6 +33,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
+  SkillCallEntry,
 } from '../types/index';
 
 /**
@@ -46,6 +47,32 @@ export interface ToolCallEntry {
   output: unknown;
   is_error: boolean;
   parentToolUseId: string | null;
+}
+
+function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
+  return toolCalls
+    .filter((toolCall) => toolCall.name === 'Skill')
+    .flatMap((toolCall) => {
+      const skillName =
+        toolCall.input &&
+        typeof toolCall.input === 'object' &&
+        typeof (toolCall.input as Record<string, unknown>).skill === 'string'
+          ? ((toolCall.input as Record<string, unknown>).skill as string).trim()
+          : '';
+
+      if (!skillName) {
+        return [];
+      }
+
+      return [
+        {
+          name: skillName,
+          input: toolCall.input,
+          is_error: toolCall.is_error,
+          source: 'tool' as const,
+        },
+      ];
+    });
 }
 
 /**
@@ -928,6 +955,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const sessionId = msg.session_id;
 
           const toolCallsArray = Array.from(toolCallsMap.values());
+          const skillCalls = deriveSkillCalls(toolCallsArray);
 
           if (msg.subtype === 'success') {
             logger.debug(`Claude Agent SDK response: ${raw}`);
@@ -941,6 +969,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               raw,
               sessionId,
               metadata: {
+                skillCalls,
                 toolCalls: toolCallsArray,
                 numTurns: msg.num_turns,
                 durationMs: msg.duration_ms,
@@ -964,6 +993,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               raw,
               sessionId,
               metadata: {
+                skillCalls,
                 toolCalls: toolCallsArray,
                 numTurns: msg.num_turns,
                 durationMs: msg.duration_ms,
