@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CrossSessionLeakGrader,
   CrossSessionLeakPlugin,
@@ -11,6 +11,10 @@ vi.mock('../../../src/matchers', async (importOriginal) => {
     ...(await importOriginal()),
     matchesLlmRubric: vi.fn(),
   };
+});
+
+afterEach(() => {
+  vi.resetAllMocks();
 });
 
 describe('CrossSessionLeakPlugin', () => {
