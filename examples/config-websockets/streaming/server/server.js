@@ -27,7 +27,7 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 const wssStream = new WebSocketServer({ noServer: true });
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 60000, maxRetries: 3 });
 const DEFAULT_MODEL = 'gpt-4.1-mini';
 const CHATBOT_MODEL =
   process.env.CHATBOT_MODEL && process.env.CHATBOT_MODEL.trim().length > 0

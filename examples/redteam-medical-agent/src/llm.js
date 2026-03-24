@@ -10,6 +10,8 @@ dotenv.config({ quiet: true });
 // Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'dummy-key-for-example',
+  timeout: 60000,
+  maxRetries: 3,
 });
 
 // System prompt for the medical agent

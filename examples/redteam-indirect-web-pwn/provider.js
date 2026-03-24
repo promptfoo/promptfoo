@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 
-const client = new OpenAI();
+const client = new OpenAI({ timeout: 60000, maxRetries: 3 });
 
 /**
  * Custom provider that simulates an AI assistant with web browsing capability.
