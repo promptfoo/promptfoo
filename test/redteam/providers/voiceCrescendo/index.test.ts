@@ -326,4 +326,30 @@ describe('VoiceCrescendoProvider', () => {
     expect(result.metadata?.voiceCrescendoTurnsCompleted).toBeLessThanOrEqual(3);
     expect(result.metadata?.stopReason).toBeDefined();
   });
+
+  it('should preserve an explicit delayBetweenTurns value of 0', async () => {
+    const { sleep } = await import('../../../../src/util/time');
+
+    vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockRedteamProvider);
+    vi.mocked(getTargetResponse).mockResolvedValue({
+      output: 'Target response',
+      tokenUsage: { prompt: 20, completion: 10, total: 30, numRequests: 1 },
+    });
+
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 2,
+      delayBetweenTurns: 0,
+    });
+
+    const context: CallApiContextParams = {
+      originalProvider: mockTargetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    await provider.callApi('Test objective', context);
+
+    expect(vi.mocked(sleep)).not.toHaveBeenCalled();
+  });
 });
