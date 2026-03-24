@@ -101,6 +101,26 @@ describe('SageMakerCompletionProvider', () => {
       expect(result.metadata?.originalPrompt).toBe('original prompt');
     });
   });
+
+  describe('payload formatting', () => {
+    it('preserves an explicit maxTokens value of 0', () => {
+      process.env.AWS_SAGEMAKER_MAX_TOKENS = '1024';
+
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'openai',
+          maxTokens: 0,
+        },
+      });
+
+      const payload = JSON.parse(provider.formatPayload('Hello'));
+
+      expect(payload.max_tokens).toBe(0);
+
+      delete process.env.AWS_SAGEMAKER_MAX_TOKENS;
+    });
+  });
 });
 
 describe('SageMakerEmbeddingProvider', () => {
