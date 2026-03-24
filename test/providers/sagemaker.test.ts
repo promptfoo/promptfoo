@@ -44,6 +44,7 @@ describe('SageMakerCompletionProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('cache flag behavior', () => {
@@ -104,7 +105,7 @@ describe('SageMakerCompletionProvider', () => {
 
   describe('payload formatting', () => {
     it('preserves an explicit maxTokens value of 0', () => {
-      process.env.AWS_SAGEMAKER_MAX_TOKENS = '1024';
+      vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '1024');
 
       const provider = new SageMakerCompletionProvider('test-endpoint', {
         config: {
@@ -117,8 +118,6 @@ describe('SageMakerCompletionProvider', () => {
       const payload = JSON.parse(provider.formatPayload('Hello'));
 
       expect(payload.max_tokens).toBe(0);
-
-      delete process.env.AWS_SAGEMAKER_MAX_TOKENS;
     });
   });
 });
