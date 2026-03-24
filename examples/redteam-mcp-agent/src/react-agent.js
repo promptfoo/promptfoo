@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 
 class ReactAgent {
   constructor(apiKey, apiBaseUrl, mcpClients = [], model = 'gpt-4o', systemPrompt = null) {
-    this.openai = new OpenAI({ apiKey, baseURL: apiBaseUrl });
+    this.openai = new OpenAI({ apiKey, baseURL: apiBaseUrl, timeout: 60000, maxRetries: 3 });
     this.mcpClients = mcpClients;
     this.maxIterations = 10;
     this.model = model;

@@ -13,6 +13,8 @@ const conversationHistories = new Map();
 // Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
+  timeout: 60000,
+  maxRetries: 3,
 });
 
 app.get('/session', (req, res) => {
