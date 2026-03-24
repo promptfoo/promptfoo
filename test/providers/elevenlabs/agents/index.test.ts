@@ -69,6 +69,16 @@ describe('ElevenLabsAgentsProvider', () => {
       expect(provider.config.simulatedUser?.prompt).toBe('helpful customer');
     });
 
+    it('should preserve an explicit maxTurns value of 0', () => {
+      const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
+        config: {
+          maxTurns: 0,
+        },
+      });
+
+      expect(provider.config.maxTurns).toBe(0);
+    });
+
     it('should use custom label if provided', () => {
       const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
         label: 'Custom Agent Label',
@@ -295,6 +305,32 @@ describe('ElevenLabsAgentsProvider', () => {
         feedback: 'Information was accurate',
         evidence: undefined,
       });
+    });
+
+    it('should preserve an explicit maxTurns value of 0 in simulation requests', async () => {
+      const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
+        config: {
+          agentId: 'test-agent-123',
+          maxTurns: 0,
+        },
+      });
+
+      const mockApiResponse: AgentSimulationResponse = {
+        conversation_id: 'conv_zero',
+        status: 'completed',
+        simulated_conversation: [],
+      } as unknown as AgentSimulationResponse;
+
+      (provider as any).client.post = vi.fn().mockResolvedValue(mockApiResponse);
+
+      await provider.callApi('Hello');
+
+      expect((provider as any).client.post).toHaveBeenCalledWith(
+        '/convai/agents/test-agent-123/simulate-conversation',
+        expect.objectContaining({
+          new_turns_limit: 0,
+        }),
+      );
     });
 
     it('should handle tool mocking configuration', async () => {
