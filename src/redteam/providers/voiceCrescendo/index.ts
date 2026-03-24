@@ -250,7 +250,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     this.nunjucks = getNunjucksEngine();
     this.memory = new VoiceMemorySystem();
     this.conversationId = crypto.randomUUID();
-    this.delayBetweenTurns = config.delayBetweenTurns || 500;
+    this.delayBetweenTurns = config.delayBetweenTurns ?? 500;
 
     logger.debug('[VoiceCrescendo] Provider initialized', { config });
   }
