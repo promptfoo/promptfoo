@@ -524,9 +524,10 @@ describe('generateEvalSummary', () => {
 
       const lines = generateEvalSummary(params);
       const plainOutput = stripAnsi(lines.join('\n'));
+      const resultsLine = plainOutput.split('\n').find((line) => line.startsWith('Results:'));
 
       expect(plainOutput).toContain('Results:');
-      expect(plainOutput).toContain('8 passed (80.00%), 1 failed, 1 error');
+      expect(resultsLine).toMatch(/8 passed \(80\.00%\), .*1 failed, .*1 error/);
       expect(plainOutput).not.toContain('1 errors');
     });
   });
