@@ -6343,12 +6343,18 @@ describe('HttpProvider - File Auth', () => {
   const mockUrl = 'http://example.com/api';
 
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: JSON.stringify({ result: 'success' }),
       status: 200,
       statusText: 'OK',
       cached: false,
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('should parse auth.type file in the provider config schema', () => {
@@ -6637,7 +6643,7 @@ describe('HttpProvider - File Auth', () => {
       },
     });
 
-    await Promise.all([
+    const requests = Promise.all([
       provider.callApi('test 1', {
         prompt: { raw: 'test 1', label: 'test 1' },
         vars: {},
@@ -6651,6 +6657,8 @@ describe('HttpProvider - File Auth', () => {
         vars: {},
       }),
     ]);
+    await vi.advanceTimersByTimeAsync(50);
+    await requests;
 
     expect(authFn).toHaveBeenCalledTimes(1);
     for (const call of vi.mocked(fetchWithCache).mock.calls) {
