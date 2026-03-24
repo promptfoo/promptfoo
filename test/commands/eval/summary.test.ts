@@ -525,11 +525,12 @@ describe('generateEvalSummary', () => {
       const lines = generateEvalSummary(params);
       const plainOutput = stripAnsi(lines.join('\n'));
       const outputLines = plainOutput.split('\n');
+      const hasLineMatching = (pattern: RegExp) => outputLines.some((line) => pattern.test(line));
 
       expect(plainOutput).toContain('Results:');
-      expect(outputLines).toContain('  8 passed (80.00%)');
-      expect(outputLines).toContain('  1 failed (10.00%)');
-      expect(outputLines).toContain('  1 error (10.00%)');
+      expect(hasLineMatching(/^\s*(✓\s+)?8 passed \(80\.00%\)$/)).toBe(true);
+      expect(hasLineMatching(/^\s*(✗\s+)?1 failed \(10\.00%\)$/)).toBe(true);
+      expect(hasLineMatching(/^\s*(✗\s+)?1 error \(10\.00%\)$/)).toBe(true);
       expect(plainOutput).not.toContain('1 errors');
     });
 
