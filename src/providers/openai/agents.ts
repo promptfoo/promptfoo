@@ -260,9 +260,9 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     const usage = result.usage;
 
     return {
-      total: usage.totalTokens || undefined,
-      prompt: usage.promptTokens || undefined,
-      completion: usage.completionTokens || undefined,
+      total: usage.totalTokens ?? undefined,
+      prompt: usage.promptTokens ?? undefined,
+      completion: usage.completionTokens ?? undefined,
     };
   }
 

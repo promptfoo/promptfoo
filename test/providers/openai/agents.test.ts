@@ -387,4 +387,33 @@ describe('OpenAiAgentsProvider', () => {
 
     expect(toolResult).toEqual({ status: 'mocked' });
   });
+
+  it('preserves explicit zero-valued token usage fields', async () => {
+    mockRun.mockResolvedValue({
+      finalOutput: 'Agent answer',
+      usage: {
+        totalTokens: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+      },
+      newItems: [],
+    });
+
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+      },
+    });
+
+    const result = await provider.callApi('Where is my order?');
+
+    expect(result.tokenUsage).toEqual({
+      total: 0,
+      prompt: 0,
+      completion: 0,
+    });
+  });
 });
