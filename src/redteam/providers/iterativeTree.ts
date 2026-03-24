@@ -103,6 +103,15 @@ const UNAUTHED_BRANCHING_FACTOR = 2;
 const UNAUTHED_MAX_WIDTH = 3;
 const UNAUTHED_MAX_ATTEMPTS = 30;
 
+function resolveNumericConfig(value: VarValue | undefined, fallback: number): number {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? fallback : parsed;
+}
+
 /**
  * Extracts defined session IDs from tree outputs
  * @param outputs - Array of tree search outputs
@@ -1154,11 +1163,14 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     );
 
     // Read tree params from config (set by UI StrategyConfigDialog), fall back to defaults
-    let maxDepth = Number(config.maxDepth) || DEFAULT_MAX_DEPTH;
-    let branchingFactor = Number(config.branchingFactor) || DEFAULT_BRANCHING_FACTOR;
-    let maxWidth = Number(config.maxWidth) || DEFAULT_MAX_WIDTH;
-    let maxAttempts = Number(config.maxAttempts) || DEFAULT_MAX_ATTEMPTS;
-    const maxNoImprovement = Number(config.maxNoImprovement) || DEFAULT_MAX_NO_IMPROVEMENT;
+    let maxDepth = resolveNumericConfig(config.maxDepth, DEFAULT_MAX_DEPTH);
+    let branchingFactor = resolveNumericConfig(config.branchingFactor, DEFAULT_BRANCHING_FACTOR);
+    let maxWidth = resolveNumericConfig(config.maxWidth, DEFAULT_MAX_WIDTH);
+    let maxAttempts = resolveNumericConfig(config.maxAttempts, DEFAULT_MAX_ATTEMPTS);
+    const maxNoImprovement = resolveNumericConfig(
+      config.maxNoImprovement,
+      DEFAULT_MAX_NO_IMPROVEMENT,
+    );
 
     // Clamp tree parameters for unauthenticated users
     if (!isLoggedIntoCloud()) {

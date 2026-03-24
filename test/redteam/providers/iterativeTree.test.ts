@@ -4,6 +4,7 @@ import {
   evaluateResponse,
   getNewPrompt,
   DEFAULT_MAX_WIDTH as MAX_WIDTH,
+  default as RedteamIterativeTreeProvider,
   renderSystemPrompts,
   selectNodes,
   updateRedteamHistory,
@@ -113,6 +114,27 @@ describe('RedteamIterativeProvider', () => {
       // Should not contain the modifiers section
       expect(result.redteamSystemPrompt).not.toContain('CRITICAL: Ensure all generated prompts');
       expect(result.redteamSystemPrompt).not.toContain('<Modifiers>');
+    });
+  });
+
+  describe('constructor', () => {
+    it('preserves explicit zero values for tree parameters', () => {
+      const provider = new RedteamIterativeTreeProvider({
+        injectVar: 'input',
+        maxDepth: 0,
+        branchingFactor: 0,
+        maxWidth: 0,
+        maxAttempts: 0,
+        maxNoImprovement: 0,
+      });
+
+      expect(provider['treeParams']).toEqual({
+        maxDepth: 0,
+        branchingFactor: 0,
+        maxWidth: 0,
+        maxAttempts: 0,
+        maxNoImprovement: 0,
+      });
     });
   });
 
