@@ -336,12 +336,10 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
       ? `${chalk.red('✗')} ${chalk.red.bold(errors.toLocaleString())} ${errorLabel}`
       : `${chalk.gray.bold(errors.toLocaleString())} ${errorLabel}`;
 
-  const resultsLine = `${passedPart}, ${failedPart}, ${errorsPart}`;
-  if (Number.isNaN(passRate)) {
-    lines.push(`${chalk.bold('Results:')} ${resultsLine}`);
-  } else {
-    lines.push(`${chalk.bold('Results:')} ${resultsLine} (${passRateDisplay})`);
-  }
+  const resultsLine = Number.isNaN(passRate)
+    ? `${passedPart}, ${failedPart}, ${errorsPart}`
+    : `${passedPart} (${passRateDisplay}), ${failedPart}, ${errorsPart}`;
+  lines.push(`${chalk.bold('Results:')} ${resultsLine}`);
 
   const durationDisplay = formatDuration(duration);
   lines.push(chalk.gray(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));

@@ -526,11 +526,8 @@ describe('generateEvalSummary', () => {
       const plainOutput = stripAnsi(lines.join('\n'));
 
       expect(plainOutput).toContain('Results:');
-      expect(plainOutput).toContain('8 passed');
-      expect(plainOutput).toContain('1 failed');
-      expect(plainOutput).toContain('1 error');
+      expect(plainOutput).toContain('8 passed (80.00%), 1 failed, 1 error');
       expect(plainOutput).not.toContain('1 errors');
-      expect(plainOutput).toContain('(80.00%)');
     });
   });
 
