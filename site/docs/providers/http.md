@@ -1228,6 +1228,105 @@ providers:
 
 The token endpoint must return a JSON response with an `access_token` field. If `expires_in` (lifetime in seconds) is included, the provider uses it to schedule refresh. Otherwise, a 1-hour default is used.
 
+### File-Based Authentication
+
+Use file-based authentication when your token needs custom logic that doesn't fit the built-in auth flows.
+
+The auth file can be written in JavaScript, TypeScript, or Python:
+
+- JavaScript and TypeScript files should export a default function by default
+- Python files should define `get_auth` by default
+- Named exports are supported with `file://path/to/file.ts:functionName`
+
+The auth function receives the standard HTTP provider `callApi` context and must return:
+
+```ts
+{
+  token: string;
+  expiration?: number | null;
+}
+```
+
+- `token` is required
+- `expiration` is optional and should be an absolute Unix timestamp in milliseconds
+- If `expiration` is omitted or `null`, the token is cached for the lifetime of the provider instance
+- If `expiration` is provided, the function is called again when the token is within the same 60-second refresh buffer used by OAuth
+
+The auth function receives the same `callApi` context object that providers receive at runtime, including `vars`, `prompt`, `test`, `originalProvider`, `evaluationId`, `testCaseId`, `traceparent`, `tracestate`, and `repeatIndex`.
+
+Unlike `bearer` and `oauth`, file auth does not automatically attach an `Authorization` header. Instead, the returned values are injected into template variables before the request is rendered so you can place them anywhere in the request:
+
+- headers
+- query params
+- JSON bodies
+- raw requests
+- session endpoint config
+- request transforms
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1/chat'
+      method: POST
+      headers:
+        Authorization: 'Bearer {{token}}'
+      body:
+        prompt: '{{prompt}}'
+      auth:
+        type: file
+        path: './auth/get-token.ts'
+```
+
+Available template variables:
+
+- `{{token}}`
+- `{{expiration}}`
+
+If `token` or `expiration` already exist in `vars`, the file auth result overwrites them and emits a warning.
+
+This is intentionally different from OAuth:
+
+- `oauth` automatically adds `Authorization: Bearer <token>`
+- `oauth` does not inject `{{token}}` into template vars
+- `file` injects `{{token}}` and `{{expiration}}` into template vars
+- `file` does not automatically add an `Authorization` header
+
+Example auth files:
+
+```ts
+export default async function getAuth(context) {
+  return {
+    token: context.vars.apiKey,
+    expiration: Date.now() + 55 * 60 * 1000,
+  };
+}
+```
+
+```ts
+export async function buildAuth(context) {
+  return {
+    token: context.vars.sessionToken,
+  };
+}
+```
+
+Use the named export with:
+
+```yaml
+auth:
+  type: file
+  path: file://./auth/get-token.ts:buildAuth
+```
+
+```python
+def get_auth(context):
+    return {
+        "token": context["vars"]["api_key"],
+        "expiration": None,
+    }
+```
+
 ### Digital Signature Authentication
 
 For APIs requiring cryptographic request signing, the HTTP provider supports digital signatures with PEM, JKS (Java KeyStore), and PFX certificate formats. The private key is **never sent to Promptfoo** and remains stored locally.
@@ -1350,6 +1449,13 @@ providers:
 | username     | string   | Yes (password grant)                    | Username for password grant            |
 | password     | string   | Yes (password grant)                    | Password for password grant            |
 | scopes       | string[] | No                                      | OAuth scopes to request                |
+
+#### File Auth Options
+
+| Option | Type   | Required | Description                                           |
+| ------ | ------ | -------- | ----------------------------------------------------- |
+| type   | string | Yes      | Must be `'file'`                                      |
+| path   | string | Yes      | Path to a JavaScript, TypeScript, or Python auth file |
 
 #### Digital Signature Options
 
@@ -1602,7 +1708,7 @@ Supported config options:
 | tokenEstimation   | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                  |
 | maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
 | validateStatus    | string \| Function      | A function or string expression that returns true if the status code should be treated as successful. By default, accepts all status codes.                                         |
-| auth              | object                  | Authentication configuration (bearer, api_key, basic, or oauth). See [Authentication](#authentication) section.                                                                     |
+| auth              | object                  | Authentication configuration (bearer, api_key, basic, oauth, or file). See [Authentication](#authentication) section.                                                               |
 | signatureAuth     | object                  | Digital signature authentication configuration. See [Digital Signature Authentication](#digital-signature-authentication) section.                                                  |
 | tls               | object                  | Configuration for TLS/HTTPS connections including client certificates, CA certificates, and cipher settings. See TLS Configuration Options above.                                   |
 

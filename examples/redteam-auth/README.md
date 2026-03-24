@@ -11,11 +11,12 @@ This example demonstrates how to configure authentication for red team evaluatio
 
 1. **OAuth 2.0** (`promptfooconfig.oauth.yaml`) - Client credentials flow for server-to-server authentication
 2. **API Key** (`promptfooconfig.api_key.yaml`) - API key authentication via headers
-3. **Digital Signature** (`promptfooconfig.digital_signature.yaml`) - Digital signature authentication using private keys
+3. **File Auth** (`promptfooconfig.file.yaml`) - Custom token loading via JavaScript, TypeScript, or Python
+4. **Digital Signature** (`promptfooconfig.digital_signature.yaml`) - Digital signature authentication using private keys
 
 ## Overview
 
-When running red team evaluations against protected HTTP endpoints, you need to configure authentication. This example shows how to set up OAuth, API key, and digital signature authentication in your red team target configuration.
+When running red team evaluations against protected HTTP endpoints, you need to configure authentication. This example shows how to set up OAuth, API key, file-based, and digital signature authentication in your red team target configuration.
 
 ## Configuration Files
 
@@ -55,6 +56,43 @@ targets:
         keyName: X-API-Key
 ```
 
+### File Authentication
+
+The `promptfooconfig.file.yaml` file demonstrates file-based authentication:
+
+```yaml
+targets:
+  - id: http
+    config:
+      url: https://example-app.promptfoo.app/minnow/chat?auth_type=bearer
+      method: POST
+      headers:
+        Content-Type: application/json
+        Authorization: Bearer {{token}}
+      body:
+        messages: '{{prompt}}'
+      auth:
+        type: file
+        path: ./auth/get-token.js
+```
+
+The bundled auth scripts simulate the client credentials grant used by the OAuth example. They call `https://example-app.promptfoo.app/oauth/token`, return the `access_token` as `token`, and convert `expires_in` into the optional `expiration` field.
+
+The auth file returns an object shaped like:
+
+```ts
+{
+  token: string;
+  expiration?: number | null;
+}
+```
+
+You can also use:
+
+- `./auth/get-token.ts` for TypeScript default exports
+- `./auth/get-token.py` for Python `get_auth`
+- `file://./auth/get-token.ts:buildAuth` for named exports
+
 ### Digital Signature Authentication
 
 The `promptfooconfig.digital_signature.yaml` file demonstrates digital signature authentication:
@@ -91,6 +129,12 @@ This example requires environment variables depending on which authentication me
 
 - `PROMPTFOO_TARGET_API_KEY` - Your API key
 
+### For File Authentication
+
+- `PROMPTFOO_TARGET_CLIENT_ID` - OAuth client ID used by the bundled auth scripts
+- `PROMPTFOO_TARGET_CLIENT_SECRET` - OAuth client secret used by the bundled auth scripts
+- `PROMPTFOO_TARGET_SCOPES` - Optional space-delimited OAuth scopes
+
 ### For Digital Signature Authentication
 
 - `PROMPTFOO_AUTH_PRIVATE_KEY` - Your base64-encoded private key (PEM format)
@@ -109,6 +153,11 @@ export PROMPTFOO_TARGET_CLIENT_SECRET=your-client-secret
 # For API Key
 export PROMPTFOO_TARGET_API_KEY=your-api-key
 
+# For File Auth
+export PROMPTFOO_TARGET_CLIENT_ID=your-client-id
+export PROMPTFOO_TARGET_CLIENT_SECRET=your-client-secret
+export PROMPTFOO_TARGET_SCOPES=
+
 # For Digital Signature
 export PROMPTFOO_AUTH_PRIVATE_KEY=your-base64-encoded-private-key
 ```
@@ -121,6 +170,9 @@ promptfoo redteam run -c promptfooconfig.oauth.yaml
 
 # Using API Key configuration
 promptfoo redteam run -c promptfooconfig.api_key.yaml
+
+# Using file-based authentication
+promptfoo redteam run -c promptfooconfig.file.yaml
 
 # Using Digital Signature configuration
 promptfoo redteam run -c promptfooconfig.digital_signature.yaml
@@ -160,6 +212,18 @@ When using digital signature authentication:
 4. The timestamp and signature are added to request headers
 5. The signature is valid for the duration specified by `signatureValidityMs` (80 seconds in the example)
 
+### File Auth Flow
+
+When using file-based authentication:
+
+1. Promptfoo loads the configured JavaScript, TypeScript, or Python file
+2. The auth function performs its own client credentials token request
+3. It returns a `token` and optional `expiration`
+4. The token is cached on the provider instance
+5. If `expiration` is omitted, the token is reused indefinitely
+6. If `expiration` is provided, the auth function is called again when the token is close to expiring
+7. `{{token}}` is available for templating into headers, query params, bodies, and raw requests
+
 ## Security Best Practices
 
 - **Never commit credentials** to version control
@@ -178,6 +242,7 @@ To use this example with your own endpoint:
 3. Adjust the `body` structure to match your API's expected format
 4. Update the `transformResponse` function to extract the response from your API's format
 5. For digital signatures, configure the `signatureDataTemplate` to match your API's expected signature format
-6. Set the appropriate environment variables
+6. For file auth, update the auth script in `auth/` to fetch or mint tokens for your API
+7. Set the appropriate environment variables
 
 For more information, see the [HTTP Provider documentation](/docs/providers/http#authentication) and [Red Team documentation](/docs/red-team/getting-started).

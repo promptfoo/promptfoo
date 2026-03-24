@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import {
+  hasTraceAwareAssertions,
   MODEL_GRADED_ASSERTION_TYPES,
   renderMetricName,
   runAssertions,
@@ -676,6 +677,10 @@ export async function runEval({
         if (parts.length >= 3) {
           traceId = parts[1];
         }
+      }
+
+      if (traceId && hasTraceAwareAssertions(test.assert)) {
+        await flushOtel();
       }
 
       // Pass providerTransformedOutput for contextTransform to use
