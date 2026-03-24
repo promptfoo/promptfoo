@@ -424,6 +424,21 @@ describe('ClaudeCodeSDKProvider', () => {
         );
       });
 
+      it('should not throw when apiKeyRequired is explicitly set to false', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: {
+            apiKeyRequired: false,
+          },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Response');
+      });
+
       it('should not throw when using Bedrock or Vertex env vars', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 

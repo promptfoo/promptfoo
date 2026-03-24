@@ -43,6 +43,17 @@ Example of setting the environment variable:
 export ANTHROPIC_API_KEY=your_api_key_here
 ```
 
+If Claude Agent SDK will authenticate through an existing local Claude Code session instead of `ANTHROPIC_API_KEY`, disable Promptfoo's upfront API key check:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      apiKeyRequired: false
+```
+
+This is useful when you're using a local Claude Code binary with an active session, such as Claude Code monthly plans. Promptfoo will skip its preflight API key validation, but the SDK still needs to be able to authenticate on its own.
+
 ## Other Model Providers
 
 Apart from using the Anthropic API, you can also use AWS Bedrock and Google Vertex AI.
@@ -126,6 +137,7 @@ prompts:
 | Parameter                            | Type         | Description                                                                                                  | Default                  |
 | ------------------------------------ | ------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------ |
 | `apiKey`                             | string       | Anthropic API key                                                                                            | Environment variable     |
+| `apiKeyRequired`                     | boolean      | Require Promptfoo to find an Anthropic API key before calling the SDK. Set to `false` for local SDK auth.    | `true`                   |
 | `working_dir`                        | string       | Directory for file operations                                                                                | Temporary directory      |
 | `model`                              | string       | Primary model to use (passed to Claude Agent SDK)                                                            | Claude Agent SDK default |
 | `fallback_model`                     | string       | Fallback model if primary fails                                                                              | Claude Agent SDK default |

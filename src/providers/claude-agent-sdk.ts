@@ -151,6 +151,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
 
 export interface ClaudeCodeOptions {
   apiKey?: string;
+  apiKeyRequired?: boolean;
 
   /**
    * 'working_dir' allows user to point to a pre-prepared directory with desired files/directories in place
@@ -692,7 +693,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     }
 
     // Could potentially do more to validate credentials for Bedrock/Vertex here, but Anthropic key is the main use case
-    if (!this.apiKey && !(env.CLAUDE_CODE_USE_BEDROCK || env.CLAUDE_CODE_USE_VERTEX)) {
+    if (
+      !this.apiKey &&
+      !(
+        config.apiKeyRequired === false ||
+        env.CLAUDE_CODE_USE_BEDROCK ||
+        env.CLAUDE_CODE_USE_VERTEX
+      )
+    ) {
       throw new Error(
         dedent`Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add "apiKey" to the provider config.
 
