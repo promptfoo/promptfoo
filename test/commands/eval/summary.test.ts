@@ -422,7 +422,7 @@ describe('generateEvalSummary', () => {
   });
 
   describe('pass rate and results', () => {
-    it('should show 100% pass rate in green', () => {
+    it('should show percentages for each result line at 100% pass rate', () => {
       const params: EvalSummaryParams = {
         evalId: 'eval-100',
         isRedteam: false,
@@ -444,13 +444,12 @@ describe('generateEvalSummary', () => {
       const plainOutput = stripAnsi(lines.join('\n'));
 
       expect(plainOutput).toContain('Results:');
-      expect(plainOutput).toContain('10 passed');
-      expect(plainOutput).toContain('0 failed');
-      expect(plainOutput).toContain('0 errors');
-      expect(plainOutput).toContain('(100%)');
+      expect(plainOutput).toContain('10 passed (100%)');
+      expect(plainOutput).toContain('0 failed (0%)');
+      expect(plainOutput).toContain('0 errors (0%)');
     });
 
-    it('should show 80%+ pass rate in yellow', () => {
+    it('should show percentages for each result line when some tests fail', () => {
       const params: EvalSummaryParams = {
         evalId: 'eval-85',
         isRedteam: false,
@@ -472,12 +471,12 @@ describe('generateEvalSummary', () => {
       const plainOutput = stripAnsi(lines.join('\n'));
 
       expect(plainOutput).toContain('Results:');
-      expect(plainOutput).toContain('17 passed');
-      expect(plainOutput).toContain('3 failed');
-      expect(plainOutput).toContain('(85.00%)');
+      expect(plainOutput).toContain('17 passed (85.00%)');
+      expect(plainOutput).toContain('3 failed (15.00%)');
+      expect(plainOutput).toContain('0 errors (0%)');
     });
 
-    it('should show <80% pass rate in red', () => {
+    it('should show percentages for each result line when passed and failed are split evenly', () => {
       const params: EvalSummaryParams = {
         evalId: 'eval-50',
         isRedteam: false,
@@ -499,9 +498,9 @@ describe('generateEvalSummary', () => {
       const plainOutput = stripAnsi(lines.join('\n'));
 
       expect(plainOutput).toContain('Results:');
-      expect(plainOutput).toContain('5 passed');
-      expect(plainOutput).toContain('5 failed');
-      expect(plainOutput).toContain('(50.00%)');
+      expect(plainOutput).toContain('5 passed (50.00%)');
+      expect(plainOutput).toContain('5 failed (50.00%)');
+      expect(plainOutput).toContain('0 errors (0%)');
     });
 
     it('should include errors in results', () => {
@@ -524,10 +523,12 @@ describe('generateEvalSummary', () => {
 
       const lines = generateEvalSummary(params);
       const plainOutput = stripAnsi(lines.join('\n'));
-      const resultsLine = plainOutput.split('\n').find((line) => line.startsWith('Results:'));
+      const outputLines = plainOutput.split('\n');
 
       expect(plainOutput).toContain('Results:');
-      expect(resultsLine).toMatch(/8 passed \(80\.00%\), .*1 failed, .*1 error/);
+      expect(outputLines).toContain('  8 passed (80.00%)');
+      expect(outputLines).toContain('  1 failed (10.00%)');
+      expect(outputLines).toContain('  1 error (10.00%)');
       expect(plainOutput).not.toContain('1 errors');
     });
   });

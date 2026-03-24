@@ -303,43 +303,24 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
 
   // Results section
   const totalTests = successes + failures + errors;
-  const passRate = (successes / totalTests) * 100;
+  const formatResultPercentage = (count: number) => {
+    const percentage = totalTests === 0 ? 0 : (count / totalTests) * 100;
+    return percentage === 0 || percentage === 100
+      ? `${percentage.toFixed(0)}%`
+      : `${percentage.toFixed(2)}%`;
+  };
 
-  // Determine pass rate color and precision
-  let passRateDisplay;
-  if (!Number.isNaN(passRate)) {
-    // Use smart precision: whole numbers for 0% and 100%, otherwise 2 decimals
-    const passRateFormatted =
-      passRate === 0 || passRate === 100 ? `${passRate.toFixed(0)}%` : `${passRate.toFixed(2)}%`;
-
-    if (passRate >= 100) {
-      passRateDisplay = chalk.green.bold(passRateFormatted);
-    } else if (passRate >= 80) {
-      passRateDisplay = chalk.yellow.bold(passRateFormatted);
-    } else {
-      passRateDisplay = chalk.red.bold(passRateFormatted);
-    }
-  }
-
-  // Results line - always show detailed breakdown with bold numbers
-  const passedPart =
-    successes > 0
-      ? `${chalk.green('✓')} ${chalk.green.bold(successes.toLocaleString())} passed`
-      : `${chalk.gray.bold(successes.toLocaleString())} passed`;
-  const failedPart =
-    failures > 0
-      ? `${chalk.red('✗')} ${chalk.red.bold(failures.toLocaleString())} failed`
-      : `${chalk.gray.bold(failures.toLocaleString())} failed`;
   const errorLabel = errors === 1 ? 'error' : 'errors';
-  const errorsPart =
-    errors > 0
-      ? `${chalk.red('✗')} ${chalk.red.bold(errors.toLocaleString())} ${errorLabel}`
-      : `${chalk.gray.bold(errors.toLocaleString())} ${errorLabel}`;
-
-  const resultsLine = Number.isNaN(passRate)
-    ? `${passedPart}, ${failedPart}, ${errorsPart}`
-    : `${passedPart} (${passRateDisplay}), ${failedPart}, ${errorsPart}`;
-  lines.push(`${chalk.bold('Results:')} ${resultsLine}`);
+  lines.push(chalk.bold('Results:'));
+  lines.push(
+    chalk.gray(`  ${successes.toLocaleString()} passed (${formatResultPercentage(successes)})`),
+  );
+  lines.push(
+    chalk.gray(`  ${failures.toLocaleString()} failed (${formatResultPercentage(failures)})`),
+  );
+  lines.push(
+    chalk.gray(`  ${errors.toLocaleString()} ${errorLabel} (${formatResultPercentage(errors)})`),
+  );
 
   const durationDisplay = formatDuration(duration);
   lines.push(chalk.gray(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
