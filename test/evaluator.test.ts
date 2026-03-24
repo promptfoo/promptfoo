@@ -4864,6 +4864,60 @@ describe('runEval', () => {
     expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
   });
 
+  it('should skip rendering generated redteam exports without a top-level redteam block', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          prompt: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
+        },
+        assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
+        metadata: {
+          pluginId: 'ascii-smuggling',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  it('should infer the inject variable for generated redteam exports without config', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{query}}', label: 'test-label' },
+      test: {
+        vars: {
+          query: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
+        },
+        assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
+        metadata: {
+          pluginId: 'ascii-smuggling',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
   describe('latencyMs handling', () => {
     it('should use provider-supplied latencyMs when available', async () => {
       const providerWithLatency: ApiProvider = {

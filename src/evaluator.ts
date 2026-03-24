@@ -69,6 +69,7 @@ import {
   isProviderAllowed,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
+import { extractVariablesFromTemplate } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
@@ -337,6 +338,40 @@ export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undef
   return isPromptAllowed(prompt, allowedPrompts);
 }
 
+function isGeneratedRedteamAssertion(assertion: Assertion): boolean {
+  return typeof assertion.type === 'string' && assertion.type.startsWith('promptfoo:redteam:');
+}
+
+function shouldSkipRedteamInjectVar(
+  test: AtomicTestCase,
+  testSuite: TestSuite | undefined,
+  isRedteam: boolean,
+): boolean {
+  if (isRedteam || testSuite?.redteam) {
+    return true;
+  }
+
+  // Exported/generated redteam configs may not include a top-level `redteam` block,
+  // but they still carry redteam assertions plus plugin metadata.
+  return (
+    Boolean(test.metadata?.pluginId) && Boolean(test.assert?.some(isGeneratedRedteamAssertion))
+  );
+}
+
+function getRedteamInjectVar(test: AtomicTestCase, prompt: Prompt, testSuite?: TestSuite): string {
+  if (testSuite?.redteam?.injectVar) {
+    return testSuite.redteam.injectVar;
+  }
+
+  const promptVars = extractVariablesFromTemplate(prompt.raw);
+  const matchingVars = promptVars.filter((variableName) =>
+    Object.prototype.hasOwnProperty.call(test.vars ?? {}, variableName),
+  );
+
+  // Mirror redteam generation behavior by preferring the last prompt variable.
+  return matchingVars.at(-1) ?? promptVars.at(-1) ?? 'prompt';
+}
+
 /**
  * Runs a single test case.
  * @param options - The options for running the test case.
@@ -435,7 +470,9 @@ export async function runEval({
     // Render the prompt
     // For redteam tests, skip rendering the inject variable to prevent double-rendering of
     // attack payloads that may contain template syntax (e.g., {{purpose | trim}})
-    const skipRenderVars = isRedteam ? [testSuite?.redteam?.injectVar ?? 'prompt'] : undefined;
+    const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
+      ? [getRedteamInjectVar(test, promptForRender, testSuite)]
+      : undefined;
     const renderedPrompt = await renderPrompt(
       promptForRender,
       vars,
