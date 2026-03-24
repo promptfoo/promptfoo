@@ -2091,6 +2091,7 @@ export class HttpProvider implements ApiProvider {
     if (this.config.auth?.type === 'oauth') {
       await this.refreshOAuthTokenIfNeeded(vars);
       invariant(this.lastToken, 'OAuth token should be defined at this point');
+      vars.token = this.lastToken;
     }
 
     // Add signature values to vars if signature auth is enabled
