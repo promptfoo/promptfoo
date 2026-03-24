@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { generateEvalSummary } from '../../../src/commands/eval/summary';
 import { stripAnsi } from '../../util/utils';
@@ -530,6 +531,37 @@ describe('generateEvalSummary', () => {
       expect(outputLines).toContain('  1 failed (10.00%)');
       expect(outputLines).toContain('  1 error (10.00%)');
       expect(plainOutput).not.toContain('1 errors');
+    });
+
+    it('should render colored icons with muted percentages', () => {
+      const params: EvalSummaryParams = {
+        evalId: 'eval-styling',
+        isRedteam: false,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: { total: 0 },
+        successes: 8,
+        failures: 1,
+        errors: 1,
+        duration: 5000,
+        maxConcurrency: 4,
+        tracker: mockTracker,
+      };
+
+      const lines = generateEvalSummary(params);
+
+      expect(lines).toContain(
+        `  ${chalk.green('✓')} ${chalk.white.bold('8')} ${chalk.white('passed')} ${chalk.gray('(80.00%)')}`,
+      );
+      expect(lines).toContain(
+        `  ${chalk.red('✗')} ${chalk.white.bold('1')} ${chalk.white('failed')} ${chalk.gray('(10.00%)')}`,
+      );
+      expect(lines).toContain(
+        `  ${chalk.red('✗')} ${chalk.white.bold('1')} ${chalk.white('error')} ${chalk.gray('(10.00%)')}`,
+      );
     });
   });
 

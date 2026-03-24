@@ -309,18 +309,21 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
       ? `${percentage.toFixed(0)}%`
       : `${percentage.toFixed(2)}%`;
   };
+  const formatResultLine = (
+    count: number,
+    label: string,
+    icon: string | undefined,
+    iconColor: (text: string) => string,
+  ) => {
+    const iconPart = icon ? `${iconColor(icon)} ` : '';
+    return `  ${iconPart}${chalk.white.bold(count.toLocaleString())} ${chalk.white(label)} ${chalk.gray(`(${formatResultPercentage(count)})`)}`;
+  };
 
   const errorLabel = errors === 1 ? 'error' : 'errors';
   lines.push(chalk.bold('Results:'));
-  lines.push(
-    chalk.gray(`  ${successes.toLocaleString()} passed (${formatResultPercentage(successes)})`),
-  );
-  lines.push(
-    chalk.gray(`  ${failures.toLocaleString()} failed (${formatResultPercentage(failures)})`),
-  );
-  lines.push(
-    chalk.gray(`  ${errors.toLocaleString()} ${errorLabel} (${formatResultPercentage(errors)})`),
-  );
+  lines.push(formatResultLine(successes, 'passed', successes > 0 ? '✓' : undefined, chalk.green));
+  lines.push(formatResultLine(failures, 'failed', failures > 0 ? '✗' : undefined, chalk.red));
+  lines.push(formatResultLine(errors, errorLabel, errors > 0 ? '✗' : undefined, chalk.red));
 
   const durationDisplay = formatDuration(duration);
   lines.push(chalk.gray(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
