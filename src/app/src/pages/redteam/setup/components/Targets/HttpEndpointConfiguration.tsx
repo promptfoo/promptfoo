@@ -5,6 +5,7 @@ import 'prismjs/components/prism-javascript';
 import { useCallback, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
+import Editor from '@app/components/ui/code-editor';
 import {
   Dialog,
   DialogContent,
@@ -44,7 +45,6 @@ import {
   Trash2,
 } from 'lucide-react';
 import Prism from 'prismjs';
-import Editor from 'react-simple-code-editor';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import PostmanImportDialog from './PostmanImportDialog';
 import ResponseParserTestModal from './ResponseParserTestModal';

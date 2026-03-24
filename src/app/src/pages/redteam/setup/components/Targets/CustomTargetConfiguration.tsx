@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
+import Editor from '@app/components/ui/code-editor';
 import {
   Collapsible,
   CollapsibleContent,
@@ -24,7 +25,6 @@ import {
   Terminal,
 } from 'lucide-react';
 import Prism from 'prismjs';
-import Editor from 'react-simple-code-editor';
 
 import type { ProviderOptions } from '../../types';
 
