@@ -35,6 +35,7 @@ describe('ElevenLabsAgentsProvider', () => {
 
   afterEach(() => {
     delete process.env.ELEVENLABS_API_KEY;
+    vi.resetAllMocks();
   });
 
   describe('constructor', () => {
