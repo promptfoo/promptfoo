@@ -204,13 +204,13 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     try {
       logger.debug('[AgentsProvider] Running agent', {
         agentName: this.agent?.name,
-        maxTurns: this.agentConfig.maxTurns || 10,
+        maxTurns: this.agentConfig.maxTurns ?? 10,
       });
 
       // Build run options
       const runOptions: any = {
         context: context?.vars,
-        maxTurns: this.agentConfig.maxTurns || 10,
+        maxTurns: this.agentConfig.maxTurns ?? 10,
         signal: callApiOptions?.abortSignal,
       };
 
