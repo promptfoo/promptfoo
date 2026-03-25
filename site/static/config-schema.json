@@ -581,6 +581,9 @@
                   "raw": {
                     "type": "string"
                   },
+                  "template": {
+                    "type": "string"
+                  },
                   "display": {
                     "type": "string"
                   },
