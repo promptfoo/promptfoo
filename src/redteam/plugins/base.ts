@@ -130,6 +130,7 @@ export abstract class RedteamPluginBase {
         n: currentBatchSize,
         examples: this.config.examples,
         outputFormat: RedteamPluginBase.getOutputFormatInstruction(this.config),
+        hasCustomOutputFormat: !!this.config.inputs && Object.keys(this.config.inputs).length > 0,
       });
 
       const finalTemplate = RedteamPluginBase.appendModifiers(renderedTemplate, this.config);
