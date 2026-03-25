@@ -27,7 +27,7 @@ function renderGeneratedOutput(generatedTests) {
 
 function fail(message) {
   process.stderr.write(`${message}\n`);
-  process.exit(0);
+  process.exit(1);
 }
 
 function main() {
