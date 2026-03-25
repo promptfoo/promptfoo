@@ -173,6 +173,10 @@ targets:
 
 Each key becomes a variable that plugins will generate adversarial content for. The value is a description that guides test case generation.
 
+:::note
+Define only your real application inputs here. In multi-input mode, Promptfoo automatically builds the internal `__prompt` payload from these fields for generation and grading, so you should not set `redteam.injectVar`, add a synthetic `prompt` input, or rewrite your target to use `{{prompt}}` just to make multi-input work.
+:::
+
 ### Variable Naming
 
 Variable names must:
@@ -220,7 +224,7 @@ targets:
 
 ### Using with Custom Providers
 
-For custom providers, read the generated values from `context['vars']`. For example, in Python:
+For custom providers, read the generated values from `context['vars']`. Promptfoo provides both the individual named inputs and the combined internal `__prompt` value automatically; you do not need to construct `__prompt` yourself. For example, in Python:
 
 ```python
 def call_api(prompt, options, context):

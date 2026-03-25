@@ -16,6 +16,8 @@ The target accepts two coordinated inputs:
 - `document` - the uploaded document or fetched web page content
 - `query` - the user's question about that content
 
+Promptfoo combines these fields into its internal `__prompt` payload automatically. You should not add a manual `prompt` field or set `injectVar` yourself for this example.
+
 Promptfoo generates attacks across both fields at the same time so you can test issues like:
 
 - indirect prompt injection embedded in documents or web pages

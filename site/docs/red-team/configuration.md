@@ -75,7 +75,7 @@ redteam:
 | `maxConcurrency`             | `number`                  | Maximum number of concurrent plugin generation requests                                                 | 4                                                |
 | `delay`                      | `number`                  | Delay in milliseconds between plugin generation requests; forces concurrency to 1 when greater than 0   | 0                                                |
 
-For multi-input testing, define `inputs` on the target/provider rather than under `redteam`. See [Multi-Input Red Teaming](/docs/red-team/multi-input/) for end-to-end examples.
+For multi-input testing, define `inputs` on the target/provider rather than under `redteam`. Promptfoo automatically stores the combined payload in `__prompt` for internal use, so you should not set `injectVar` or create a manual `prompt` field just to support multi-input configs. See [Multi-Input Red Teaming](/docs/red-team/multi-input/) for end-to-end examples.
 
 ### Framework Filtering
 
