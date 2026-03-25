@@ -336,7 +336,7 @@ Running separate tests for each field misses vulnerabilities that emerge from fi
 
 ### Which plugins work best with multi-input?
 
-Authorization plugins like [BOLA](/docs/red-team/plugins/bola/), [BFLA](/docs/red-team/plugins/bfla/), and [RBAC](/docs/red-team/plugins/rbac/) are most effective because they specifically test how user identity fields interact with action requests. [Hijacking](/docs/red-team/plugins/hijacking/) and [policy](/docs/red-team/plugins/policy/) plugins also benefit from multi-input context.
+Authorization plugins like [BOLA](/docs/red-team/plugins/bola/), [BFLA](/docs/red-team/plugins/bfla/), and [RBAC](/docs/red-team/plugins/rbac/) are most effective because they specifically test how user identity fields interact with action requests. [Hijacking](/docs/red-team/plugins/hijacking/) and [policy](/docs/red-team/plugins/policy/) plugins also benefit from multi-input context. For document and web-page workflows, you can also configure [indirect-prompt-injection](/docs/red-team/plugins/indirect-prompt-injection/), but you must set `indirectInjectionVar` to point at the untrusted input field, such as `document`.
 
 ### Can I use multi-input with custom providers?
 

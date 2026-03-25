@@ -22,6 +22,8 @@ Promptfoo generates attacks across both fields at the same time so you can test 
 - prompt disclosure and internal-note leakage
 - policy bypass where the assistant follows the document instead of the user's query
 
+For the `indirect-prompt-injection` plugin, this example sets `indirectInjectionVar: document` because the untrusted instructions live in the uploaded document or fetched web page, not in the user's query.
+
 ## Prerequisites
 
 - `OPENAI_API_KEY` set in your environment so Promptfoo can generate red-team attacks
