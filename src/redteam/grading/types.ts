@@ -10,7 +10,7 @@ import type { RedteamHistoryEntry } from '../types';
 export interface RedteamGradingContext {
   traceContext?: TraceContextData | null;
   traceSummary?: string;
-  // Multi-turn conversation context for graders that need provenance across turns.
+  // Prior multi-turn conversation context for graders that need provenance across turns.
   redteamHistory?: RedteamHistoryEntry[];
   conversationHistory?: Array<Pick<RedteamHistoryEntry, 'prompt' | 'output'>>;
   conversationTranscript?: string;

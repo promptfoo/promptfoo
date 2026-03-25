@@ -607,14 +607,13 @@ export class CrescendoProvider implements ApiProvider {
               };
             }
 
-            // Provide multi-turn transcript context separately from the latest
-            // assistant output under test. Context-aware graders can use this
-            // to reason over provenance from earlier turns without changing the
-            // meaning of `llmOutput` for output-only graders.
-            const conversationHistoryForGrading = [
-              ...redteamHistory.map((turn) => ({ prompt: turn.prompt, output: turn.output })),
-              { prompt: attackPrompt, output: lastResponse.output },
-            ];
+            // Provide prior turns separately from the latest assistant output
+            // under test. Context-aware graders can use this to reason over
+            // provenance without duplicating the current turn in `llmOutput`.
+            const conversationHistoryForGrading = redteamHistory.map((turn) => ({
+              prompt: turn.prompt,
+              output: turn.output,
+            }));
             gradingContext = {
               ...(gradingContext ?? {}),
               redteamHistory: [...redteamHistory],

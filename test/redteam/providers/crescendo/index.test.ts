@@ -819,17 +819,22 @@ describe('CrescendoProvider', () => {
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(getResult).toHaveBeenCalledTimes(2);
 
+    const firstCall = getResult.mock.calls[0] as unknown as unknown[];
+    expect(firstCall?.[0]).toBe('first question');
+    expect(firstCall?.[1]).toBe('first response');
+    expect(firstCall?.[7]).toMatchObject({
+      redteamHistory: [],
+      conversationHistory: [],
+      conversationTranscript: '',
+    });
+
     const secondCall = getResult.mock.calls[1] as unknown as unknown[];
     expect(secondCall?.[0]).toBe('second question');
     expect(secondCall?.[1]).toBe('second response');
     expect(secondCall?.[7]).toMatchObject({
       redteamHistory: [{ prompt: 'first question', output: 'first response' }],
-      conversationHistory: [
-        { prompt: 'first question', output: 'first response' },
-        { prompt: 'second question', output: 'second response' },
-      ],
-      conversationTranscript:
-        'Turn 1:\nUser: first question\nAssistant: first response\n\nTurn 2:\nUser: second question\nAssistant: second response',
+      conversationHistory: [{ prompt: 'first question', output: 'first response' }],
+      conversationTranscript: 'Turn 1:\nUser: first question\nAssistant: first response',
     });
   });
 
