@@ -202,6 +202,61 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
         {showTargetTypeSection && (
           <section className="space-y-4">
             <Label className="text-sm font-semibold">Select Target Type</Label>
+            <p className="text-sm text-muted-foreground">
+              Select the type that best matches your target. You can also create your own using{' '}
+              <button
+                type="button"
+                className="inline-flex items-center rounded-sm bg-muted px-1.5 py-0.5 text-sm font-medium text-foreground hover:bg-primary hover:text-primary-foreground transition-colors"
+                onClick={() =>
+                  handleProviderChange(
+                    { id: 'file:///path/to/custom_provider.py', config: {}, label: selectedTarget.label },
+                    'python',
+                  )
+                }
+              >
+                Python
+              </button>
+              ,{' '}
+              <button
+                type="button"
+                className="inline-flex items-center rounded-sm bg-muted px-1.5 py-0.5 text-sm font-medium text-foreground hover:bg-primary hover:text-primary-foreground transition-colors"
+                onClick={() =>
+                  handleProviderChange(
+                    { id: 'file:///path/to/custom_provider.js', config: {}, label: selectedTarget.label },
+                    'javascript',
+                  )
+                }
+              >
+                JavaScript
+              </button>
+              , or{' '}
+              <button
+                type="button"
+                className="inline-flex items-center rounded-sm bg-muted px-1.5 py-0.5 text-sm font-medium text-foreground hover:bg-primary hover:text-primary-foreground transition-colors"
+                onClick={() =>
+                  handleProviderChange(
+                    { id: 'exec', config: { command: '' }, label: selectedTarget.label },
+                    'exec',
+                  )
+                }
+              >
+                Shell Scripts
+              </button>
+              . Don&apos;t see what you need? Try{' '}
+              <button
+                type="button"
+                className="inline-flex items-center rounded-sm bg-muted px-1.5 py-0.5 text-sm font-medium text-foreground hover:bg-primary hover:text-primary-foreground transition-colors"
+                onClick={() =>
+                  handleProviderChange(
+                    { id: '', config: {}, label: selectedTarget.label },
+                    'custom',
+                  )
+                }
+              >
+                Custom Provider
+              </button>
+              .
+            </p>
 
             <ProviderTypeSelector
               provider={selectedTarget}
