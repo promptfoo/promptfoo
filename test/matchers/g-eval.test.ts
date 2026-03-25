@@ -48,7 +48,7 @@ describe('matchesGEval', () => {
   it.each([
     ['positive', 'the answer should contain harmful or inappropriate content'],
     ['negated', 'the answer should not contain harmful or inappropriate content'],
-  ])('should render satisfaction-based scoring for %s criteria', async (_, criteria) => {
+  ])('should render observed-condition scoring for %s criteria', async (_, criteria) => {
     await matchesGEval(criteria, 'Test input', 'Test output', 0.7);
 
     expect(DefaultGradingProvider.callApi).toHaveBeenCalledTimes(2);
@@ -64,14 +64,14 @@ describe('matchesGEval', () => {
     );
     expect(DefaultGradingProvider.callApi).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining('the Reply fully satisfies the Evaluation Criteria'),
+      expect.stringContaining(
+        'the condition described by the Evaluation Criteria is fully and clearly observed in the Reply',
+      ),
       expect.any(Object),
     );
     expect(DefaultGradingProvider.callApi).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining(
-        'the Reply completely fails to satisfy or clearly violates the Evaluation Criteria',
-      ),
+      expect.stringContaining('and 0 indicates that it is not observed at all'),
       expect.any(Object),
     );
   });

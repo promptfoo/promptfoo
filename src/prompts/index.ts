@@ -262,7 +262,7 @@ export async function processPrompts(
 
 // G-Eval prompts
 export const GEVAL_PROMPT_STEPS = `
-Given evaluation criteria that outline how you should judge a piece of text, generate 3-4 concise evaluation steps applicable to any text based on the criteria below.
+Given evaluation criteria that outline how you should judge a piece of text, generate 3-4 concise evaluation steps applicable to any text based on the criteria below and designed to check whether the criteria are satisfied by the text.
 
 **EVALUATION CRITERIA**
 {{criteria}}
@@ -294,7 +294,7 @@ Please make sure you read and understand these instructions carefully. Please ke
 **Evaluation Steps**
 - {{steps}}
 Given the evaluation steps, return a JSON with two keys: 
-  1) a "score" key that MUST be an integer from 0 to {{maxScore}}, where {{maxScore}} indicates that the Reply fully satisfies the Evaluation Criteria according to the Evaluation Steps, and 0 indicates that the Reply completely fails to satisfy or clearly violates the Evaluation Criteria;
+  1) a "score" key that MUST be an integer from 0 to {{maxScore}}, where {{maxScore}} indicates that the condition described by the Evaluation Criteria is fully and clearly observed in the Reply according to the Evaluation Steps, and 0 indicates that it is not observed at all;
   2) a "reason" key, a reason for the given score, but DO NOT QUOTE THE SCORE in your reason. Please mention specific information from Prompt and Reply in your reason, but be very concise with it!
 
 **Prompt**
