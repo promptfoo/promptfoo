@@ -62,7 +62,16 @@ An attacker controlling both `vendor_id` and `description` can attempt authoriza
 
 ### Step 1: Create the Configuration
 
-Create a file named `finbot-redteam.yaml`:
+You can set this up in either of these ways:
+
+1. Write a `promptfooconfig.yaml` file directly.
+2. Use the setup UI to define the target inputs and red team settings.
+
+If you are configuring this in the product, the setup UI looks like this:
+
+![Multi-input setup UI showing target inputs and red team configuration](/img/docs/red-team/multi-input-setup-ui.png)
+
+If you prefer the file-based setup, create a file named `finbot-redteam.yaml`:
 
 ```yaml title="finbot-redteam.yaml"
 targets:
@@ -109,6 +118,8 @@ redteam:
     - 'jailbreak:composite'
     - 'jailbreak-templates'
 ```
+
+You can also browse the full document-based example in GitHub: [examples/redteam-multi-input](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-multi-input).
 
 ### Step 2: Run the Red Team
 
@@ -203,6 +214,12 @@ targets:
 ### Using with HTTP Targets
 
 Reference your input variables in the HTTP provider URL and body:
+
+If you are configuring an HTTP target in the product UI, the most common place to map multi-input variables is the request body:
+
+![HTTP target setup UI showing multi-input variables in the request body](/img/docs/red-team/multi-input-http-body-ui.png)
+
+This screenshot shows the HTTP request body specifically, but the same variables can also be used anywhere the HTTP provider supports templating, including the URL, headers, request transforms, response transforms, and body. The same named inputs are also available in other provider types that support variables.
 
 ```yaml
 targets:
@@ -299,7 +316,7 @@ Promptfoo automatically skips plugins that require a single string payload or da
 - `ascii-smuggling`, `cca`, `cross-session-leak`, `special-token-injection`, and `system-prompt-override`
 - Dataset-backed plugins such as `beavertails`, `harmbench`, and `xstest`
 
-Why this happens: multi-input mode packages each generated test as structured JSON across named fields and then applies strategies to that combined payload. Plugins that depend on one opaque prompt string or on fixed dataset samples cannot reliably generate coordinated per-field attacks in that format, so Promptfoo skips them instead of producing misleading tests.
+These plugins are skipped because their current implementations do not support multi-input mode yet.
 
 When one of these plugins is present in your configuration, Promptfoo logs the skipped IDs and continues with the supported plugins.
 
@@ -352,6 +369,7 @@ Standard single-input mode is simpler for applications with a single prompt fiel
 
 ## Related Concepts
 
+- [GitHub Example: redteam-multi-input](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-multi-input) — Browse the full runnable multi-input example
 - [BOLA Plugin](/docs/red-team/plugins/bola/) — Test broken object-level authorization
 - [BFLA Plugin](/docs/red-team/plugins/bfla/) — Test broken function-level authorization
 - [HTTP Provider](/docs/providers/http/) — Configure HTTP API targets
