@@ -1,11 +1,4 @@
-import '@testing-library/jest-dom/vitest';
-// Ensure Prism is initialized before any language components are loaded
-import 'prismjs';
-import 'prismjs/components/prism-clike';
-import 'prismjs/components/prism-javascript';
-import 'prismjs/components/prism-json';
-import 'prismjs/components/prism-yaml';
-import 'prismjs/components/prism-http';
+import '@app/lib/prism';
 
 import { webcrypto } from 'node:crypto';
 
@@ -25,7 +18,8 @@ if (!globalThis.crypto?.subtle) {
   });
 }
 
-// Extend vitest's expect with jest-dom matchers
+// Extend expect manually instead of importing '@testing-library/jest-dom/vitest'
+// so matchers bind to the workspace vitest instance (avoids version mismatch).
 expect.extend(matchers);
 
 import { cleanup } from '@testing-library/react';

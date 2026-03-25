@@ -257,7 +257,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         (await maybeLoadToolsFromExternalFile(this.assistantConfig.tools, context?.vars)) ||
         undefined,
       metadata: this.assistantConfig.metadata || undefined,
-      temperature: this.assistantConfig.temperature || undefined,
+      temperature: this.assistantConfig.temperature ?? undefined,
       tool_choice: this.assistantConfig.toolChoice || undefined,
       tool_resources: this.assistantConfig.tool_resources || undefined,
       thread: {

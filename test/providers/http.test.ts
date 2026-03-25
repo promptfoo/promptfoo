@@ -4448,10 +4448,18 @@ describe('RSA signature authentication', () => {
   let mockSign: MockInstance;
   let mockUpdate: MockInstance;
   let mockEnd: MockInstance;
+  let actualReadFileSync: typeof fs.readFileSync;
 
   beforeEach(() => {
     mockPrivateKey = '-----BEGIN PRIVATE KEY-----\nMOCK_KEY\n-----END PRIVATE KEY-----';
-    vi.spyOn(fs, 'readFileSync').mockReturnValue(mockPrivateKey);
+    actualReadFileSync = fs.readFileSync;
+    vi.spyOn(fs, 'readFileSync').mockImplementation(((path, options) => {
+      if (path === '/path/to/key.pem') {
+        return mockPrivateKey;
+      }
+
+      return actualReadFileSync(path as any, options as any);
+    }) as typeof fs.readFileSync);
 
     mockUpdate = vi.fn();
     mockEnd = vi.fn();
@@ -4615,7 +4623,10 @@ describe('RSA signature authentication', () => {
     await provider.callApi('test');
 
     // Verify signature generation using privateKey directly
-    expect(fs.readFileSync).not.toHaveBeenCalled(); // Should not read from file
+    const privateKeyFileReads = vi
+      .mocked(fs.readFileSync)
+      .mock.calls.filter(([filePath]) => filePath === '/path/to/key.pem');
+    expect(privateKeyFileReads).toHaveLength(0);
     expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
     expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
   });
