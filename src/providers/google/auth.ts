@@ -557,6 +557,9 @@ export class GoogleAuthManager {
 export const loadCredentials = GoogleAuthManager.loadCredentials.bind(GoogleAuthManager);
 export const getGoogleClient = GoogleAuthManager.getOAuthClient.bind(GoogleAuthManager);
 export const resolveProjectId = GoogleAuthManager.resolveProjectId.bind(GoogleAuthManager);
+export const getGoogleApiKey = GoogleAuthManager.getApiKey.bind(GoogleAuthManager);
+export const determineGoogleVertexMode =
+  GoogleAuthManager.determineVertexMode.bind(GoogleAuthManager);
 export const hasGoogleDefaultCredentials =
   GoogleAuthManager.hasDefaultCredentials.bind(GoogleAuthManager);
 export const clearCachedAuth = GoogleAuthManager.clearCache.bind(GoogleAuthManager);

@@ -9,6 +9,6 @@
   "dependencies": {
     "express": "^5.2.1",
     "uuid": "^13.0.0",
-    "openai": "^6.25.0"
+    "openai": "^6.32.0"
   }
 }

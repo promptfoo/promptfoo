@@ -506,4 +506,63 @@ describe('HttpAdvancedConfiguration', () => {
       type: 'pfx',
     });
   });
+
+  it('should initialize file auth when File is selected in the authorization tab', async () => {
+    const user = userEvent.setup();
+    const selectedTarget: ProviderOptions = {
+      id: 'http-provider',
+      config: {},
+    };
+
+    renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={selectedTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+
+    const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+    await user.click(authorizationTab);
+
+    const authTypeSelect = screen.getByRole('combobox', { name: /Authentication Type/i });
+    await user.click(authTypeSelect);
+    await user.click(screen.getByRole('option', { name: 'File' }));
+
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', undefined);
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('auth', {
+      type: 'file',
+      path: '',
+    });
+  });
+
+  it('should update the file auth path', async () => {
+    const user = userEvent.setup();
+    const selectedTarget: ProviderOptions = {
+      id: 'http-provider',
+      config: {
+        auth: {
+          type: 'file',
+          path: './auth/current.ts',
+        },
+      },
+    };
+
+    renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={selectedTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+
+    const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+    await user.click(authorizationTab);
+
+    const input = screen.getByLabelText(/Auth File Path/i);
+    fireEvent.change(input, { target: { value: './auth/next.ts' } });
+
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('auth', {
+      type: 'file',
+      path: './auth/next.ts',
+    });
+  });
 });

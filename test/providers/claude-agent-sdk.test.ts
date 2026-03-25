@@ -305,6 +305,7 @@ describe('ClaudeCodeSDKProvider', () => {
           raw: expect.stringContaining('"type":"result"'),
           sessionId: 'test-session-123',
           metadata: {
+            skillCalls: [],
             toolCalls: [],
             numTurns: 1,
             durationMs: 1000,
@@ -421,6 +422,21 @@ describe('ClaudeCodeSDKProvider', () => {
         await expect(provider.callApi('Test prompt')).rejects.toThrow(
           /Anthropic API key is not set/,
         );
+      });
+
+      it('should not throw when apiKeyRequired is explicitly set to false', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: {
+            apiKeyRequired: false,
+          },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Response');
       });
 
       it('should not throw when using Bedrock or Vertex env vars', async () => {
@@ -2191,6 +2207,132 @@ describe('ClaudeCodeSDKProvider', () => {
             parentToolUseId: null,
           },
         ]);
+        expect(result.metadata?.skillCalls).toEqual([]);
+      });
+
+      it('should derive normalized skillCalls from the Skill tool', async () => {
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'skill-1',
+                  name: 'Skill',
+                  input: {
+                    skill: 'project-standards:standards-check',
+                    args: { target: 'README.md' },
+                  },
+                },
+              ]),
+              session_id: 'test-session',
+            },
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'skill-1',
+                    content: 'README missing',
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'test-session',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'README missing',
+              usage: createMockUsage(100, 120),
+              total_cost_usd: 0.01,
+              duration_ms: 1000,
+              duration_api_ms: 800,
+              is_error: false,
+              num_turns: 1,
+              permission_denials: [],
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Check project standards');
+
+        expect(result.metadata?.skillCalls).toEqual([
+          {
+            name: 'project-standards:standards-check',
+            input: {
+              skill: 'project-standards:standards-check',
+              args: { target: 'README.md' },
+            },
+            is_error: false,
+            source: 'tool',
+          },
+        ]);
+      });
+
+      it('should ignore malformed Skill tool inputs without a string skill name', async () => {
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'skill-1',
+                  name: 'Skill',
+                  input: {
+                    args: { target: 'README.md' },
+                  },
+                },
+              ]),
+              session_id: 'test-session',
+            },
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'skill-1',
+                    content: 'Malformed skill input',
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'test-session',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'Malformed skill input',
+              usage: createMockUsage(100, 120),
+              total_cost_usd: 0.01,
+              duration_ms: 1000,
+              duration_api_ms: 800,
+              is_error: false,
+              num_turns: 1,
+              permission_denials: [],
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Check project standards');
+
+        expect(result.metadata?.skillCalls).toEqual([]);
       });
 
       it('should capture multiple tool calls across multiple turns', async () => {
