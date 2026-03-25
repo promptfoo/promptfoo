@@ -225,7 +225,7 @@ describe('matchesConversationRelevance', () => {
     ];
     const customRubric = 'Custom rubric template with {{ messages | dump(2) }}';
 
-    await matchesConversationRelevance(messages, 0.5, { messages }, { rubricPrompt: customRubric });
+    await matchesConversationRelevance(messages, 0.5, {}, { rubricPrompt: customRubric });
     const prompt = mockProvider.callApi.mock.calls[0][0];
     // Custom rubric prompt (user config) IS rendered as a template — this is the safe path
     expect(prompt).toBe('Custom rubric template with ' + JSON.stringify(messages, null, 2));
