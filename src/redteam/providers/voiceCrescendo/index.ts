@@ -239,7 +239,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
 
   constructor(config: VoiceCrescendoConfig) {
     this.config = { ...config };
-    this.maxTurns = config.maxTurns || DEFAULT_MAX_TURNS;
+    this.maxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
     this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
 
     // Cap turns for unauthenticated users
