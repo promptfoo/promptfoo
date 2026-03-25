@@ -295,6 +295,8 @@ Promptfoo automatically skips plugins that require a single string payload or da
 - `ascii-smuggling`, `cca`, `cross-session-leak`, `special-token-injection`, and `system-prompt-override`
 - Dataset-backed plugins such as `beavertails`, `harmbench`, and `xstest`
 
+Why this happens: multi-input mode packages each generated test as structured JSON across named fields and then applies strategies to that combined payload. Plugins that depend on one opaque prompt string or on fixed dataset samples cannot reliably generate coordinated per-field attacks in that format, so Promptfoo skips them instead of producing misleading tests.
+
 When one of these plugins is present in your configuration, Promptfoo logs the skipped IDs and continues with the supported plugins.
 
 ## Best Practices
