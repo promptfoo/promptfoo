@@ -55,6 +55,21 @@ function isTestCaseWithVars(test: unknown): test is { vars: Record<string, unkno
   return typeof test === 'object' && test !== null && 'vars' in test;
 }
 
+function hasTargetLevelInputs(providers: UnifiedConfig['providers'] | undefined): boolean {
+  if (!Array.isArray(providers)) {
+    return false;
+  }
+
+  return providers.some((provider) => {
+    if (typeof provider !== 'object' || provider === null || !('inputs' in provider)) {
+      return false;
+    }
+
+    const inputs = provider.inputs;
+    return typeof inputs === 'object' && inputs !== null && Object.keys(inputs).length > 0;
+  });
+}
+
 /**
  * When --providers is used alongside a config file that has providers defined,
  * maps each CLI provider token to a matching config provider (preserving its config
@@ -339,8 +354,9 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
         ret.tests.some(
           (test) => isTestCaseWithVars(test) && Object.keys(test.vars || {}).includes('prompt'),
         ));
+    const usesMultiInputTargets = hasTargetLevelInputs(ret.providers);
 
-    if (!hasAnyPrompt) {
+    if (!hasAnyPrompt && !usesMultiInputTargets) {
       logger.warn(
         `Warning: Expected top-level "prompts" property in config or a test variable named "prompt"`,
       );
