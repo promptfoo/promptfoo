@@ -343,6 +343,30 @@ function isGeneratedRedteamAssertion(assertion: { type?: string }): boolean {
   return typeof assertion.type === 'string' && assertion.type.startsWith('promptfoo:redteam:');
 }
 
+type NestedAssertion = {
+  type?: string;
+  assert?: NestedAssertion[];
+};
+
+function hasNestedRedteamAssertion(assertion: NestedAssertion): boolean {
+  if (isGeneratedRedteamAssertion(assertion)) {
+    return true;
+  }
+
+  return (
+    assertion.type === 'assert-set' &&
+    Array.isArray(assertion.assert) &&
+    assertion.assert.some(hasNestedRedteamAssertion)
+  );
+}
+
+function hasGeneratedRedteamMetadata(test: AtomicTestCase): boolean {
+  return (
+    typeof test.metadata?.pluginId === 'string' &&
+    (Boolean(test.metadata?.pluginConfig) || Boolean(test.metadata?.goal))
+  );
+}
+
 function shouldSkipRedteamInjectVar(
   test: AtomicTestCase,
   testSuite: TestSuite | undefined,
@@ -353,10 +377,8 @@ function shouldSkipRedteamInjectVar(
   }
 
   // Exported/generated redteam configs may not include a top-level `redteam` block,
-  // but they still carry redteam assertions plus plugin metadata.
-  return (
-    Boolean(test.metadata?.pluginId) && Boolean(test.assert?.some(isGeneratedRedteamAssertion))
-  );
+  // but they still carry redteam metadata or nested redteam assertions.
+  return hasGeneratedRedteamMetadata(test) || Boolean(test.assert?.some(hasNestedRedteamAssertion));
 }
 
 function getRedteamInjectVar(test: AtomicTestCase, prompt: Prompt, testSuite?: TestSuite): string {
@@ -364,7 +386,17 @@ function getRedteamInjectVar(test: AtomicTestCase, prompt: Prompt, testSuite?: T
     return testSuite.redteam.injectVar;
   }
 
-  const promptVars = extractVariablesFromTemplate(prompt.raw);
+  const promptTemplate = prompt.template ?? prompt.raw;
+  const promptVars = extractVariablesFromTemplate(promptTemplate);
+
+  if (
+    testSuite?.redteam &&
+    promptVars.includes('prompt') &&
+    Object.prototype.hasOwnProperty.call(test.vars ?? {}, 'prompt')
+  ) {
+    return 'prompt';
+  }
+
   const matchingVars = promptVars.filter((variableName) =>
     Object.prototype.hasOwnProperty.call(test.vars ?? {}, variableName),
   );
@@ -1473,6 +1505,7 @@ class Evaluator {
                 prompt: {
                   ...prompt,
                   raw: prependToPrompt + prompt.raw + appendToPrompt,
+                  template: prompt.template ?? prompt.raw,
                 },
                 testSuite,
                 test: (() => {
