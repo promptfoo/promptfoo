@@ -25,14 +25,17 @@ interface Task {
   };
   artifacts: TaskArtifact[];
   history: {
-    state: string;
+    state: Task['status']['state'];
     message: string;
     timestamp: string;
   }[];
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
-const sampleTasks: Record<string, Task> = {
+type TaskKey = 'lead-qualification' | 'content-moderation';
+type TaskState = Task['status']['state'];
+
+const sampleTasks: Record<TaskKey, Task> = {
   'lead-qualification': {
     id: 'task-001',
     sessionId: 'session-001',
@@ -66,7 +69,10 @@ const sampleTasks: Record<string, Task> = {
   },
 };
 
-const taskStateSequences = {
+const taskStateSequences: Record<
+  TaskKey,
+  Array<{ state: TaskState; message: string; duration: number }>
+> = {
   'lead-qualification': [
     { state: 'submitted', message: 'New lead qualification task received', duration: 2000 },
     { state: 'working', message: 'Analyzing lead data and engagement metrics', duration: 3000 },
@@ -88,7 +94,7 @@ const taskStateSequences = {
   ],
 };
 
-const stateColors = {
+const stateColors: Record<TaskState, string> = {
   submitted: '#60a5fa',
   working: '#f59e0b',
   'input-required': '#7c3aed',
@@ -97,7 +103,7 @@ const stateColors = {
   failed: '#ef4444',
 };
 
-const stateDescriptions = {
+const stateDescriptions: Record<TaskState, string> = {
   submitted: 'Task has been received but not yet started',
   working: 'Task is actively being processed',
   'input-required': 'Additional information needed from client',
@@ -111,7 +117,7 @@ export default function A2ATaskSimulator() {
   const [isAnimating, setIsAnimating] = useState(false);
   const [currentSequenceIndex, setCurrentSequenceIndex] = useState(0);
 
-  const resetTask = (taskKey: string) => {
+  const resetTask = (taskKey: TaskKey) => {
     const task = { ...sampleTasks[taskKey] };
     task.status = {
       state: 'submitted',
@@ -123,7 +129,7 @@ export default function A2ATaskSimulator() {
     return task;
   };
 
-  const handleTaskSelect = (taskKey: string) => {
+  const handleTaskSelect = (taskKey: TaskKey) => {
     if (isAnimating) {
       return;
     }
@@ -131,7 +137,7 @@ export default function A2ATaskSimulator() {
     setCurrentSequenceIndex(0);
   };
 
-  const addHistoryEntry = (task: Task, newState: string, message: string) => {
+  const addHistoryEntry = (task: Task, newState: TaskState, message: string) => {
     return {
       ...task,
       history: [
@@ -195,9 +201,9 @@ export default function A2ATaskSimulator() {
     }
 
     setIsAnimating(true);
-    const taskKey =
-      Object.entries(sampleTasks).find(([_, task]) => task.id === selectedTask.id)?.[0] ||
-      'lead-qualification';
+    const taskKey = (Object.entries(sampleTasks).find(
+      ([_, task]) => task.id === selectedTask.id,
+    )?.[0] ?? 'lead-qualification') as TaskKey;
     const sequence = taskStateSequences[taskKey];
 
     for (let i = 0; i < sequence.length; i++) {
@@ -224,7 +230,7 @@ export default function A2ATaskSimulator() {
             <button
               key={key}
               className={`${styles.taskButton} ${selectedTask.id === task.id ? styles.active : ''}`}
-              onClick={() => handleTaskSelect(key)}
+              onClick={() => handleTaskSelect(key as TaskKey)}
               disabled={isAnimating}
             >
               {key
@@ -243,7 +249,7 @@ export default function A2ATaskSimulator() {
         <div className={styles.stateVisualizer}>
           <h5>Task Lifecycle States</h5>
           <div className={styles.states}>
-            {Object.keys(stateDescriptions).map((state) => (
+            {(Object.keys(stateDescriptions) as TaskState[]).map((state) => (
               <div
                 key={state}
                 className={`${styles.state} ${
