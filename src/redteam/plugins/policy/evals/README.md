@@ -2,22 +2,20 @@
 
 This suite evaluates the `PolicyPlugin` test generator itself.
 
-It compares four generation modes:
+It compares four native `promptfoo redteam generate` cases:
 
 - normal single-input generation
 - policy text with explicit test-generation instructions
 - modifier-driven generation (Spanish output)
 - multi-input generation with coordinated `document` / `query` attacks
 
-The suite uses a local custom provider that calls the real `PolicyPlugin.generateTests()` path and returns a structured JSON trace containing:
+The eval flow is:
 
-- the rendered generation prompt sent to the model
-- the raw model output
-- the parsed generated cases
+- run `promptfoo redteam generate` against each case config under `cases/`
+- parse the generated YAML test artifacts
+- feed those generated cases into Promptfoo assertions and `llm-rubric` checks
 
-Promptfoo then grades those outputs with `llm-rubric` assertions tuned for policy-test quality, diversity, formatting, and case-specific expectations.
-
-The default generator provider uses `gpt-4.1-mini` for stable plain-text prompt generation. You can duplicate the provider block in `promptfooconfig.yaml` to compare generator models directly.
+That keeps the suite on Promptfoo's real CLI generation path instead of using a custom harness provider.
 
 ## Prerequisites
 
@@ -32,14 +30,9 @@ npm run local -- validate -c src/redteam/plugins/policy/evals/promptfooconfig.ya
 npm run local -- eval -c src/redteam/plugins/policy/evals/promptfooconfig.yaml --env-file .env --no-cache
 ```
 
-To save and inspect the raw results:
-
-```bash
-npm run local -- eval -c src/redteam/plugins/policy/evals/promptfooconfig.yaml --env-file .env --no-cache -o src/redteam/plugins/policy/evals/output.json
-```
-
 ## Files
 
 - `promptfooconfig.yaml` - eval suite
-- `policyGenerationProvider.cjs` - local harness that runs `PolicyPlugin.generateTests()`
-- `tests/policy-generation.yaml` - comparison cases and grading assertions
+- `generateEvalCases.cjs` - JS test generator that runs `redteam generate` for each case config
+- `cases/*.yaml` - native redteam generation configs being compared
+- `tests/policy-generation.yaml` - case metadata and Promptfoo assertions
