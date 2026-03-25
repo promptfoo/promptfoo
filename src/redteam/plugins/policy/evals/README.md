@@ -12,8 +12,8 @@ It compares four native `promptfoo redteam generate` cases:
 The eval flow is:
 
 - run `promptfoo redteam generate` against each case config under `cases/`
-- parse the generated YAML test artifacts
-- feed those generated cases into Promptfoo assertions and `llm-rubric` checks
+- normalize the generated YAML into a stable JSON payload
+- feed that payload into Promptfoo assertions and `llm-rubric` checks through an executable prompt
 
 That keeps the suite on Promptfoo's real CLI generation path instead of using a custom harness provider.
 
@@ -30,9 +30,15 @@ npm run local -- validate -c src/redteam/plugins/policy/evals/promptfooconfig.ya
 npm run local -- eval -c src/redteam/plugins/policy/evals/promptfooconfig.yaml --env-file .env --no-cache
 ```
 
+To generate any single comparison case directly:
+
+```bash
+npm run local -- redteam generate -c src/redteam/plugins/policy/evals/cases/normal-single-input.yaml -o /tmp/policy-normal.yaml --force
+```
+
 ## Files
 
 - `promptfooconfig.yaml` - eval suite
-- `generateEvalCases.cjs` - JS test generator that runs `redteam generate` for each case config
+- `generatePolicyEvalPrompt.cjs` - executable prompt that runs `redteam generate` for one case and emits normalized JSON
 - `cases/*.yaml` - native redteam generation configs being compared
 - `tests/policy-generation.yaml` - case metadata and Promptfoo assertions
