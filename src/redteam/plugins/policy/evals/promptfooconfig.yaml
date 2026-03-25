@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Evaluate PolicyPlugin generation quality across normal, instruction-heavy, modifier, and multi-input scenarios
+description: Evaluate PolicyPlugin generation quality across normal, instruction-heavy, modifier, multi-input, and log-analysis scenarios
 
 prompts:
   - 'exec:file://generatePolicyEvalPrompt.cjs'

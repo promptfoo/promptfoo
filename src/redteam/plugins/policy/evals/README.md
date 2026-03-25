@@ -2,12 +2,13 @@
 
 This suite evaluates the `PolicyPlugin` test generator itself.
 
-It compares four native `promptfoo redteam generate` cases:
+It compares five native `promptfoo redteam generate` cases:
 
 - normal single-input generation
 - policy text with explicit test-generation instructions
 - modifier-driven generation (Spanish output)
 - multi-input generation with coordinated `document` / `query` attacks
+- log-analysis generation with `PromptBlock:` output
 
 The eval flow is:
 
