@@ -1611,7 +1611,9 @@ function ResultsTable({
                             alt="Base64 encoded image"
                             style={{
                               maxWidth: '100%',
+                              maxHeight: '200px',
                               height: 'auto',
+                              objectFit: 'contain',
                               cursor: 'pointer',
                             }}
                             onClick={() => toggleLightbox(imgSrc)}
