@@ -3,6 +3,7 @@ import './syntax-highlighting.css';
 import { useCallback, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
+import Editor from '@app/components/ui/code-editor';
 import {
   Dialog,
   DialogContent,
@@ -42,7 +43,6 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import Editor from 'react-simple-code-editor';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import PostmanImportDialog from './PostmanImportDialog';
 import ResponseParserTestModal from './ResponseParserTestModal';

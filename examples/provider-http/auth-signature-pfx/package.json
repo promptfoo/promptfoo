@@ -11,7 +11,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
     "pem": "^1.15.1",
-    "promptfoo": "^0.120.17"
+    "promptfoo": "^0.121.0"
   },
   "keywords": [
     "promptfoo",

@@ -5,8 +5,8 @@ prompts:
   - 'Answer the following concisely: {{message}}'
 
 providers:
-  - id: openai:chat:gpt-5-mini
-  - id: azure:chat:gpt-5-mini
+  - id: openai:chat:gpt-5.4
+  - id: azure:chat:gpt-5.4
     config:
       apiHost: your-resource-name.openai.azure.com
 

@@ -30,7 +30,10 @@ import {
   urlEncodeRawRequestPath,
 } from '../../src/providers/http';
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
+import { runPython } from '../../src/python/pythonUtils';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../../src/util/file';
+import { functionCache } from '../../src/util/functions/loadFunction';
+import { TOKEN_REFRESH_BUFFER_MS } from '../../src/util/oauth';
 import { sanitizeObject, sanitizeUrl } from '../../src/util/sanitizer';
 
 // Mock console.warn to prevent test noise
@@ -91,6 +94,16 @@ vi.mock('../../src/cliState', async () => {
   };
 });
 
+vi.mock('../../src/python/pythonUtils', async () => {
+  const actual = await vi.importActual<typeof import('../../src/python/pythonUtils')>(
+    '../../src/python/pythonUtils',
+  );
+  return {
+    ...actual,
+    runPython: vi.fn(),
+  };
+});
+
 // Mock jks-js module for JKS tests - don't use importOriginal as the native module may fail to load
 vi.mock('jks-js', () => ({
   toPem: vi.fn(),
@@ -108,12 +121,16 @@ beforeEach(() => {
   vi.mocked(fetchWithCache).mockReset();
   vi.mocked(maybeLoadFromExternalFile).mockReset();
   vi.mocked(maybeLoadConfigFromExternalFile).mockReset();
+  vi.mocked(runPython).mockReset();
   vi.mocked(fetchWithCache).mockResolvedValue(undefined as any);
   vi.mocked(maybeLoadFromExternalFile).mockImplementation(function (input: unknown) {
     return input;
   });
   vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function (input: unknown) {
     return input;
+  });
+  Object.keys(functionCache).forEach((key) => {
+    delete functionCache[key];
   });
 });
 
@@ -4431,10 +4448,18 @@ describe('RSA signature authentication', () => {
   let mockSign: MockInstance;
   let mockUpdate: MockInstance;
   let mockEnd: MockInstance;
+  let actualReadFileSync: typeof fs.readFileSync;
 
   beforeEach(() => {
     mockPrivateKey = '-----BEGIN PRIVATE KEY-----\nMOCK_KEY\n-----END PRIVATE KEY-----';
-    vi.spyOn(fs, 'readFileSync').mockReturnValue(mockPrivateKey);
+    actualReadFileSync = fs.readFileSync;
+    vi.spyOn(fs, 'readFileSync').mockImplementation(((path, options) => {
+      if (path === '/path/to/key.pem') {
+        return mockPrivateKey;
+      }
+
+      return actualReadFileSync(path as any, options as any);
+    }) as typeof fs.readFileSync);
 
     mockUpdate = vi.fn();
     mockEnd = vi.fn();
@@ -4598,7 +4623,10 @@ describe('RSA signature authentication', () => {
     await provider.callApi('test');
 
     // Verify signature generation using privateKey directly
-    expect(fs.readFileSync).not.toHaveBeenCalled(); // Should not read from file
+    const privateKeyFileReads = vi
+      .mocked(fs.readFileSync)
+      .mock.calls.filter(([filePath]) => filePath === '/path/to/key.pem');
+    expect(privateKeyFileReads).toHaveLength(0);
     expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
     expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
   });
@@ -6265,6 +6293,115 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
     expect(headers?.authorization).toBe(`Bearer ${expectedToken}`);
   });
 
+  it('should expose the refreshed token as vars.token for header templating', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Auth-Token': '{{ token }}',
+        },
+        body: { key: '{{ prompt }}' },
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          tokenUrl,
+          clientId: 'test-client-id',
+          clientSecret: 'test-client-secret',
+        },
+      },
+    });
+
+    const expectedToken = 'templated-header-token';
+    const tokenResponse = {
+      data: JSON.stringify({
+        access_token: expectedToken,
+        expires_in: 3600,
+      }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    const apiResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    vi.mocked(fetchWithCache).mockImplementation(async (url: RequestInfo) => {
+      const urlString =
+        typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
+      return urlString === tokenUrl ? tokenResponse : apiResponse;
+    });
+
+    await provider.callApi('test prompt');
+
+    const apiCall = vi.mocked(fetchWithCache).mock.calls.find((call) => call[0] === mockUrl);
+    expect(apiCall).toBeDefined();
+
+    const headers = apiCall![1]?.headers as Record<string, string> | undefined;
+    expect(headers?.authorization).toBe(`Bearer ${expectedToken}`);
+    expect(headers?.['x-auth-token']).toBe(expectedToken);
+  });
+
+  it('should expose the refreshed token as vars.token for body templating', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          key: '{{ prompt }}',
+          token: '{{ token }}',
+        },
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          tokenUrl,
+          clientId: 'test-client-id',
+          clientSecret: 'test-client-secret',
+        },
+      },
+    });
+
+    const expectedToken = 'templated-body-token';
+    const tokenResponse = {
+      data: JSON.stringify({
+        access_token: expectedToken,
+        expires_in: 3600,
+      }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    const apiResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    vi.mocked(fetchWithCache).mockImplementation(async (url: RequestInfo) => {
+      const urlString =
+        typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
+      return urlString === tokenUrl ? tokenResponse : apiResponse;
+    });
+
+    await provider.callApi('test prompt');
+
+    const apiCall = vi.mocked(fetchWithCache).mock.calls.find((call) => call[0] === mockUrl);
+    expect(apiCall).toBeDefined();
+
+    expect(apiCall![1]?.body).toBe(
+      JSON.stringify({
+        key: 'test prompt',
+        token: expectedToken,
+      }),
+    );
+  });
+
   it('should handle password grant type with deduplication', async () => {
     const provider = new HttpProvider(mockUrl, {
       config: {
@@ -6319,6 +6456,641 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
 
     // Should only refresh once
     expect(refreshCallCount).toBe(1);
+  });
+});
+
+describe('HttpProvider - File Auth', () => {
+  const mockUrl = 'http://example.com/api';
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('should parse auth.type file in the provider config schema', () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    expect(provider.config.auth).toEqual({
+      type: 'file',
+      path: './auth/get-token.js',
+    });
+  });
+
+  it('should inject a file auth token into templated headers, query params, and body', async () => {
+    const authFn = vi.fn().mockResolvedValue({
+      token: 'file-token-123',
+      expiration: Date.now() + 60_000,
+    });
+    vi.mocked(importModule).mockImplementation(
+      async (_modulePath: string, functionName?: string) => {
+        if (functionName) {
+          return authFn;
+        }
+        return { default: authFn };
+      },
+    );
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer {{token}}',
+          'X-Token-Expiry': '{{expiration}}',
+        },
+        queryParams: {
+          access_token: '{{token}}',
+        },
+        body: {
+          prompt: '{{prompt}}',
+          token: '{{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    await provider.callApi('test prompt', {
+      prompt: { raw: 'test prompt', label: 'test prompt' },
+      vars: {},
+    });
+
+    expect(authFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vars: expect.objectContaining({
+          prompt: 'test prompt',
+        }),
+      }),
+    );
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      `${mockUrl}?access_token=file-token-123`,
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          authorization: 'Bearer file-token-123',
+          'x-token-expiry': expect.any(String),
+        }),
+        body: JSON.stringify({
+          prompt: 'test prompt',
+          token: 'file-token-123',
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should support named TypeScript exports via file:// references', async () => {
+    const authFn = vi.fn().mockResolvedValue({
+      token: 'named-export-token',
+    });
+    vi.mocked(importModule).mockImplementation(
+      async (_modulePath: string, functionName?: string) => {
+        if (functionName === 'buildAuth') {
+          return authFn;
+        }
+        return { default: authFn };
+      },
+    );
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        request: dedent`
+          POST /chat HTTP/1.1
+          Host: example.com
+          Authorization: Bearer {{token}}
+          Content-Type: application/json
+
+          {"token":"{{token}}","prompt":"{{prompt}}"}
+        `,
+        auth: {
+          type: 'file',
+          path: 'file://./auth/get-token.ts:buildAuth',
+        },
+      },
+    });
+
+    await provider.callApi('raw prompt', {
+      prompt: { raw: 'raw prompt', label: 'raw prompt' },
+      vars: {},
+    });
+
+    const rawRequestCall = vi
+      .mocked(fetchWithCache)
+      .mock.calls.find((call) => String(call[0]) === 'http://example.com/chat');
+    expect(rawRequestCall).toBeDefined();
+    expect(rawRequestCall?.[1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          authorization: 'Bearer named-export-token',
+          'content-type': 'application/json',
+          host: 'example.com',
+        }),
+        body: '{"token":"named-export-token","prompt":"raw prompt"}',
+      }),
+    );
+  });
+
+  it('should load Python auth files using get_auth by default', async () => {
+    vi.mocked(runPython).mockResolvedValue({
+      token: 'python-token',
+    });
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.py',
+        },
+      },
+    });
+
+    await provider.callApi('test prompt', {
+      prompt: { raw: 'test prompt', label: 'test prompt' },
+      vars: {},
+    });
+
+    expect(runPython).toHaveBeenCalledWith(
+      path.resolve('/mock/base/path', './auth/get-token.py'),
+      'get_auth',
+      [
+        expect.objectContaining({
+          vars: expect.objectContaining({
+            prompt: 'test prompt',
+          }),
+        }),
+      ],
+    );
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          authorization: 'Bearer python-token',
+        }),
+        method: 'GET',
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should reuse a non-expiring file auth token across requests', async () => {
+    const authFn = vi.fn().mockResolvedValue({
+      token: 'never-expire-token',
+    });
+    vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    await provider.callApi('first prompt', {
+      prompt: { raw: 'first prompt', label: 'first prompt' },
+      vars: {},
+    });
+    await provider.callApi('second prompt', {
+      prompt: { raw: 'second prompt', label: 'second prompt' },
+      vars: {},
+    });
+
+    expect(authFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('should refresh a file auth token when it is within the oauth refresh buffer', async () => {
+    const authFn = vi
+      .fn()
+      .mockResolvedValueOnce({
+        token: 'stale-token',
+        expiration: Date.now() + TOKEN_REFRESH_BUFFER_MS - 1,
+      })
+      .mockResolvedValueOnce({
+        token: 'fresh-token',
+        expiration: Date.now() + TOKEN_REFRESH_BUFFER_MS + 60_000,
+      });
+    vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    await provider.callApi('first prompt', {
+      prompt: { raw: 'first prompt', label: 'first prompt' },
+      vars: {},
+    });
+    await provider.callApi('second prompt', {
+      prompt: { raw: 'second prompt', label: 'second prompt' },
+      vars: {},
+    });
+
+    expect(authFn).toHaveBeenCalledTimes(2);
+    const secondApiCall = vi.mocked(fetchWithCache).mock.calls[1];
+    expect(secondApiCall?.[1]).toEqual(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          authorization: 'Bearer fresh-token',
+        }),
+      }),
+    );
+  });
+
+  it('should deduplicate concurrent file auth refreshes', async () => {
+    const authFn = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return {
+        token: 'shared-file-token',
+        expiration: Date.now() + TOKEN_REFRESH_BUFFER_MS + 60_000,
+      };
+    });
+    vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    const requests = Promise.all([
+      provider.callApi('test 1', {
+        prompt: { raw: 'test 1', label: 'test 1' },
+        vars: {},
+      }),
+      provider.callApi('test 2', {
+        prompt: { raw: 'test 2', label: 'test 2' },
+        vars: {},
+      }),
+      provider.callApi('test 3', {
+        prompt: { raw: 'test 3', label: 'test 3' },
+        vars: {},
+      }),
+    ]);
+    await vi.advanceTimersByTimeAsync(50);
+    await requests;
+
+    expect(authFn).toHaveBeenCalledTimes(1);
+    for (const call of vi.mocked(fetchWithCache).mock.calls) {
+      expect(call[1]).toEqual(
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            authorization: 'Bearer shared-file-token',
+          }),
+        }),
+      );
+    }
+  });
+
+  it('should make file auth values available to transformRequest before the request is rendered', async () => {
+    const authFn = vi.fn().mockResolvedValue({
+      token: 'transform-token',
+    });
+    const transformRequest = vi.fn((_prompt: string, vars: Record<string, any>) => ({
+      transformedToken: vars.token,
+      transformedExpiration: vars.expiration,
+    }));
+    vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {},
+        transformRequest,
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    await provider.callApi('test prompt', {
+      prompt: { raw: 'test prompt', label: 'test prompt' },
+      vars: {},
+    });
+
+    expect(transformRequest).toHaveBeenCalledWith(
+      'test prompt',
+      expect.objectContaining({
+        token: 'transform-token',
+        expiration: undefined,
+      }),
+      expect.anything(),
+    );
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        body: JSON.stringify({
+          transformedToken: 'transform-token',
+          transformedExpiration: undefined,
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should make file auth values available when rendering the session endpoint config', async () => {
+    const authFn = vi.fn().mockResolvedValue({
+      token: 'session-token',
+      expiration: 1234567890,
+    });
+    vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          prompt: '{{prompt}}',
+          session: '{{sessionId}}',
+        },
+        session: {
+          url: 'http://example.com/session',
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer {{token}}',
+            'X-Token-Expiration': '{{expiration}}',
+          },
+          body: {
+            token: '{{token}}',
+          },
+          responseParser: 'data.body.sessionId',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    vi.mocked(fetchWithCache)
+      .mockResolvedValueOnce({
+        data: JSON.stringify({ sessionId: 'session-123' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+        headers: {},
+      })
+      .mockResolvedValueOnce({
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+        headers: {},
+      });
+
+    await provider.callApi('test prompt', {
+      prompt: { raw: 'test prompt', label: 'test prompt' },
+      vars: {},
+    });
+
+    const sessionCall = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(sessionCall?.[0]).toBe('http://example.com/session');
+    expect(sessionCall?.[1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          authorization: 'Bearer session-token',
+          'x-token-expiration': '1234567890',
+        }),
+        body: JSON.stringify({
+          token: 'session-token',
+        }),
+      }),
+    );
+
+    const mainCall = vi.mocked(fetchWithCache).mock.calls[1];
+    expect(mainCall?.[1]).toEqual(
+      expect.objectContaining({
+        body: JSON.stringify({
+          prompt: 'test prompt',
+          session: 'session-123',
+        }),
+      }),
+    );
+  });
+
+  it('should warn when file auth overwrites token vars', async () => {
+    const authFn = vi.fn().mockResolvedValue({
+      token: 'replacement-token',
+      expiration: 123456,
+    });
+    vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    await provider.callApi('test prompt', {
+      prompt: { raw: 'test prompt', label: 'test prompt' },
+      vars: {
+        token: 'existing-token',
+        expiration: 1,
+      },
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[HTTP Provider Auth]: `token` is already defined in vars and will be overwritten',
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[HTTP Provider Auth]: `expiration` is already defined in vars and will be overwritten',
+    );
+  });
+
+  it.each([
+    { label: 'null', result: null },
+    { label: 'string', result: 'token' },
+    { label: 'missing token', result: { expiration: 123 } },
+    { label: 'empty token', result: { token: '' } },
+    { label: 'invalid expiration', result: { token: 'abc', expiration: 'soon' } },
+  ])('should reject invalid file auth return values: $label', async ({ result }) => {
+    const authFn = vi.fn().mockResolvedValue(result);
+    vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    await expect(
+      provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: {},
+      }),
+    ).rejects.toThrow('Failed to refresh file auth token');
+  });
+
+  it('should surface thrown errors from the auth file', async () => {
+    const authFn = vi.fn().mockRejectedValue(new Error('boom'));
+    vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    await expect(
+      provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: {},
+      }),
+    ).rejects.toThrow('Failed to refresh file auth token: Error: boom');
+  });
+
+  it('should surface missing JavaScript exports clearly', async () => {
+    vi.mocked(importModule).mockImplementation(async () => ({
+      default: {
+        notAFunction: true,
+      },
+    }));
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    await expect(
+      provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: {},
+      }),
+    ).rejects.toThrow('JavaScript file must export a function');
+  });
+
+  it('should surface missing files clearly', async () => {
+    vi.mocked(importModule).mockRejectedValue(new Error('ENOENT: no such file or directory'));
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/missing.js',
+        },
+      },
+    });
+
+    await expect(
+      provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: {},
+      }),
+    ).rejects.toThrow('ENOENT: no such file or directory');
+  });
+
+  it('should surface missing Python function names clearly', async () => {
+    vi.mocked(runPython).mockRejectedValue(new Error("Function 'missing_auth' not found"));
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: 'file://./auth/get-token.py:missing_auth',
+        },
+      },
+    });
+
+    await expect(
+      provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: {},
+      }),
+    ).rejects.toThrow("Function 'missing_auth' not found");
   });
 });
 
