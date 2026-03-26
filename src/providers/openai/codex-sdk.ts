@@ -276,7 +276,7 @@ async function loadCodexSDK(): Promise<any> {
       To use the OpenAI Codex SDK provider, install it with:
         npm install @openai/codex-sdk
 
-      Requires Node.js 18+.
+      Requires Node.js 20.20+ or 22.22+.
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );
@@ -293,7 +293,7 @@ async function loadCodexSDK(): Promise<any> {
       dedent`Failed to load @openai/codex-sdk.
 
       The package was found but could not be loaded. This may be due to:
-      - Incompatible Node.js version (requires Node.js 18+)
+      - Incompatible Node.js version (requires Node.js 20.20+ or 22.22+)
       - Corrupted installation
 
       Try reinstalling:

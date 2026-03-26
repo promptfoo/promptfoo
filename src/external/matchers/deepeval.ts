@@ -46,17 +46,13 @@ export async function matchesConversationRelevance(
     'conversation relevancy check',
   );
 
-  // First, render any variables within the messages themselves
-  const renderedMessages = messages.map((msg) => ({
-    input:
-      typeof msg.input === 'string' && vars ? nunjucks.renderString(msg.input, vars) : msg.input,
-    output:
-      typeof msg.output === 'string' && vars ? nunjucks.renderString(msg.output, vars) : msg.output,
-  }));
-
   // Convert messages to the format expected by ConversationRelevancyTemplate
+  // Messages contain runtime data (model output in msg.output, conversation prompts in
+  // msg.input) and must NOT be rendered as Nunjucks templates. Rendering untrusted model
+  // output as a template enables SSTI — credential exfiltration via {{env.SECRET}} and
+  // RCE via {{range.constructor(...)()}}. Pass messages through as data only.
   const messageRoles: MessageRole[] = [];
-  for (const msg of renderedMessages) {
+  for (const msg of messages) {
     messageRoles.push({
       role: 'user',
       content: typeof msg.input === 'string' ? msg.input : JSON.stringify(msg.input),
@@ -77,7 +73,7 @@ export async function matchesConversationRelevance(
   if (loadedRubricPrompt) {
     // Use custom rubric prompt with nunjucks rendering
     promptText = nunjucks.renderString(loadedRubricPrompt, {
-      messages: renderedMessages,
+      messages,
       ...(vars || {}),
     });
   } else {
@@ -89,7 +85,7 @@ export async function matchesConversationRelevance(
     textProvider,
     promptText,
     'conversation-relevance',
-    { messages: renderedMessages, ...(vars || {}) },
+    { messages, ...(vars || {}) },
     providerCallContext,
   );
   if (resp.error || !resp.output) {
