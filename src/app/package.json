@@ -73,7 +73,7 @@
     "storybook": "^10.2.10",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.2",
-    "typescript": "^6.0.0",
+    "typescript": "^6.0.2",
     "use-debounce": "^10.1.0",
     "vite": "^8.0.0",
     "vitest": "^4.1.0",

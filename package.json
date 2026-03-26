@@ -171,7 +171,7 @@
     "supertest": "^7.2.2",
     "ts-dedent": "^2.2.0",
     "tsdown": "0.21.5",
-    "typescript": "^6.0.0",
+    "typescript": "^6.0.2",
     "vitest": "^4.1.0",
     "winston-transport": "^4.9.0"
   },
