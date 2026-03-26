@@ -31,6 +31,7 @@ import type {
  *   npm install @openai/codex-sdk
  *
  * Key features:
+ * - Supports API key auth or existing Codex/ChatGPT login state
  * - Thread-based conversations with persistence in ~/.codex/sessions
  * - Native JSON schema output with Zod support
  * - Git repository requirement for safety (can be disabled)
@@ -337,9 +338,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return this.providerId;
   }
 
-  getApiKey(): string | undefined {
+  getApiKey(config: OpenAICodexSDKConfig = this.config): string | undefined {
     return (
-      this.config?.apiKey ||
+      config?.apiKey ||
       this.env?.OPENAI_API_KEY ||
       this.env?.CODEX_API_KEY ||
       getEnvString('OPENAI_API_KEY') ||
@@ -384,6 +385,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private prepareEnvironment(
     config: OpenAICodexSDKConfig,
     traceparent?: string,
+    apiKey: string | undefined = this.getApiKey(config),
   ): Record<string, string> {
     const env: Record<string, string> = config.cli_env
       ? { ...config.cli_env }
@@ -397,12 +399,6 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
 
-    // Inject API key
-    if (this.apiKey) {
-      sortedEnv.OPENAI_API_KEY = this.apiKey;
-      sortedEnv.CODEX_API_KEY = this.apiKey;
-    }
-
     // Inject env overrides
     if (this.env) {
       for (const key of Object.keys(this.env).sort()) {
@@ -411,6 +407,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           sortedEnv[key] = value;
         }
       }
+    }
+
+    // Inject API key last so explicit config wins over inherited env state.
+    if (apiKey) {
+      sortedEnv.OPENAI_API_KEY = apiKey;
+      sortedEnv.CODEX_API_KEY = apiKey;
     }
 
     // Inject OpenTelemetry configuration for deep tracing
@@ -488,10 +490,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private buildCodexOptions(
     env: Record<string, string>,
     config: OpenAICodexSDKConfig,
+    apiKey: string | undefined = this.getApiKey(config),
   ): Record<string, any> {
     return {
       env,
-      ...(this.apiKey ? { apiKey: this.apiKey } : {}),
+      ...(apiKey ? { apiKey } : {}),
       ...(config.codex_path_override ? { codexPathOverride: config.codex_path_override } : {}),
       ...(config.base_url ? { baseUrl: config.base_url } : {}),
       ...(config.cli_config ? { config: config.cli_config } : {}),
@@ -1164,13 +1167,16 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // Get current trace context for deep tracing
     // This allows the Codex CLI to export its internal spans as children of our span
     const currentTraceparent = getTraceparent();
+    const apiKey = this.getApiKey(config);
 
     // Prepare environment with OTEL config for deep tracing
-    const env: Record<string, string> = this.prepareEnvironment(config, currentTraceparent);
+    const env: Record<string, string> = this.prepareEnvironment(config, currentTraceparent, apiKey);
 
-    if (!this.apiKey && !env.OPENAI_API_KEY && !env.CODEX_API_KEY) {
-      throw new Error(
-        'OpenAI API key is not set. Set OPENAI_API_KEY or CODEX_API_KEY environment variable or add "apiKey" to provider config.',
+    if (apiKey) {
+      logger.debug('[CodexSDK] Using explicit API credentials from promptfoo config/environment');
+    } else {
+      logger.debug(
+        '[CodexSDK] No explicit API credentials configured; deferring auth resolution to Codex SDK login state',
       );
     }
 
@@ -1208,7 +1214,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
 
       // Create a fresh instance for this call only (not cached)
-      localInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config));
+      localInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config, apiKey));
     } else {
       // Standard caching path for non-deep-tracing mode
       // Exclude TRACEPARENT from hash to preserve thread persistence across traces
@@ -1232,7 +1238,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           this.threads.clear();
         }
         // Create new instance with full environment
-        this.codexInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config));
+        this.codexInstance = new this.codexModule.Codex(
+          this.buildCodexOptions(env, config, apiKey),
+        );
         this.codexInstanceEnvHash = envHash;
       }
     }

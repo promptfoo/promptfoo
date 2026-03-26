@@ -204,12 +204,21 @@ describe('OpenAICodexSDKProvider', () => {
         errorSpy.mockRestore();
       });
 
-      it('should return error when API key is missing', async () => {
+      it('should allow SDK-managed auth when API key is missing', async () => {
         delete process.env.OPENAI_API_KEY;
         delete process.env.CODEX_API_KEY;
+        mockRun.mockResolvedValue(createMockResponse('Login-backed response'));
 
         const provider = new OpenAICodexSDKProvider();
-        await expect(provider.callApi('Test prompt')).rejects.toThrow(/OpenAI API key is not set/);
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('Login-backed response');
+        expect(MockCodex).toHaveBeenCalledTimes(1);
+
+        const codexOptions = MockCodex.mock.calls[0][0];
+        expect(codexOptions.apiKey).toBeUndefined();
+        expect(codexOptions.env.OPENAI_API_KEY).toBeUndefined();
+        expect(codexOptions.env.CODEX_API_KEY).toBeUndefined();
       });
     });
 
@@ -943,6 +952,30 @@ describe('OpenAICodexSDKProvider', () => {
             env: expect.objectContaining({
               OPENAI_API_KEY: 'config-key',
               CODEX_API_KEY: 'config-key',
+            }),
+          }),
+        );
+      });
+
+      it('should use prompt config apiKey over env vars', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'env-key' },
+        });
+
+        await provider.callApi('Test prompt', {
+          prompt: {
+            config: { apiKey: 'prompt-key' },
+          },
+        } as any);
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            apiKey: 'prompt-key',
+            env: expect.objectContaining({
+              OPENAI_API_KEY: 'prompt-key',
+              CODEX_API_KEY: 'prompt-key',
             }),
           }),
         );
