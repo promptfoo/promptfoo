@@ -82,6 +82,7 @@ export const PLUGIN_DOCUMENTATION_MAP: Record<string, string> = {
   'financial:compliance-violation': `${BASE_DOCS_URL}/financial/`,
   'financial:data-leakage': `${BASE_DOCS_URL}/financial/`,
   'financial:hallucination': `${BASE_DOCS_URL}/financial/`,
+  'financial:japan-fiea-suitability': `${BASE_DOCS_URL}/financial/`,
   'financial:sycophancy': `${BASE_DOCS_URL}/financial/`,
   'medical:anchoring-bias': `${BASE_DOCS_URL}/medical/`,
   'medical:hallucination': `${BASE_DOCS_URL}/medical/`,

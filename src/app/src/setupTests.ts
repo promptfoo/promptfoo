@@ -1,16 +1,37 @@
-import '@testing-library/jest-dom/vitest';
-// Ensure Prism is initialized before any language components are loaded
-import 'prismjs';
-import 'prismjs/components/prism-clike';
-import 'prismjs/components/prism-javascript';
-import 'prismjs/components/prism-json';
-import 'prismjs/components/prism-yaml';
-import 'prismjs/components/prism-http';
+import '@app/lib/prism';
 
 import { webcrypto } from 'node:crypto';
 
 import * as matchers from '@testing-library/jest-dom/matchers';
 import { afterEach, expect, vi } from 'vitest';
+
+class MemoryStorage implements Storage {
+  private store = new Map<string, string>();
+
+  get length() {
+    return this.store.size;
+  }
+
+  clear() {
+    this.store.clear();
+  }
+
+  getItem(key: string) {
+    return this.store.get(key) ?? null;
+  }
+
+  key(index: number) {
+    return Array.from(this.store.keys())[index] ?? null;
+  }
+
+  removeItem(key: string) {
+    this.store.delete(key);
+  }
+
+  setItem(key: string, value: string) {
+    this.store.set(key, value);
+  }
+}
 
 /**
  * Polyfill crypto.subtle for jsdom environment.
@@ -25,7 +46,16 @@ if (!globalThis.crypto?.subtle) {
   });
 }
 
-// Extend vitest's expect with jest-dom matchers
+if (typeof globalThis.localStorage?.clear !== 'function') {
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: new MemoryStorage(),
+    writable: true,
+    configurable: true,
+  });
+}
+
+// Extend expect manually instead of importing '@testing-library/jest-dom/vitest'
+// so matchers bind to the workspace vitest instance (avoids version mismatch).
 expect.extend(matchers);
 
 import { cleanup } from '@testing-library/react';

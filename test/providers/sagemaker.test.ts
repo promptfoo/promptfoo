@@ -44,6 +44,7 @@ describe('SageMakerCompletionProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('cache flag behavior', () => {
@@ -99,6 +100,24 @@ describe('SageMakerCompletionProvider', () => {
       expect(result.cached).toBe(true);
       expect(result.metadata?.transformed).toBe(true);
       expect(result.metadata?.originalPrompt).toBe('original prompt');
+    });
+  });
+
+  describe('payload formatting', () => {
+    it('preserves an explicit maxTokens value of 0', () => {
+      vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '1024');
+
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'openai',
+          maxTokens: 0,
+        },
+      });
+
+      const payload = JSON.parse(provider.formatPayload('Hello'));
+
+      expect(payload.max_tokens).toBe(0);
     });
   });
 });
