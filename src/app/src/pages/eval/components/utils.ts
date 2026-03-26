@@ -56,5 +56,12 @@ export function getNamedMetricTotal(
 export function getNamedMetricTotals(
   metrics: NamedMetricTotalsSource | null | undefined,
 ): Record<string, number> | undefined {
-  return metrics?.namedScoreWeights ?? metrics?.namedScoresCount;
+  if (!metrics?.namedScoresCount && !metrics?.namedScoreWeights) {
+    return undefined;
+  }
+
+  return {
+    ...(metrics.namedScoresCount ?? {}),
+    ...(metrics.namedScoreWeights ?? {}),
+  };
 }

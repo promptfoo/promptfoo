@@ -339,13 +339,22 @@ describe('named metric helpers', () => {
     expect(getNamedMetricTotal(baseMetrics, 'missing')).toBe(0);
   });
 
-  it('returns the preferred totals map', () => {
-    expect(getNamedMetricTotals(baseMetrics)).toEqual(baseMetrics.namedScoreWeights);
+  it('merges sparse namedScoreWeights over namedScoresCount', () => {
+    expect(getNamedMetricTotals(baseMetrics)).toEqual({
+      accuracy: 4,
+      safety: 1,
+    });
     expect(
       getNamedMetricTotals({
         namedScoresCount: { relevance: 3 },
       } as Pick<PromptMetrics, 'namedScoresCount' | 'namedScoreWeights'>),
     ).toEqual({ relevance: 3 });
+  });
+
+  it('returns undefined when no totals are available', () => {
+    expect(
+      getNamedMetricTotals({} as Pick<PromptMetrics, 'namedScoresCount' | 'namedScoreWeights'>),
+    ).toBeUndefined();
   });
 });
 

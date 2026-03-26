@@ -60,7 +60,7 @@ import { isNonTransientHttpStatus } from './util/fetch/errors';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
-import { accumulateNamedMetric } from './util/namedMetrics';
+import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
 import { isPromptAllowed } from './util/promptMatching';
 import {
   isAnthropicProvider,
@@ -1154,6 +1154,9 @@ class Evaluator {
         const promptId = generateIdFromPrompt(prompt);
         const existingPromptKey = `${providerKey}:${promptId}`;
         const existingPrompt = existingPromptsMap.get(existingPromptKey);
+        if (existingPrompt?.metrics) {
+          backfillNamedScoreWeights(existingPrompt.metrics);
+        }
 
         const completedPrompt = {
           ...prompt,

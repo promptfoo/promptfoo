@@ -86,3 +86,13 @@ export function accumulateNamedMetric(
   accumulator.namedScoreWeights[metricName] =
     (accumulator.namedScoreWeights[metricName] ?? 0) + metricWeightTotal;
 }
+
+export function backfillNamedScoreWeights(accumulator: NamedMetricAccumulator): void {
+  accumulator.namedScoreWeights ||= {};
+
+  for (const [metricName, assertionCount] of Object.entries(accumulator.namedScoresCount)) {
+    if (!Object.prototype.hasOwnProperty.call(accumulator.namedScoreWeights, metricName)) {
+      accumulator.namedScoreWeights[metricName] = assertionCount;
+    }
+  }
+}

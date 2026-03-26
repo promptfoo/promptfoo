@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accumulateNamedMetric } from '../../src/util/namedMetrics';
+import { accumulateNamedMetric, backfillNamedScoreWeights } from '../../src/util/namedMetrics';
 
 describe('accumulateNamedMetric', () => {
   it('preserves weighted totals from grading results while keeping assertion counts', () => {
@@ -71,6 +71,39 @@ describe('accumulateNamedMetric', () => {
       namedScores: { 'accuracy:alpha': 0.8 },
       namedScoresCount: { 'accuracy:alpha': 1 },
       namedScoreWeights: { 'accuracy:alpha': 1 },
+    });
+  });
+});
+
+describe('backfillNamedScoreWeights', () => {
+  it('fills missing weights from assertion counts without overwriting existing weights', () => {
+    const metrics = {
+      namedScores: { accuracy: 1.6, safety: 0.8 },
+      namedScoresCount: { accuracy: 2, safety: 1 },
+      namedScoreWeights: { accuracy: 4 },
+    };
+
+    backfillNamedScoreWeights(metrics);
+
+    expect(metrics).toEqual({
+      namedScores: { accuracy: 1.6, safety: 0.8 },
+      namedScoresCount: { accuracy: 2, safety: 1 },
+      namedScoreWeights: { accuracy: 4, safety: 1 },
+    });
+  });
+
+  it('initializes missing weights from assertion counts for legacy metrics', () => {
+    const metrics = {
+      namedScores: { accuracy: 1.6 },
+      namedScoresCount: { accuracy: 2 },
+    };
+
+    backfillNamedScoreWeights(metrics);
+
+    expect(metrics).toEqual({
+      namedScores: { accuracy: 1.6 },
+      namedScoresCount: { accuracy: 2 },
+      namedScoreWeights: { accuracy: 2 },
     });
   });
 });

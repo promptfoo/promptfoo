@@ -5457,6 +5457,70 @@ describe('Evaluator with external defaultTest', () => {
       cliState.resume = originalResume;
     }
   });
+
+  it('should backfill legacy named score weights when resuming evaluation', async () => {
+    const originalResume = cliState.resume;
+    cliState.resume = false;
+
+    try {
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [{ raw: 'Test prompt 1', label: 'test1' }],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'equals',
+                value: 'Test output',
+                metric: 'accuracy',
+                weight: 3,
+              },
+              {
+                type: 'contains',
+                value: 'Missing output',
+                metric: 'accuracy',
+                weight: 1,
+              },
+            ],
+          },
+        ],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+      evalRecord.prompts = [
+        {
+          raw: 'Test prompt 1',
+          label: 'test1',
+          id: 'prompt-test1',
+          provider: 'test-provider',
+          metrics: {
+            score: 1,
+            testPassCount: 1,
+            testFailCount: 0,
+            testErrorCount: 0,
+            assertPassCount: 1,
+            assertFailCount: 0,
+            totalLatencyMs: 100,
+            tokenUsage: createEmptyTokenUsage(),
+            namedScores: { accuracy: 1 },
+            namedScoresCount: { accuracy: 1 },
+            cost: 0.001,
+          },
+        },
+      ];
+      evalRecord.persisted = true;
+      cliState.resume = true;
+
+      await evaluate(testSuite, evalRecord, {});
+
+      expect(evalRecord.prompts[0].metrics?.namedScores.accuracy).toBeCloseTo(4, 10);
+      expect(evalRecord.prompts[0].metrics?.namedScoresCount.accuracy).toBe(3);
+      expect(evalRecord.prompts[0].metrics?.namedScoreWeights?.accuracy).toBe(5);
+    } finally {
+      cliState.resume = originalResume;
+    }
+  });
 });
 
 describe('defaultTest normalization for extensions', () => {
