@@ -65,17 +65,29 @@ const createMockResponse = (
   items,
 });
 
+function restoreEnvVar(name: 'OPENAI_API_KEY' | 'CODEX_API_KEY', value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+}
+
 describe('OpenAICodexSDKProvider', () => {
   let statSyncSpy: MockInstance;
   let existsSyncSpy: MockInstance;
   const mockImportModule = vi.mocked(importModule);
   const mockResolvePackageEntryPoint = vi.mocked(resolvePackageEntryPoint);
   let originalBasePath: string | undefined;
+  let originalOpenAiApiKey: string | undefined;
+  let originalCodexApiKey: string | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
     originalBasePath = cliState.basePath;
     cliState.basePath = undefined;
+    originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+    originalCodexApiKey = process.env.CODEX_API_KEY;
 
     // Reset mock implementations
     mockStartThread.mockReturnValue(mockThread);
@@ -96,6 +108,8 @@ describe('OpenAICodexSDKProvider', () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     cliState.basePath = originalBasePath;
+    restoreEnvVar('OPENAI_API_KEY', originalOpenAiApiKey);
+    restoreEnvVar('CODEX_API_KEY', originalCodexApiKey);
     await clearCache();
   });
 
@@ -1292,11 +1306,12 @@ describe('OpenAICodexSDKProvider', () => {
         );
       });
 
-      it('should use prompt config apiKey over env vars', async () => {
+      it('should use prompt config apiKey over provider and process env vars', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
+        process.env.OPENAI_API_KEY = 'process-env-key';
         const provider = new OpenAICodexSDKProvider({
-          env: { OPENAI_API_KEY: 'env-key' },
+          env: { OPENAI_API_KEY: 'provider-env-key' },
         });
 
         await provider.callApi('Test prompt', {
