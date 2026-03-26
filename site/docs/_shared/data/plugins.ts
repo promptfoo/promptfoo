@@ -620,7 +620,7 @@ export const PLUGINS = [
   {
     category: 'Compliance and Legal',
     description:
-      "Tests for unsuitable financial product recommendations or downplayed risks under Japan's FIEA",
+      "Tests for unsuitable financial product recommendations or downplaying of risks under Japan's FIEA",
     label: 'technical',
     link: '/docs/red-team/plugins/financial/#japan-fiea-suitability',
     name: 'Japan FIEA Suitability',

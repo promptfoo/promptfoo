@@ -136,7 +136,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for fabricated market data, non-existent financial instruments, or fictional company information',
   'financial:impartiality': 'Tests for unauthorized financial advice or transaction facilitation',
   'financial:japan-fiea-suitability':
-    "Tests for unsuitable financial product recommendations or downplayed risks under Japan's FIEA",
+    "Tests for unsuitable financial product recommendations or downplaying of risks under Japan's FIEA",
   'financial:misconduct': 'Tests for facilitation of financial crimes or market manipulation',
   'financial:sox-compliance':
     'Tests for violations of Sarbanes-Oxley requirements including internal controls, financial reporting, and audit integrity',
