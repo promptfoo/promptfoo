@@ -6,6 +6,7 @@ import cliState from '../../src/cliState';
 import { importModule, resolvePackageEntryPoint } from '../../src/esm';
 import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
+import { checkProviderApiKeys } from '../../src/util/provider';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
@@ -73,6 +74,17 @@ function restoreEnvVar(name: 'OPENAI_API_KEY' | 'CODEX_API_KEY', value: string |
   }
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, resolve, reject };
+}
+
 describe('OpenAICodexSDKProvider', () => {
   let statSyncSpy: MockInstance;
   let existsSyncSpy: MockInstance;
@@ -90,6 +102,12 @@ describe('OpenAICodexSDKProvider', () => {
     originalCodexApiKey = process.env.CODEX_API_KEY;
 
     // Reset mock implementations
+    MockCodex.mockImplementation(function () {
+      return {
+        startThread: mockStartThread.mockReturnValue(mockThread),
+        resumeThread: mockResumeThread.mockReturnValue(mockThread),
+      };
+    });
     mockStartThread.mockReturnValue(mockThread);
     mockResumeThread.mockReturnValue(mockThread);
 
@@ -242,6 +260,16 @@ describe('OpenAICodexSDKProvider', () => {
         expect(codexOptions.apiKey).toBeUndefined();
         expect(codexOptions.env.OPENAI_API_KEY).toBeUndefined();
         expect(codexOptions.env.CODEX_API_KEY).toBeUndefined();
+      });
+
+      it('should skip missing API key preflight for SDK-managed auth', () => {
+        delete process.env.OPENAI_API_KEY;
+        delete process.env.CODEX_API_KEY;
+
+        const provider = new OpenAICodexSDKProvider();
+        const result = checkProviderApiKeys([provider]);
+
+        expect(result.size).toBe(0);
       });
 
       it('should fall back to process.cwd() when resolving the SDK from an external config base path', async () => {
@@ -693,6 +721,73 @@ describe('OpenAICodexSDKProvider', () => {
         expect(mockStartThread).toHaveBeenCalledTimes(2);
       });
 
+      it('should isolate concurrent calls with different prompt-level apiKeys', async () => {
+        const firstRun = createDeferred<ReturnType<typeof createMockResponse>>();
+        const secondRun = createDeferred<ReturnType<typeof createMockResponse>>();
+        const firstDestroy = vi.fn();
+        const secondDestroy = vi.fn();
+        const firstThread = {
+          id: 'thread-1',
+          run: vi.fn().mockReturnValue(firstRun.promise),
+          runStreamed: mockRunStreamed,
+        };
+        const secondThread = {
+          id: 'thread-2',
+          run: vi.fn().mockReturnValue(secondRun.promise),
+          runStreamed: mockRunStreamed,
+        };
+
+        MockCodex.mockImplementationOnce(function () {
+          return {
+            startThread: vi.fn().mockReturnValue(firstThread),
+            resumeThread: vi.fn().mockReturnValue(firstThread),
+            destroy: firstDestroy,
+          };
+        }).mockImplementationOnce(function () {
+          return {
+            startThread: vi.fn().mockReturnValue(secondThread),
+            resumeThread: vi.fn().mockReturnValue(secondThread),
+            destroy: secondDestroy,
+          };
+        });
+
+        const provider = new OpenAICodexSDKProvider();
+
+        const firstCall = provider.callApi('Test prompt', {
+          prompt: {
+            config: { apiKey: 'prompt-key-1' },
+          },
+        } as any);
+
+        await vi.waitFor(() => {
+          expect(firstThread.run).toHaveBeenCalledTimes(1);
+        });
+
+        const secondCall = provider.callApi('Test prompt', {
+          prompt: {
+            config: { apiKey: 'prompt-key-2' },
+          },
+        } as any);
+
+        await vi.waitFor(() => {
+          expect(secondThread.run).toHaveBeenCalledTimes(1);
+        });
+
+        expect(firstDestroy).not.toHaveBeenCalled();
+        expect(secondDestroy).not.toHaveBeenCalled();
+
+        firstRun.resolve(createMockResponse('First response'));
+        secondRun.resolve(createMockResponse('Second response'));
+
+        await expect(firstCall).resolves.toEqual(
+          expect.objectContaining({ output: 'First response', sessionId: 'thread-1' }),
+        );
+        await expect(secondCall).resolves.toEqual(
+          expect.objectContaining({ output: 'Second response', sessionId: 'thread-2' }),
+        );
+        expect(MockCodex).toHaveBeenCalledTimes(2);
+      });
+
       it('should reuse threads when persist_threads is true', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
@@ -1121,6 +1216,41 @@ describe('OpenAICodexSDKProvider', () => {
           workingDirectory: '/prompt/dir',
           skipGitRepoCheck: false,
         });
+      });
+
+      it('should create separate Codex instances for prompt-level base_url overrides', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt', {
+          prompt: {
+            raw: 'Test prompt',
+            label: 'test-1',
+            config: { base_url: 'https://proxy-one.example.com' },
+          },
+          vars: {},
+        });
+        await provider.callApi('Test prompt', {
+          prompt: {
+            raw: 'Test prompt',
+            label: 'test-2',
+            config: { base_url: 'https://proxy-two.example.com' },
+          },
+          vars: {},
+        });
+
+        expect(MockCodex).toHaveBeenCalledTimes(2);
+        expect(MockCodex).toHaveBeenNthCalledWith(
+          1,
+          expect.objectContaining({ baseUrl: 'https://proxy-one.example.com' }),
+        );
+        expect(MockCodex).toHaveBeenNthCalledWith(
+          2,
+          expect.objectContaining({ baseUrl: 'https://proxy-two.example.com' }),
+        );
       });
     });
 

@@ -357,8 +357,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
   private providerId = 'openai:codex-sdk';
   private codexModule?: any;
-  private codexInstance?: any;
-  private codexInstanceEnvHash?: string; // Track env hash to detect changes
+  private codexInstances: Map<string, any> = new Map();
   private threads: Map<string, any> = new Map();
   private deepTracingWarningShown = false; // Show warning once per instance
 
@@ -394,6 +393,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     );
   }
 
+  requiresApiKey(): boolean {
+    return false;
+  }
+
   toString(): string {
     return '[OpenAI Codex SDK Provider]';
   }
@@ -416,16 +419,15 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // Clean up threads
     this.threads.clear();
 
-    // Clean up Codex instance to release resources (child processes, file handles)
-    if (this.codexInstance) {
+    // Clean up Codex instances to release resources (child processes, file handles)
+    for (const instance of this.codexInstances.values()) {
       try {
-        await this.destroyInstance(this.codexInstance);
+        await this.destroyInstance(instance);
       } catch (error) {
         logger.warn('[CodexSDK] Error during cleanup', { error });
       }
-      this.codexInstance = undefined;
-      this.codexInstanceEnvHash = undefined;
     }
+    this.codexInstances.clear();
   }
 
   private prepareEnvironment(
@@ -723,6 +725,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private async getOrCreateThread(
     config: OpenAICodexSDKConfig,
     cacheKey: string | undefined,
+    instanceKey: string,
     instance: any,
   ): Promise<any> {
     const threadOptions = this.buildThreadOptions(config);
@@ -735,14 +738,15 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Resume specific thread
     if (config.thread_id) {
-      const cached = this.threads.get(config.thread_id);
+      const threadIdCacheKey = `${instanceKey}:${config.thread_id}`;
+      const cached = this.threads.get(threadIdCacheKey);
       if (cached) {
         return cached;
       }
 
       const thread = instance.resumeThread(config.thread_id, threadOptions);
       if (config.persist_threads) {
-        this.threads.set(config.thread_id, thread);
+        this.threads.set(threadIdCacheKey, thread);
       }
       return thread;
     }
@@ -1274,8 +1278,25 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return attrs;
   }
 
-  private generateCacheKey(config: OpenAICodexSDKConfig, prompt: string): string {
+  private generateInstanceKey(env: Record<string, string>, config: OpenAICodexSDKConfig): string {
     const keyData = {
+      env,
+      base_url: config.base_url,
+      cli_config: config.cli_config,
+      codex_path_override: config.codex_path_override,
+    };
+
+    const hash = crypto.createHash('sha256').update(JSON.stringify(keyData)).digest('hex');
+    return `openai:codex-sdk:instance:${hash}`;
+  }
+
+  private generateCacheKey(
+    config: OpenAICodexSDKConfig,
+    prompt: string,
+    instanceKey: string,
+  ): string {
+    const keyData = {
+      instanceKey,
       working_dir: config.working_dir,
       additional_directories: config.additional_directories,
       model: config.model,
@@ -1443,10 +1464,16 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       this.codexModule = await loadCodexSDK();
     }
 
+    // Exclude TRACEPARENT from cache keys to preserve thread persistence across traces.
+    const stableEnv = { ...env };
+    delete stableEnv.TRACEPARENT;
+    const instanceKey = this.generateInstanceKey(stableEnv, config);
+
     // Deep tracing requires per-call instances (each call has unique TRACEPARENT)
     // This avoids race conditions where concurrent calls destroy shared instances
     let localInstance: any = undefined;
     const useLocalInstance = config.deep_tracing;
+    let activeInstance: any = undefined;
 
     if (useLocalInstance) {
       // Warn about ignored thread options (only once)
@@ -1463,38 +1490,17 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
       // Create a fresh instance for this call only (not cached)
       localInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config, apiKey));
+      activeInstance = localInstance;
     } else {
-      // Standard caching path for non-deep-tracing mode
-      // Exclude TRACEPARENT from hash to preserve thread persistence across traces
-      const stableEnv = { ...env };
-      delete stableEnv.TRACEPARENT;
-
-      const envHash = crypto.createHash('sha256').update(JSON.stringify(stableEnv)).digest('hex');
-      const envChanged = this.codexInstanceEnvHash !== envHash;
-
-      // Initialize Codex instance - recreate only if stable config changed
-      if (!this.codexInstance || envChanged) {
-        if (envChanged && this.codexInstance) {
-          logger.debug('[CodexSDK] Recreating instance due to configuration change');
-          // Clean up old instance to prevent resource leaks
-          try {
-            await this.destroyInstance(this.codexInstance);
-          } catch (cleanupError) {
-            logger.warn('[CodexSDK] Error cleaning up old instance', { error: cleanupError });
-          }
-          // Clear thread pool when instance is recreated
-          this.threads.clear();
-        }
-        // Create new instance with full environment
-        this.codexInstance = new this.codexModule.Codex(
-          this.buildCodexOptions(env, config, apiKey),
-        );
-        this.codexInstanceEnvHash = envHash;
+      // Standard caching path for non-deep-tracing mode.
+      // Cache one Codex instance per stable constructor config so concurrent calls
+      // with different prompt-level credentials/config do not tear each other down.
+      activeInstance = this.codexInstances.get(instanceKey);
+      if (!activeInstance) {
+        activeInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config, apiKey));
+        this.codexInstances.set(instanceKey, activeInstance);
       }
     }
-
-    // Use local instance for deep_tracing, otherwise shared cached instance
-    const activeInstance = useLocalInstance ? localInstance : this.codexInstance;
 
     // Guard against undefined instance (shouldn't happen, but defensive coding)
     if (!activeInstance) {
@@ -1502,8 +1508,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
 
     // Get or create thread (pass instance to avoid using stale this.codexInstance)
-    const cacheKey = this.generateCacheKey(config, prompt);
-    const thread = await this.getOrCreateThread(config, cacheKey, activeInstance);
+    const cacheKey = this.generateCacheKey(config, prompt, instanceKey);
+    const thread = await this.getOrCreateThread(config, cacheKey, instanceKey, activeInstance);
 
     // Prepare run options
     const runOptions: any = {};

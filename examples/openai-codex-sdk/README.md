@@ -31,6 +31,8 @@ codex
 
 ```bash
 export OPENAI_API_KEY=your_api_key_here
+# or
+export CODEX_API_KEY=your_api_key_here
 ```
 
 When no `apiKey`, `OPENAI_API_KEY`, or `CODEX_API_KEY` is set, promptfoo will let the Codex SDK reuse an existing Codex login.
