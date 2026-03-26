@@ -29,7 +29,7 @@ import type {
 } from './testCaseGenerationTypes';
 
 // Re-export types for backward compatibility
-export type { GeneratedTestCase, TargetResponse, TargetPlugin, TargetStrategy };
+export type { GeneratedTestCase, TargetPlugin, TargetResponse, TargetStrategy };
 
 const DEFAULT_PLUGIN = 'harmful:hate';
 

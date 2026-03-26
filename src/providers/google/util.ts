@@ -361,6 +361,8 @@ export function maybeCoerceToGeminiFormat(
 // These were previously implemented here but are now centralized in auth.ts
 export {
   clearCachedAuth,
+  determineGoogleVertexMode,
+  getGoogleApiKey,
   getGoogleClient,
   hasGoogleDefaultCredentials,
   loadCredentials,

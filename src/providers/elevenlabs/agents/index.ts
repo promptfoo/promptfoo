@@ -139,7 +139,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
       );
 
       // Add new_turns_limit (API field name)
-      simulationRequest.new_turns_limit = this.config.maxTurns || 10;
+      simulationRequest.new_turns_limit = this.config.maxTurns ?? 10;
 
       // Debug: Log the request being sent
       logger.debug('[ElevenLabs Agents] Request payload', {
@@ -351,7 +351,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
       simulatedUser: config?.simulatedUser,
       evaluationCriteria: config?.evaluationCriteria,
       toolMockConfig: config?.toolMockConfig,
-      maxTurns: config?.maxTurns || 10,
+      maxTurns: config?.maxTurns ?? 10,
       label: options.label || options.id,
     };
   }

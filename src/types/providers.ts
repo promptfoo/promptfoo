@@ -21,6 +21,14 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface SkillCallEntry {
+  name: string;
+  input?: unknown;
+  path?: string;
+  source?: 'heuristic' | 'tool';
+  is_error?: boolean;
+}
+
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
 // Local interface to avoid circular dependency with src/types/index.ts

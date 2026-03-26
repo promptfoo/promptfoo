@@ -65,4 +65,4 @@ function CardFooter({
   return <div ref={ref} className={cn('flex items-center p-6 pt-0', className)} {...props} />;
 }
 
-export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent };
+export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle };

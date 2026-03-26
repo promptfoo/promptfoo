@@ -165,15 +165,15 @@ function ProviderConfigEditor({
 
     if (providerType === 'http') {
       // Check if we're in raw mode (using request field) or structured mode (using url field)
-      if (provider.config.request !== undefined) {
-        // Raw mode: validate that request is not empty
-        if (!provider.config.request || provider.config.request.trim() === '') {
-          errors.push('HTTP request content is required');
-        }
-      } else {
+      if (provider.config.request === undefined) {
         // Structured mode: validate URL
         if (!provider.config.url || !validateUrl(provider.config.url)) {
           errors.push('Valid URL is required');
+        }
+      } else {
+        // Raw mode: validate that request is not empty
+        if (!provider.config.request || provider.config.request.trim() === '') {
+          errors.push('HTTP request content is required');
         }
       }
 

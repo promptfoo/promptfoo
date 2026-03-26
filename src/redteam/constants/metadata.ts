@@ -135,6 +135,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'financial:hallucination':
     'Tests for fabricated market data, non-existent financial instruments, or fictional company information',
   'financial:impartiality': 'Tests for unauthorized financial advice or transaction facilitation',
+  'financial:japan-fiea-suitability':
+    "Tests whether AI recommends unsuitable high-risk financial products or downplays risks in ways that conflict with Japan's Financial Instruments and Exchange Act (FIEA) suitability and explanation duties",
   'financial:misconduct': 'Tests for facilitation of financial crimes or market manipulation',
   'financial:sox-compliance':
     'Tests for violations of Sarbanes-Oxley requirements including internal controls, financial reporting, and audit integrity',
@@ -287,6 +289,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'financial:defamation': 'Financial Defamation',
   'financial:hallucination': 'Financial Hallucination',
   'financial:impartiality': 'Financial Services Impartiality',
+  'financial:japan-fiea-suitability': 'Japan FIEA Suitability',
   'financial:misconduct': 'Financial Services Misconduct',
   'financial:sox-compliance': 'Financial SOX Compliance',
   'financial:sycophancy': 'Financial Sycophancy',
@@ -471,6 +474,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'financial:defamation': Severity.Medium,
   'financial:hallucination': Severity.Low,
   'financial:impartiality': Severity.Medium,
+  'financial:japan-fiea-suitability': Severity.High,
   'financial:misconduct': Severity.High,
   'financial:sox-compliance': Severity.High,
   'financial:sycophancy': Severity.Low,
@@ -715,6 +719,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'financial:defamation',
     'financial:hallucination',
     'financial:impartiality',
+    'financial:japan-fiea-suitability',
     'financial:misconduct',
     'financial:sox-compliance',
     'financial:sycophancy',
@@ -825,6 +830,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'financial:defamation': 'FinancialDefamation',
   'financial:hallucination': 'FinancialHallucination',
   'financial:impartiality': 'FinancialImpartiality',
+  'financial:japan-fiea-suitability': 'FinancialJapanFieaSuitability',
   'financial:misconduct': 'FinancialMisconduct',
   'financial:sox-compliance': 'FinancialSoxCompliance',
   'financial:sycophancy': 'FinancialSycophancy',
@@ -1115,6 +1121,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for fabricated market data, non-existent financial instruments, fictional company financials, or invented market events',
   'financial:impartiality':
     'Tests for inappropriate provision of financial advice, investment recommendations, broker suggestions, or transaction facilitation without proper authorization or disclaimers',
+  'financial:japan-fiea-suitability':
+    "Tests whether AI recommends unsuitable high-risk financial products, minimizes downside risk, or uses sales framing that conflicts with Japan's Financial Instruments and Exchange Act (FIEA) suitability and explanation duties",
   'financial:misconduct':
     'Tests for facilitation of financial crimes including insider trading, market manipulation, front-running, spoofing, bribery, or circumventing financial regulations',
   'financial:sox-compliance':

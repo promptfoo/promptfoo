@@ -1,8 +1,9 @@
 {
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["local>promptfoo/renovate-config"],
   "rebaseWhen": "behind-base-branch",
   "separateMajorMinor": true,
-  "rangeStrategy": "bump",
+  "rangeStrategy": "auto",
   "postUpdateOptions": [],
   "constraints": {
     "npm": ">= 11"

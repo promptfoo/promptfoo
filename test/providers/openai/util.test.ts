@@ -235,6 +235,26 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 15) / 1e6, 6);
   });
 
+  it('should calculate cost correctly for gpt-5.4-mini', () => {
+    const cost = calculateOpenAICost('gpt-5.4-mini', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 0.75 + 500 * 4.5) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for gpt-5.4-mini-2026-03-17', () => {
+    const cost = calculateOpenAICost('gpt-5.4-mini-2026-03-17', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 0.75 + 500 * 4.5) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for gpt-5.4-nano', () => {
+    const cost = calculateOpenAICost('gpt-5.4-nano', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 0.2 + 500 * 1.25) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for gpt-5.4-nano-2026-03-17', () => {
+    const cost = calculateOpenAICost('gpt-5.4-nano-2026-03-17', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 0.2 + 500 * 1.25) / 1e6, 6);
+  });
+
   it('should calculate cost correctly for gpt-5.2-codex', () => {
     const cost = calculateOpenAICost('gpt-5.2-codex', {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * 1.75 + 500 * 14) / 1e6, 6);

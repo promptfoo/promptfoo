@@ -1295,7 +1295,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
             cmdObj.noShare = cmdNoShare;
           }
 
-          const config = (cfgShare !== undefined ? { sharing: cfgShare } : {}) as UnifiedConfig;
+          const config = (cfgShare === undefined ? {} : { sharing: cfgShare }) as UnifiedConfig;
           const evalRecord = new Eval(config);
 
           // Use mockReturnValue for synchronous returns, mockResolvedValue for async
@@ -1304,7 +1304,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
             config,
             testSuite: { prompts: [], providers: [] },
             basePath: path.resolve('/'),
-            commandLineOptions: cloShare !== undefined ? { share: cloShare } : undefined,
+            commandLineOptions: cloShare === undefined ? undefined : { share: cloShare },
           });
           vi.mocked(evaluate).mockResolvedValue(evalRecord);
 
