@@ -115,5 +115,26 @@ describe('AnthropicCompletionProvider', () => {
         error: 'API call error: Error: API call failed',
       });
     });
+
+    it('should preserve an explicit max_tokens_to_sample value of 0', async () => {
+      process.env.ANTHROPIC_MAX_TOKENS = '1024';
+
+      const provider = new AnthropicCompletionProvider('claude-2.1', {
+        config: { max_tokens_to_sample: 0 },
+      });
+      vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
+        id: 'test-id',
+        model: 'claude-2.1',
+        stop_reason: 'stop_sequence',
+        type: 'completion',
+        completion: 'Test output',
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(provider.anthropic.completions.create).toHaveBeenCalledWith(
+        expect.objectContaining({ max_tokens_to_sample: 0 }),
+      );
+    });
   });
 });

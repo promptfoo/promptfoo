@@ -61,6 +61,7 @@ const assertTypes: AssertionType[] = [
   'is-valid-function-call',
   'is-valid-openai-function-call',
   'is-valid-openai-tools-call',
+  'skill-used',
   'trajectory:goal-success',
   'trajectory:tool-args-match',
   'trajectory:tool-used',

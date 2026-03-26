@@ -254,6 +254,16 @@ See `test/AGENTS.md` for testing patterns.
 - **Test both success and error cases** for all functionality
 - **Document provider configurations** following examples in existing code
 
+## Review Guidelines
+
+- Prioritize security regressions first, especially injection risks, unsafe handling of user-controlled or adversarial content, credential exposure, SSRF, path traversal, unsafe deserialization, and authorization mistakes.
+- Then prioritize correctness issues that can break behavior, public APIs, data integrity, concurrency, or error handling.
+- Treat missing or ineffective tests as a P1 issue when a change adds security-sensitive behavior, changes public behavior, or fixes a bug without meaningful coverage.
+- Focus on the code changed by the pull request. Do not flag pre-existing issues outside the touched diff unless the pull request materially worsens them.
+- Avoid repeating findings that were already raised in the current pull request unless the new diff reintroduces them or leaves the same risk in newly changed code.
+- Ignore formatting, import ordering, naming, and other style-only issues already enforced by CI or repository tooling.
+- If a pull request touches `src/redteam/`, verify the title follows THE REDTEAM RULE in `docs/agents/pr-conventions.md` and uses `(redteam)` scope. Treat a title violation as P1.
+
 ## Documentation Testing
 
 When testing doc changes, speed up builds by skipping OG image generation:

@@ -53,6 +53,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
 | [tool-call-f1](#tool-call-f1)                                   | F1 score comparing actual vs expected tool calls                   |
+| [skill-used](#skill-used)                                       | Ensure normalized provider skill metadata contains expected skills |
 | [trajectory:tool-used](#trajectorytool-used)                    | Ensure traced tool usage contains expected tools                   |
 | [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads        |
 | [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order             |
@@ -645,6 +646,33 @@ The `threshold` defaults to `1.0` (exact match required). Lower thresholds allow
 | `[get_weather, book_flight]` | `[get_weather]`                      | 1.0       | 0.5    | 0.667 |
 | `[get_weather, book_flight]` | `[get_weather, book_flight, search]` | 0.667     | 1.0    | 0.8   |
 | `[get_weather]`              | `[book_flight]`                      | 0.0       | 0.0    | 0.0   |
+
+### skill-used {#skill-used}
+
+The `skill-used` assertion checks normalized provider skill metadata rather than the model's final output. It works well for agent evals where the important question is "did the agent route through the right skill?".
+
+Promptfoo currently populates `metadata.skillCalls` for:
+
+- Claude Agent SDK, by normalizing `Skill` tool calls.
+- OpenAI Codex SDK, by inferring skill usage from command text that directly references a local `SKILL.md` path.
+
+Example:
+
+```yaml
+assert:
+  - type: skill-used
+    value: code-review
+
+  - type: skill-used
+    value:
+      pattern: 'project-*:*'
+      min: 1
+
+  - type: not-skill-used
+    value: forbidden-skill
+```
+
+Use `skill-used` when provider-level routing evidence is enough. If you also need to verify what the skill actually did, combine it with trace assertions such as [`trajectory:tool-used`](#trajectorytool-used), [`trajectory:tool-args-match`](#trajectorytool-args-match), or [`trajectory:step-count`](#trajectorystep-count).
 
 ### trajectory:tool-used {#trajectorytool-used}
 

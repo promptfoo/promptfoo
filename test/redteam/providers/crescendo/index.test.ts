@@ -759,6 +759,85 @@ describe('CrescendoProvider', () => {
     expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
   });
 
+  it('should grade the latest assistant output while passing prior turns in grading context', async () => {
+    const getResult = vi.fn(async () => ({
+      grade: {
+        pass: true,
+      },
+      rubric: 'rendered rubric',
+    }));
+    mockGetGraderById.mockImplementation(() => ({ getResult }) as any);
+
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 2,
+      maxBacktracks: 0,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: '{{objective}}', label: 'test' },
+      test: {
+        assert: [{ type: 'mock-grader' }],
+        metadata: { pluginId: 'mock', purpose: 'test purpose' },
+      } as any,
+    };
+
+    mockRedTeamProvider.callApi
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          generatedQuestion: 'first question',
+          rationaleBehindJailbreak: 'first rationale',
+          lastResponseSummary: '',
+        }),
+      })
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          generatedQuestion: 'second question',
+          rationaleBehindJailbreak: 'second rationale',
+          lastResponseSummary: 'first response summary',
+        }),
+      });
+
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({ output: 'first response' })
+      .mockResolvedValueOnce({ output: 'second response' });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: false,
+        metadata: 0,
+        rationale: 'not refused and not achieved',
+      }),
+    });
+
+    const result = await provider.callApi('ignored', context);
+
+    expect(result.metadata?.stopReason).toBe('Max rounds reached');
+    expect(getResult).toHaveBeenCalledTimes(2);
+
+    const firstCall = getResult.mock.calls[0] as unknown as unknown[];
+    expect(firstCall?.[0]).toBe('first question');
+    expect(firstCall?.[1]).toBe('first response');
+    expect(firstCall?.[7]).toMatchObject({
+      redteamHistory: [],
+      conversationHistory: [],
+      conversationTranscript: '',
+    });
+
+    const secondCall = getResult.mock.calls[1] as unknown as unknown[];
+    expect(secondCall?.[0]).toBe('second question');
+    expect(secondCall?.[1]).toBe('second response');
+    expect(secondCall?.[7]).toMatchObject({
+      redteamHistory: [{ prompt: 'first question', output: 'first response' }],
+      conversationHistory: [{ prompt: 'first question', output: 'first response' }],
+      conversationTranscript: 'Turn 1:\nUser: first question\nAssistant: first response',
+    });
+  });
+
   it('should stop when max backtracks reached', async () => {
     // Set up grader to pass (not detect jailbreak)
     mockGetGraderById.mockImplementation(function () {
