@@ -581,6 +581,9 @@
                   "raw": {
                     "type": "string"
                   },
+                  "template": {
+                    "type": "string"
+                  },
                   "display": {
                     "type": "string"
                   },
@@ -2007,6 +2010,7 @@
                       "financial:defamation",
                       "financial:hallucination",
                       "financial:impartiality",
+                      "financial:japan-fiea-suitability",
                       "financial:misconduct",
                       "financial:sox-compliance",
                       "financial:sycophancy",
@@ -2279,6 +2283,7 @@
                           "financial:defamation",
                           "financial:hallucination",
                           "financial:impartiality",
+                          "financial:japan-fiea-suitability",
                           "financial:misconduct",
                           "financial:sox-compliance",
                           "financial:sycophancy",

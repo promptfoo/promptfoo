@@ -6,6 +6,7 @@ import cliState from '../../src/cliState';
 import { importModule, resolvePackageEntryPoint } from '../../src/esm';
 import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
+import { checkProviderApiKeys } from '../../src/util/provider';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
@@ -65,19 +66,48 @@ const createMockResponse = (
   items,
 });
 
+function restoreEnvVar(name: 'OPENAI_API_KEY' | 'CODEX_API_KEY', value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, resolve, reject };
+}
+
 describe('OpenAICodexSDKProvider', () => {
   let statSyncSpy: MockInstance;
   let existsSyncSpy: MockInstance;
   const mockImportModule = vi.mocked(importModule);
   const mockResolvePackageEntryPoint = vi.mocked(resolvePackageEntryPoint);
   let originalBasePath: string | undefined;
+  let originalOpenAiApiKey: string | undefined;
+  let originalCodexApiKey: string | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
     originalBasePath = cliState.basePath;
     cliState.basePath = undefined;
+    originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+    originalCodexApiKey = process.env.CODEX_API_KEY;
 
     // Reset mock implementations
+    MockCodex.mockImplementation(function () {
+      return {
+        startThread: mockStartThread.mockReturnValue(mockThread),
+        resumeThread: mockResumeThread.mockReturnValue(mockThread),
+      };
+    });
     mockStartThread.mockReturnValue(mockThread);
     mockResumeThread.mockReturnValue(mockThread);
 
@@ -96,6 +126,8 @@ describe('OpenAICodexSDKProvider', () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     cliState.basePath = originalBasePath;
+    restoreEnvVar('OPENAI_API_KEY', originalOpenAiApiKey);
+    restoreEnvVar('CODEX_API_KEY', originalCodexApiKey);
     await clearCache();
   });
 
@@ -213,12 +245,31 @@ describe('OpenAICodexSDKProvider', () => {
         errorSpy.mockRestore();
       });
 
-      it('should return error when API key is missing', async () => {
+      it('should allow SDK-managed auth when API key is missing', async () => {
+        delete process.env.OPENAI_API_KEY;
+        delete process.env.CODEX_API_KEY;
+        mockRun.mockResolvedValue(createMockResponse('Login-backed response'));
+
+        const provider = new OpenAICodexSDKProvider();
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('Login-backed response');
+        expect(MockCodex).toHaveBeenCalledTimes(1);
+
+        const codexOptions = MockCodex.mock.calls[0][0];
+        expect(codexOptions.apiKey).toBeUndefined();
+        expect(codexOptions.env.OPENAI_API_KEY).toBeUndefined();
+        expect(codexOptions.env.CODEX_API_KEY).toBeUndefined();
+      });
+
+      it('should skip missing API key preflight for SDK-managed auth', () => {
         delete process.env.OPENAI_API_KEY;
         delete process.env.CODEX_API_KEY;
 
         const provider = new OpenAICodexSDKProvider();
-        await expect(provider.callApi('Test prompt')).rejects.toThrow(/OpenAI API key is not set/);
+        const result = checkProviderApiKeys([provider]);
+
+        expect(result.size).toBe(0);
       });
 
       it('should fall back to process.cwd() when resolving the SDK from an external config base path', async () => {
@@ -670,6 +721,73 @@ describe('OpenAICodexSDKProvider', () => {
         expect(mockStartThread).toHaveBeenCalledTimes(2);
       });
 
+      it('should isolate concurrent calls with different prompt-level apiKeys', async () => {
+        const firstRun = createDeferred<ReturnType<typeof createMockResponse>>();
+        const secondRun = createDeferred<ReturnType<typeof createMockResponse>>();
+        const firstDestroy = vi.fn();
+        const secondDestroy = vi.fn();
+        const firstThread = {
+          id: 'thread-1',
+          run: vi.fn().mockReturnValue(firstRun.promise),
+          runStreamed: mockRunStreamed,
+        };
+        const secondThread = {
+          id: 'thread-2',
+          run: vi.fn().mockReturnValue(secondRun.promise),
+          runStreamed: mockRunStreamed,
+        };
+
+        MockCodex.mockImplementationOnce(function () {
+          return {
+            startThread: vi.fn().mockReturnValue(firstThread),
+            resumeThread: vi.fn().mockReturnValue(firstThread),
+            destroy: firstDestroy,
+          };
+        }).mockImplementationOnce(function () {
+          return {
+            startThread: vi.fn().mockReturnValue(secondThread),
+            resumeThread: vi.fn().mockReturnValue(secondThread),
+            destroy: secondDestroy,
+          };
+        });
+
+        const provider = new OpenAICodexSDKProvider();
+
+        const firstCall = provider.callApi('Test prompt', {
+          prompt: {
+            config: { apiKey: 'prompt-key-1' },
+          },
+        } as any);
+
+        await vi.waitFor(() => {
+          expect(firstThread.run).toHaveBeenCalledTimes(1);
+        });
+
+        const secondCall = provider.callApi('Test prompt', {
+          prompt: {
+            config: { apiKey: 'prompt-key-2' },
+          },
+        } as any);
+
+        await vi.waitFor(() => {
+          expect(secondThread.run).toHaveBeenCalledTimes(1);
+        });
+
+        expect(firstDestroy).not.toHaveBeenCalled();
+        expect(secondDestroy).not.toHaveBeenCalled();
+
+        firstRun.resolve(createMockResponse('First response'));
+        secondRun.resolve(createMockResponse('Second response'));
+
+        await expect(firstCall).resolves.toEqual(
+          expect.objectContaining({ output: 'First response', sessionId: 'thread-1' }),
+        );
+        await expect(secondCall).resolves.toEqual(
+          expect.objectContaining({ output: 'Second response', sessionId: 'thread-2' }),
+        );
+        expect(MockCodex).toHaveBeenCalledTimes(2);
+      });
+
       it('should reuse threads when persist_threads is true', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
@@ -1099,6 +1217,41 @@ describe('OpenAICodexSDKProvider', () => {
           skipGitRepoCheck: false,
         });
       });
+
+      it('should create separate Codex instances for prompt-level base_url overrides', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt', {
+          prompt: {
+            raw: 'Test prompt',
+            label: 'test-1',
+            config: { base_url: 'https://proxy-one.example.com' },
+          },
+          vars: {},
+        });
+        await provider.callApi('Test prompt', {
+          prompt: {
+            raw: 'Test prompt',
+            label: 'test-2',
+            config: { base_url: 'https://proxy-two.example.com' },
+          },
+          vars: {},
+        });
+
+        expect(MockCodex).toHaveBeenCalledTimes(2);
+        expect(MockCodex).toHaveBeenNthCalledWith(
+          1,
+          expect.objectContaining({ baseUrl: 'https://proxy-one.example.com' }),
+        );
+        expect(MockCodex).toHaveBeenNthCalledWith(
+          2,
+          expect.objectContaining({ baseUrl: 'https://proxy-two.example.com' }),
+        );
+      });
     });
 
     describe('abort signal', () => {
@@ -1278,6 +1431,31 @@ describe('OpenAICodexSDKProvider', () => {
             env: expect.objectContaining({
               OPENAI_API_KEY: 'config-key',
               CODEX_API_KEY: 'config-key',
+            }),
+          }),
+        );
+      });
+
+      it('should use prompt config apiKey over provider and process env vars', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        process.env.OPENAI_API_KEY = 'process-env-key';
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'provider-env-key' },
+        });
+
+        await provider.callApi('Test prompt', {
+          prompt: {
+            config: { apiKey: 'prompt-key' },
+          },
+        } as any);
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            apiKey: 'prompt-key',
+            env: expect.objectContaining({
+              OPENAI_API_KEY: 'prompt-key',
+              CODEX_API_KEY: 'prompt-key',
             }),
           }),
         );

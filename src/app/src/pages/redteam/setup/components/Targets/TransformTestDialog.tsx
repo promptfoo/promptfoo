@@ -2,6 +2,7 @@ import React from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
+import Editor from '@app/components/ui/code-editor';
 import {
   Collapsible,
   CollapsibleContent,
@@ -16,10 +17,9 @@ import {
 } from '@app/components/ui/dialog';
 import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import { AlertCircle, AlignLeft, CheckCircle, ChevronDown, Code2, Info, Play } from 'lucide-react';
-import Prism from 'prismjs';
-import Editor from 'react-simple-code-editor';
 
 interface TransformTestDialogProps {
   open: boolean;

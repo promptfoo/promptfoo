@@ -6,6 +6,7 @@ import {
   TEMPERATURE,
 } from '../../../src/redteam/providers/constants';
 import {
+  formatRedteamHistoryAsTranscript,
   getTargetResponse,
   type Message,
   messagesToRedteamHistory,
@@ -768,6 +769,23 @@ describe('shared redteam provider utilities', () => {
       const result = messagesToRedteamHistory(messages);
 
       expect(result).toEqual([{ prompt: 'user message 2', output: 'assistant response 2' }]);
+    });
+  });
+
+  describe('formatRedteamHistoryAsTranscript', () => {
+    it('formats turn history as a readable transcript', () => {
+      const result = formatRedteamHistoryAsTranscript([
+        { prompt: 'first question', output: 'first response' },
+        { prompt: 'second question', output: 'second response' },
+      ]);
+
+      expect(result).toBe(
+        'Turn 1:\nUser: first question\nAssistant: first response\n\nTurn 2:\nUser: second question\nAssistant: second response',
+      );
+    });
+
+    it('returns an empty string for empty history', () => {
+      expect(formatRedteamHistoryAsTranscript([])).toBe('');
     });
   });
 

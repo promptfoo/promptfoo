@@ -3,6 +3,7 @@ import WebSocket from 'ws';
 import { disableCache, enableCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiRealtimeProvider } from '../../../src/providers/openai/realtime';
+import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 import type { OpenAiRealtimeOptions } from '../../../src/providers/openai/realtime';
 
@@ -25,6 +26,7 @@ describe('OpenAI Realtime Provider', () => {
   let mockWs: any;
   let mockHandlers: { [key: string]: Function[] };
   const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+  const originalCustomRealtimeApiKey = process.env.CUSTOM_REALTIME_API_KEY;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -57,11 +59,8 @@ describe('OpenAI Realtime Provider', () => {
 
   afterEach(() => {
     enableCache();
-    if (originalOpenAiApiKey) {
-      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
-    } else {
-      delete process.env.OPENAI_API_KEY;
-    }
+    restoreEnvVar('OPENAI_API_KEY', originalOpenAiApiKey);
+    restoreEnvVar('CUSTOM_REALTIME_API_KEY', originalCustomRealtimeApiKey);
   });
 
   describe('Basic Functionality', () => {
@@ -110,6 +109,35 @@ describe('OpenAI Realtime Provider', () => {
       new OpenAiRealtimeProvider('unknown-model');
       expect(logger.debug).toHaveBeenCalledWith(
         'Using unknown OpenAI realtime model: unknown-model',
+      );
+    });
+
+    it('should use default missing API key error message', async () => {
+      delete process.env.OPENAI_API_KEY;
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        env: {
+          OPENAI_API_KEY: undefined,
+        },
+      });
+
+      await expect(provider.callApi('Hello')).rejects.toThrow(getOpenAiMissingApiKeyMessage());
+    });
+
+    it('should use custom apiKeyEnvar in missing API key errors', async () => {
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.CUSTOM_REALTIME_API_KEY;
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: {
+          apiKeyEnvar: 'CUSTOM_REALTIME_API_KEY',
+        },
+        env: {
+          OPENAI_API_KEY: undefined,
+          CUSTOM_REALTIME_API_KEY: undefined,
+        },
+      });
+
+      await expect(provider.callApi('Hello')).rejects.toThrow(
+        getOpenAiMissingApiKeyMessage('CUSTOM_REALTIME_API_KEY'),
       );
     });
 
