@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { sleep } from '../../../../src/util/time';
 
 import type { ApiProvider, CallApiContextParams } from '../../../../src/types/index';
 
@@ -43,9 +44,12 @@ describe('VoiceCrescendoProvider', () => {
   let mockTargetProvider: ApiProvider;
   let getTargetResponse: typeof import('../../../../src/redteam/providers/shared').getTargetResponse;
   let redteamProviderManager: typeof import('../../../../src/redteam/providers/shared').redteamProviderManager;
+  const mockedSleep = vi.mocked(sleep);
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockedSleep.mockReset();
+    mockedSleep.mockResolvedValue(undefined);
 
     // Import mocked modules
     const sharedModule = await import('../../../../src/redteam/providers/shared');
@@ -184,6 +188,7 @@ describe('VoiceCrescendoProvider', () => {
     expect(result.tokenUsage?.numRequests).toBe(result.metadata?.voiceCrescendoTurnsCompleted);
     // Token totals still include internal calls.
     expect(result.tokenUsage?.total).toBeGreaterThan(0);
+    expect(mockedSleep).not.toHaveBeenCalled();
   });
 
   it('should track token usage even when audio generation fails', async () => {
@@ -271,6 +276,8 @@ describe('VoiceCrescendoProvider', () => {
     // Should still track token usage from attempted calls
     expect(result.tokenUsage).toBeDefined();
     expect(result.tokenUsage?.numRequests).toBeGreaterThanOrEqual(1);
+    expect(result.metadata?.voiceCrescendoBacktrackCount).toBe(0);
+    expect(vi.mocked(getTargetResponse)).toHaveBeenCalledTimes(1);
   });
 
   it('should stop when target ends conversation', async () => {

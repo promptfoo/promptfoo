@@ -133,7 +133,7 @@ export default class GoatProvider implements ApiProvider {
       throw new Error(`GOAT strategy requires remote grading to be enabled`);
     }
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
-    let maxTurns = options.maxTurns || 5;
+    let maxTurns = options.maxTurns ?? 5;
     // Cap turns for unauthenticated users
     if (!isLoggedIntoCloud()) {
       maxTurns = Math.min(maxTurns, 10);

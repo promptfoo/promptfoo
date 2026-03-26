@@ -4448,10 +4448,18 @@ describe('RSA signature authentication', () => {
   let mockSign: MockInstance;
   let mockUpdate: MockInstance;
   let mockEnd: MockInstance;
+  let actualReadFileSync: typeof fs.readFileSync;
 
   beforeEach(() => {
     mockPrivateKey = '-----BEGIN PRIVATE KEY-----\nMOCK_KEY\n-----END PRIVATE KEY-----';
-    vi.spyOn(fs, 'readFileSync').mockReturnValue(mockPrivateKey);
+    actualReadFileSync = fs.readFileSync;
+    vi.spyOn(fs, 'readFileSync').mockImplementation(((path, options) => {
+      if (path === '/path/to/key.pem') {
+        return mockPrivateKey;
+      }
+
+      return actualReadFileSync(path as any, options as any);
+    }) as typeof fs.readFileSync);
 
     mockUpdate = vi.fn();
     mockEnd = vi.fn();
@@ -4615,7 +4623,10 @@ describe('RSA signature authentication', () => {
     await provider.callApi('test');
 
     // Verify signature generation using privateKey directly
-    expect(fs.readFileSync).not.toHaveBeenCalled(); // Should not read from file
+    const privateKeyFileReads = vi
+      .mocked(fs.readFileSync)
+      .mock.calls.filter(([filePath]) => filePath === '/path/to/key.pem');
+    expect(privateKeyFileReads).toHaveLength(0);
     expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
     expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
   });
@@ -6280,6 +6291,115 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
 
     const headers = apiCall![1]?.headers as Record<string, string> | undefined;
     expect(headers?.authorization).toBe(`Bearer ${expectedToken}`);
+  });
+
+  it('should expose the refreshed token as vars.token for header templating', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Auth-Token': '{{ token }}',
+        },
+        body: { key: '{{ prompt }}' },
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          tokenUrl,
+          clientId: 'test-client-id',
+          clientSecret: 'test-client-secret',
+        },
+      },
+    });
+
+    const expectedToken = 'templated-header-token';
+    const tokenResponse = {
+      data: JSON.stringify({
+        access_token: expectedToken,
+        expires_in: 3600,
+      }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    const apiResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    vi.mocked(fetchWithCache).mockImplementation(async (url: RequestInfo) => {
+      const urlString =
+        typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
+      return urlString === tokenUrl ? tokenResponse : apiResponse;
+    });
+
+    await provider.callApi('test prompt');
+
+    const apiCall = vi.mocked(fetchWithCache).mock.calls.find((call) => call[0] === mockUrl);
+    expect(apiCall).toBeDefined();
+
+    const headers = apiCall![1]?.headers as Record<string, string> | undefined;
+    expect(headers?.authorization).toBe(`Bearer ${expectedToken}`);
+    expect(headers?.['x-auth-token']).toBe(expectedToken);
+  });
+
+  it('should expose the refreshed token as vars.token for body templating', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          key: '{{ prompt }}',
+          token: '{{ token }}',
+        },
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          tokenUrl,
+          clientId: 'test-client-id',
+          clientSecret: 'test-client-secret',
+        },
+      },
+    });
+
+    const expectedToken = 'templated-body-token';
+    const tokenResponse = {
+      data: JSON.stringify({
+        access_token: expectedToken,
+        expires_in: 3600,
+      }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    const apiResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    vi.mocked(fetchWithCache).mockImplementation(async (url: RequestInfo) => {
+      const urlString =
+        typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
+      return urlString === tokenUrl ? tokenResponse : apiResponse;
+    });
+
+    await provider.callApi('test prompt');
+
+    const apiCall = vi.mocked(fetchWithCache).mock.calls.find((call) => call[0] === mockUrl);
+    expect(apiCall).toBeDefined();
+
+    expect(apiCall![1]?.body).toBe(
+      JSON.stringify({
+        key: 'test prompt',
+        token: expectedToken,
+      }),
+    );
   });
 
   it('should handle password grant type with deduplication', async () => {

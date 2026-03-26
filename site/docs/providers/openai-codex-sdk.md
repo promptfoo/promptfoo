@@ -37,6 +37,22 @@ This is an optional dependency and only needs to be installed if you want to use
 
 ## Setup
 
+The Codex SDK can authenticate with either an existing Codex/ChatGPT login or an API key.
+
+### Option 1: Use your ChatGPT login
+
+Sign in through the Codex CLI first:
+
+```bash
+codex
+```
+
+Then follow the sign-in flow with ChatGPT. When `apiKey`, `OPENAI_API_KEY`, and `CODEX_API_KEY` are all unset, promptfoo's `openai:codex-sdk` provider lets the Codex SDK reuse that existing login state.
+
+See OpenAI's [Using Codex with your ChatGPT plan](https://help.openai.com/en/articles/11369540) for the current supported Codex login flow.
+
+### Option 2: Use an API key
+
 Set your OpenAI API key with the `OPENAI_API_KEY` environment variable or specify the `apiKey` in the provider configuration.
 
 Create OpenAI API keys [here](https://platform.openai.com/api-keys).
@@ -52,6 +68,12 @@ Alternatively, you can use the `CODEX_API_KEY` environment variable:
 ```sh
 export CODEX_API_KEY=your_api_key_here
 ```
+
+:::note
+
+ChatGPT login support is specific to the Codex SDK provider. Other `openai:*` providers in promptfoo still use Platform API credentials, and [ChatGPT subscriptions are billed separately from API usage](https://help.openai.com/en/articles/8156019).
+
+:::
 
 ## Quick Start
 
@@ -129,29 +151,29 @@ Skipping the Git check removes a safety guard. Use with caution and consider ver
 
 ## Supported Parameters
 
-| Parameter                | Type     | Description                                    | Default               |
-| ------------------------ | -------- | ---------------------------------------------- | --------------------- |
-| `apiKey`                 | string   | OpenAI API key                                 | Environment variable  |
-| `base_url`               | string   | Custom base URL for API requests (for proxies) | None                  |
-| `working_dir`            | string   | Directory for Codex to operate in              | Current directory     |
-| `additional_directories` | string[] | Additional directories the agent can access    | None                  |
-| `model`                  | string   | Model to use                                   | SDK default           |
-| `sandbox_mode`           | string   | Sandbox access level (see below)               | `workspace-write`     |
-| `model_reasoning_effort` | string   | Reasoning intensity (see below)                | SDK default           |
-| `network_access_enabled` | boolean  | Allow network requests                         | false                 |
-| `web_search_enabled`     | boolean  | Allow web search                               | false                 |
-| `approval_policy`        | string   | When to require approval (see below)           | SDK default           |
-| `collaboration_mode`     | string   | Multi-agent mode: `coding` or `plan` (beta)    | None                  |
-| `skip_git_repo_check`    | boolean  | Skip Git repository validation                 | false                 |
-| `codex_path_override`    | string   | Custom path to codex binary                    | None                  |
-| `thread_id`              | string   | Resume existing thread from ~/.codex/sessions  | None (creates new)    |
-| `persist_threads`        | boolean  | Keep threads alive between calls               | false                 |
-| `thread_pool_size`       | number   | Max concurrent threads (when persist_threads)  | 1                     |
-| `output_schema`          | object   | JSON schema for structured responses           | None                  |
-| `cli_env`                | object   | Custom environment variables for Codex CLI     | Inherits from process |
-| `inherit_process_env`    | boolean  | Merge process env when `cli_env` is set        | false                 |
-| `enable_streaming`       | boolean  | Enable streaming events                        | false                 |
-| `deep_tracing`           | boolean  | Enable OpenTelemetry tracing of CLI internals  | false                 |
+| Parameter                | Type     | Description                                               | Default                |
+| ------------------------ | -------- | --------------------------------------------------------- | ---------------------- |
+| `apiKey`                 | string   | OpenAI API key. Optional when Codex is already signed in. | Environment variable   |
+| `base_url`               | string   | Custom base URL for API requests (for proxies)            | None                   |
+| `working_dir`            | string   | Directory for Codex to operate in                         | Current directory      |
+| `additional_directories` | string[] | Additional directories the agent can access               | None                   |
+| `model`                  | string   | Model to use                                              | SDK default            |
+| `sandbox_mode`           | string   | Sandbox access level (see below)                          | `workspace-write`      |
+| `model_reasoning_effort` | string   | Reasoning intensity (see below)                           | SDK default            |
+| `network_access_enabled` | boolean  | Allow network requests                                    | false                  |
+| `web_search_enabled`     | boolean  | Allow web search                                          | false                  |
+| `approval_policy`        | string   | When to require approval (see below)                      | SDK default            |
+| `cli_config`             | object   | Additional Codex CLI config overrides                     | None                   |
+| `skip_git_repo_check`    | boolean  | Skip Git repository validation                            | false                  |
+| `codex_path_override`    | string   | Custom path to codex binary                               | None                   |
+| `thread_id`              | string   | Resume existing thread from ~/.codex/sessions             | None (creates new)     |
+| `persist_threads`        | boolean  | Keep threads alive between calls                          | false                  |
+| `thread_pool_size`       | number   | Max concurrent threads (when persist_threads)             | 1                      |
+| `output_schema`          | object   | JSON schema for structured responses                      | None                   |
+| `cli_env`                | object   | Custom environment variables for Codex CLI                | Inherits from process  |
+| `inherit_process_env`    | boolean  | Merge process env when `cli_env` is set                   | `false` with `cli_env` |
+| `enable_streaming`       | boolean  | Enable streaming events                                   | false                  |
+| `deep_tracing`           | boolean  | Enable OpenTelemetry tracing of CLI internals             | false                  |
 
 ### Sandbox Modes
 
