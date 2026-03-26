@@ -122,7 +122,7 @@ jobs:
 
       - name: Upload Backend Coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           files: ./coverage/coverage-final.json
           flags: backend
@@ -421,7 +421,7 @@ jobs:
         run: npm run test:coverage --prefix src/app
 
       - name: Upload Frontend Coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           files: ./src/app/coverage/coverage-final.json
           flags: frontend
