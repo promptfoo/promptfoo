@@ -729,8 +729,10 @@ async function runJsonGradingPrompt({
       },
     },
     metadata: {
+      ...(resp.metadata && typeof resp.metadata === 'object' && !Array.isArray(resp.metadata)
+        ? resp.metadata
+        : {}),
       renderedGradingPrompt: prompt,
-      ...(resp.metadata && typeof resp.metadata === 'object' ? resp.metadata : {}),
     },
   };
 }
