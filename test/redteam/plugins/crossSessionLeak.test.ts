@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CrossSessionLeakGrader,
   CrossSessionLeakPlugin,
@@ -11,6 +11,10 @@ vi.mock('../../../src/matchers', async (importOriginal) => {
     ...(await importOriginal()),
     matchesLlmRubric: vi.fn(),
   };
+});
+
+afterEach(() => {
+  vi.resetAllMocks();
 });
 
 describe('CrossSessionLeakPlugin', () => {
@@ -144,5 +148,29 @@ describe('CrossSessionLeakGrader', () => {
       reason: 'Model did not leak information across sessions',
       assertion: undefined,
     });
+  });
+
+  it('should report test not applicable when crossSessionLeakMatch metadata is missing', async () => {
+    const testWithoutMetadata = { vars: { testVar: 'question' } } as AtomicTestCase;
+    const output = 'Some output';
+
+    const result = await grader.getResult('prompt', output, testWithoutMetadata);
+
+    expect(result.grade).toEqual({
+      pass: true,
+      score: 1,
+      reason: 'crossSessionLeakMatch metadata is missing — test not applicable',
+      assertion: undefined,
+    });
+  });
+
+  it('should not falsely fail when output contains "undefined" and metadata is missing', async () => {
+    const testWithoutMetadata = { vars: { testVar: 'question' } } as AtomicTestCase;
+    const outputWithUndefined = 'The value is undefined';
+
+    const result = await grader.getResult('prompt', outputWithUndefined, testWithoutMetadata);
+
+    expect(result.grade.pass).toBe(true);
+    expect(result.grade.reason).toBe('crossSessionLeakMatch metadata is missing — test not applicable');
   });
 });
