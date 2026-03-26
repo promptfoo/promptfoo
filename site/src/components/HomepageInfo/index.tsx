@@ -7,7 +7,7 @@ import styles from './styles.module.css';
 
 export default function HomepageInfo(): React.ReactElement {
   type TabId = 'evaluations' | 'security';
-  const [activeTab, setActiveTab] = useState<'evaluations' | 'security'>('security');
+  const [activeTab, setActiveTab] = useState<TabId>('security');
 
   const tabs: Array<{ id: TabId; label: string; mobileLabel: string }> = [
     { id: 'evaluations', label: 'Quality evaluations', mobileLabel: 'Evaluations' },

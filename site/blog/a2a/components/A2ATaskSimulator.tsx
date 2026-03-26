@@ -69,6 +69,8 @@ const sampleTasks: Record<TaskKey, Task> = {
   },
 };
 
+const sampleTaskEntries = Object.entries(sampleTasks) as Array<[TaskKey, Task]>;
+
 const taskStateSequences: Record<
   TaskKey,
   Array<{ state: TaskState; message: string; duration: number }>
@@ -149,7 +151,7 @@ export default function A2ATaskSimulator() {
         ...task.history,
       ],
       status: {
-        state: newState as Task['status']['state'],
+        state: newState,
         message,
         timestamp: new Date().toISOString(),
       },
@@ -201,9 +203,9 @@ export default function A2ATaskSimulator() {
     }
 
     setIsAnimating(true);
-    const taskKey = (Object.entries(sampleTasks).find(
-      ([_, task]) => task.id === selectedTask.id,
-    )?.[0] ?? 'lead-qualification') as TaskKey;
+    const taskKey =
+      sampleTaskEntries.find(([, task]) => task.id === selectedTask.id)?.[0] ??
+      'lead-qualification';
     const sequence = taskStateSequences[taskKey];
 
     for (let i = 0; i < sequence.length; i++) {
@@ -226,11 +228,11 @@ export default function A2ATaskSimulator() {
       <div className={styles.taskSelector}>
         <h4>Select Task Type to See Lifecycle</h4>
         <div className={styles.taskButtons}>
-          {Object.entries(sampleTasks).map(([key, task]) => (
+          {sampleTaskEntries.map(([key, task]) => (
             <button
               key={key}
               className={`${styles.taskButton} ${selectedTask.id === task.id ? styles.active : ''}`}
-              onClick={() => handleTaskSelect(key as TaskKey)}
+              onClick={() => handleTaskSelect(key)}
               disabled={isAnimating}
             >
               {key

@@ -109,7 +109,7 @@ describe('useVersionCheck', () => {
       json: () => Promise.resolve(mockVersionInfo),
     } as Response);
 
-    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
+    const setItemSpy = vi.spyOn(localStorage, 'setItem');
 
     const { result } = renderHook(() => useVersionCheck());
 

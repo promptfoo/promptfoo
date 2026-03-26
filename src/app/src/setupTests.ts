@@ -5,6 +5,34 @@ import { webcrypto } from 'node:crypto';
 import * as matchers from '@testing-library/jest-dom/matchers';
 import { afterEach, expect, vi } from 'vitest';
 
+class MemoryStorage implements Storage {
+  private store = new Map<string, string>();
+
+  get length() {
+    return this.store.size;
+  }
+
+  clear() {
+    this.store.clear();
+  }
+
+  getItem(key: string) {
+    return this.store.get(key) ?? null;
+  }
+
+  key(index: number) {
+    return Array.from(this.store.keys())[index] ?? null;
+  }
+
+  removeItem(key: string) {
+    this.store.delete(key);
+  }
+
+  setItem(key: string, value: string) {
+    this.store.set(key, value);
+  }
+}
+
 /**
  * Polyfill crypto.subtle for jsdom environment.
  * jsdom doesn't support SubtleCrypto, but Node.js provides it via webcrypto.
@@ -13,6 +41,14 @@ import { afterEach, expect, vi } from 'vitest';
 if (!globalThis.crypto?.subtle) {
   Object.defineProperty(globalThis, 'crypto', {
     value: webcrypto,
+    writable: true,
+    configurable: true,
+  });
+}
+
+if (typeof globalThis.localStorage?.clear !== 'function') {
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: new MemoryStorage(),
     writable: true,
     configurable: true,
   });
