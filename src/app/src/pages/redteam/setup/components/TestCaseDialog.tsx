@@ -59,7 +59,7 @@ interface TestCaseDialogProps {
   onContinue: (additionalTurns: number) => void;
   currentTurn: number;
   maxTurns: number;
-  availablePlugins: string[];
+  availablePlugins: TargetPlugin[];
   // Whether to allow changing the plugin (only on strategies page)
   allowPluginChange?: boolean;
 }
@@ -148,10 +148,33 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   const renderPluginDocumentationLink =
     pluginName && !plugin?.isStatic && hasSpecificPluginDocumentation(pluginName as Plugin);
 
-  const getDisplayName = (option: string) =>
-    (displayNameOverrides as Record<string, string>)[option] ||
-    (categoryAliases as Record<string, string>)[option] ||
-    option;
+  const selectedPluginValue = useMemo(() => {
+    const index = availablePlugins.findIndex(
+      (option) =>
+        option.id === plugin?.id &&
+        JSON.stringify(option.config) === JSON.stringify(plugin?.config ?? {}),
+    );
+    return index >= 0 ? String(index) : undefined;
+  }, [availablePlugins, plugin]);
+
+  const getAvailablePluginLabel = (option: TargetPlugin, index: number) => {
+    if (option.id === 'policy') {
+      const policy = option.config?.policy as { name?: string } | string | undefined;
+
+      if (policy && typeof policy === 'object' && typeof policy.name === 'string' && policy.name) {
+        return policy.name;
+      }
+
+      const policyIndex = availablePlugins
+        .slice(0, index + 1)
+        .filter((p) => p.id === 'policy').length;
+      return `Custom Policy ${policyIndex}`;
+    }
+
+    return (
+      displayNameOverrides[option.id as Plugin] || categoryAliases[option.id as Plugin] || option.id
+    );
+  };
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -175,9 +198,9 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
           </div>
           {allowPluginChange && (
             <Select
-              value={pluginName}
+              value={selectedPluginValue}
               onValueChange={(newValue) => {
-                if (newValue && newValue !== pluginName) {
+                if (newValue && newValue !== selectedPluginValue) {
                   onRegenerate(newValue);
                 }
               }}
@@ -186,9 +209,9 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
                 <SelectValue placeholder="Select plugin" />
               </SelectTrigger>
               <SelectContent className="z-[10001]">
-                {availablePlugins.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {getDisplayName(option)}
+                {availablePlugins.map((option, index) => (
+                  <SelectItem key={`${option.id}-${index}`} value={String(index)}>
+                    {getAvailablePluginLabel(option, index)}
                   </SelectItem>
                 ))}
               </SelectContent>

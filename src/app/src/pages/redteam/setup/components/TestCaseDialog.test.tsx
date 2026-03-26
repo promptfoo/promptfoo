@@ -230,7 +230,11 @@ describe('TestCaseDialog', () => {
     onContinue: vi.fn(),
     currentTurn: 0,
     maxTurns: 1,
-    availablePlugins: ['harmful:hate', 'harmful:violence', 'pii'],
+    availablePlugins: [
+      { id: 'harmful:hate' as const, config: {}, isStatic: true },
+      { id: 'harmful:violence' as const, config: {}, isStatic: true },
+      { id: 'pii' as const, config: {}, isStatic: true },
+    ],
   };
 
   beforeEach(() => {

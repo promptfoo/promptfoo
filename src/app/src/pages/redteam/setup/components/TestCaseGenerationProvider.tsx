@@ -32,7 +32,6 @@ import type {
 export type { GeneratedTestCase, TargetPlugin, TargetResponse, TargetStrategy };
 
 const DEFAULT_PLUGIN = 'harmful:hate';
-
 const TEST_GENERATION_TIMEOUT = 60000; // 60s timeout
 const TEST_EXECUTION_TIMEOUT = 60000; // 60s timeout
 const ERROR_MSG_DURATION = 7500; // 7.5s duration
@@ -235,13 +234,17 @@ export const TestCaseGenerationProvider: React.FC<{
 
   // Compute available plugins from config
   const availablePlugins = useMemo(() => {
-    const plugins =
-      redTeamConfig.plugins?.map((p) => (typeof p === 'string' ? p : p.id)).filter(Boolean) ?? [];
-    // If no plugins are configured, provide a default
-    if (plugins.length === 0) {
-      return [DEFAULT_PLUGIN];
-    }
-    return plugins;
+    const plugins = redTeamConfig.plugins.map((configuredPlugin) =>
+      typeof configuredPlugin === 'string'
+        ? { id: configuredPlugin as Plugin, config: {}, isStatic: true }
+        : {
+            id: configuredPlugin.id as Plugin,
+            config: configuredPlugin.config ?? {},
+            isStatic: true,
+          },
+    );
+
+    return plugins.length > 0 ? plugins : [{ id: DEFAULT_PLUGIN, config: {}, isStatic: true }];
   }, [redTeamConfig.plugins]);
 
   // ===================================================================
@@ -582,22 +585,16 @@ export const TestCaseGenerationProvider: React.FC<{
   const handleRegenerate = useCallback(
     (newPluginId?: string) => {
       // If plugin changed, clear batch and start fresh
-      if (newPluginId && newPluginId !== plugin?.id) {
+      if (newPluginId) {
+        const selectedPlugin = availablePlugins[Number(newPluginId)];
+        if (!selectedPlugin) {
+          return;
+        }
+
         // Clear batch since we're switching plugins
         setTestCaseBatch([]);
         setBatchIndex(0);
-
-        // Look up the plugin config from redTeamConfig.plugins
-        const pluginFromConfig = redTeamConfig.plugins?.find((p) =>
-          typeof p === 'string' ? p === newPluginId : p.id === newPluginId,
-        );
-        const pluginConfig =
-          typeof pluginFromConfig === 'object' ? (pluginFromConfig.config ?? {}) : {};
-
-        handleStart(
-          { id: newPluginId as Plugin, config: pluginConfig, isStatic: false },
-          strategy!,
-        );
+        handleStart(selectedPlugin, strategy!);
         return;
       }
 
@@ -633,7 +630,7 @@ export const TestCaseGenerationProvider: React.FC<{
       handleStart,
       plugin,
       strategy,
-      redTeamConfig.plugins,
+      availablePlugins,
       batchIndex,
       testCaseBatch,
       isPrefetching,
