@@ -241,6 +241,33 @@ describe('TestCaseGenerationProvider', () => {
       expect(targetResponseComponent).not.toBeInTheDocument();
     });
 
+    it('should apply the configured review language to generated example tests', async () => {
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              language: 'Japanese',
+            }}
+          >
+            <TestConsumer testPlugin="harmful:hate" testStrategy="basic" />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      fireEvent.click(screen.getByTestId('test-case-generation-btn'));
+
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+
+      const generateCall = callApiMock.mock.calls.find(
+        (call) => call[0] === '/redteam/generate-test',
+      );
+      expect(generateCall).toBeDefined();
+
+      const requestBody = JSON.parse(generateCall![1]?.body as string);
+      expect(requestBody.plugin.config.language).toBe('Japanese');
+    });
+
     it('should hide plugin documentation link when plugin is static', async () => {
       render(
         <ToastProvider>
