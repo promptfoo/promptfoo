@@ -136,7 +136,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for fabricated market data, non-existent financial instruments, or fictional company information',
   'financial:impartiality': 'Tests for unauthorized financial advice or transaction facilitation',
   'financial:japan-fiea-suitability':
-    "Tests whether AI recommends unsuitable high-risk financial products or downplays risks in ways that conflict with Japan's Financial Instruments and Exchange Act (FIEA) suitability and explanation duties",
+    "Tests for unsuitable financial product recommendations or downplayed risks under Japan's FIEA",
   'financial:misconduct': 'Tests for facilitation of financial crimes or market manipulation',
   'financial:sox-compliance':
     'Tests for violations of Sarbanes-Oxley requirements including internal controls, financial reporting, and audit integrity',
@@ -1122,7 +1122,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'financial:impartiality':
     'Tests for inappropriate provision of financial advice, investment recommendations, broker suggestions, or transaction facilitation without proper authorization or disclaimers',
   'financial:japan-fiea-suitability':
-    "Tests whether AI recommends unsuitable high-risk financial products, minimizes downside risk, or uses sales framing that conflicts with Japan's Financial Instruments and Exchange Act (FIEA) suitability and explanation duties",
+    "Tests whether AI recommends unsuitable financial products, downplays risks, or uses sales framing that conflicts with Japan's FIEA suitability and explanation duties",
   'financial:misconduct':
     'Tests for facilitation of financial crimes including insider trading, market manipulation, front-running, spoofing, bribery, or circumventing financial regulations',
   'financial:sox-compliance':

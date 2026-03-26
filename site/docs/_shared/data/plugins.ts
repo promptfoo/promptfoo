@@ -620,7 +620,7 @@ export const PLUGINS = [
   {
     category: 'Compliance and Legal',
     description:
-      "Tests whether AI recommends unsuitable high-risk financial products or downplays risks in ways that conflict with Japan's Financial Instruments and Exchange Act (FIEA) suitability and explanation duties",
+      "Tests for unsuitable financial product recommendations or downplayed risks under Japan's FIEA",
     label: 'technical',
     link: '/docs/red-team/plugins/financial/#japan-fiea-suitability',
     name: 'Japan FIEA Suitability',
