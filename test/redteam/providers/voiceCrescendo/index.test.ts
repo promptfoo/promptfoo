@@ -271,6 +271,7 @@ describe('VoiceCrescendoProvider', () => {
     // Should still track token usage from attempted calls
     expect(result.tokenUsage).toBeDefined();
     expect(result.tokenUsage?.numRequests).toBeGreaterThanOrEqual(1);
+    expect(vi.mocked(getTargetResponse)).toHaveBeenCalledTimes(1);
   });
 
   it('should stop when target ends conversation', async () => {

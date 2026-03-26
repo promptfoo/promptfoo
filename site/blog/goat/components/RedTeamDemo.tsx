@@ -22,7 +22,23 @@ import { API_BASE_URL } from './constants';
 import styles from './RedTeamDemo.module.css';
 import RedTeamSuggestions from './RedTeamSuggestions';
 
-const attacks = [
+type AttackName =
+  | 'Refusal Suppression'
+  | 'Context Manipulation'
+  | 'Emotional Triggering'
+  | 'Authority Impersonation'
+  | 'Hypothetical Framing'
+  | 'Dual Response'
+  | 'Response Priming'
+  | 'Persona Modification'
+  | 'Topic Splitting'
+  | 'Opposite Intent'
+  | 'Logic Reversal'
+  | 'Incremental Coercion'
+  | 'Adversarial Redirect'
+  | 'Grammar Obfuscation';
+
+const attacks: Array<{ name: AttackName; definition: string }> = [
   {
     name: 'Refusal Suppression',
     definition:
@@ -50,7 +66,10 @@ const attacks = [
   },
 ];
 
-const attackIcons = {
+const attackIcons: Record<
+  AttackName,
+  React.ComponentType<React.ComponentProps<typeof AlertCircle>>
+> = {
   'Refusal Suppression': AlertCircle,
   'Context Manipulation': KeyRound,
   'Emotional Triggering': Heart,
@@ -201,6 +220,19 @@ const RedTeamDemo: React.FC = () => {
     });
   };
 
+  const processStreamLine = (line: string) => {
+    if (!line.startsWith('data: ')) {
+      return;
+    }
+
+    try {
+      const event = JSON.parse(line.slice(6));
+      handleStreamEvent(event);
+    } catch (error) {
+      console.error('Failed to parse event:', error);
+    }
+  };
+
   const runTurn = async (turnsToRun: number) => {
     if (isLoading) {
       return;
@@ -240,19 +272,10 @@ const RedTeamDemo: React.FC = () => {
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const event = JSON.parse(line.slice(6));
-              handleStreamEvent(event);
-            } catch (e) {
-              console.error('Failed to parse event:', e);
-            }
-          }
-        }
+        lines.forEach(processStreamLine);
       }
     } catch (error) {
-      if (error.name === 'AbortError') {
+      if (error instanceof Error && error.name === 'AbortError') {
         console.log('Stream aborted due to unsafe response');
         return;
       }
@@ -413,7 +436,7 @@ const RedTeamDemo: React.FC = () => {
             <h2>See What's in the Arsenal</h2>
             <div className={styles.attacksGrid}>
               {attacks.map((attack) => {
-                const IconComponent = attackIcons[attack.name] || AlertCircle;
+                const IconComponent = attackIcons[attack.name];
                 return (
                   <div key={attack.name} className={styles.attackCard}>
                     <div className={styles.attackHeader}>

@@ -16,10 +16,10 @@ The OpenAI Codex SDK is a proprietary package and is not installed by default. Y
 
 ## Provider IDs
 
-You can reference this provider using either:
+You can reference this provider using either base ID, and you can inline the model in the provider path:
 
-- `openai:codex-sdk` (full name)
-- `openai:codex` (alias)
+- `openai:codex-sdk` or `openai:codex-sdk:<model name>` (full name)
+- `openai:codex` or `openai:codex:<model name>` (alias)
 
 ## Installation
 
@@ -75,12 +75,19 @@ Specify which OpenAI model to use for code generation:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:codex-sdk
-    config:
-      model: codex # Or any supported model
+  - openai:codex:gpt-5.4
 
 prompts:
   - 'Write a TypeScript function that validates email addresses'
+```
+
+If you need additional Codex settings, you can still set the model via `config.model`:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: gpt-5.4
 ```
 
 ### With Working Directory
@@ -142,6 +149,7 @@ Skipping the Git check removes a safety guard. Use with caution and consider ver
 | `thread_pool_size`       | number   | Max concurrent threads (when persist_threads)  | 1                     |
 | `output_schema`          | object   | JSON schema for structured responses           | None                  |
 | `cli_env`                | object   | Custom environment variables for Codex CLI     | Inherits from process |
+| `inherit_process_env`    | boolean  | Merge process env when `cli_env` is set        | false                 |
 | `enable_streaming`       | boolean  | Enable streaming events                        | false                 |
 | `deep_tracing`           | boolean  | Enable OpenTelemetry tracing of CLI internals  | false                 |
 
@@ -490,6 +498,109 @@ providers:
 ```
 
 By default, the provider inherits all environment variables from the Node.js process.
+If you set `cli_env`, promptfoo passes only those custom variables plus the provider's resolved API key by default. This keeps the Codex runtime isolated from unrelated process secrets.
+
+To merge the process environment anyway, set `inherit_process_env: true`:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      inherit_process_env: true
+      cli_env:
+        CODEX_HOME: ./sample-codex-home
+```
+
+## Skills
+
+Codex loads [agent skills](https://developers.openai.com/codex/skills) from `.agents/skills/` directories in the `working_dir` hierarchy. Promptfoo does not enable skills via a provider-specific toggle; instead, you point `working_dir` at a repository that already contains the skill files you want Codex to discover.
+
+Promptfoo exposes inferred skill usage in `response.metadata.skillCalls`. Each entry is derived from Codex command text that directly references a local `SKILL.md` file:
+
+| Field    | Type   | Description                                           |
+| -------- | ------ | ----------------------------------------------------- |
+| `name`   | string | Skill name inferred from the `SKILL.md` path          |
+| `path`   | string | Skill instruction file path read by Codex             |
+| `source` | string | Evidence source. For Codex this is always `heuristic` |
+
+```yaml title="promptfooconfig.yaml"
+description: Codex skill eval
+
+prompts:
+  - 'Use the token-skill skill. Return only the token.'
+
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: gpt-5.2
+      working_dir: '{{ env.CODEX_SKILLS_WORKING_DIR | default("./sample-project") }}'
+      skip_git_repo_check: true
+      enable_streaming: true
+      cli_env:
+        CODEX_HOME: '{{ env.CODEX_HOME_OVERRIDE | default("./sample-codex-home") }}'
+
+tests:
+  - assert:
+      - type: equals
+        value: 'CERULEAN-FALCON-SKILL'
+      - type: skill-used
+        value: token-skill
+```
+
+The `CODEX_SKILLS_WORKING_DIR` and `CODEX_HOME_OVERRIDE` variables are optional. They are useful when you want to run the same config from a different current working directory, such as the repository root in CI.
+
+:::note
+
+`metadata.skillCalls` is a heuristic. The Codex SDK currently does not expose a first-class skill invocation event, so promptfoo infers skill usage from commands that directly reference `.agents/skills/.../SKILL.md` files during the run.
+
+:::
+
+For reproducible CI runs, use `cli_env.CODEX_HOME` to point Codex at a project-local home directory. That isolates the eval from any personal Codex configuration or user-level skills on the machine.
+
+Promptfoo also enriches traced Codex command spans with `promptfoo.skill.*` attributes when it detects skill reads. That makes it easier to debug routing in OTEL backends while keeping the main eval assertion surface on `skill-used`.
+
+To trace what Codex does inside a skill, enable `deep_tracing` on the provider and root-level OTLP tracing in your config. That lets you assert on traced shell commands, MCP tool calls, search steps, and reasoning with the standard trace and trajectory assertions:
+
+```yaml title="promptfooconfig.tracing.yaml"
+description: Codex skill trace eval
+
+prompts:
+  - 'Use the token-skill skill. Return only the token.'
+
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: gpt-5.2
+      working_dir: '{{ env.CODEX_SKILLS_WORKING_DIR | default("./sample-project") }}'
+      skip_git_repo_check: true
+      enable_streaming: true
+      deep_tracing: true
+      cli_env:
+        CODEX_HOME: '{{ env.CODEX_HOME_OVERRIDE | default("./sample-codex-home") }}'
+
+tests:
+  - assert:
+      - type: contains
+        value: 'CERULEAN-FALCON-SKILL'
+      - type: trajectory:step-count
+        value:
+          type: command
+          pattern: '*token-skill/SKILL.md*'
+          min: 1
+      - type: skill-used
+        value: token-skill
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      host: '127.0.0.1'
+      acceptFormats: ['json']
+```
+
+Use `trajectory:step-count` for shell commands emitted while Codex is following the skill. If the skill triggers traced MCP calls, you can assert on those with `trajectory:tool-used` and `trajectory:tool-args-match`.
 
 ## Custom Binary Path
 
@@ -652,6 +763,7 @@ Choose based on your use case:
 See the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk) for complete implementations:
 
 - [Basic usage](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/basic) - Simple code generation
+- [Skills testing](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/skills) - Evaluate local Codex skills with `skill-used` and traced skill evidence
 - [Agentic SDK comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-agentic-sdks) - Side-by-side comparison with Claude Agent SDK
 
 ## See Also

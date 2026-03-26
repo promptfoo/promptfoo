@@ -5,11 +5,10 @@ import { pathToFileURL } from 'node:url';
 
 import { Command } from 'commander';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { setLogLevel } from '../src/logger';
-import { addCommonOptionsRecursively, isMainModule, shutdownGracefully } from '../src/main';
-import { setupEnv } from '../src/util/index';
 
 // Hoisted mocks for shutdown tests
+const mockSetupEnv = vi.hoisted(() => vi.fn());
+const mockSetLogLevel = vi.hoisted(() => vi.fn());
 const mockTelemetryShutdown = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockCloseLogger = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockCloseDbIfOpen = vi.hoisted(() => vi.fn());
@@ -22,13 +21,13 @@ const actualUndici = vi.hoisted(() => vi.importActual<typeof import('undici')>('
 
 // Mock the dependencies
 vi.mock('../src/util', () => ({
-  setupEnv: vi.fn(),
+  setupEnv: mockSetupEnv,
 }));
 
 vi.mock('../src/logger', () => ({
   __esModule: true,
   default: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
-  setLogLevel: vi.fn(),
+  setLogLevel: mockSetLogLevel,
   closeLogger: mockCloseLogger,
 }));
 
@@ -51,6 +50,15 @@ vi.mock('../src/codeScan', () => ({
   codeScansCommand: vi.fn(),
 }));
 
+let addCommonOptionsRecursively: typeof import('../src/main').addCommonOptionsRecursively;
+let isMainModule: typeof import('../src/main').isMainModule;
+let shutdownGracefully: typeof import('../src/main').shutdownGracefully;
+
+async function loadMainModule() {
+  vi.resetModules();
+  ({ addCommonOptionsRecursively, isMainModule, shutdownGracefully } = await import('../src/main'));
+}
+
 describe('addCommonOptionsRecursively', () => {
   const originalExit = process.exit;
   let program: Command;
@@ -60,7 +68,8 @@ describe('addCommonOptionsRecursively', () => {
     process.exit = vi.fn() as any;
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await loadMainModule();
     program = new Command();
     program.action(() => {});
     subCommand = program.command('subcommand');
@@ -201,16 +210,16 @@ describe('addCommonOptionsRecursively', () => {
 
     // Test verbose option
     preActionFn(createMockCommand({ verbose: true }));
-    expect(setLogLevel).toHaveBeenCalledWith('debug');
+    expect(mockSetLogLevel).toHaveBeenCalledWith('debug');
 
     // Test env-file option
     preActionFn(createMockCommand({ envFile: '.env.test' }));
-    expect(setupEnv).toHaveBeenCalledWith('.env.test');
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.test');
 
     // Test both options together
     preActionFn(createMockCommand({ verbose: true, envFile: '.env.combined' }));
-    expect(setLogLevel).toHaveBeenCalledWith('debug');
-    expect(setupEnv).toHaveBeenCalledWith('.env.combined');
+    expect(mockSetLogLevel).toHaveBeenCalledWith('debug');
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.combined');
   });
 });
 
@@ -219,7 +228,8 @@ describe('isMainModule', () => {
   let realFilePath: string;
   let symlinkPath: string;
 
-  beforeAll(() => {
+  beforeAll(async () => {
+    await loadMainModule();
     // Create a temporary directory with a real file and a symlink
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'main-test-'));
     realFilePath = path.join(tempDir, 'real-file.js');
@@ -326,10 +336,13 @@ describe('isMainModule', () => {
 describe('shutdownGracefully', () => {
   const originalExit = process.exit;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await loadMainModule();
     vi.useFakeTimers();
     process.exit = vi.fn() as never;
     // Reset all mocks to default behavior
+    mockSetupEnv.mockReset();
+    mockSetLogLevel.mockReset();
     mockTelemetryShutdown.mockReset().mockResolvedValue(undefined);
     mockCloseLogger.mockReset().mockResolvedValue(undefined);
     mockCloseDbIfOpen.mockReset();
