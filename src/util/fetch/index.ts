@@ -9,6 +9,7 @@ import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { parseRateLimitHeaders, parseRetryAfter } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sanitizeUrl } from '../sanitizer';
@@ -291,13 +292,16 @@ export async function handleRateLimit(response: Response): Promise<void> {
   let waitTime = 60_000; // Default wait time of 60 seconds
 
   if (openaiReset) {
-    waitTime = Math.max(Number.parseInt(openaiReset) * 1000, 0);
+    const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
+    if (parsedHeaders.resetAt !== undefined) {
+      waitTime = Math.max(parsedHeaders.resetAt - Date.now(), 0);
+    }
   } else if (rateLimitReset) {
     const resetTime = new Date(Number.parseInt(rateLimitReset) * 1000);
     const now = new Date();
     waitTime = Math.max(resetTime.getTime() - now.getTime() + 1000, 0);
   } else if (retryAfter) {
-    waitTime = Number.parseInt(retryAfter) * 1000;
+    waitTime = parseRetryAfter(retryAfter) ?? waitTime;
   }
 
   logger.debug(`Rate limited, waiting ${waitTime}ms before retry`);
