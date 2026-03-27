@@ -1700,9 +1700,11 @@ The Realtime API configuration supports these parameters in addition to standard
 | `input_audio_format`         | Format of audio input                               | 'pcm16'                | 'pcm16', 'g711_ulaw', 'g711_alaw'       |
 | `output_audio_format`        | Format of audio output                              | 'pcm16'                | 'pcm16', 'g711_ulaw', 'g711_alaw'       |
 | `websocketTimeout`           | Timeout for WebSocket connection (milliseconds)     | 30000                  | Any number                              |
-| `max_response_output_tokens` | Maximum tokens in model response                    | 'inf'                  | Number or 'inf'                         |
-| `tools`                      | Array of tool definitions for function calling      | []                     | Array of tool objects                   |
-| `tool_choice`                | Controls how tools are selected                     | 'auto'                 | 'none', 'auto', 'required', or object   |
+| `max_response_output_tokens` | Maximum tokens in model response                    | 'inf'                  | Positive integer or 'inf'               |
+
+For Realtime models, `0` is treated as invalid and falls back to the default `'inf'` value instead of being sent to the API.
+| `tools` | Array of tool definitions for function calling | [] | Array of tool objects |
+| `tool_choice` | Controls how tools are selected | 'auto' | 'none', 'auto', 'required', or object |
 
 #### Custom endpoints and proxies (Realtime)
 

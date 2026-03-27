@@ -136,6 +136,14 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   private isProcessingAudio: boolean = false;
   private audioTimeout: NodeJS.Timeout | null = null;
 
+  private getMaxResponseOutputTokens(): number | 'inf' {
+    const value = this.config.max_response_output_tokens;
+    if (typeof value === 'number' && value > 0) {
+      return value;
+    }
+    return 'inf';
+  }
+
   constructor(
     modelName: string,
     options: { config?: OpenAiRealtimeOptions; id?: string; env?: EnvOverrides } = {},
@@ -199,7 +207,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     const inputAudioFormat = this.config.input_audio_format || 'pcm16';
     const outputAudioFormat = this.config.output_audio_format || 'pcm16';
     const temperature = this.config.temperature ?? 0.8;
-    const maxResponseOutputTokens = this.config.max_response_output_tokens ?? 'inf';
+    const maxResponseOutputTokens = this.getMaxResponseOutputTokens();
 
     const body: any = {
       model: this.modelName,
@@ -980,7 +988,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             input_audio_format: this.config.input_audio_format || 'pcm16',
             output_audio_format: this.config.output_audio_format || 'pcm16',
             temperature: this.config.temperature ?? 0.8,
-            max_response_output_tokens: this.config.max_response_output_tokens ?? 'inf',
+            max_response_output_tokens: this.getMaxResponseOutputTokens(),
             ...(this.config.input_audio_transcription !== undefined && {
               input_audio_transcription: this.config.input_audio_transcription,
             }),

@@ -207,7 +207,7 @@ describe('OpenAI Realtime Provider', () => {
       });
     });
 
-    it('should preserve an explicit max_response_output_tokens value of 0 in the session body', async () => {
+    it('should fall back to inf when max_response_output_tokens is 0 in the session body', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
         config: {
           modalities: ['text'],
@@ -217,7 +217,7 @@ describe('OpenAI Realtime Provider', () => {
 
       const body = await provider.getRealtimeSessionBody();
 
-      expect(body.max_response_output_tokens).toBe(0);
+      expect(body.max_response_output_tokens).toBe('inf');
     });
 
     it('should handle basic text response with persistent connection', async () => {
@@ -771,7 +771,7 @@ describe('OpenAI Realtime Provider', () => {
       );
     });
 
-    it('preserves an explicit max_response_output_tokens value of 0 in session.update', async () => {
+    it('falls back to inf when max_response_output_tokens is 0 in session.update', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
         config: { max_response_output_tokens: 0 },
       });
@@ -781,7 +781,7 @@ describe('OpenAI Realtime Provider', () => {
 
       expect(mockWs.send).toHaveBeenNthCalledWith(
         1,
-        expect.stringContaining('"max_response_output_tokens":0'),
+        expect.stringContaining('"max_response_output_tokens":"inf"'),
       );
 
       const messageHandlers = mockHandlers.message;
