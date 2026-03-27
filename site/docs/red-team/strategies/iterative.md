@@ -30,6 +30,8 @@ You can also override the number of iterations via an environment variable:
 PROMPTFOO_NUM_JAILBREAK_ITERATIONS=5
 ```
 
+Blank or null numeric tree settings fall back to the documented defaults, while explicit `0` values are still preserved when the strategy allows them.
+
 ## How It Works
 
 ![algorithmic jailbreak diagram](/img/docs/iterative-jailbreak-diagram.svg)

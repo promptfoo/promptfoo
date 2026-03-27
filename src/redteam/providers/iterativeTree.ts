@@ -104,7 +104,11 @@ const UNAUTHED_MAX_WIDTH = 3;
 const UNAUTHED_MAX_ATTEMPTS = 30;
 
 function resolveNumericConfig(value: VarValue | undefined, fallback: number): number {
-  if (value === undefined) {
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+
+  if (typeof value === 'string' && value.trim() === '') {
     return fallback;
   }
 

@@ -136,6 +136,25 @@ describe('RedteamIterativeProvider', () => {
         maxNoImprovement: 0,
       });
     });
+
+    it('falls back to defaults for null and blank numeric tree parameters', () => {
+      const provider = new RedteamIterativeTreeProvider({
+        injectVar: 'input',
+        maxDepth: null as unknown as number,
+        branchingFactor: '' as unknown as number,
+        maxWidth: '   ' as unknown as number,
+        maxAttempts: null as unknown as number,
+        maxNoImprovement: '' as unknown as number,
+      });
+
+      expect(provider['treeParams']).toEqual({
+        maxDepth: 5,
+        branchingFactor: 2,
+        maxWidth: 3,
+        maxAttempts: 30,
+        maxNoImprovement: 25,
+      });
+    });
   });
 
   describe('evaluateResponse', () => {
