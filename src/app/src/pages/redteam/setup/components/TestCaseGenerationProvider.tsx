@@ -121,8 +121,9 @@ async function callTestGenerationApi(
   count: number = 1,
 ) {
   const previewLanguage = getPreviewLanguage(language);
+  const pluginLanguage = getPreviewLanguage(plugin.config.language);
   const pluginWithLanguage =
-    previewLanguage && !plugin.config.language
+    previewLanguage && !pluginLanguage
       ? {
           ...plugin,
           config: {
