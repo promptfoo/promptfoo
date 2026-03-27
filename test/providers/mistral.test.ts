@@ -198,6 +198,29 @@ describe('Mistral', () => {
       });
     });
 
+    it('should preserve an explicit max_tokens value of 0', async () => {
+      const zeroProvider = new MistralChatCompletionProvider('mistral-medium', {
+        config: { max_tokens: 0 },
+      });
+      vi.spyOn(zeroProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Zero token response' } }],
+          usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await zeroProvider.callApi('Test prompt');
+
+      const requestInit = vi.mocked(fetchWithCache).mock.calls[0]?.[1];
+      expect(requestInit).toBeDefined();
+      const requestBody = JSON.parse((requestInit as RequestInit).body as string);
+      expect(requestBody.max_tokens).toBe(0);
+    });
+
     it('should calculate cost correctly for Magistral models', async () => {
       const magistralSmallProvider = new MistralChatCompletionProvider('magistral-small-2506');
       vi.spyOn(magistralSmallProvider, 'getApiKey').mockReturnValue('fake-api-key');
