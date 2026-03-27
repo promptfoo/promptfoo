@@ -119,6 +119,8 @@ By default, `llm-rubric` uses `gpt-5` for grading. You can override this in seve
            // highlight-end
    ```
 
+Custom `llm-rubric` providers can also return a `metadata` object in their `ProviderResponse`. promptfoo copies those keys onto the assertion's `GradingResult.metadata` alongside `renderedGradingPrompt`, which makes per-assertion fields such as upload IDs or trace IDs available in hooks like `afterEach`.
+
 ## Customizing the rubric prompt
 
 For more control over the `llm-rubric` evaluation, you can set a custom prompt using the `rubricPrompt` property:
