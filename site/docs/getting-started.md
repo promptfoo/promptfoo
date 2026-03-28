@@ -10,6 +10,8 @@ import TabItem from '@theme/TabItem';
 
 # Getting started
 
+By the end of this guide, you'll have a working eval that tests prompts across multiple models and a web view for comparing outputs.
+
 After [installing](/docs/installation) promptfoo, you can set up your first config file in a few ways:
 
 ## Running an example
@@ -125,7 +127,7 @@ This opens a browser-based setup flow that walks you through creating prompts, c
 
 ## Configuration
 
-To configure your evaluation:
+Now that you've created an initial configuration, you can update `promptfooconfig.yaml` with your own prompts, providers, and test cases:
 
 1. **Set up your prompts**: Open `promptfooconfig.yaml` and add prompts that you want to test. Use double curly braces for variable placeholders: `{{variable_name}}`. For example:
 
@@ -136,7 +138,7 @@ To configure your evaluation:
 
    [&raquo; More information on setting up prompts](/docs/configuration/prompts)
 
-2. Add `providers` to specify AI models you want to test. Promptfoo supports 60+ providers including OpenAI, Anthropic, Google, and many others:
+2. **Add providers**: Add `providers` to specify AI models you want to test. Promptfoo supports 60+ providers including OpenAI, Anthropic, Google, and many others:
 
    ```yaml
    providers:
@@ -198,7 +200,7 @@ To configure your evaluation:
 
    This tests every prompt, model, and test case.
 
-5. After the evaluation is complete, open the web viewer to review the outputs:
+5. **Review outputs**: After the evaluation is complete, open the web viewer to review the outputs:
 
    <Tabs groupId="promptfoo-command">
      <TabItem value="npx" label="npx" default>
