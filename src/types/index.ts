@@ -566,6 +566,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'similar:euclidean',
   'starts-with',
   'tool-call-f1',
+  'skill-used',
   'trajectory:goal-success',
   'trajectory:tool-args-match',
   'trajectory:step-count',

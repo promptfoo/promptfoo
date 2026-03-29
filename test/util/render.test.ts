@@ -306,6 +306,41 @@ describe('renderEnvOnlyInObject', () => {
         "{{ vars.name | default('Guest') }}",
       );
     });
+
+    it('should preserve env templates in _conversation runtime vars', async () => {
+      process.env.TEST_ENV_VAR = 'env_value';
+      const config = {
+        tests: [
+          {
+            vars: {
+              _conversation: [
+                {
+                  input: 'Tell me a secret',
+                  output: 'The answer is {{ env.TEST_ENV_VAR }}',
+                },
+              ],
+              regularVar: '{{ env.TEST_ENV_VAR }}',
+            },
+          },
+        ],
+      };
+
+      expect(renderEnvOnlyInObject(config)).toEqual({
+        tests: [
+          {
+            vars: {
+              _conversation: [
+                {
+                  input: 'Tell me a secret',
+                  output: 'The answer is {{ env.TEST_ENV_VAR }}',
+                },
+              ],
+              regularVar: 'env_value',
+            },
+          },
+        ],
+      });
+    });
   });
 
   describe('Undefined env vars', () => {

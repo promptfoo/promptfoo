@@ -3,6 +3,7 @@ import * as cache from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
 import { LONG_RUNNING_MODEL_TIMEOUT_MS } from '../../../src/providers/shared';
+import { getOpenAiMissingApiKeyMessage } from './shared';
 import type { Mock } from 'vitest';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
@@ -988,7 +989,21 @@ describe('OpenAiResponsesProvider', () => {
 
     vi.spyOn(provider, 'getApiKey').mockReturnValue(undefined);
 
-    await expect(provider.callApi('Test prompt')).rejects.toThrow('OpenAI API key is not set');
+    await expect(provider.callApi('Test prompt')).rejects.toThrow(getOpenAiMissingApiKeyMessage());
+  });
+
+  it('should use custom apiKeyEnvar in missing API key errors', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKeyEnvar: 'CUSTOM_RESPONSES_API_KEY',
+      },
+    });
+
+    vi.spyOn(provider, 'getApiKey').mockReturnValue(undefined);
+
+    await expect(provider.callApi('Test prompt')).rejects.toThrow(
+      getOpenAiMissingApiKeyMessage('CUSTOM_RESPONSES_API_KEY'),
+    );
   });
 
   it('should handle error in API response data correctly', async () => {

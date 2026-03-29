@@ -35,7 +35,7 @@ import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from './util/
 import { isJavascriptFile } from './util/fileExtensions';
 import { parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
-import { extractFirstJsonObject, extractJsonObjects } from './util/json';
+import { extractFirstJsonObject, extractJsonObjects, safeJsonStringify } from './util/json';
 import { getNunjucksEngine } from './util/templates';
 import { accumulateTokenUsage } from './util/tokenUsageUtils';
 
@@ -711,6 +711,14 @@ async function runJsonGradingPrompt({
   const reason =
     parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`);
 
+  let responseMetadata: Record<string, unknown> = {};
+  if (resp.metadata && typeof resp.metadata === 'object' && !Array.isArray(resp.metadata)) {
+    const serializedMetadata = safeJsonStringify(resp.metadata);
+    responseMetadata = serializedMetadata
+      ? (JSON.parse(serializedMetadata) as Record<string, unknown>)
+      : {};
+  }
+
   return {
     assertion,
     pass,
@@ -729,6 +737,7 @@ async function runJsonGradingPrompt({
       },
     },
     metadata: {
+      ...responseMetadata,
       renderedGradingPrompt: prompt,
     },
   };

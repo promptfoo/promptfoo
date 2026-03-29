@@ -9,6 +9,15 @@ import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamCon
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 import Targets from './index';
 
+vi.mock('react-simple-code-editor', () => ({
+  default: ({ value, onValueChange }: any) => (
+    <textarea
+      data-testid="code-editor"
+      value={value}
+      onChange={(e) => onValueChange(e.target.value)}
+    />
+  ),
+}));
 vi.mock('../../hooks/useRedTeamConfig');
 vi.mock('@app/hooks/useTelemetry');
 vi.mock('@app/utils/api');

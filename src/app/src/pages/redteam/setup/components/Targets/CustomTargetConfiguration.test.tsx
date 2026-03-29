@@ -7,6 +7,16 @@ import CustomTargetConfiguration from './CustomTargetConfiguration';
 
 import type { ProviderOptions } from '../../types';
 
+vi.mock('react-simple-code-editor', () => ({
+  default: ({ value, onValueChange }: any) => (
+    <textarea
+      data-testid="code-editor"
+      value={value}
+      onChange={(e) => onValueChange(e.target.value)}
+    />
+  ),
+}));
+
 const render = (ui: React.ReactElement) => {
   return rtlRender(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
 };

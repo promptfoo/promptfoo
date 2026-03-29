@@ -3,7 +3,7 @@ import { getGraderById } from '../redteam/graders';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
 import invariant from '../util/invariant';
 
-import type { RedteamGradingContext } from '../redteam/plugins/base';
+import type { RedteamGradingContext } from '../redteam/grading/types';
 import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
