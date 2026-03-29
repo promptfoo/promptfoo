@@ -31,7 +31,7 @@ import type {
 // Re-export types for backward compatibility
 export type { GeneratedTestCase, TargetPlugin, TargetResponse, TargetStrategy };
 
-const DEFAULT_PLUGIN = 'harmful:hate';
+const DEFAULT_PLUGIN: Plugin = 'harmful:hate';
 const TEST_GENERATION_TIMEOUT = 60000; // 60s timeout
 const TEST_EXECUTION_TIMEOUT = 60000; // 60s timeout
 const ERROR_MSG_DURATION = 7500; // 7.5s duration
@@ -233,7 +233,7 @@ export const TestCaseGenerationProvider: React.FC<{
   const [isPrefetching, setIsPrefetching] = useState(false);
 
   // Compute available plugins from config
-  const availablePlugins = useMemo(() => {
+  const availablePlugins = useMemo<TargetPlugin[]>(() => {
     const plugins = redTeamConfig.plugins.map((configuredPlugin) =>
       typeof configuredPlugin === 'string'
         ? { id: configuredPlugin as Plugin, config: {}, isStatic: true }

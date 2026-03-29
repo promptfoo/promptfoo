@@ -232,7 +232,7 @@ describe('TestCaseDialog', () => {
     maxTurns: 1,
     availablePlugins: [
       { id: 'harmful:hate' as const, config: {}, isStatic: true },
-      { id: 'harmful:violence' as const, config: {}, isStatic: true },
+      { id: 'harmful:violent-crime' as const, config: {}, isStatic: true },
       { id: 'pii' as const, config: {}, isStatic: true },
     ],
   };
