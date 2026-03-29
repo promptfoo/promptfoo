@@ -22,6 +22,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
+  SkillCallEntry,
 } from '../../types/index';
 
 /**
@@ -31,6 +32,7 @@ import type {
  *   npm install @openai/codex-sdk
  *
  * Key features:
+ * - Supports API key auth or existing Codex/ChatGPT login state
  * - Thread-based conversations with persistence in ~/.codex/sessions
  * - Native JSON schema output with Zod support
  * - Git repository requirement for safety (can be disabled)
@@ -81,6 +83,25 @@ export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
  * - 'live': Allow live web searches
  */
 export type WebSearchMode = 'disabled' | 'cached' | 'live';
+
+const MINIMAL_CLI_ENV_KEYS = [
+  'PATH',
+  'Path',
+  'HOME',
+  'USER',
+  'USERNAME',
+  'USERPROFILE',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'SHELL',
+  'COMSPEC',
+  'SystemRoot',
+  'PATHEXT',
+  'LANG',
+  'LC_ALL',
+  'TERM',
+] as const;
 
 export interface OpenAICodexSDKConfig {
   apiKey?: string;
@@ -179,9 +200,16 @@ export interface OpenAICodexSDKConfig {
 
   /**
    * Environment variables to pass to Codex CLI
-   * By default inherits Node.js process.env
+   * When unset, Codex inherits Node.js process.env.
+   * When set, only these variables are passed unless inherit_process_env is true.
    */
   cli_env?: Record<string, string>;
+
+  /**
+   * Merge process.env into the Codex CLI environment even when cli_env is set.
+   * Defaults to false when cli_env is provided, preserving env isolation.
+   */
+  inherit_process_env?: boolean;
 
   /**
    * Enable streaming events (default: false for simplicity)
@@ -213,15 +241,34 @@ export interface OpenAICodexSDKConfig {
   cli_config?: Record<string, unknown>;
 }
 
+function getMinimalProcessEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const key of MINIMAL_CLI_ENV_KEYS) {
+    const value = process.env[key];
+    if (typeof value === 'string' && value.length > 0) {
+      env[key] = value;
+    }
+  }
+  return env;
+}
+
 /**
  * Helper to load the OpenAI Codex SDK ESM module
  * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
  */
 async function loadCodexSDK(): Promise<any> {
-  const basePath =
-    cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
+  const basePaths = [
+    cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : undefined,
+    process.cwd(),
+  ].filter((candidate): candidate is string => Boolean(candidate));
 
-  const codexPath = resolvePackageEntryPoint('@openai/codex-sdk', basePath);
+  let codexPath: string | null = null;
+  for (const basePath of new Set(basePaths)) {
+    codexPath = resolvePackageEntryPoint('@openai/codex-sdk', basePath);
+    if (codexPath) {
+      break;
+    }
+  }
 
   if (!codexPath) {
     throw new Error(
@@ -230,7 +277,7 @@ async function loadCodexSDK(): Promise<any> {
       To use the OpenAI Codex SDK provider, install it with:
         npm install @openai/codex-sdk
 
-      Requires Node.js 18+.
+      Requires Node.js 20.20+ or 22.22+.
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );
@@ -247,7 +294,7 @@ async function loadCodexSDK(): Promise<any> {
       dedent`Failed to load @openai/codex-sdk.
 
       The package was found but could not be loaded. This may be due to:
-      - Incompatible Node.js version (requires Node.js 18+)
+      - Incompatible Node.js version (requires Node.js 20.20+ or 22.22+)
       - Corrupted installation
 
       Try reinstalling:
@@ -310,8 +357,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
   private providerId = 'openai:codex-sdk';
   private codexModule?: any;
-  private codexInstance?: any;
-  private codexInstanceEnvHash?: string; // Track env hash to detect changes
+  private codexInstances: Map<string, any> = new Map();
   private threads: Map<string, any> = new Map();
   private deepTracingWarningShown = false; // Show warning once per instance
 
@@ -337,14 +383,18 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return this.providerId;
   }
 
-  getApiKey(): string | undefined {
+  getApiKey(config: OpenAICodexSDKConfig = this.config): string | undefined {
     return (
-      this.config?.apiKey ||
+      config?.apiKey ||
       this.env?.OPENAI_API_KEY ||
       this.env?.CODEX_API_KEY ||
       getEnvString('OPENAI_API_KEY') ||
       getEnvString('CODEX_API_KEY')
     );
+  }
+
+  requiresApiKey(): boolean {
+    return false;
   }
 
   toString(): string {
@@ -369,25 +419,27 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // Clean up threads
     this.threads.clear();
 
-    // Clean up Codex instance to release resources (child processes, file handles)
-    if (this.codexInstance) {
+    // Clean up Codex instances to release resources (child processes, file handles)
+    for (const instance of this.codexInstances.values()) {
       try {
-        await this.destroyInstance(this.codexInstance);
+        await this.destroyInstance(instance);
       } catch (error) {
         logger.warn('[CodexSDK] Error during cleanup', { error });
       }
-      this.codexInstance = undefined;
-      this.codexInstanceEnvHash = undefined;
     }
+    this.codexInstances.clear();
   }
 
   private prepareEnvironment(
     config: OpenAICodexSDKConfig,
     traceparent?: string,
+    apiKey: string | undefined = this.getApiKey(config),
   ): Record<string, string> {
-    const env: Record<string, string> = config.cli_env
-      ? { ...config.cli_env }
-      : ({ ...process.env } as Record<string, string>);
+    const inheritProcessEnv = config.cli_env === undefined || config.inherit_process_env === true;
+    const env: Record<string, string> = {
+      ...(inheritProcessEnv ? (process.env as Record<string, string>) : getMinimalProcessEnv()),
+      ...(config.cli_env ?? {}),
+    };
 
     // Sort keys for stable cache key generation
     const sortedEnv: Record<string, string> = {};
@@ -395,12 +447,6 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       if (env[key] !== undefined) {
         sortedEnv[key] = env[key];
       }
-    }
-
-    // Inject API key
-    if (this.apiKey) {
-      sortedEnv.OPENAI_API_KEY = this.apiKey;
-      sortedEnv.CODEX_API_KEY = this.apiKey;
     }
 
     // Inject env overrides
@@ -411,6 +457,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           sortedEnv[key] = value;
         }
       }
+    }
+
+    // Inject API key last so explicit config wins over inherited env state.
+    if (apiKey) {
+      sortedEnv.OPENAI_API_KEY = apiKey;
+      sortedEnv.CODEX_API_KEY = apiKey;
     }
 
     // Inject OpenTelemetry configuration for deep tracing
@@ -453,6 +505,154 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return sortedEnv;
   }
 
+  private getSkillRootPrefixes(env: Record<string, string>): string[] {
+    const prefixes = new Set<string>();
+
+    const addPrefix = (candidate?: string) => {
+      if (!candidate) {
+        return;
+      }
+
+      const normalized = candidate.replace(/\\/g, '/').replace(/\/+$/g, '');
+      if (normalized) {
+        prefixes.add(normalized);
+      }
+    };
+
+    addPrefix(env.CODEX_HOME);
+    // Codex's system skill root is documented as /etc/codex/skills.
+    addPrefix('/etc/codex');
+
+    const homeDir = env.HOME || process.env.HOME;
+    if (homeDir) {
+      addPrefix(path.posix.join(homeDir.replace(/\\/g, '/'), '.codex'));
+    }
+
+    return Array.from(prefixes);
+  }
+
+  private isValidCodexSkillName(name: string): boolean {
+    return /^[A-Za-z0-9._:-]+$/.test(name);
+  }
+
+  private extractSkillPathCandidates(
+    text: string,
+    skillRootPrefixes: readonly string[] = [],
+  ): Array<{ name: string; path: string }> {
+    const matches = new Map<string, { name: string; path: string }>();
+
+    for (const rawToken of text.split(/\s+/)) {
+      const token = rawToken.replace(/^[`"'([{<]+|[`"',;:)\]}>]+$/g, '').trim();
+      if (!token) {
+        continue;
+      }
+
+      const normalizedPath = token.replace(/\\/g, '/');
+      const repoMatch = normalizedPath.match(/^\.agents\/skills\/([^/\s]+)\/SKILL\.md$/);
+      if (repoMatch) {
+        if (this.isValidCodexSkillName(repoMatch[1])) {
+          matches.set(normalizedPath, { name: repoMatch[1], path: normalizedPath });
+        }
+        continue;
+      }
+
+      const matchingRoot = skillRootPrefixes.find((prefix) =>
+        normalizedPath.startsWith(`${prefix}/skills/`),
+      );
+      if (!matchingRoot) {
+        continue;
+      }
+
+      const relativeSkillPath = normalizedPath.slice(matchingRoot.length + 1);
+      const customRootMatch = relativeSkillPath.match(/^skills\/([^/\s]+)\/SKILL\.md$/);
+      if (customRootMatch && this.isValidCodexSkillName(customRootMatch[1])) {
+        matches.set(normalizedPath, { name: customRootMatch[1], path: normalizedPath });
+      }
+    }
+
+    return Array.from(matches.values());
+  }
+
+  private extractSkillCallsFromItems(
+    items: any[],
+    skillRootPrefixes: readonly string[] = [],
+    options: { requireSuccessfulCommand?: boolean } = {},
+  ): SkillCallEntry[] {
+    const skillCalls = new Map<
+      string,
+      {
+        name: string;
+        path: string;
+      }
+    >();
+
+    for (const item of items) {
+      if (item?.type !== 'command_execution') {
+        continue;
+      }
+      if (options.requireSuccessfulCommand && !this.isSuccessfulCommandExecution(item)) {
+        continue;
+      }
+
+      const command =
+        typeof item.command === 'string' && item.command.trim() ? item.command : undefined;
+      if (!command) {
+        continue;
+      }
+
+      for (const skillPath of this.extractSkillPathCandidates(command, skillRootPrefixes)) {
+        const existing = skillCalls.get(skillPath.path) ?? {
+          name: skillPath.name,
+          path: skillPath.path,
+        };
+
+        skillCalls.set(skillPath.path, existing);
+      }
+    }
+
+    return Array.from(skillCalls.values()).map((skillCall) => ({
+      name: skillCall.name,
+      path: skillCall.path,
+      source: 'heuristic',
+    }));
+  }
+
+  private buildSkillMetadata(
+    items: any[],
+    skillRootPrefixes: readonly string[] = [],
+  ): { attemptedSkillCalls: SkillCallEntry[]; skillCalls: SkillCallEntry[] } | undefined {
+    if (!Array.isArray(items) || items.length === 0) {
+      return undefined;
+    }
+
+    const attemptedSkillCalls = this.extractSkillCallsFromItems(items, skillRootPrefixes);
+    const skillCalls = this.extractSkillCallsFromItems(items, skillRootPrefixes, {
+      requireSuccessfulCommand: true,
+    });
+
+    if (skillCalls.length === 0 && attemptedSkillCalls.length <= skillCalls.length) {
+      return undefined;
+    }
+
+    return { attemptedSkillCalls, skillCalls };
+  }
+
+  private isSuccessfulCommandExecution(item: any): boolean {
+    if (item?.type !== 'command_execution') {
+      return false;
+    }
+
+    if (typeof item.status === 'string' && item.status !== 'completed') {
+      return false;
+    }
+
+    if (typeof item.exit_code === 'number' && item.exit_code !== 0) {
+      return false;
+    }
+
+    return true;
+  }
+
   private validateWorkingDirectory(workingDir: string, skipGitCheck: boolean = false): void {
     let stats: fs.Stats;
     try {
@@ -488,10 +688,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private buildCodexOptions(
     env: Record<string, string>,
     config: OpenAICodexSDKConfig,
+    apiKey: string | undefined = this.getApiKey(config),
   ): Record<string, any> {
     return {
       env,
-      ...(this.apiKey ? { apiKey: this.apiKey } : {}),
+      ...(apiKey ? { apiKey } : {}),
       ...(config.codex_path_override ? { codexPathOverride: config.codex_path_override } : {}),
       ...(config.base_url ? { baseUrl: config.base_url } : {}),
       ...(config.cli_config ? { config: config.cli_config } : {}),
@@ -524,6 +725,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private async getOrCreateThread(
     config: OpenAICodexSDKConfig,
     cacheKey: string | undefined,
+    instanceKey: string,
     instance: any,
   ): Promise<any> {
     const threadOptions = this.buildThreadOptions(config);
@@ -536,14 +738,15 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Resume specific thread
     if (config.thread_id) {
-      const cached = this.threads.get(config.thread_id);
+      const threadIdCacheKey = `${instanceKey}:${config.thread_id}`;
+      const cached = this.threads.get(threadIdCacheKey);
       if (cached) {
         return cached;
       }
 
       const thread = instance.resumeThread(config.thread_id, threadOptions);
       if (config.persist_threads) {
-        this.threads.set(config.thread_id, thread);
+        this.threads.set(threadIdCacheKey, thread);
       }
       return thread;
     }
@@ -580,6 +783,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     prompt: string,
     runOptions: any,
     callOptions?: CallApiOptionsParams,
+    skillRootPrefixes: readonly string[] = [],
   ): Promise<any> {
     const { events } = await thread.runStreamed(prompt, runOptions);
     const items: any[] = [];
@@ -689,7 +893,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
             }
 
             // Add completion attributes
-            const completionAttrs = this.getCompletionAttributesForItem(item);
+            const completionAttrs = this.getCompletionAttributesForItem(item, skillRootPrefixes);
             for (const [key, value] of Object.entries(completionAttrs)) {
               span.setAttribute(key, value);
             }
@@ -753,7 +957,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
               const itemId = String(item.id);
               const span = activeSpans.get(itemId);
               if (span) {
-                const updatedAttrs = this.getCompletionAttributesForItem(item);
+                const updatedAttrs = this.getCompletionAttributesForItem(item, skillRootPrefixes);
                 for (const [key, value] of Object.entries(updatedAttrs)) {
                   span.setAttribute(key, value);
                 }
@@ -855,6 +1059,47 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   /**
    * Get attributes for a Codex item at start
    */
+  private getSkillTraceAttributes(
+    item: any,
+    skillRootPrefixes: readonly string[] = [],
+    options: { requireSuccessfulCommand?: boolean } = {},
+  ): Record<string, string | number | boolean> {
+    if (item?.type !== 'command_execution') {
+      return {};
+    }
+    if (options.requireSuccessfulCommand && !this.isSuccessfulCommandExecution(item)) {
+      return {};
+    }
+
+    const command =
+      typeof item.command === 'string' && item.command.trim() ? item.command : undefined;
+    const skillCandidates = new Map<string, { name: string; path: string }>();
+
+    if (command) {
+      for (const skill of this.extractSkillPathCandidates(command, skillRootPrefixes)) {
+        skillCandidates.set(skill.path, skill);
+      }
+    }
+
+    if (skillCandidates.size === 0) {
+      return {};
+    }
+
+    const skills = Array.from(skillCandidates.values());
+    const attrs: Record<string, string | number | boolean> = {
+      'promptfoo.skill.count': skills.length,
+      'promptfoo.skill.names': skills.map((skill) => skill.name).join(','),
+      'promptfoo.skill.paths': skills.map((skill) => skill.path).join(','),
+    };
+
+    if (skills.length === 1) {
+      attrs['promptfoo.skill.name'] = skills[0].name;
+      attrs['promptfoo.skill.path'] = skills[0].path;
+    }
+
+    return attrs;
+  }
+
   private getAttributesForItem(item: any): Record<string, string | number | boolean> {
     const attrs: Record<string, string | number | boolean> = {};
 
@@ -963,7 +1208,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   /**
    * Get attributes for a Codex item at completion
    */
-  private getCompletionAttributesForItem(item: any): Record<string, string | number | boolean> {
+  private getCompletionAttributesForItem(
+    item: any,
+    skillRootPrefixes: readonly string[] = [],
+  ): Record<string, string | number | boolean> {
     const attrs: Record<string, string | number | boolean> = {};
 
     switch (item.type) {
@@ -977,6 +1225,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         if (typeof item.aggregated_output === 'string') {
           attrs['codex.output'] = item.aggregated_output;
         }
+        Object.assign(
+          attrs,
+          this.getSkillTraceAttributes(item, skillRootPrefixes, {
+            requireSuccessfulCommand: true,
+          }),
+        );
         break;
       case 'file_change':
         if (typeof item.status === 'string') {
@@ -1024,8 +1278,25 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return attrs;
   }
 
-  private generateCacheKey(config: OpenAICodexSDKConfig, prompt: string): string {
+  private generateInstanceKey(env: Record<string, string>, config: OpenAICodexSDKConfig): string {
     const keyData = {
+      env,
+      base_url: config.base_url,
+      cli_config: config.cli_config,
+      codex_path_override: config.codex_path_override,
+    };
+
+    const hash = crypto.createHash('sha256').update(JSON.stringify(keyData)).digest('hex');
+    return `openai:codex-sdk:instance:${hash}`;
+  }
+
+  private generateCacheKey(
+    config: OpenAICodexSDKConfig,
+    prompt: string,
+    instanceKey: string,
+  ): string {
+    const keyData = {
+      instanceKey,
       working_dir: config.working_dir,
       additional_directories: config.additional_directories,
       model: config.model,
@@ -1164,13 +1435,17 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // Get current trace context for deep tracing
     // This allows the Codex CLI to export its internal spans as children of our span
     const currentTraceparent = getTraceparent();
+    const apiKey = this.getApiKey(config);
 
     // Prepare environment with OTEL config for deep tracing
-    const env: Record<string, string> = this.prepareEnvironment(config, currentTraceparent);
+    const env: Record<string, string> = this.prepareEnvironment(config, currentTraceparent, apiKey);
+    const skillRootPrefixes = this.getSkillRootPrefixes(env);
 
-    if (!this.apiKey && !env.OPENAI_API_KEY && !env.CODEX_API_KEY) {
-      throw new Error(
-        'OpenAI API key is not set. Set OPENAI_API_KEY or CODEX_API_KEY environment variable or add "apiKey" to provider config.',
+    if (apiKey) {
+      logger.debug('[CodexSDK] Using explicit API credentials from promptfoo config/environment');
+    } else {
+      logger.debug(
+        '[CodexSDK] No explicit API credentials configured; deferring auth resolution to Codex SDK login state',
       );
     }
 
@@ -1189,10 +1464,16 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       this.codexModule = await loadCodexSDK();
     }
 
+    // Exclude TRACEPARENT from cache keys to preserve thread persistence across traces.
+    const stableEnv = { ...env };
+    delete stableEnv.TRACEPARENT;
+    const instanceKey = this.generateInstanceKey(stableEnv, config);
+
     // Deep tracing requires per-call instances (each call has unique TRACEPARENT)
     // This avoids race conditions where concurrent calls destroy shared instances
     let localInstance: any = undefined;
     const useLocalInstance = config.deep_tracing;
+    let activeInstance: any = undefined;
 
     if (useLocalInstance) {
       // Warn about ignored thread options (only once)
@@ -1208,37 +1489,18 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
 
       // Create a fresh instance for this call only (not cached)
-      localInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config));
+      localInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config, apiKey));
+      activeInstance = localInstance;
     } else {
-      // Standard caching path for non-deep-tracing mode
-      // Exclude TRACEPARENT from hash to preserve thread persistence across traces
-      const stableEnv = { ...env };
-      delete stableEnv.TRACEPARENT;
-
-      const envHash = crypto.createHash('sha256').update(JSON.stringify(stableEnv)).digest('hex');
-      const envChanged = this.codexInstanceEnvHash !== envHash;
-
-      // Initialize Codex instance - recreate only if stable config changed
-      if (!this.codexInstance || envChanged) {
-        if (envChanged && this.codexInstance) {
-          logger.debug('[CodexSDK] Recreating instance due to configuration change');
-          // Clean up old instance to prevent resource leaks
-          try {
-            await this.destroyInstance(this.codexInstance);
-          } catch (cleanupError) {
-            logger.warn('[CodexSDK] Error cleaning up old instance', { error: cleanupError });
-          }
-          // Clear thread pool when instance is recreated
-          this.threads.clear();
-        }
-        // Create new instance with full environment
-        this.codexInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config));
-        this.codexInstanceEnvHash = envHash;
+      // Standard caching path for non-deep-tracing mode.
+      // Cache one Codex instance per stable constructor config so concurrent calls
+      // with different prompt-level credentials/config do not tear each other down.
+      activeInstance = this.codexInstances.get(instanceKey);
+      if (!activeInstance) {
+        activeInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config, apiKey));
+        this.codexInstances.set(instanceKey, activeInstance);
       }
     }
-
-    // Use local instance for deep_tracing, otherwise shared cached instance
-    const activeInstance = useLocalInstance ? localInstance : this.codexInstance;
 
     // Guard against undefined instance (shouldn't happen, but defensive coding)
     if (!activeInstance) {
@@ -1246,8 +1508,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
 
     // Get or create thread (pass instance to avoid using stale this.codexInstance)
-    const cacheKey = this.generateCacheKey(config, prompt);
-    const thread = await this.getOrCreateThread(config, cacheKey, activeInstance);
+    const cacheKey = this.generateCacheKey(config, prompt, instanceKey);
+    const thread = await this.getOrCreateThread(config, cacheKey, instanceKey, activeInstance);
 
     // Prepare run options
     const runOptions: any = {};
@@ -1261,12 +1523,23 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // Execute turn
     try {
       const turn = config.enable_streaming
-        ? await this.runStreaming(thread, prompt, runOptions, callOptions)
+        ? await this.runStreaming(thread, prompt, runOptions, callOptions, skillRootPrefixes)
         : await thread.run(prompt, runOptions);
 
       // Extract response
       const output = turn.finalResponse || '';
       const raw = JSON.stringify(turn);
+      const skillMetadata = this.buildSkillMetadata(turn.items, skillRootPrefixes);
+      const metadata = skillMetadata
+        ? {
+            ...(skillMetadata.skillCalls.length > 0
+              ? { skillCalls: skillMetadata.skillCalls }
+              : {}),
+            ...(skillMetadata.attemptedSkillCalls.length > skillMetadata.skillCalls.length
+              ? { attemptedSkillCalls: skillMetadata.attemptedSkillCalls }
+              : {}),
+          }
+        : undefined;
 
       const tokenUsage: ProviderResponse['tokenUsage'] = turn.usage
         ? {
@@ -1299,6 +1572,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         output,
         tokenUsage,
         cost,
+        metadata,
         raw,
         sessionId: thread.id || 'unknown',
       };

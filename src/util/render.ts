@@ -96,6 +96,12 @@ export function renderEnvOnlyInObject<T>(
   if (typeof obj === 'object' && obj !== null) {
     const result: Record<string, unknown> = {};
     for (const key in obj) {
+      if (key === '_conversation') {
+        // Conversation history is runtime data and may contain untrusted model output.
+        // Preserve it as literal data instead of rendering env templates.
+        result[key] = (obj as Record<string, unknown>)[key];
+        continue;
+      }
       result[key] = renderEnvOnlyInObject(
         (obj as Record<string, unknown>)[key],
         envOverrides,

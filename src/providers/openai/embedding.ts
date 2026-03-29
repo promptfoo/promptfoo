@@ -11,7 +11,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     // Validate API key first (like chat provider)
     if (this.requiresApiKey() && !this.getApiKey()) {
       return {
-        error: `API key is not set. Set the ${this.config.apiKeyEnvar || 'OPENAI_API_KEY'} environment variable or add \`apiKey\` to the provider config.`,
+        error: this.getMissingApiKeyErrorMessage(),
       };
     }
 

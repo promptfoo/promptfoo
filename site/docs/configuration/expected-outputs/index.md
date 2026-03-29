@@ -111,49 +111,50 @@ tests:
 
 These metrics are programmatic tests that are run on LLM output. [See all details](/docs/configuration/expected-outputs/deterministic)
 
-| Assertion Type                                                                                                     | Returns true if...                                                |
-| ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| [equals](/docs/configuration/expected-outputs/deterministic/#equality)                                             | output matches exactly                                            |
-| [contains](/docs/configuration/expected-outputs/deterministic/#contains)                                           | output contains substring                                         |
-| [icontains](/docs/configuration/expected-outputs/deterministic/#contains)                                          | output contains substring, case insensitive                       |
-| [regex](/docs/configuration/expected-outputs/deterministic/#regex)                                                 | output matches regex                                              |
-| [starts-with](/docs/configuration/expected-outputs/deterministic/#starts-with)                                     | output starts with string                                         |
-| [contains-any](/docs/configuration/expected-outputs/deterministic/#contains-any)                                   | output contains any of the listed substrings                      |
-| [contains-all](/docs/configuration/expected-outputs/deterministic/#contains-all)                                   | output contains all list of substrings                            |
-| [icontains-any](/docs/configuration/expected-outputs/deterministic/#contains-any)                                  | output contains any of the listed substrings, case insensitive    |
-| [icontains-all](/docs/configuration/expected-outputs/deterministic/#contains-all)                                  | output contains all list of substrings, case insensitive          |
-| [is-json](/docs/configuration/expected-outputs/deterministic/#is-json)                                             | output is valid json (optional json schema validation)            |
-| [contains-json](/docs/configuration/expected-outputs/deterministic/#contains-json)                                 | output contains valid json (optional json schema validation)      |
-| [contains-html](/docs/configuration/expected-outputs/deterministic/#contains-html)                                 | output contains HTML content                                      |
-| [is-html](/docs/configuration/expected-outputs/deterministic/#is-html)                                             | output is valid HTML                                              |
-| [is-sql](/docs/configuration/expected-outputs/deterministic/#is-sql)                                               | output is valid sql                                               |
-| [contains-sql](/docs/configuration/expected-outputs/deterministic/#contains-sql)                                   | output contains valid sql                                         |
-| [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is valid xml                                               |
-| [contains-xml](/docs/configuration/expected-outputs/deterministic/#contains-xml)                                   | output contains valid xml                                         |
-| [is-refusal](/docs/configuration/expected-outputs/deterministic/#is-refusal)                                       | output indicates the model refused to perform the task            |
-| [javascript](/docs/configuration/expected-outputs/javascript)                                                      | provided Javascript function validates the output                 |
-| [python](/docs/configuration/expected-outputs/python)                                                              | provided Python function validates the output                     |
-| [webhook](/docs/configuration/expected-outputs/deterministic/#webhook)                                             | provided webhook returns \{pass: true\}                           |
-| [rouge-n](/docs/configuration/expected-outputs/deterministic/#rouge-n)                                             | Rouge-N score is above a given threshold (default 0.75)           |
-| [bleu](/docs/configuration/expected-outputs/deterministic/#bleu)                                                   | BLEU score is above a given threshold (default 0.5)               |
-| [gleu](/docs/configuration/expected-outputs/deterministic/#gleu)                                                   | GLEU score is above a given threshold (default 0.5)               |
-| [levenshtein](/docs/configuration/expected-outputs/deterministic/#levenshtein-distance)                            | Levenshtein distance is below a threshold                         |
-| [latency](/docs/configuration/expected-outputs/deterministic/#latency)                                             | Latency is below a threshold (milliseconds)                       |
-| [meteor](/docs/configuration/expected-outputs/deterministic/#meteor)                                               | METEOR score is above a given threshold (default 0.5)             |
-| [perplexity](/docs/configuration/expected-outputs/deterministic/#perplexity)                                       | Perplexity is below a threshold                                   |
-| [perplexity-score](/docs/configuration/expected-outputs/deterministic/#perplexity-score)                           | Normalized perplexity                                             |
-| [cost](/docs/configuration/expected-outputs/deterministic/#cost)                                                   | Cost is below a threshold (for models with cost info such as GPT) |
-| [is-valid-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema  |
-| [is-valid-openai-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema  |
-| [is-valid-openai-tools-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                 |
-| [trace-span-count](/docs/configuration/expected-outputs/deterministic/#trace-span-count)                           | Count spans matching patterns with min/max thresholds             |
-| [trace-span-duration](/docs/configuration/expected-outputs/deterministic/#trace-span-duration)                     | Check span durations with percentile support                      |
-| [trace-error-spans](/docs/configuration/expected-outputs/deterministic/#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages |
-| [trajectory:tool-used](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used)                    | Ensure a traced agent trajectory used specific tools              |
-| [trajectory:tool-args-match](/docs/configuration/expected-outputs/deterministic/#trajectorytool-args-match)        | Ensure traced tool calls used the expected arguments              |
-| [trajectory:tool-sequence](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence)            | Ensure traced tool usage happened in the expected order           |
-| [trajectory:step-count](/docs/configuration/expected-outputs/deterministic/#trajectorystep-count)                  | Count normalized trajectory steps by type or name pattern         |
-| [guardrails](/docs/configuration/expected-outputs/guardrails)                                                      | Ensure that the output does not contain harmful content           |
+| Assertion Type                                                                                                     | Returns true if...                                                 |
+| ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| [equals](/docs/configuration/expected-outputs/deterministic/#equality)                                             | output matches exactly                                             |
+| [contains](/docs/configuration/expected-outputs/deterministic/#contains)                                           | output contains substring                                          |
+| [icontains](/docs/configuration/expected-outputs/deterministic/#contains)                                          | output contains substring, case insensitive                        |
+| [regex](/docs/configuration/expected-outputs/deterministic/#regex)                                                 | output matches regex                                               |
+| [starts-with](/docs/configuration/expected-outputs/deterministic/#starts-with)                                     | output starts with string                                          |
+| [contains-any](/docs/configuration/expected-outputs/deterministic/#contains-any)                                   | output contains any of the listed substrings                       |
+| [contains-all](/docs/configuration/expected-outputs/deterministic/#contains-all)                                   | output contains all list of substrings                             |
+| [icontains-any](/docs/configuration/expected-outputs/deterministic/#contains-any)                                  | output contains any of the listed substrings, case insensitive     |
+| [icontains-all](/docs/configuration/expected-outputs/deterministic/#contains-all)                                  | output contains all list of substrings, case insensitive           |
+| [is-json](/docs/configuration/expected-outputs/deterministic/#is-json)                                             | output is valid json (optional json schema validation)             |
+| [contains-json](/docs/configuration/expected-outputs/deterministic/#contains-json)                                 | output contains valid json (optional json schema validation)       |
+| [contains-html](/docs/configuration/expected-outputs/deterministic/#contains-html)                                 | output contains HTML content                                       |
+| [is-html](/docs/configuration/expected-outputs/deterministic/#is-html)                                             | output is valid HTML                                               |
+| [is-sql](/docs/configuration/expected-outputs/deterministic/#is-sql)                                               | output is valid sql                                                |
+| [contains-sql](/docs/configuration/expected-outputs/deterministic/#contains-sql)                                   | output contains valid sql                                          |
+| [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is valid xml                                                |
+| [contains-xml](/docs/configuration/expected-outputs/deterministic/#contains-xml)                                   | output contains valid xml                                          |
+| [is-refusal](/docs/configuration/expected-outputs/deterministic/#is-refusal)                                       | output indicates the model refused to perform the task             |
+| [javascript](/docs/configuration/expected-outputs/javascript)                                                      | provided Javascript function validates the output                  |
+| [python](/docs/configuration/expected-outputs/python)                                                              | provided Python function validates the output                      |
+| [webhook](/docs/configuration/expected-outputs/deterministic/#webhook)                                             | provided webhook returns \{pass: true\}                            |
+| [rouge-n](/docs/configuration/expected-outputs/deterministic/#rouge-n)                                             | Rouge-N score is above a given threshold (default 0.75)            |
+| [bleu](/docs/configuration/expected-outputs/deterministic/#bleu)                                                   | BLEU score is above a given threshold (default 0.5)                |
+| [gleu](/docs/configuration/expected-outputs/deterministic/#gleu)                                                   | GLEU score is above a given threshold (default 0.5)                |
+| [levenshtein](/docs/configuration/expected-outputs/deterministic/#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
+| [latency](/docs/configuration/expected-outputs/deterministic/#latency)                                             | Latency is below a threshold (milliseconds)                        |
+| [meteor](/docs/configuration/expected-outputs/deterministic/#meteor)                                               | METEOR score is above a given threshold (default 0.5)              |
+| [perplexity](/docs/configuration/expected-outputs/deterministic/#perplexity)                                       | Perplexity is below a threshold                                    |
+| [perplexity-score](/docs/configuration/expected-outputs/deterministic/#perplexity-score)                           | Normalized perplexity                                              |
+| [cost](/docs/configuration/expected-outputs/deterministic/#cost)                                                   | Cost is below a threshold (for models with cost info such as GPT)  |
+| [is-valid-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema   |
+| [is-valid-openai-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
+| [is-valid-openai-tools-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
+| [trace-span-count](/docs/configuration/expected-outputs/deterministic/#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
+| [trace-span-duration](/docs/configuration/expected-outputs/deterministic/#trace-span-duration)                     | Check span durations with percentile support                       |
+| [trace-error-spans](/docs/configuration/expected-outputs/deterministic/#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
+| [skill-used](/docs/configuration/expected-outputs/deterministic/#skill-used)                                       | Ensure normalized provider skill metadata includes expected skills |
+| [trajectory:tool-used](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used)                    | Ensure a traced agent trajectory used specific tools               |
+| [trajectory:tool-args-match](/docs/configuration/expected-outputs/deterministic/#trajectorytool-args-match)        | Ensure traced tool calls used the expected arguments               |
+| [trajectory:tool-sequence](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence)            | Ensure traced tool usage happened in the expected order            |
+| [trajectory:step-count](/docs/configuration/expected-outputs/deterministic/#trajectorystep-count)                  | Count normalized trajectory steps by type or name pattern          |
+| [guardrails](/docs/configuration/expected-outputs/guardrails)                                                      | Ensure that the output does not contain harmful content            |
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.

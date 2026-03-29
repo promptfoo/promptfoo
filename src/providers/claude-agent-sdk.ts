@@ -33,6 +33,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
+  SkillCallEntry,
 } from '../types/index';
 
 /**
@@ -46,6 +47,32 @@ export interface ToolCallEntry {
   output: unknown;
   is_error: boolean;
   parentToolUseId: string | null;
+}
+
+function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
+  return toolCalls
+    .filter((toolCall) => toolCall.name === 'Skill')
+    .flatMap((toolCall) => {
+      const skillName =
+        toolCall.input &&
+        typeof toolCall.input === 'object' &&
+        typeof (toolCall.input as Record<string, unknown>).skill === 'string'
+          ? ((toolCall.input as Record<string, unknown>).skill as string).trim()
+          : '';
+
+      if (!skillName) {
+        return [];
+      }
+
+      return [
+        {
+          name: skillName,
+          input: toolCall.input,
+          is_error: toolCall.is_error,
+          source: 'tool' as const,
+        },
+      ];
+    });
 }
 
 /**
@@ -111,7 +138,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
       dedent`Failed to load @anthropic-ai/claude-agent-sdk.
 
       The package was found but could not be loaded. This may be due to:
-      - Incompatible Node.js version (requires Node.js 20+)
+      - Incompatible Node.js version (requires Node.js 20.20+ or 22.22+)
       - Corrupted installation
 
       Try reinstalling:
@@ -124,6 +151,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
 
 export interface ClaudeCodeOptions {
   apiKey?: string;
+  apiKeyRequired?: boolean;
 
   /**
    * 'working_dir' allows user to point to a pre-prepared directory with desired files/directories in place
@@ -665,7 +693,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     }
 
     // Could potentially do more to validate credentials for Bedrock/Vertex here, but Anthropic key is the main use case
-    if (!this.apiKey && !(env.CLAUDE_CODE_USE_BEDROCK || env.CLAUDE_CODE_USE_VERTEX)) {
+    if (
+      !this.apiKey &&
+      !(
+        config.apiKeyRequired === false ||
+        env.CLAUDE_CODE_USE_BEDROCK ||
+        env.CLAUDE_CODE_USE_VERTEX
+      )
+    ) {
       throw new Error(
         dedent`Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add "apiKey" to the provider config.
 
@@ -928,6 +963,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const sessionId = msg.session_id;
 
           const toolCallsArray = Array.from(toolCallsMap.values());
+          const skillCalls = deriveSkillCalls(toolCallsArray);
 
           if (msg.subtype === 'success') {
             logger.debug(`Claude Agent SDK response: ${raw}`);
@@ -941,6 +977,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               raw,
               sessionId,
               metadata: {
+                skillCalls,
                 toolCalls: toolCallsArray,
                 numTurns: msg.num_turns,
                 durationMs: msg.duration_ms,
@@ -964,6 +1001,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               raw,
               sessionId,
               metadata: {
+                skillCalls,
                 toolCalls: toolCallsArray,
                 numTurns: msg.num_turns,
                 durationMs: msg.duration_ms,

@@ -2,8 +2,8 @@ import { useMemo } from 'react';
 
 import { cn } from '@app/lib/utils';
 import { resolveAudioSource, resolveImageSource } from '@app/utils/media';
+import invariant from '@promptfoo/util/invariant';
 import { Crosshair, Swords } from 'lucide-react';
-import invariant from 'tiny-invariant';
 
 interface BaseMessage {
   role: 'user' | 'assistant' | 'system';

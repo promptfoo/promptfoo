@@ -149,7 +149,7 @@ This example demonstrates testing [Agent Skills](https://platform.claude.com/doc
 
 - **Skill discovery**: Uses `setting_sources: ['project']` to load skills from `.claude/skills/`
 - **Skill tool**: Enables the `Skill` tool via `append_allowed_tools`
-- **Tool call assertions**: Verifies skill invocation through `metadata.toolCalls`
+- **Skill assertions**: Verifies normalized `metadata.skillCalls` with the `skill-used` assertion
 - **Sample skill**: A code review skill that identifies bugs and security issues
 
 **Location**: `./skills/`
@@ -166,7 +166,7 @@ This example demonstrates loading skills from a [plugin](https://code.claude.com
 
 - **Plugin loading**: Uses `plugins: [{type: local, path: ./sample-plugin}]` to load a local plugin
 - **Skill tool**: Enables the `Skill` tool via `append_allowed_tools`
-- **Tool call assertions**: Verifies skill invocation through `metadata.toolCalls`
+- **Skill assertions**: Verifies normalized `metadata.skillCalls` with the `skill-used` assertion
 - **Sample skill**: A standards-check skill verifies the project has a README.md
 
 **Location**: `./plugins/`

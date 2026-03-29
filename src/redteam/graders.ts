@@ -28,6 +28,7 @@ import { FinancialDataLeakagePluginGrader } from './plugins/financial/financialD
 import { FinancialDefamationPluginGrader } from './plugins/financial/financialDefamation';
 import { FinancialHallucinationPluginGrader } from './plugins/financial/financialHallucination';
 import { FinancialImpartialityPluginGrader } from './plugins/financial/financialImpartiality';
+import { FinancialJapanFieaSuitabilityPluginGrader } from './plugins/financial/financialJapanFieaSuitability';
 import { FinancialMisconductPluginGrader } from './plugins/financial/financialMisconduct';
 import { FinancialSoxCompliancePluginGrader } from './plugins/financial/financialSoxCompliance';
 import { FinancialSycophancyPluginGrader } from './plugins/financial/financialSycophancy';
@@ -158,6 +159,8 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:financial:defamation': new FinancialDefamationPluginGrader(),
   'promptfoo:redteam:financial:hallucination': new FinancialHallucinationPluginGrader(),
   'promptfoo:redteam:financial:impartiality': new FinancialImpartialityPluginGrader(),
+  'promptfoo:redteam:financial:japan-fiea-suitability':
+    new FinancialJapanFieaSuitabilityPluginGrader(),
   'promptfoo:redteam:financial:misconduct': new FinancialMisconductPluginGrader(),
   'promptfoo:redteam:financial:sox-compliance': new FinancialSoxCompliancePluginGrader(),
   'promptfoo:redteam:financial:sycophancy': new FinancialSycophancyPluginGrader(),

@@ -43,6 +43,17 @@ Example of setting the environment variable:
 export ANTHROPIC_API_KEY=your_api_key_here
 ```
 
+If Claude Agent SDK will authenticate through an existing local Claude Code session instead of `ANTHROPIC_API_KEY`, disable Promptfoo's upfront API key check:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      apiKeyRequired: false
+```
+
+This is useful when you're using a local Claude Code binary with an active session, such as Claude Code monthly plans. Promptfoo will skip its preflight API key validation, but the SDK still needs to be able to authenticate on its own.
+
 ## Other Model Providers
 
 Apart from using the Anthropic API, you can also use AWS Bedrock and Google Vertex AI.
@@ -126,6 +137,7 @@ prompts:
 | Parameter                            | Type         | Description                                                                                                  | Default                  |
 | ------------------------------------ | ------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------ |
 | `apiKey`                             | string       | Anthropic API key                                                                                            | Environment variable     |
+| `apiKeyRequired`                     | boolean      | Require Promptfoo to find an Anthropic API key before calling the SDK. Set to `false` for local SDK auth.    | `true`                   |
 | `working_dir`                        | string       | Directory for file operations                                                                                | Temporary directory      |
 | `model`                              | string       | Primary model to use (passed to Claude Agent SDK)                                                            | Claude Agent SDK default |
 | `fallback_model`                     | string       | Fallback model if primary fails                                                                              | Claude Agent SDK default |
@@ -392,11 +404,8 @@ Skills from plugins are namespaced with the plugin name. For example, a `standar
 
 ```yaml
 assert:
-  - type: javascript
-    value: |
-      const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
-      const skillCalls = toolCalls.filter(t => t.name === 'Skill');
-      return skillCalls.some(t => t.input?.skill === 'project-standards:standards-check');
+  - type: skill-used
+    value: project-standards:standards-check
 ```
 
 ### Plugins vs Setting Sources
@@ -443,7 +452,7 @@ Claude automatically invokes the relevant skill when a task matches the skill's 
 
 ### Testing Skill Invocation
 
-You can test that skills are properly invoked by checking [tool calls](#tool-call-tracking). The Skill tool's input includes `skill` (the skill name) and optional `args`:
+Promptfoo normalizes Claude `Skill` tool invocations into `response.metadata.skillCalls`, so skill evals can use the same `skill-used` assertion style as Codex. The underlying `Skill` tool calls are still available in [`response.metadata.toolCalls`](#tool-call-tracking) when you need the raw tool payload.
 
 ```yaml
 providers:
@@ -458,17 +467,9 @@ prompts:
 
 tests:
   - assert:
-      # Check that the Skill tool was called
-      - type: javascript
-        value: |
-          const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
-          return toolCalls.some(t => t.name === 'Skill');
       # Check that a specific skill was invoked
-      - type: javascript
-        value: |
-          const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
-          const skillCalls = toolCalls.filter(t => t.name === 'Skill');
-          return skillCalls.some(t => t.input?.skill === 'code-review');
+      - type: skill-used
+        value: code-review
 ```
 
 ### Checking Available Skills
@@ -522,11 +523,8 @@ prompts:
 tests:
   - assert:
       # Verify the test-generator skill was invoked
-      - type: javascript
-        value: |
-          const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
-          const skillCalls = toolCalls.filter(t => t.name === 'Skill');
-          return skillCalls.some(t => t.input?.skill === 'test-generator');
+      - type: skill-used
+        value: test-generator
       # Verify tests were generated
       - type: icontains
         value: 'describe('
@@ -887,6 +885,8 @@ assert:
       const grepCall = toolCalls.find(t => t.name === 'Grep');
       return grepCall?.output?.includes('expected match');
 ```
+
+For skill evals specifically, prefer the deterministic [`skill-used`](/docs/configuration/expected-outputs/deterministic/#skill-used) assertion over raw JavaScript when possible. Promptfoo derives `metadata.skillCalls` from these `Skill` tool calls automatically.
 
 ## Caching Behavior
 

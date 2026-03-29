@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import {
+  hasTraceAwareAssertions,
   MODEL_GRADED_ASSERTION_TYPES,
   renderMetricName,
   runAssertions,
@@ -69,6 +70,7 @@ import {
   isProviderAllowed,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
+import { extractVariablesFromTemplate } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
@@ -337,6 +339,72 @@ export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undef
   return isPromptAllowed(prompt, allowedPrompts);
 }
 
+function isGeneratedRedteamAssertion(assertion: { type?: string }): boolean {
+  return typeof assertion.type === 'string' && assertion.type.startsWith('promptfoo:redteam:');
+}
+
+type NestedAssertion = {
+  type?: string;
+  assert?: NestedAssertion[];
+};
+
+function hasNestedRedteamAssertion(assertion: NestedAssertion): boolean {
+  if (isGeneratedRedteamAssertion(assertion)) {
+    return true;
+  }
+
+  return (
+    assertion.type === 'assert-set' &&
+    Array.isArray(assertion.assert) &&
+    assertion.assert.some(hasNestedRedteamAssertion)
+  );
+}
+
+function hasGeneratedRedteamMetadata(test: AtomicTestCase): boolean {
+  return (
+    typeof test.metadata?.pluginId === 'string' &&
+    (Boolean(test.metadata?.pluginConfig) || Boolean(test.metadata?.goal))
+  );
+}
+
+function shouldSkipRedteamInjectVar(
+  test: AtomicTestCase,
+  testSuite: TestSuite | undefined,
+  isRedteam: boolean,
+): boolean {
+  if (isRedteam || testSuite?.redteam) {
+    return true;
+  }
+
+  // Exported/generated redteam configs may not include a top-level `redteam` block,
+  // but they still carry redteam metadata or nested redteam assertions.
+  return hasGeneratedRedteamMetadata(test) || Boolean(test.assert?.some(hasNestedRedteamAssertion));
+}
+
+function getRedteamInjectVar(test: AtomicTestCase, prompt: Prompt, testSuite?: TestSuite): string {
+  if (testSuite?.redteam?.injectVar) {
+    return testSuite.redteam.injectVar;
+  }
+
+  const promptTemplate = prompt.template ?? prompt.raw;
+  const promptVars = extractVariablesFromTemplate(promptTemplate);
+
+  if (
+    testSuite?.redteam &&
+    promptVars.includes('prompt') &&
+    Object.prototype.hasOwnProperty.call(test.vars ?? {}, 'prompt')
+  ) {
+    return 'prompt';
+  }
+
+  const matchingVars = promptVars.filter((variableName) =>
+    Object.prototype.hasOwnProperty.call(test.vars ?? {}, variableName),
+  );
+
+  // Mirror redteam generation behavior by preferring the last prompt variable.
+  return matchingVars.at(-1) ?? promptVars.at(-1) ?? 'prompt';
+}
+
 /**
  * Runs a single test case.
  * @param options - The options for running the test case.
@@ -435,7 +503,9 @@ export async function runEval({
     // Render the prompt
     // For redteam tests, skip rendering the inject variable to prevent double-rendering of
     // attack payloads that may contain template syntax (e.g., {{purpose | trim}})
-    const skipRenderVars = isRedteam ? [testSuite?.redteam?.injectVar ?? 'prompt'] : undefined;
+    const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
+      ? [getRedteamInjectVar(test, promptForRender, testSuite)]
+      : undefined;
     const renderedPrompt = await renderPrompt(
       promptForRender,
       vars,
@@ -676,6 +746,10 @@ export async function runEval({
         if (parts.length >= 3) {
           traceId = parts[1];
         }
+      }
+
+      if (traceId && hasTraceAwareAssertions(test.assert)) {
+        await flushOtel();
       }
 
       // Pass providerTransformedOutput for contextTransform to use
@@ -1431,6 +1505,7 @@ class Evaluator {
                 prompt: {
                   ...prompt,
                   raw: prependToPrompt + prompt.raw + appendToPrompt,
+                  template: prompt.template ?? prompt.raw,
                 },
                 testSuite,
                 test: (() => {
