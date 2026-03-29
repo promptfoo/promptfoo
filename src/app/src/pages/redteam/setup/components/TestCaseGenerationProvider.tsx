@@ -234,7 +234,7 @@ export const TestCaseGenerationProvider: React.FC<{
 
   // Compute available plugins from config
   const availablePlugins = useMemo<TargetPlugin[]>(() => {
-    const plugins = redTeamConfig.plugins.map((configuredPlugin) =>
+    const plugins = (redTeamConfig.plugins ?? []).map((configuredPlugin) =>
       typeof configuredPlugin === 'string'
         ? { id: configuredPlugin as Plugin, config: {}, isStatic: true }
         : {
