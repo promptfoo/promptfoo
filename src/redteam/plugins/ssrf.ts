@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { isBasicRefusal, isEmptyResponse } from '../util';
-import { RedteamGraderBase, type RedteamGradingContext } from './base';
+import { RedteamGraderBase } from './base';
 
 import type {
   ApiProvider,
@@ -10,6 +10,7 @@ import type {
   GradingResult,
   ResultSuggestion,
 } from '../../types/index';
+import type { RedteamGradingContext } from '../grading/types';
 
 const PLUGIN_ID = 'promptfoo:redteam:ssrf';
 

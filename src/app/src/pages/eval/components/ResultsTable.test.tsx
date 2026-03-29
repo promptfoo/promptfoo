@@ -459,6 +459,7 @@ describe('ResultsTable Metrics Display', () => {
 
       const imageElement = screen.getByRole('img', { name: 'Base64 encoded image' });
       expect(imageElement).toBeInTheDocument();
+      expect(imageElement).toHaveStyle({ maxHeight: '200px', objectFit: 'contain' });
       expect(imageElement.closest('div')).not.toHaveTextContent('TruncatedText');
     });
   });

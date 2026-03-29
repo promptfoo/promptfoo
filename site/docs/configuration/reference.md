@@ -892,6 +892,7 @@ interface GradingResult {
   namedScores?: Record<string, number>; # labeled metrics attached to this result
   namedScoreWeights?: Record<string, number>; # weighted denominator for namedScores
   tokensUsed?: TokenUsage;              # tokens consumed by the test
+  metadata?: Record<string, any>;       # additional matcher/provider metadata
   componentResults?: GradingResult[];   # if this is a composite score, it can have nested results
   assertion: Assertion | null;          # source of assertion
   latencyMs?: number;                   # latency of LLM call

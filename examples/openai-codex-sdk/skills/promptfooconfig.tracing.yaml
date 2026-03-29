@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Codex skill trace eval
+
+prompts:
+  - 'Use the token-skill skill. Return only the token.'
+
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: gpt-5.2
+      # Defaults assume you run this config from examples/openai-codex-sdk/skills.
+      # From the repo root, set CODEX_SKILLS_WORKING_DIR and CODEX_HOME_OVERRIDE.
+      working_dir: '{{ env.CODEX_SKILLS_WORKING_DIR | default("./sample-project") }}'
+      skip_git_repo_check: true
+      enable_streaming: true
+      deep_tracing: true
+      inherit_process_env: true
+      cli_env:
+        CODEX_HOME: '{{ env.CODEX_HOME_OVERRIDE | default("./sample-codex-home") }}'
+
+tests:
+  - assert:
+      - type: contains
+        value: 'CERULEAN-FALCON-SKILL'
+      - type: trajectory:step-count
+        value:
+          type: command
+          pattern: '*token-skill/SKILL.md*'
+          min: 1
+      - type: skill-used
+        value: token-skill
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      host: '127.0.0.1'
+      acceptFormats: ['json']

@@ -3,6 +3,7 @@ import * as cache from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
 import { LONG_RUNNING_MODEL_TIMEOUT_MS } from '../../../src/providers/shared';
+import { getOpenAiMissingApiKeyMessage } from './shared';
 import type { Mock } from 'vitest';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
@@ -52,6 +53,14 @@ describe('OpenAiResponsesProvider', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.3-chat-latest');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4-2026-03-05');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4-mini');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'gpt-5.4-mini-2026-03-17',
+    );
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4-nano');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'gpt-5.4-nano-2026-03-17',
+    );
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4-pro');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
       'gpt-5.4-pro-2026-03-05',
@@ -980,7 +989,21 @@ describe('OpenAiResponsesProvider', () => {
 
     vi.spyOn(provider, 'getApiKey').mockReturnValue(undefined);
 
-    await expect(provider.callApi('Test prompt')).rejects.toThrow('OpenAI API key is not set');
+    await expect(provider.callApi('Test prompt')).rejects.toThrow(getOpenAiMissingApiKeyMessage());
+  });
+
+  it('should use custom apiKeyEnvar in missing API key errors', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKeyEnvar: 'CUSTOM_RESPONSES_API_KEY',
+      },
+    });
+
+    vi.spyOn(provider, 'getApiKey').mockReturnValue(undefined);
+
+    await expect(provider.callApi('Test prompt')).rejects.toThrow(
+      getOpenAiMissingApiKeyMessage('CUSTOM_RESPONSES_API_KEY'),
+    );
   });
 
   it('should handle error in API response data correctly', async () => {
@@ -2681,6 +2704,14 @@ describe('OpenAiResponsesProvider', () => {
     // GPT-5.4 models
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4-2026-03-05');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4-mini');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'gpt-5.4-mini-2026-03-17',
+    );
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4-nano');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'gpt-5.4-nano-2026-03-17',
+    );
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4-pro');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
       'gpt-5.4-pro-2026-03-05',
