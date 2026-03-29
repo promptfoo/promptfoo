@@ -49,7 +49,7 @@ export const rollDice = tool({
       notation,
       purpose: purpose || 'dice roll',
       criticalInfo,
-      breakdown: `${rolls.join(' + ')}${modifier !== 0 ? ` + ${modifier}` : ''} = ${finalTotal}${criticalInfo}`,
+      breakdown: `${rolls.join(' + ')}${modifier === 0 ? '' : ` + ${modifier}`} = ${finalTotal}${criticalInfo}`,
     };
   },
 });

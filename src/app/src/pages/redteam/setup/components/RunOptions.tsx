@@ -263,13 +263,13 @@ export const RunOptionsContent = ({
   const canSetMaxConcurrency = Boolean(!runOptions?.delay || runOptions?.delay === 0);
 
   const [numTestsInput, setNumTestsInput] = useState<string>(
-    numTests !== undefined ? String(numTests) : '0',
+    numTests === undefined ? '0' : String(numTests),
   );
   const [delayInput, setDelayInput] = useState<string>(
-    runOptions?.delay !== undefined ? String(runOptions.delay) : '0',
+    runOptions?.delay === undefined ? '0' : String(runOptions.delay),
   );
   const [maxConcurrencyInput, setMaxConcurrencyInput] = useState<string>(
-    runOptions?.maxConcurrency !== undefined ? String(runOptions.maxConcurrency) : '1',
+    runOptions?.maxConcurrency === undefined ? '1' : String(runOptions.maxConcurrency),
   );
 
   // Normalize language to array

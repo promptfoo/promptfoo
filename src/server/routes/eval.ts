@@ -713,7 +713,7 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
       const eval_ = await Eval.create(incEval.config, incEval.prompts || [], {
         author: incEval.author,
         // Use !== undefined to handle createdAt=0 (Unix epoch)
-        createdAt: incEval.createdAt !== undefined ? new Date(incEval.createdAt) : undefined,
+        createdAt: incEval.createdAt === undefined ? undefined : new Date(incEval.createdAt),
         results: incEval.results,
         vars: incEval.vars,
       });

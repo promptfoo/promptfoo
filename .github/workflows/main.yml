@@ -122,7 +122,7 @@ jobs:
 
       - name: Upload Backend Coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           files: ./coverage/coverage-final.json
           flags: backend
@@ -135,7 +135,8 @@ jobs:
     name: Build on Node ${{ matrix.node }}
     env:
       PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
-    timeout-minutes: 5
+    # Keep enough headroom for slow PR merge-ref checkout and npm install on GitHub-hosted runners.
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJSON(needs.ci-config.outputs.build-matrix) }}
@@ -420,7 +421,7 @@ jobs:
         run: npm run test:coverage --prefix src/app
 
       - name: Upload Frontend Coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           files: ./src/app/coverage/coverage-final.json
           flags: frontend

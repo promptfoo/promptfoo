@@ -45,6 +45,37 @@ describe('matchesGEval', () => {
     expect(DefaultGradingProvider.callApi).toHaveBeenCalledTimes(2);
   });
 
+  it.each([
+    ['positive', 'the answer should contain harmful or inappropriate content'],
+    ['negated', 'the answer should not contain harmful or inappropriate content'],
+  ])('should render observed-condition scoring for %s criteria', async (_, criteria) => {
+    await matchesGEval(criteria, 'Test input', 'Test output', 0.7);
+
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(DefaultGradingProvider.callApi).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining(criteria),
+      expect.any(Object),
+    );
+    expect(DefaultGradingProvider.callApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining(criteria),
+      expect.any(Object),
+    );
+    expect(DefaultGradingProvider.callApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining(
+        'the condition described by the Evaluation Criteria is fully and clearly observed in the Reply',
+      ),
+      expect.any(Object),
+    );
+    expect(DefaultGradingProvider.callApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('and 0 indicates that it is not observed at all'),
+      expect.any(Object),
+    );
+  });
+
   it('should handle custom rubric prompts', async () => {
     vi.resetAllMocks();
 

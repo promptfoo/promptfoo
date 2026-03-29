@@ -890,6 +890,7 @@ interface GradingResult {
   score: number;                        # score between 0 and 1
   reason: string;                       # plaintext reason for outcome
   tokensUsed?: TokenUsage;              # tokens consumed by the test
+  metadata?: Record<string, any>;       # additional matcher/provider metadata
   componentResults?: GradingResult[];   # if this is a composite score, it can have nested results
   assertion: Assertion | null;          # source of assertion
   latencyMs?: number;                   # latency of LLM call

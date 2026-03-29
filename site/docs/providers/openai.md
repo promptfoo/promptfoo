@@ -32,7 +32,7 @@ The OpenAI provider supports the following model formats:
 - `openai:video:<model name>` - uses Sora video generation models
 - `openai:agents:<agent name>` - runs agentic workflows via OpenAI Agents SDK
 - `openai:chatkit:<workflow_id>` - runs ChatKit workflows
-- `openai:codex-sdk` - runs agentic coding workflows via OpenAI Codex SDK
+- `openai:codex-sdk` / `openai:codex` - runs agentic coding workflows via OpenAI Codex SDK, with optional inline model selection like `openai:codex:gpt-5.4`
 
 The `openai:<endpoint>:<model name>` construction is useful if OpenAI releases a new model,
 or if you have a custom model.
@@ -52,14 +52,17 @@ providers:
         effort: minimal
 ```
 
-The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai/types.ts#L112-L185), such as `temperature`, `functions`, and `tools`, which can be used to customize the behavior of the model like so:
+The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai/types.ts#L112-L185), such as `temperature`, `max_tokens`, `max_completion_tokens`, `functions`, and `tools`, which can be used to customize model behavior like so:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:gpt-5-mini
+  - id: openai:gpt-4.1-mini
     config:
       temperature: 0
       max_tokens: 1024
+  - id: openai:gpt-5.4-mini
+    config:
+      max_completion_tokens: 1024
 ```
 
 > **Note:** OpenAI models can also be accessed through [Azure OpenAI](/docs/providers/azure/), which offers additional enterprise features, compliance options, and regional availability.
@@ -70,14 +73,17 @@ For information on setting up chat conversation, see [chat threads](/docs/config
 
 ## Configuring parameters
 
-The `providers` list takes a `config` key that allows you to set parameters like `temperature`, `max_tokens`, and [others](https://platform.openai.com/docs/api-reference/chat/create#chat/create-temperature). For example:
+The `providers` list takes a `config` key that allows you to set parameters like `temperature` for non-reasoning models, `max_tokens`, `max_completion_tokens` for GPT-5 family chat models, and [others](https://platform.openai.com/docs/api-reference/chat/create). For example:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:gpt-5-mini
+  - id: openai:gpt-4.1-mini
     config:
       temperature: 0
       max_tokens: 128
+  - id: openai:gpt-5.4-mini
+    config:
+      max_completion_tokens: 128
       apiKey: sk-abc123
 ```
 
@@ -106,7 +112,7 @@ Supported parameters include:
 | `seed`                  | Seed used for deterministic output.                                                                                                                                                                                                                                                               |
 | `stop`                  | Defines a list of tokens that signal the end of the output.                                                                                                                                                                                                                                       |
 | `store`                 | Whether to store the conversation for future retrieval (boolean).                                                                                                                                                                                                                                 |
-| `temperature`           | Controls the randomness of the AI's output. Higher values (close to 1) make the output more random, while lower values (close to 0) make it more deterministic.                                                                                                                                   |
+| `temperature`           | Controls the randomness of the AI's output for non-reasoning models. Promptfoo omits it for reasoning-capable models (o-series, `codex-mini-latest`, and GPT-5 family) because OpenAI ignores it there.                                                                                           |
 | `tool_choice`           | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                         |
 | `tools`                 | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                                 |
 | `top_p`                 | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                                                                                                                                                     |
@@ -174,6 +180,13 @@ When `n > 1`, the primary `output` contains the first choice's content, and all 
 
 ## Models
 
+OpenAI updates aliases, dated snapshots, and pricing frequently. Promptfoo supports explicit
+endpoint syntax like `openai:chat:<model>` and `openai:responses:<model>` for newly released
+models right away, while the tables below call out the common model IDs promptfoo knows about
+for routing and cost estimation. Check the official
+[OpenAI models docs](https://platform.openai.com/docs/models) and
+[pricing](https://openai.com/pricing) for the latest availability and rates.
+
 ### GPT-4.1
 
 GPT-4.1 is OpenAI's flagship model for complex tasks with a 1,047,576 token context window and 32,768 max output tokens. Available in three variants with different price points:
@@ -215,13 +228,13 @@ providers:
 
 ### GPT-5.1
 
-GPT-5.1 is OpenAI's newest flagship model, part of the GPT-5 model family. It excels at coding and agentic tasks with improved steerability, a new `none` reasoning mode for faster responses, and new tools for coding use cases.
+GPT-5.1 is a GPT-5 family model that emphasizes coding, agentic tasks, and more steerable output behavior.
 
 #### Available Models
 
 | Model               | Description                                        | Best For                                    |
 | ------------------- | -------------------------------------------------- | ------------------------------------------- |
-| gpt-5.1             | Latest flagship model                              | Complex reasoning and broad world knowledge |
+| gpt-5.1             | Primary GPT-5.1 model                              | Complex reasoning and broad world knowledge |
 | gpt-5.1-2025-11-13  | Dated snapshot version                             | Locked behavior for production              |
 | gpt-5.1-mini        | Cost-optimized reasoning                           | Balanced speed, cost, and capability        |
 | gpt-5.1-nano        | High-throughput model                              | Simple instruction-following tasks          |
@@ -477,38 +490,60 @@ providers:
 
 ### GPT-5.4
 
-GPT-5.4 is a GPT-5 family model for complex professional work, combining advanced reasoning with agentic coding capabilities.
+GPT-5.4 is a GPT-5 family model for complex professional work, agentic coding, and tool-heavy workflows.
 
 #### Available Models
 
-| Model                  | Description                   | Pricing (Input / Output)    |
-| ---------------------- | ----------------------------- | --------------------------- |
-| gpt-5.4                | Standard GPT-5.4 model        | $2.50 / $15 per 1M tokens   |
-| gpt-5.4-2026-03-05     | Dated snapshot of gpt-5.4     | $2.50 / $15 per 1M tokens   |
-| gpt-5.4-pro            | Premium GPT-5.4 pro model     | $30.00 / $180 per 1M tokens |
-| gpt-5.4-pro-2026-03-05 | Dated snapshot of gpt-5.4-pro | $30.00 / $180 per 1M tokens |
+| Model                   | Description                    | Pricing (Input / Output)    |
+| ----------------------- | ------------------------------ | --------------------------- |
+| gpt-5.4                 | Standard GPT-5.4 model         | $2.50 / $15 per 1M tokens   |
+| gpt-5.4-2026-03-05      | Dated snapshot of gpt-5.4      | $2.50 / $15 per 1M tokens   |
+| gpt-5.4-mini            | Smaller GPT-5.4 model          | $0.75 / $4.50 per 1M tokens |
+| gpt-5.4-mini-2026-03-17 | Dated snapshot of gpt-5.4-mini | $0.75 / $4.50 per 1M tokens |
+| gpt-5.4-nano            | Lowest-cost GPT-5.4 model      | $0.20 / $1.25 per 1M tokens |
+| gpt-5.4-nano-2026-03-17 | Dated snapshot of gpt-5.4-nano | $0.20 / $1.25 per 1M tokens |
+| gpt-5.4-pro             | Premium GPT-5.4 pro model      | $30.00 / $180 per 1M tokens |
+| gpt-5.4-pro-2026-03-05  | Dated snapshot of gpt-5.4-pro  | $30.00 / $180 per 1M tokens |
 
 #### Key Specifications
 
-- **Context window**: 1,050,000 tokens
+- **Context window**: `gpt-5.4` and `gpt-5.4-pro` support 1,050,000 tokens. `gpt-5.4-mini` and `gpt-5.4-nano` support 400,000 tokens.
 - **Max output tokens**: 128,000 tokens
-- **Reasoning effort**: `gpt-5.4` supports `none`, `low`, `medium`, `high`, `xhigh`. `gpt-5.4-pro` supports `medium`, `high`, `xhigh`.
-- **Endpoint support**: Chat Completions API, Responses API, and Codex SDK
-- **Cached input**: `gpt-5.4` cached input tokens $0.25 per 1M. `gpt-5.4-pro` has no cached-input discount.
+- **Reasoning effort**: `gpt-5.4`, `gpt-5.4-mini`, and `gpt-5.4-nano` support `none`, `low`, `medium`, `high`, `xhigh`. `gpt-5.4-pro` supports `medium`, `high`, `xhigh`.
+- **Endpoint support**: Chat Completions API and Responses API across the GPT-5.4 family. Promptfoo's Codex SDK provider currently supports `gpt-5.4` and `gpt-5.4-pro`.
+- **Cached input**: `gpt-5.4` cached input tokens $0.25 per 1M, `gpt-5.4-mini` $0.075 per 1M, and `gpt-5.4-nano` $0.02 per 1M. `gpt-5.4-pro` has no cached-input discount.
 
 #### Usage Examples
 
 ```yaml title="promptfooconfig.yaml"
 providers:
+  - id: openai:chat:gpt-5.4-mini
+    config:
+      max_completion_tokens: 2048
+      reasoning_effort: 'none'
+      verbosity: 'low'
+
   - id: openai:chat:gpt-5.4
     config:
       max_completion_tokens: 4096
       reasoning_effort: 'low'
 
+  - id: openai:responses:gpt-5.4-nano
+    config:
+      reasoning:
+        effort: 'none'
+      max_output_tokens: 1024
+
   - id: openai:responses:gpt-5.4
     config:
       reasoning:
         effort: 'high'
+      max_output_tokens: 4096
+
+  - id: openai:responses:gpt-5.4-mini
+    config:
+      reasoning:
+        effort: 'medium'
       max_output_tokens: 4096
 
   - id: openai:responses:gpt-5.4-pro
@@ -966,7 +1001,7 @@ export async function getTools() {
 prompts:
   - file://prompt.txt
 providers:
-  - id: openai:chat:gpt-5-mini
+  - id: openai:chat:gpt-5.4-mini
     // highlight-start
     config:
       # Load tools from external file
@@ -1088,7 +1123,7 @@ Use the `functions` config to define custom functions. Each function should be a
 prompts:
   - file://prompt.txt
 providers:
-  - id: openai:chat:gpt-5-mini
+  - id: openai:chat:gpt-5.4-mini
     // highlight-start
     config:
       functions:
@@ -1176,7 +1211,7 @@ providers:
 Here's an example of how your `provider_with_function.yaml` might look:
 
 ```yaml title="provider_with_function.yaml"
-id: openai:chat:gpt-5-mini
+id: openai:chat:gpt-5.4-mini
 config:
   functions:
     - name: get_current_weather
@@ -1219,7 +1254,7 @@ prompts:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:chat:gpt-5-mini
+  - id: openai:chat:gpt-5.4-mini
     config:
       response_format:
         type: json_schema
@@ -1761,13 +1796,17 @@ The Responses API supports a wide range of models, including:
 
 - `gpt-5.4` - GPT-5.4 model ($2.50/$15 per 1M tokens)
 - `gpt-5.4-2026-03-05` - Dated snapshot of gpt-5.4
+- `gpt-5.4-mini` - Smaller GPT-5.4 model ($0.75/$4.50 per 1M tokens)
+- `gpt-5.4-mini-2026-03-17` - Dated snapshot of gpt-5.4-mini
+- `gpt-5.4-nano` - Lowest-cost GPT-5.4 model ($0.20/$1.25 per 1M tokens)
+- `gpt-5.4-nano-2026-03-17` - Dated snapshot of gpt-5.4-nano
 - `gpt-5.4-pro` - Premium GPT-5.4 model ($30/$180 per 1M tokens)
 - `gpt-5.4-pro-2026-03-05` - Dated snapshot of gpt-5.4-pro
-- `gpt-5` - OpenAI's most capable vision model
+- `gpt-5` - Earlier GPT-5 family model
 - `gpt-5-chat` - GPT-5 chat alias
-- `gpt-5.1` - GPT-5.1 flagship model
+- `gpt-5.1` - GPT-5.1 base model
 - `gpt-5.1-chat-latest` - GPT-5.1 chat alias
-- `gpt-5.3-chat-latest` - Latest chat-focused GPT-5.3 Instant alias
+- `gpt-5.3-chat-latest` - GPT-5.3 chat alias
 - `gpt-5.2-chat-latest` - GPT-5.2 chat-optimized alias
 - `gpt-5.2-codex` - GPT-5.2 coding variant
 - `gpt-5.2-pro` - Premium GPT-5.2 model with highest reasoning capability ($15/$120 per 1M tokens)
@@ -2110,7 +2149,7 @@ The `web_search_preview` tool is **required** for deep research models. The prov
 
 ### GPT-5 Pro Timeout Configuration
 
-`gpt-5-pro`, `gpt-5.2-pro`, and `gpt-5.4-pro` are long-running models that often require extended timeouts due to advanced reasoning. Like deep research models, these variants **automatically** receive a 10-minute timeout (600,000ms) instead of the standard 5-minute timeout.
+`gpt-5-pro`, `gpt-5.2-pro`, and `gpt-5.4-pro` are long-running models that often require extended timeouts due to advanced reasoning. Like deep research models, these variants automatically receive a 10-minute timeout (600,000ms) instead of the standard 5-minute timeout.
 
 **Automatic timeout behavior:**
 
@@ -2251,13 +2290,17 @@ providers:
       agent: file://./agents/support-agent.ts
       tools: file://./tools/support-tools.ts
       maxTurns: 10
+      modelSettings:
+        retry:
+          maxRetries: 2
+          policy: providerSuggested
 ```
 
-See the [OpenAI Agents documentation](/docs/providers/openai-agents) for full configuration options and examples.
+See the [OpenAI Agents documentation](/docs/providers/openai-agents) for full configuration options, retry policies, and examples.
 
 ### Codex SDK
 
-For agentic coding tasks with working directory access and structured JSON output, use the [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk). This provider supports GPT-5.4 and Codex-optimized GPT-5 models for code generation:
+For agentic coding tasks with working directory access and structured JSON output, use the [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk). This provider supports GPT-5.4 and Codex-optimized GPT-5 models for code generation. You can select a model inline with `openai:codex:gpt-5.4` or via `config.model` when you need additional options:
 
 ```yaml
 providers:

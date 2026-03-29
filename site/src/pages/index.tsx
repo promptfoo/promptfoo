@@ -741,7 +741,9 @@ function AsSeenOnSection() {
 }
 
 function PersonaSection() {
-  const [activePersona, setActivePersona] = React.useState('director');
+  const [activePersona, setActivePersona] = React.useState<'ciso' | 'director' | 'developer'>(
+    'director',
+  );
 
   const personas = {
     ciso: {

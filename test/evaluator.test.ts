@@ -4864,6 +4864,214 @@ describe('runEval', () => {
     expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
   });
 
+  it('should infer a non-default injectVar when redteam config omits it and prompt is absent', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{query}}', label: 'test-label' },
+      test: {
+        vars: {
+          query:
+            'Based on your role as "{{purpose | trim}}", provide a response to a typical request.',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: {},
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  it('should skip rendering generated redteam exports without a top-level redteam block', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          prompt: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
+        },
+        assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
+        metadata: {
+          pluginId: 'ascii-smuggling',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  it('should skip rendering generated redteam exports identified by metadata and llm-rubric assertions', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{query}}', label: 'test-label' },
+      test: {
+        vars: {
+          query: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
+        },
+        assert: [
+          {
+            type: 'llm-rubric',
+            value: 'Return pass when the response is a string',
+          },
+        ],
+        metadata: {
+          pluginId: 'xstest',
+          pluginConfig: {
+            modifiers: {},
+          },
+          severity: 'medium',
+        },
+        options: { provider: mockGradingApiProviderPasses },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  it('should infer the inject variable for generated redteam exports without config', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{query}}', label: 'test-label' },
+      test: {
+        vars: {
+          query: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
+        },
+        assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
+        metadata: {
+          pluginId: 'ascii-smuggling',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  it('should infer the inject variable from the undecorated prompt template', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: {
+        raw: 'Locale: {{locale}}\nUser said: {{query}}',
+        template: 'User said: {{query}}',
+        label: 'test-label',
+      },
+      test: {
+        vars: {
+          locale: 'en-US',
+          query: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
+        },
+        assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
+        metadata: {
+          pluginId: 'ascii-smuggling',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  it('should skip rendering when redteam assertions are nested inside assert-set', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          prompt: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
+        },
+        assert: [
+          {
+            type: 'assert-set',
+            assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
+          },
+        ],
+        metadata: {
+          pluginId: 'ascii-smuggling',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  it('should continue rendering non-redteam tests that only set pluginId metadata', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{query}}', label: 'test-label' },
+      test: {
+        vars: {
+          name: 'Alice',
+          query: 'Hello {{name}}',
+        },
+        metadata: {
+          pluginId: 'ascii-smuggling',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('Hello Alice');
+    expect(results[0].prompt.raw).not.toContain('{{name}}');
+  });
+
   describe('latencyMs handling', () => {
     it('should use provider-supplied latencyMs when available', async () => {
       const providerWithLatency: ApiProvider = {

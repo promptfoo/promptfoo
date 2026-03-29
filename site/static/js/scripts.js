@@ -91,7 +91,7 @@ vector.load('18d08a7d-45cf-4805-b8b1-978305be5dd4');
         (r = t.getElementsByTagName('script')[0]).parentNode.insertBefore(p, r);
       var u = e;
       for (
-        void 0 !== a ? (u = e[a] = []) : (a = 'posthog'),
+        void 0 === a ? (a = 'posthog') : (u = e[a] = []),
           u.people = u.people || [],
           u.toString = function (t) {
             var e = 'posthog';

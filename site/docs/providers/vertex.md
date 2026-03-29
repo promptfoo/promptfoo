@@ -150,6 +150,27 @@ By default, Llama models use Llama Guard for content safety. You can disable it 
 Imagen models are available through [Google AI Studio](/docs/providers/google#image-generation-models) using the `google:image:` prefix.
 :::
 
+### Video Generation Models
+
+Use the `vertex:video:` prefix for Veo on Vertex AI:
+
+- `vertex:video:veo-3.1-generate-preview`
+- `vertex:video:veo-3.1-fast-preview`
+- `vertex:video:veo-3-generate`
+- `vertex:video:veo-3-fast`
+- `vertex:video:veo-2-generate`
+
+```yaml
+providers:
+  - id: vertex:video:veo-3.1-generate-preview
+    config:
+      projectId: your-project-id
+      region: us-central1
+      aspectRatio: '16:9'
+      resolution: '1080p'
+      durationSeconds: 8
+```
+
 ## Model Capabilities
 
 ### Gemini 2.0 Pro Specifications
@@ -1071,6 +1092,7 @@ The Vertex AI provider supports core functionality for LLM evaluation:
 | Files API                | ❌        | Upload/manage files not supported      |
 | Caching API              | ❌        | Context caching not supported          |
 | Live/Realtime API        | ❌        | WebSocket-based live API not supported |
+| Video generation         | ✅        | Use `vertex:video:` provider           |
 | Image generation         | ⚠️        | Use `google:image:` provider instead   |
 
 For image generation, use the [Google AI Studio provider](/docs/providers/google#image-generation-models) with the `google:image:` prefix.

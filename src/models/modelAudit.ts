@@ -80,15 +80,15 @@ export default class ModelAudit {
     const resultsHasErrors = data.results?.has_errors ?? false;
 
     // If hasErrors is explicitly provided, use it; otherwise compute from results and issues
-    if (data.hasErrors !== undefined) {
-      this.hasErrors = data.hasErrors;
-    } else {
+    if (data.hasErrors === undefined) {
       const hasActualErrors =
         resultsHasErrors ||
         (issues &&
           issues.some((issue) => issue.severity === 'critical' || issue.severity === 'error')) ||
         false;
       this.hasErrors = hasActualErrors;
+    } else {
+      this.hasErrors = data.hasErrors;
     }
 
     this.totalChecks = data.totalChecks;

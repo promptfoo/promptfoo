@@ -225,7 +225,7 @@ function FileGroup({
             ) : (
               <ExpandMoreIcon className="size-4" />
             )}
-            {isExpanded ? 'Hide' : 'Show'} {issues.length} issue{issues.length !== 1 ? 's' : ''}
+            {isExpanded ? 'Hide' : 'Show'} {issues.length} issue{issues.length === 1 ? '' : 's'}
           </button>
         </CollapsibleTrigger>
 

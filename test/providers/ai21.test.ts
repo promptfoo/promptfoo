@@ -199,4 +199,42 @@ describe('AI21ChatCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
     expect(result.cost).toBeDefined();
   });
+
+  it('should preserve an explicit max_tokens value of 0', async () => {
+    const mockResponse = {
+      data: {
+        choices: [
+          {
+            message: {
+              content: 'test response',
+            },
+          },
+        ],
+        usage: {
+          total_tokens: 10,
+          prompt_tokens: 5,
+          completion_tokens: 5,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    };
+
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new AI21ChatCompletionProvider('jamba-1.5-mini', {
+      config: { apiKey: 'test-key', max_tokens: 0 },
+    });
+
+    await provider.callApi('test prompt');
+
+    expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        body: expect.stringContaining('"max_tokens":0'),
+      }),
+      expect.any(Number),
+    );
+  });
 });

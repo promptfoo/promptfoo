@@ -11,31 +11,27 @@ cd google-video
 
 ## Prerequisites
 
-- Google Cloud project with Vertex AI API enabled
-- Authentication via `gcloud auth application-default login`
+Choose one:
+
+- Google AI Studio / Gemini API key
+- Google Cloud project with Vertex AI API enabled and authentication via `gcloud auth application-default login`
 
 ## Setup
 
 ```bash
-# Enable Vertex AI API
+# Option 1: Google AI Studio / Gemini API
+export GOOGLE_API_KEY=your-api-key
+
+# Option 2: Vertex AI
 gcloud services enable aiplatform.googleapis.com
-
-# Authenticate with Application Default Credentials
 gcloud auth application-default login
-
-# Set project ID (Unix/Linux/macOS)
 export GOOGLE_PROJECT_ID=your-project-id
-
-# For Windows Command Prompt:
-# set GOOGLE_PROJECT_ID=your-project-id
-
-# For Windows PowerShell:
-# $env:GOOGLE_PROJECT_ID="your-project-id"
 ```
 
 ## Environment Variables
 
-- `GOOGLE_PROJECT_ID` - Your Google Cloud project ID (required)
+- `GOOGLE_API_KEY` - Google AI Studio / Gemini API key
+- `GOOGLE_PROJECT_ID` - Google Cloud project ID for Vertex AI
 
 ## Available Models
 
@@ -55,17 +51,17 @@ npx promptfoo@latest eval
 
 ## Configuration Options
 
-| Option             | Type   | Description                                              |
-| ------------------ | ------ | -------------------------------------------------------- |
-| `aspectRatio`      | string | `16:9` (default) or `9:16`                               |
-| `resolution`       | string | `720p` (default) or `1080p`                              |
-| `durationSeconds`  | number | Duration: 4, 6, 8 for Veo 3.x; 5, 6, 8 for Veo 2         |
-| `personGeneration` | string | `allow_adult` or `dont_allow`                            |
-| `negativePrompt`   | string | Concepts to avoid                                        |
-| `image`            | string | Source image for image-to-video                          |
-| `lastImage`        | string | End frame for interpolation                              |
-| `extendVideoId`    | string | Operation ID from previous Veo generation (Veo 3.1 only) |
-| `referenceImages`  | array  | Up to 3 style reference images (file paths or objects)   |
+| Option             | Type   | Description                                                     |
+| ------------------ | ------ | --------------------------------------------------------------- |
+| `aspectRatio`      | string | `16:9` (default) or `9:16`                                      |
+| `resolution`       | string | `720p` (default) or `1080p`                                     |
+| `durationSeconds`  | number | Duration: 4, 6, 8 for Veo 3.x; 5, 6, 8 for Veo 2                |
+| `personGeneration` | string | `allow_adult` or `dont_allow`                                   |
+| `negativePrompt`   | string | Concepts to avoid                                               |
+| `image`            | string | Source image for image-to-video                                 |
+| `lastImage`        | string | End frame for interpolation                                     |
+| `extendVideoId`    | string | Operation ID from previous Vertex Veo generation (Veo 3.1 only) |
+| `referenceImages`  | array  | Up to 3 style reference images (file paths or objects)          |
 
 ## Features
 
@@ -79,7 +75,7 @@ Generate videos from a starting image (see `promptfooconfig-image.yaml`).
 
 ### Video Extension (Veo 3.1)
 
-Extend previously generated Veo videos using the operation ID (see `promptfooconfig-extension.yaml`).
+Extend previously generated Veo videos using the explicit Vertex provider path and an operation ID (see `promptfooconfig-extension.yaml`).
 
 ## Notes
 
@@ -88,3 +84,5 @@ Extend previously generated Veo videos using the operation ID (see `promptfoocon
 - Use `--no-cache` flag to force regeneration
 - Videos are served via the local server for viewing in the UI
 - Veo models use long-running operations with polling for completion
+- `google:video:*` uses Google AI Studio by default and auto-detects Vertex AI when project-based auth is configured
+- Existing project-based `google:video:*` configs remain compatible, but `vertex:video:*` is the recommended explicit path for Vertex-only flows such as `extendVideoId`

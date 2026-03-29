@@ -14,6 +14,7 @@ import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureCompletionProvider } from '../../src/providers/azure/completion';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock/index';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
+import { GoogleVideoProvider } from '../../src/providers/google/video';
 import {
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceTextClassificationProvider,
@@ -758,6 +759,12 @@ describe('loadApiProvider', () => {
     const provider = await loadApiProvider('vertex:vertex-chat-model');
     expect(provider).toBeInstanceOf(VertexChatProvider);
     expect(provider.id()).toBe('vertex:vertex-chat-model');
+  });
+
+  it('loadApiProvider with vertex:video:modelname', async () => {
+    const provider = await loadApiProvider('vertex:video:veo-3.1-generate-preview');
+    expect(provider).toBeInstanceOf(GoogleVideoProvider);
+    expect(provider.id()).toBe('vertex:video:veo-3.1-generate-preview');
   });
 
   it('loadApiProvider with replicate:modelname', async () => {

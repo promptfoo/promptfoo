@@ -39,18 +39,20 @@ providers:
 
 ## Configuration Options
 
-| Parameter          | Description                                               | Default               |
-| ------------------ | --------------------------------------------------------- | --------------------- |
-| `agent`            | Agent definition (inline object or `file://path`)         | -                     |
-| `tools`            | Tool definitions (inline array or `file://path`)          | -                     |
-| `handoffs`         | Agent handoff definitions (inline array or `file://path`) | -                     |
-| `maxTurns`         | Maximum conversation turns                                | 10                    |
-| `model`            | Override model specified in agent definition              | -                     |
-| `modelSettings`    | Model parameters (temperature, topP, maxTokens)           | -                     |
-| `inputGuardrails`  | Input validation guardrails (inline array or `file://`)   | -                     |
-| `outputGuardrails` | Output validation guardrails (inline array or `file://`)  | -                     |
-| `tracing`          | Enable OpenTelemetry OTLP tracing                         | false                 |
-| `otlpEndpoint`     | Custom OTLP endpoint URL for tracing                      | http://localhost:4318 |
+| Parameter          | Description                                                                         | Default               |
+| ------------------ | ----------------------------------------------------------------------------------- | --------------------- |
+| `agent`            | Agent definition (inline object or `file://path`)                                   | -                     |
+| `tools`            | Additional tool definitions (inline array or `file://path`)                         | -                     |
+| `handoffs`         | Additional handoff definitions (inline array or `file://path`)                      | -                     |
+| `maxTurns`         | Maximum conversation turns                                                          | 10                    |
+| `model`            | Override model specified in agent definition                                        | -                     |
+| `modelSettings`    | SDK `ModelSettings` overrides, including reasoning, verbosity, and retry settings   | -                     |
+| `inputGuardrails`  | Additional input guardrails (inline array or `file://`)                             | -                     |
+| `outputGuardrails` | Additional output guardrails (inline array or `file://`)                            | -                     |
+| `executeTools`     | Execute function tools normally (`real`) or replace them with mocked results        | `real`                |
+| `toolMocks`        | Mocked tool outputs keyed by tool name, used when `executeTools` is `mock` or false | -                     |
+| `tracing`          | Enable OpenTelemetry OTLP tracing                                                   | false                 |
+| `otlpEndpoint`     | Custom OTLP endpoint URL for tracing                                                | http://localhost:4318 |
 
 ## File-Based Configuration
 
@@ -65,6 +67,8 @@ providers:
       maxTurns: 15
       tracing: true
 ```
+
+Top-level `tools`, `handoffs`, `inputGuardrails`, and `outputGuardrails` augment whatever is already defined on the loaded agent.
 
 **Example agent file (`agents/support-agent.ts`):**
 
@@ -120,7 +124,7 @@ providers:
 
 ## Guardrails
 
-Validate tool inputs and outputs with guardrails (added in SDK v0.3.8):
+Validate tool inputs and outputs with guardrails:
 
 ```yaml
 providers:
@@ -132,6 +136,52 @@ providers:
 ```
 
 Guardrails run validation logic before tool execution (input) and after (output), enabling content filtering, PII detection, or custom business rules.
+
+## Retry Policies
+
+OpenAI Agents SDK v0.7 added opt-in retry settings on `modelSettings.retry`. Promptfoo supports YAML-friendly retry policy presets and passes them to the SDK as runtime callbacks.
+
+```yaml
+providers:
+  - openai:agents:support-agent
+    config:
+      agent: file://./agents/support-agent.ts
+      modelSettings:
+        retry:
+          maxRetries: 2
+          backoff:
+            initialDelayMs: 250
+            maxDelayMs: 2000
+            multiplier: 2
+            jitter: true
+          policy:
+            any:
+              - providerSuggested
+              - httpStatus:
+                  - 429
+                  - 503
+```
+
+Supported preset policies are `never`, `providerSuggested`, `networkError`, and `retryAfter`.
+
+You can also compose them with `any` or `all`. If you are configuring Promptfoo in TypeScript or JavaScript instead of YAML, you can pass SDK retry callbacks directly.
+
+## Mock Tool Execution
+
+Use mocked tool outputs when you want deterministic evals without calling external systems:
+
+```yaml
+providers:
+  - openai:agents:support-agent
+    config:
+      agent: file://./agents/support-agent.ts
+      tools: file://./tools/support-tools.ts
+      executeTools: mock
+      toolMocks:
+        lookup_order:
+          status: shipped
+          tracking: ABC123
+```
 
 ## Tracing
 

@@ -38,7 +38,7 @@ interface ResultsTabProps {
 // Compact issue row component
 function IssueRow({ issue }: { issue: ScanIssue }) {
   const filePath = getIssueFilePath(issue);
-  const fileName = filePath !== 'Unknown' ? filePath.split('/').pop() : null;
+  const fileName = filePath === 'Unknown' ? null : filePath.split('/').pop();
 
   const severityConfig = {
     error: { icon: ErrorIcon, color: 'text-red-600 dark:text-red-400' },

@@ -4,6 +4,64 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.121.3](https://github.com/promptfoo/promptfoo/compare/0.121.2...0.121.3) (2026-03-24)
+
+### Features
+
+- add block-no-verify PreToolUse hook to .claude/settings.json ([#8234](https://github.com/promptfoo/promptfoo/issues/8234)) ([29a856a](https://github.com/promptfoo/promptfoo/commit/29a856a8fa2defba5bc8362ea6e14364b7e624ce))
+- add new config options to composite jailbreak strategy ([#7693](https://github.com/promptfoo/promptfoo/issues/7693)) ([071d345](https://github.com/promptfoo/promptfoo/commit/071d34592e626fa12399d43d6f2feda2a8edb67c))
+- **app:** add manual filtering to DataTable and improve filter UX ([#8122](https://github.com/promptfoo/promptfoo/issues/8122)) ([46dfdf5](https://github.com/promptfoo/promptfoo/commit/46dfdf57298b0cd6afa98b2b626bcb53e150cca8))
+- **assertions:** add trajectory eval assertions ([#8040](https://github.com/promptfoo/promptfoo/issues/8040)) ([6567fda](https://github.com/promptfoo/promptfoo/commit/6567fdaf0b381e65110451f802222fc0f861613a))
+- **assertions:** add trajectory tool args matching ([#8142](https://github.com/promptfoo/promptfoo/issues/8142)) ([d0ba078](https://github.com/promptfoo/promptfoo/commit/d0ba0780b01f900f9b78670b16e8fadb897afe20))
+- **http:** add file-based auth ([#8282](https://github.com/promptfoo/promptfoo/issues/8282)) ([00b497c](https://github.com/promptfoo/promptfoo/commit/00b497c23e43c0f2f4cafbbcfbdad65e4aedf9a8))
+- **providers:** add skill eval support for agent SDKs ([#8242](https://github.com/promptfoo/promptfoo/issues/8242)) ([3e2bfeb](https://github.com/promptfoo/promptfoo/commit/3e2bfeb4d51fa09cee1c1fd8530ad3114354f6b9))
+- **providers:** support GPT-5.4 mini and nano models ([#8216](https://github.com/promptfoo/promptfoo/issues/8216)) ([8ee7547](https://github.com/promptfoo/promptfoo/commit/8ee7547fe4f6a72e6206190758d878da91446a9c))
+- **providers:** support new sora video sizes ([#8147](https://github.com/promptfoo/promptfoo/issues/8147)) ([3e8af4d](https://github.com/promptfoo/promptfoo/commit/3e8af4d571825772c1d93e4729effc58db93255a))
+- **providers:** support Veo via Google AI Studio and Vertex ([#8185](https://github.com/promptfoo/promptfoo/issues/8185)) ([c8e340d](https://github.com/promptfoo/promptfoo/commit/c8e340de7a293fd95b16a80ccb4067d326092a46))
+- support opt-out from api key checks in claude-agent-sdk ([#8256](https://github.com/promptfoo/promptfoo/issues/8256)) ([13c040f](https://github.com/promptfoo/promptfoo/commit/13c040f3f4bc8415378239c4e13c1c8967738850))
+
+### Bug Fixes
+
+- **ai21:** preserve zero max_tokens ([#8287](https://github.com/promptfoo/promptfoo/issues/8287)) ([88da62a](https://github.com/promptfoo/promptfoo/commit/88da62a219dc0370301636cf7ff651238771dad1))
+- **anthropic:** preserve zero max_tokens_to_sample ([#8290](https://github.com/promptfoo/promptfoo/issues/8290)) ([92dd8b7](https://github.com/promptfoo/promptfoo/commit/92dd8b78291341fdd0142ce69a1ae0fbba575565))
+- **assertions:** stabilize trajectory eval assertions ([#8140](https://github.com/promptfoo/promptfoo/issues/8140)) ([a207119](https://github.com/promptfoo/promptfoo/commit/a2071199846ccc0b685cbf2e48e1016ed07d50e4))
+- **cli:** move success rate next to passes ([#8303](https://github.com/promptfoo/promptfoo/issues/8303)) ([8e09d59](https://github.com/promptfoo/promptfoo/commit/8e09d59450957bfc1d534fa7fbab249277658a8a))
+- **cli:** prevent API error logs from corrupting progress bar display ([#7646](https://github.com/promptfoo/promptfoo/issues/7646)) ([8aa4e42](https://github.com/promptfoo/promptfoo/commit/8aa4e4217e01bf0965970790f03c5c694f225954))
+- **deps:** update anthropic packages ([#8249](https://github.com/promptfoo/promptfoo/issues/8249)) ([15efcd7](https://github.com/promptfoo/promptfoo/commit/15efcd704998f5c66a427d28619f3ee812a4e77e))
+- **deps:** update dependency @anthropic-ai/sdk to ^0.80.0 ([#8281](https://github.com/promptfoo/promptfoo/issues/8281)) ([33d738f](https://github.com/promptfoo/promptfoo/commit/33d738fc9acf3da8e8ea064620ca47ad86a71a17))
+- **deps:** update dependency @openai/agents to ^0.6.0 ([#8179](https://github.com/promptfoo/promptfoo/issues/8179)) ([d221767](https://github.com/promptfoo/promptfoo/commit/d221767b0391e79bbcbada3c2788d18102a065ce))
+- **deps:** update dependency @openai/agents to ^0.7.0 ([#8189](https://github.com/promptfoo/promptfoo/issues/8189)) ([08a2c12](https://github.com/promptfoo/promptfoo/commit/08a2c127beaff35c29ba6e3c44f34b18a48d6871))
+- **deps:** update dependency @tanstack/react-virtual to ^3.13.22 ([#8201](https://github.com/promptfoo/promptfoo/issues/8201)) ([63cc2b1](https://github.com/promptfoo/promptfoo/commit/63cc2b175b6b4e649642ab8c2228dcfa3b09da10))
+- **deps:** update dependency better-sqlite3 to ^12.8.0 ([#8221](https://github.com/promptfoo/promptfoo/issues/8221)) ([7ffc164](https://github.com/promptfoo/promptfoo/commit/7ffc1645dc777521cdf99e706756b99e484f3a15))
+- **deps:** update dependency fast-xml-parser to ^5.5.0 ([#8168](https://github.com/promptfoo/promptfoo/issues/8168)) ([c1e0dcb](https://github.com/promptfoo/promptfoo/commit/c1e0dcbc0e84b19be40fa1898d0ec067298c41f0))
+- **deps:** update dependency fast-xml-parser to ^5.5.3 ([#8169](https://github.com/promptfoo/promptfoo/issues/8169)) ([ce1e672](https://github.com/promptfoo/promptfoo/commit/ce1e6724eb92388254af5f38f1cfc4218f73077d))
+- **deps:** update dependency fast-xml-parser to ^5.5.4 ([#8205](https://github.com/promptfoo/promptfoo/issues/8205)) ([ab66e52](https://github.com/promptfoo/promptfoo/commit/ab66e527a392aec3f9a6b80e8fd03bfd7144c112))
+- **deps:** update dependency fast-xml-parser to ^5.5.5 ([#8210](https://github.com/promptfoo/promptfoo/issues/8210)) ([ca3d586](https://github.com/promptfoo/promptfoo/commit/ca3d586fc8e0c5484b2691a6f314b52d3b3a0f77))
+- **deps:** update dependency lightningcss to ^1.32.0 ([#8149](https://github.com/promptfoo/promptfoo/issues/8149)) ([a5c5c3b](https://github.com/promptfoo/promptfoo/commit/a5c5c3b94685e78074203df886fd45a6e4c20b6e))
+- **deps:** update dependency lru-cache to ^11.2.7 ([#8215](https://github.com/promptfoo/promptfoo/issues/8215)) ([3065be9](https://github.com/promptfoo/promptfoo/commit/3065be92c42dac2ad40296b845a5bfc89b4f69e2))
+- **deps:** update dependency openai to ^6.32.0 ([#8269](https://github.com/promptfoo/promptfoo/issues/8269)) ([c7d7825](https://github.com/promptfoo/promptfoo/commit/c7d78250eec5cbff86b0179ddb35e0fd090bf167))
+- **deps:** update dependency proxy-agent to v7 ([#8186](https://github.com/promptfoo/promptfoo/issues/8186)) ([87affda](https://github.com/promptfoo/promptfoo/commit/87affdad72818a87e1dc82e46313a0dc54cc83ed))
+- **deps:** update dependency proxy-from-env to ^2.1.0 ([#8229](https://github.com/promptfoo/promptfoo/issues/8229)) ([8b4b542](https://github.com/promptfoo/promptfoo/commit/8b4b54270d8de3598f0ef82d68539143d4611dbe))
+- **deps:** update dependency simple-git to ^3.33.0 ([#8170](https://github.com/promptfoo/promptfoo/issues/8170)) ([39aee24](https://github.com/promptfoo/promptfoo/commit/39aee2496d8e4be0583d96a7d7bc31ebd9ed7c21))
+- **deps:** update example dependencies ([#8248](https://github.com/promptfoo/promptfoo/issues/8248)) ([53d5ab6](https://github.com/promptfoo/promptfoo/commit/53d5ab621e2e8c53a5626df10e4d142027069b23))
+- **deps:** update openai packages ([#8212](https://github.com/promptfoo/promptfoo/issues/8212)) ([42e523a](https://github.com/promptfoo/promptfoo/commit/42e523a67afbf74205688990a1310cf8a0c25d45))
+- **deps:** update openai packages ([#8268](https://github.com/promptfoo/promptfoo/issues/8268)) ([ac24038](https://github.com/promptfoo/promptfoo/commit/ac240385fcd40e7bc456e313a9a5aca5edc0bee7))
+- **elevenlabs:** preserve agents maxTurns zero ([#8285](https://github.com/promptfoo/promptfoo/issues/8285)) ([36ce694](https://github.com/promptfoo/promptfoo/commit/36ce6943cf94d51fe2e19f0ea8d6e7cbf3b6c54e))
+- **envars:** use explicit undefined check in getEnvInt and getEnvFloat ([#8182](https://github.com/promptfoo/promptfoo/issues/8182)) ([f3215e5](https://github.com/promptfoo/promptfoo/commit/f3215e552bb15a5e74eb6da74b04999cfb9bc4e4))
+- **examples:** use append_allowed_tools in plugins example ([#8143](https://github.com/promptfoo/promptfoo/issues/8143)) ([3510ba8](https://github.com/promptfoo/promptfoo/commit/3510ba8e42a494cc89bfb7f9bda238586077070e))
+- **http:** expose oauth token in vars ([#8304](https://github.com/promptfoo/promptfoo/issues/8304)) ([fee4bc0](https://github.com/promptfoo/promptfoo/commit/fee4bc058df350fb0f0167f8f223e732c84771e0))
+- **mistral:** handle tool call responses where content is null ([#8165](https://github.com/promptfoo/promptfoo/issues/8165)) ([9c93471](https://github.com/promptfoo/promptfoo/commit/9c9347128580d1bd3367be82586f02ffb1e9eff4))
+- **providers:** add gpt-5.4 mini and nano support ([#8219](https://github.com/promptfoo/promptfoo/issues/8219)) ([68c1961](https://github.com/promptfoo/promptfoo/commit/68c196119903e016b08c26aa9b3e1b050e09c5a6))
+- **providers:** add requiresApiKey() to claude-agent-sdk for Vertex/Bedrock support ([#8132](https://github.com/promptfoo/promptfoo/issues/8132)) ([49af17b](https://github.com/promptfoo/promptfoo/commit/49af17b51d8d09442e8c36d5d1f46fdc840d934a))
+- **providers:** support gpt-5.4 in codex provider ([#8228](https://github.com/promptfoo/promptfoo/issues/8228)) ([ee7ae2c](https://github.com/promptfoo/promptfoo/commit/ee7ae2c71bad28f9237b9a2541256b0035406783))
+- **providers:** use merged env for claude-agent-sdk provider registration ([#8134](https://github.com/promptfoo/promptfoo/issues/8134)) ([456199c](https://github.com/promptfoo/promptfoo/commit/456199c953e8bcb554aeada65e64b5973007d179))
+- **providers:** use nullish coalescing for temperature in Anthropic Messages and LocalAI ([#8163](https://github.com/promptfoo/promptfoo/issues/8163)) ([94adbe1](https://github.com/promptfoo/promptfoo/commit/94adbe1c23d8eb5b1fad83853ac2a53e0da5ade8))
+- **providers:** use nullish coalescing for temperature with provider-scoped env support ([#8167](https://github.com/promptfoo/promptfoo/issues/8167)) ([3b20e2b](https://github.com/promptfoo/promptfoo/commit/3b20e2ba606e7121a75c93be6c48174da9d99e23))
+- **redteam:** de-alias generated redteam examples ([#8241](https://github.com/promptfoo/promptfoo/issues/8241)) ([6117b52](https://github.com/promptfoo/promptfoo/commit/6117b52b092882bde2258a9b91ff4a41e09ae778))
+- **redteam:** fix Rules of Hooks violation in RiskCategoryDrawer ([#8072](https://github.com/promptfoo/promptfoo/issues/8072)) ([afb2732](https://github.com/promptfoo/promptfoo/commit/afb2732d823c0c97ef3a4f332e032861739b55ad))
+- **redteam:** preserve voice crescendo zero max backtracks ([#8296](https://github.com/promptfoo/promptfoo/issues/8296)) ([0d3e4b7](https://github.com/promptfoo/promptfoo/commit/0d3e4b79759bcf133ad62961ea5c6f30b9327265))
+- **replicate:** preserve zero-valued config ([#8128](https://github.com/promptfoo/promptfoo/issues/8128)) ([14890e6](https://github.com/promptfoo/promptfoo/commit/14890e62a87f7d4e759d1fc6fefb4bc46a53b5a8))
+
 ## [0.121.2](https://github.com/promptfoo/promptfoo/compare/0.121.1...0.121.2) (2026-03-12)
 
 ### Bug Fixes

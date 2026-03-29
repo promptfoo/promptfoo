@@ -67,9 +67,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
-      throw new Error(
-        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
+      throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
     const config = {
@@ -240,9 +238,9 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
           duration: durationSeconds,
           language: data.language,
           segments: data.segments?.length || 0,
-          ...(avgLogprob !== undefined ? { avgLogprob } : {}),
-          ...(avgCompressionRatio !== undefined ? { avgCompressionRatio } : {}),
-          ...(avgNoSpeechProb !== undefined ? { avgNoSpeechProb } : {}),
+          ...(avgLogprob === undefined ? {} : { avgLogprob }),
+          ...(avgCompressionRatio === undefined ? {} : { avgCompressionRatio }),
+          ...(avgNoSpeechProb === undefined ? {} : { avgNoSpeechProb }),
           ...(this.modelName.includes('diarize') && data.speakers
             ? { speakers: data.speakers }
             : {}),

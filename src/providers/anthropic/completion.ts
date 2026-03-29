@@ -51,7 +51,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
       model: this.modelName,
       prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
       max_tokens_to_sample:
-        this.config?.max_tokens_to_sample || getEnvInt('ANTHROPIC_MAX_TOKENS', 1024),
+        this.config?.max_tokens_to_sample ?? getEnvInt('ANTHROPIC_MAX_TOKENS', 1024),
       temperature: this.config.temperature ?? getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
       stop_sequences: stop,
     };

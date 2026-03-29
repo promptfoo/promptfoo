@@ -1,4 +1,14 @@
-import type { Agent } from '@openai/agents';
+import type {
+  Agent,
+  Handoff,
+  InputGuardrail,
+  MCPServer,
+  ModelSettings,
+  OutputGuardrail,
+  RetryPolicy,
+  Tool,
+  ToolUseBehavior,
+} from '@openai/agents';
 
 import type { OpenAiSharedOptions } from './types';
 
@@ -18,13 +28,13 @@ export interface OpenAiAgentsOptions extends OpenAiSharedOptions {
    * Tools to provide to the agent
    * Can be a file path or an array of tool definitions
    */
-  tools?: string | ToolDefinition[];
+  tools?: string | Array<Tool<any> | ToolDefinition>;
 
   /**
    * Handoff agents
    * Can be a file path or an array of handoff definitions
    */
-  handoffs?: string | HandoffDefinition[];
+  handoffs?: string | Array<Agent<any, any> | Handoff<any, any> | HandoffDefinition>;
 
   /**
    * Maximum number of agent turns before stopping
@@ -36,13 +46,13 @@ export interface OpenAiAgentsOptions extends OpenAiSharedOptions {
    * Input guardrails
    * Can be a file path or an array of guardrail definitions
    */
-  inputGuardrails?: string | any[];
+  inputGuardrails?: string | InputGuardrail[];
 
   /**
    * Output guardrails
    * Can be a file path or an array of guardrail definitions
    */
-  outputGuardrails?: string | any[];
+  outputGuardrails?: string | OutputGuardrail<any>[];
 
   /**
    * Whether to execute tools for real or use mocks
@@ -79,8 +89,31 @@ export interface OpenAiAgentsOptions extends OpenAiSharedOptions {
   /**
    * Model settings to use for the agent
    */
-  modelSettings?: any;
+  modelSettings?: OpenAiAgentsModelSettings;
 }
+
+export type OpenAiAgentsRetryPolicyPreset =
+  | 'never'
+  | 'providerSuggested'
+  | 'networkError'
+  | 'retryAfter'
+  | {
+      httpStatus: number[];
+    }
+  | {
+      any: OpenAiAgentsRetryPolicyPreset[];
+    }
+  | {
+      all: OpenAiAgentsRetryPolicyPreset[];
+    };
+
+export type OpenAiAgentsRetryPolicyConfig = RetryPolicy | OpenAiAgentsRetryPolicyPreset;
+
+export type OpenAiAgentsModelSettings = Omit<ModelSettings, 'retry'> & {
+  retry?: Omit<NonNullable<ModelSettings['retry']>, 'policy'> & {
+    policy?: OpenAiAgentsRetryPolicyConfig;
+  };
+};
 
 /**
  * Agent definition for inline configuration
@@ -98,9 +131,19 @@ export interface AgentDefinition {
   instructions: string | ((context: any) => string | Promise<string>);
 
   /**
+   * Prompt template to use for the agent
+   */
+  prompt?: any;
+
+  /**
    * Model to use for the agent
    */
   model?: string;
+
+  /**
+   * Model settings to use for the agent
+   */
+  modelSettings?: OpenAiAgentsModelSettings;
 
   /**
    * Description of what the agent does (used for handoffs)
@@ -116,12 +159,37 @@ export interface AgentDefinition {
   /**
    * Tools available to the agent
    */
-  tools?: ToolDefinition[];
+  tools?: Array<Tool<any> | ToolDefinition>;
 
   /**
    * Handoff agents
    */
-  handoffs?: HandoffDefinition[];
+  handoffs?: Array<Agent<any, any> | Handoff<any, any> | HandoffDefinition>;
+
+  /**
+   * Input validation guardrails
+   */
+  inputGuardrails?: InputGuardrail[];
+
+  /**
+   * Output validation guardrails
+   */
+  outputGuardrails?: OutputGuardrail<any>[];
+
+  /**
+   * MCP servers available to the agent
+   */
+  mcpServers?: MCPServer[];
+
+  /**
+   * Configure how the agent should handle tool use
+   */
+  toolUseBehavior?: ToolUseBehavior;
+
+  /**
+   * Whether to reset the tool choice after a tool call
+   */
+  resetToolChoice?: boolean;
 }
 
 /**
@@ -142,6 +210,16 @@ export interface ToolDefinition {
    * Parameters schema (Zod schema or JSON schema)
    */
   parameters: any;
+
+  /**
+   * Whether to use strict schema enforcement
+   */
+  strict?: boolean;
+
+  /**
+   * Responses API only: whether to defer loading this tool
+   */
+  deferLoading?: boolean;
 
   /**
    * Function to execute when tool is called
