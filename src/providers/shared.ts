@@ -27,8 +27,21 @@ interface ProviderModel {
 }
 
 export interface ProviderConfig {
+  /**
+   * Legacy single override applied to BOTH input + output token cost.
+   * Prefer `inputCost` / `outputCost` for asymmetric pricing.
+   */
   cost?: number;
+  inputCost?: number;
+  outputCost?: number;
+
+  /**
+   * Legacy single override applied to BOTH audio input + audio output token cost.
+   * Prefer `audioInputCost` / `audioOutputCost` for asymmetric pricing.
+   */
   audioCost?: number;
+  audioInputCost?: number;
+  audioOutputCost?: number;
 }
 
 /**
@@ -62,8 +75,8 @@ export function calculateCost(
     return undefined;
   }
 
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
+  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
+  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
   return inputCost * promptTokens + outputCost * completionTokens;
 }
 

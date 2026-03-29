@@ -300,6 +300,11 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBe(184.5);
   });
 
+  it('should use custom inputCost/outputCost from config when provided', () => {
+    const cost = calculateOpenAICost('gpt-4', { inputCost: 0.1, outputCost: 0.2 }, 1000, 500);
+    expect(cost).toBe(1000 * 0.1 + 500 * 0.2);
+  });
+
   it('should calculate cost correctly with custom audioCost', () => {
     const cost = calculateOpenAICost(
       'gpt-4o-audio-preview',
@@ -310,6 +315,32 @@ describe('calculateOpenAICost', () => {
       100,
     );
     expect(cost).toBe(15.0075);
+  });
+
+  it('should use custom audioInputCost/audioOutputCost when provided', () => {
+    const promptTokens = 1000;
+    const completionTokens = 500;
+    const audioPromptTokens = 200;
+    const audioCompletionTokens = 100;
+
+    const model = OPENAI_CHAT_MODELS.find((m) => m.id === 'gpt-4o-audio-preview');
+    if (!model || !model.cost) {
+      return;
+    }
+
+    const base = model.cost.input * promptTokens + model.cost.output * completionTokens;
+    const expected = base + 0.01 * audioPromptTokens + 0.02 * audioCompletionTokens;
+
+    const cost = calculateOpenAICost(
+      'gpt-4o-audio-preview',
+      { audioInputCost: 0.01, audioOutputCost: 0.02 },
+      promptTokens,
+      completionTokens,
+      audioPromptTokens,
+      audioCompletionTokens,
+    );
+
+    expect(cost).toBeCloseTo(expected, 8);
   });
 
   it('should handle a model with no cost property', () => {
