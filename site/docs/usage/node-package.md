@@ -91,6 +91,9 @@ completion: number;
 cached?: number;
 }>;
 
+// Additional matcher/provider metadata
+metadata?: Record<string, unknown>;
+
 // List of results for each component of the assertion
 componentResults?: GradingResult[];
 

@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - conversation relevance SSTI'
+
+prompts:
+  - 'unused prompt'
+
+providers:
+  - echo
+
+defaultTest:
+  options:
+    provider: 'exec:node ../scripts/capture-conversation-relevance-grader.js'
+
+tests:
+  - vars:
+      country: France
+      capital: Paris
+      _conversation:
+        - input: 'What is the capital of {{country}}?'
+          output: 'The answer is {{capital}} and {{ env.OPENAI_API_KEY }} and {% for x in range(3) %}{{x}}{% endfor %}'
+    assert:
+      - type: conversation-relevance
+        threshold: 0

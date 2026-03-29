@@ -2192,6 +2192,14 @@ export class HttpProvider implements ApiProvider {
     if (this.config.auth?.type === 'oauth') {
       await this.refreshOAuthTokenIfNeeded(vars);
       invariant(this.lastToken, 'OAuth token should be defined at this point');
+
+      if (hasOwnProperty(vars, 'token')) {
+        logger.warn(
+          '[HTTP Provider Auth]: `token` is already defined in vars and will be overwritten',
+        );
+      }
+
+      vars.token = this.lastToken;
     } else if (this.config.auth?.type === 'file') {
       await this.refreshFileTokenIfNeeded(prompt, vars, context);
       invariant(this.lastToken, 'File auth token should be defined at this point');

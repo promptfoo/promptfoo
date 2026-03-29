@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiImageProvider } from '../../../src/providers/openai/image';
+import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -156,11 +157,36 @@ describe('OpenAiImageProvider', () => {
 
         // Attempt to call the API should throw an error
         await expect(provider.callApi('Generate a cat')).rejects.toThrow(
-          'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+          getOpenAiMissingApiKeyMessage(),
         );
       } finally {
-        // Restore the original environment variable
-        process.env.OPENAI_API_KEY = originalEnv;
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+      }
+    });
+
+    it('should use custom apiKeyEnvar in missing API key errors', async () => {
+      const originalEnv = process.env.OPENAI_API_KEY;
+      const originalCustomEnv = process.env.CUSTOM_IMAGE_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.CUSTOM_IMAGE_API_KEY;
+
+      try {
+        const provider = new OpenAiImageProvider('dall-e-3', {
+          config: {
+            apiKeyEnvar: 'CUSTOM_IMAGE_API_KEY',
+          },
+          env: {
+            OPENAI_API_KEY: undefined,
+            CUSTOM_IMAGE_API_KEY: undefined,
+          },
+        });
+
+        await expect(provider.callApi('Generate a cat')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage('CUSTOM_IMAGE_API_KEY'),
+        );
+      } finally {
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+        restoreEnvVar('CUSTOM_IMAGE_API_KEY', originalCustomEnv);
       }
     });
   });
