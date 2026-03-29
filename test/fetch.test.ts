@@ -871,7 +871,7 @@ describe('isRateLimited', () => {
 describe('handleRateLimit', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.mocked(sleep).mockClear();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -890,6 +890,30 @@ describe('handleRateLimit', () => {
     await promise;
 
     expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 5000ms before retry');
+  });
+
+  it('should handle OpenAI reset headers with millisecond durations', async () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'x-ratelimit-reset-requests': '500ms',
+      }),
+    });
+
+    await handleRateLimit(response);
+
+    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 500ms before retry');
+  });
+
+  it('should handle OpenAI reset headers with compound durations', async () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'x-ratelimit-reset-requests': '1m30s',
+      }),
+    });
+
+    await handleRateLimit(response);
+
+    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 90000ms before retry');
   });
 
   it('should handle standard rate limit reset headers', async () => {
@@ -920,6 +944,31 @@ describe('handleRateLimit', () => {
     await promise;
 
     expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 5000ms before retry');
+  });
+
+  it('should handle Retry-After HTTP-date headers', async () => {
+    vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
+    const response = createMockResponse({
+      headers: new Headers({
+        'Retry-After': 'Mon, 01 Jan 2024 00:00:05 GMT',
+      }),
+    });
+
+    await handleRateLimit(response);
+
+    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 5000ms before retry');
+  });
+
+  it('should use default wait time for invalid Retry-After headers', async () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'Retry-After': 'invalid',
+      }),
+    });
+
+    await handleRateLimit(response);
+
+    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 60000ms before retry');
   });
 
   it('should use default wait time when no headers present', async () => {

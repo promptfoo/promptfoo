@@ -466,11 +466,11 @@ export async function doEval(
       showProgressBar:
         getLogLevel() === 'debug'
           ? false
-          : cmdObj.progressBar !== undefined
-            ? cmdObj.progressBar !== false
-            : evaluateOptions.showProgressBar !== undefined
-              ? evaluateOptions.showProgressBar
-              : true,
+          : cmdObj.progressBar === undefined
+            ? evaluateOptions.showProgressBar === undefined
+              ? true
+              : evaluateOptions.showProgressBar
+            : cmdObj.progressBar !== false,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       maxConcurrency,

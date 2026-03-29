@@ -15,6 +15,7 @@ import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
@@ -791,13 +792,29 @@ const ApiKeyAuthSchema = z.object({
   keyName: z.string(),
 });
 
+const FileAuthSchema = z.object({
+  type: z.literal('file'),
+  path: z.string().min(1),
+});
+
 const AuthSchema = z.union([
   OAuthClientCredentialsSchema,
   OAuthPasswordSchema,
   BasicAuthSchema,
   BearerAuthSchema,
   ApiKeyAuthSchema,
+  FileAuthSchema,
 ]);
+
+const FileAuthResultSchema = z.object({
+  token: z.string().min(1),
+  expiration: z.number().finite().nullable().optional(),
+});
+
+type FileAuthResult = {
+  token: string;
+  expiration?: number;
+};
 
 /**
  * Configuration for a separate session endpoint that must be called before the main API.
@@ -941,6 +958,14 @@ export async function loadTransformModule(
   }
   // For string expressions, return as-is
   return transform;
+}
+
+function hasOwnProperty(obj: Record<string, any>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function parseFileAuthReference(filePath: string): { filePath: string; functionName?: string } {
+  return filePath.startsWith('file://') ? parseFileUrl(filePath) : { filePath };
 }
 
 export async function createSessionParser(
@@ -1587,36 +1612,13 @@ export class HttpProvider implements ApiProvider {
         : baseConfig;
     const now = Date.now();
 
-    // Check if token exists and is still valid (with buffer before expiry)
-    if (
-      this.lastToken &&
-      this.lastTokenExpiresAt &&
-      now + TOKEN_REFRESH_BUFFER_MS < this.lastTokenExpiresAt
-    ) {
+    if (this.hasValidCachedToken(now)) {
       logger.debug('[HTTP Provider Auth]: Using cached OAuth token');
       return;
     }
 
-    // If a refresh is already in progress, wait for it instead of making a new request
-    if (this.tokenRefreshPromise != null) {
-      logger.debug('[HTTP Provider Auth]: Token refresh already in progress, waiting...');
-      try {
-        await this.tokenRefreshPromise;
-        // If we successfully waited for the refresh, verify token is still valid
-        // (it might have expired while we were waiting)
-        const stillValid =
-          this.lastToken &&
-          this.lastTokenExpiresAt &&
-          Date.now() + TOKEN_REFRESH_BUFFER_MS < this.lastTokenExpiresAt;
-        if (stillValid) {
-          return;
-        }
-        // Token expired while waiting, fall through to refresh again
-        logger.debug('[HTTP Provider Auth]: Token expired while waiting, refreshing again...');
-      } catch {
-        // If the in-progress refresh failed, we'll try again below
-        logger.debug('[HTTP Provider Auth]: Previous token refresh failed, retrying...');
-      }
+    if (this.tokenRefreshPromise != null && (await this.waitForInFlightTokenRefresh())) {
+      return;
     }
 
     // Start a new token refresh and store the promise for deduplication
@@ -1719,6 +1721,105 @@ export class HttpProvider implements ApiProvider {
     }
 
     invariant(this.lastToken, 'OAuth token should be defined at this point');
+  }
+
+  private hasValidCachedToken(now = Date.now()): boolean {
+    if (!this.lastToken) {
+      return false;
+    }
+
+    if (this.lastTokenExpiresAt == null) {
+      return this.config.auth?.type === 'file';
+    }
+
+    return now + TOKEN_REFRESH_BUFFER_MS < this.lastTokenExpiresAt;
+  }
+
+  private async waitForInFlightTokenRefresh(): Promise<boolean> {
+    if (this.tokenRefreshPromise == null) {
+      return false;
+    }
+
+    logger.debug('[HTTP Provider Auth]: Token refresh already in progress, waiting...');
+
+    try {
+      await this.tokenRefreshPromise;
+      if (this.hasValidCachedToken()) {
+        return true;
+      }
+      logger.debug('[HTTP Provider Auth]: Token expired while waiting, refreshing again...');
+    } catch {
+      logger.debug('[HTTP Provider Auth]: Previous token refresh failed, retrying...');
+    }
+
+    return false;
+  }
+
+  private async refreshFileTokenIfNeeded(
+    prompt: string,
+    vars: Record<string, any>,
+    context?: CallApiContextParams,
+  ): Promise<void> {
+    if (!this.config.auth || this.config.auth.type !== 'file') {
+      logger.debug('[HTTP Provider Auth]: No file auth configured');
+      return;
+    }
+
+    if (this.hasValidCachedToken()) {
+      logger.debug('[HTTP Provider Auth]: Using cached file auth token');
+      return;
+    }
+
+    if (this.tokenRefreshPromise != null && (await this.waitForInFlightTokenRefresh())) {
+      return;
+    }
+
+    logger.debug('[HTTP Provider Auth]: Refreshing file auth token');
+    const refreshPromise = this.performFileTokenRefresh(prompt, vars, context);
+    this.tokenRefreshPromise = refreshPromise;
+
+    try {
+      await refreshPromise;
+    } finally {
+      if (this.tokenRefreshPromise === refreshPromise) {
+        this.tokenRefreshPromise = undefined;
+      }
+    }
+  }
+
+  private async performFileTokenRefresh(
+    prompt: string,
+    vars: Record<string, any>,
+    context?: CallApiContextParams,
+  ): Promise<void> {
+    invariant(this.config.auth?.type === 'file', 'File auth should be configured');
+
+    const { filePath, functionName } = parseFileAuthReference(this.config.auth.path);
+    const defaultFunctionName = filePath.endsWith('.py') ? 'get_auth' : 'default';
+    const authContext: CallApiContextParams = {
+      ...(context ?? {}),
+      prompt: context?.prompt ?? ({ raw: prompt, label: prompt } as CallApiContextParams['prompt']),
+      vars,
+    };
+
+    try {
+      const authFn = await loadFunction<
+        (authContext: CallApiContextParams) => Promise<FileAuthResult> | FileAuthResult
+      >({
+        filePath,
+        functionName,
+        defaultFunctionName,
+      });
+      const result = FileAuthResultSchema.parse(await authFn(authContext));
+      this.lastToken = result.token;
+      this.lastTokenExpiresAt = result.expiration ?? undefined;
+      logger.debug('[HTTP Provider Auth]: Successfully refreshed file auth token');
+    } catch (err) {
+      logger.error(`[HTTP Provider Auth]: Failed to refresh file auth token: ${String(err)}`);
+      throw new Error(`Failed to refresh file auth token: ${String(err)}`);
+    }
+
+    invariant(this.lastToken, 'File auth token should be defined at this point');
   }
 
   private async refreshSignatureIfNeeded(vars: Record<string, any>): Promise<void> {
@@ -2082,15 +2183,40 @@ export class HttpProvider implements ApiProvider {
       prompt,
       ...(context?.evaluationId ? { evaluationId: context.evaluationId } : {}),
       // Only set tools/tool_choice if defined in config, to avoid overwriting user vars
-      ...(transformedTools !== undefined ? { tools: serializeForTemplate(transformedTools) } : {}),
-      ...(transformedToolChoice !== undefined
-        ? { tool_choice: serializeForTemplate(transformedToolChoice) }
-        : {}),
+      ...(transformedTools === undefined ? {} : { tools: serializeForTemplate(transformedTools) }),
+      ...(transformedToolChoice === undefined
+        ? {}
+        : { tool_choice: serializeForTemplate(transformedToolChoice) }),
     } as Record<string, any>;
 
     if (this.config.auth?.type === 'oauth') {
       await this.refreshOAuthTokenIfNeeded(vars);
       invariant(this.lastToken, 'OAuth token should be defined at this point');
+
+      if (hasOwnProperty(vars, 'token')) {
+        logger.warn(
+          '[HTTP Provider Auth]: `token` is already defined in vars and will be overwritten',
+        );
+      }
+
+      vars.token = this.lastToken;
+    } else if (this.config.auth?.type === 'file') {
+      await this.refreshFileTokenIfNeeded(prompt, vars, context);
+      invariant(this.lastToken, 'File auth token should be defined at this point');
+
+      if (hasOwnProperty(vars, 'token')) {
+        logger.warn(
+          '[HTTP Provider Auth]: `token` is already defined in vars and will be overwritten',
+        );
+      }
+      if (hasOwnProperty(vars, 'expiration')) {
+        logger.warn(
+          '[HTTP Provider Auth]: `expiration` is already defined in vars and will be overwritten',
+        );
+      }
+
+      vars.token = this.lastToken;
+      vars.expiration = this.lastTokenExpiresAt;
     }
 
     // Add signature values to vars if signature auth is enabled

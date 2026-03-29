@@ -10,7 +10,7 @@
     "view": "promptfoo view"
   },
   "dependencies": {
-    "openai": "^6.25.0",
+    "openai": "^6.32.0",
     "tsx": "^4.21.0",
     "zod": "^4.3.6"
   },

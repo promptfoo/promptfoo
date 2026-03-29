@@ -2223,10 +2223,10 @@ describe('readConfig with environment variable substitution', () => {
     vi.restoreAllMocks();
     // Restore or delete environment variables to prevent test pollution
     for (const varName of testEnvVars) {
-      if (originalEnv[varName] !== undefined) {
-        process.env[varName] = originalEnv[varName];
-      } else {
+      if (originalEnv[varName] === undefined) {
         delete process.env[varName];
+      } else {
+        process.env[varName] = originalEnv[varName];
       }
     }
   });
@@ -2281,6 +2281,46 @@ describe('readConfig with environment variable substitution', () => {
     const result = await readConfig('config.json');
 
     expect((result.providers as any)[0].config.apiKey).toEqual('sk-test-12345');
+  });
+
+  it('should preserve env templates in static _conversation vars', async () => {
+    process.env.MY_API_KEY = 'sk-test-12345';
+    const mockConfig = {
+      description: 'Test config with _conversation vars',
+      providers: ['{{ env.MY_API_KEY }}'],
+      prompts: ['Hello, world!'],
+      tests: [
+        {
+          vars: {
+            _conversation: [
+              {
+                input: 'Tell me a secret',
+                output: 'The answer is {{ env.MY_API_KEY }}',
+              },
+            ],
+            apiKey: '{{ env.MY_API_KEY }}',
+          },
+          assert: [
+            {
+              type: 'conversation-relevance',
+            },
+          ],
+        },
+      ],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result.providers).toEqual(['sk-test-12345']);
+    expect((result.tests as any)[0].vars.apiKey).toEqual('sk-test-12345');
+    expect((result.tests as any)[0].vars._conversation).toEqual([
+      {
+        input: 'Tell me a secret',
+        output: 'The answer is {{ env.MY_API_KEY }}',
+      },
+    ]);
   });
 
   it('should substitute environment variables in assertion paths', async () => {

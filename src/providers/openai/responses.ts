@@ -82,6 +82,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // GPT-5.4 models
     'gpt-5.4',
     'gpt-5.4-2026-03-05',
+    'gpt-5.4-mini',
+    'gpt-5.4-mini-2026-03-17',
+    'gpt-5.4-nano',
+    'gpt-5.4-nano-2026-03-17',
     'gpt-5.4-pro',
     'gpt-5.4-pro-2026-03-05',
     // Audio models
@@ -254,9 +258,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const body = {
       model: this.modelName,
       input,
-      ...(maxOutputTokens !== undefined ? { max_output_tokens: maxOutputTokens } : {}),
+      ...(maxOutputTokens === undefined ? {} : { max_output_tokens: maxOutputTokens }),
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
-      ...(temperature !== undefined ? { temperature } : {}),
+      ...(temperature === undefined ? {} : { temperature }),
       ...(instructions ? { instructions } : {}),
       ...((!reasoningEffort || reasoningEffort === 'none') &&
       (config.top_p !== undefined || getEnvString('OPENAI_TOP_P'))
@@ -302,9 +306,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.requiresApiKey() && !this.getApiKey()) {
-      throw new Error(
-        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
+      throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);

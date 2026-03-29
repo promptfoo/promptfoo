@@ -32,6 +32,7 @@ import {
 import { getGoalRubric } from '../prompts';
 import {
   externalizeResponseForRedteamHistory,
+  formatRedteamHistoryAsTranscript,
   getLastMessageContent,
   getTargetResponse,
   isConversationEndedResponse,
@@ -62,6 +63,7 @@ import type {
   TokenUsage,
   VarValue,
 } from '../../../types/index';
+import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
 import type { Message } from '../shared';
 
@@ -165,8 +167,8 @@ export class CrescendoProvider implements ApiProvider {
     // Create a copy of config to avoid mutating the original
     this.config = { ...config };
     // Support backwards compatibility: use maxRounds if maxTurns is not provided
-    this.maxTurns = config.maxTurns || config.maxRounds || DEFAULT_MAX_TURNS;
-    this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
+    this.maxTurns = config.maxTurns ?? config.maxRounds ?? DEFAULT_MAX_TURNS;
+    this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
 
     // Cap turns for unauthenticated users
     if (!isLoggedIntoCloud()) {
@@ -560,33 +562,10 @@ export class CrescendoProvider implements ApiProvider {
               : undefined;
 
             // Build grading context with tracing and exfil tracking data
-            let gradingContext:
-              | {
-                  traceContext?: TraceContextData | null;
-                  traceSummary?: string;
-                  wasExfiltrated?: boolean;
-                  exfilCount?: number;
-                  exfilRecords?: Array<{
-                    timestamp: string;
-                    ip: string;
-                    userAgent: string;
-                    queryParams: Record<string, string>;
-                  }>;
-                }
-              | undefined;
+            let gradingContext: RedteamGradingContext | undefined;
 
             // First try to get exfil data from provider response metadata (Playwright provider)
-            if (lastResponse.metadata?.wasExfiltrated !== undefined) {
-              logger.debug('[Crescendo] Using exfil data from provider response metadata');
-              gradingContext = {
-                ...(tracingOptions.includeInGrading
-                  ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
-                  : {}),
-                wasExfiltrated: Boolean(lastResponse.metadata.wasExfiltrated),
-                exfilCount: Number(lastResponse.metadata.exfilCount) || 0,
-                exfilRecords: [],
-              };
-            } else {
+            if (lastResponse.metadata?.wasExfiltrated === undefined) {
               // Try to fetch exfil tracking from server API via webPageUuid
               const webPageUuid = test.metadata?.webPageUuid as string | undefined;
               if (webPageUuid) {
@@ -608,6 +587,16 @@ export class CrescendoProvider implements ApiProvider {
                   };
                 }
               }
+            } else {
+              logger.debug('[Crescendo] Using exfil data from provider response metadata');
+              gradingContext = {
+                ...(tracingOptions.includeInGrading
+                  ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
+                  : {}),
+                wasExfiltrated: Boolean(lastResponse.metadata.wasExfiltrated),
+                exfilCount: Number(lastResponse.metadata.exfilCount) || 0,
+                exfilRecords: [],
+              };
             }
 
             // Fallback to just tracing context if no exfil data found
@@ -617,6 +606,22 @@ export class CrescendoProvider implements ApiProvider {
                 traceSummary: gradingTraceSummary,
               };
             }
+
+            // Provide prior turns separately from the latest assistant output
+            // under test. Context-aware graders can use this to reason over
+            // provenance without duplicating the current turn in `llmOutput`.
+            const conversationHistoryForGrading = redteamHistory.map((turn) => ({
+              prompt: turn.prompt,
+              output: turn.output,
+            }));
+            gradingContext = {
+              ...(gradingContext ?? {}),
+              redteamHistory: [...redteamHistory],
+              conversationHistory: conversationHistoryForGrading,
+              conversationTranscript: formatRedteamHistoryAsTranscript(
+                conversationHistoryForGrading,
+              ),
+            };
 
             const { grade, rubric } = await grader.getResult(
               attackPrompt,

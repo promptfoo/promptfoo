@@ -6,7 +6,7 @@ import { isValidPolicyId } from './plugins/policy/validators';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 // Re-export Inputs from shared to maintain backwards compatibility
-export { InputsSchema, type Inputs };
+export { type Inputs, InputsSchema };
 
 // Modifiers are used to modify the behavior of the plugin.
 // They let the user specify additional instructions for the plugin,

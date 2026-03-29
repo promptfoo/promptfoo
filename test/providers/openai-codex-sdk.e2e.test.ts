@@ -4,11 +4,11 @@
  *
  * Requirements:
  * - @openai/codex-sdk package installed
- * - OPENAI_API_KEY or CODEX_API_KEY environment variable
+ * - CODEX_API_KEY, CODEX_E2E_API_KEY, or OPENAI_API_KEY environment variable
  * - Access to Codex-compatible models (gpt-5.2, gpt-5.1-codex, etc.)
  *
  * Run with:
- *   OPENAI_API_KEY=... npx vitest run openai-codex-sdk.e2e
+ *   CODEX_API_KEY=... npx vitest run openai-codex-sdk.e2e
  *
  * Model configuration:
  *   Set CODEX_E2E_MODEL to override the default model (gpt-5.2).
@@ -21,21 +21,42 @@
 import fs from 'fs';
 import path from 'path';
 
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-// Check if SDK is available before unmocking
-let hasSdk = false;
-try {
-  require.resolve('@openai/codex-sdk');
-  hasSdk = true;
-  // Only unmock if SDK is actually installed
-  vi.unmock('@openai/codex-sdk');
-  // Also unmock the esm module so importModule can load the real SDK
-  vi.unmock('../../src/esm');
-} catch {
-  // SDK not installed - tests will be skipped
-  hasSdk = false;
+vi.unmock('@openai/codex-sdk');
+vi.unmock('../../src/esm');
+
+const hasSdk = fs.existsSync(
+  path.resolve(process.cwd(), 'node_modules/@openai/codex-sdk/package.json'),
+);
+const openAiApiKey =
+  process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'test-openai-api-key'
+    ? process.env.OPENAI_API_KEY
+    : undefined;
+const e2eApiKey = process.env.CODEX_E2E_API_KEY || process.env.CODEX_API_KEY || openAiApiKey;
+const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+const originalCodexApiKey = process.env.CODEX_API_KEY;
+
+// vitest.setup.ts installs a dummy OPENAI_API_KEY for unit tests. Ignore that value for E2E runs,
+// and only restore a real key when one is explicitly provided.
+if (e2eApiKey) {
+  process.env.OPENAI_API_KEY = e2eApiKey;
+  process.env.CODEX_API_KEY = e2eApiKey;
 }
+
+afterAll(() => {
+  if (originalOpenAiApiKey === undefined) {
+    delete process.env.OPENAI_API_KEY;
+  } else {
+    process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+  }
+
+  if (originalCodexApiKey === undefined) {
+    delete process.env.CODEX_API_KEY;
+  } else {
+    process.env.CODEX_API_KEY = originalCodexApiKey;
+  }
+});
 
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 
@@ -43,7 +64,7 @@ import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 const DEFAULT_E2E_MODEL = process.env.CODEX_E2E_MODEL || 'gpt-5.2';
 
 describe('OpenAICodexSDKProvider E2E', () => {
-  const hasApiKey = !!process.env.OPENAI_API_KEY || !!process.env.CODEX_API_KEY;
+  const hasApiKey = !!e2eApiKey;
   const testTimeout = 60000; // 60 seconds for real API calls
 
   // Skip all tests if no API key or SDK not installed
@@ -56,7 +77,9 @@ describe('OpenAICodexSDKProvider E2E', () => {
       console.info(`Running E2E tests with model: ${DEFAULT_E2E_MODEL}`);
       console.info('(Set CODEX_E2E_MODEL to use a different model)');
     } else {
-      console.warn('Skipping E2E tests: No OPENAI_API_KEY or CODEX_API_KEY found');
+      console.warn(
+        'Skipping E2E tests: No real CODEX_API_KEY, CODEX_E2E_API_KEY, or OPENAI_API_KEY found',
+      );
     }
   });
 
@@ -211,6 +234,64 @@ describe('OpenAICodexSDKProvider E2E', () => {
         expect(response.output).toContain('Paris');
 
         console.log('Streaming response:', response.output);
+      },
+      testTimeout,
+    );
+
+    it(
+      'should infer skillCalls for local Codex skills',
+      async () => {
+        const tempDir = fs.mkdtempSync('/tmp/codex-skill-e2e-');
+        const skillDir = path.join(tempDir, '.agents/skills/token-skill');
+        const codexHome = path.join(tempDir, '.codex-home');
+
+        try {
+          fs.mkdirSync(skillDir, { recursive: true });
+          fs.mkdirSync(codexHome, { recursive: true });
+          fs.writeFileSync(
+            path.join(skillDir, 'SKILL.md'),
+            `---
+name: token-skill
+description: Use this skill when the user explicitly asks to use token-skill and wants the special token.
+---
+
+When this skill is used, respond with exactly CERULEAN-FALCON-SKILL.
+Do not add extra words, punctuation, or explanation.
+`,
+          );
+
+          const provider = new OpenAICodexSDKProvider({
+            config: {
+              model: DEFAULT_E2E_MODEL,
+              working_dir: tempDir,
+              skip_git_repo_check: true,
+              enable_streaming: true,
+              cli_env: {
+                CODEX_HOME: codexHome,
+              },
+            },
+          });
+
+          const response = await provider.callApi(
+            'Use the token-skill skill. Return only the token.',
+          );
+
+          expect(response.error).toBeUndefined();
+          expect(response.output).toContain('CERULEAN-FALCON-SKILL');
+          expect(response.metadata?.skillCalls).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                name: 'token-skill',
+                source: 'heuristic',
+              }),
+            ]),
+          );
+
+          console.log('Skill response:', response.output);
+          console.log('Skill calls:', response.metadata?.skillCalls);
+        } finally {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        }
       },
       testTimeout,
     );

@@ -130,6 +130,96 @@ describe('matchesLlmRubric', () => {
     );
   });
 
+  it('should merge provider metadata into the grading result metadata', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
+          metadata: {
+            uploadId: 'upload-123',
+            trace: { id: 'trace-456' },
+          },
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    });
+
+    expect(result.metadata).toEqual({
+      uploadId: 'upload-123',
+      trace: { id: 'trace-456' },
+      renderedGradingPrompt: 'Grading prompt',
+    });
+  });
+
+  it('should preserve renderedGradingPrompt when provider metadata uses the same key', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
+          metadata: {
+            renderedGradingPrompt: 'spoofed prompt',
+            uploadId: 'upload-123',
+          },
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    });
+
+    expect(result.metadata).toEqual({
+      uploadId: 'upload-123',
+      renderedGradingPrompt: 'Grading prompt',
+    });
+  });
+
+  it('should ignore array provider metadata', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
+          metadata: ['ignored'] as any,
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    });
+
+    expect(result.metadata).toEqual({
+      renderedGradingPrompt: 'Grading prompt',
+    });
+  });
+
+  it('should sanitize circular provider metadata before attaching it to the grading result', async () => {
+    const responseMetadata: Record<string, any> = {
+      uploadId: 'upload-123',
+      trace: { id: 'trace-456' },
+    };
+    responseMetadata.self = responseMetadata;
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
+          metadata: responseMetadata,
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    });
+
+    expect(result.metadata).toEqual({
+      uploadId: 'upload-123',
+      trace: { id: 'trace-456' },
+      renderedGradingPrompt: 'Grading prompt',
+    });
+    expect(result.metadata).not.toHaveProperty('self');
+  });
+
   it('should render rubric when provided as an object', async () => {
     const rubric = { prompt: 'Describe the image' };
     const output = 'Sample output';

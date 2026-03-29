@@ -1,9 +1,11 @@
 import path from 'path';
 
+import { Agent, handoff, tool } from '@openai/agents';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import type { Agent } from '@openai/agents';
+import { resolveModelSettings } from './agents-model-settings';
+import type { Handoff, InputGuardrail, Tool as OpenAiTool, OutputGuardrail } from '@openai/agents';
 
 import type { AgentDefinition, HandoffDefinition, ToolDefinition } from './agents-types';
 
@@ -47,8 +49,8 @@ export async function loadAgentDefinition(
  * Load tools from file path or return inline definitions
  */
 export async function loadTools(
-  toolsConfig?: string | ToolDefinition[],
-): Promise<ToolDefinition[] | undefined> {
+  toolsConfig?: string | Array<OpenAiTool<any> | ToolDefinition>,
+): Promise<OpenAiTool<any>[] | undefined> {
   if (!toolsConfig) {
     return undefined;
   }
@@ -59,10 +61,9 @@ export async function loadTools(
     return await loadToolsFromFile(toolsConfig);
   }
 
-  // If it's an array, return as is
   if (Array.isArray(toolsConfig)) {
     logger.debug('[AgentsLoader] Using inline tool definitions');
-    return toolsConfig;
+    return normalizeTools(toolsConfig);
   }
 
   logger.debug('[AgentsLoader] Invalid tools configuration', {
@@ -76,8 +77,8 @@ export async function loadTools(
  * Load handoffs from file path or return inline definitions
  */
 export async function loadHandoffs(
-  handoffsConfig?: string | HandoffDefinition[],
-): Promise<HandoffDefinition[] | undefined> {
+  handoffsConfig?: string | Array<Agent<any, any> | Handoff<any, any> | HandoffDefinition>,
+): Promise<Array<Agent<any, any> | Handoff<any, any>> | undefined> {
   if (!handoffsConfig) {
     return undefined;
   }
@@ -88,10 +89,9 @@ export async function loadHandoffs(
     return await loadHandoffsFromFile(handoffsConfig);
   }
 
-  // If it's an array, return as is
   if (Array.isArray(handoffsConfig)) {
     logger.debug('[AgentsLoader] Using inline handoff definitions');
-    return handoffsConfig;
+    return normalizeHandoffs(handoffsConfig);
   }
 
   logger.debug('[AgentsLoader] Invalid handoffs configuration', {
@@ -99,6 +99,60 @@ export async function loadHandoffs(
     isArray: Array.isArray(handoffsConfig),
   });
   throw new Error('Invalid handoffs configuration: expected file:// URL or array');
+}
+
+/**
+ * Load input guardrails from file path or return inline definitions
+ */
+export async function loadInputGuardrails(
+  guardrailsConfig?: string | InputGuardrail[],
+): Promise<InputGuardrail[] | undefined> {
+  if (!guardrailsConfig) {
+    return undefined;
+  }
+
+  if (typeof guardrailsConfig === 'string' && guardrailsConfig.startsWith('file://')) {
+    logger.debug('[AgentsLoader] Loading input guardrails from file', { path: guardrailsConfig });
+    return await loadArrayFromFile<InputGuardrail>(guardrailsConfig, 'input guardrails');
+  }
+
+  if (Array.isArray(guardrailsConfig)) {
+    logger.debug('[AgentsLoader] Using inline input guardrails');
+    return guardrailsConfig;
+  }
+
+  logger.debug('[AgentsLoader] Invalid input guardrails configuration', {
+    type: typeof guardrailsConfig,
+    isArray: Array.isArray(guardrailsConfig),
+  });
+  throw new Error('Invalid input guardrails configuration: expected file:// URL or array');
+}
+
+/**
+ * Load output guardrails from file path or return inline definitions
+ */
+export async function loadOutputGuardrails(
+  guardrailsConfig?: string | OutputGuardrail<any>[],
+): Promise<OutputGuardrail<any>[] | undefined> {
+  if (!guardrailsConfig) {
+    return undefined;
+  }
+
+  if (typeof guardrailsConfig === 'string' && guardrailsConfig.startsWith('file://')) {
+    logger.debug('[AgentsLoader] Loading output guardrails from file', { path: guardrailsConfig });
+    return await loadArrayFromFile<OutputGuardrail<any>>(guardrailsConfig, 'output guardrails');
+  }
+
+  if (Array.isArray(guardrailsConfig)) {
+    logger.debug('[AgentsLoader] Using inline output guardrails');
+    return guardrailsConfig;
+  }
+
+  logger.debug('[AgentsLoader] Invalid output guardrails configuration', {
+    type: typeof guardrailsConfig,
+    isArray: Array.isArray(guardrailsConfig),
+  });
+  throw new Error('Invalid output guardrails configuration: expected file:// URL or array');
 }
 
 /**
@@ -126,48 +180,22 @@ async function loadAgentFromFile(filePath: string): Promise<Agent<any, any>> {
 /**
  * Load tools from file
  */
-async function loadToolsFromFile(filePath: string): Promise<ToolDefinition[]> {
-  const resolvedPath = resolveFilePath(filePath);
-  logger.debug('[AgentsLoader] Loading tools from resolved path', { path: resolvedPath });
-
-  try {
-    const module = await importModule(resolvedPath);
-    const tools = module.default || module;
-
-    if (!Array.isArray(tools)) {
-      throw new Error(`File ${resolvedPath} does not export an array of tools`);
-    }
-
-    return tools;
-  } catch (error) {
-    logger.error('[AgentsLoader] Failed to load tools from file', { path: resolvedPath, error });
-    throw new Error(`Failed to load tools from ${resolvedPath}: ${error}`);
-  }
+async function loadToolsFromFile(filePath: string): Promise<OpenAiTool<any>[]> {
+  const tools = await loadArrayFromFile<OpenAiTool<any> | ToolDefinition>(filePath, 'tools');
+  return (await normalizeTools(tools)) ?? [];
 }
 
 /**
  * Load handoffs from file
  */
-async function loadHandoffsFromFile(filePath: string): Promise<HandoffDefinition[]> {
-  const resolvedPath = resolveFilePath(filePath);
-  logger.debug('[AgentsLoader] Loading handoffs from resolved path', { path: resolvedPath });
-
-  try {
-    const module = await importModule(resolvedPath);
-    const handoffs = module.default || module;
-
-    if (!Array.isArray(handoffs)) {
-      throw new Error(`File ${resolvedPath} does not export an array of handoffs`);
-    }
-
-    return handoffs;
-  } catch (error) {
-    logger.error('[AgentsLoader] Failed to load handoffs from file', {
-      path: resolvedPath,
-      error,
-    });
-    throw new Error(`Failed to load handoffs from ${resolvedPath}: ${error}`);
-  }
+async function loadHandoffsFromFile(
+  filePath: string,
+): Promise<Array<Agent<any, any> | Handoff<any, any>>> {
+  const handoffs = await loadArrayFromFile<Agent<any, any> | Handoff<any, any> | HandoffDefinition>(
+    filePath,
+    'handoffs',
+  );
+  return (await normalizeHandoffs(handoffs)) ?? [];
 }
 
 /**
@@ -175,23 +203,24 @@ async function loadHandoffsFromFile(filePath: string): Promise<HandoffDefinition
  */
 async function createAgentFromDefinition(definition: AgentDefinition): Promise<Agent<any, any>> {
   try {
-    // Dynamically import Agent class
-    const { Agent } = await import('@openai/agents');
+    const tools = await normalizeTools(definition.tools);
+    const handoffs = await normalizeHandoffs(definition.handoffs);
 
-    // Create agent with definition
-    // Note: tools and handoffs should be actual Tool/Handoff objects, not definitions
-    // They should be included in the definition if needed
     const agent = new Agent({
       name: definition.name,
       instructions: definition.instructions,
+      prompt: definition.prompt,
       model: definition.model,
+      modelSettings: resolveModelSettings(definition.modelSettings),
       handoffDescription: definition.handoffDescription,
-      // @ts-ignore - outputType might be various types
       outputType: definition.outputType,
-      // @ts-ignore - tools and handoffs will be added separately if needed
-      tools: definition.tools,
-      // @ts-ignore
-      handoffs: definition.handoffs,
+      tools,
+      handoffs,
+      inputGuardrails: definition.inputGuardrails,
+      outputGuardrails: definition.outputGuardrails,
+      mcpServers: definition.mcpServers,
+      toolUseBehavior: definition.toolUseBehavior,
+      resetToolChoice: definition.resetToolChoice,
     });
 
     return agent;
@@ -211,14 +240,99 @@ async function createAgentFromDefinition(definition: AgentDefinition): Promise<A
  * Check if a value is an Agent instance
  */
 function isAgentInstance(value: any): value is Agent<any, any> {
-  // Check if it has the Agent class properties/methods
+  return value instanceof Agent;
+}
+
+function isToolInstance(value: unknown): value is OpenAiTool<any> {
   return (
-    value &&
+    !!value &&
     typeof value === 'object' &&
-    'name' in value &&
-    'instructions' in value &&
-    typeof value.name === 'string'
+    'type' in value &&
+    typeof (value as OpenAiTool<any>).type === 'string'
   );
+}
+
+function isHandoffInstance(value: unknown): value is Handoff<any, any> {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'agent' in value &&
+    'getHandoffAsFunctionTool' in value &&
+    typeof (value as Handoff<any, any>).getHandoffAsFunctionTool === 'function'
+  );
+}
+
+async function normalizeTools(
+  definitions?: Array<OpenAiTool<any> | ToolDefinition>,
+): Promise<OpenAiTool<any>[] | undefined> {
+  if (!definitions?.length) {
+    return undefined;
+  }
+
+  return definitions.map((definition) => {
+    if (isToolInstance(definition)) {
+      return definition;
+    }
+
+    return tool({
+      name: definition.name,
+      description: definition.description,
+      parameters: definition.parameters,
+      strict: definition.strict ?? true,
+      deferLoading: definition.deferLoading,
+      execute:
+        typeof definition.execute === 'function'
+          ? definition.execute
+          : async () => definition.execute,
+    });
+  });
+}
+
+async function normalizeHandoffs(
+  definitions?: Array<Agent<any, any> | Handoff<any, any> | HandoffDefinition>,
+): Promise<Array<Agent<any, any> | Handoff<any, any>> | undefined> {
+  if (!definitions?.length) {
+    return undefined;
+  }
+
+  return Promise.all(
+    definitions.map(async (definition) => {
+      if (isAgentInstance(definition) || isHandoffInstance(definition)) {
+        return definition;
+      }
+
+      const agent = await loadAgentDefinition(definition.agent);
+      if (!definition.description) {
+        return agent;
+      }
+
+      return handoff(agent, {
+        toolDescriptionOverride: definition.description,
+      });
+    }),
+  );
+}
+
+async function loadArrayFromFile<T>(filePath: string, label: string): Promise<T[]> {
+  const resolvedPath = resolveFilePath(filePath);
+  logger.debug(`[AgentsLoader] Loading ${label} from resolved path`, { path: resolvedPath });
+
+  try {
+    const module = await importModule(resolvedPath);
+    const exported = module.default || module;
+
+    if (!Array.isArray(exported)) {
+      throw new Error(`File ${resolvedPath} does not export an array of ${label}`);
+    }
+
+    return exported as T[];
+  } catch (error) {
+    logger.error(`[AgentsLoader] Failed to load ${label} from file`, {
+      path: resolvedPath,
+      error,
+    });
+    throw new Error(`Failed to load ${label} from ${resolvedPath}: ${error}`);
+  }
 }
 
 /**

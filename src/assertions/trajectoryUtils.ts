@@ -349,7 +349,7 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
 
       return {
         aliases: [...aliases],
-        ...(args !== undefined ? { args } : {}),
+        ...(args === undefined ? {} : { args }),
         attributes: span.attributes || {},
         endTime: span.endTime,
         name,
@@ -463,7 +463,7 @@ export function summarizeTrajectoryForJudge(trace: TraceData): string {
     index: index + 1,
     type: step.type,
     name: step.name,
-    ...(step.spanName !== step.name ? { spanName: step.spanName } : {}),
+    ...(step.spanName === step.name ? {} : { spanName: step.spanName }),
     ...(getTrajectoryStepStatus(step) ? { status: getTrajectoryStepStatus(step) } : {}),
   }));
   const compactedSteps = compactJudgeTrajectorySteps(rawSteps);

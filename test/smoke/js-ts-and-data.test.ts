@@ -144,6 +144,42 @@ describe('JavaScript/TypeScript Provider Smoke Tests', () => {
       expect(parsed.results.results[0].success).toBe(true);
       expect(parsed.results.results[0].response.output).toContain('ESM Echo:');
     });
+
+    it('3.2.5 - skill-used assertion passes with local ESM provider metadata', () => {
+      const configPath = path.join(CONFIGS_DIR, 'skill-used-provider-esm.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'skill-used-provider-esm-output.json');
+
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: CONFIGS_DIR,
+      });
+
+      expect(exitCode).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      const result = parsed.results.results[0];
+
+      expect(result.success).toBe(true);
+      expect(result.response.output).toContain('Skill smoke:');
+      expect(result.response.metadata.skillCalls).toEqual([
+        {
+          name: 'smoke-skill',
+          source: 'tool',
+        },
+      ]);
+      expect(result.gradingResult.componentResults).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            pass: true,
+            assertion: expect.objectContaining({ type: 'skill-used' }),
+          }),
+          expect.objectContaining({
+            pass: true,
+            assertion: expect.objectContaining({ type: 'not-skill-used' }),
+          }),
+        ]),
+      );
+    });
   });
 
   describe('3.3 TypeScript Providers', () => {

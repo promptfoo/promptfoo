@@ -133,7 +133,7 @@ export default class GoatProvider implements ApiProvider {
       throw new Error(`GOAT strategy requires remote grading to be enabled`);
     }
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
-    let maxTurns = options.maxTurns || 5;
+    let maxTurns = options.maxTurns ?? 5;
     // Cap turns for unauthenticated users
     if (!isLoggedIntoCloud()) {
       maxTurns = Math.min(maxTurns, 10);
@@ -676,17 +676,7 @@ export default class GoatProvider implements ApiProvider {
             | undefined;
 
           // First try to get exfil data from provider response metadata (Playwright provider)
-          if (finalResponse.metadata?.wasExfiltrated !== undefined) {
-            logger.debug('[GOAT] Using exfil data from provider response metadata');
-            gradingContext = {
-              ...(tracingOptions.includeInGrading
-                ? { traceContext: targetResponse.traceContext, traceSummary: gradingTraceSummary }
-                : {}),
-              wasExfiltrated: Boolean(finalResponse.metadata.wasExfiltrated),
-              exfilCount: Number(finalResponse.metadata.exfilCount) || 0,
-              exfilRecords: [],
-            };
-          } else {
+          if (finalResponse.metadata?.wasExfiltrated === undefined) {
             // Try to fetch exfil tracking from server API via webPageUuid
             const webPageUuid = test.metadata?.webPageUuid as string | undefined;
             if (webPageUuid) {
@@ -711,6 +701,16 @@ export default class GoatProvider implements ApiProvider {
                 };
               }
             }
+          } else {
+            logger.debug('[GOAT] Using exfil data from provider response metadata');
+            gradingContext = {
+              ...(tracingOptions.includeInGrading
+                ? { traceContext: targetResponse.traceContext, traceSummary: gradingTraceSummary }
+                : {}),
+              wasExfiltrated: Boolean(finalResponse.metadata.wasExfiltrated),
+              exfilCount: Number(finalResponse.metadata.exfilCount) || 0,
+              exfilRecords: [],
+            };
           }
 
           // Fallback to just tracing context if no exfil data found

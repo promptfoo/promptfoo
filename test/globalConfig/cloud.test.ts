@@ -287,10 +287,10 @@ describe('CloudConfig', () => {
     const originalEnv = process.env.PROMPTFOO_API_KEY;
 
     afterEach(() => {
-      if (originalEnv !== undefined) {
-        process.env.PROMPTFOO_API_KEY = originalEnv;
-      } else {
+      if (originalEnv === undefined) {
         delete process.env.PROMPTFOO_API_KEY;
+      } else {
+        process.env.PROMPTFOO_API_KEY = originalEnv;
       }
     });
 
@@ -337,10 +337,10 @@ describe('CloudConfig', () => {
     const originalEnv = process.env.PROMPTFOO_API_KEY;
 
     afterEach(() => {
-      if (originalEnv !== undefined) {
-        process.env.PROMPTFOO_API_KEY = originalEnv;
-      } else {
+      if (originalEnv === undefined) {
         delete process.env.PROMPTFOO_API_KEY;
+      } else {
+        process.env.PROMPTFOO_API_KEY = originalEnv;
       }
     });
 
@@ -377,10 +377,10 @@ describe('CloudConfig', () => {
     const originalEnv = process.env.PROMPTFOO_CLOUD_API_URL;
 
     afterEach(() => {
-      if (originalEnv !== undefined) {
-        process.env.PROMPTFOO_CLOUD_API_URL = originalEnv;
-      } else {
+      if (originalEnv === undefined) {
         delete process.env.PROMPTFOO_CLOUD_API_URL;
+      } else {
+        process.env.PROMPTFOO_CLOUD_API_URL = originalEnv;
       }
     });
 

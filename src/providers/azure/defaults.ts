@@ -55,6 +55,38 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: { input: 5 / 1000000, output: 20 / 1000000 },
   },
   {
+    id: 'gpt-5.4',
+    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+  },
+  {
+    id: 'gpt-5.4-2026-03-05',
+    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+  },
+  {
+    id: 'gpt-5.4-pro',
+    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+  },
+  {
+    id: 'gpt-5.4-pro-2026-03-05',
+    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+  },
+  {
+    id: 'gpt-5.4-mini',
+    cost: { input: 0.4 / 1000000, output: 1.6 / 1000000 },
+  },
+  {
+    id: 'gpt-5.4-mini-2026-03-17',
+    cost: { input: 0.4 / 1000000, output: 1.6 / 1000000 },
+  },
+  {
+    id: 'gpt-5.4-nano',
+    cost: { input: 0.1 / 1000000, output: 0.4 / 1000000 },
+  },
+  {
+    id: 'gpt-5.4-nano-2026-03-17',
+    cost: { input: 0.1 / 1000000, output: 0.4 / 1000000 },
+  },
+  {
     id: 'gpt-5-mini',
     cost: { input: 0.4 / 1000000, output: 1.6 / 1000000 },
   },
