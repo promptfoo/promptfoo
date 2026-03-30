@@ -110,6 +110,16 @@ vi.mock('../../src/matchers', async () => {
 const Grader = new TestGrader();
 
 describe('runAssertion', () => {
+  beforeEach(() => {
+    vi.mocked(fs.readFileSync).mockReset();
+    vi.mocked(fs.existsSync).mockReset();
+    vi.mocked(fs.writeFileSync).mockReset();
+    vi.mocked(fs.mkdirSync).mockReset();
+    vi.mocked(fs.promises.readFile).mockReset();
+    vi.mocked(path.resolve).mockReset();
+    vi.mocked(path.extname).mockReset();
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
   });
@@ -517,6 +527,67 @@ describe('runAssertion', () => {
     });
   });
 
+  it('should fail gracefully when the is-json assertion has malformed inline schema yaml', async () => {
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'is-json',
+        value: 'type: object\nproperties:\n  foo: [',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{"foo":"bar"}' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('Invalid JSON schema:'),
+    });
+  });
+
+  it('should fail gracefully when the is-json assertion references an invalid schema object', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ type: null }));
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'is-json',
+        value: 'file:///schema.json',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{"foo":"bar"}' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('Invalid JSON schema:'),
+    });
+  });
+
+  it('should fail when the is-json assertion uses an inline boolean false schema', async () => {
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'is-json',
+        value: false,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{"foo":"bar"}' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('JSON does not conform to the provided schema'),
+    });
+  });
+
   it('should fail when the not-is-json assertion finds matching schema', async () => {
     const output = '{"latitude": 80.123, "longitude": -1}';
 
@@ -715,6 +786,32 @@ describe('runAssertion', () => {
     expect(result).toMatchObject({
       pass: false,
       reason: 'JSON does not conform to the provided schema. Errors: data/latitude must be number',
+    });
+  });
+
+  it('should fail when the is-json assertion uses an external boolean false schema', async () => {
+    const assertion: Assertion = {
+      type: 'is-json',
+      value: 'file:///schema.json',
+    };
+
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue('false');
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{"foo":"bar"}' },
+    });
+
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.json', 'utf8');
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('JSON does not conform to the provided schema'),
     });
   });
 
@@ -1195,6 +1292,93 @@ describe('runAssertion', () => {
     expect(result).toMatchObject({
       pass: false,
       reason: 'JSON does not conform to the provided schema. Errors: data/latitude must be number',
+    });
+  });
+
+  it('should fail gracefully when the contains-json assertion has malformed inline schema yaml', async () => {
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'contains-json',
+        value: 'type: object\nproperties:\n  foo: [',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'prefix {"foo":"bar"} suffix' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('Invalid JSON schema:'),
+    });
+  });
+
+  it('should fail gracefully when the contains-json assertion references an invalid schema object', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ type: null }));
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'contains-json',
+        value: 'file:///schema.json',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'prefix {"foo":"bar"} suffix' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('Invalid JSON schema:'),
+    });
+  });
+
+  it('should fail when the contains-json assertion uses an inline boolean false schema', async () => {
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'contains-json',
+        value: false,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'prefix {"foo":"bar"} suffix' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('JSON does not conform to the provided schema'),
+    });
+  });
+
+  it('should fail when the contains-json assertion uses an external boolean false schema', async () => {
+    const assertion: Assertion = {
+      type: 'contains-json',
+      value: 'file:///schema.json',
+    };
+
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue('false');
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'prefix {"foo":"bar"} suffix' },
+    });
+
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.json', 'utf8');
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('JSON does not conform to the provided schema'),
     });
   });
 
