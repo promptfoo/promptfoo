@@ -44,7 +44,7 @@ providers:
 
 - Latest flagship model with enhanced reasoning and coding
 - 204,800 token context window, up to 192K output tokens
-- Input: $0.03/1M (cache hit), $0.3/1M (cache miss)
+- Input: $0.06/1M (cache hit), $0.3/1M (cache miss)
 - Output: $1.2/1M
 
 ### MiniMax-M2.7-highspeed

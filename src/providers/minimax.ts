@@ -19,7 +19,7 @@ export const MINIMAX_CHAT_MODELS = [
     cost: {
       input: 0.3 / 1e6,
       output: 1.2 / 1e6,
-      cache_read: 0.03 / 1e6,
+      cache_read: 0.06 / 1e6,
     },
   },
   {

@@ -22,7 +22,7 @@ describe('calculateMiniMaxCost', () => {
 
   it('should calculate cost with cache hits for MiniMax-M2.7', () => {
     const cost = calculateMiniMaxCost('MiniMax-M2.7', {}, 1000000, 1000000, 500000);
-    expect(cost).toBeCloseTo(1.365); // (0.3 * 0.5 + 0.03 * 0.5 + 1.2)
+    expect(cost).toBeCloseTo(1.38); // (0.3 * 0.5 + 0.06 * 0.5 + 1.2)
   });
 
   it('should calculate cost for MiniMax-M2.7-highspeed', () => {
@@ -78,7 +78,7 @@ describe('calculateMiniMaxCost', () => {
 
   it('should calculate cost with 100% cache hits for M2.7', () => {
     const cost = calculateMiniMaxCost('MiniMax-M2.7', {}, 1000000, 1000000, 1000000);
-    expect(cost).toBeCloseTo(1.23); // (0.03 + 1.2) - all input tokens are cached
+    expect(cost).toBeCloseTo(1.26); // (0.06 + 1.2) - all input tokens are cached
   });
 });
 
@@ -88,7 +88,7 @@ describe('MINIMAX_CHAT_MODELS', () => {
     expect(model).toBeDefined();
     expect(model?.cost.input).toBeCloseTo(0.3 / 1e6);
     expect(model?.cost.output).toBeCloseTo(1.2 / 1e6);
-    expect(model?.cost.cache_read).toBeCloseTo(0.03 / 1e6);
+    expect(model?.cost.cache_read).toBeCloseTo(0.06 / 1e6);
   });
 
   it('should have correct pricing for MiniMax-M2.7-highspeed', () => {
