@@ -82,7 +82,7 @@ Before running `vite` or `vitest` in an automated shell, load the repo's pinned 
 source ~/.nvm/nvm.sh && nvm use
 ```
 
-`.nvmrc` currently pins `24.14.1`, and the repo requires `^20.20.0 || >=22.22.0`. If Vite or Vitest fails during startup with `node:util.styleText`, the shell is on an older Node version.
+The `.nvmrc` file pins the Node version; the repo requires `^20.20.0 || >=22.22.0`. If Vite or Vitest fails during startup with `node:util.styleText`, the shell is on an older Node version.
 
 ```bash
 npm run dev:app    # From root, runs on localhost:5173
