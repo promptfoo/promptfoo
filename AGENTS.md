@@ -66,17 +66,6 @@ npm run jsonSchema:generate  # Generate JSON schema for config
 npm run citation:generate    # Generate citation file
 ```
 
-## Environment Sanity Check
-
-Before running `npm`, `vite`, or `vitest` commands, load the repo's pinned Node version:
-
-```bash
-source ~/.nvm/nvm.sh && nvm use
-node -v  # should match the version pinned in .nvmrc
-```
-
-This repo requires `^20.20.0 || >=22.22.0`. Older Node versions, including `v20.9.0`, can fail during Vite/Vitest startup with `node:util.styleText` errors before tests even begin.
-
 ## Testing in Development
 
 When testing changes, use the local build:
@@ -249,7 +238,7 @@ See `test/AGENTS.md` for testing patterns.
 ## Project Conventions
 
 - **ESM modules** (type: "module" in package.json)
-- **Node.js ^20.20.0 || >=22.22.0** - Before `npm`/`vite`/`vitest` commands, run `source ~/.nvm/nvm.sh && nvm use` to align with `.nvmrc`; `.npmrc` sets `engine-strict=true`
+- **Node.js ^20.20.0 || >=22.22.0** - Before `npm`/`vite`/`vitest`, run `source ~/.nvm/nvm.sh && nvm use` so `node -v` matches `.nvmrc`; `.npmrc` sets `engine-strict=true`
 - **Alternative package managers** (pnpm, yarn) are supported
 - **File structure:** core logic in `src/`, tests in `test/`
 - **Examples** belong in `examples/` with clear README.md

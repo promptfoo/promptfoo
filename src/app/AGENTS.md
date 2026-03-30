@@ -76,13 +76,7 @@ src/app/src/
 
 ## Development
 
-Before running `vite` or `vitest` in an automated shell, load the repo's pinned Node version:
-
-```bash
-source ~/.nvm/nvm.sh && nvm use
-```
-
-The `.nvmrc` file pins the Node version; the repo requires `^20.20.0 || >=22.22.0`. If Vite or Vitest fails during startup with `node:util.styleText`, the shell is on an older Node version.
+If `vite` or `vitest` fails to start, run `source ~/.nvm/nvm.sh && nvm use` so `node -v` matches `.nvmrc`.
 
 ```bash
 npm run dev:app    # From root, runs on localhost:5173
