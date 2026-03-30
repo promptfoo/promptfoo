@@ -110,4 +110,37 @@ describe('useStrategyTestGeneration', () => {
       },
     );
   });
+
+  it('uses an empty config for string plugin entries', async () => {
+    vi.mocked(useRedTeamConfig).mockReturnValue({
+      config: {
+        plugins: ['policy'],
+        strategies: [],
+      },
+    } as ReturnType<typeof useRedTeamConfig>);
+
+    const { result } = renderHook(() =>
+      useStrategyTestGeneration({
+        strategyId: 'jailbreak:meta',
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleTestCaseGeneration();
+    });
+
+    expect(result.current.testGenerationPlugin).toBe('policy');
+    expect(generateTestCase).toHaveBeenCalledWith(
+      {
+        id: 'policy',
+        config: {},
+        isStatic: true,
+      },
+      {
+        id: 'jailbreak:meta',
+        config: {},
+        isStatic: false,
+      },
+    );
+  });
 });
