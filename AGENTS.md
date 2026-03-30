@@ -120,6 +120,20 @@ Review the output file for `success`, `score`, and `error` fields.
 
 ## Debugging & Troubleshooting
 
+**Before running tests or review checks, align Node with the repo version first:**
+
+```bash
+nvm use
+```
+
+If database-backed tests fail with a `better-sqlite3` ABI or `NODE_MODULE_VERSION` mismatch after switching Node versions, rebuild the native module for the active Node version before treating the test run as blocked:
+
+```bash
+npm rebuild better-sqlite3
+```
+
+This is an environment repair step, not a product bug. Agents should try `nvm use` first and `npm rebuild better-sqlite3` second before concluding that review-time tests are blocked by the local setup.
+
 **Verbose logging:**
 
 ```bash
@@ -238,7 +252,7 @@ See `test/AGENTS.md` for testing patterns.
 ## Project Conventions
 
 - **ESM modules** (type: "module" in package.json)
-- **Node.js ^20.20.0 || >=22.22.0** - Before `npm`/`vite`/`vitest`, run `source ~/.nvm/nvm.sh && nvm use` so `node -v` matches `.nvmrc`; `.npmrc` sets `engine-strict=true`
+- **Node.js ^20.20.0 || >=22.22.0** - Before `npm`/`vite`/`vitest`, run `source ~/.nvm/nvm.sh && nvm use` so `node -v` matches `.nvmrc`; if native modules still mismatch before tests or review checks, run `npm rebuild better-sqlite3`. `.npmrc` sets `engine-strict=true`
 - **Alternative package managers** (pnpm, yarn) are supported
 - **File structure:** core logic in `src/`, tests in `test/`
 - **Examples** belong in `examples/` with clear README.md
