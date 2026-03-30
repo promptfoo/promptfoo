@@ -47,7 +47,8 @@ npm run f                  # Format only changed files
 npm run test:watch         # Run tests in watch mode
 npm run test:integration   # Run integration tests
 npm run test:redteam:integration  # Run red team integration tests
-npx vitest path/to/test    # Run a specific test file
+npm run test:app -- src/pages/path/to/test.test.tsx --run  # Run a specific frontend test file from repo root
+npx vitest path/to/test    # Run a specific backend test file
 
 # Development
 npm run dev                # Start both server and app
@@ -64,6 +65,19 @@ npm run db:studio          # Open Drizzle studio
 npm run jsonSchema:generate  # Generate JSON schema for config
 npm run citation:generate    # Generate citation file
 ```
+
+## Environment Sanity Check
+
+Before running `npm`, `vite`, or `vitest` commands, load the repo's pinned Node version:
+
+```bash
+source ~/.nvm/nvm.sh && nvm use
+node -v  # should match .nvmrc (currently 24.14.1)
+```
+
+This repo requires `^20.20.0 || >=22.22.0`. Older Node versions, including `v20.9.0`, can fail during Vite/Vitest startup with `node:util.styleText` errors before tests even begin.
+
+When reading or writing automation or memory files, do not assume `CODEX_HOME` is exported. Resolve agent-home paths with `${CODEX_HOME:-$HOME/.codex}`.
 
 ## Testing in Development
 
@@ -237,7 +251,7 @@ See `test/AGENTS.md` for testing patterns.
 ## Project Conventions
 
 - **ESM modules** (type: "module" in package.json)
-- **Node.js ^20.20.0 || >=22.22.0** - Use `nvm use` to align with `.nvmrc`; `.npmrc` sets `engine-strict=true`
+- **Node.js ^20.20.0 || >=22.22.0** - Before `npm`/`vite`/`vitest` commands, run `source ~/.nvm/nvm.sh && nvm use` to align with `.nvmrc`; `.npmrc` sets `engine-strict=true`
 - **Alternative package managers** (pnpm, yarn) are supported
 - **File structure:** core logic in `src/`, tests in `test/`
 - **Examples** belong in `examples/` with clear README.md

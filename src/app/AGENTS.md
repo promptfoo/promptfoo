@@ -76,6 +76,14 @@ src/app/src/
 
 ## Development
 
+Before running `vite` or `vitest` in an automated shell, load the repo's pinned Node version:
+
+```bash
+source ~/.nvm/nvm.sh && nvm use
+```
+
+`.nvmrc` currently pins `24.14.1`, and the repo requires `^20.20.0 || >=22.22.0`. If Vite or Vitest fails during startup with `node:util.styleText`, the shell is on an older Node version.
+
 ```bash
 npm run dev:app    # From root, runs on localhost:5173
 ```
@@ -85,6 +93,7 @@ npm run dev:app    # From root, runs on localhost:5173
 ```bash
 npm run test       # From src/app/
 npm run test:app   # From project root
+npm run test:app -- src/pages/path/to/test.test.tsx --run   # Single frontend test from repo root
 ```
 
 See `src/app/src/hooks/usePageMeta.test.ts` for patterns. Use `vi.fn()` for mocks, `vi.mock()` for modules.
