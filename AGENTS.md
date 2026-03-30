@@ -47,7 +47,7 @@ npm run f                  # Format only changed files
 npm run test:watch         # Run tests in watch mode
 npm run test:integration   # Run integration tests
 npm run test:redteam:integration  # Run red team integration tests
-npm run test:app -- src/pages/path/to/test.test.tsx --run  # Run a specific frontend test file from repo root
+npm run test:app -- -- src/pages/path/to/test.test.tsx --run  # Run a specific frontend test file from repo root
 npx vitest path/to/test    # Run a specific backend test file
 
 # Development
@@ -72,7 +72,7 @@ Before running `npm`, `vite`, or `vitest` commands, load the repo's pinned Node 
 
 ```bash
 source ~/.nvm/nvm.sh && nvm use
-node -v  # should match .nvmrc (currently 24.14.1)
+node -v  # should match the version pinned in .nvmrc
 ```
 
 This repo requires `^20.20.0 || >=22.22.0`. Older Node versions, including `v20.9.0`, can fail during Vite/Vitest startup with `node:util.styleText` errors before tests even begin.

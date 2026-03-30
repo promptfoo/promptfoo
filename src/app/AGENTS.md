@@ -93,7 +93,7 @@ npm run dev:app    # From root, runs on localhost:5173
 ```bash
 npm run test       # From src/app/
 npm run test:app   # From project root
-npm run test:app -- src/pages/path/to/test.test.tsx --run   # Single frontend test from repo root
+npm run test:app -- -- src/pages/path/to/test.test.tsx --run   # Single frontend test from repo root
 ```
 
 See `src/app/src/hooks/usePageMeta.test.ts` for patterns. Use `vi.fn()` for mocks, `vi.mock()` for modules.
