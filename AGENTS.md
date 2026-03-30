@@ -77,8 +77,6 @@ node -v  # should match the version pinned in .nvmrc
 
 This repo requires `^20.20.0 || >=22.22.0`. Older Node versions, including `v20.9.0`, can fail during Vite/Vitest startup with `node:util.styleText` errors before tests even begin.
 
-When reading or writing automation or memory files, do not assume `CODEX_HOME` is exported. Resolve agent-home paths with `${CODEX_HOME:-$HOME/.codex}`.
-
 ## Testing in Development
 
 When testing changes, use the local build:
