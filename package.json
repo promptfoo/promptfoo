@@ -148,7 +148,7 @@
     "@types/react": "19.2.14",
     "@types/semver": "^7.7.1",
     "@types/source-map-support": "^0.5.10",
-    "@types/supertest": "^6.0.3",
+    "@types/supertest": "^7.0.0",
     "@vitest/coverage-v8": "^4.1.0",
     "concurrently": "^9.2.1",
     "depcheck": "^1.4.7",
