@@ -83,6 +83,13 @@ import { type TransformContext, TransformInputType, transform } from './util/tra
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
 
+const CONVERSATION_TEMPLATE_VAR_REGEX =
+  /\{\{[\s\S]*?\b_conversation\b[\s\S]*?\}\}|\{%[\s\S]*?\b_conversation\b[\s\S]*?%\}/m;
+
+export function usesConversationTemplateVar(rawPrompt: string): boolean {
+  return CONVERSATION_TEMPLATE_VAR_REGEX.test(rawPrompt);
+}
+
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
 import type {
@@ -461,7 +468,7 @@ export async function runEval({
   const fileMetadata = collectFileMetadata(test.vars || vars);
 
   const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
-  const usesConversation = prompt.raw.includes('_conversation');
+  const usesConversation = usesConversationTemplateVar(prompt.raw);
   if (
     !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
     !test.options?.disableConversationVar &&
@@ -1607,7 +1614,7 @@ class Evaluator {
     // Determine run parameters
 
     if (concurrency > 1) {
-      const usesConversation = prompts.some((p) => p.raw.includes('_conversation'));
+      const usesConversation = prompts.some((p) => usesConversationTemplateVar(p.raw));
       const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
       if (usesConversation) {
         logger.info(
@@ -2435,7 +2442,7 @@ class Evaluator {
       this.evalRecord.results.length > 0 ? totalLatencyMs / this.evalRecord.results.length : 0;
 
     // Detect key feature usage patterns
-    const usesConversationVar = prompts.some((p) => p.raw.includes('_conversation'));
+    const usesConversationVar = prompts.some((p) => usesConversationTemplateVar(p.raw));
     const usesTransforms = Boolean(
       tests.some((t) => t.options?.transform || t.options?.postprocess) ||
         testSuite.providers.some((p) => Boolean(p.transform)),

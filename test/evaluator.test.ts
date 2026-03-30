@@ -11,6 +11,7 @@ import {
   generateVarCombinations,
   isAllowedPrompt,
   runEval,
+  usesConversationTemplateVar,
 } from '../src/evaluator';
 import { runExtensionHook } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
@@ -2230,6 +2231,60 @@ describe('evaluator', () => {
     expect(summary.stats.failures).toBe(0);
     expect(summary.results[0].response?.output).toBe('First run ');
     expect(summary.results[1].response?.output).toBe('Second run First run ');
+  });
+
+  it('forces concurrency to 1 when _conversation is used as a standalone template variable', async () => {
+    const loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'ok',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('{{ _conversation[0].output }} {{ input }}')],
+      tests: [{ vars: { input: 'test input' } }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 10 });
+
+    expect(loggerInfoSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Setting concurrency to 1 because the'),
+    );
+  });
+
+  it('does not force concurrency to 1 when _conversation appears only as a substring', async () => {
+    const loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'ok',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Summarize the pre_conversation_context for {{ input }}')],
+      tests: [{ vars: { input: 'test input' } }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 10 });
+
+    expect(loggerInfoSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('Setting concurrency to 1 because the'),
+    );
+  });
+
+  it('detects _conversation inside object-literal template expressions', () => {
+    const prompt = '{{ {"nested": {"value": 1}, "history": _conversation}["history"][0].output }}';
+
+    expect(usesConversationTemplateVar(prompt)).toBe(true);
   });
 
   it('evaluate with labeled and unlabeled providers and providerPromptMap', async () => {
