@@ -5,6 +5,45 @@ import type { ValidateFunction } from 'ajv';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
+function getJsonSchemaValidator({
+  renderedValue,
+  valueFromScript,
+  assertion,
+}: Pick<AssertionParams, 'renderedValue' | 'valueFromScript' | 'assertion'>):
+  | { validate: ValidateFunction }
+  | { failure: GradingResult } {
+  try {
+    if (typeof renderedValue === 'string') {
+      if (renderedValue.startsWith('file://')) {
+        const schema = valueFromScript;
+        invariant(
+          schema !== undefined && schema !== null,
+          `${assertion.type} references a file that does not export a JSON schema`,
+        );
+
+        return { validate: getAjv().compile(schema as object | boolean) };
+      }
+
+      return { validate: getAjv().compile(yaml.load(renderedValue) as object | boolean) };
+    }
+
+    if (typeof renderedValue === 'boolean' || typeof renderedValue === 'object') {
+      return { validate: getAjv().compile(renderedValue as object | boolean) };
+    }
+
+    throw new Error(`${assertion.type} assertion must have a string or object value`);
+  } catch (error) {
+    return {
+      failure: {
+        pass: false,
+        score: 0,
+        reason: `Invalid JSON schema: ${error instanceof Error ? error.message : String(error)}`,
+        assertion,
+      },
+    };
+  }
+}
+
 export function handleIsJson({
   outputString,
   renderedValue,
@@ -21,23 +60,13 @@ export function handleIsJson({
     pass = inverse;
   }
 
-  if (parsedJson !== undefined && renderedValue) {
-    let validate: ValidateFunction;
-    if (typeof renderedValue === 'string') {
-      if (renderedValue.startsWith('file://')) {
-        // Reference the JSON schema from external file
-        const schema = valueFromScript;
-        invariant(schema, 'is-json references a file that does not export a JSON schema');
-        validate = getAjv().compile(schema as object);
-      } else {
-        const scheme = yaml.load(renderedValue) as object;
-        validate = getAjv().compile(scheme);
-      }
-    } else if (typeof renderedValue === 'object') {
-      validate = getAjv().compile(renderedValue);
-    } else {
-      throw new Error('is-json assertion must have a string or object value');
+  if (parsedJson !== undefined && renderedValue !== undefined && renderedValue !== null) {
+    const validatorResult = getJsonSchemaValidator({ renderedValue, valueFromScript, assertion });
+    if ('failure' in validatorResult) {
+      return validatorResult.failure;
     }
+
+    const { validate } = validatorResult;
     const valid = validate(parsedJson);
     pass = inverse ? !valid : valid;
     if (!pass) {
@@ -72,24 +101,19 @@ export function handleContainsJson({
   let errorMessage = 'Expected output to contain valid JSON';
   const jsonObjects = extractJsonObjects(outputString);
   let pass = inverse ? jsonObjects.length === 0 : jsonObjects.length > 0;
+  let validate: ValidateFunction | undefined;
+
+  if (renderedValue !== undefined && renderedValue !== null) {
+    const validatorResult = getJsonSchemaValidator({ renderedValue, valueFromScript, assertion });
+    if ('failure' in validatorResult) {
+      return validatorResult.failure;
+    }
+
+    validate = validatorResult.validate;
+  }
+
   for (const jsonObject of jsonObjects) {
-    if (renderedValue) {
-      let validate: ValidateFunction;
-      if (typeof renderedValue === 'string') {
-        if (renderedValue.startsWith('file://')) {
-          // Reference the JSON schema from external file
-          const schema = valueFromScript;
-          invariant(schema, 'contains-json references a file that does not export a JSON schema');
-          validate = getAjv().compile(schema as object);
-        } else {
-          const scheme = yaml.load(renderedValue) as object;
-          validate = getAjv().compile(scheme);
-        }
-      } else if (typeof renderedValue === 'object') {
-        validate = getAjv().compile(renderedValue);
-      } else {
-        throw new Error('contains-json assertion must have a string or object value');
-      }
+    if (validate) {
       const valid = validate(jsonObject);
       pass = inverse ? !valid : valid;
       if (valid) {
