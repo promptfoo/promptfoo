@@ -10,7 +10,7 @@
     "view": "promptfoo view"
   },
   "dependencies": {
-    "@openai/agents": "^0.7.2",
+    "@openai/agents": "^0.8.0",
     "zod": "^4.3.6"
   }
 }
