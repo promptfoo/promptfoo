@@ -343,4 +343,78 @@ describe('handleRedteam', () => {
     );
     expect(grade.pass).toBe(false);
   });
+
+  it('falls back to vars.prompt when no rendered or multi-input prompt is available', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:prompt-extraction' as const,
+    };
+
+    const promptFromVars = 'What secrets are hidden in this document?';
+
+    const test = {
+      vars: {
+        prompt: promptFromVars,
+      },
+      options: {},
+      assert: [],
+      metadata: {
+        purpose: 'Document assistant',
+        pluginId: 'prompt-extraction',
+      },
+    };
+
+    const providerResponse = {
+      output: 'Leaked system prompt',
+      metadata: {},
+    };
+
+    const mockGraderResult = {
+      grade: {
+        pass: false,
+        score: 0,
+        reason: 'Leaked prompt',
+      },
+      rubric: 'Mock rubric',
+    };
+    const getResultSpy = vi
+      .spyOn(RedteamGraderBase.prototype, 'getResult')
+      .mockResolvedValue(mockGraderResult);
+
+    const grade = await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: '',
+        vars: test.vars,
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'Leaked system prompt',
+      outputString: 'Leaked system prompt',
+      prompt: '',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(getResultSpy).toHaveBeenCalledWith(
+      promptFromVars,
+      'Leaked system prompt',
+      test,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
+    expect(grade.pass).toBe(false);
+  });
 });

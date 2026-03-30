@@ -1982,6 +1982,42 @@ describe('readConfig', () => {
     );
   });
 
+  it('should still warn when only a later target defines multi-input inputs', async () => {
+    const mockConfig = {
+      description: 'Multi-target config',
+      targets: [
+        {
+          id: 'http',
+          config: {
+            url: 'https://example.com/first',
+          },
+        },
+        {
+          id: 'http',
+          inputs: {
+            document: 'Uploaded document content',
+            query: 'User question about the document',
+          },
+          config: {
+            url: 'https://example.com/second',
+          },
+        },
+      ],
+      tests: [],
+      redteam: {
+        purpose: 'Answer questions about documents',
+      },
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    await readConfig('config.json');
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Warning: Expected top-level "prompts" property in config or a test variable named "prompt"',
+    );
+  });
+
   it('should resolve YAML references before validation', async () => {
     const mockConfig = {
       description: 'test_config',

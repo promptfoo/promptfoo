@@ -55,19 +55,18 @@ function isTestCaseWithVars(test: unknown): test is { vars: Record<string, unkno
   return typeof test === 'object' && test !== null && 'vars' in test;
 }
 
-function hasTargetLevelInputs(providers: UnifiedConfig['providers'] | undefined): boolean {
+function firstTargetHasInputs(providers: UnifiedConfig['providers'] | undefined): boolean {
   if (!Array.isArray(providers)) {
     return false;
   }
 
-  return providers.some((provider) => {
-    if (typeof provider !== 'object' || provider === null || !('inputs' in provider)) {
-      return false;
-    }
+  const firstProvider = providers[0];
+  if (typeof firstProvider !== 'object' || firstProvider === null || !('inputs' in firstProvider)) {
+    return false;
+  }
 
-    const inputs = provider.inputs;
-    return typeof inputs === 'object' && inputs !== null && Object.keys(inputs).length > 0;
-  });
+  const inputs = firstProvider.inputs;
+  return typeof inputs === 'object' && inputs !== null && Object.keys(inputs).length > 0;
 }
 
 /**
@@ -354,7 +353,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
         ret.tests.some(
           (test) => isTestCaseWithVars(test) && Object.keys(test.vars || {}).includes('prompt'),
         ));
-    const usesMultiInputTargets = hasTargetLevelInputs(ret.providers);
+    const usesMultiInputTargets = firstTargetHasInputs(ret.providers);
 
     if (!hasAnyPrompt && !usesMultiInputTargets) {
       logger.warn(
