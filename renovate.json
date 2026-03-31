@@ -29,6 +29,12 @@
       "enabled": false
     },
     {
+      "description": "Group example directory updates as a fallback so package-specific groups still win",
+      "matchFileNames": ["examples/**/package.json"],
+      "groupName": "Example dependencies",
+      "schedule": ["before 6am on the first day of the month"]
+    },
+    {
       "description": "Group @inquirer packages together",
       "matchPackagePatterns": ["^@inquirer/"],
       "groupName": "@inquirer packages"
@@ -224,12 +230,6 @@
       "matchPackagePatterns": ["^@types/"],
       "groupName": "Type definitions",
       "schedule": ["before 6am on Monday"]
-    },
-    {
-      "description": "Group example directory updates to reduce noise",
-      "matchFileNames": ["examples/**/package.json"],
-      "groupName": "Example dependencies",
-      "schedule": ["before 6am on the first day of the month"]
     },
     {
       "description": "LLM provider packages: frequent updates, minimal stabilization",
