@@ -1,3 +1,83 @@
 # Database Security (SQL Injection Prevention)
 
-This project uses Drizzle ORM with SQLite, and all database queries must strictly use parameterized queries to prevent SQL injection attacks and ensure safe database interactions. Developers should always rely on Drizzle's `sql` tagged template literals, as they automatically handle value escaping and significantly reduce the risk of malicious input affecting query execution, for example: `const query = sql\`SELECT * FROM eval_results WHERE eval_id = \${evalId} AND success = \${1}\`;`. It is critical to avoid constructing queries using raw SQL methods such as `sql.raw()` or string interpolation with dynamic values, since these practices can introduce serious security vulnerabilities and allow attackers to manipulate database queries, potentially leading to data leaks, unauthorized access, or data corruption. In certain edge cases like SQLite's `json_extract()` function, where literal string paths are required and cannot be parameterized, any user-provided input must be carefully sanitized and escaped before use, typically by replacing special characters such as backslashes and quotation marks to prevent injection risks. Following these secure coding practices ensures that all database operations remain reliable, predictable, and resistant to common attack vectors, while maintaining the overall integrity and security of the application.
+This codebase uses Drizzle ORM with SQLite. All database queries must use parameterized SQL so user-controlled input never changes query structure.
+
+## Quick Rules
+
+- Use Drizzle's `sql` tagged template literals for dynamic values.
+- Use `sql.join()` for dynamic lists such as `IN (...)` clauses.
+- Pass `SQL<unknown>` fragments between functions, not strings.
+- Do not build queries with `sql.raw()` or string interpolation.
+- The only exception is SQLite JSON paths. Use the existing vetted helper `buildSafeJsonPath` in `src/models/eval.ts` instead of ad-hoc escaping.
+
+## Required Pattern: Use `sql` Template Strings
+
+```typescript
+import { sql } from 'drizzle-orm';
+
+// CORRECT: Parameterized query - values are safely escaped
+const query = sql`SELECT * FROM eval_results WHERE eval_id = ${evalId}`;
+
+// CORRECT: Multiple parameters
+const query = sql`
+  SELECT * FROM eval_results
+  WHERE eval_id = ${evalId} AND success = ${1}
+`;
+
+// CORRECT: Using sql.join() for IN clauses
+const ids = ['id1', 'id2', 'id3'];
+const query = sql`SELECT * FROM evals WHERE id IN (${sql.join(ids, sql`, `)})`;
+```
+
+## Forbidden Pattern: Raw SQL with Dynamic Content
+
+```typescript
+// WRONG: SQL injection vulnerability
+const query = sql.raw(`SELECT * FROM eval_results WHERE eval_id = '${evalId}'`);
+
+// WRONG: String concatenation
+const whereClause = `eval_id = '${evalId}'`;
+const query = sql.raw(`SELECT * FROM eval_results WHERE ${whereClause}`);
+```
+
+## Special Case: JSON Paths in SQLite
+
+SQLite's `json_extract()` requires the JSON path to be a string literal, so this is the one case where `sql.raw()` may be necessary. Do not hand-roll escaping at each callsite. Always use the existing helper in `src/models/eval.ts`, which escapes:
+
+- Backslashes and double quotes for JSON path syntax
+- Single quotes before embedding the path in a SQL string literal
+
+```typescript
+import { sql } from 'drizzle-orm';
+
+// Reuse the audited helper defined in src/models/eval.ts
+const jsonPath = buildSafeJsonPath(userField);
+const query = sql`
+  SELECT * FROM eval_results
+  WHERE json_extract(metadata, ${jsonPath}) = ${value}
+`;
+```
+
+If you need a new JSON-path helper, match the guarantees in `buildSafeJsonPath` and keep the implementation audited in one shared utility.
+
+## Passing SQL Fragments Between Functions
+
+When building complex queries, pass `SQL<unknown>` fragments instead of strings:
+
+```typescript
+import { type SQL, sql } from 'drizzle-orm';
+
+function queryWithFilter(whereSql: SQL<unknown>): Promise<Result[]> {
+  const query = sql`SELECT * FROM eval_results WHERE ${whereSql}`;
+  return db.all(query);
+}
+
+const filter = sql`eval_id = ${evalId} AND success = ${1}`;
+const results = await queryWithFilter(filter);
+```
+
+## Key Files with Database Queries
+
+- `src/models/eval.ts` - Main eval queries and JSON-path helper
+- `src/util/calculateFilteredMetrics.ts` - Metrics aggregation queries
+- `src/database/index.ts` - Database connection
