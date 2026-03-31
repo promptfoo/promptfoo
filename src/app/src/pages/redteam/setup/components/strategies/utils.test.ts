@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getEstimatedDuration,
   getEstimatedProbes,
   getStrategyId,
   isStrategyConfigured,
-  getEstimatedDuration,
 } from './utils';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 

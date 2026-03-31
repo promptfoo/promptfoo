@@ -52,53 +52,33 @@ describe('getProviderType', () => {
   });
 
   describe('file:// path handling', () => {
-    // Note: Due to the implementation checking includes(':') before startsWith('file://'),
-    // all file:// URLs are caught by the colon check and return 'file' as the provider type.
-    // The file extension logic (lines 12-30) is currently unreachable.
-    it('should return "file" for file:// paths with .js extension', () => {
-      expect(getProviderType('file://path/to/script.js')).toBe('file');
-      expect(getProviderType('file://script.js')).toBe('file');
-      expect(getProviderType('file:///absolute/path/script.js')).toBe('file');
-    });
-
-    it('should return "file" for file:// paths with .ts extension', () => {
-      expect(getProviderType('file://path/to/script.ts')).toBe('file');
-      expect(getProviderType('file://script.ts')).toBe('file');
-      expect(getProviderType('file:///absolute/path/script.ts')).toBe('file');
-    });
-
-    it('should return "file" for file:// paths with .py extension', () => {
-      expect(getProviderType('file://path/to/script.py')).toBe('file');
-      expect(getProviderType('file://script.py')).toBe('file');
-      expect(getProviderType('file:///absolute/path/script.py')).toBe('file');
-    });
-
-    it('should return "file" for file:// paths with .go extension', () => {
-      expect(getProviderType('file://path/to/main.go')).toBe('file');
-      expect(getProviderType('file://main.go')).toBe('file');
-      expect(getProviderType('file:///absolute/path/main.go')).toBe('file');
-    });
-
-    it('should return "file" for file:// paths with .sh extension', () => {
-      expect(getProviderType('file://path/to/script.sh')).toBe('file');
-      expect(getProviderType('file://script.sh')).toBe('file');
-      expect(getProviderType('file:///absolute/path/script.sh')).toBe('file');
-    });
-
-    it('should return "file" for file:// paths with .bat extension', () => {
-      expect(getProviderType('file://path/to/script.bat')).toBe('file');
-      expect(getProviderType('file://script.bat')).toBe('file');
-      expect(getProviderType('file:///C:/path/script.bat')).toBe('file');
-    });
-
-    it('should return "file" for file:// paths with .cmd extension', () => {
-      expect(getProviderType('file://path/to/script.cmd')).toBe('file');
-      expect(getProviderType('file://script.cmd')).toBe('file');
-    });
-
-    it('should return "file" for file:// paths with .ps1 extension', () => {
-      expect(getProviderType('file://path/to/script.ps1')).toBe('file');
-      expect(getProviderType('file://script.ps1')).toBe('file');
+    it.each([
+      ['file://path/to/script.js', 'javascript'],
+      ['file://script.js', 'javascript'],
+      ['file:///absolute/path/script.js', 'javascript'],
+      ['file://path/to/script.ts', 'javascript'],
+      ['file://script.ts', 'javascript'],
+      ['file:///absolute/path/script.ts', 'javascript'],
+      ['file://./provider.js:myFunc', 'javascript'],
+      ['file://path/to/script.py', 'python'],
+      ['file://script.py', 'python'],
+      ['file:///absolute/path/script.py', 'python'],
+      ['file:///path/to/script.py:custom_func', 'python'],
+      ['file://path/to/main.go', 'go'],
+      ['file://main.go', 'go'],
+      ['file:///absolute/path/main.go', 'go'],
+      ['file://path/to/script.sh', 'shell'],
+      ['file://script.sh', 'shell'],
+      ['file:///absolute/path/script.sh', 'shell'],
+      ['file://path/to/script.bat', 'shell'],
+      ['file://script.bat', 'shell'],
+      ['file:///C:/path/script.bat', 'shell'],
+      ['file://path/to/script.cmd', 'shell'],
+      ['file://script.cmd', 'shell'],
+      ['file://path/to/script.ps1', 'shell'],
+      ['file://script.ps1', 'shell'],
+    ])('should infer %s as %s', (providerId, expected) => {
+      expect(getProviderType(providerId)).toBe(expected);
     });
 
     it('should return "file" for file:// paths without recognized extensions', () => {
@@ -108,8 +88,8 @@ describe('getProviderType', () => {
     });
 
     it('should return "file" for file:// paths with complex nested directories', () => {
-      expect(getProviderType('file://deeply/nested/path/with/many/dirs/script.py')).toBe('file');
-      expect(getProviderType('file:///var/www/app/scripts/handler.js')).toBe('file');
+      expect(getProviderType('file://deeply/nested/path/with/many/dirs/script.py')).toBe('python');
+      expect(getProviderType('file:///var/www/app/scripts/handler.js')).toBe('javascript');
     });
   });
 

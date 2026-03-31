@@ -1,20 +1,20 @@
+import useApiConfig from '@app/stores/apiConfig';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  isStorageRef,
-  isBlobRef,
-  parseStorageRef,
-  parseBlobRef,
-  getMediaUrl,
   getBlobUrl,
-  resolveMediaUrl,
-  resolveAudioUrlSync,
-  resolveImageUrlSync,
-  resolveVideoUrlSync,
-  resolveMediaValue,
+  getMediaUrl,
+  isBlobRef,
+  isStorageRef,
+  parseBlobRef,
+  parseStorageRef,
   resolveAudioUrl,
+  resolveAudioUrlSync,
   resolveImageUrl,
+  resolveImageUrlSync,
+  resolveMediaUrl,
+  resolveMediaValue,
+  resolveVideoUrlSync,
 } from './mediaStorage';
-import useApiConfig from '@app/stores/apiConfig';
 
 // Mock the apiConfig store
 vi.mock('@app/stores/apiConfig', () => ({
