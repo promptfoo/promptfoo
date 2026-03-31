@@ -22,7 +22,7 @@ The OSS CLI runs in your environment with your user permissions. It is **permiss
 
 **In scope for OSS:** vulnerabilities where untrusted data inputs (prompts, test cases, model outputs) can trigger code execution, file access, or network access without explicit configuration.
 
-**Out of scope for OSS:** code execution from explicitly configured custom code, and direct local API or browser access to the OSS local server (`promptfoo view`), since these are part of the documented local trust model for the open source tool.
+**Out of scope for OSS:** code execution from explicitly configured custom code, and direct local API or browser access to the OSS local server (`promptfoo view`), since these are part of the documented local trust model for the open-source tool.
 
 ### Cloud Services
 
@@ -54,7 +54,7 @@ To speed triage, also include:
 
 - Whether you reproduced on the latest supported release (or `main`)
 - The affected file/function/code path, if known
-- A real browser-based PoC for browser-origin claims; spoofed browser headers from `curl` are not sufficient
+- A real browser-based PoC for browser-origin claims; spoofed `Origin` or `Sec-Fetch-Site` headers from `curl` or other non-browser clients are not sufficient
 - Why the issue exceeds the OSS trust model described in [SECURITY.md](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md)
 
 ## Response Time
