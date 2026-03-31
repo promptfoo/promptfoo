@@ -1,10 +1,11 @@
 import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REQUIRED_VERSION = [11, 11, 0];
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const gitMarker = join(repoRoot, '.git');
+const initCwd = process.env.INIT_CWD ? resolve(process.env.INIT_CWD) : null;
 const userAgent = process.env.npm_config_user_agent ?? '';
 
 const parseVersion = (value) => {
@@ -24,8 +25,8 @@ const compareVersions = (left, right) => {
   return 0;
 };
 
-// Skip package consumers; this check is only for source checkouts.
-if (!existsSync(gitMarker)) {
+// Skip package consumers; this check is only for source checkouts initiated from the repo root.
+if (!existsSync(gitMarker) || initCwd !== repoRoot) {
   process.exit(0);
 }
 

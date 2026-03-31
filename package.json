@@ -32,18 +32,6 @@
   "engines": {
     "node": "^20.20.0 || >=22.22.0"
   },
-  "devEngines": {
-    "runtime": {
-      "name": "node",
-      "version": "^20.20.0 || >=22.22.0",
-      "onFail": "error"
-    },
-    "packageManager": {
-      "name": "npm",
-      "version": ">=11.11.0",
-      "onFail": "error"
-    }
-  },
   "bin": {
     "promptfoo": "dist/src/entrypoint.js",
     "pf": "dist/src/entrypoint.js"
