@@ -171,8 +171,7 @@ const PressContent = () => {
           <Typography variant="body1" paragraph>
             Promptfoo is a leading provider of AI security solutions, helping developers and
             enterprises build secure, reliable AI applications. Based in {COMPANY_INFO.headquarters}
-            , Promptfoo joined OpenAI on March 16, 2026 and continues as an open-source AI security
-            project.
+            , Promptfoo is now part of OpenAI and continues as an open-source AI security project.
           </Typography>
           <Typography variant="body1" paragraph>
             Our core product is an open-source pentesting and evaluation framework used by{' '}

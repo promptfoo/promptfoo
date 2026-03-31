@@ -53,9 +53,8 @@ const AboutPageContent = () => {
                 when we were on the front lines.
               </Typography>
               <Typography variant="body1" paragraph>
-                Based in San Mateo, California, Promptfoo joined OpenAI on March 16, 2026. Promptfoo
-                remains open source, and we continue to build tools for secure, reliable AI
-                applications.
+                Based in San Mateo, California, Promptfoo is now part of OpenAI. Promptfoo remains
+                open source, and we continue to build tools for secure, reliable AI applications.
               </Typography>
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
