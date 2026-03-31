@@ -232,7 +232,7 @@
       "schedule": ["before 6am on Monday"]
     },
     {
-      "description": "LLM provider packages: frequent updates, minimal stabilization",
+      "description": "LLM provider packages: frequent updates with a short stabilization window",
       "matchPackagePatterns": [
         "^@anthropic-ai/",
         "^@aws-sdk/client-bedrock",
@@ -250,7 +250,7 @@
       ],
       "schedule": ["every weekday"],
       "rangeStrategy": "bump",
-      "minimumReleaseAge": "0 days"
+      "minimumReleaseAge": "2 days"
     },
     {
       "description": "Runtime npm deps: wait 5 days before updates",
