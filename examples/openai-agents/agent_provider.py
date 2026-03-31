@@ -364,15 +364,22 @@ def _build_steps(prompt: str, vars_dict: dict[str, Any]) -> list[str]:
 
     for key in ("steps_json", "task_steps_json"):
         configured_steps_json = vars_dict.get(key)
-        if not isinstance(configured_steps_json, str) or not configured_steps_json.strip():
+        if (
+            not isinstance(configured_steps_json, str)
+            or not configured_steps_json.strip()
+        ):
             continue
         try:
             parsed_steps = json.loads(configured_steps_json)
         except json.JSONDecodeError as exc:
-            raise ValueError(f"{key} must be valid JSON containing a non-empty list of steps") from exc
+            raise ValueError(
+                f"{key} must be valid JSON containing a non-empty list of steps"
+            ) from exc
 
         if not isinstance(parsed_steps, list) or not parsed_steps:
-            raise ValueError(f"{key} must be valid JSON containing a non-empty list of steps")
+            raise ValueError(
+                f"{key} must be valid JSON containing a non-empty list of steps"
+            )
         return [str(step) for step in parsed_steps]
 
     return [prompt]
@@ -385,7 +392,10 @@ def _hydrate_context_from_step(step: str, airline_context: AirlineContext) -> No
             confirmation_match.group(1)
         )
         previous_confirmation_number = airline_context.confirmation_number
-        if airline_context.verified_confirmation_number != normalized_confirmation_number:
+        if (
+            airline_context.verified_confirmation_number
+            != normalized_confirmation_number
+        ):
             airline_context.verified_confirmation_number = None
         airline_context.confirmation_number = normalized_confirmation_number
         _, reservation = _reservation_view(
@@ -444,7 +454,9 @@ def _session_id(context: dict[str, Any], vars_dict: dict[str, Any]) -> str:
     repeat_index = context.get("repeatIndex")
     if repeat_index is None:
         return f"promptfoo-openai-agents-{evaluation_id}-{test_case_id}"
-    return f"promptfoo-openai-agents-{evaluation_id}-{test_case_id}-repeat-{repeat_index}"
+    return (
+        f"promptfoo-openai-agents-{evaluation_id}-{test_case_id}-repeat-{repeat_index}"
+    )
 
 
 def call_api(

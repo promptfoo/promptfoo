@@ -45,7 +45,12 @@ def load_agent_provider():
             self.kwargs = kwargs
 
     def function_tool(*decorator_args, **decorator_kwargs):
-        if decorator_args and callable(decorator_args[0]) and len(decorator_args) == 1 and not decorator_kwargs:
+        if (
+            decorator_args
+            and callable(decorator_args[0])
+            and len(decorator_args) == 1
+            and not decorator_kwargs
+        ):
             return decorator_args[0]
 
         def decorator(func):
@@ -89,7 +94,9 @@ def load_agent_provider():
     sys.modules["agents.items"] = items_module
     sys.modules["promptfoo_tracing"] = tracing_module
 
-    spec = importlib.util.spec_from_file_location("agent_provider_under_test", MODULE_PATH)
+    spec = importlib.util.spec_from_file_location(
+        "agent_provider_under_test", MODULE_PATH
+    )
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Could not load {MODULE_PATH}")
     module = importlib.util.module_from_spec(spec)
@@ -176,9 +183,7 @@ class AgentProviderTests(unittest.TestCase):
             {},
         )
 
-        self.assertEqual(
-            session_id, "promptfoo-openai-agents-eval-1-case-1-repeat-2"
-        )
+        self.assertEqual(session_id, "promptfoo-openai-agents-eval-1-case-1-repeat-2")
 
 
 if __name__ == "__main__":
