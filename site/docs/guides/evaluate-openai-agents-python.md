@@ -24,8 +24,7 @@ pip install -r requirements.txt
 
 export OPENAI_API_KEY=your_api_key_here
 
-npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
-PROMPTFOO_ENABLE_OTEL=true npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
+[PROMPTFOO_ENABLE_OTEL=true] npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 npx promptfoo@latest view
 ```
 
