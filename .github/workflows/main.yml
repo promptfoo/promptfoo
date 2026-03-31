@@ -90,11 +90,13 @@ jobs:
       # Use npm 11 everywhere so min-release-age is enforced consistently across supported Node versions.
       # Install it in a temp prefix to avoid self-upgrade issues with the runner's bundled npm on macOS.
       - name: Install npm 11
+        shell: bash
         run: |
           cd "$RUNNER_TEMP"
           npm install --prefix "$RUNNER_TEMP/npm11" npm@11.11.0
+          export PATH="$RUNNER_TEMP/npm11/node_modules/.bin:$PATH"
           echo "$RUNNER_TEMP/npm11/node_modules/.bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/npm11/node_modules/.bin/npm" --version
+          npm --version
 
       - name: Use Python 3.14
         uses: actions/setup-python@v6
@@ -158,11 +160,13 @@ jobs:
       # Use npm 11 everywhere so min-release-age is enforced consistently across supported Node versions.
       # Install it in a temp prefix to avoid self-upgrade issues with the runner's bundled npm on macOS.
       - name: Install npm 11
+        shell: bash
         run: |
           cd "$RUNNER_TEMP"
           npm install --prefix "$RUNNER_TEMP/npm11" npm@11.11.0
+          export PATH="$RUNNER_TEMP/npm11/node_modules/.bin:$PATH"
           echo "$RUNNER_TEMP/npm11/node_modules/.bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/npm11/node_modules/.bin/npm" --version
+          npm --version
 
       - name: Install Dependencies
         run: npm ci
