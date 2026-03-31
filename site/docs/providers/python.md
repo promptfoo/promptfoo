@@ -684,7 +684,13 @@ tracing:
       enabled: true
 ```
 
-When tracing is enabled (`PROMPTFOO_ENABLE_OTEL=true`), the Python provider wrapper automatically:
+Install the Python OpenTelemetry packages and enable the wrapper instrumentation:
+
+```bash
+export PROMPTFOO_ENABLE_OTEL=true
+```
+
+When wrapper OTEL instrumentation is enabled, the Python provider wrapper:
 
 - Creates child spans linked to the parent evaluation trace
 - Records request/response body attributes
@@ -692,6 +698,8 @@ When tracing is enabled (`PROMPTFOO_ENABLE_OTEL=true`), the Python provider wrap
 - Includes evaluation and test case metadata
 
 The spans follow [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) with attributes like `gen_ai.request.model`, `gen_ai.usage.input_tokens`, and `gen_ai.usage.output_tokens`.
+
+This span covers the provider call itself. If you need internal workflow telemetry for tools, agents, or handoffs, create custom child spans or export framework-native traces into Promptfoo. See the [OpenAI Agents Python SDK guide](/docs/guides/evaluate-openai-agents-python) for a full example that makes `trajectory:*` assertions work with the Python `openai-agents` SDK.
 
 ### Handling Retries
 

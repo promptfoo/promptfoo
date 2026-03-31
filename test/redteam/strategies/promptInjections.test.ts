@@ -51,6 +51,19 @@ describe('addInjections', () => {
     });
   });
 
+  it('should preserve an explicit sample size of 0', async () => {
+    const testCases: TestCase[] = [
+      {
+        vars: { prompt: 'Hello world' },
+        metadata: {},
+      },
+    ];
+
+    const result = await addInjections(testCases, 'prompt', { sample: 0 });
+
+    expect(result).toEqual([]);
+  });
+
   it('should filter harmful only when configured', async () => {
     const testCases: TestCase[] = [
       {

@@ -126,6 +126,8 @@ Review the output file for `success`, `score`, and `error` fields.
 nvm use
 ```
 
+If Node-based tools fail with `ERR_MODULE_NOT_FOUND` or similar missing-package errors in a fresh worktree, run `npm ci` before treating the environment as blocked.
+
 If database-backed tests fail with a `better-sqlite3` ABI or `NODE_MODULE_VERSION` mismatch after switching Node versions, rebuild the native module for the active Node version before treating the test run as blocked:
 
 ```bash
@@ -276,6 +278,8 @@ See `test/AGENTS.md` for testing patterns.
 - Treat missing or ineffective tests as a P1 issue when a change adds security-sensitive behavior, changes public behavior, or fixes a bug without meaningful coverage.
 - Focus on the code changed by the pull request. Do not flag pre-existing issues outside the touched diff unless the pull request materially worsens them.
 - Avoid repeating findings that were already raised in the current pull request unless the new diff reintroduces them or leaves the same risk in newly changed code.
+- Verify findings on the current branch tip after syncing with the latest `main`.
+- Treat existing PR comments and bot reviews as hints; confirm they still apply before reporting them. If CI is failing, inspect the failing job logs and separate unrelated base-branch failures from PR regressions.
 - Ignore formatting, import ordering, naming, and other style-only issues already enforced by CI or repository tooling.
 - If a pull request touches `src/redteam/`, verify the title follows THE REDTEAM RULE in `docs/agents/pr-conventions.md` and uses `(redteam)` scope. Treat a title violation as P1.
 
