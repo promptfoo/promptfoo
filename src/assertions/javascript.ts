@@ -131,31 +131,34 @@ function normalizeResultAssertion(
   assertion: GradingResult['assertion'],
   fallbackAssertion: AssertionParams['assertion'],
 ) {
-  if (!assertion) {
-    return serializeFunctionAssertion(fallbackAssertion);
+  const assertionToNormalize = assertion ?? fallbackAssertion;
+
+  if (typeof assertionToNormalize.value === 'function') {
+    return serializeFunctionAssertion(assertionToNormalize);
   }
 
-  if (typeof assertion.value === 'function') {
-    return serializeFunctionAssertion(assertion);
-  }
-
-  return assertion;
+  return assertionToNormalize;
 }
 
-function normalizeFunctionAssertionResult(
+function normalizeJavascriptAssertionResult(
   assertion: AssertionParams['assertion'],
   result: boolean | number | GradingResult,
   inverse: boolean,
+  renderedValue?: string,
 ): GradingResult {
-  const serializedAssertion = serializeFunctionAssertion(assertion);
+  const normalizedAssertion = normalizeResultAssertion(undefined, assertion);
+  const getFailureReason = (rawPass: boolean) => {
+    const reason = `Custom function returned ${rawPass ? 'true' : 'false'}`;
+    return renderedValue ? `${reason}\n${renderedValue}` : reason;
+  };
 
   if (typeof result === 'boolean') {
     const pass = result !== inverse;
     return {
       pass,
       score: pass ? 1 : 0,
-      reason: pass ? 'Assertion passed' : `Custom function returned ${result ? 'true' : 'false'}`,
-      assertion: serializedAssertion,
+      reason: pass ? 'Assertion passed' : getFailureReason(result),
+      assertion: normalizedAssertion,
     };
   }
 
@@ -165,8 +168,8 @@ function normalizeFunctionAssertionResult(
     return {
       pass,
       score: result,
-      reason: pass ? 'Assertion passed' : `Custom function returned ${rawPass ? 'true' : 'false'}`,
-      assertion: serializedAssertion,
+      reason: pass ? 'Assertion passed' : getFailureReason(rawPass),
+      assertion: normalizedAssertion,
     };
   }
 
@@ -193,12 +196,10 @@ export const handleJavascript = async ({
   output,
   inverse,
 }: AssertionParams): Promise<GradingResult> => {
-  let pass;
-  let score;
   try {
     if (typeof assertion.value === 'function') {
       const result = await validateResult(assertion.value(outputString, assertionValueContext));
-      return normalizeFunctionAssertionResult(assertion, result, inverse);
+      return normalizeJavascriptAssertionResult(assertion, result, inverse);
     }
     invariant(typeof renderedValue === 'string', 'javascript assertion must have a string value');
 
@@ -235,17 +236,7 @@ export const handleJavascript = async ({
       result = await validateResult(valueFromScript);
     }
 
-    if (typeof result === 'boolean') {
-      pass = result !== inverse;
-      score = pass ? 1 : 0;
-    } else if (typeof result === 'number') {
-      pass = assertion.threshold === undefined ? result > 0 : result >= assertion.threshold;
-      score = result;
-    } else if (typeof result === 'object') {
-      return result;
-    } else {
-      throw new Error('Custom function must return a boolean or number');
-    }
+    return normalizeJavascriptAssertionResult(assertion, result, inverse, renderedValue);
   } catch (err) {
     return {
       pass: false,
@@ -253,16 +244,7 @@ export const handleJavascript = async ({
       reason: `Custom function threw error: ${(err as Error).message}
 Stack Trace: ${(err as Error).stack}
 ${renderedValue}`,
-      assertion,
+      assertion: normalizeResultAssertion(undefined, assertion),
     };
   }
-  return {
-    pass,
-    score,
-    reason: pass
-      ? 'Assertion passed'
-      : `Custom function returned ${inverse ? 'true' : 'false'}
-${renderedValue}`,
-    assertion,
-  };
 };
