@@ -436,4 +436,78 @@ describe('OpenAiAgentsProvider', () => {
       expect.objectContaining({ maxTurns: 0 }),
     );
   });
+
+  it('passes structured multimodal JSON prompts to the SDK as agent input items', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Vision Agent',
+          instructions: 'Describe the image.',
+        },
+      },
+    });
+    const prompt = JSON.stringify([
+      {
+        role: 'user',
+        content: [
+          { type: 'input_text', text: 'What is in this image?' },
+          {
+            type: 'input_image',
+            image: 'data:image/png;base64,iVBORw0KGgo=',
+          },
+        ],
+      },
+    ]);
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(
+      expect.any(Agent),
+      [
+        {
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'What is in this image?' },
+            {
+              type: 'input_image',
+              image: 'data:image/png;base64,iVBORw0KGgo=',
+            },
+          ],
+        },
+      ],
+      expect.any(Object),
+    );
+  });
+
+  it('keeps arbitrary JSON object prompts as plain text', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
+    const prompt = '{"foo":"bar"}';
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(expect.any(Agent), prompt, expect.any(Object));
+  });
+
+  it('keeps arbitrary JSON prompts with unknown type fields as plain text', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
+    const prompt = '{"type":"custom_payload","value":"bar"}';
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(expect.any(Agent), prompt, expect.any(Object));
+  });
 });

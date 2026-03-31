@@ -16,7 +16,7 @@ import {
 import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
-import type { Agent } from '@openai/agents';
+import type { Agent, AgentInputItem } from '@openai/agents';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -226,7 +226,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
       // Run the agent within a trace context to ensure proper trace ID generation
       const result = await getOrCreateTrace(async () => {
-        return await run(this.agent!, prompt, runOptions);
+        return await run(this.agent!, this.parsePromptInput(prompt), runOptions);
       });
 
       logger.debug('[AgentsProvider] Agent run result', {
@@ -295,6 +295,22 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
     return agent.clone({ tools });
   }
+
+  private parsePromptInput(prompt: string): string | AgentInputItem[] {
+    try {
+      const parsedPrompt: unknown = JSON.parse(prompt);
+      if (isAgentInputItem(parsedPrompt)) {
+        return [parsedPrompt];
+      }
+      if (Array.isArray(parsedPrompt) && parsedPrompt.every(isAgentInputItem)) {
+        return parsedPrompt;
+      }
+    } catch {
+      // Fall back to plain text input.
+    }
+
+    return prompt;
+  }
 }
 
 function mergeArrays<T>(existing?: T[], additions?: T[]): T[] | undefined {
@@ -303,4 +319,33 @@ function mergeArrays<T>(existing?: T[], additions?: T[]): T[] | undefined {
   }
 
   return [...(existing ?? []), ...(additions ?? [])];
+}
+
+function isAgentInputItem(value: unknown): value is AgentInputItem {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const item = value as Record<string, unknown>;
+  if (typeof item.role === 'string') {
+    return ['user', 'assistant', 'system'].includes(item.role);
+  }
+
+  return (
+    typeof item.type === 'string' &&
+    [
+      'hosted_tool_call',
+      'function_call',
+      'computer_call',
+      'shell_call',
+      'apply_patch_call',
+      'function_call_result',
+      'computer_call_result',
+      'shell_call_result',
+      'apply_patch_call_result',
+      'reasoning',
+      'tool_search_call',
+      'tool_search_output',
+    ].includes(item.type)
+  );
 }
