@@ -28,6 +28,8 @@ tests:
       - type: contains
         value: Seat updated to 14C
       - type: contains
+        value: '"seat_number": "14C"'
+      - type: contains
         value: 50 pounds
       - type: trajectory:tool-used
         value:
