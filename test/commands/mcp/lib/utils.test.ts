@@ -82,7 +82,7 @@ describe('MCP Utility Functions', () => {
       const result = withTimeout(promise, 50, 'Operation timed out');
       const expectation = expect(result).rejects.toThrow('Operation timed out');
 
-      await vi.advanceTimersByTimeAsync(50);
+      await vi.runAllTimersAsync();
 
       await expectation;
     });
