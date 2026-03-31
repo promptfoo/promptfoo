@@ -14,7 +14,7 @@ Some features intentionally execute user-provided code (custom assertions, provi
 
 The local web server (`promptfoo view`) is a **single-user development tool** intended for use on your local machine. The web API executes evaluations with the same privileges as the CLI — inputs to the API (including provider configurations, transforms, and assertions) are treated as **trusted code**, equivalent to a local config file. The server is not designed to be exposed to untrusted networks or users.
 
-The server includes **CSRF protection** that uses browser-provided `Sec-Fetch-Site` and `Origin` headers to reject cross-site mutating requests from untrusted origins (e.g., a malicious website attempting to call the local API). This mitigates cross-origin attacks from modern browsers but is not a complete defense in all deployment configurations — non-browser clients and requests without browser headers are allowed through to avoid breaking curl, scripts, and SDKs. Known localhost aliases (`localhost`, `127.0.0.1`, `[::1]`, `local.promptfoo.app`) are treated as equivalent origins.
+The server includes **CSRF/origin checks** that use browser-provided `Sec-Fetch-Site` and `Origin` headers to reduce accidental cross-origin requests from modern browsers. These checks are **best-effort hardening** for a local development tool, not a supported security boundary. Non-browser clients and requests without browser headers are allowed through to avoid breaking `curl`, scripts, and SDKs. Known localhost aliases (`localhost`, `127.0.0.1`, `[::1]`, `local.promptfoo.app`) are treated as equivalent origins.
 
 ### Trust Boundaries
 
@@ -80,6 +80,19 @@ A good report helps us triage and fix issues faster. Please include:
 - **Environment** — Node.js version, OS, install method (npm, npx, Docker)
 - **Affected surface** — CLI, web UI, or library/SDK
 - **Model provider** in use, if relevant to the issue
+- **Whether you reproduced on the latest supported release** (or `main`) and, if not, why
+- **Exact code path** — relevant file/function/line range, if known
+- **For browser-origin claims:** a real browser-based PoC. Spoofed `Origin` or `Sec-Fetch-Site` headers from `curl` are not sufficient
+- **Why the issue exceeds the documented trust model** in this policy
+
+### Common Triage Outcomes
+
+We may close reports as one of the following:
+
+- **Invalid** — the reported behavior does not reproduce, depends on stale/nonexistent code, or relies on an unrealistic setup
+- **Out of scope** — the behavior matches the documented trust model or requires explicitly configured trusted code
+- **Duplicate** — the report is materially the same as an earlier advisory
+- **Already fixed** — the issue is valid but no longer affects the latest supported release
 
 ## Response Timeline
 
@@ -102,7 +115,6 @@ Severity is assessed using [CVSS v4.0](https://www.first.org/cvss/v4.0/specifica
 **Promptfoo-specific severity considerations (illustrative, not automatic):**
 
 - Untrusted input leading to arbitrary code execution: typically **Critical**
-- CSRF bypass enabling arbitrary command execution or file write via the local server: typically **High**
 - Secret or credential leakage to unconfigured or attacker-controlled destinations: typically **High**
 - Algorithmic DoS in CI pipelines causing significant resource exhaustion: typically **Medium–High**
 - Web UI XSS requiring deliberate user interaction (for example, self-XSS): typically **Low** or no CVE (see Scope)
@@ -123,7 +135,6 @@ We request CVEs through GitHub Security Advisories when appropriate. Final advis
 **We usually request a CVE for:**
 
 - Remote code execution from untrusted inputs (prompts, test cases, model outputs)
-- CSRF bypass enabling arbitrary command execution or file write on the local server
 - Secret or credential leakage to unconfigured or unintended destinations
 - Supply chain compromise affecting Promptfoo-published packages, dependencies, or build artifacts
 
@@ -175,10 +186,11 @@ When a fix is released, we will:
 
 **Out of scope:**
 
-- Code execution from **explicitly configured** custom code (JS assertions, providers, transforms, plugins configured in your config file)
-- Code execution via **direct local web API access** (e.g., curl, scripts, or the bundled UI) — the local server has the same trust level as the CLI and executes evaluation configurations with user privileges (see [Local Web Server](#local-web-server)). Note: cross-site requests from untrusted websites are blocked by CSRF protection and **are** in scope if the protection is bypassed
+- Code execution from **explicitly configured** custom code (JS assertions, providers, transforms, session parsers, plugins, or `file://`-backed scripts configured in your config file)
+- Code execution via **direct local web API access** or **browser access to the OSS local server** (e.g., `curl`, scripts, SDKs, the bundled UI, or malicious webpages reaching `promptfoo view`) — the local server has the same trust level as the CLI and its CSRF/origin checks are best-effort hardening, not a supported security boundary
 - Issues requiring the user to run untrusted configs or scripts with local privileges
 - Network requests triggered by content in **user-controlled config files** (test variables, prompts, fixtures defined in your config) — users are responsible for what they put in their own configs
+- Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Third-party dependency issues that don't materially affect Promptfoo's security posture (report upstream)
 - Social engineering, phishing, or physical attacks
 - Volumetric denial of service
@@ -189,6 +201,7 @@ When a fix is released, we will:
 - "A third-party prompt pack includes a transform that runs shell commands" → Expected behavior; don't run untrusted configs
 - "The Web UI fetches a URL when a test variable contains a URL" → Expected behavior; users control their own config content
 - "The local web API executes provider transforms as code" → Expected behavior; the web API has the same trust model as the CLI
+- "A malicious website can reach the local server if I replay browser headers with `curl`" → Not a valid browser repro, and local-server browser-origin claims are out of scope
 
 If unsure whether something is in scope, report it anyway.
 

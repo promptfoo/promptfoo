@@ -192,8 +192,8 @@ describe('StrategyStats', () => {
 
       expect(screen.getByText('Plugin')).toBeInTheDocument();
       expect(within(table).getByText('Attack Success Rate')).toBeInTheDocument();
-      expect(screen.getByText('# Flagged Attempts')).toBeInTheDocument();
-      expect(screen.getByText('# Attempts')).toBeInTheDocument();
+      expect(within(table).getByText('# Flagged Attempts')).toBeInTheDocument();
+      expect(within(table).getByText('# Attempts')).toBeInTheDocument();
 
       const pluginAStats = {
         plugin: 'plugin-A',
