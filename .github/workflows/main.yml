@@ -87,11 +87,10 @@ jobs:
           node-version: ${{ matrix.node == '20.20' && '20.20.1' || matrix.node }}
           cache: 'npm'
 
-      # Node 24.x ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      # Upgrade to npm@latest (>= 11.6.4) to fix this. Node 20.20/22.22 use npm 10.x which is unaffected.
-      - name: Upgrade npm for Node 24.x
-        if: matrix.node == '24.x'
-        run: npm install -g npm@latest
+      # Use npm 11 everywhere so min-release-age is enforced consistently across supported Node versions.
+      # This also avoids the Node 24.x lockfile compatibility bug in npm 11.6.2 (npm/cli#8669).
+      - name: Upgrade npm
+        run: npm install -g npm@11
 
       - name: Use Python 3.14
         uses: actions/setup-python@v6
@@ -152,11 +151,10 @@ jobs:
           node-version: ${{ matrix.node == '20.20' && '20.20.1' || matrix.node }}
           cache: 'npm'
 
-      # Node 24.x ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      # Upgrade to npm@latest (>= 11.6.4) to fix this. Node 20.20/22.22 use npm 10.x which is unaffected.
-      - name: Upgrade npm for Node 24.x
-        if: matrix.node == '24.x'
-        run: npm install -g npm@latest
+      # Use npm 11 everywhere so min-release-age is enforced consistently across supported Node versions.
+      # This also avoids the Node 24.x lockfile compatibility bug in npm 11.6.2 (npm/cli#8669).
+      - name: Upgrade npm
+        run: npm install -g npm@11
 
       - name: Install Dependencies
         run: npm ci
