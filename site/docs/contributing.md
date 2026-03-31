@@ -45,7 +45,7 @@ We particularly welcome contributions in the following areas:
    # Use the Node.js version specified in .nvmrc
    nvm use
 
-   # If you're using npm, match the major used in CI so release-age policy is enforced
+   # If you're using npm, match the major used in CI so release-age policy is applied
    npm install -g npm@11
 
    # Install dependencies (CI uses npm; pnpm and yarn also work for local development)

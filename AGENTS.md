@@ -260,7 +260,7 @@ See `test/AGENTS.md` for testing patterns.
 ## Project Conventions
 
 - **ESM modules** (type: "module" in package.json)
-- **Node.js ^20.20.0 || >=22.22.0** - Before `npm`/`vite`/`vitest`, run `source ~/.nvm/nvm.sh && nvm use` so `node -v` matches `.nvmrc`. If you're using npm, upgrade to `npm@11` so the repo's release-age policy is enforced consistently. If native modules still mismatch before tests or review checks, run `npm rebuild better-sqlite3`. `.npmrc` sets `engine-strict=true`
+- **Node.js ^20.20.0 || >=22.22.0** - Before `npm`/`vite`/`vitest`, run `source ~/.nvm/nvm.sh && nvm use` so `node -v` matches `.nvmrc`. If you're using npm, upgrade to `npm@11` so the repo's release-age policy is applied consistently. If native modules still mismatch before tests or review checks, run `npm rebuild better-sqlite3`. `.npmrc` sets `engine-strict=true`
 - **Alternative package managers** (pnpm, yarn) are supported
 - **File structure:** core logic in `src/`, tests in `test/`
 - **Examples** belong in `examples/` with clear README.md
