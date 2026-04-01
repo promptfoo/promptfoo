@@ -287,6 +287,26 @@ describe('AzureResponsesProvider', () => {
       expect('max_output_tokens' in body).toBe(true);
     });
 
+    it('should use OPENAI_MAX_TOKENS for reasoning models when omitDefaults is false and OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
+      process.env.OPENAI_MAX_TOKENS = '2048';
+
+      const provider = new AzureResponsesProvider('o1-preview');
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.max_output_tokens).toBe(2048);
+      expect('max_output_tokens' in body).toBe(true);
+    });
+
+    it('should not apply a hardcoded max_output_tokens default for reasoning models when omitDefaults is false', async () => {
+      const provider = new AzureResponsesProvider('o1-preview');
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.max_output_tokens).toBeUndefined();
+      expect('max_output_tokens' in body).toBe(false);
+    });
+
     it('should omit default max_output_tokens when omitDefaults is true for reasoning models', async () => {
       const provider = new AzureResponsesProvider('o1-preview', {
         config: { omitDefaults: true },

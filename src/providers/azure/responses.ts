@@ -120,11 +120,11 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         ? undefined
         : getEnvInt('OPENAI_MAX_TOKENS')
       : getEnvInt('OPENAI_MAX_TOKENS', 1024);
+    const reasoningMaxOutputTokensDefault =
+      getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
     const maxOutputTokens =
       config.max_output_tokens ??
-      (isReasoningModel
-        ? (getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? maxOutputTokensDefault)
-        : maxOutputTokensDefault);
+      (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
 
     const temperatureDefault = config.omitDefaults
       ? getEnvString('OPENAI_TEMPERATURE') === undefined
