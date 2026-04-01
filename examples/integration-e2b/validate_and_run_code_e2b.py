@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 def is_unsafe(code: str) -> bool:
+    """Return True when generated code contains blocked imports or APIs."""
     for p in UNSAFE_PATTERNS:
         if re.search(p, code):
             return True
@@ -35,6 +36,7 @@ def is_unsafe(code: str) -> bool:
 
 
 def _extract_function(output: str, fn_name: str) -> str | None:
+    """Extract the generated function from fenced code or plain text output."""
     m = FENCE_RE.search(output)
     if m:
         return m.group(1).strip()
@@ -81,8 +83,8 @@ def _try_parse_logs_obj(logs_obj):
         try:
             j = logs_obj.to_json()
             return _try_parse_logs_obj(j)
-        except Exception as exc:
-            logger.debug("Failed to parse sandbox logs via to_json()", exc_info=exc)
+        except Exception:
+            logger.debug("Failed to parse sandbox logs via to_json()", exc_info=True)
 
     if hasattr(logs_obj, "stdout") or hasattr(logs_obj, "stderr"):
         try:
@@ -93,15 +95,15 @@ def _try_parse_logs_obj(logs_obj):
             if isinstance(err, list):
                 err = "".join(map(str, err))
             return str(out).strip(), str(err).strip()
-        except Exception as exc:
-            logger.debug("Failed to parse sandbox log stream fields", exc_info=exc)
+        except Exception:
+            logger.debug("Failed to parse sandbox log stream fields", exc_info=True)
 
     if isinstance(logs_obj, str):
         try:
             parsed = json.loads(logs_obj)
             return _try_parse_logs_obj(parsed)
-        except Exception as exc:
-            logger.debug("Failed to decode sandbox logs as JSON", exc_info=exc)
+        except Exception:
+            logger.debug("Failed to decode sandbox logs as JSON", exc_info=True)
             m = re.search(r"stdout:\s*\[([^\]]*)\]", logs_obj)
             if m:
                 inner = m.group(1).strip()
@@ -118,6 +120,7 @@ def _try_parse_logs_obj(logs_obj):
 
 
 def _stdout_from_result(res) -> tuple[str, str]:
+    """Return stdout and stderr strings from an E2B execution result."""
     if hasattr(res, "results") and res.results:
         try:
             first = res.results[0]
@@ -135,8 +138,8 @@ def _stdout_from_result(res) -> tuple[str, str]:
                     err = "".join(map(str, err))
                 if out or err:
                     return str(out).strip(), str(err).strip()
-        except Exception as exc:
-            logger.debug("Failed to parse sandbox result entries", exc_info=exc)
+        except Exception:
+            logger.debug("Failed to parse sandbox result entries", exc_info=True)
 
     logs_field = getattr(res, "logs", None)
     if logs_field is not None:
@@ -151,8 +154,8 @@ def _stdout_from_result(res) -> tuple[str, str]:
         try:
             j = res.to_json()
             return _try_parse_logs_obj(j)
-        except Exception as exc:
-            logger.debug("Failed to serialize sandbox result via to_json()", exc_info=exc)
+        except Exception:
+            logger.debug("Failed to serialize sandbox result via to_json()", exc_info=True)
 
     return "", ""
 
@@ -169,20 +172,21 @@ def _run_code_in_sandbox(sbx, code: str):
         )
     except TypeError:
         pass
-    except Exception as exc:
-        logger.debug("Preferred sandbox run_code signature failed", exc_info=exc)
+    except Exception:
+        logger.debug("Preferred sandbox run_code signature failed", exc_info=True)
     # Try alternate signatures
     try:
         return sbx.run_code(
             code, "python", {"cputime": 1, "wall_time": 5, "memory": 128}
         )
-    except Exception as exc:
-        logger.debug("Positional sandbox run_code signature failed", exc_info=exc)
+    except Exception:
+        logger.debug("Positional sandbox run_code signature failed", exc_info=True)
     # Last resort
     return sbx.run_code(code)
 
 
 def get_assert(output, context):
+    """Execute the generated function in E2B and compare stdout with expected output."""
     task_id = context.get("id", str(time.time()))
     provider = context.get("provider", "unknown")
     model = context.get("model", "unknown")
