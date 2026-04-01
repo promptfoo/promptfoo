@@ -804,8 +804,7 @@ module.exports = { validateUser, validatePasswordStrength };`;
   // Handle selecting a predefined prompt
   const handlePromptSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedValue = e.target.value;
-    const selectedPromptObj = prompts.find((p) => p.id === selectedValue);
-    if (selectedPromptObj) {
+    if (prompts.some((prompt) => prompt.id === selectedValue)) {
       setSelectedPrompt(selectedValue);
     } else {
       setSelectedPrompt('');
