@@ -140,6 +140,10 @@ function normalizeResultAssertion(
   return assertionToNormalize;
 }
 
+function appendRenderedValueToReason(reason: string, renderedValue?: string): string {
+  return renderedValue ? `${reason}\n${renderedValue}` : reason;
+}
+
 function normalizeJavascriptAssertionResult(
   assertion: AssertionParams['assertion'],
   result: boolean | number | GradingResult,
@@ -148,8 +152,10 @@ function normalizeJavascriptAssertionResult(
 ): GradingResult {
   const normalizedAssertion = normalizeResultAssertion(undefined, assertion);
   const getFailureReason = (rawPass: boolean) => {
-    const reason = `Custom function returned ${rawPass ? 'true' : 'false'}`;
-    return renderedValue ? `${reason}\n${renderedValue}` : reason;
+    return appendRenderedValueToReason(
+      `Custom function returned ${rawPass ? 'true' : 'false'}`,
+      renderedValue,
+    );
   };
 
   if (typeof result === 'boolean') {
@@ -241,9 +247,11 @@ export const handleJavascript = async ({
     return {
       pass: false,
       score: 0,
-      reason: `Custom function threw error: ${(err as Error).message}
-Stack Trace: ${(err as Error).stack}
-${renderedValue}`,
+      reason: appendRenderedValueToReason(
+        `Custom function threw error: ${(err as Error).message}
+Stack Trace: ${(err as Error).stack}`,
+        renderedValue,
+      ),
       assertion: normalizeResultAssertion(undefined, assertion),
     };
   }

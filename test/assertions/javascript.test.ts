@@ -727,6 +727,43 @@ describe('JavaScript file references', () => {
       },
     });
     expect(typeof result.assertion?.value).toBe('string');
+    expect(result.reason).not.toMatch(/\nundefined$/);
+  });
+
+  it('should serialize function-valued assertions returned inside a custom GradingResult', async () => {
+    const output = 'Expected output';
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: () => ({
+        pass: true,
+        score: 1,
+        reason: 'Custom reason',
+        assertion: {
+          type: 'javascript',
+          value: () => false,
+        },
+      }),
+    };
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Custom reason',
+      assertion: {
+        type: 'javascript',
+        value: expect.any(String),
+      },
+    });
+    expect(typeof result.assertion?.value).toBe('string');
+    expect(result.assertion?.value).toContain('() => false');
   });
 
   it.each([
