@@ -140,8 +140,13 @@ function normalizeResultAssertion(
   return assertionToNormalize;
 }
 
-function appendRenderedValueToReason(reason: string, renderedValue?: string): string {
-  return renderedValue ? `${reason}\n${renderedValue}` : reason;
+function appendRenderedValueToReason(
+  reason: string,
+  renderedValue?: AssertionParams['renderedValue'],
+): string {
+  return typeof renderedValue === 'string' && renderedValue
+    ? `${reason}\n${renderedValue}`
+    : reason;
 }
 
 function normalizeJavascriptAssertionResult(
