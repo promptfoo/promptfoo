@@ -981,6 +981,57 @@ describe('MCPClient', () => {
       expect(mockClient.callTool).toHaveBeenCalledTimes(1);
     });
 
+    it('should skip a server whose proactive OAuth refresh fails when another server still has the requested tool', async () => {
+      const server1Client = createMockClient(vi.fn().mockResolvedValue({ content: 'server1' }));
+      const server2Client = createMockClient(
+        vi.fn().mockResolvedValue({ content: 'server2 result' }),
+      );
+      vi.mocked(Client)
+        .mockImplementationOnce(function MockServer1Client() {
+          return server1Client as unknown as Client;
+        })
+        .mockImplementationOnce(function MockServer2Client() {
+          return server2Client as unknown as Client;
+        });
+
+      mockGetOAuthTokenWithExpiry
+        .mockResolvedValueOnce({
+          accessToken: 'stale-token',
+          expiresAt: Date.now() - 1000,
+        })
+        .mockRejectedValueOnce(new Error('refresh failed'));
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        servers: [
+          {
+            name: 'server1',
+            url: 'http://localhost:3000',
+            auth: {
+              type: 'oauth',
+              grantType: 'client_credentials',
+              clientId: 'test-client',
+              clientSecret: 'test-secret',
+              tokenUrl: 'https://auth.example.com/token',
+            },
+          },
+          {
+            name: 'server2',
+            command: 'npm',
+            args: ['start'],
+          },
+        ],
+      });
+
+      await mcpClient.initialize();
+
+      await expect(mcpClient.callTool('tool1', {})).resolves.toEqual({
+        content: 'server2 result',
+      });
+      expect(server1Client.callTool).not.toHaveBeenCalled();
+      expect(server2Client.callTool).toHaveBeenCalledTimes(1);
+    });
+
     it('should report when a known tool only exists on disconnected servers', async () => {
       mockClient.connect.mockResolvedValue(undefined);
       mockClient.listTools.mockResolvedValue({

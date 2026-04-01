@@ -403,7 +403,14 @@ export class MCPClient {
     for (const [serverKey, serverTools] of this.tools.entries()) {
       if (serverTools.some((tool) => tool.name === name)) {
         // Proactively refresh token if close to expiration (with locking)
-        await this.refreshOAuthTokenIfNeeded(serverKey);
+        try {
+          await this.refreshOAuthTokenIfNeeded(serverKey);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          logger.debug(
+            `[MCP] Failed to refresh OAuth token for ${serverKey}, trying the next matching server: ${errorMessage}`,
+          );
+        }
 
         // Get the current client (may have changed after token refresh)
         const client = this.clients.get(serverKey);
