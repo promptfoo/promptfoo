@@ -518,7 +518,7 @@ describe('fetchWithCache', () => {
 
     it('should retry on transient body-read error then succeed', async () => {
       const responseText = JSON.stringify(response);
-      const textMock = vi.fn<[], Promise<string>>();
+      const textMock = vi.fn<() => Promise<string>>();
 
       // First fetch: text() fails with transient error
       textMock.mockImplementationOnce(() => {
