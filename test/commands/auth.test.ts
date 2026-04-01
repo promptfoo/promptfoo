@@ -6,7 +6,7 @@ import { isNonInteractive } from '../../src/envars';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
-import { getDefaultTeam, getUserTeams, resolveTeamFromIdentifier } from '../../src/util/cloud';
+import { getDefaultTeam, getUserTeams } from '../../src/util/cloud';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { openAuthBrowser } from '../../src/util/server';
 import { createMockResponse, stripAnsi } from '../util/utils';
@@ -249,19 +249,71 @@ describe('auth command', () => {
       ];
 
       vi.mocked(getUserTeams).mockResolvedValue(mockTeams);
-      vi.mocked(resolveTeamFromIdentifier).mockResolvedValue({
-        ...mockTeams[1],
-        createdAt: '2024-01-01',
-      });
 
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key', '--team', 'security']);
 
-      expect(resolveTeamFromIdentifier).toHaveBeenCalledWith('security');
       expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', '1');
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Security Team'));
+    });
+
+    it('should scope team selection and current organization to --org', async () => {
+      const mockTeams = [
+        {
+          id: 'team-1',
+          name: 'Default',
+          slug: 'default',
+          organizationId: '1',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+        {
+          id: 'team-2',
+          name: 'Security Team',
+          slug: 'security',
+          organizationId: 'org-2',
+          createdAt: '2024-01-02',
+          updatedAt: '2024-01-02',
+        },
+      ];
+
+      vi.mocked(getUserTeams).mockResolvedValue(mockTeams);
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key', '--org', 'org-2']);
+
+      expect(cloudConfig.setCurrentOrganization).toHaveBeenCalledWith('org-2');
+      expect(cloudConfig.cacheTeams).toHaveBeenCalledWith([mockTeams[1]], 'org-2');
+      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', 'org-2');
+    });
+
+    it('should fail login when --org does not match any accessible team organization', async () => {
+      vi.mocked(getUserTeams).mockResolvedValue([
+        {
+          id: 'team-1',
+          name: 'Default',
+          slug: 'default',
+          organizationId: '1',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+      ]);
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key', '--org', 'missing-org']);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "Authentication failed: Organization 'missing-org' not found in your accessible teams.",
+        ),
+      );
+      expect(process.exitCode).toBe(1);
     });
 
     it('should auto-select single team without prompting', async () => {

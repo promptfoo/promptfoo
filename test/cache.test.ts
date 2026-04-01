@@ -518,22 +518,16 @@ describe('fetchWithCache', () => {
 
     it('should retry on transient body-read error then succeed', async () => {
       const responseText = JSON.stringify(response);
-      const textMock = vi.fn<() => Promise<string>>();
-
-      // First fetch: text() fails with transient error
-      textMock.mockImplementationOnce(() => {
-        return Promise.reject(new Error('ECONNRESET during body read'));
-      });
-      // Second fetch (after body retry): succeeds
-      textMock.mockImplementationOnce(() => {
-        return Promise.resolve(responseText);
-      });
+      const textMockFail = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValue(new Error('ECONNRESET during body read'));
+      const textMockSuccess = vi.fn<() => Promise<string>>().mockResolvedValue(responseText);
 
       mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         status: 200,
         statusText: 'OK',
-        text: textMock,
+        text: textMockFail,
         headers: new Headers({ 'content-type': 'application/json' }),
       } as unknown as Response);
       // Second fetch (after body retry): succeeds
@@ -541,14 +535,15 @@ describe('fetchWithCache', () => {
         ok: true,
         status: 200,
         statusText: 'OK',
-        text: textMock,
+        text: textMockSuccess,
         headers: new Headers({ 'content-type': 'application/json' }),
       } as unknown as Response);
 
       const result = await fetchWithCache(url, {}, 1000);
 
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
-      expect(textMock).toHaveBeenCalledTimes(2);
+      expect(textMockFail).toHaveBeenCalledTimes(1);
+      expect(textMockSuccess).toHaveBeenCalledTimes(1);
       expect(result.data).toEqual(response);
       expect(result.cached).toBe(false);
     });
