@@ -1577,6 +1577,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
   private async runSerializedThreadTurn<T>(
     queueKey: string | undefined,
+    abortSignal: AbortSignal | undefined,
     executeTurn: () => Promise<T>,
   ): Promise<T> {
     if (!queueKey) {
@@ -1592,7 +1593,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     this.threadRunQueues.set(queueKey, queuedRun);
 
     try {
-      await previousRun.catch(() => undefined);
+      await this.waitForPreviousThreadRun(previousRun, abortSignal);
       return await executeTurn();
     } finally {
       releaseCurrentRun();
@@ -1600,6 +1601,42 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         this.threadRunQueues.delete(queueKey);
       }
     }
+  }
+
+  private async waitForPreviousThreadRun(
+    previousRun: Promise<void>,
+    abortSignal: AbortSignal | undefined,
+  ): Promise<void> {
+    const previousRunDone = previousRun.catch(() => undefined);
+
+    if (!abortSignal) {
+      await previousRunDone;
+      return;
+    }
+
+    if (abortSignal.aborted) {
+      throw this.createAbortError('Codex thread turn wait aborted');
+    }
+
+    let onAbort: (() => void) | undefined;
+    const abortPromise = new Promise<void>((_, reject) => {
+      onAbort = () => reject(this.createAbortError('Codex thread turn wait aborted'));
+      abortSignal.addEventListener('abort', onAbort, { once: true });
+    });
+
+    try {
+      await Promise.race([previousRunDone, abortPromise]);
+    } finally {
+      if (onAbort) {
+        abortSignal.removeEventListener('abort', onAbort);
+      }
+    }
+  }
+
+  private createAbortError(message: string): Error {
+    const error = new Error(message);
+    error.name = 'AbortError';
+    return error;
   }
 
   async callApi(
@@ -1816,18 +1853,27 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       cacheKey = this.generateCacheKey(config, promptCacheBasis, instanceKey);
 
       const queueKey = this.getThreadRunQueueKey(config, cacheKey, instanceKey);
-      const { turn, sessionId } = await this.runSerializedThreadTurn(queueKey, async () => {
-        // Get or create thread (pass instance to avoid using stale this.codexInstance)
-        const thread = await this.getOrCreateThread(config, cacheKey, instanceKey, activeInstance);
-        const turnResult = config.enable_streaming
-          ? await this.runStreaming(thread, prompt, runOptions, callOptions, skillRootPrefixes)
-          : await thread.run(prompt, runOptions);
+      const { turn, sessionId } = await this.runSerializedThreadTurn(
+        queueKey,
+        callOptions?.abortSignal,
+        async () => {
+          // Get or create thread (pass instance to avoid using stale this.codexInstance)
+          const thread = await this.getOrCreateThread(
+            config,
+            cacheKey,
+            instanceKey,
+            activeInstance,
+          );
+          const turnResult = config.enable_streaming
+            ? await this.runStreaming(thread, prompt, runOptions, callOptions, skillRootPrefixes)
+            : await thread.run(prompt, runOptions);
 
-        return {
-          turn: turnResult,
-          sessionId: thread.id || 'unknown',
-        };
-      });
+          return {
+            turn: turnResult,
+            sessionId: thread.id || 'unknown',
+          };
+        },
+      );
 
       // Extract response
       const output = turn.finalResponse || '';

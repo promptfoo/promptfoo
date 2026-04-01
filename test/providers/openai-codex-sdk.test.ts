@@ -1098,6 +1098,57 @@ describe('OpenAICodexSDKProvider', () => {
         expect(mockRun).toHaveBeenCalledTimes(2);
       });
 
+      it('should abort while waiting for a serialized persisted-thread turn', async () => {
+        const firstRun = createDeferred<ReturnType<typeof createMockResponse>>();
+        mockRun.mockImplementationOnce(() => firstRun.promise);
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { persist_threads: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const firstCall = provider.callApi('Remember BLUE-OTTER-19', {
+          prompt: {
+            raw: '{{request}}',
+            label: 'conversation',
+            config: {},
+          },
+          vars: {
+            request: 'Remember BLUE-OTTER-19',
+          },
+        });
+
+        await vi.waitFor(() => {
+          expect(mockRun).toHaveBeenCalledTimes(1);
+        });
+
+        const abortController = new AbortController();
+        const secondCall = provider.callApi(
+          'What did I ask you to remember?',
+          {
+            prompt: {
+              raw: '{{request}}',
+              label: 'conversation',
+              config: {},
+            },
+            vars: {
+              request: 'What did I ask you to remember?',
+            },
+          },
+          { abortSignal: abortController.signal },
+        );
+
+        abortController.abort();
+
+        await expect(secondCall).resolves.toEqual({ error: 'OpenAI Codex SDK call aborted' });
+        expect(mockRun).toHaveBeenCalledTimes(1);
+
+        firstRun.resolve(createMockResponse('First response'));
+        await expect(firstCall).resolves.toEqual(
+          expect.objectContaining({ output: 'First response' }),
+        );
+      });
+
       it('should resume thread when thread_id is provided', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
@@ -2356,10 +2407,8 @@ describe('OpenAICodexSDKProvider', () => {
         env: { OPENAI_API_KEY: 'test-api-key' },
       });
       const fakeEmail = ['user', 'example.com'].join('@');
-      const fakeApiKey = ['sk', 'secret-value-12345678901234567890'].join('-');
-      const fakeBearerToken = ['Bearer', 'secret-token-value-that-is-definitely-long-enough'].join(
-        ' ',
-      );
+      const fakeApiKey = ['sk', 'x'.repeat(32)].join('-');
+      const fakeBearerToken = ['Bearer', 'token'.repeat(12)].join(' ');
 
       expect(
         (provider as any).getAttributesForItem({
