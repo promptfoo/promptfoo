@@ -22,7 +22,9 @@ const mockRetryPolicies = vi.hoisted(() => {
   };
 });
 
-vi.mock('@openai/agents', () => {
+vi.mock('@openai/agents', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@openai/agents')>();
+
   class MockAgent {
     name: string;
     instructions: unknown;
@@ -65,6 +67,7 @@ vi.mock('@openai/agents', () => {
   }
 
   return {
+    ...actual,
     Agent: MockAgent,
     BatchTraceProcessor: class BatchTraceProcessor {
       exporter: unknown;
@@ -577,6 +580,116 @@ describe('OpenAiAgentsProvider', () => {
     await provider.callApi(prompt);
 
     expect(mockRun).toHaveBeenCalledWith(expect.any(Agent), prompt, expect.any(Object));
+  });
+
+  it('keeps malformed tool-call JSON prompts as plain text', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
+    const prompt = '{"type":"function_call"}';
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(expect.any(Agent), prompt, expect.any(Object));
+  });
+
+  it('passes SDK tool outputs, compaction, and unknown items as structured input', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Continue from prior items.',
+        },
+      },
+    });
+    const prompt = JSON.stringify([
+      {
+        type: 'shell_call_output',
+        callId: 'shell-call-1',
+        output: [
+          {
+            stdout: 'done',
+            stderr: '',
+            outcome: {
+              type: 'exit',
+              exitCode: 0,
+            },
+          },
+        ],
+      },
+      {
+        type: 'apply_patch_call_output',
+        callId: 'patch-call-1',
+        status: 'completed',
+      },
+      {
+        type: 'compaction',
+        encrypted_content: 'opaque-payload',
+      },
+      {
+        type: 'unknown',
+      },
+    ]);
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(
+      expect.any(Agent),
+      [
+        {
+          type: 'shell_call_output',
+          callId: 'shell-call-1',
+          output: [
+            {
+              stdout: 'done',
+              stderr: '',
+              outcome: {
+                type: 'exit',
+                exitCode: 0,
+              },
+            },
+          ],
+        },
+        {
+          type: 'apply_patch_call_output',
+          callId: 'patch-call-1',
+          status: 'completed',
+        },
+        {
+          type: 'compaction',
+          encrypted_content: 'opaque-payload',
+        },
+        {
+          type: 'unknown',
+        },
+      ],
+      expect.any(Object),
+    );
+  });
+
+  it('passes valid messages with empty content arrays as structured input', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Continue from prior messages.',
+        },
+      },
+    });
+    const prompt = '{"role":"user","content":[]}';
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(
+      expect.any(Agent),
+      [{ role: 'user', content: [] }],
+      expect.any(Object),
+    );
   });
 
   it('keeps empty JSON arrays as plain text', async () => {

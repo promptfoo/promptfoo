@@ -88,6 +88,10 @@ providers:
   - id: openai:agents:vision-agent
     config:
       agent: file://./agents/vision-agent.ts
+
+tests:
+  - vars:
+      image: file://./images/cat.jpg
 ```
 
 Example prompt file (`prompts/vision-input.json`):
@@ -98,11 +102,13 @@ Example prompt file (`prompts/vision-input.json`):
     "role": "user",
     "content": [
       { "type": "input_text", "text": "What is in this image?" },
-      { "type": "input_image", "image": "data:image/jpeg;base64,{{image_b64}}" }
+      { "type": "input_image", "image": "{{image}}" }
     ]
   }
 ]
 ```
+
+Promptfoo resolves local image vars like `file://./images/cat.jpg` to data URLs before the prompt is passed to the SDK.
 
 Arbitrary JSON prompts that do not match an agent input item are still sent as plain text.
 

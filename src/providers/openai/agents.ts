@@ -2,6 +2,7 @@ import {
   addTraceProcessor,
   BatchTraceProcessor,
   getOrCreateTrace,
+  protocol,
   run,
   startTraceExportLoop,
 } from '@openai/agents';
@@ -299,15 +300,9 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   private parsePromptInput(prompt: string): string | AgentInputItem[] {
     try {
       const parsedPrompt: unknown = JSON.parse(prompt);
-      if (isAgentInputItem(parsedPrompt)) {
-        return [parsedPrompt];
-      }
-      if (
-        Array.isArray(parsedPrompt) &&
-        parsedPrompt.length > 0 &&
-        parsedPrompt.every(isAgentInputItem)
-      ) {
-        return parsedPrompt;
+      const parsedInput = parseAgentInputItems(parsedPrompt);
+      if (parsedInput) {
+        return parsedInput;
       }
     } catch {
       // Fall back to plain text input.
@@ -325,119 +320,27 @@ function mergeArrays<T>(existing?: T[], additions?: T[]): T[] | undefined {
   return [...(existing ?? []), ...(additions ?? [])];
 }
 
-const USER_CONTENT_TYPES = new Set(['input_text', 'input_image', 'input_file', 'audio']);
-const ASSISTANT_CONTENT_TYPES = new Set(['output_text', 'refusal', 'audio', 'image']);
-const ASSISTANT_MESSAGE_STATUSES = new Set(['in_progress', 'completed', 'incomplete']);
-
-function isAgentInputItem(value: unknown): value is AgentInputItem {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const item = value as Record<string, unknown>;
-  if (typeof item.role === 'string') {
-    if (item.type !== undefined && item.type !== 'message') {
-      return false;
+function parseAgentInputItems(value: unknown): AgentInputItem[] | undefined {
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return undefined;
     }
 
-    if (item.role === 'system') {
-      return typeof item.content === 'string';
+    const parsedItems: AgentInputItem[] = [];
+    for (const item of value) {
+      const parsedItem = protocol.ModelItem.safeParse(item);
+      if (!parsedItem.success) {
+        return undefined;
+      }
+      parsedItems.push(parsedItem.data);
     }
-
-    if (item.role === 'user') {
-      return isAgentMessageContent(item.content, USER_CONTENT_TYPES, true);
-    }
-
-    if (item.role === 'assistant') {
-      return (
-        typeof item.status === 'string' &&
-        ASSISTANT_MESSAGE_STATUSES.has(item.status) &&
-        isAgentMessageContent(item.content, ASSISTANT_CONTENT_TYPES, false)
-      );
-    }
-
-    return false;
+    return parsedItems;
   }
 
-  return (
-    typeof item.type === 'string' &&
-    [
-      'hosted_tool_call',
-      'function_call',
-      'computer_call',
-      'shell_call',
-      'apply_patch_call',
-      'function_call_result',
-      'computer_call_result',
-      'shell_call_result',
-      'apply_patch_call_result',
-      'reasoning',
-      'tool_search_call',
-      'tool_search_output',
-    ].includes(item.type)
-  );
-}
-
-function isAgentMessageContent(
-  value: unknown,
-  allowedContentTypes: Set<string>,
-  allowStringContent: boolean,
-): boolean {
-  if (allowStringContent && typeof value === 'string') {
-    return true;
+  const parsedItem = protocol.ModelItem.safeParse(value);
+  if (!parsedItem.success) {
+    return undefined;
   }
 
-  return (
-    Array.isArray(value) &&
-    value.length > 0 &&
-    value.every((contentPart) => isAgentMessageContentPart(contentPart, allowedContentTypes))
-  );
-}
-
-function isAgentMessageContentPart(value: unknown, allowedContentTypes: Set<string>): boolean {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const item = value as Record<string, unknown>;
-  if (typeof item.type !== 'string' || !allowedContentTypes.has(item.type)) {
-    return false;
-  }
-
-  switch (item.type) {
-    case 'input_text':
-    case 'output_text':
-      return typeof item.text === 'string';
-    case 'refusal':
-      return typeof item.refusal === 'string';
-    case 'audio':
-      return isStringOrIdReference(item.audio);
-    case 'input_image':
-      return item.image === undefined || isStringOrIdReference(item.image);
-    case 'input_file':
-      return (
-        item.file === undefined || isStringOrIdReference(item.file) || isUrlReference(item.file)
-      );
-    case 'image':
-      return typeof item.image === 'string';
-    default:
-      return false;
-  }
-}
-
-function isStringOrIdReference(value: unknown): boolean {
-  return (
-    typeof value === 'string' ||
-    (Boolean(value) &&
-      typeof value === 'object' &&
-      typeof (value as Record<string, unknown>).id === 'string')
-  );
-}
-
-function isUrlReference(value: unknown): boolean {
-  return (
-    Boolean(value) &&
-    typeof value === 'object' &&
-    typeof (value as Record<string, unknown>).url === 'string'
-  );
+  return [parsedItem.data];
 }
