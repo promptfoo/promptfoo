@@ -71,12 +71,14 @@ export function addCommonOptionsRecursively(command: Command) {
   );
   if (!hasEnvFileOption) {
     command.option(
-      '--env-file, --env-path <paths...>',
-      'Path(s) to .env file(s). Can specify multiple files or use comma-separated values.',
+      '--env-file, --env-path <path>',
+      'Path(s) to .env file(s). Repeat the flag or use comma-separated values for multiple files.',
+      (value: string, previous: string[]) => [...previous, value],
+      [],
     );
   }
 
-  command.hook('preAction', (thisCommand) => {
+  command.hook('preAction', (thisCommand, actionCommand) => {
     if (thisCommand.opts().verbose) {
       setLogLevel('debug');
       logger.debug('Verbose mode enabled via --verbose flag');
@@ -90,9 +92,11 @@ export function addCommonOptionsRecursively(command: Command) {
       logger.debug(`Loading environment from ${pathsStr}`);
     }
 
-    const commandName = getCommandPath(thisCommand);
-    if (commandName) {
-      telemetry.record('command_used', { name: commandName });
+    if (thisCommand === actionCommand) {
+      const commandName = getCommandPath(actionCommand);
+      if (commandName) {
+        telemetry.record('command_used', { name: commandName });
+      }
     }
   });
 

@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { sleep } from '../../src/util/time';
 
 import type { EvaluateTestSuite } from '../../src/types/index';
 
@@ -78,6 +79,7 @@ describe('OpenTelemetry Tracing Integration', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
