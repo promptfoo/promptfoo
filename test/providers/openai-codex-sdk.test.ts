@@ -1100,7 +1100,9 @@ describe('OpenAICodexSDKProvider', () => {
 
       it('should abort while waiting for a serialized persisted-thread turn', async () => {
         const firstRun = createDeferred<ReturnType<typeof createMockResponse>>();
-        mockRun.mockImplementationOnce(() => firstRun.promise);
+        mockRun
+          .mockImplementationOnce(() => firstRun.promise)
+          .mockResolvedValueOnce(createMockResponse('Third response'));
 
         const provider = new OpenAICodexSDKProvider({
           config: { persist_threads: true },
@@ -1143,10 +1145,28 @@ describe('OpenAICodexSDKProvider', () => {
         await expect(secondCall).resolves.toEqual({ error: 'OpenAI Codex SDK call aborted' });
         expect(mockRun).toHaveBeenCalledTimes(1);
 
+        const thirdCall = provider.callApi('What did I ask you to remember?', {
+          prompt: {
+            raw: '{{request}}',
+            label: 'conversation',
+            config: {},
+          },
+          vars: {
+            request: 'What did I ask you to remember?',
+          },
+        });
+
+        await Promise.resolve();
+        expect(mockRun).toHaveBeenCalledTimes(1);
+
         firstRun.resolve(createMockResponse('First response'));
         await expect(firstCall).resolves.toEqual(
           expect.objectContaining({ output: 'First response' }),
         );
+        await expect(thirdCall).resolves.toEqual(
+          expect.objectContaining({ output: 'Third response' }),
+        );
+        expect(mockRun).toHaveBeenCalledTimes(2);
       });
 
       it('should resume thread when thread_id is provided', async () => {

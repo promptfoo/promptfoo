@@ -1591,15 +1591,17 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     });
     const queuedRun = previousRun.catch(() => undefined).then(() => currentRun);
     this.threadRunQueues.set(queueKey, queuedRun);
+    void queuedRun.finally(() => {
+      if (this.threadRunQueues.get(queueKey) === queuedRun) {
+        this.threadRunQueues.delete(queueKey);
+      }
+    });
 
     try {
       await this.waitForPreviousThreadRun(previousRun, abortSignal);
       return await executeTurn();
     } finally {
       releaseCurrentRun();
-      if (this.threadRunQueues.get(queueKey) === queuedRun) {
-        this.threadRunQueues.delete(queueKey);
-      }
     }
   }
 
