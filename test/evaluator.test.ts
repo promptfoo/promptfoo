@@ -3566,6 +3566,71 @@ describe('evaluator', () => {
     }
   });
 
+  it('should not block timeout rows on a hanging provider cleanup', async () => {
+    const mockAddResult = vi.fn().mockResolvedValue(undefined);
+
+    const hangingCleanupProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('hanging-cleanup-provider'),
+      callApi: vi.fn().mockImplementation(
+        () =>
+          new Promise(() => {
+            // Intentionally never resolves; timeout handling must still emit a row.
+          }),
+      ),
+      cleanup: vi.fn().mockImplementation(
+        () =>
+          new Promise(() => {
+            // Intentionally never resolves.
+          }),
+      ),
+    };
+
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 0,
+          failures: 0,
+          errors: 1,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: vi.fn().mockResolvedValue(undefined),
+      setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [hangingCleanupProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    const startedAt = Date.now();
+    await evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
+    const elapsedMs = Date.now() - startedAt;
+
+    expect(hangingCleanupProvider.cleanup).toHaveBeenCalledWith();
+    expect(mockAddResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.stringContaining('Evaluation timed out after 50ms'),
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+      }),
+    );
+    expect(elapsedMs).toBeLessThan(1000);
+  });
+
   it('should honor external abortSignal when timeoutMs is set', async () => {
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let longTimer: NodeJS.Timeout | null = null;

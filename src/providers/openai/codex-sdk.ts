@@ -4,9 +4,10 @@ import path from 'path';
 
 import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
+import { z } from 'zod';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
-import { importModule, resolvePackageEntryPoint } from '../../esm';
+import { getDirectory, importModule, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
 import {
   type GenAISpanContext,
@@ -15,6 +16,7 @@ import {
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
+import { providerRegistry } from '../providerRegistry';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -41,7 +43,7 @@ import type {
  *
  * Thread Management:
  * - No persist_threads: Creates ephemeral thread per call (default)
- * - With persist_threads: Pools threads by cache key for reuse
+ * - With persist_threads: Pools threads by prompt template + config cache key for reuse
  * - With thread_id: Resumes specific thread from ~/.codex/sessions
  */
 
@@ -59,7 +61,7 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
- * - gpt-5.4: 'none', 'low', 'medium', 'high', 'xhigh'
+ * - gpt-5.4: 'minimal', 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.4-pro: 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex-spark: 'low', 'medium', 'high'
@@ -84,6 +86,11 @@ export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
  */
 export type WebSearchMode = 'disabled' | 'cached' | 'live';
 
+/**
+ * Multi-agent collaboration presets accepted by Codex CLI config.
+ */
+export type CollaborationMode = 'coding' | 'plan';
+
 const MINIMAL_CLI_ENV_KEYS = [
   'PATH',
   'Path',
@@ -103,7 +110,35 @@ const MINIMAL_CLI_ENV_KEYS = [
   'TERM',
 ] as const;
 
+const COMMON_OPTIONAL_PROCESS_ENV_KEYS = [
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+  'NO_PROXY',
+  'SSL_CERT_FILE',
+  'SSL_CERT_DIR',
+  'REQUESTS_CA_BUNDLE',
+  'NODE_EXTRA_CA_CERTS',
+  'SSH_AUTH_SOCK',
+  'GIT_SSH_COMMAND',
+] as const;
+
 export interface OpenAICodexSDKConfig {
+  /**
+   * Internal promptfoo config base path. Accepted for loader compatibility but not
+   * forwarded to the Codex SDK constructor.
+   */
+  basePath?: string;
+
+  /**
+   * Internal prompt wrapper/provider metadata merged into prompt configs by promptfoo.
+   * Accepted for compatibility but not forwarded to the Codex SDK constructor.
+   */
+  prefix?: string;
+  suffix?: string;
+  provider?: unknown;
+  linkedTargetId?: string;
+
   apiKey?: string;
 
   /**
@@ -177,6 +212,12 @@ export interface OpenAICodexSDKConfig {
   web_search_mode?: WebSearchMode;
 
   /**
+   * Multi-agent collaboration preset. This is mapped to
+   * cli_config.collaboration_mode when constructing the SDK client.
+   */
+  collaboration_mode?: CollaborationMode;
+
+  /**
    * When to require user approval
    * - 'never': Never require approval
    * - 'on-request': Require approval when requested
@@ -200,14 +241,14 @@ export interface OpenAICodexSDKConfig {
 
   /**
    * Environment variables to pass to Codex CLI
-   * When unset, Codex inherits Node.js process.env.
-   * When set, only these variables are passed unless inherit_process_env is true.
+   * By default, Promptfoo passes a minimal shell environment plus provider credentials.
+   * Set inherit_process_env: true to merge the full Node.js process environment.
    */
   cli_env?: Record<string, string>;
 
   /**
-   * Merge process.env into the Codex CLI environment even when cli_env is set.
-   * Defaults to false when cli_env is provided, preserving env isolation.
+   * Merge process.env into the Codex CLI environment.
+   * Defaults to false to avoid exposing unrelated process secrets to agent commands.
    */
   inherit_process_env?: boolean;
 
@@ -241,6 +282,66 @@ export interface OpenAICodexSDKConfig {
   cli_config?: Record<string, unknown>;
 }
 
+const CodexCliEnvValueSchema = z.union([z.string(), z.number(), z.boolean()]).transform(String);
+
+const OpenAICodexSDKConfigShape = {
+  basePath: z.string().optional(),
+  prefix: z.string().optional(),
+  suffix: z.string().optional(),
+  provider: z.unknown().optional(),
+  linkedTargetId: z.string().optional(),
+  apiKey: z.string().min(1).optional(),
+  base_url: z.string().min(1).optional(),
+  working_dir: z.string().min(1).optional(),
+  additional_directories: z.array(z.string().min(1)).optional(),
+  skip_git_repo_check: z.boolean().optional(),
+  codex_path_override: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+  sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
+  model_reasoning_effort: z.enum(['minimal', 'low', 'medium', 'high', 'xhigh']).optional(),
+  network_access_enabled: z.boolean().optional(),
+  web_search_enabled: z.boolean().optional(),
+  web_search_mode: z.enum(['disabled', 'cached', 'live']).optional(),
+  collaboration_mode: z.enum(['coding', 'plan']).optional(),
+  approval_policy: z.enum(['never', 'on-request', 'on-failure', 'untrusted']).optional(),
+  thread_id: z.string().min(1).optional(),
+  persist_threads: z.boolean().optional(),
+  thread_pool_size: z.number().int().positive().optional(),
+  output_schema: z.record(z.string(), z.unknown()).optional(),
+  cli_env: z.record(z.string(), CodexCliEnvValueSchema).optional(),
+  inherit_process_env: z.boolean().optional(),
+  enable_streaming: z.boolean().optional(),
+  deep_tracing: z.boolean().optional(),
+  cli_config: z.record(z.string(), z.unknown()).optional(),
+} as const;
+
+const OpenAICodexSDKConfigSchema = z.object(OpenAICodexSDKConfigShape).strict();
+const OpenAICodexSDKMergedPromptConfigSchema = z.object(OpenAICodexSDKConfigShape).strip();
+
+function parseCodexConfig(
+  config: OpenAICodexSDKConfig | undefined,
+  options: { stripUnknownKeys?: boolean } = {},
+): OpenAICodexSDKConfig {
+  const schema = options.stripUnknownKeys
+    ? OpenAICodexSDKMergedPromptConfigSchema
+    : OpenAICodexSDKConfigSchema;
+  try {
+    return schema.parse(config ?? {});
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const issues = error.issues
+        .map((issue) => {
+          const pathLabel = issue.path.length > 0 ? issue.path.join('.') : '(root)';
+          return `${pathLabel}: ${issue.message}`;
+        })
+        .join('; ');
+      throw new Error(`Invalid OpenAI Codex SDK config: ${issues}`);
+    }
+
+    throw error;
+  }
+}
+
 function getMinimalProcessEnv(): Record<string, string> {
   const env: Record<string, string> = {};
   for (const key of MINIMAL_CLI_ENV_KEYS) {
@@ -258,8 +359,10 @@ function getMinimalProcessEnv(): Record<string, string> {
  */
 async function loadCodexSDK(): Promise<any> {
   const basePaths = [
-    cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : undefined,
+    cliState.basePath ? path.resolve(cliState.basePath) : undefined,
     process.cwd(),
+    path.resolve(getDirectory(), '..'),
+    path.resolve(getDirectory(), '../..'),
   ].filter((candidate): candidate is string => Boolean(candidate));
 
   let codexPath: string | null = null;
@@ -359,7 +462,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private codexModule?: any;
   private codexInstances: Map<string, any> = new Map();
   private threads: Map<string, any> = new Map();
+  private threadRunQueues: Map<string, Promise<void>> = new Map();
   private deepTracingWarningShown = false; // Show warning once per instance
+  private ignoredProviderEnvWarningShown = false;
+  private omittedProcessEnvWarningShown = false;
 
   constructor(
     options: {
@@ -369,10 +475,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     } = {},
   ) {
     const { config, env, id } = options;
-    this.config = config ?? {};
+    this.config = parseCodexConfig(config);
     this.env = env;
     this.apiKey = this.getApiKey();
     this.providerId = id ?? this.providerId;
+    providerRegistry.register(this);
 
     if (this.config.model && !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.model)) {
       logger.warn(`Using unknown model for OpenAI Codex SDK: ${this.config.model}`);
@@ -418,6 +525,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   async cleanup(): Promise<void> {
     // Clean up threads
     this.threads.clear();
+    this.threadRunQueues.clear();
 
     // Clean up Codex instances to release resources (child processes, file handles)
     for (const instance of this.codexInstances.values()) {
@@ -428,6 +536,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
     this.codexInstances.clear();
+    providerRegistry.unregister(this);
+  }
+
+  async shutdown(): Promise<void> {
+    await this.cleanup();
   }
 
   private prepareEnvironment(
@@ -435,11 +548,42 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     traceparent?: string,
     apiKey: string | undefined = this.getApiKey(config),
   ): Record<string, string> {
-    const inheritProcessEnv = config.cli_env === undefined || config.inherit_process_env === true;
+    const inheritProcessEnv = config.inherit_process_env === true;
     const env: Record<string, string> = {
       ...(inheritProcessEnv ? (process.env as Record<string, string>) : getMinimalProcessEnv()),
       ...(config.cli_env ?? {}),
     };
+
+    const ignoredProviderEnvKeys = Object.keys(this.env ?? {})
+      .filter(
+        (key) =>
+          key !== 'OPENAI_API_KEY' && key !== 'CODEX_API_KEY' && !(key in (config.cli_env ?? {})),
+      )
+      .sort();
+
+    if (ignoredProviderEnvKeys.length > 0 && !this.ignoredProviderEnvWarningShown) {
+      logger.warn(
+        '[CodexSDK] Ignoring promptfoo-level env overrides for the Codex CLI process. ' +
+          'Move these keys into config.cli_env if Codex shell commands need them.',
+        { envKeys: ignoredProviderEnvKeys },
+      );
+      this.ignoredProviderEnvWarningShown = true;
+    }
+
+    if (!inheritProcessEnv && !this.omittedProcessEnvWarningShown) {
+      const omittedProcessEnvKeys = COMMON_OPTIONAL_PROCESS_ENV_KEYS.filter(
+        (key) => typeof process.env[key] === 'string' && !(key in env),
+      );
+
+      if (omittedProcessEnvKeys.length > 0) {
+        logger.warn(
+          '[CodexSDK] Common proxy/SSH/certificate process env vars are not inherited by default. ' +
+            'Move these keys into config.cli_env or set inherit_process_env: true if Codex CLI commands need them.',
+          { envKeys: omittedProcessEnvKeys },
+        );
+        this.omittedProcessEnvWarningShown = true;
+      }
+    }
 
     // Sort keys for stable cache key generation
     const sortedEnv: Record<string, string> = {};
@@ -449,17 +593,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
 
-    // Inject env overrides
-    if (this.env) {
-      for (const key of Object.keys(this.env).sort()) {
-        const value = this.env[key as keyof typeof this.env];
-        if (value !== undefined) {
-          sortedEnv[key] = value;
-        }
-      }
-    }
-
-    // Inject API key last so explicit config wins over inherited env state.
+    // Inject only the resolved Codex/OpenAI API key from provider env/config.
+    // Other promptfoo env overrides should be passed explicitly via cli_env so
+    // unrelated secrets are not exposed to shell commands.
     if (apiKey) {
       sortedEnv.OPENAI_API_KEY = apiKey;
       sortedEnv.CODEX_API_KEY = apiKey;
@@ -505,7 +641,18 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return sortedEnv;
   }
 
-  private getSkillRootPrefixes(env: Record<string, string>): string[] {
+  private getResolvedCliConfig(config: OpenAICodexSDKConfig): Record<string, unknown> | undefined {
+    if (!config.cli_config && !config.collaboration_mode) {
+      return undefined;
+    }
+
+    return {
+      ...(config.cli_config ?? {}),
+      ...(config.collaboration_mode ? { collaboration_mode: config.collaboration_mode } : {}),
+    };
+  }
+
+  private getSkillRootPrefixes(env: Record<string, string>, workingDir?: string): string[] {
     const prefixes = new Set<string>();
 
     const addPrefix = (candidate?: string) => {
@@ -522,6 +669,16 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     addPrefix(env.CODEX_HOME);
     // Codex's system skill root is documented as /etc/codex/skills.
     addPrefix('/etc/codex');
+
+    if (workingDir) {
+      const resolvedWorkingDir = path.resolve(workingDir).replace(/\\/g, '/');
+      addPrefix(path.posix.join(resolvedWorkingDir, '.agents'));
+
+      const gitRoot = this.findGitRepositoryRoot(resolvedWorkingDir);
+      if (gitRoot) {
+        addPrefix(path.posix.join(gitRoot.replace(/\\/g, '/'), '.agents'));
+      }
+    }
 
     const homeDir = env.HOME || process.env.HOME;
     if (homeDir) {
@@ -667,17 +824,34 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       throw new Error(`Working directory ${workingDir} is not a directory`);
     }
 
-    if (!skipGitCheck) {
-      const gitDir = path.join(workingDir, '.git');
-      if (!fs.existsSync(gitDir)) {
-        throw new Error(
-          dedent`Working directory ${workingDir} is not a Git repository.
+    if (!skipGitCheck && !this.isInsideGitRepository(workingDir)) {
+      throw new Error(
+        dedent`Working directory ${workingDir} is not inside a Git repository.
 
-          Codex requires a Git repository by default to prevent unrecoverable errors.
+        Codex requires a Git repository by default to prevent unrecoverable errors.
 
-          To bypass this check, set skip_git_repo_check: true in your provider config.`,
-        );
+        To bypass this check, set skip_git_repo_check: true in your provider config.`,
+      );
+    }
+  }
+
+  private isInsideGitRepository(workingDir: string): boolean {
+    return this.findGitRepositoryRoot(workingDir) !== undefined;
+  }
+
+  private findGitRepositoryRoot(workingDir: string): string | undefined {
+    let currentDir = path.resolve(workingDir);
+
+    while (true) {
+      if (fs.existsSync(path.join(currentDir, '.git'))) {
+        return currentDir;
       }
+
+      const parentDir = path.dirname(currentDir);
+      if (parentDir === currentDir) {
+        return undefined;
+      }
+      currentDir = parentDir;
     }
   }
 
@@ -690,12 +864,14 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     config: OpenAICodexSDKConfig,
     apiKey: string | undefined = this.getApiKey(config),
   ): Record<string, any> {
+    const cliConfig = this.getResolvedCliConfig(config);
+
     return {
       env,
       ...(apiKey ? { apiKey } : {}),
       ...(config.codex_path_override ? { codexPathOverride: config.codex_path_override } : {}),
       ...(config.base_url ? { baseUrl: config.base_url } : {}),
-      ...(config.cli_config ? { config: config.cli_config } : {}),
+      ...(cliConfig ? { config: cliConfig } : {}),
     };
   }
 
@@ -863,12 +1039,21 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
             // Collect reasoning text for summary
             if (item.type === 'reasoning' && typeof item.text === 'string') {
-              reasoningTexts.push(item.text);
+              const sanitizedReasoning = this.sanitizeTraceText(
+                item.text,
+                'Codex reasoning trace event',
+              );
+              if (sanitizedReasoning) {
+                reasoningTexts.push(sanitizedReasoning);
+              }
             }
 
             // Collect agent messages for conversation history
             if (item.type === 'agent_message' && typeof item.text === 'string') {
-              conversationMessages.push({ role: 'assistant', content: item.text });
+              conversationMessages.push({
+                role: 'assistant',
+                content: this.sanitizeTraceText(item.text, 'Codex agent message trace event') ?? '',
+              });
             }
 
             // Get or create span for this item
@@ -906,18 +1091,27 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
             // Add span events for rich content types
             if (item.type === 'reasoning' && typeof item.text === 'string') {
+              const reasoningText = this.sanitizeTraceText(item.text, 'Codex reasoning span event');
               span.addEvent('reasoning', {
-                'codex.reasoning.text': item.text,
+                'codex.reasoning.text': reasoningText ?? '',
               });
             }
             if (item.type === 'agent_message' && typeof item.text === 'string') {
+              const messageText = this.sanitizeTraceText(
+                item.text,
+                'Codex agent message span event',
+              );
               span.addEvent('message', {
-                'codex.message.text': item.text,
+                'codex.message.text': messageText ?? '',
               });
             }
             if (item.type === 'command_execution' && typeof item.aggregated_output === 'string') {
+              const commandOutput = this.sanitizeTraceText(
+                item.aggregated_output,
+                'Codex command output span event',
+              );
               span.addEvent('output', {
-                'codex.command.output': item.aggregated_output,
+                'codex.command.output': commandOutput ?? '',
               });
             }
 
@@ -1031,7 +1225,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       case 'reasoning':
         return 'reasoning';
       case 'web_search': {
-        const query = typeof item.query === 'string' ? item.query.slice(0, 30) : '';
+        const query =
+          typeof item.query === 'string'
+            ? (this.sanitizeTraceText(item.query, 'Codex web search span name') ?? '').slice(0, 30)
+            : '';
         return `search "${query}"`;
       }
       case 'todo_list':
@@ -1106,7 +1303,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     switch (item.type) {
       case 'command_execution':
         if (typeof item.command === 'string') {
-          attrs['codex.command'] = item.command;
+          attrs['codex.command'] =
+            this.sanitizeTraceText(item.command, 'Codex command trace attribute') ?? '';
         }
         break;
       case 'mcp_tool_call':
@@ -1125,7 +1323,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         break;
       case 'web_search':
         if (typeof item.query === 'string') {
-          attrs['codex.search.query'] = item.query;
+          attrs['codex.search.query'] =
+            this.sanitizeTraceText(item.query, 'Codex web search query trace attribute') ?? '';
         }
         break;
       // Collaboration mode attributes
@@ -1184,9 +1383,37 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
   }
 
+  private sanitizeTraceText(value: string, context: string): string | undefined {
+    const sanitized = this.redactTracePii(sanitizeObject(value, { context }));
+
+    if (typeof sanitized === 'string') {
+      return sanitized;
+    }
+
+    if (sanitized === undefined || sanitized === null) {
+      return undefined;
+    }
+
+    try {
+      return JSON.stringify(sanitized);
+    } catch {
+      return undefined;
+    }
+  }
+
   private redactTracePii(value: unknown): unknown {
-    if (typeof value === 'string' && /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(value)) {
-      return REDACTED;
+    if (typeof value === 'string') {
+      return value
+        .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, REDACTED)
+        .replace(
+          /\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|Bearer\s+[A-Za-z0-9._~+/-]{20,}|Basic\s+[A-Za-z0-9+/=]{20,})\b/g,
+          REDACTED,
+        )
+        .replace(
+          /\b(api[_-]?key|token|password|secret|authorization|auth)\s*([=:])(\s*)(["']?)[^\s"'`]+(\4)/gi,
+          (_match, key, separator, spacing, quote) =>
+            `${key}${separator}${spacing}${quote}${REDACTED}${quote}`,
+        );
     }
 
     if (Array.isArray(value)) {
@@ -1223,7 +1450,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           attrs['codex.status'] = item.status;
         }
         if (typeof item.aggregated_output === 'string') {
-          attrs['codex.output'] = item.aggregated_output;
+          attrs['codex.output'] =
+            this.sanitizeTraceText(
+              item.aggregated_output,
+              'Codex command output trace attribute',
+            ) ?? '';
         }
         Object.assign(
           attrs,
@@ -1249,7 +1480,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           attrs['codex.status'] = item.status;
         }
         if (typeof item.error?.message === 'string') {
-          attrs['codex.error'] = item.error.message;
+          attrs['codex.error'] =
+            this.sanitizeTraceText(item.error.message, 'Codex MCP error trace attribute') ?? '';
         }
         {
           const serializedArgs = this.serializeItemValue(item.arguments ?? item.args ?? item.input);
@@ -1260,17 +1492,20 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         break;
       case 'agent_message':
         if (typeof item.text === 'string') {
-          attrs['codex.message'] = item.text;
+          attrs['codex.message'] =
+            this.sanitizeTraceText(item.text, 'Codex agent message trace attribute') ?? '';
         }
         break;
       case 'reasoning':
         if (typeof item.text === 'string') {
-          attrs['codex.reasoning'] = item.text;
+          attrs['codex.reasoning'] =
+            this.sanitizeTraceText(item.text, 'Codex reasoning trace attribute') ?? '';
         }
         break;
       case 'error':
         if (typeof item.message === 'string') {
-          attrs['codex.error'] = item.message;
+          attrs['codex.error'] =
+            this.sanitizeTraceText(item.message, 'Codex error trace attribute') ?? '';
         }
         break;
     }
@@ -1282,7 +1517,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const keyData = {
       env,
       base_url: config.base_url,
-      cli_config: config.cli_config,
+      cli_config: this.getResolvedCliConfig(config),
       codex_path_override: config.codex_path_override,
     };
 
@@ -1314,6 +1549,53 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return `openai:codex-sdk:${hash}`;
   }
 
+  private getThreadRunQueueKey(
+    config: OpenAICodexSDKConfig,
+    cacheKey: string | undefined,
+    instanceKey: string,
+  ): string | undefined {
+    if (config.deep_tracing) {
+      return undefined;
+    }
+
+    if (config.thread_id) {
+      return `${instanceKey}:${config.thread_id}`;
+    }
+
+    if (config.persist_threads && cacheKey) {
+      return cacheKey;
+    }
+
+    return undefined;
+  }
+
+  private async runSerializedThreadTurn<T>(
+    queueKey: string | undefined,
+    executeTurn: () => Promise<T>,
+  ): Promise<T> {
+    if (!queueKey) {
+      return executeTurn();
+    }
+
+    const previousRun = this.threadRunQueues.get(queueKey) ?? Promise.resolve();
+    let releaseCurrentRun: () => void = () => {};
+    const currentRun = new Promise<void>((resolve) => {
+      releaseCurrentRun = resolve;
+    });
+    const queuedRun = previousRun.catch(() => undefined).then(() => currentRun);
+    this.threadRunQueues.set(queueKey, queuedRun);
+
+    try {
+      await previousRun.catch(() => undefined);
+      return await executeTurn();
+    } finally {
+      releaseCurrentRun();
+      if (this.threadRunQueues.get(queueKey) === queuedRun) {
+        this.threadRunQueues.delete(queueKey);
+      }
+    }
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -1325,7 +1607,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       ...context?.prompt?.config,
     };
 
-    const modelName = config.model || 'codex';
+    const modelName = typeof config.model === 'string' && config.model ? config.model : 'codex';
 
     // Build GenAI span context for tracing
     const spanContext: GenAISpanContext = {
@@ -1428,10 +1710,19 @@ export class OpenAICodexSDKProvider implements ApiProvider {
    */
   private async callApiInternal(
     prompt: string,
-    _context: CallApiContextParams | undefined,
+    context: CallApiContextParams | undefined,
     callOptions: CallApiOptionsParams | undefined,
-    config: OpenAICodexSDKConfig,
+    rawConfig: OpenAICodexSDKConfig,
   ): Promise<ProviderResponse> {
+    let config: OpenAICodexSDKConfig;
+    try {
+      config = parseCodexConfig(rawConfig, { stripUnknownKeys: true });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Error calling OpenAI Codex SDK', { error: errorMessage });
+      return { error: `Error calling OpenAI Codex SDK: ${errorMessage}` };
+    }
+
     // Get current trace context for deep tracing
     // This allows the Codex CLI to export its internal spans as children of our span
     const currentTraceparent = getTraceparent();
@@ -1439,7 +1730,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Prepare environment with OTEL config for deep tracing
     const env: Record<string, string> = this.prepareEnvironment(config, currentTraceparent, apiKey);
-    const skillRootPrefixes = this.getSkillRootPrefixes(env);
+    const skillRootPrefixes = this.getSkillRootPrefixes(env, config.working_dir);
 
     if (apiKey) {
       logger.debug('[CodexSDK] Using explicit API credentials from promptfoo config/environment');
@@ -1449,67 +1740,17 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       );
     }
 
-    // Validate working directory
-    if (config.working_dir) {
-      this.validateWorkingDirectory(config.working_dir, config.skip_git_repo_check);
-    }
-
     // Check abort signal
     if (callOptions?.abortSignal?.aborted) {
       return { error: 'OpenAI Codex SDK call aborted before it started' };
     }
-
-    // Load SDK module (lazy)
-    if (!this.codexModule) {
-      this.codexModule = await loadCodexSDK();
-    }
-
-    // Exclude TRACEPARENT from cache keys to preserve thread persistence across traces.
-    const stableEnv = { ...env };
-    delete stableEnv.TRACEPARENT;
-    const instanceKey = this.generateInstanceKey(stableEnv, config);
 
     // Deep tracing requires per-call instances (each call has unique TRACEPARENT)
     // This avoids race conditions where concurrent calls destroy shared instances
     let localInstance: any = undefined;
     const useLocalInstance = config.deep_tracing;
     let activeInstance: any = undefined;
-
-    if (useLocalInstance) {
-      // Warn about ignored thread options (only once)
-      if (
-        (config.persist_threads || config.thread_id || (config.thread_pool_size ?? 0) > 1) &&
-        !this.deepTracingWarningShown
-      ) {
-        logger.warn(
-          '[CodexSDK] deep_tracing is incompatible with thread persistence. ' +
-            'Thread options (persist_threads, thread_id, thread_pool_size) are ignored when deep_tracing is enabled.',
-        );
-        this.deepTracingWarningShown = true;
-      }
-
-      // Create a fresh instance for this call only (not cached)
-      localInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config, apiKey));
-      activeInstance = localInstance;
-    } else {
-      // Standard caching path for non-deep-tracing mode.
-      // Cache one Codex instance per stable constructor config so concurrent calls
-      // with different prompt-level credentials/config do not tear each other down.
-      activeInstance = this.codexInstances.get(instanceKey);
-      if (!activeInstance) {
-        activeInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config, apiKey));
-        this.codexInstances.set(instanceKey, activeInstance);
-      }
-    }
-
-    // Guard against undefined instance (shouldn't happen, but defensive coding)
-    if (!activeInstance) {
-      throw new Error('Failed to create Codex instance - SDK module may have failed to load');
-    }
-
-    // Get or create thread (pass instance to avoid using stale this.codexInstance)
-    const cacheKey = this.generateCacheKey(config, prompt, instanceKey);
-    const thread = await this.getOrCreateThread(config, cacheKey, instanceKey, activeInstance);
+    let cacheKey: string | undefined = undefined;
 
     // Prepare run options
     const runOptions: any = {};
@@ -1522,9 +1763,70 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Execute turn
     try {
-      const turn = config.enable_streaming
-        ? await this.runStreaming(thread, prompt, runOptions, callOptions, skillRootPrefixes)
-        : await thread.run(prompt, runOptions);
+      if (config.working_dir) {
+        this.validateWorkingDirectory(config.working_dir, config.skip_git_repo_check);
+      }
+
+      // Load SDK module (lazy)
+      if (!this.codexModule) {
+        this.codexModule = await loadCodexSDK();
+      }
+
+      // Exclude TRACEPARENT from cache keys to preserve thread persistence across traces.
+      const stableEnv = { ...env };
+      delete stableEnv.TRACEPARENT;
+      const instanceKey = this.generateInstanceKey(stableEnv, config);
+
+      if (useLocalInstance) {
+        // Warn about ignored thread options (only once)
+        if (
+          (config.persist_threads || config.thread_id || (config.thread_pool_size ?? 0) > 1) &&
+          !this.deepTracingWarningShown
+        ) {
+          logger.warn(
+            '[CodexSDK] deep_tracing is incompatible with thread persistence. ' +
+              'Thread options (persist_threads, thread_id, thread_pool_size) are ignored when deep_tracing is enabled.',
+          );
+          this.deepTracingWarningShown = true;
+        }
+
+        // Create a fresh instance for this call only (not cached)
+        localInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config, apiKey));
+        activeInstance = localInstance;
+      } else {
+        // Standard caching path for non-deep-tracing mode.
+        // Cache one Codex instance per stable constructor config so concurrent calls
+        // with different prompt-level credentials/config do not tear each other down.
+        activeInstance = this.codexInstances.get(instanceKey);
+        if (!activeInstance) {
+          activeInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config, apiKey));
+          this.codexInstances.set(instanceKey, activeInstance);
+        }
+      }
+
+      // Guard against undefined instance (shouldn't happen, but defensive coding)
+      if (!activeInstance) {
+        throw new Error('Failed to create Codex instance - SDK module may have failed to load');
+      }
+
+      // Persist threads by prompt template (when available) rather than rendered prompt values
+      // so test vars can drive a multi-turn conversation on the same thread.
+      const promptCacheBasis = context?.prompt?.raw ?? prompt;
+      cacheKey = this.generateCacheKey(config, promptCacheBasis, instanceKey);
+
+      const queueKey = this.getThreadRunQueueKey(config, cacheKey, instanceKey);
+      const { turn, sessionId } = await this.runSerializedThreadTurn(queueKey, async () => {
+        // Get or create thread (pass instance to avoid using stale this.codexInstance)
+        const thread = await this.getOrCreateThread(config, cacheKey, instanceKey, activeInstance);
+        const turnResult = config.enable_streaming
+          ? await this.runStreaming(thread, prompt, runOptions, callOptions, skillRootPrefixes)
+          : await thread.run(prompt, runOptions);
+
+        return {
+          turn: turnResult,
+          sessionId: thread.id || 'unknown',
+        };
+      });
 
       // Extract response
       const output = turn.finalResponse || '';
@@ -1574,7 +1876,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         cost,
         metadata,
         raw,
-        sessionId: thread.id || 'unknown',
+        sessionId,
       };
     } catch (error: unknown) {
       const isAbort =

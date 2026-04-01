@@ -14,7 +14,6 @@ providers:
       skip_git_repo_check: true
       enable_streaming: true
       deep_tracing: true
-      inherit_process_env: true
       cli_env:
         CODEX_HOME: '{{ env.CODEX_HOME_OVERRIDE | default("./sample-codex-home") }}'
 

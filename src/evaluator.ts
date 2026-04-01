@@ -1822,6 +1822,7 @@ class Evaluator {
 
       let timeoutId: NodeJS.Timeout | undefined;
       let didTimeout = false;
+      let cleanupPromise: Promise<void> | undefined;
 
       try {
         return await Promise.race([
@@ -1835,7 +1836,11 @@ class Evaluator {
               // If the provider has a cleanup method, call it
               if (typeof evalStep.provider.cleanup === 'function') {
                 try {
-                  void evalStep.provider.cleanup();
+                  cleanupPromise = Promise.resolve(evalStep.provider.cleanup()).catch(
+                    (cleanupErr: unknown) => {
+                      logger.warn(`Error during provider cleanup: ${cleanupErr}`);
+                    },
+                  );
                 } catch (cleanupErr) {
                   logger.warn(`Error during provider cleanup: ${cleanupErr}`);
                 }
@@ -1848,6 +1853,27 @@ class Evaluator {
       } catch (error) {
         if (!didTimeout) {
           throw error;
+        }
+        if (cleanupPromise !== undefined) {
+          const cleanupTimeoutMs = Math.min(timeoutMs, 5000);
+          let cleanupTimeoutId: NodeJS.Timeout | undefined;
+          try {
+            await Promise.race([
+              cleanupPromise,
+              new Promise<void>((resolve) => {
+                cleanupTimeoutId = setTimeout(() => {
+                  logger.warn(
+                    `Provider cleanup did not finish within ${cleanupTimeoutMs}ms after timeout; continuing`,
+                  );
+                  resolve();
+                }, cleanupTimeoutMs);
+              }),
+            ]);
+          } finally {
+            if (cleanupTimeoutId) {
+              clearTimeout(cleanupTimeoutId);
+            }
+          }
         }
         const sanitizedTestCase = { ...evalStep.test };
         delete (sanitizedTestCase as Partial<AtomicTestCase>).provider;
