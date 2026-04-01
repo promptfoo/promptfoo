@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleModeration } from '../../src/assertions/moderation';
 import { matchesModeration } from '../../src/matchers';
 
@@ -58,7 +58,11 @@ describe('handleModeration', () => {
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockedMatchesModeration.mockReset();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('should pass moderation check', async () => {
@@ -277,7 +281,7 @@ describe('handleModeration', () => {
     );
   });
 
-  it('should extract the final chat message from serialized prompts before moderation', async () => {
+  it('should extract the final user message from serialized chat prompts before moderation', async () => {
     mockedMatchesModeration.mockResolvedValue({
       pass: true,
       score: 1,
@@ -289,6 +293,7 @@ describe('handleModeration', () => {
       prompt: JSON.stringify([
         { role: 'system', content: 'Ignore this system message' },
         { role: 'user', content: 'Moderate this user request' },
+        { role: 'assistant', content: 'Ignore this assistant reply' },
       ]),
       providerResponse: {
         output: 'output',
@@ -298,6 +303,38 @@ describe('handleModeration', () => {
     expect(mockedMatchesModeration).toHaveBeenCalledWith(
       {
         userPrompt: 'Moderate this user request',
+        assistantResponse: 'output',
+        categories: ['harassment'],
+      },
+      {},
+    );
+  });
+
+  it('should extract the final user message from YAML chat prompts before moderation', async () => {
+    mockedMatchesModeration.mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Safe content',
+    });
+
+    await handleModeration({
+      ...baseParams,
+      prompt: [
+        '- role: system',
+        '  content: Ignore this system message',
+        '- role: user',
+        '  content: Moderate this YAML user request',
+        '- role: assistant',
+        '  content: Ignore this assistant reply',
+      ].join('\n'),
+      providerResponse: {
+        output: 'output',
+      },
+    });
+
+    expect(mockedMatchesModeration).toHaveBeenCalledWith(
+      {
+        userPrompt: 'Moderate this YAML user request',
         assistantResponse: 'output',
         categories: ['harassment'],
       },

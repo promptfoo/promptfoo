@@ -5,6 +5,29 @@ import { getActualPromptWithFallback } from '../util/providerResponse';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
+type ChatMessage = {
+  role?: string;
+  content?: unknown;
+};
+
+function getLastModerationPrompt(parsedPrompt: ChatMessage[]): string | undefined {
+  for (let i = parsedPrompt.length - 1; i >= 0; i--) {
+    const message = parsedPrompt[i];
+    if (message?.role === 'user' && typeof message.content === 'string') {
+      return message.content;
+    }
+  }
+
+  for (let i = parsedPrompt.length - 1; i >= 0; i--) {
+    const message = parsedPrompt[i];
+    if (typeof message?.content === 'string') {
+      return message.content;
+    }
+  }
+
+  return undefined;
+}
+
 export const handleModeration = async ({
   assertion,
   test,
@@ -20,19 +43,14 @@ export const handleModeration = async ({
     !assertion.value || (Array.isArray(assertion.value) && typeof assertion.value[0] === 'string'),
     'moderation assertion value must be a string array if set',
   );
-  if (promptToModerate[0] === '[' || promptToModerate[0] === '{') {
-    // Try to extract the last user message from OpenAI-style prompts.
-    try {
-      const parsedPrompt = parseChatPrompt<null | { role: string; content: string }[]>(
-        promptToModerate,
-        null,
-      );
-      if (parsedPrompt && parsedPrompt.length > 0) {
-        promptToModerate = parsedPrompt[parsedPrompt.length - 1].content;
-      }
-    } catch {
-      // Ignore error
+  // Try to extract the last user message from serialized chat prompts (JSON or YAML).
+  try {
+    const parsedPrompt = parseChatPrompt<ChatMessage[] | null>(promptToModerate, null);
+    if (parsedPrompt && parsedPrompt.length > 0) {
+      promptToModerate = getLastModerationPrompt(parsedPrompt) ?? promptToModerate;
     }
+  } catch {
+    // Ignore error
   }
 
   const moderationResult = await matchesModeration(

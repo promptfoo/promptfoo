@@ -2854,9 +2854,9 @@ var __defProp = Object.defineProperty,
           (new URL(e.href, document.baseURI).origin == location.origin &&
             fetch(e.getAttribute('href')).then(async (t) => {
               const n = await t.text();
-              It.transpileStyleSheet(n, !0);
-              const i = It.transpileStyleSheet(n, !1, t.url);
-              if (i != n) {
+              let i = It.transpileStyleSheet(n, !0);
+              i = It.transpileStyleSheet(i, !1, t.url);
+              if (i !== n) {
                 const t = new Blob([i], { type: 'text/css' }),
                   n = URL.createObjectURL(t);
                 e.setAttribute('href', n);
