@@ -48,7 +48,7 @@ function getAssertionType(result: GradingResult): string {
 function buildAssertionRows(
   gradingResults: GradingResult[],
   depth = 0,
-  parentRowId = 'assertion',
+  parentRowId = '',
 ): AssertionResultRow[] {
   const rows: AssertionResultRow[] = [];
 
@@ -58,7 +58,7 @@ function buildAssertionRows(
       continue;
     }
 
-    const rowId = `${parentRowId}-${index}`;
+    const rowId = parentRowId ? `${parentRowId}-${index}` : `${index}`;
     rows.push({ depth, result, rowId });
 
     const childResults = getChildResults(result);
