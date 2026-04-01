@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -43,7 +44,11 @@ class TestCallMethod(unittest.TestCase):
             return "sync"
 
         # Test async function is detected and run with asyncio.run
-        with patch("asyncio.run", return_value="mocked_async") as mock_run:
+        def close_coroutine(coro):
+            coro.close()
+            return "mocked_async"
+
+        with patch("asyncio.run", side_effect=close_coroutine) as mock_run:
             result = persistent_wrapper.call_method(real_async_func, [])
             mock_run.assert_called_once()
             self.assertEqual(result, "mocked_async")
@@ -185,6 +190,107 @@ class TestGetCallable(unittest.TestCase):
         error_message = str(context.exception)
         self.assertIn("call_api", error_message)
         self.assertNotIn("Did you mean", error_message)
+
+
+class TestInitTracing(unittest.TestCase):
+    """Tests for OpenTelemetry initialization."""
+
+    def setUp(self) -> None:
+        self.original_tracer = persistent_wrapper._tracer
+        self.original_tracing_enabled = persistent_wrapper._tracing_enabled
+        persistent_wrapper._tracer = None
+        persistent_wrapper._tracing_enabled = False
+
+    def tearDown(self) -> None:
+        persistent_wrapper._tracer = self.original_tracer
+        persistent_wrapper._tracing_enabled = self.original_tracing_enabled
+
+    def test_successful_init_does_not_write_to_stderr(self) -> None:
+        """Tests that successful tracing initialization stays quiet."""
+        fake_trace = MagicMock()
+        fake_tracer = object()
+        fake_trace.get_tracer.return_value = fake_tracer
+
+        opentelemetry_module = ModuleType("opentelemetry")
+        opentelemetry_exporter_module = ModuleType("opentelemetry.exporter")
+        opentelemetry_exporter_otlp_module = ModuleType("opentelemetry.exporter.otlp")
+        opentelemetry_exporter_otlp_proto_module = ModuleType(
+            "opentelemetry.exporter.otlp.proto"
+        )
+        opentelemetry_exporter_otlp_proto_http_module = ModuleType(
+            "opentelemetry.exporter.otlp.proto.http"
+        )
+        trace_exporter_module = ModuleType(
+            "opentelemetry.exporter.otlp.proto.http.trace_exporter"
+        )
+        sdk_module = ModuleType("opentelemetry.sdk")
+        sdk_trace_module = ModuleType("opentelemetry.sdk.trace")
+        sdk_trace_export_module = ModuleType("opentelemetry.sdk.trace.export")
+
+        class FakeOTLPSpanExporter:
+            def __init__(self, endpoint):
+                self.endpoint = endpoint
+
+        class FakeSimpleSpanProcessor:
+            def __init__(self, exporter):
+                self.exporter = exporter
+
+        class FakeTracerProvider:
+            def __init__(self):
+                self.processors = []
+
+            def add_span_processor(self, processor):
+                self.processors.append(processor)
+
+        trace_exporter_module.OTLPSpanExporter = FakeOTLPSpanExporter
+        sdk_trace_module.TracerProvider = FakeTracerProvider
+        sdk_trace_export_module.SimpleSpanProcessor = FakeSimpleSpanProcessor
+
+        opentelemetry_module.trace = fake_trace
+        opentelemetry_module.exporter = opentelemetry_exporter_module
+        opentelemetry_module.sdk = sdk_module
+        opentelemetry_exporter_module.otlp = opentelemetry_exporter_otlp_module
+        opentelemetry_exporter_otlp_module.proto = (
+            opentelemetry_exporter_otlp_proto_module
+        )
+        opentelemetry_exporter_otlp_proto_module.http = (
+            opentelemetry_exporter_otlp_proto_http_module
+        )
+        opentelemetry_exporter_otlp_proto_http_module.trace_exporter = (
+            trace_exporter_module
+        )
+        sdk_module.trace = sdk_trace_module
+        sdk_trace_module.export = sdk_trace_export_module
+
+        def getenv(name, default=None):
+            if name == "PROMPTFOO_ENABLE_OTEL":
+                return "true"
+            return default
+
+        fake_modules = {
+            "opentelemetry": opentelemetry_module,
+            "opentelemetry.exporter": opentelemetry_exporter_module,
+            "opentelemetry.exporter.otlp": opentelemetry_exporter_otlp_module,
+            "opentelemetry.exporter.otlp.proto": opentelemetry_exporter_otlp_proto_module,
+            "opentelemetry.exporter.otlp.proto.http": (
+                opentelemetry_exporter_otlp_proto_http_module
+            ),
+            "opentelemetry.exporter.otlp.proto.http.trace_exporter": (
+                trace_exporter_module
+            ),
+            "opentelemetry.sdk": sdk_module,
+            "opentelemetry.sdk.trace": sdk_trace_module,
+            "opentelemetry.sdk.trace.export": sdk_trace_export_module,
+        }
+
+        with patch.dict(sys.modules, fake_modules, clear=False):
+            with patch("python.persistent_wrapper.os.getenv", side_effect=getenv):
+                with patch("sys.stderr", new_callable=io.StringIO) as stderr_capture:
+                    persistent_wrapper._init_tracing()
+
+        self.assertTrue(persistent_wrapper._tracing_enabled)
+        self.assertIs(persistent_wrapper._tracer, fake_tracer)
+        self.assertEqual(stderr_capture.getvalue(), "")
 
 
 class TestMain(unittest.TestCase):

@@ -62,6 +62,14 @@ describe('MCP Utility Functions', () => {
   });
 
   describe('withTimeout', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('should resolve when promise resolves before timeout', async () => {
       const promise = Promise.resolve('success');
       const result = await withTimeout(promise, 1000, 'Timed out');
@@ -71,10 +79,12 @@ describe('MCP Utility Functions', () => {
 
     it('should reject when promise times out', async () => {
       const promise = new Promise((resolve) => setTimeout(() => resolve('late'), 100));
+      const result = withTimeout(promise, 50, 'Operation timed out');
+      const expectation = expect(result).rejects.toThrow('Operation timed out');
 
-      await expect(withTimeout(promise, 50, 'Operation timed out')).rejects.toThrow(
-        'Operation timed out',
-      );
+      await vi.runAllTimersAsync();
+
+      await expectation;
     });
 
     it('should reject with original error if promise rejects', async () => {

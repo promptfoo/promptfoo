@@ -175,6 +175,44 @@ describe('handleTraceErrorSpans', () => {
     });
   });
 
+  it('should detect OTLP error status codes', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trace-error-spans',
+        value: { max_count: 0 },
+      },
+      renderedValue: { max_count: 0 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: {
+          traceId: 'otlp-status-errors',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+          spans: [
+            {
+              spanId: '1',
+              name: 'tool.lookup',
+              startTime: 0,
+              endTime: 100,
+              statusCode: 2,
+              statusMessage: 'Tool failed',
+            },
+          ],
+        },
+      },
+    };
+
+    const result = handleTraceErrorSpans(params);
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Found 1 error spans, expected at most 0. Errors: tool.lookup (Tool failed)',
+      assertion: params.assertion,
+    });
+  });
+
   it('should detect errors by attributes', () => {
     const params: AssertionParams = {
       ...defaultParams,

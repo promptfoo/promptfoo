@@ -18,6 +18,12 @@ sidebar_label: OpenAI Agents
 
 Test multi-turn agentic workflows built with the [@openai/agents](https://github.com/openai/openai-agents-js) SDK. Evaluate agents that use tools, hand off between specialists, and handle multi-step tasks.
 
+:::note
+This page covers the JavaScript `@openai/agents` SDK and the built-in `openai:agents:*` provider.
+
+If you are using the Python `openai-agents` SDK, use the [OpenAI Agents Python SDK guide](/docs/guides/evaluate-openai-agents-python) and the [`openai-agents` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents) instead.
+:::
+
 ## Prerequisites
 
 - Install SDK: `npm install @openai/agents`
@@ -308,6 +314,7 @@ Tools must be async functions. Synchronous tools will cause runtime errors.
 ## Related Documentation
 
 - [OpenAI Provider](/docs/providers/openai) - Standard OpenAI completions and chat
+- [OpenAI Agents Python SDK Guide](/docs/guides/evaluate-openai-agents-python) - Python SDK example with Promptfoo tracing
 - [Red Team Guide](/docs/red-team/quickstart) - Test agent safety
 - [Assertions](/docs/configuration/expected-outputs) - Validate agent responses
 - [OpenAI Agents SDK](https://github.com/openai/openai-agents-js) - Official SDK documentation
