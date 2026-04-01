@@ -123,7 +123,7 @@ export function assertNotNull<T>(value: T | null | undefined, message?: string):
  * Type-safe array filtering that removes null/undefined values
  */
 export function filterNonNull<T>(array: (T | null | undefined)[]): T[] {
-  return array.filter((item): item is T => Boolean(item));
+  return array.filter((item): item is T => item != null);
 }
 
 /**
@@ -207,5 +207,10 @@ export function truncateText(text: string, maxLength: number): string {
   if (text.length <= maxLength) {
     return text;
   }
+
+  if (maxLength <= 3) {
+    return text.slice(0, Math.max(0, maxLength));
+  }
+
   return text.slice(0, maxLength - 3) + '...';
 }

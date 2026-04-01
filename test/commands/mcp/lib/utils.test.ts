@@ -230,8 +230,7 @@ describe('MCP Utility Functions', () => {
       const array = ['', 0, false, null, undefined, 'test'];
       const result = filterNonNull(array);
 
-      // Note: filterNonNull uses Boolean() which removes all falsy values
-      expect(result).toEqual(['test']);
+      expect(result).toEqual(['', 0, false, 'test']);
     });
 
     it('should return empty array for all null/undefined', () => {
@@ -439,9 +438,14 @@ describe('MCP Utility Functions', () => {
       const text = 'Hello';
       const result = truncateText(text, 2);
 
-      // When maxLength < 3, slice(0, negative) gives unexpected results
-      // This is an edge case in the implementation - it returns "Hell..."
-      expect(result).toBe('Hell...');
+      // Truncate without ellipsis so the result never exceeds maxLength.
+      expect(result).toBe('He');
+    });
+
+    it('should return empty string when max length is zero', () => {
+      const result = truncateText('Hello', 0);
+
+      expect(result).toBe('');
     });
 
     it('should handle empty string', () => {
