@@ -210,7 +210,6 @@
     "pdf-parse": "^2.4.5",
     "playwright": "^1.58.2",
     "playwright-extra": "^4.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "read-excel-file": "^8.0.0",
     "sharp": "^0.34.5"
   },
