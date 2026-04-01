@@ -148,6 +148,59 @@ describe('getGradingProvider', () => {
       expect(result).toBe(azureProvider);
     });
 
+    it('should skip defaultTest.provider when it is promptfoo:simulated-user', async () => {
+      const defaultProvider = {
+        id: () => 'default-provider',
+        callApi: vi.fn(),
+      };
+
+      (cliState as any).config = {
+        defaultTest: {
+          provider: {
+            id: 'promptfoo:simulated-user',
+            config: {
+              maxTurns: 3,
+            },
+          },
+        },
+      };
+
+      const result = await getGradingProvider('text', undefined, defaultProvider);
+
+      expect(loadApiProvider).not.toHaveBeenCalled();
+      expect(result).toBe(defaultProvider);
+    });
+
+    it('should fall back to defaultTest.options.provider when defaultTest.provider is promptfoo:simulated-user', async () => {
+      const azureProvider = {
+        id: () => 'azureopenai:chat:gpt-4',
+        callApi: vi.fn(),
+      };
+
+      (cliState as any).config = {
+        defaultTest: {
+          provider: {
+            id: 'promptfoo:simulated-user',
+            config: {
+              maxTurns: 3,
+            },
+          },
+          options: {
+            provider: 'azureopenai:chat:gpt-4',
+          },
+        },
+      };
+
+      vi.mocked(loadApiProvider).mockResolvedValue(azureProvider);
+
+      const result = await getGradingProvider('text', undefined, null);
+
+      expect(loadApiProvider).toHaveBeenCalledWith('azureopenai:chat:gpt-4', {
+        basePath: undefined,
+      });
+      expect(result).toBe(azureProvider);
+    });
+
     it('should use defaultTest.options.provider.text when specified', async () => {
       const azureProvider = {
         id: () => 'azureopenai:chat:gpt-4',
