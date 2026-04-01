@@ -365,6 +365,24 @@ describe('auth command', () => {
       expect(process.exitCode).toBe(1);
     });
 
+    it('should reject unknown --org when no teams are returned', async () => {
+      vi.mocked(getUserTeams).mockResolvedValue([]);
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key', '--org', 'missing-org']);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "Authentication failed: Organization 'missing-org' not found in your accessible teams. Available organizations: 1",
+        ),
+      );
+      expect(cloudConfig.saveValidatedApiToken).not.toHaveBeenCalled();
+      expect(setUserEmail).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(1);
+    });
+
     it('should auto-select single team without prompting', async () => {
       const mockTeams = [
         {

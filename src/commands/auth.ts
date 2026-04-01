@@ -34,14 +34,19 @@ function getOrganizationTeams(
       (team) => team.organizationId === requestedOrganizationId,
     );
 
-    if (organizationTeams.length > 0 || teams.length === 0) {
+    if (
+      organizationTeams.length > 0 ||
+      (teams.length === 0 && requestedOrganizationId === fallbackOrganizationId)
+    ) {
       return {
         organizationId: requestedOrganizationId,
         teams: organizationTeams,
       };
     }
 
-    const organizationIds = [...new Set(teams.map((team) => team.organizationId))].join(', ');
+    const organizationIds = [
+      ...new Set([fallbackOrganizationId, ...teams.map((team) => team.organizationId)]),
+    ].join(', ');
     throw new Error(
       `Organization '${requestedOrganizationId}' not found in your accessible teams. Available organizations: ${organizationIds}`,
     );
