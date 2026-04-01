@@ -9,7 +9,7 @@ import {
 import { cn } from '@app/lib/utils';
 import { Check, ChevronDown, CircleCheck, CircleX, Copy, CornerDownRight } from 'lucide-react';
 import { ellipsize } from '../../../../../util/text';
-import type { AssertionSet, GradingResult } from '@promptfoo/types';
+import type { Assertion, GradingResult } from '@promptfoo/types';
 
 const COPY_FEEDBACK_DURATION_MS = 2000;
 const ASSERTION_VALUE_PREVIEW_LENGTH = 300;
@@ -21,6 +21,15 @@ interface AssertionResultRow {
   rowId: string;
 }
 
+interface AssertionSetMetadata {
+  type: 'assert-set';
+  assertionCount?: number;
+  assert?: Assertion[];
+  metric?: string;
+  threshold?: number;
+  weight?: number;
+}
+
 function getChildResults(result: GradingResult): GradingResult[] {
   return (
     result.componentResults?.filter((childResult): childResult is GradingResult =>
@@ -29,8 +38,35 @@ function getChildResults(result: GradingResult): GradingResult[] {
   );
 }
 
-function getAssertionSet(result: GradingResult): AssertionSet | undefined {
-  return result.metadata?.assertionSet as AssertionSet | undefined;
+function isAssertionSetMetadata(value: unknown): value is AssertionSetMetadata {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const metadata = value as Record<string, unknown>;
+  return (
+    metadata.type === 'assert-set' &&
+    (metadata.assertionCount === undefined ||
+      (Number.isInteger(metadata.assertionCount) && metadata.assertionCount >= 0)) &&
+    (metadata.assert === undefined || Array.isArray(metadata.assert)) &&
+    (metadata.metric === undefined || typeof metadata.metric === 'string') &&
+    (metadata.threshold === undefined || typeof metadata.threshold === 'number') &&
+    (metadata.weight === undefined || typeof metadata.weight === 'number')
+  );
+}
+
+function getAssertionSet(result: GradingResult): AssertionSetMetadata | undefined {
+  const assertionSet = result.metadata?.assertionSet;
+  return isAssertionSetMetadata(assertionSet) ? assertionSet : undefined;
+}
+
+function getAssertionSetCount(result: GradingResult): number | undefined {
+  const assertionSet = getAssertionSet(result);
+  if (!assertionSet) {
+    return undefined;
+  }
+
+  return assertionSet.assertionCount ?? assertionSet.assert?.length;
 }
 
 function getMetric(result: GradingResult): string {
@@ -45,15 +81,75 @@ function getAssertionType(result: GradingResult): string {
   );
 }
 
+function isMatchingAssertion(
+  expected: Assertion | undefined,
+  actual: Assertion | undefined,
+): boolean {
+  return JSON.stringify(actual ?? null) === JSON.stringify(expected ?? null);
+}
+
+function isMatchingResultTree(
+  expected: GradingResult,
+  actual: GradingResult | undefined,
+  inheritedAssertion?: Assertion,
+): boolean {
+  if (!actual) {
+    return false;
+  }
+
+  const expectedAssertion = expected.assertion ?? inheritedAssertion;
+  const actualAssertion = actual.assertion ?? inheritedAssertion;
+  const expectedChildren = getChildResults(expected);
+  const actualChildren = getChildResults(actual);
+
+  return (
+    expected.pass === actual.pass &&
+    expected.score === actual.score &&
+    expected.reason === actual.reason &&
+    isMatchingAssertion(expectedAssertion, actualAssertion) &&
+    expectedChildren.length === actualChildren.length &&
+    expectedChildren.every((childResult, childIndex) =>
+      isMatchingResultTree(childResult, actualChildren[childIndex], expectedAssertion),
+    )
+  );
+}
+
+function normalizeAssertionResults(gradingResults: GradingResult[]): GradingResult[] {
+  const normalizedResults: GradingResult[] = [];
+  let index = 0;
+
+  while (index < gradingResults.length) {
+    const result = gradingResults[index];
+    if (!result) {
+      index += 1;
+      continue;
+    }
+
+    normalizedResults.push(result);
+
+    const childResults = getChildResults(result);
+    const hasFlattenedDuplicates =
+      childResults.length > 0 &&
+      childResults.every((childResult, childIndex) =>
+        isMatchingResultTree(childResult, gradingResults[index + childIndex + 1], result.assertion),
+      );
+
+    index += hasFlattenedDuplicates ? childResults.length + 1 : 1;
+  }
+
+  return normalizedResults;
+}
+
 function buildAssertionRows(
   gradingResults: GradingResult[],
   depth = 0,
   parentRowId = '',
 ): AssertionResultRow[] {
   const rows: AssertionResultRow[] = [];
+  const normalizedResults = normalizeAssertionResults(gradingResults);
 
-  for (let index = 0; index < gradingResults.length; index++) {
-    const result = gradingResults[index];
+  for (let index = 0; index < normalizedResults.length; index++) {
+    const result = normalizedResults[index];
     if (!result) {
       continue;
     }
@@ -64,7 +160,6 @@ function buildAssertionRows(
     const childResults = getChildResults(result);
     if (childResults.length > 0) {
       rows.push(...buildAssertionRows(childResults, depth + 1, rowId));
-      index += childResults.length;
     }
   }
 
@@ -98,7 +193,7 @@ function getValue(result: GradingResult): string {
 
   const assertionSet = getAssertionSet(result);
   if (assertionSet) {
-    const assertionCount = assertionSet.assert.length;
+    const assertionCount = getAssertionSetCount(result) ?? getChildResults(result).length;
     return `${assertionCount} nested assertion${assertionCount === 1 ? '' : 's'}`;
   }
 

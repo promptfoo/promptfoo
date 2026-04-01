@@ -189,11 +189,10 @@ describe('EvaluationPanel', () => {
           assertionSet: {
             type: 'assert-set',
             metric: 'tool-calls',
-            assert: childResults.map((childResult) => childResult.assertion),
+            assertionCount: childResults.length,
           },
         },
       },
-      ...childResults,
     ];
 
     const { container } = render(<EvaluationPanel gradingResults={gradingResults} />);
@@ -206,5 +205,97 @@ describe('EvaluationPanel', () => {
     expect(screen.getByText('google_docs/batch_update')).toBeInTheDocument();
     expect(screen.getByText('google_docs/create_document')).toBeInTheDocument();
     expect(container.querySelectorAll('.lucide-corner-down-right')).toHaveLength(2);
+  });
+
+  it('renders sibling rows after nested children when child results are not duplicated at top level', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Parent set passed',
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'Nested child set passed',
+            componentResults: [
+              {
+                pass: true,
+                score: 1,
+                reason: 'Deep child passed',
+                assertion: {
+                  type: 'contains',
+                  value: 'deep-child',
+                },
+              },
+            ],
+            metadata: {
+              assertionSet: {
+                type: 'assert-set',
+                metric: 'nested-tool-calls',
+                assertionCount: 1,
+              },
+            },
+          },
+          {
+            pass: false,
+            score: 0,
+            reason: 'Sibling child failed',
+            assertion: {
+              type: 'equals',
+              value: 'expected-sibling',
+            },
+          },
+        ],
+        metadata: {
+          assertionSet: {
+            type: 'assert-set',
+            metric: 'tool-calls',
+            assertionCount: 2,
+          },
+        },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    expect(screen.getByText('nested-tool-calls')).toBeInTheDocument();
+    expect(screen.getByText('deep-child')).toBeInTheDocument();
+    expect(screen.getByText('equals')).toBeInTheDocument();
+    expect(screen.getByText('expected-sibling')).toBeInTheDocument();
+    expect(screen.getByText('Sibling child failed')).toBeInTheDocument();
+  });
+
+  it('ignores malformed assertion-set metadata and falls back to child result counts', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'All assertions passed',
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'Assertion passed',
+            assertion: {
+              type: 'contains',
+              value: 'google_docs/create_document',
+            },
+          },
+        ],
+        metadata: {
+          assertionSet: {
+            type: 'assert-set',
+            assertionCount: '1',
+          },
+        },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    expect(screen.getByText('assert-set')).toBeInTheDocument();
+    expect(screen.getByText('1 nested assertion')).toBeInTheDocument();
+    expect(screen.getByText('google_docs/create_document')).toBeInTheDocument();
   });
 });
