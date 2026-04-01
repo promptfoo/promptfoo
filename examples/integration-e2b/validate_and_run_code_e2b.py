@@ -155,7 +155,9 @@ def _stdout_from_result(res) -> tuple[str, str]:
             j = res.to_json()
             return _try_parse_logs_obj(j)
         except Exception:
-            logger.debug("Failed to serialize sandbox result via to_json()", exc_info=True)
+            logger.debug(
+                "Failed to serialize sandbox result via to_json()", exc_info=True
+            )
 
     return "", ""
 

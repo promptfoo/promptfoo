@@ -562,10 +562,7 @@ class TestHandleCall(unittest.TestCase):
         def mock_open_func(path, *args, **kwargs):
             nonlocal verification_read_count
             mode = args[0] if args else kwargs.get("mode", "r")
-            if (
-                path == self.response_file
-                and "r" in mode
-            ):
+            if path == self.response_file and "r" in mode:
                 verification_read_count += 1
                 if verification_read_count <= 2:
                     raise IOError("Simulated read failure")
