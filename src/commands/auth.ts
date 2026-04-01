@@ -81,12 +81,10 @@ function resolveTeamFromOrganizationTeams(
   teamIdentifier: string,
   organizationId: string,
 ): UserTeam {
-  const selectedTeam = teams.find(
-    (team) =>
-      team.id === teamIdentifier ||
-      team.slug === teamIdentifier ||
-      team.name.toLowerCase() === teamIdentifier.toLowerCase(),
-  );
+  const selectedTeam =
+    teams.find((team) => team.id === teamIdentifier) ||
+    teams.find((team) => team.name.toLowerCase() === teamIdentifier.toLowerCase()) ||
+    teams.find((team) => team.slug === teamIdentifier);
 
   if (selectedTeam) {
     return selectedTeam;
@@ -122,7 +120,7 @@ async function setupTeamContext(
   cmdObj: LoginCommandOptions,
   organizationId: string,
   teams?: UserTeam[],
-): Promise<void> {
+): Promise<string> {
   try {
     let currentOrganizationId = organizationId;
     let organizationTeams = teams;
@@ -183,6 +181,8 @@ async function setupTeamContext(
       cloudConfig.setCurrentTeamId(selectedTeam.id, currentOrganizationId);
       logger.info(`Team: ${chalk.cyan(selectedTeam.name)}${teamLabelSuffix}`);
     }
+
+    return currentOrganizationId;
   } catch (teamError) {
     if (cmdObj.org || cmdObj.team) {
       throw teamError;
@@ -190,6 +190,7 @@ async function setupTeamContext(
     logger.warn(
       `Could not set up team context: ${teamError instanceof Error ? teamError.message : String(teamError)}`,
     );
+    return organizationId;
   }
 }
 
@@ -229,7 +230,7 @@ async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Pr
   setUserEmail(user.email);
   cloudConfig.setCurrentOrganization(organizationId);
 
-  await setupTeamContext(cmdObj, organizationId, organizationTeams);
+  organizationId = await setupTeamContext(cmdObj, organizationId, organizationTeams);
 
   logger.info(chalk.green.bold('Successfully logged in'));
   logger.info(`User: ${chalk.cyan(user.email)}`);
