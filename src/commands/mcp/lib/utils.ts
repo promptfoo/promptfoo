@@ -47,10 +47,18 @@ export function withTimeout<T>(
   timeoutMs: number,
   errorMessage: string,
 ): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
   return Promise.race([
     promise,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(errorMessage)), timeoutMs)),
-  ]);
+    new Promise<T>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
+    }),
+  ]).finally(() => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  });
 }
 
 /**
