@@ -310,17 +310,16 @@ export class MCPClient {
       return;
     }
 
-    if (this.hasValidToken(serverKey)) {
-      logger.debug(`[MCP] Token for ${serverKey} still valid, no refresh needed`);
-      return;
-    }
-
     await this.refreshOAuthToken(serverKey, oauthConfig, false);
   }
 
   private hasValidToken(serverKey: string): boolean {
     const expiresAt = this.tokenExpiresAt.get(serverKey);
-    return expiresAt != null && Date.now() + TOKEN_REFRESH_BUFFER_MS < expiresAt;
+    return (
+      expiresAt != null &&
+      this.clients.has(serverKey) &&
+      Date.now() + TOKEN_REFRESH_BUFFER_MS < expiresAt
+    );
   }
 
   private async refreshOAuthToken(
@@ -351,6 +350,7 @@ export class MCPClient {
     }
 
     if (!forceRefresh && this.hasValidToken(serverKey)) {
+      logger.debug(`[MCP] Token for ${serverKey} still valid, no refresh needed`);
       return;
     }
 
@@ -397,6 +397,7 @@ export class MCPClient {
 
   async callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult> {
     const requestOptions = getEffectiveRequestOptions(this.config);
+    const disconnectedServers: string[] = [];
 
     // Find which server has this tool
     for (const [serverKey, serverTools] of this.tools.entries()) {
@@ -410,6 +411,7 @@ export class MCPClient {
           logger.debug(
             `[MCP] Server ${serverKey} is not connected, trying the next matching server`,
           );
+          disconnectedServers.push(serverKey);
           continue;
         }
         let currentClient = client;
@@ -484,6 +486,13 @@ export class MCPClient {
           }
         }
       }
+    }
+
+    if (disconnectedServers.length > 0) {
+      const plural = disconnectedServers.length > 1 ? 's are' : ' is';
+      throw new Error(
+        `Tool ${name} is known but MCP server${plural} disconnected: ${disconnectedServers.join(', ')}`,
+      );
     }
 
     throw new Error(`Tool ${name} not found in any connected MCP server`);

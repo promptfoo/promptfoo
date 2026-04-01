@@ -1615,7 +1615,7 @@ export class HttpProvider implements ApiProvider {
       return;
     }
 
-    logger.debug('[HTTP Provider Auth]: Refreshing OAuth token');
+    logger.debug('[HTTP Provider Auth]: Starting or waiting for OAuth token refresh');
     await this.refreshTokenWithLock(() => this.performTokenRefresh(oauthConfig));
   }
 
@@ -1771,7 +1771,7 @@ export class HttpProvider implements ApiProvider {
       return;
     }
 
-    logger.debug('[HTTP Provider Auth]: Refreshing file auth token');
+    logger.debug('[HTTP Provider Auth]: Starting or waiting for file auth token refresh');
     await this.refreshTokenWithLock(() => this.performFileTokenRefresh(prompt, vars, context));
   }
 

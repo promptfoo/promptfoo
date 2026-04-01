@@ -143,6 +143,8 @@ describe('MCPClient', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetEnvInt.mockReset();
+    mockGetEnvInt.mockReturnValue(undefined);
     // Reset the OAuth token mock to return a valid token by default
     mockGetOAuthTokenWithExpiry.mockReset();
     mockGetOAuthTokenWithExpiry.mockResolvedValue({
@@ -978,6 +980,33 @@ describe('MCPClient', () => {
       await expect(mcpClient.callTool('tool1', {})).resolves.toEqual({ content: 'result' });
       expect(mockClient.callTool).toHaveBeenCalledTimes(1);
     });
+
+    it('should report when a known tool only exists on disconnected servers', async () => {
+      mockClient.connect.mockResolvedValue(undefined);
+      mockClient.listTools.mockResolvedValue({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          name: 'server1',
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+      (
+        mcpClient as unknown as {
+          clients: Map<string, unknown>;
+        }
+      ).clients.delete('server1');
+
+      await expect(mcpClient.callTool('tool1', {})).rejects.toThrow(
+        'Tool tool1 is known but MCP server is disconnected: server1',
+      );
+    });
   });
 
   describe('OAuth authentication', () => {
@@ -1303,6 +1332,68 @@ describe('MCPClient', () => {
       await expect(mcpClient.callTool('tool1', {})).resolves.toEqual({ content: 'result' });
       expect(oldClient.callTool).not.toHaveBeenCalled();
       expect(refreshedClient.callTool).toHaveBeenCalledTimes(1);
+    });
+
+    it('should wait for an in-progress reactive reconnect when token metadata is already refreshed', async () => {
+      const reconnectStarted = createDeferred<void>();
+      const reconnectContinue = createDeferred<void>();
+      const oldClient = createMockClient(
+        vi.fn().mockRejectedValueOnce(new Error('401 Unauthorized')),
+      );
+      const refreshedClient = createMockClient(
+        vi.fn().mockResolvedValue({ content: 'refreshed-result' }),
+      );
+      refreshedClient.connect.mockImplementationOnce(async () => {
+        reconnectStarted.resolve(undefined);
+        await reconnectContinue.promise;
+      });
+
+      vi.mocked(Client)
+        .mockImplementationOnce(function () {
+          return oldClient as unknown as Client;
+        })
+        .mockImplementationOnce(function () {
+          return refreshedClient as unknown as Client;
+        });
+
+      mockGetOAuthTokenWithExpiry
+        .mockResolvedValueOnce({
+          accessToken: 'initial-token',
+          expiresAt: Date.now() + 3_600_000,
+        })
+        .mockResolvedValueOnce({
+          accessToken: 'refreshed-token',
+          expiresAt: Date.now() + 3_600_000,
+        });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          url: 'http://localhost:3000',
+          auth: {
+            type: 'oauth',
+            grantType: 'client_credentials',
+            clientId: 'test-client',
+            clientSecret: 'test-secret',
+            tokenUrl: 'https://auth.example.com/token',
+          },
+        },
+      });
+
+      await mcpClient.initialize();
+
+      const call1 = mcpClient.callTool('tool1', {});
+      await reconnectStarted.promise;
+      const call2 = mcpClient.callTool('tool1', {});
+
+      reconnectContinue.resolve(undefined);
+
+      await expect(Promise.all([call1, call2])).resolves.toEqual([
+        { content: 'refreshed-result' },
+        { content: 'refreshed-result' },
+      ]);
+      expect(oldClient.callTool).toHaveBeenCalledTimes(1);
+      expect(refreshedClient.callTool).toHaveBeenCalledTimes(2);
     });
 
     it('should deduplicate concurrent proactive token refreshes', async () => {
