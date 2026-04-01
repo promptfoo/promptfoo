@@ -28,7 +28,7 @@ export async function loadAgentDefinition(
   }
 
   // If it's an inline definition, convert to Agent
-  if (agentConfig !== null && typeof agentConfig === 'object') {
+  if (agentConfig !== null && typeof agentConfig === 'object' && !Array.isArray(agentConfig)) {
     logger.debug('[AgentsLoader] Creating agent from inline definition');
     return await createAgentFromDefinition(agentConfig);
   }

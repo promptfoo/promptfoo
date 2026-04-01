@@ -440,8 +440,17 @@ describe('OpenAiAgentsProvider', () => {
 });
 
 describe('loadAgentDefinition', () => {
-  it('rejects null agent configs with the standard validation error', async () => {
+  it('rejects nullish agent configs with the standard validation error', async () => {
     await expect(loadAgentDefinition(null)).rejects.toThrow(
+      'Invalid agent configuration: expected Agent instance, file:// URL, or inline definition',
+    );
+    await expect(loadAgentDefinition(undefined)).rejects.toThrow(
+      'Invalid agent configuration: expected Agent instance, file:// URL, or inline definition',
+    );
+  });
+
+  it('rejects array agent configs with the standard validation error', async () => {
+    await expect(loadAgentDefinition([] as any)).rejects.toThrow(
       'Invalid agent configuration: expected Agent instance, file:// URL, or inline definition',
     );
   });
