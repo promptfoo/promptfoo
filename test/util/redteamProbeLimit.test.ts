@@ -1,9 +1,8 @@
 import { randomUUID } from 'crypto';
 
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { evalResultsTable, evalsTable } from '../../src/database/tables';
-import { getUserEmail, isLoggedIntoCloud } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import {
   checkRedteamProbeLimit,
@@ -130,16 +129,6 @@ describe('redteamProbeLimit', () => {
     await db.run('DELETE FROM evals_to_datasets');
     await db.run('DELETE FROM evals_to_prompts');
     await db.run('DELETE FROM evals');
-
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-03-15T12:00:00.000Z'));
-    vi.mocked(isLoggedIntoCloud).mockReturnValue(false);
-    vi.mocked(getUserEmail).mockReturnValue('test@example.com');
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-    vi.resetAllMocks();
   });
 
   describe('getMonthStartTimestamp', () => {
@@ -176,11 +165,8 @@ describe('redteamProbeLimit', () => {
     });
 
     it('should not count evals from previous months', () => {
-      const lastMonth = new Date();
-      lastMonth.setDate(1);
-      lastMonth.setMonth(lastMonth.getMonth() - 1);
       insertRedteamEval({
-        createdAt: lastMonth.getTime(),
+        createdAt: getMonthStartTimestamp() - 1,
         numResults: 5,
         numRequestsPerResult: 1,
       });
@@ -304,6 +290,7 @@ describe('redteamProbeLimit', () => {
     });
 
     it('should exempt cloud-authenticated users', async () => {
+      const { isLoggedIntoCloud } = await import('../../src/globalConfig/accounts');
       vi.mocked(isLoggedIntoCloud).mockReturnValue(true);
 
       // Even with probes, cloud users should be exempt
@@ -313,6 +300,9 @@ describe('redteamProbeLimit', () => {
       expect(result.withinLimit).toBe(true);
       expect(result.remaining).toBe(Number.POSITIVE_INFINITY);
       expect(result.limit).toBe(Number.POSITIVE_INFINITY);
+
+      // Reset mock
+      vi.mocked(isLoggedIntoCloud).mockReturnValue(false);
     });
   });
 });
