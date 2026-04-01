@@ -100,6 +100,10 @@ providers:
       apiBaseUrl: https://custom.googleapis.com
 ```
 
+For promptfoo's built-in cost estimates, Google providers also support `config.cost`,
+`config.inputCost`, and `config.outputCost`. Use `inputCost` and `outputCost` for separate
+prompt and completion pricing. The legacy `cost` option remains the shared fallback.
+
 ## Quick Start
 
 ### 1. Basic Evaluation

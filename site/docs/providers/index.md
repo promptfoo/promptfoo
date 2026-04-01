@@ -175,6 +175,24 @@ providers:
       apiKey: your_api_key_here
 ```
 
+### Overriding Pricing
+
+For providers with built-in token pricing, you can override promptfoo's cost estimates in
+`config`:
+
+```yaml
+providers:
+  - id: openai:gpt-4o
+    config:
+      inputCost: 0.0000025
+      outputCost: 0.00001
+```
+
+Use `inputCost` and `outputCost` when a provider charges different prompt and completion
+rates. The legacy `cost` option remains a shared fallback that applies the same value to
+both directions. OpenAI audio-capable models also support `audioInputCost` and
+`audioOutputCost`, with `audioCost` as the shared fallback.
+
 ## Custom Integrations
 
 promptfoo supports several types of custom integrations:

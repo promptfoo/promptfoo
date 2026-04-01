@@ -228,10 +228,18 @@ export class ReplicateProvider implements ApiProvider {
 
     if (typeof response === 'string') {
       // It's text
-      return {
+      const ret = {
         output: response,
         tokenUsage: createEmptyTokenUsage(),
       };
+      if (cache && cacheKey) {
+        try {
+          await cache.set(cacheKey, JSON.stringify(ret));
+        } catch (err) {
+          logger.error(`Failed to cache response: ${String(err)}`);
+        }
+      }
+      return ret;
     } else if (Array.isArray(response)) {
       // It's a list of generative outputs
       if (response.every((item) => typeof item === 'string')) {
