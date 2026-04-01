@@ -10,6 +10,12 @@ import { clearAgentCache } from './util/fetch/index';
 import { setupEnv } from './util/index';
 import type { Command } from 'commander';
 
+// Tracks the last env path loaded to prevent double-loading.
+// setupEnvFilesFromArgv() runs early (before Commander parses) with shouldLog=false,
+// then the preAction hook may call loadEnvPathOnce again with shouldLog=true.
+// If the paths match, the second call is a no-op (including its log), which is intentional:
+// the env vars are already in process.env, and logging before Commander sets --verbose
+// would be invisible anyway.
 let loadedEnvPathKey: string | undefined;
 
 function normalizeEnvPaths(input: string | string[] | undefined): string | string[] | undefined {

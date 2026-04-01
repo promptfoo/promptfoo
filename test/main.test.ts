@@ -85,6 +85,30 @@ describe('setupEnvFilesFromArgv', () => {
 
     expect(mockSetupEnv).not.toHaveBeenCalled();
   });
+
+  it('should recognize the --env-path alias', () => {
+    setupEnvFilesFromArgv(['eval', '--env-path', '.env.staging']);
+
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.staging');
+  });
+
+  it('should be a no-op when no env flags are present', () => {
+    setupEnvFilesFromArgv(['eval', '--verbose', '--no-cache']);
+
+    expect(mockSetupEnv).not.toHaveBeenCalled();
+  });
+
+  it('should ignore --env-file= with empty value', () => {
+    setupEnvFilesFromArgv(['eval', '--env-file=']);
+
+    expect(mockSetupEnv).not.toHaveBeenCalled();
+  });
+
+  it('should skip --env-file when next arg starts with -', () => {
+    setupEnvFilesFromArgv(['eval', '--env-file', '--verbose']);
+
+    expect(mockSetupEnv).not.toHaveBeenCalled();
+  });
 });
 
 describe('addCommonOptionsRecursively', () => {
