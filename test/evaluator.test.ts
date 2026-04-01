@@ -19,6 +19,7 @@ import Eval from '../src/models/eval';
 import {
   type ApiProvider,
   type Prompt,
+  type ProviderResponse,
   ResultFailureReason,
   type TestSuite,
 } from '../src/types/index';
@@ -3488,7 +3489,7 @@ describe('evaluator', () => {
     expect(mockApiProviderWithError.callApi).toHaveBeenCalledTimes(1);
   });
 
-  it('should handle evaluation timeout', async () => {
+  it('should handle evaluation timeout without tearing down the shared provider', async () => {
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let longTimer: NodeJS.Timeout | null = null;
 
@@ -3558,7 +3559,7 @@ describe('evaluator', () => {
         }),
       );
 
-      expect(slowApiProvider.cleanup).toHaveBeenCalledWith();
+      expect(slowApiProvider.cleanup).not.toHaveBeenCalled();
     } finally {
       if (longTimer) {
         clearTimeout(longTimer);
@@ -3566,23 +3567,18 @@ describe('evaluator', () => {
     }
   });
 
-  it('should not block timeout rows on a hanging provider cleanup', async () => {
+  it('should not block timeout rows when a provider call does not settle after abort', async () => {
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
 
-    const hangingCleanupProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('hanging-cleanup-provider'),
+    const hangingProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('hanging-provider'),
       callApi: vi.fn().mockImplementation(
         () =>
           new Promise(() => {
             // Intentionally never resolves; timeout handling must still emit a row.
           }),
       ),
-      cleanup: vi.fn().mockImplementation(
-        () =>
-          new Promise(() => {
-            // Intentionally never resolves.
-          }),
-      ),
+      cleanup: vi.fn(),
     };
 
     const mockEval = {
@@ -3611,7 +3607,7 @@ describe('evaluator', () => {
     };
 
     const testSuite: TestSuite = {
-      providers: [hangingCleanupProvider],
+      providers: [hangingProvider],
       prompts: [toPrompt('Test prompt')],
       tests: [{}],
     };
@@ -3620,7 +3616,7 @@ describe('evaluator', () => {
     await evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
     const elapsedMs = Date.now() - startedAt;
 
-    expect(hangingCleanupProvider.cleanup).toHaveBeenCalledWith();
+    expect(hangingProvider.cleanup).not.toHaveBeenCalled();
     expect(mockAddResult).toHaveBeenCalledWith(
       expect.objectContaining({
         error: expect.stringContaining('Evaluation timed out after 50ms'),
@@ -3629,6 +3625,73 @@ describe('evaluator', () => {
       }),
     );
     expect(elapsedMs).toBeLessThan(1000);
+  });
+
+  it('should ignore stale provider rows that resolve after a timeout row is recorded', async () => {
+    const mockAddResult = vi.fn().mockResolvedValue(undefined);
+    let resolveLateResponse!: (value: ProviderResponse) => void;
+
+    const slowApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('slow-provider'),
+      callApi: vi.fn().mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveLateResponse = resolve;
+          }),
+      ),
+      cleanup: vi.fn(),
+    };
+
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 0,
+          failures: 0,
+          errors: 1,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: vi.fn().mockResolvedValue(undefined),
+      setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [slowApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    await evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
+
+    expect(mockAddResult).toHaveBeenCalledTimes(1);
+    expect(mockAddResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.stringContaining('Evaluation timed out after 50ms'),
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+      }),
+    );
+
+    resolveLateResponse({
+      output: 'Late response',
+      tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(mockAddResult).toHaveBeenCalledTimes(1);
   });
 
   it('should honor external abortSignal when timeoutMs is set', async () => {

@@ -13,6 +13,10 @@ providers:
       persist_threads: true
       thread_pool_size: 1
 
+defaultTest:
+  options:
+    runSerially: true
+
 tests:
   - vars:
       request: 'Remember this marker: BLUE-OTTER-19. Reply with exactly STORED.'

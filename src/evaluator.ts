@@ -1619,7 +1619,12 @@ class Evaluator {
     // Actually run the eval
     let numComplete = 0;
 
-    const processEvalStep = async (evalStep: RunEvalOptions, index: number | string) => {
+    const processEvalStep = async (
+      evalStep: RunEvalOptions,
+      index: number | string,
+      shouldSkipStaleRows?: () => boolean,
+      onRowsReady?: () => void,
+    ) => {
       if (typeof index !== 'number') {
         throw new Error('Expected index to be a number');
       }
@@ -1630,8 +1635,15 @@ class Evaluator {
       evalStep.test = beforeEachOut.test;
 
       const rows = await runEval(evalStep);
+      onRowsReady?.();
 
       for (const row of rows) {
+        if (shouldSkipStaleRows?.()) {
+          // Timed-out provider calls can still settle later; ignore stale rows
+          // so the timeout row remains the canonical result for this test case.
+          return;
+        }
+
         for (const varName of Object.keys(row.vars)) {
           vars.add(varName);
         }
@@ -1822,29 +1834,21 @@ class Evaluator {
 
       let timeoutId: NodeJS.Timeout | undefined;
       let didTimeout = false;
-      let cleanupPromise: Promise<void> | undefined;
+      const clearEvalStepTimeout = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = undefined;
+        }
+      };
 
       try {
         return await Promise.race([
-          processEvalStep(evalStepWithSignal, index),
+          processEvalStep(evalStepWithSignal, index, () => didTimeout, clearEvalStepTimeout),
           new Promise<void>((_, reject) => {
             timeoutId = setTimeout(() => {
               didTimeout = true;
               // Abort any ongoing requests
               abortController.abort();
-
-              // If the provider has a cleanup method, call it
-              if (typeof evalStep.provider.cleanup === 'function') {
-                try {
-                  cleanupPromise = Promise.resolve(evalStep.provider.cleanup()).catch(
-                    (cleanupErr: unknown) => {
-                      logger.warn(`Error during provider cleanup: ${cleanupErr}`);
-                    },
-                  );
-                } catch (cleanupErr) {
-                  logger.warn(`Error during provider cleanup: ${cleanupErr}`);
-                }
-              }
 
               reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
             }, timeoutMs);
@@ -1853,27 +1857,6 @@ class Evaluator {
       } catch (error) {
         if (!didTimeout) {
           throw error;
-        }
-        if (cleanupPromise !== undefined) {
-          const cleanupTimeoutMs = Math.min(timeoutMs, 5000);
-          let cleanupTimeoutId: NodeJS.Timeout | undefined;
-          try {
-            await Promise.race([
-              cleanupPromise,
-              new Promise<void>((resolve) => {
-                cleanupTimeoutId = setTimeout(() => {
-                  logger.warn(
-                    `Provider cleanup did not finish within ${cleanupTimeoutMs}ms after timeout; continuing`,
-                  );
-                  resolve();
-                }, cleanupTimeoutMs);
-              }),
-            ]);
-          } finally {
-            if (cleanupTimeoutId) {
-              clearTimeout(cleanupTimeoutId);
-            }
-          }
         }
         const sanitizedTestCase = { ...evalStep.test };
         delete (sanitizedTestCase as Partial<AtomicTestCase>).provider;
@@ -1947,9 +1930,7 @@ class Evaluator {
           );
         }
       } finally {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
+        clearEvalStepTimeout();
       }
     };
 
