@@ -52,12 +52,7 @@ def after_all(context):
     # Alert on low success rate
     if success_rate < 80:
         print(f"WARNING: Success rate {success_rate:.1f}% is below 80% threshold!")
-
-        # Example: Send webhook notification
-        # import requests
-        # requests.post("https://hooks.slack.com/...", json={
-        #     "text": f"Evaluation {eval_id} has low success rate: {success_rate:.1f}%"
-        # })
+        # Add webhook notification logic here if you want alerting.
 
     # Log failures
     if failed > 0:
@@ -67,14 +62,4 @@ def after_all(context):
                 error = r.get("error") or "Assertion failed"
                 print(f"  {i + 1}. {error}")
 
-    # Example: Export to CSV
-    # import csv
-    # with open(f"results_{eval_id}.csv", "w", newline="") as f:
-    #     writer = csv.DictWriter(f, fieldnames=["success", "latencyMs", "cost"])
-    #     writer.writeheader()
-    #     for r in results:
-    #         writer.writerow({
-    #             "success": r.get("success"),
-    #             "latencyMs": r.get("latencyMs"),
-    #             "cost": r.get("cost"),
-    #         })
+    # Export `results` here if you need durable reporting.

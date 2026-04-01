@@ -17,5 +17,5 @@ def get_assert(output, context):
     try:
         _, _, F1 = score([output], [reference], lang="en", verbose=False)
         return F1.item()
-    except:
+    except Exception:
         return 0
