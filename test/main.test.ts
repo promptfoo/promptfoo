@@ -50,14 +50,26 @@ vi.mock('../src/codeScan', () => ({
   codeScansCommand: vi.fn(),
 }));
 
-let addCommonOptionsRecursively: typeof import('../src/main').addCommonOptionsRecursively;
-let isMainModule: typeof import('../src/main').isMainModule;
-let shutdownGracefully: typeof import('../src/main').shutdownGracefully;
+let addCommonOptionsRecursively: typeof import('../src/mainUtils').addCommonOptionsRecursively;
+let isMainModule: typeof import('../src/mainUtils').isMainModule;
+let shutdownGracefully: typeof import('../src/mainUtils').shutdownGracefully;
 
 async function loadMainModule() {
   vi.resetModules();
-  ({ addCommonOptionsRecursively, isMainModule, shutdownGracefully } = await import('../src/main'));
+  ({ addCommonOptionsRecursively, isMainModule, shutdownGracefully } = await import(
+    '../src/mainUtils'
+  ));
 }
+
+describe('main module exports', () => {
+  it('should re-export the extracted helpers from src/main.ts', async () => {
+    const mainModule = await import('../src/main');
+
+    expect(mainModule.addCommonOptionsRecursively).toBeInstanceOf(Function);
+    expect(mainModule.isMainModule).toBeInstanceOf(Function);
+    expect(mainModule.shutdownGracefully).toBeInstanceOf(Function);
+  });
+});
 
 describe('addCommonOptionsRecursively', () => {
   const originalExit = process.exit;

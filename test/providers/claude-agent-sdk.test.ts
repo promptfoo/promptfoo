@@ -3,6 +3,7 @@ import fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache, getCache } from '../../src/cache';
+import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import {
   CLAUDE_CODE_MODEL_ALIASES,
@@ -186,7 +187,6 @@ describe('ClaudeCodeSDKProvider', () => {
     vi.clearAllMocks();
 
     // Setup importModule to return our mockQuery
-    const { importModule } = await import('../../src/esm');
     vi.mocked(importModule).mockResolvedValue({ query: mockQuery });
 
     // Default mocks
@@ -496,14 +496,10 @@ describe('ClaudeCodeSDKProvider', () => {
         delete process.env.ANTHROPIC_API_KEY;
         delete process.env.CLAUDE_CODE_USE_VERTEX;
 
-        const { loadApiProvider } = await import('../../src/providers/index');
-        const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
-          options: {
-            env: { CLAUDE_CODE_USE_VERTEX: 'true' } as EnvOverrides,
-          },
+        const provider = new ClaudeCodeSDKProvider({
+          env: { CLAUDE_CODE_USE_VERTEX: 'true' } as EnvOverrides,
         });
 
-        // Provider should have received the env override through the registry
         const result = checkProviderApiKeys([provider]);
         expect(result.size).toBe(0);
       });

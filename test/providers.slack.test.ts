@@ -21,6 +21,7 @@ describe('SlackProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    slackMocks.webClientImpl.mockReset();
     process.env.SLACK_BOT_TOKEN = 'xoxb-test-token';
 
     mockWebClient = {
@@ -36,6 +37,7 @@ describe('SlackProvider', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     delete process.env.SLACK_BOT_TOKEN;
   });
 
@@ -103,6 +105,8 @@ describe('SlackProvider', () => {
     });
 
     it('should post message to Slack and return first response', async () => {
+      vi.useFakeTimers();
+
       // Set a longer timeout for this test
       provider = new SlackProvider({
         config: {
@@ -131,7 +135,9 @@ describe('SlackProvider', () => {
           ],
         } as any);
 
-      const result = await provider.callApi('Test prompt');
+      const resultPromise = provider.callApi('Test prompt');
+      await vi.advanceTimersByTimeAsync(1000);
+      const result = await resultPromise;
 
       expect(mockWebClient.chat.postMessage).toHaveBeenCalledWith({
         channel: 'C123',
@@ -178,6 +184,8 @@ describe('SlackProvider', () => {
     });
 
     it('should handle timeout', async () => {
+      vi.useFakeTimers();
+
       mockWebClient.chat.postMessage.mockResolvedValue({
         ok: true,
         ts: '1234567890.123456',
@@ -187,7 +195,9 @@ describe('SlackProvider', () => {
         messages: [],
       } as any);
 
-      const result = await provider.callApi('Test prompt');
+      const resultPromise = provider.callApi('Test prompt');
+      await vi.advanceTimersByTimeAsync(1000);
+      const result = await resultPromise;
 
       expect(result.error).toContain('Timeout waiting for Slack response');
     });
@@ -238,6 +248,8 @@ describe('SlackProvider', () => {
 
   describe('response strategies', () => {
     it('should wait for specific user when responseStrategy is "user"', async () => {
+      vi.useFakeTimers();
+
       const provider = new SlackProvider({
         config: {
           channel: 'C123',
@@ -279,13 +291,17 @@ describe('SlackProvider', () => {
           ],
         } as any);
 
-      const result = await provider.callApi('Test prompt');
+      const resultPromise = provider.callApi('Test prompt');
+      await vi.advanceTimersByTimeAsync(1000);
+      const result = await resultPromise;
 
       expect(result.output).toBe('Correct user');
       expect(result.metadata?.waitForUser).toBe('U456');
     });
 
     it('should collect all responses until timeout when responseStrategy is "timeout"', async () => {
+      vi.useFakeTimers();
+
       const provider = new SlackProvider({
         config: {
           channel: 'C123',
@@ -333,7 +349,9 @@ describe('SlackProvider', () => {
         }
       });
 
-      const result = await provider.callApi('Test prompt');
+      const resultPromise = provider.callApi('Test prompt');
+      await vi.advanceTimersByTimeAsync(3000);
+      const result = await resultPromise;
 
       expect(result.output).toBe('First response\n\nSecond response');
     });
@@ -425,6 +443,8 @@ describe('SlackProvider', () => {
 
   describe('metadata', () => {
     it('should include response time in metadata', async () => {
+      vi.useFakeTimers();
+
       const provider = new SlackProvider({
         config: {
           channel: 'C123',
@@ -454,7 +474,9 @@ describe('SlackProvider', () => {
           ],
         });
 
-      const result = await provider.callApi('Test prompt');
+      const resultPromise = provider.callApi('Test prompt');
+      await vi.advanceTimersByTimeAsync(1000);
+      const result = await resultPromise;
 
       expect(result.output).toBe('Response');
       expect(result.metadata).toBeDefined();

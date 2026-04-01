@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, Mock, Mocked, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, Mock, Mocked, vi } from 'vitest';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
@@ -47,12 +47,9 @@ vi.mock('../../../../src/providers/promptfoo', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../../src/redteam/graders', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    getGraderById: mockGetGraderById,
-  };
-});
+vi.mock('../../../../src/redteam/graders', () => ({
+  getGraderById: mockGetGraderById,
+}));
 
 vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => {
   return {
@@ -99,15 +96,15 @@ describe('HydraProvider', () => {
   let mockTargetProvider: Mocked<ApiProvider>;
   let mockGrader: any;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
+    const hydraModule = await import('../../../../src/redteam/providers/hydra/index');
+    HydraProvider = hydraModule.HydraProvider;
+  });
+
+  beforeEach(() => {
     vi.clearAllMocks();
     // Reset the hoisted mock to ensure clean state
     mockGetGraderById.mockReset();
-
-    // Reset modules and dynamically import HydraProvider so it gets the mocked graders
-    vi.resetModules();
-    const hydraModule = await import('../../../../src/redteam/providers/hydra/index');
-    HydraProvider = hydraModule.HydraProvider;
 
     // Mock agent provider (cloud provider)
     mockAgentProvider = {

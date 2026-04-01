@@ -8,7 +8,6 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Plugins from './Plugins';
-import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
@@ -54,6 +53,11 @@ vi.mock('./PluginConfigDialog', () => ({
   default: () => <div data-testid="plugin-config-dialog"></div>,
 }));
 
+vi.mock('./TestCaseDialog', () => ({
+  TestCaseDialog: () => <div data-testid="test-case-dialog" />,
+  TestCaseGenerateButton: () => <button type="button">Generate test case</button>,
+}));
+
 vi.mock('react-error-boundary', () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -62,15 +66,10 @@ const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
 const mockUseRecentlyUsedPlugins = useRecentlyUsedPlugins as unknown as Mock;
 
 const renderWithProviders = (ui: React.ReactNode) => {
-  const redTeamConfig = mockUseRedTeamConfig();
   return render(
     <MemoryRouter>
       <TooltipProvider>
-        <ToastProvider>
-          <TestCaseGenerationProvider redTeamConfig={redTeamConfig}>
-            {ui}
-          </TestCaseGenerationProvider>
-        </ToastProvider>
+        <ToastProvider>{ui}</ToastProvider>
       </TooltipProvider>
     </MemoryRouter>,
   );
@@ -200,15 +199,7 @@ describe('Plugins - State Management Unit Tests', () => {
         <MemoryRouter>
           <TooltipProvider>
             <ToastProvider>
-              <TestCaseGenerationProvider
-                redTeamConfig={
-                  {
-                    plugins: ['harmful:hate', 'bola'],
-                  } as any
-                }
-              >
-                <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-              </TestCaseGenerationProvider>
+              <Plugins onNext={mockOnNext} onBack={mockOnBack} />
             </ToastProvider>
           </TooltipProvider>
         </MemoryRouter>,
@@ -706,20 +697,7 @@ describe('Plugins - State Management Unit Tests', () => {
         <MemoryRouter>
           <TooltipProvider>
             <ToastProvider>
-              <TestCaseGenerationProvider
-                redTeamConfig={
-                  {
-                    plugins: [
-                      {
-                        id: 'indirect-prompt-injection',
-                        config: { systemPrompt: 'new prompt' },
-                      },
-                    ],
-                  } as any
-                }
-              >
-                <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-              </TestCaseGenerationProvider>
+              <Plugins onNext={mockOnNext} onBack={mockOnBack} />
             </ToastProvider>
           </TooltipProvider>
         </MemoryRouter>,

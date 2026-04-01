@@ -13,6 +13,11 @@ vi.mock('../../src/tracing/store', () => ({
   TraceStore: vi.fn(),
 }));
 
+vi.mock('../../src/util/time', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/time')>()),
+  sleep: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Define the mock provider class
 class MockTracedProviderInstance {
   id() {

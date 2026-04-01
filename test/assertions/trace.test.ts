@@ -67,8 +67,8 @@ describe('trace assertions', () => {
     mockTraceStore.getTrace.mockReset();
     vi.clearAllMocks();
     delete process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS;
-    delete process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS;
-    delete process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS;
+    process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS = '0';
+    process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS = '1';
     vi.mocked(getTraceStore).mockReturnValue(
       mockTraceStore as unknown as ReturnType<typeof getTraceStore>,
     );
@@ -77,6 +77,7 @@ describe('trace assertions', () => {
   afterEach(() => {
     cliState.basePath = originalBasePath;
     vi.resetAllMocks();
+    vi.useRealTimers();
   });
 
   const mockTest: AtomicTestCase = {
@@ -168,6 +169,30 @@ describe('trace assertions', () => {
         providerResponse: mockProviderResponse,
         traceId: 'test-trace-id',
       });
+
+      expect(result.pass).toBe(true);
+      expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(2);
+    });
+
+    it('should use default retry timing when trace fetch env vars are unset', async () => {
+      delete process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS;
+      delete process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS;
+      vi.useFakeTimers();
+
+      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+
+      const resultPromise = runAssertion({
+        assertion: {
+          type: 'javascript',
+          value: 'context.trace?.spans?.length === 2',
+        },
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      await vi.advanceTimersByTimeAsync(250);
+      const result = await resultPromise;
 
       expect(result.pass).toBe(true);
       expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(2);
