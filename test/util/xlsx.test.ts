@@ -73,6 +73,42 @@ describe('parseXlsxFile', () => {
     );
   });
 
+  it('should throw error when Excel file has no sheets', async () => {
+    mockReadXlsxFile.mockResolvedValue([]);
+
+    await expect(parseXlsxFile('test.xlsx')).rejects.toThrow('Excel file has no sheets');
+  });
+
+  it('should throw error when sheet has no valid column headers', async () => {
+    mockReadXlsxFile.mockResolvedValue([createMockSheet('Sheet1', [['', '', '']])]);
+
+    await expect(parseXlsxFile('test.xlsx')).rejects.toThrow(
+      'Sheet "Sheet1" has no valid column headers',
+    );
+  });
+
+  it('should throw error when sheet has headers but no data rows', async () => {
+    mockReadXlsxFile.mockResolvedValue([createMockSheet('Sheet1', [['col1', 'col2']])]);
+
+    await expect(parseXlsxFile('test.xlsx')).rejects.toThrow(
+      'Sheet "Sheet1" is empty or contains no valid data rows',
+    );
+  });
+
+  it('should throw error when sheet has headers but only empty data rows', async () => {
+    mockReadXlsxFile.mockResolvedValue([
+      createMockSheet('Sheet1', [
+        ['col1', 'col2'],
+        ['', ''],
+        [null, undefined],
+      ]),
+    ]);
+
+    await expect(parseXlsxFile('test.xlsx')).rejects.toThrow(
+      'Sheet "Sheet1" contains only empty data. Please ensure the sheet has both headers and data rows.',
+    );
+  });
+
   it('should use first sheet by default', async () => {
     const mockRows = [
       ['col1', 'col2'],
