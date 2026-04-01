@@ -971,7 +971,7 @@ describe('logger', () => {
 
       expect(mockLogger.debug).toHaveBeenCalled();
       const call = mockLogger.debug.mock.calls[0][0];
-      expect(call.message).toContain('Api Request');
+      expect(call.message).toContain('API request');
       const loggedMessage = call.message;
       expect(loggedMessage).toContain('"message": "API request"');
       expect(loggedMessage).toContain('"url": "https://api.example.com/test"');
