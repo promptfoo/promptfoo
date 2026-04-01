@@ -33,15 +33,6 @@ vi.mock('../src/util/time', () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
-// Mock cacheMigration
-vi.mock('../src/cacheMigration', () => ({
-  shouldRunMigration: vi.fn().mockReturnValue(false), // Don't run migration by default in tests
-  runMigration: vi.fn().mockReturnValue({
-    success: true,
-    stats: { successCount: 0, skippedExpired: 0, failureCount: 0, errors: [] },
-  }),
-}));
-
 const mockFetchWithRetries = vi.mocked(fetchWithRetries);
 
 // Mock cache-manager v7
