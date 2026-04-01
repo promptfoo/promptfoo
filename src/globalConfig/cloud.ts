@@ -37,6 +37,13 @@ interface CloudApp {
   url: string;
 }
 
+interface CloudTokenValidation {
+  user: CloudUser;
+  organization: CloudOrganization;
+  app: CloudApp;
+  hasActiveLicense?: boolean;
+}
+
 export class CloudConfig {
   private config: {
     appUrl: string;
@@ -156,15 +163,24 @@ export class CloudConfig {
     };
   }
 
-  async validateAndSetApiToken(
+  saveValidatedApiToken(
     token: string,
     apiHost: string,
-  ): Promise<{
-    user: CloudUser;
-    organization: CloudOrganization;
-    app: CloudApp;
-    hasActiveLicense: boolean;
-  }> {
+    user: CloudUser,
+    app: CloudApp,
+    hasActiveLicense?: boolean,
+  ): void {
+    this.setApiKey(token);
+    this.setApiHost(apiHost);
+    this.setAppUrl(app.url);
+    if (typeof hasActiveLicense === 'boolean') {
+      const createdAt = user?.createdAt ? new Date(user.createdAt) : null;
+      const isGrandfathered = createdAt != null && createdAt < SHARING_CUTOFF_DATE;
+      this.setSharing(hasActiveLicense || isGrandfathered);
+    }
+  }
+
+  async validateApiToken(token: string, apiHost: string): Promise<CloudTokenValidation> {
     try {
       const { fetchWithProxy } = await import('../util/fetch');
       const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
@@ -182,20 +198,12 @@ export class CloudConfig {
       }
 
       const { user, organization, app, hasActiveLicense } = await response.json();
-      this.setApiKey(token);
-      this.setApiHost(apiHost);
-      this.setAppUrl(app.url);
-      if (typeof hasActiveLicense === 'boolean') {
-        const createdAt = user?.createdAt ? new Date(user.createdAt) : null;
-        const isGrandfathered = createdAt != null && createdAt < SHARING_CUTOFF_DATE;
-        this.setSharing(hasActiveLicense || isGrandfathered);
-      }
 
       return {
         user,
         organization,
         app,
-        hasActiveLicense: typeof hasActiveLicense === 'boolean' ? hasActiveLicense : false,
+        ...(typeof hasActiveLicense === 'boolean' ? { hasActiveLicense } : {}),
       };
     } catch (err) {
       const error = err as Error & { cause?: string };
@@ -206,6 +214,24 @@ export class CloudConfig {
       }
       throw error;
     }
+  }
+
+  async validateAndSetApiToken(
+    token: string,
+    apiHost: string,
+  ): Promise<CloudTokenValidation & { hasActiveLicense: boolean }> {
+    const { user, organization, app, hasActiveLicense } = await this.validateApiToken(
+      token,
+      apiHost,
+    );
+    this.saveValidatedApiToken(token, apiHost, user, app, hasActiveLicense);
+
+    return {
+      user,
+      organization,
+      app,
+      hasActiveLicense: typeof hasActiveLicense === 'boolean' ? hasActiveLicense : false,
+    };
   }
 
   getCurrentOrganizationId(): string | undefined {

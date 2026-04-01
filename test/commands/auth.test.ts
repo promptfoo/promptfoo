@@ -58,7 +58,7 @@ describe('auth command', () => {
     authCommand(program);
 
     // Set up a basic mock that just returns the expected data
-    vi.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValue({
+    vi.mocked(cloudConfig.validateApiToken).mockResolvedValue({
       user: mockCloudUser,
       organization: mockOrganization,
       app: mockApp,
@@ -81,7 +81,14 @@ describe('auth command', () => {
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
 
       expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
-      expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith('test-key', undefined);
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith('test-key', undefined);
+      expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
+        'test-key',
+        undefined,
+        mockCloudUser,
+        mockApp,
+        false,
+      );
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
     });
 
@@ -168,11 +175,18 @@ describe('auth command', () => {
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key', '--host', customHost]);
 
-      expect(cloudConfig.validateAndSetApiToken).toHaveBeenCalledWith('test-key', customHost);
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith('test-key', customHost);
+      expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
+        'test-key',
+        customHost,
+        mockCloudUser,
+        mockApp,
+        false,
+      );
     });
 
     it('should handle login request failure', async () => {
-      vi.mocked(cloudConfig.validateAndSetApiToken).mockRejectedValueOnce(new Error('Bad Request'));
+      vi.mocked(cloudConfig.validateApiToken).mockRejectedValueOnce(new Error('Bad Request'));
 
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
@@ -190,7 +204,7 @@ describe('auth command', () => {
       vi.mocked(getUserEmail).mockImplementation(function () {
         return 'old@example.com';
       });
-      vi.mocked(cloudConfig.validateAndSetApiToken).mockResolvedValueOnce({
+      vi.mocked(cloudConfig.validateApiToken).mockResolvedValueOnce({
         user: newCloudUser,
         organization: mockOrganization,
         app: mockApp,
@@ -209,8 +223,8 @@ describe('auth command', () => {
     });
 
     it('should handle non-Error objects in the catch block', async () => {
-      // Mock validateAndSetApiToken to throw a non-Error object
-      vi.mocked(cloudConfig.validateAndSetApiToken).mockImplementationOnce(function () {
+      // Mock validateApiToken to throw a non-Error object
+      vi.mocked(cloudConfig.validateApiToken).mockImplementationOnce(function () {
         throw 'String error message'; // This will test line 57 in auth.ts
       });
 
@@ -257,6 +271,39 @@ describe('auth command', () => {
 
       expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', '1');
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Security Team'));
+    });
+
+    it('should resolve --team across organizations when --org is omitted', async () => {
+      const mockTeams = [
+        {
+          id: 'team-1',
+          name: 'Default',
+          slug: 'default',
+          organizationId: '1',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+        {
+          id: 'team-2',
+          name: 'Security Team',
+          slug: 'security',
+          organizationId: 'org-2',
+          createdAt: '2024-01-02',
+          updatedAt: '2024-01-02',
+        },
+      ];
+
+      vi.mocked(getUserTeams).mockResolvedValue(mockTeams);
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key', '--team', 'security']);
+
+      expect(cloudConfig.setCurrentOrganization).toHaveBeenCalledWith('org-2');
+      expect(cloudConfig.cacheTeams).toHaveBeenCalledWith([mockTeams[1]], 'org-2');
+      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', 'org-2');
+      expect(logger.warn).not.toHaveBeenCalled();
     });
 
     it('should scope team selection and current organization to --org', async () => {
@@ -313,6 +360,8 @@ describe('auth command', () => {
           "Authentication failed: Organization 'missing-org' not found in your accessible teams.",
         ),
       );
+      expect(cloudConfig.saveValidatedApiToken).not.toHaveBeenCalled();
+      expect(setUserEmail).not.toHaveBeenCalled();
       expect(process.exitCode).toBe(1);
     });
 

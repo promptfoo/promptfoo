@@ -93,6 +93,26 @@ function resolveTeamFromOrganizationTeams(
   );
 }
 
+function resolveTeamFromTeams(teams: UserTeam[], teamIdentifier: string): UserTeam {
+  const selectedTeam = teams.find((team) => team.id === teamIdentifier);
+  if (selectedTeam) {
+    return selectedTeam;
+  }
+
+  const nameMatch = teams.find((team) => team.name.toLowerCase() === teamIdentifier.toLowerCase());
+  if (nameMatch) {
+    return nameMatch;
+  }
+
+  const slugMatch = teams.find((team) => team.slug === teamIdentifier);
+  if (slugMatch) {
+    return slugMatch;
+  }
+
+  const availableTeams = teams.map((team) => team.name).join(', ');
+  throw new Error(`Team '${teamIdentifier}' not found. Available teams: ${availableTeams}`);
+}
+
 async function setupTeamContext(
   cmdObj: LoginCommandOptions,
   organizationId: string,
@@ -159,7 +179,7 @@ async function setupTeamContext(
       logger.info(`Team: ${chalk.cyan(selectedTeam.name)}${teamLabelSuffix}`);
     }
   } catch (teamError) {
-    if (cmdObj.org) {
+    if (cmdObj.org || cmdObj.team) {
       throw teamError;
     }
     logger.warn(
@@ -169,29 +189,42 @@ async function setupTeamContext(
 }
 
 async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Promise<void> {
-  const { user, organization } = await cloudConfig.validateAndSetApiToken(cmdObj.apiKey!, apiHost);
+  const { user, organization, app, hasActiveLicense } = await cloudConfig.validateApiToken(
+    cmdObj.apiKey!,
+    apiHost,
+  );
 
   const existingEmail = getUserEmail();
+  let organizationId = organization.id;
+  let organizationTeams: UserTeam[] | undefined;
+
+  if (cmdObj.org || cmdObj.team) {
+    const allTeams = await getUserTeams(apiHost, cmdObj.apiKey!);
+    const resolvedOrganizationTeams = getOrganizationTeams(allTeams, cmdObj.org, organization.id);
+    organizationId = resolvedOrganizationTeams.organizationId;
+    organizationTeams = resolvedOrganizationTeams.teams;
+
+    if (cmdObj.team && !cmdObj.org) {
+      const selectedTeam = resolveTeamFromTeams(allTeams, cmdObj.team);
+      organizationId = selectedTeam.organizationId;
+      organizationTeams = allTeams.filter((team) => team.organizationId === organizationId);
+    }
+
+    if (cmdObj.team) {
+      resolveTeamFromOrganizationTeams(organizationTeams, cmdObj.team, organizationId);
+    }
+  }
+
+  cloudConfig.saveValidatedApiToken(cmdObj.apiKey!, apiHost, user, app, hasActiveLicense);
   if (existingEmail && existingEmail !== user.email) {
     logger.info(
       chalk.yellow(`Updating local email configuration from ${existingEmail} to ${user.email}`),
     );
   }
   setUserEmail(user.email);
-
-  let organizationId = organization.id;
-  let organizationTeams: UserTeam[] | undefined;
-  if (cmdObj.org) {
-    const resolvedOrganizationTeams = getOrganizationTeams(
-      await getUserTeams(),
-      cmdObj.org,
-      organization.id,
-    );
-    organizationId = resolvedOrganizationTeams.organizationId;
-    organizationTeams = resolvedOrganizationTeams.teams;
-  }
-
   cloudConfig.setCurrentOrganization(organizationId);
+
+  await setupTeamContext(cmdObj, organizationId, organizationTeams);
 
   logger.info(chalk.green.bold('Successfully logged in'));
   logger.info(`User: ${chalk.cyan(user.email)}`);
@@ -199,8 +232,6 @@ async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Pr
     `Organization: ${chalk.cyan(organizationId === organization.id ? organization.name : organizationId)}`,
   );
   logger.info(`App: ${chalk.cyan(cloudConfig.getAppUrl())}`);
-
-  await setupTeamContext(cmdObj, organizationId, organizationTeams);
 }
 
 async function loginWithBrowser(cmdObj: LoginCommandOptions): Promise<void> {
