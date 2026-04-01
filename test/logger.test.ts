@@ -971,7 +971,7 @@ describe('logger', () => {
 
       expect(mockLogger.debug).toHaveBeenCalled();
       const call = mockLogger.debug.mock.calls[0][0];
-      expect(call.message).toContain('API request');
+      expect(call.message).toContain('Api Request');
       const loggedMessage = call.message;
       expect(loggedMessage).toContain('"message": "API request"');
       expect(loggedMessage).toContain('"url": "https://api.example.com/test"');
@@ -1239,9 +1239,10 @@ describe('logger', () => {
 
       const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
       // When undefined is passed through sanitizeObject, it may be omitted or converted to null
-      // Just verify the log message exists and doesn't crash
-      expect(loggedMessage).toContain('API request');
-      expect(loggedMessage).toContain('"url"');
+      // Verify the log envelope and stable serialized fields still exist without assuming requestBody shape.
+      expect(loggedMessage).toContain('Api Request');
+      expect(loggedMessage).toContain('"message": "API request"');
+      expect(loggedMessage).toContain('"url": "https://api.example.com/test"');
     });
 
     it('should handle response with empty body', async () => {
@@ -1315,7 +1316,7 @@ describe('logger', () => {
       });
 
       const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
-      expect(loggedMessage).toContain('API request');
+      expect(loggedMessage).toContain('Api Request');
       expect(loggedMessage).toContain('"message": "API request"');
       expect(loggedMessage).toContain('"url":');
       expect(loggedMessage).toContain('"method":');
