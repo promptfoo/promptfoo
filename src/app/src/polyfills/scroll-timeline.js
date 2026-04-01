@@ -1180,7 +1180,7 @@ var __defProp = Object.defineProperty,
         if (!i) {
           (i = { timelineRefs: new Set(), sourceMeasurements: Me(t) }), Te.set(t, i);
           const e = new ResizeObserver((e) => {
-            for (const t of e) Ie(n.source);
+            e.forEach(() => Ie(n.source));
           });
           e.observe(t);
           for (const n of t.children) e.observe(n);
