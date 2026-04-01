@@ -143,9 +143,12 @@ describe('logger', () => {
     mockLogger.transports[0].level = 'info';
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     mockStdout.mockRestore();
     global.Error = originalError;
+    vi.restoreAllMocks();
+    vi.doUnmock('source-map-support');
+    await vi.dynamicImportSettled();
     vi.resetModules();
   });
 
@@ -564,7 +567,7 @@ describe('logger', () => {
   });
 
   describe('initializeSourceMapSupport', () => {
-    it('should only call install once across multiple invocations', async () => {
+    it('should only call install once across concurrent and repeated invocations', async () => {
       // Save and clear LOG_LEVEL to prevent auto-initialization during import
       const originalLogLevel = process.env.LOG_LEVEL;
       delete process.env.LOG_LEVEL;
@@ -578,25 +581,17 @@ describe('logger', () => {
           install: mockInstall,
         }));
 
-        // Import fresh logger with our mock (import needed for side effect)
-        await import('../src/logger');
-
-        // Clear any calls that happened during import
-        mockInstall.mockClear();
-
-        // Reset the initialized flag by reimporting with clean state
-        vi.resetModules();
-        vi.doMock('source-map-support', () => ({
-          install: mockInstall,
-        }));
         const cleanLogger = await import('../src/logger');
         mockInstall.mockClear();
 
-        // First explicit call should trigger install
-        await cleanLogger.initializeSourceMapSupport();
+        // Concurrent explicit calls should share one in-flight initialization.
+        await Promise.all([
+          cleanLogger.initializeSourceMapSupport(),
+          cleanLogger.initializeSourceMapSupport(),
+        ]);
         expect(mockInstall).toHaveBeenCalledTimes(1);
 
-        // Second call should NOT trigger install again (flag is set)
+        // A later call should not trigger install again once initialized.
         mockInstall.mockClear();
         await cleanLogger.initializeSourceMapSupport();
         expect(mockInstall).not.toHaveBeenCalled();
