@@ -232,8 +232,10 @@ describe('doGenerateRedteam', () => {
     vi.clearAllMocks();
     // Reset mock implementations that persist across tests (clearAllMocks only clears call history)
     vi.mocked(extractMcpToolsInfo).mockReset();
-    vi.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
-    vi.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
+    vi.mocked(checkEmailStatusAndMaybeExit).mockReset().mockResolvedValue('ok');
+    vi.mocked(promptForEmailUnverified)
+      .mockReset()
+      .mockResolvedValue({ emailNeedsValidation: false });
     mockProvider = {
       id: () => 'test-provider',
       callApi: vi.fn().mockResolvedValue({ output: 'test output' }),

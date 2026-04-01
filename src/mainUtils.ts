@@ -10,6 +10,8 @@ import { clearAgentCache } from './util/fetch/index';
 import { setupEnv } from './util/index';
 import type { Command } from 'commander';
 
+let loadedEnvPathKey: string | undefined;
+
 function normalizeEnvPaths(input: string | string[] | undefined): string | string[] | undefined {
   if (!input) {
     return undefined;
@@ -27,6 +29,59 @@ function normalizeEnvPaths(input: string | string[] | undefined): string | strin
   }
 
   return expanded.length === 1 ? expanded[0] : expanded;
+}
+
+function getEnvPathKey(envPath: string | string[]): string {
+  return Array.isArray(envPath) ? envPath.join('\0') : envPath;
+}
+
+function loadEnvPathOnce(envPath: string | string[], shouldLog: boolean): void {
+  const envPathKey = getEnvPathKey(envPath);
+  if (loadedEnvPathKey === envPathKey) {
+    return;
+  }
+
+  setupEnv(envPath);
+  loadedEnvPathKey = envPathKey;
+
+  if (shouldLog) {
+    const pathsStr = Array.isArray(envPath) ? envPath.join(', ') : envPath;
+    logger.debug(`Loading environment from ${pathsStr}`);
+  }
+}
+
+export function setupEnvFilesFromArgv(argv: string[] = process.argv.slice(2)): void {
+  const envFileValues: string[] = [];
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--') {
+      break;
+    }
+
+    const envAssignment = arg.match(/^--env-(?:file|path)=(.*)$/);
+    if (envAssignment) {
+      envFileValues.push(envAssignment[1]);
+      continue;
+    }
+
+    if (arg !== '--env-file' && arg !== '--env-path') {
+      continue;
+    }
+
+    const nextArg = argv[i + 1];
+    if (!nextArg || nextArg === '--' || nextArg.startsWith('-')) {
+      continue;
+    }
+
+    envFileValues.push(nextArg);
+    i += 1;
+  }
+
+  const envPath = normalizeEnvPaths(envFileValues);
+  if (envPath) {
+    loadEnvPathOnce(envPath, false);
+  }
 }
 
 export function isMainModule(importMetaUrl: string, processArgv1: string | undefined): boolean {
@@ -87,9 +142,7 @@ export function addCommonOptionsRecursively(command: Command) {
     const rawEnvPath = thisCommand.opts().envFile || thisCommand.opts().envPath;
     const envPath = normalizeEnvPaths(rawEnvPath);
     if (envPath) {
-      setupEnv(envPath);
-      const pathsStr = Array.isArray(envPath) ? envPath.join(', ') : envPath;
-      logger.debug(`Loading environment from ${pathsStr}`);
+      loadEnvPathOnce(envPath, true);
     }
 
     if (thisCommand === actionCommand) {

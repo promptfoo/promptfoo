@@ -24,14 +24,12 @@ import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
 import logger, { initializeRunLogging } from './logger';
-
-export {
+import {
   addCommonOptionsRecursively,
   isMainModule,
+  setupEnvFilesFromArgv,
   shutdownGracefully,
 } from './mainUtils';
-
-import { addCommonOptionsRecursively, isMainModule, shutdownGracefully } from './mainUtils';
 import { runDbMigrations } from './migrate';
 import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
 import { redteamGenerateCommand } from './redteam/commands/generate';
@@ -46,6 +44,7 @@ import { printErrorInformation } from './util/errors/index';
 import { VERSION } from './version';
 
 async function main() {
+  setupEnvFilesFromArgv();
   initializeRunLogging();
 
   // Set PROMPTFOO_DISABLE_UPDATE=true in CI to prevent hanging on network requests

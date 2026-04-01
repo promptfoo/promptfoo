@@ -462,34 +462,35 @@ describe('DefaultTestVariables Component', () => {
       const timestamp = Date.now();
       const originalDateNow = Date.now;
       Date.now = vi.fn(() => timestamp);
+      try {
+        mockUseRedTeamConfig.mockReturnValue({
+          config: {
+            ...defaultConfig,
+            defaultTest: { vars: {} },
+          },
+          updateConfig: mockUpdateConfig,
+        });
 
-      mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          ...defaultConfig,
-          defaultTest: { vars: {} },
-        },
-        updateConfig: mockUpdateConfig,
-      });
+        render(<DefaultTestVariables />);
 
-      render(<DefaultTestVariables />);
+        const addButton = screen.getByText('Add Variable');
+        fireEvent.click(addButton);
+        fireEvent.click(addButton);
+        fireEvent.click(addButton);
 
-      const addButton = screen.getByText('Add Variable');
-      fireEvent.click(addButton);
-      fireEvent.click(addButton);
-      fireEvent.click(addButton);
+        await flushDebouncedUpdate();
 
-      await flushDebouncedUpdate();
+        expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
 
-      expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
+        const vars = mockUpdateConfig.mock.calls[0][1].vars;
+        const ids = Object.keys(vars);
 
-      Date.now = originalDateNow;
-
-      const vars = mockUpdateConfig.mock.calls[0][1].vars;
-      const ids = Object.keys(vars);
-
-      expect(ids[0]).not.toBe(ids[1]);
-      expect(ids[0]).not.toBe(ids[2]);
-      expect(ids[1]).not.toBe(ids[2]);
+        expect(ids[0]).not.toBe(ids[1]);
+        expect(ids[0]).not.toBe(ids[2]);
+        expect(ids[1]).not.toBe(ids[2]);
+      } finally {
+        Date.now = originalDateNow;
+      }
     });
   });
 

@@ -54,7 +54,11 @@ vi.mock('./PluginConfigDialog', () => ({
 
 vi.mock('./TestCaseDialog', () => ({
   TestCaseDialog: () => <div data-testid="test-case-dialog" />,
-  TestCaseGenerateButton: () => <button type="button">Generate test case</button>,
+  TestCaseGenerateButton: ({ children, ...props }: React.ComponentProps<'button'>) => (
+    <button type="button" {...props}>
+      {children ?? 'Generate test case'}
+    </button>
+  ),
 }));
 
 vi.mock('react-error-boundary', () => ({

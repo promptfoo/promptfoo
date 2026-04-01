@@ -53,22 +53,37 @@ vi.mock('../src/codeScan', () => ({
 
 let addCommonOptionsRecursively: typeof import('../src/mainUtils').addCommonOptionsRecursively;
 let isMainModule: typeof import('../src/mainUtils').isMainModule;
+let setupEnvFilesFromArgv: typeof import('../src/mainUtils').setupEnvFilesFromArgv;
 let shutdownGracefully: typeof import('../src/mainUtils').shutdownGracefully;
 
 async function loadMainModule() {
   vi.resetModules();
-  ({ addCommonOptionsRecursively, isMainModule, shutdownGracefully } = await import(
-    '../src/mainUtils'
-  ));
+  ({ addCommonOptionsRecursively, isMainModule, setupEnvFilesFromArgv, shutdownGracefully } =
+    await import('../src/mainUtils'));
 }
 
-describe('main module exports', () => {
-  it('should re-export the extracted helpers from src/main.ts', async () => {
-    const mainModule = await import('../src/main');
+describe('setupEnvFilesFromArgv', () => {
+  beforeEach(async () => {
+    await loadMainModule();
+    mockSetupEnv.mockReset();
+  });
 
-    expect(mainModule.addCommonOptionsRecursively).toBeInstanceOf(Function);
-    expect(mainModule.isMainModule).toBeInstanceOf(Function);
-    expect(mainModule.shutdownGracefully).toBeInstanceOf(Function);
+  it('should load env files before command actions run', () => {
+    setupEnvFilesFromArgv(['eval', '--env-file', '.env.local']);
+
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.local');
+  });
+
+  it('should support repeated and comma-separated env file args', () => {
+    setupEnvFilesFromArgv(['eval', '--env-file', '.env.one', '--env-path=.env.two,.env.three']);
+
+    expect(mockSetupEnv).toHaveBeenCalledWith(['.env.one', '.env.two', '.env.three']);
+  });
+
+  it('should ignore flags after --', () => {
+    setupEnvFilesFromArgv(['eval', '--', '--env-file', '.env.local']);
+
+    expect(mockSetupEnv).not.toHaveBeenCalled();
   });
 });
 
