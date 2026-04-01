@@ -1,7 +1,6 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { and, eq, inArray } from 'drizzle-orm';
-import { renderMetricName } from '../assertions/index';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -11,6 +10,7 @@ import Eval from '../models/eval';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
 import { resolveConfigs } from '../util/config/load';
+import { accumulateNamedMetric } from '../util/namedMetrics';
 import { shouldShareResults } from '../util/sharing';
 import {
   accumulateAssertionTokenUsage,
@@ -95,6 +95,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       tokenUsage: TokenUsage;
       namedScores: Record<string, number>;
       namedScoresCount: Record<string, number>;
+      namedScoreWeights?: Record<string, number>;
       cost: number;
     }
   >();
@@ -112,6 +113,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       tokenUsage: createEmptyTokenUsage(),
       namedScores: {},
       namedScoresCount: {},
+      namedScoreWeights: {},
       cost: 0,
     });
   }
@@ -148,22 +150,13 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         metrics.totalLatencyMs += result.latencyMs || 0;
         metrics.cost += result.cost || 0;
 
-        // Update named scores
         for (const [key, value] of Object.entries(result.namedScores || {})) {
-          metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
-
-          // Count assertions contributing to this named score
-          // Note: We need to render template variables in assertion metrics before comparing
-          const testVars = result.testCase?.vars || {};
-          let contributingAssertions = 0;
-          result.gradingResult?.componentResults?.forEach((componentResult) => {
-            const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
-            if (renderedMetric === key) {
-              contributingAssertions++;
-            }
+          accumulateNamedMetric(metrics, {
+            metricName: key,
+            metricValue: value,
+            gradingResult: result.gradingResult,
+            testVars: result.testCase?.vars || {},
           });
-          metrics.namedScoresCount[key] =
-            (metrics.namedScoresCount[key] || 0) + (contributingAssertions || 1);
         }
 
         // Update assertion counts

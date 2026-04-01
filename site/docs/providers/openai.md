@@ -101,6 +101,12 @@ Supported parameters include:
 | `functions`             | Allows you to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`.                                                                                                                                                                 |
 | `functionToolCallbacks` | A map of function tool names to function callbacks. Each callback should accept a string and return a string or a `Promise<string>`.                                                                                                                                                              |
 | `headers`               | Additional headers to include in the request.                                                                                                                                                                                                                                                     |
+| `cost`                  | Legacy per-token override applied to both input and output pricing in promptfoo cost estimates.                                                                                                                                                                                                   |
+| `inputCost`             | Override input token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                         |
+| `outputCost`            | Override output token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                        |
+| `audioCost`             | Legacy per-token override applied to both audio input and audio output pricing in promptfoo cost estimates.                                                                                                                                                                                       |
+| `audioInputCost`        | Override audio input token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                   |
+| `audioOutputCost`       | Override audio output token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                  |
 | `max_tokens`            | Controls maximum output length for non-reasoning requests. Not used by reasoning-capable models (o-series, `codex-mini-latest`, and GPT-5 family). Use `max_completion_tokens` (Chat Completions) or `max_output_tokens` (Responses API) instead.                                                 |
 | `maxRetries`            | Maximum number of retry attempts for failed API requests. Defaults to 4. Set to 0 to disable retries.                                                                                                                                                                                             |
 | `metadata`              | Key-value pairs for request tagging and organization.                                                                                                                                                                                                                                             |
@@ -118,6 +124,10 @@ Supported parameters include:
 | `top_p`                 | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                                                                                                                                                     |
 | `user`                  | A unique identifier representing your end-user, for tracking and abuse prevention.                                                                                                                                                                                                                |
 | `max_completion_tokens` | Maximum number of tokens for reasoning-capable Chat Completions models (o-series and GPT-5 family). For Responses API, use `max_output_tokens` instead.                                                                                                                                           |
+
+Use `inputCost` and `outputCost` when a model has different prompt and completion rates.
+The legacy `cost` option remains a shared fallback. For audio-capable models,
+`audioInputCost` and `audioOutputCost` take precedence over `audioCost`.
 
 Here are the type declarations of `config` parameters:
 
@@ -159,6 +169,12 @@ interface OpenAiConfig {
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
+  cost?: number;
+  inputCost?: number;
+  outputCost?: number;
+  audioCost?: number;
+  audioInputCost?: number;
+  audioOutputCost?: number;
   headers?: { [key: string]: string };
   maxRetries?: number;
 }

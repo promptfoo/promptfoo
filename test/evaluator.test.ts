@@ -1736,7 +1736,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
   });
 
-  it('evaluator should correctly count named scores based on contributing assertions', async () => {
+  it('evaluator should count named score assertions per metric', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt for namedScoresCount')],
@@ -1786,7 +1786,7 @@ describe('evaluator', () => {
     );
   });
 
-  it('evaluator should correctly count named scores with template metric variables', async () => {
+  it('evaluator should count named scores with template metric variables per assertion', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt for template metrics')],
@@ -1829,12 +1829,51 @@ describe('evaluator', () => {
               Accuracy: expect.any(Number),
             }),
             namedScoresCount: expect.objectContaining({
-              Accuracy: 3, // 2 assertions in first test + 1 in second
+              Accuracy: 3, // 2 assertions in the first test + 1 in the second
             }),
           }),
         }),
       ]),
     );
+  });
+
+  it('evaluator should preserve weighted named score totals alongside prompt denominators', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt for weighted metrics')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test output',
+              metric: 'Accuracy',
+              weight: 3,
+            },
+            {
+              type: 'contains',
+              value: 'Missing output',
+              metric: 'Accuracy',
+              weight: 1,
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const results = await evalRecord.getResults();
+    const promptMetrics = evalRecord.prompts[0]?.metrics;
+
+    expect(results[0].namedScores?.Accuracy).toBeCloseTo(0.75, 10);
+    expect(results[0].gradingResult?.namedScoreWeights?.Accuracy).toBe(4);
+    expect(promptMetrics?.namedScores.Accuracy).toBeCloseTo(3, 10);
+    expect(promptMetrics?.namedScoresCount.Accuracy).toBe(2);
+    expect(promptMetrics?.namedScoreWeights?.Accuracy).toBe(4);
+    expect(
+      (promptMetrics?.namedScores.Accuracy ?? 0) /
+        (promptMetrics?.namedScoreWeights?.Accuracy ?? 1),
+    ).toBeCloseTo(0.75, 10);
   });
 
   it('evaluator should handle mixed static and template metrics correctly', async () => {
@@ -5623,6 +5662,70 @@ describe('Evaluator with external defaultTest', () => {
       expect(prompt2TotalTests).toBeGreaterThan(0);
     } finally {
       // Always restore original state
+      cliState.resume = originalResume;
+    }
+  });
+
+  it('should backfill legacy named score weights when resuming evaluation', async () => {
+    const originalResume = cliState.resume;
+    cliState.resume = false;
+
+    try {
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [{ raw: 'Test prompt 1', label: 'test1' }],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'equals',
+                value: 'Test output',
+                metric: 'accuracy',
+                weight: 3,
+              },
+              {
+                type: 'contains',
+                value: 'Missing output',
+                metric: 'accuracy',
+                weight: 1,
+              },
+            ],
+          },
+        ],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+      evalRecord.prompts = [
+        {
+          raw: 'Test prompt 1',
+          label: 'test1',
+          id: 'prompt-test1',
+          provider: 'test-provider',
+          metrics: {
+            score: 1,
+            testPassCount: 1,
+            testFailCount: 0,
+            testErrorCount: 0,
+            assertPassCount: 1,
+            assertFailCount: 0,
+            totalLatencyMs: 100,
+            tokenUsage: createEmptyTokenUsage(),
+            namedScores: { accuracy: 1 },
+            namedScoresCount: { accuracy: 1 },
+            cost: 0.001,
+          },
+        },
+      ];
+      evalRecord.persisted = true;
+      cliState.resume = true;
+
+      await evaluate(testSuite, evalRecord, {});
+
+      expect(evalRecord.prompts[0].metrics?.namedScores.accuracy).toBeCloseTo(4, 10);
+      expect(evalRecord.prompts[0].metrics?.namedScoresCount.accuracy).toBe(3);
+      expect(evalRecord.prompts[0].metrics?.namedScoreWeights?.accuracy).toBe(5);
+    } finally {
       cliState.resume = originalResume;
     }
   });

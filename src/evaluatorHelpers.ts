@@ -26,7 +26,7 @@ import {
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
 import { renderVarsInObject } from './util/index';
 import invariant from './util/invariant';
-import { getNunjucksEngine } from './util/templates';
+import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
@@ -90,6 +90,15 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
     return `{% raw %}${prompt}{% endraw %}`;
   }
   return prompt;
+}
+
+function referencesUndefinedVariables(template: string, vars: Record<string, VarValue>): boolean {
+  return extractVariablesFromTemplate(template).some((variableName) => {
+    const rootVariableName = /^([A-Za-z_]\w*)/.exec(variableName)?.[1];
+    return Boolean(
+      rootVariableName && rootVariableName !== 'env' && vars[rootVariableName] === undefined,
+    );
+  });
 }
 
 /**
@@ -478,12 +487,17 @@ export async function renderPrompt(
   } catch {
     // Vars values can be template strings, so we need to render them first:
     const renderedVars = Object.fromEntries(
-      Object.entries(vars).map(([key, value]) => [
-        key,
-        typeof value === 'string' && !skipRenderVars?.includes(key)
-          ? nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)
-          : value,
-      ]),
+      Object.entries(vars).map(([key, value]) => {
+        if (typeof value !== 'string' || skipRenderVars?.includes(key)) {
+          return [key, value];
+        }
+
+        if (referencesUndefinedVariables(value, vars)) {
+          return [key, value];
+        }
+
+        return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];
+      }),
     );
 
     // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected

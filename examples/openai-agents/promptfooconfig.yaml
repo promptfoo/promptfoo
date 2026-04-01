@@ -28,6 +28,8 @@ tests:
       - type: contains
         value: Seat updated to 14C
       - type: contains
+        value: '"seat_number": "14C"'
+      - type: contains
         value: 50 pounds
       - type: trajectory:tool-used
         value:
@@ -95,5 +97,5 @@ tracing:
     http:
       enabled: true
       port: 4318
-      # The SDK bridge exports JSON; wrapper OTEL spans use protobuf by default.
+      # The SDK bridge exports OTLP/JSON; the Python wrapper exporter uses OTLP/protobuf by default.
       acceptFormats: ['json', 'protobuf']
