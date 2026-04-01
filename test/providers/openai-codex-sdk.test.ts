@@ -467,13 +467,15 @@ describe('OpenAICodexSDKProvider', () => {
 
       it('should infer skillCalls from absolute .agents paths under working_dir', async () => {
         existsSyncSpy.mockReturnValue(false);
+        const workingDir = path.join(path.parse(process.cwd()).root, 'tmp', 'codex-repo');
+        const skillPath = path.join(workingDir, '.agents', 'skills', 'token-skill', 'SKILL.md');
+
         mockRun.mockResolvedValue(
           createMockResponse('CERULEAN-FALCON-SKILL', undefined, [
             {
               id: 'item-1',
               type: 'command_execution',
-              command:
-                '/bin/zsh -lc "sed -n \'1,200p\' /tmp/codex-repo/.agents/skills/token-skill/SKILL.md"',
+              command: `/bin/zsh -lc "sed -n '1,200p' ${skillPath}"`,
               aggregated_output: '',
               exit_code: 0,
               status: 'completed',
@@ -483,7 +485,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         const provider = new OpenAICodexSDKProvider({
           config: {
-            working_dir: '/tmp/codex-repo',
+            working_dir: workingDir,
             skip_git_repo_check: true,
           },
           env: { OPENAI_API_KEY: 'test-api-key' },
@@ -494,7 +496,7 @@ describe('OpenAICodexSDKProvider', () => {
           skillCalls: [
             {
               name: 'token-skill',
-              path: '/tmp/codex-repo/.agents/skills/token-skill/SKILL.md',
+              path: skillPath.replace(/\\/g, '/'),
               source: 'heuristic',
             },
           ],
