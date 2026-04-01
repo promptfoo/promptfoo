@@ -98,6 +98,10 @@ function computeModifiersFromConfig(config: PluginConfig | undefined): Record<st
       .join(', ');
     modifiers.__outputFormat = `Output each test case as JSON wrapped in <Prompt> tags: <Prompt>{${schema}}</Prompt>`;
   }
+  const maxCharsModifier = getMaxCharsPerMessageModifierValue(config?.maxCharsPerMessage);
+  if (maxCharsModifier) {
+    modifiers[MAX_CHARS_PER_MESSAGE_MODIFIER_KEY] = maxCharsModifier;
+  }
   return modifiers;
 }
 
@@ -163,7 +167,7 @@ async function fetchRemoteTestCases(
   // Strip graderExamples before sending - they're not used during generation,
   // only during grading. The CLI re-attaches the full config to test case metadata after.
   const { graderExamples, ...configForRemote } = config ?? {};
-  const maxCharsModifier = getMaxCharsPerMessageModifierValue();
+  const maxCharsModifier = getMaxCharsPerMessageModifierValue(config?.maxCharsPerMessage);
   if (maxCharsModifier) {
     configForRemote.modifiers = {
       ...((configForRemote.modifiers as Record<string, string> | undefined) ?? {}),

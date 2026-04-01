@@ -6016,6 +6016,34 @@ describe('runEval', () => {
     expect(results[0].error).toContain('maxCharsPerMessage=10');
   });
 
+  it('should not enforce redteam maxCharsPerMessage for non-redteam evals', async () => {
+    const callApi = vi.fn().mockResolvedValue({ output: 'success' });
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: {
+        id: () => 'test-provider',
+        callApi,
+      },
+      prompt: { raw: 'this prompt is longer than ten chars', label: 'test-label' },
+      test: {},
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: {
+          maxCharsPerMessage: 10,
+        },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(results[0].success).toBe(true);
+    expect(results[0].response?.output).toBe('success');
+  });
+
   it('should use default injectVar "prompt" when not explicitly set in redteam config', async () => {
     // Tests the fallback to default 'prompt' injectVar when redteam config exists but injectVar is undefined
     const results = await runEval({

@@ -269,7 +269,35 @@ describe('RedteamPluginBase', () => {
       2,
       expect.stringContaining('The longest rejected prompt was 20 characters.'),
     );
-    expect(result[0].metadata?.pluginConfig?.modifiers).toEqual({ language: 'German' });
+    expect(result[0].metadata?.pluginConfig?.modifiers).toEqual({
+      language: 'German',
+      maxCharsPerMessage: 'Each generated user message must be 10 characters or fewer.',
+    });
+  });
+
+  it('should honor maxCharsPerMessage from plugin config without cliState', async () => {
+    plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
+      language: 'German',
+      maxCharsPerMessage: 8,
+    });
+
+    vi.spyOn(provider, 'callApi').mockResolvedValue({
+      output: 'Prompt: tiny',
+    });
+
+    const result = await plugin.generateTests(1);
+
+    expect(result).toHaveLength(1);
+    expect(provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'maxCharsPerMessage: Each generated user message must be 8 characters or fewer.',
+      ),
+    );
+    expect(result[0].metadata?.pluginConfig?.maxCharsPerMessage).toBe(8);
+    expect(result[0].metadata?.pluginConfig?.modifiers).toEqual({
+      language: 'German',
+      maxCharsPerMessage: 'Each generated user message must be 8 characters or fewer.',
+    });
   });
 
   describe('false positive refusal detection', () => {

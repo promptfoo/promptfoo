@@ -201,7 +201,7 @@ export abstract class RedteamPluginBase {
 
       for (const prompt of parsedPrompts) {
         const promptText = '__prompt' in prompt ? String(prompt.__prompt) : JSON.stringify(prompt);
-        const violation = getGeneratedPromptOverLimit(promptText);
+        const violation = getGeneratedPromptOverLimit(promptText, this.config.maxCharsPerMessage);
         if (violation) {
           rejectedPromptLengths.push(violation.length);
           rejectedPromptLimit = violation.limit;
@@ -297,6 +297,13 @@ export abstract class RedteamPluginBase {
       modifiers.__outputFormat = `multi-input-mode: ${inputKeys.join(', ')}`;
     }
 
+    const maxCharsPerMessageModifier = getMaxCharsPerMessageModifierValue(
+      config.maxCharsPerMessage,
+    );
+    if (maxCharsPerMessageModifier) {
+      modifiers[MAX_CHARS_PER_MESSAGE_MODIFIER_KEY] = maxCharsPerMessageModifier;
+    }
+
     // Store the computed modifiers back into config so they get passed to strategies
     if (Object.keys(modifiers).length > 0) {
       config.modifiers = modifiers;
@@ -306,10 +313,6 @@ export abstract class RedteamPluginBase {
     const promptModifiers = {
       ...modifiers,
     };
-    const maxCharsPerMessageModifier = getMaxCharsPerMessageModifierValue();
-    if (maxCharsPerMessageModifier) {
-      promptModifiers[MAX_CHARS_PER_MESSAGE_MODIFIER_KEY] = maxCharsPerMessageModifier;
-    }
 
     const regularModifiers = Object.entries(promptModifiers)
       .filter(

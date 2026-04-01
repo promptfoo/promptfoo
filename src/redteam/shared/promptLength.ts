@@ -4,8 +4,13 @@ export const MAX_CHARS_PER_MESSAGE_MODIFIER_KEY = 'maxCharsPerMessage';
 
 type ChatMessage = {
   content: string;
+  path: string;
   role: string;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
 
 function getMaxCharsPerMessage(limit?: number): number | undefined {
   const maxCharsPerMessage = limit ?? cliState.config?.redteam?.maxCharsPerMessage;
@@ -24,17 +29,48 @@ function getMaxCharsPerMessage(limit?: number): number | undefined {
 function parseChatMessages(prompt: string): ChatMessage[] | undefined {
   try {
     const parsed = JSON.parse(prompt);
+
     if (
       Array.isArray(parsed) &&
       parsed.every(
         (item) =>
-          typeof item === 'object' &&
-          item !== null &&
-          typeof (item as ChatMessage).role === 'string' &&
-          typeof (item as ChatMessage).content === 'string',
+          isRecord(item) && typeof item.role === 'string' && typeof item.content === 'string',
       )
     ) {
-      return parsed;
+      return parsed.map((message, index) => ({
+        content: message.content,
+        path: `[${index}].content`,
+        role: message.role,
+      }));
+    }
+
+    if (
+      isRecord(parsed) &&
+      parsed._promptfoo_audio_hybrid === true &&
+      (parsed.history === undefined || Array.isArray(parsed.history)) &&
+      isRecord(parsed.currentTurn) &&
+      typeof parsed.currentTurn.role === 'string' &&
+      typeof parsed.currentTurn.transcript === 'string' &&
+      (parsed.history === undefined ||
+        parsed.history.every(
+          (item) =>
+            isRecord(item) && typeof item.role === 'string' && typeof item.content === 'string',
+        ))
+    ) {
+      return [
+        ...((parsed.history as Array<{ content: string; role: string }> | undefined) ?? []).map(
+          (message, index) => ({
+            content: message.content,
+            path: `history[${index}].content`,
+            role: message.role,
+          }),
+        ),
+        {
+          content: parsed.currentTurn.transcript,
+          path: 'currentTurn.transcript',
+          role: parsed.currentTurn.role,
+        },
+      ];
     }
   } catch {
     // Plain-string prompts are checked as-is.
@@ -54,17 +90,15 @@ function getPromptLengthViolation(
 
   const messages = parseChatMessages(prompt);
   if (messages) {
-    const oversizedMessage = messages
-      .map((message, index) => ({ index, message }))
-      .find(
-        ({ message }) => message.role === 'user' && message.content.length > maxCharsPerMessage,
-      );
+    const oversizedMessage = messages.find(
+      (message) => message.role === 'user' && message.content.length > maxCharsPerMessage,
+    );
 
     return oversizedMessage
       ? {
-          length: oversizedMessage.message.content.length,
+          length: oversizedMessage.content.length,
           limit: maxCharsPerMessage,
-          path: `[${oversizedMessage.index}].content`,
+          path: oversizedMessage.path,
         }
       : undefined;
   }
@@ -91,8 +125,9 @@ export function getMaxCharsPerMessageModifierValue(limit?: number): string | und
 
 export function getGeneratedPromptOverLimit(
   prompt: string,
+  limit?: number,
 ): { length: number; limit: number } | undefined {
-  const violation = getPromptLengthViolation(prompt);
+  const violation = getPromptLengthViolation(prompt, limit);
   if (!violation) {
     return undefined;
   }

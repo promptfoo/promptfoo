@@ -614,7 +614,9 @@ async function renderRunEvalPrompt({
     provider,
     skipRenderVars,
   );
-  throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
+  if (isRedteam) {
+    throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
+  }
   const promptConfig = {
     ...(promptForRender.config ?? {}),
     ...(test.options ?? {}),
