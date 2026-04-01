@@ -110,6 +110,27 @@ That pattern is useful when you want to evaluate:
 - task completion after several intermediate actions
 - regressions in tool usage across longer trajectories
 
+## Multimodal Input
+
+The Python provider runs your own function, so you can pass structured multimodal input directly to `Runner.run_sync()` instead of a plain string:
+
+```python
+result = Runner.run_sync(
+    agent,
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "What is in this image?"},
+                {"type": "input_image", "image_url": f"data:image/jpeg;base64,{image_b64}"},
+            ],
+        }
+    ],
+)
+```
+
+Python SDK image input items use `image_url`; the JavaScript SDK examples use `image`.
+
 ## Telemetry
 
 After the eval finishes, open the web UI and inspect the **Trace Timeline** for any row. You should see:

@@ -75,19 +75,23 @@ class AirlineContext:
         seat_number: str | None = None,
         requested_seat_number: str | None = None,
         flight_number: str | None = None,
+        verified_confirmation_number: str | None = None,
     ) -> None:
         self.passenger_name = passenger_name
         self.confirmation_number = confirmation_number
         self.seat_number = seat_number
         self.requested_seat_number = requested_seat_number
         self.flight_number = flight_number
+        self.verified_confirmation_number = verified_confirmation_number
 
     def to_dict(self) -> dict[str, str | None]:
         return {
             "passenger_name": self.passenger_name,
             "confirmation_number": self.confirmation_number,
             "seat_number": self.seat_number,
+            "requested_seat_number": self.requested_seat_number,
             "flight_number": self.flight_number,
+            "verified_confirmation_number": self.verified_confirmation_number,
         }
 
 
@@ -139,6 +143,26 @@ def _reservation_view(
             "seat_number": seat_number,
         },
     )
+
+
+def _apply_reservation_to_context(
+    airline_context: AirlineContext,
+    normalized_confirmation_number: str,
+    reservation: dict[str, str] | None,
+) -> None:
+    airline_context.confirmation_number = normalized_confirmation_number
+    if reservation is None:
+        airline_context.passenger_name = None
+        airline_context.flight_number = None
+        airline_context.seat_number = None
+        airline_context.verified_confirmation_number = None
+        return
+
+    if airline_context.verified_confirmation_number != normalized_confirmation_number:
+        airline_context.verified_confirmation_number = None
+    airline_context.passenger_name = reservation["passenger_name"]
+    airline_context.flight_number = reservation["flight_number"]
+    airline_context.seat_number = reservation["seat_number"]
 
 
 def _extract_token_usage(raw_responses: Iterable[Any]) -> dict[str, int]:
@@ -195,15 +219,17 @@ def lookup_reservation(
     normalized_confirmation_number, reservation = _reservation_view(
         context.context, confirmation_number
     )
+    _apply_reservation_to_context(
+        context.context,
+        normalized_confirmation_number,
+        reservation,
+    )
     if reservation is None:
         return {
             "error": f"Unknown confirmation number: {normalized_confirmation_number}",
         }
 
-    context.context.confirmation_number = normalized_confirmation_number
-    context.context.passenger_name = reservation["passenger_name"]
-    context.context.flight_number = reservation["flight_number"]
-    context.context.seat_number = reservation["seat_number"]
+    context.context.verified_confirmation_number = normalized_confirmation_number
 
     return {
         "passenger_name": reservation["passenger_name"],
@@ -218,8 +244,15 @@ def update_seat(
 ) -> str:
     """Update a passenger seat assignment after the booking has been located."""
 
+    normalized_confirmation_number = _normalize_confirmation_number(confirmation_number)
+    if context.context.verified_confirmation_number != normalized_confirmation_number:
+        return (
+            "Unable to update the seat before the reservation has been verified. "
+            "Call lookup_reservation first."
+        )
+
     normalized_confirmation_number, reservation = _reservation_view(
-        context.context, confirmation_number
+        context.context, normalized_confirmation_number
     )
     normalized_seat = new_seat.strip().upper()
     if reservation is None:
@@ -340,21 +373,37 @@ def _build_context(vars_dict: dict[str, Any]) -> AirlineContext:
 
 
 def _build_steps(prompt: str, vars_dict: dict[str, Any]) -> list[str]:
-    configured_steps = vars_dict.get("steps") or vars_dict.get("task_steps")
-    if isinstance(configured_steps, list) and configured_steps:
-        return [str(step) for step in configured_steps]
+    for key in ("steps", "task_steps"):
+        if key not in vars_dict:
+            continue
+        configured_steps = vars_dict[key]
+        if isinstance(configured_steps, list) and configured_steps:
+            return [str(step) for step in configured_steps]
+        raise ValueError(f"{key} must be a non-empty list of steps")
 
-    configured_steps_json = vars_dict.get("steps_json") or vars_dict.get(
-        "task_steps_json"
-    )
-    if isinstance(configured_steps_json, str) and configured_steps_json.strip():
+    for key in ("steps_json", "task_steps_json"):
+        if key not in vars_dict:
+            continue
+        configured_steps_json = vars_dict[key]
+        if (
+            not isinstance(configured_steps_json, str)
+            or not configured_steps_json.strip()
+        ):
+            raise ValueError(
+                f"{key} must be valid JSON containing a non-empty list of steps"
+            )
         try:
             parsed_steps = json.loads(configured_steps_json)
-        except json.JSONDecodeError:
-            parsed_steps = None
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"{key} must be valid JSON containing a non-empty list of steps"
+            ) from exc
 
-        if isinstance(parsed_steps, list) and parsed_steps:
-            return [str(step) for step in parsed_steps]
+        if not isinstance(parsed_steps, list) or not parsed_steps:
+            raise ValueError(
+                f"{key} must be valid JSON containing a non-empty list of steps"
+            )
+        return [str(step) for step in parsed_steps]
 
     return [prompt]
 
@@ -362,12 +411,21 @@ def _build_steps(prompt: str, vars_dict: dict[str, Any]) -> list[str]:
 def _hydrate_context_from_step(step: str, airline_context: AirlineContext) -> None:
     confirmation_match = CONFIRMATION_NUMBER_RE.search(step)
     if confirmation_match:
-        airline_context.confirmation_number = confirmation_match.group(1).upper()
-        reservation = RESERVATIONS.get(airline_context.confirmation_number)
-        if reservation is not None:
-            airline_context.passenger_name = reservation["passenger_name"]
-            airline_context.flight_number = reservation["flight_number"]
-            airline_context.seat_number = reservation["seat_number"]
+        normalized_confirmation_number = _normalize_confirmation_number(
+            confirmation_match.group(1)
+        )
+        previous_confirmation_number = airline_context.confirmation_number
+        _, reservation = _reservation_view(
+            airline_context
+            if previous_confirmation_number == normalized_confirmation_number
+            else None,
+            normalized_confirmation_number,
+        )
+        _apply_reservation_to_context(
+            airline_context,
+            normalized_confirmation_number,
+            reservation,
+        )
 
     passenger_match = PASSENGER_NAME_RE.search(step)
     if passenger_match and not airline_context.passenger_name:
@@ -411,7 +469,12 @@ def _session_id(context: dict[str, Any], vars_dict: dict[str, Any]) -> str:
 
     evaluation_id = context.get("evaluationId", "local-eval")
     test_case_id = context.get("testCaseId", "default-test")
-    return f"promptfoo-openai-agents-{evaluation_id}-{test_case_id}"
+    repeat_index = context.get("repeatIndex")
+    if repeat_index is None:
+        return f"promptfoo-openai-agents-{evaluation_id}-{test_case_id}"
+    return (
+        f"promptfoo-openai-agents-{evaluation_id}-{test_case_id}-repeat-{repeat_index}"
+    )
 
 
 def call_api(
@@ -419,27 +482,27 @@ def call_api(
 ) -> dict[str, Any]:
     """Run the OpenAI Agents workflow as a Promptfoo Python provider."""
 
-    options.setdefault("config", {})
-    config = options["config"]
-    vars_dict = context.get("vars", {})
-
-    steps = _build_steps(prompt, vars_dict)
-    airline_context = _build_context(vars_dict)
-    session_id = _session_id(context, vars_dict)
-    session = SQLiteSession(session_id=session_id, db_path=SESSION_DB_PATH)
-    tracing_context = configure_promptfoo_tracing(
-        context=context,
-        otlp_endpoint=config.get("otlp_endpoint", "http://localhost:4318"),
-    )
-
-    current_agent: Agent[AirlineContext] = _build_agents(
-        str(config.get("model") or DEFAULT_MODEL)
-    )
-    transcript: list[str] = [f"Task: {prompt}"]
-    all_raw_responses: list[Any] = []
-    max_turns = int(config.get("max_turns", 10))
-
     try:
+        options.setdefault("config", {})
+        config = options["config"]
+        vars_dict = context.get("vars", {})
+
+        steps = _build_steps(prompt, vars_dict)
+        airline_context = _build_context(vars_dict)
+        session_id = _session_id(context, vars_dict)
+        session = SQLiteSession(session_id=session_id, db_path=SESSION_DB_PATH)
+        tracing_context = configure_promptfoo_tracing(
+            context=context,
+            otlp_endpoint=config.get("otlp_endpoint", "http://localhost:4318"),
+        )
+
+        current_agent: Agent[AirlineContext] = _build_agents(
+            str(config.get("model") or DEFAULT_MODEL)
+        )
+        transcript: list[str] = [f"Task: {prompt}"]
+        all_raw_responses: list[Any] = []
+        max_turns = int(config.get("max_turns", 10))
+
         trace_kwargs: dict[str, Any] = {
             "workflow_name": "Promptfoo OpenAI Agents Python Example",
             "group_id": session_id,
