@@ -28,6 +28,7 @@ import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { type TransformContext, TransformInputType, transform } from '../../util/transform';
+import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
@@ -273,13 +274,21 @@ export async function getTargetResponse(
   let targetRespRaw;
 
   try {
+    throwIfTargetPromptExceedsMaxChars(targetPrompt);
     targetRespRaw = await targetProvider.callApi(targetPrompt, context, options);
   } catch (error) {
     // Re-throw abort errors to properly cancel the operation
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;
     }
-    return { output: '', error: (error as Error).message, tokenUsage: { numRequests: 1 } };
+    return {
+      output: '',
+      error: (error as Error).message,
+      tokenUsage: {
+        numRequests:
+          error instanceof Error && error.message.includes('maxCharsPerMessage=') ? 0 : 1,
+      },
+    };
   }
   if (!targetRespRaw.cached && targetProvider.delay && targetProvider.delay > 0) {
     logger.debug(`Sleeping for ${targetProvider.delay}ms`);

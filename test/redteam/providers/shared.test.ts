@@ -449,6 +449,54 @@ describe('shared redteam provider utilities', () => {
   });
 
   describe('getTargetResponse', () => {
+    it('returns an error before calling the target when the prompt exceeds maxCharsPerMessage', async () => {
+      cliState.config = {
+        redteam: {
+          maxCharsPerMessage: 5,
+        },
+      };
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'test response',
+          tokenUsage: { numRequests: 1 },
+        }),
+      };
+
+      const result = await getTargetResponse(mockProvider, 'too long');
+
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        output: '',
+        error: 'Target prompt message at prompt exceeds maxCharsPerMessage=5: 8 characters.',
+        tokenUsage: { numRequests: 0 },
+      });
+    });
+
+    it('only enforces maxCharsPerMessage for user messages in chat arrays', async () => {
+      cliState.config = {
+        redteam: {
+          maxCharsPerMessage: 5,
+        },
+      };
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'ok',
+          tokenUsage: { numRequests: 1 },
+        }),
+      };
+      const prompt = JSON.stringify([
+        { role: 'system', content: 'this system message is long' },
+        { role: 'user', content: 'short' },
+      ]);
+
+      const result = await getTargetResponse(mockProvider, prompt);
+
+      expect(mockProvider.callApi).toHaveBeenCalledWith(prompt, undefined, undefined);
+      expect(result.output).toBe('ok');
+    });
+
     it('returns successful response with string output', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',

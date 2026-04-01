@@ -20,6 +20,10 @@ import {
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../remoteGeneration';
+import {
+  getMaxCharsPerMessageModifierValue,
+  MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
+} from '../shared/promptLength';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
 import { type RedteamPluginBase } from './base';
@@ -159,6 +163,13 @@ async function fetchRemoteTestCases(
   // Strip graderExamples before sending - they're not used during generation,
   // only during grading. The CLI re-attaches the full config to test case metadata after.
   const { graderExamples, ...configForRemote } = config ?? {};
+  const maxCharsModifier = getMaxCharsPerMessageModifierValue();
+  if (maxCharsModifier) {
+    configForRemote.modifiers = {
+      ...((configForRemote.modifiers as Record<string, string> | undefined) ?? {}),
+      [MAX_CHARS_PER_MESSAGE_MODIFIER_KEY]: maxCharsModifier,
+    };
+  }
   const body = JSON.stringify({
     config: configForRemote,
     injectVar,

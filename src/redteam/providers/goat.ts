@@ -16,6 +16,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -282,6 +283,7 @@ export default class GoatProvider implements ApiProvider {
               unblockingTargetPrompt = transformResult.prompt;
             }
 
+            throwIfTargetPromptExceedsMaxChars(unblockingTargetPrompt);
             const unblockingResponse = await targetProvider.callApi(
               unblockingTargetPrompt,
               context,
@@ -522,6 +524,7 @@ export default class GoatProvider implements ApiProvider {
         }
 
         const iterationStart = Date.now();
+        throwIfTargetPromptExceedsMaxChars(targetPrompt);
         const targetResponse = (await targetProvider.callApi(
           targetPrompt,
           context,

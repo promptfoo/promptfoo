@@ -41,6 +41,7 @@ import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
+import { getGeneratedPromptOverLimit } from './shared/promptLength';
 import { validateSharpDependency } from './sharpAvailability';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
@@ -283,6 +284,24 @@ function getLanguageForTestCase(test: TestCase | undefined): string | undefined 
   return test.metadata?.language || test.metadata?.modifiers?.language;
 }
 
+function filterOversizedTestCases<T extends TestCase>(
+  testCases: T[],
+  injectVar: string,
+  sourceLabel: string,
+): T[] {
+  return testCases.filter((testCase) => {
+    const violation = getGeneratedPromptOverLimit(String(testCase.vars?.[injectVar] ?? ''));
+    if (!violation) {
+      return true;
+    }
+
+    logger.warn(
+      `[${sourceLabel}] Dropping generated test case that exceeds maxCharsPerMessage=${violation.limit} (${violation.length} chars)`,
+    );
+    return false;
+  });
+}
+
 /**
  * Adds comprehensive metadata to plugin test cases including language, plugin info, and severity.
  * @param test - The test case to add metadata to.
@@ -452,6 +471,12 @@ async function applyStrategies(
         resultTestCases = resultTestCases.slice(0, numTestsLimit);
       }
     }
+
+    resultTestCases = filterOversizedTestCases(
+      resultTestCases,
+      injectVar,
+      `Strategy ${strategy.id}`,
+    );
 
     newTestCases.push(
       ...resultTestCases.map((t) => {
@@ -1129,12 +1154,17 @@ export async function synthesize({
             const testsWithMetadata = pluginTests.map((test) =>
               addLanguageToPluginMetadata(test, lang, plugin, testGenerationInstructions),
             );
+            const constrainedTests = filterOversizedTestCases(
+              testsWithMetadata,
+              injectVar,
+              `Plugin ${plugin.id}`,
+            );
 
             return {
               lang: langKey,
-              tests: testsWithMetadata,
+              tests: constrainedTests,
               requested: plugin.numTests,
-              generated: pluginTests.length,
+              generated: constrainedTests.length,
             };
           }
 
@@ -1234,20 +1264,24 @@ export async function synthesize({
         const customTests = await customPlugin.generateTests(plugin.numTests, delay);
 
         // Add metadata to each test case
-        const testCasesWithMetadata = customTests.map((t) => ({
-          ...t,
-          metadata: {
-            pluginId: plugin.id,
-            pluginConfig: resolvePluginConfig(plugin.config),
-            severity:
-              plugin.severity || getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
-            modifiers: {
-              ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
-              ...(plugin.config?.modifiers || {}),
+        const testCasesWithMetadata = filterOversizedTestCases(
+          customTests.map((t) => ({
+            ...t,
+            metadata: {
+              pluginId: plugin.id,
+              pluginConfig: resolvePluginConfig(plugin.config),
+              severity:
+                plugin.severity || getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+              modifiers: {
+                ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
+                ...(plugin.config?.modifiers || {}),
+              },
+              ...(t.metadata || {}),
             },
-            ...(t.metadata || {}),
-          },
-        }));
+          })),
+          injectVar,
+          `Custom plugin ${plugin.id}`,
+        );
 
         // Extract goal for custom plugin's tests (only needed for agentic strategies)
         if (needsGoalExtraction) {
@@ -1272,7 +1306,7 @@ export async function synthesize({
         const displayId = getPluginDisplayId(plugin);
         pluginResults[displayId] = {
           requested: plugin.numTests,
-          generated: customTests.length,
+          generated: testCasesWithMetadata.length,
         };
       } catch (e) {
         logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
