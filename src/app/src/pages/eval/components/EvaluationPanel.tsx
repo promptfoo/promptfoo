@@ -44,10 +44,14 @@ function isAssertionSetMetadata(value: unknown): value is AssertionSetMetadata {
   }
 
   const metadata = value as Record<string, unknown>;
+  const assertionCount = metadata.assertionCount;
+
   return (
     metadata.type === 'assert-set' &&
-    (metadata.assertionCount === undefined ||
-      (Number.isInteger(metadata.assertionCount) && metadata.assertionCount >= 0)) &&
+    (assertionCount === undefined ||
+      (typeof assertionCount === 'number' &&
+        Number.isInteger(assertionCount) &&
+        assertionCount >= 0)) &&
     (metadata.assert === undefined || Array.isArray(metadata.assert)) &&
     (metadata.metric === undefined || typeof metadata.metric === 'string') &&
     (metadata.threshold === undefined || typeof metadata.threshold === 'number') &&
