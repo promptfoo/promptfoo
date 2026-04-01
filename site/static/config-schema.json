@@ -2684,6 +2684,12 @@
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991
         },
+        "maxCharsPerMessage": {
+          "description": "Maximum number of characters allowed per generated user message",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
         "delay": {
           "description": "Delay in milliseconds between plugin API calls",
           "type": "integer",
