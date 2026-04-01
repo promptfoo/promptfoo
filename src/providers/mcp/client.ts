@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { getEnvBool, getEnvInt } from '../../envars';
 import logger from '../../logger';
-import { TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
+import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../../util/oauth';
 import {
   applyQueryParams,
   getAuthHeaders,
@@ -38,10 +38,6 @@ interface MCPRequestOptions {
   timeout?: number;
   resetTimeoutOnProgress?: boolean;
   maxTotalTimeout?: number;
-}
-
-interface TokenRefreshLock {
-  promise: Promise<void>;
 }
 
 /**

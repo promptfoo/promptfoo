@@ -35,20 +35,7 @@ import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../.
 import { functionCache } from '../../src/util/functions/loadFunction';
 import { TOKEN_REFRESH_BUFFER_MS } from '../../src/util/oauth';
 import { sanitizeObject, sanitizeUrl } from '../../src/util/sanitizer';
-
-function createDeferred<T>(): {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (reason?: unknown) => void;
-} {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    resolve = promiseResolve;
-    reject = promiseReject;
-  });
-  return { promise, resolve, reject };
-}
+import { createDeferred } from '../util/utils';
 
 // Mock console.warn to prevent test noise
 const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(function () {});
