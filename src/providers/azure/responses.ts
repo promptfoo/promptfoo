@@ -19,16 +19,22 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { ReasoningEffort } from '../openai/types';
+import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
 
 // Azure Responses API uses the v1 preview API version
 const AZURE_RESPONSES_API_VERSION = 'preview';
 
 export class AzureResponsesProvider extends AzureGenericProvider {
+  declare config: AzureChatResponsesOptions;
+
   private functionCallbackHandler = new FunctionCallbackHandler();
   private processor: ResponsesProcessor;
 
-  constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
-    super(...args);
+  constructor(
+    deploymentName: string,
+    options: AzureProviderOptions<AzureChatResponsesOptions> = {},
+  ) {
+    super(deploymentName, options);
 
     // Initialize the shared response processor
     this.processor = new ResponsesProcessor({
@@ -116,7 +122,9 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       : getEnvInt('OPENAI_MAX_TOKENS', 1024);
     const maxOutputTokens =
       config.max_output_tokens ??
-      (isReasoningModel ? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') : maxOutputTokensDefault);
+      (isReasoningModel
+        ? (getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? maxOutputTokensDefault)
+        : maxOutputTokensDefault);
 
     const temperatureDefault = config.omitDefaults
       ? getEnvString('OPENAI_TEMPERATURE') === undefined

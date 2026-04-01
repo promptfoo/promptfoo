@@ -27,13 +27,19 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
+  declare config: AzureChatResponsesOptions;
+
   private mcpClient: MCPClient | null = null;
   private functionCallbackHandler: FunctionCallbackHandler;
 
-  constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
-    super(...args);
+  constructor(
+    deploymentName: string,
+    options: AzureProviderOptions<AzureChatResponsesOptions> = {},
+  ) {
+    super(deploymentName, options);
 
     // Initialize callback handler immediately (will be replaced if MCP is enabled)
     this.functionCallbackHandler = new FunctionCallbackHandler();
@@ -152,7 +158,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         : getEnvInt('OPENAI_MAX_TOKENS')
       : getEnvInt('OPENAI_MAX_TOKENS', 1024);
     const maxTokens = config.max_tokens ?? maxTokensDefault;
-    const maxCompletionTokens = config.max_completion_tokens ?? maxTokens;
+    const maxCompletionTokens =
+      config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? maxTokens;
 
     const temperatureDefault = config.omitDefaults
       ? getEnvString('OPENAI_TEMPERATURE') === undefined
@@ -172,7 +179,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       : (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0));
 
     // Get reasoning effort for reasoning models
-    const reasoningEffort = config.reasoning_effort ?? 'medium';
+    const reasoningEffort = config.reasoning_effort ?? (config.omitDefaults ? undefined : 'medium');
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
@@ -190,7 +197,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       messages,
       ...(isReasoningModel
         ? {
-            reasoning_effort: renderVarsInObject(reasoningEffort, context?.vars),
+            ...(reasoningEffort === undefined
+              ? {}
+              : { reasoning_effort: renderVarsInObject(reasoningEffort, context?.vars) }),
             ...(maxCompletionTokens === undefined
               ? {}
               : { max_completion_tokens: maxCompletionTokens }),

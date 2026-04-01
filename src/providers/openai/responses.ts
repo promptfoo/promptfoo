@@ -199,7 +199,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       : getEnvInt('OPENAI_MAX_TOKENS', 1024);
     const maxOutputTokens =
       config.max_output_tokens ??
-      (isReasoningModel ? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') : maxOutputTokensDefault);
+      (isReasoningModel
+        ? (getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? maxOutputTokensDefault)
+        : maxOutputTokensDefault);
 
     const temperatureDefault = config.omitDefaults
       ? getEnvString('OPENAI_TEMPERATURE') === undefined

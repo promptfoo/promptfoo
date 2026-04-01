@@ -32,12 +32,14 @@ vi.mock('../../../src/python/pythonUtils', async (importOriginal) => {
 
 const originalOpenAiTemperature = process.env.OPENAI_TEMPERATURE;
 const originalOpenAiMaxTokens = process.env.OPENAI_MAX_TOKENS;
+const originalOpenAiMaxCompletionTokens = process.env.OPENAI_MAX_COMPLETION_TOKENS;
 
 describe('OpenAiResponsesProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.OPENAI_TEMPERATURE;
     delete process.env.OPENAI_MAX_TOKENS;
+    delete process.env.OPENAI_MAX_COMPLETION_TOKENS;
   });
 
   afterEach(() => {
@@ -51,6 +53,11 @@ describe('OpenAiResponsesProvider', () => {
       delete process.env.OPENAI_MAX_TOKENS;
     } else {
       process.env.OPENAI_MAX_TOKENS = originalOpenAiMaxTokens;
+    }
+    if (originalOpenAiMaxCompletionTokens === undefined) {
+      delete process.env.OPENAI_MAX_COMPLETION_TOKENS;
+    } else {
+      process.env.OPENAI_MAX_COMPLETION_TOKENS = originalOpenAiMaxCompletionTokens;
     }
   });
 
@@ -594,6 +601,53 @@ describe('OpenAiResponsesProvider', () => {
     expect('temperature' in body).toBe(true);
     expect(body.max_output_tokens).toBe(2048);
     expect('max_output_tokens' in body).toBe(true);
+  });
+
+  it('should prefer OPENAI_MAX_COMPLETION_TOKENS over OPENAI_MAX_TOKENS for reasoning models', async () => {
+    process.env.OPENAI_MAX_COMPLETION_TOKENS = '4096';
+    process.env.OPENAI_MAX_TOKENS = '2048';
+
+    const provider = new OpenAiResponsesProvider('o1-preview', {
+      config: {
+        apiKey: 'test-key',
+        omitDefaults: true,
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.max_output_tokens).toBe(4096);
+    expect('max_output_tokens' in body).toBe(true);
+  });
+
+  it('should fall back to OPENAI_MAX_TOKENS for reasoning models when OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
+    process.env.OPENAI_MAX_TOKENS = '2048';
+
+    const provider = new OpenAiResponsesProvider('o1-preview', {
+      config: {
+        apiKey: 'test-key',
+        omitDefaults: true,
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.max_output_tokens).toBe(2048);
+    expect('max_output_tokens' in body).toBe(true);
+  });
+
+  it('should omit default max_output_tokens when omitDefaults is true for reasoning models', async () => {
+    const provider = new OpenAiResponsesProvider('o1-preview', {
+      config: {
+        apiKey: 'test-key',
+        omitDefaults: true,
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.max_output_tokens).toBeUndefined();
+    expect('max_output_tokens' in body).toBe(false);
   });
 
   it('should correctly send max_output_tokens: 0 in the request body when explicitly set', async () => {
