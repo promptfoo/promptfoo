@@ -336,9 +336,10 @@ describe('OpenAICodexSDKProvider', () => {
 
       it('should fall back to process.cwd() when resolving the SDK from an external config base path', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
-        cliState.basePath = '/tmp/external-config';
+        const externalConfigBasePath = path.resolve('/tmp/external-config');
+        cliState.basePath = externalConfigBasePath;
         mockResolvePackageEntryPoint.mockImplementation((packageName, basePath) => {
-          if (basePath === '/tmp/external-config') {
+          if (basePath === externalConfigBasePath) {
             return null;
           }
           return packageName === '@openai/codex-sdk' ? '@openai/codex-sdk' : null;
@@ -354,7 +355,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(mockResolvePackageEntryPoint).toHaveBeenNthCalledWith(
           1,
           '@openai/codex-sdk',
-          '/tmp/external-config',
+          externalConfigBasePath,
         );
         expect(mockResolvePackageEntryPoint).toHaveBeenNthCalledWith(
           2,
