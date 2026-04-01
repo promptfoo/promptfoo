@@ -442,8 +442,20 @@ describe('MCP Utility Functions', () => {
       expect(result).toBe('He');
     });
 
+    it('should return ellipsis when max length equals ellipsis length', () => {
+      const result = truncateText('Hello', 3);
+
+      expect(result).toBe('...');
+    });
+
     it('should return empty string when max length is zero', () => {
       const result = truncateText('Hello', 0);
+
+      expect(result).toBe('');
+    });
+
+    it('should return empty string when max length is negative', () => {
+      const result = truncateText('Hello', -1);
 
       expect(result).toBe('');
     });

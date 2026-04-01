@@ -208,7 +208,7 @@ export function truncateText(text: string, maxLength: number): string {
     return text;
   }
 
-  if (maxLength <= 3) {
+  if (maxLength < 3) {
     return text.slice(0, Math.max(0, maxLength));
   }
 
