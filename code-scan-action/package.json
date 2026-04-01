@@ -31,6 +31,6 @@
     "typescript": "^6.0.2"
   },
   "overrides": {
-    "undici": "^7.22.0"
+    "undici": "^7.24.5"
   }
 }

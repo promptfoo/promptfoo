@@ -3290,15 +3290,9 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
 
     // When score is provided explicitly, it should be used instead of defaulting to 0/1
     const customScore = 0.75;
-    const isPass = true;
 
-    // Verify logic: if score is provided, use it; if only isPass, use 0/1
-    let finalScore: number = 0;
-    if (typeof customScore !== 'undefined') {
-      finalScore = customScore;
-    } else if (typeof isPass !== 'undefined' && isPass !== null) {
-      finalScore = isPass ? 1 : 0;
-    }
+    // Verify logic: an explicit score takes precedence over pass/fail-derived scores.
+    const finalScore = customScore;
 
     expect(finalScore).toBe(0.75);
   });

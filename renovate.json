@@ -310,6 +310,7 @@
     {
       "description": "Vercel AI SDK: monthly updates to reduce noise from frequent patch releases",
       "matchPackageNames": ["ai"],
+      "groupName": "Vercel AI SDK",
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
       "minimumReleaseAge": "7 days"

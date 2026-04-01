@@ -47,7 +47,7 @@ npx promptfoo@latest view
 
 Open any result and inspect the **Trace Timeline** tab. You should see agent, handoff, generation, and tool spans from the OpenAI Agents SDK.
 
-If you also want a provider-level Python OTEL span alongside the SDK spans, run the eval with `PROMPTFOO_ENABLE_OTEL=true`.
+If you also want a provider-level Python OpenTelemetry span alongside the SDK spans, run the eval with `PROMPTFOO_ENABLE_OTEL=true`.
 
 ## What The Eval Asserts
 

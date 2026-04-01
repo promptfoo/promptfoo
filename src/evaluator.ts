@@ -7,7 +7,6 @@ import { globSync } from 'glob';
 import {
   hasTraceAwareAssertions,
   MODEL_GRADED_ASSERTION_TYPES,
-  renderMetricName,
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
@@ -62,6 +61,7 @@ import { isNonTransientHttpStatus } from './util/fetch/errors';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
+import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
 import { isPromptAllowed } from './util/promptMatching';
 import {
   isAnthropicProvider,
@@ -1228,6 +1228,9 @@ class Evaluator {
         const promptId = generateIdFromPrompt(prompt);
         const existingPromptKey = `${providerKey}:${promptId}`;
         const existingPrompt = existingPromptsMap.get(existingPromptKey);
+        if (existingPrompt?.metrics) {
+          backfillNamedScoreWeights(existingPrompt.metrics);
+        }
 
         const completedPrompt = {
           ...prompt,
@@ -1245,6 +1248,7 @@ class Evaluator {
             tokenUsage: createEmptyTokenUsage(),
             namedScores: {},
             namedScoresCount: {},
+            namedScoreWeights: {},
             cost: 0,
           },
         };
@@ -1710,22 +1714,12 @@ class Evaluator {
         invariant(metrics, 'Expected prompt.metrics to be set');
         metrics.score += row.score;
         for (const [key, value] of Object.entries(row.namedScores)) {
-          // Update named score value
-          metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
-
-          // Count assertions contributing to this named score
-          // Note: We need to render template variables in assertion metrics before comparing
-          const testVars = row.testCase?.vars || {};
-          let contributingAssertions = 0;
-          row.gradingResult?.componentResults?.forEach((result) => {
-            const renderedMetric = renderMetricName(result.assertion?.metric, testVars);
-            if (renderedMetric === key) {
-              contributingAssertions++;
-            }
+          accumulateNamedMetric(metrics, {
+            metricName: key,
+            metricValue: value,
+            gradingResult: row.gradingResult,
+            testVars: row.testCase?.vars || {},
           });
-
-          metrics.namedScoresCount[key] =
-            (metrics.namedScoresCount[key] || 0) + (contributingAssertions || 1);
         }
 
         if (testSuite.derivedMetrics) {
@@ -1916,6 +1910,7 @@ class Evaluator {
               },
               namedScores: {},
               namedScoresCount: {},
+              namedScoreWeights: {},
               cost: 0,
             },
           );

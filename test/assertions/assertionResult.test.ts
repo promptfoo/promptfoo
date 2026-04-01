@@ -79,6 +79,9 @@ describe('AssertionsResult', () => {
       namedScores: {
         [metric]: 1,
       },
+      namedScoreWeights: {
+        [metric]: 1,
+      },
     });
   });
 
@@ -256,6 +259,22 @@ describe('AssertionsResult', () => {
       'metric-2': 0.9,
       'metric-3': 1,
     });
+    expect(result.namedScoreWeights).toEqual({
+      'metric-1': 1,
+      'metric-2': 1,
+      'metric-3': 1,
+    });
+  });
+
+  it('omits empty namedScoreWeights from the final result', async () => {
+    assertionsResult.addResult({
+      index: 0,
+      result: succeedingResult,
+    });
+
+    const result = await assertionsResult.testResult();
+
+    expect(result).not.toHaveProperty('namedScoreWeights');
   });
 
   it('handles scoring function errors', async () => {

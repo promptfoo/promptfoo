@@ -2569,10 +2569,7 @@ var __defProp = Object.defineProperty,
     }
     hasDuration(e) {
       return (
-        e.split(' ').filter((e) => {
-          return (t = e), kt.TIME.exec(t);
-          var t;
-        }).length >= 1
+        e.split(' ').filter((e) => kt.TIME.exec(e)).length >= 1
       );
     }
     hasAutoDuration(e) {

@@ -9,8 +9,6 @@ codeql[py/weak-cryptographic-algorithm]: Intentional vulnerability for testing
 """
 
 import json
-from decimal import Decimal
-from typing import Optional
 
 
 class PaymentProcessor:

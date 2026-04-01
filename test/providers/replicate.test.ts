@@ -12,6 +12,7 @@ import {
   ReplicateModerationProvider,
   ReplicateProvider,
 } from '../../src/providers/replicate';
+import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 
 vi.mock('../../src/cache');
 
@@ -281,6 +282,44 @@ describe('ReplicateProvider', () => {
     expect(mockCache.get).toHaveBeenCalled();
     // Verify fetchWithCache was not called because cache was used
     expect(mockedFetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should cache successful string responses', async () => {
+    mockedFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'test-id',
+        status: 'succeeded',
+        output: 'test response',
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const mockCache = {
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+    } as any;
+
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    vi.mocked(getCache).mockResolvedValue(mockCache);
+
+    const provider = new ReplicateProvider('test-model', {
+      config: { apiKey: mockApiKey },
+    });
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.output).toBe('test response');
+    expect(mockCache.set).toHaveBeenCalledTimes(1);
+    expect(mockCache.set).toHaveBeenCalledWith(
+      'replicate:test-model:{"apiKey":"test-api-key"}:test prompt',
+      expect.any(String),
+    );
+    expect(JSON.parse(mockCache.set.mock.calls[0][1])).toEqual({
+      output: 'test response',
+      tokenUsage: createEmptyTokenUsage(),
+    });
   });
 });
 

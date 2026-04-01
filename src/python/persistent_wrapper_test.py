@@ -557,31 +557,35 @@ class TestHandleCall(unittest.TestCase):
 
         # Mock open to fail first two reads, succeed on third
         original_open = open
-        call_count = [0]
+        verification_read_count = 0
 
         def mock_open_func(path, *args, **kwargs):
-            if (
-                path == self.response_file and "r" in args[0]
-                if args
-                else "r" in kwargs.get("mode", "r")
-            ):
-                call_count[0] += 1
-                if call_count[0] <= 2:
+            nonlocal verification_read_count
+            mode = args[0] if args else kwargs.get("mode", "r")
+            if path == self.response_file and "r" in mode:
+                verification_read_count += 1
+                if verification_read_count <= 2:
                     raise IOError("Simulated read failure")
             return original_open(path, *args, **kwargs)
 
         stdout_capture = io.StringIO()
         with patch("sys.stdout", stdout_capture):
-            with patch("time.sleep"):  # Skip actual sleep
-                # Note: This test verifies the retry logic path exists
-                # Full mocking of builtins.open is complex, so we test the happy path
-                persistent_wrapper.handle_call(
-                    f"CALL|test_func|{self.request_file}|{self.response_file}",
-                    self.mock_module,
-                    "default_func",
-                )
+            with patch("time.sleep") as mock_sleep:
+                with patch("builtins.open", side_effect=mock_open_func):
+                    persistent_wrapper.handle_call(
+                        f"CALL|test_func|{self.request_file}|{self.response_file}",
+                        self.mock_module,
+                        "default_func",
+                    )
 
         self.assertIn("DONE", stdout_capture.getvalue())
+        self.assertEqual(verification_read_count, 3)
+        self.assertEqual(mock_sleep.call_count, 2)
+
+        with open(self.response_file) as f:
+            response = json.load(f)
+        self.assertEqual(response["type"], "result")
+        self.assertEqual(response["data"], 3)
 
 
 class TestAsyncFunctionHandling(unittest.TestCase):

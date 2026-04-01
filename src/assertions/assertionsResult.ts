@@ -38,6 +38,7 @@ export class AssertionsResult {
   private failedReason: string | undefined;
   private componentResults: GradingResult[] = [];
   private namedScores: Record<string, number> = {};
+  private namedScoreWeights: Record<string, number> = {};
   private result: GradingResult | null = null;
   private failedContentSafetyChecks: boolean = false;
 
@@ -79,13 +80,15 @@ export class AssertionsResult {
     }
 
     if (metric) {
-      this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score;
+      this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score * weight;
+      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] || 0) + weight;
     }
 
     if (result.namedScores) {
       Object.entries(result.namedScores).forEach(([metricName, score]) => {
         if (metricName !== metric) {
-          this.namedScores[metricName] = (this.namedScores[metricName] || 0) + score;
+          this.namedScores[metricName] = (this.namedScores[metricName] || 0) + score * weight;
+          this.namedScoreWeights[metricName] = (this.namedScoreWeights[metricName] || 0) + weight;
         }
       });
     }
@@ -150,18 +153,27 @@ export class AssertionsResult {
       }
     });
 
+    const normalizedNamedScores: Record<string, number> = {};
+    for (const [key, value] of Object.entries(this.namedScores)) {
+      const totalWeight = this.namedScoreWeights[key] ?? 0;
+      normalizedNamedScores[key] = totalWeight > 0 ? value / totalWeight : 0;
+    }
+
+    const hasNamedScoreWeights = Object.keys(this.namedScoreWeights).length > 0;
+
     this.result = {
       pass,
       score,
       reason,
-      namedScores: this.namedScores,
+      namedScores: normalizedNamedScores,
+      ...(hasNamedScoreWeights ? { namedScoreWeights: this.namedScoreWeights } : {}),
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
     };
 
     if (scoringFunction) {
       try {
-        const scoringResult = await scoringFunction(this.namedScores, {
+        const scoringResult = await scoringFunction(normalizedNamedScores, {
           threshold: this.threshold,
           parentAssertionSet: this._parentAssertionSet,
           componentResults: flattenedComponentResults,
