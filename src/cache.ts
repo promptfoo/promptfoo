@@ -4,7 +4,6 @@ import path from 'path';
 import { createCache } from 'cache-manager';
 import { Keyv } from 'keyv';
 import { KeyvFile } from 'keyv-file';
-import { runMigration, shouldRunMigration } from './cacheMigration';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
@@ -36,7 +35,6 @@ export function getCache() {
   if (!cacheInstance) {
     let cachePath = '';
     const stores = [];
-    let migrationFailed = false;
 
     if (cacheType === 'disk' && enabled) {
       cachePath =
@@ -49,57 +47,23 @@ export function getCache() {
 
       const newCacheFile = path.join(cachePath, 'cache.json');
 
-      // Run migration if needed
-      if (shouldRunMigration(cachePath, newCacheFile)) {
-        logger.info('[Cache] Migrating cache from v4 to v7...');
+      try {
+        const store = new KeyvFile({
+          filename: newCacheFile,
+        });
 
-        try {
-          const result = runMigration(cachePath, newCacheFile);
+        const keyv = new Keyv({
+          store,
+          ttl: getCacheTtlMs(),
+        });
 
-          if (result.success) {
-            logger.info(
-              `[Cache] Migration completed: ${result.stats.successCount} entries migrated, ` +
-                `${result.stats.skippedExpired} expired`,
-            );
-            if (result.backupPath) {
-              logger.info(`[Cache] Backup kept at: ${result.backupPath}`);
-            }
-          } else {
-            logger.error(
-              `[Cache] Migration failed: ${result.stats.errors.join(', ')}. ` +
-                `Falling back to memory cache.`,
-            );
-            migrationFailed = true;
-          }
-        } catch (err) {
-          logger.error(
-            `[Cache] Migration error: ${(err as Error).message}. ` +
-              `Falling back to memory cache.`,
-          );
-          migrationFailed = true;
-        }
-      }
-
-      // Set up disk cache if migration succeeded or wasn't needed
-      if (!migrationFailed) {
-        try {
-          const store = new KeyvFile({
-            filename: newCacheFile,
-          });
-
-          const keyv = new Keyv({
-            store,
-            ttl: getCacheTtlMs(),
-          });
-
-          stores.push(keyv);
-        } catch (err) {
-          logger.warn(
-            `[Cache] Failed to initialize disk cache: ${(err as Error).message}. ` +
-              `Using memory cache instead.`,
-          );
-          // Falls through to memory cache
-        }
+        stores.push(keyv);
+      } catch (err) {
+        logger.warn(
+          `[Cache] Failed to initialize disk cache: ${(err as Error).message}. ` +
+            `Using memory cache instead.`,
+        );
+        // Falls through to memory cache
       }
     }
 
