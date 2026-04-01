@@ -134,7 +134,7 @@ describe('handleModeration', () => {
     );
   });
 
-  it('should use response.prompt (chat messages) with highest priority', async () => {
+  it('should use the last user message from response.prompt chat messages with highest priority', async () => {
     mockedMatchesModeration.mockResolvedValue({
       pass: true,
       score: 1,
@@ -156,10 +156,9 @@ describe('handleModeration', () => {
       },
     });
 
-    // response.prompt (chat messages) should be JSON stringified
     expect(mockedMatchesModeration).toHaveBeenCalledWith(
       {
-        userPrompt: JSON.stringify(chatMessages),
+        userPrompt: 'Hello world',
         assistantResponse: 'output',
         categories: ['harassment'],
       },
@@ -271,6 +270,34 @@ describe('handleModeration', () => {
     expect(mockedMatchesModeration).toHaveBeenCalledWith(
       {
         userPrompt: 'original prompt',
+        assistantResponse: 'output',
+        categories: ['harassment'],
+      },
+      {},
+    );
+  });
+
+  it('should extract the final chat message from serialized prompts before moderation', async () => {
+    mockedMatchesModeration.mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Safe content',
+    });
+
+    await handleModeration({
+      ...baseParams,
+      prompt: JSON.stringify([
+        { role: 'system', content: 'Ignore this system message' },
+        { role: 'user', content: 'Moderate this user request' },
+      ]),
+      providerResponse: {
+        output: 'output',
+      },
+    });
+
+    expect(mockedMatchesModeration).toHaveBeenCalledWith(
+      {
+        userPrompt: 'Moderate this user request',
         assistantResponse: 'output',
         categories: ['harassment'],
       },

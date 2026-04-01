@@ -14,7 +14,7 @@ export const handleModeration = async ({
 }: AssertionParams): Promise<GradingResult> => {
   // Priority: 1) response.prompt (provider-reported), 2) redteamFinalPrompt (legacy), 3) original prompt
   // This allows providers to report the actual prompt they sent (e.g., GenAIScript, dynamic prompts)
-  const promptToModerate = getActualPromptWithFallback(providerResponse, prompt || '');
+  let promptToModerate = getActualPromptWithFallback(providerResponse, prompt || '');
   invariant(promptToModerate, 'moderation assertion type must have a prompt');
   invariant(
     !assertion.value || (Array.isArray(assertion.value) && typeof assertion.value[0] === 'string'),
@@ -28,7 +28,7 @@ export const handleModeration = async ({
         null,
       );
       if (parsedPrompt && parsedPrompt.length > 0) {
-        prompt = parsedPrompt[parsedPrompt.length - 1].content;
+        promptToModerate = parsedPrompt[parsedPrompt.length - 1].content;
       }
     } catch {
       // Ignore error

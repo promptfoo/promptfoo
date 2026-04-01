@@ -608,7 +608,7 @@ export async function runRedteamConversation({
       continue;
     }
 
-    let currentScore = 1;
+    let currentScore: number;
     let previousScore = bestResponse ? highestScore : 0;
     try {
       const parsed =

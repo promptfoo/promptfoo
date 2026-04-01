@@ -2390,10 +2390,10 @@ var __defProp = Object.defineProperty,
       if (!t) return e;
       const n = new URL(t).origin,
         i = t.lastIndexOf('/') > n.length ? t.substring(0, t.lastIndexOf('/')) : n;
-      return (e = (e = e.replace(
+      return e.replace(
         /url\((?:(['"])(?!https?:\/\/|data:|blob:|\/)|(?!['"]?(?:https?:\/\/|data:|blob:|\/)))(?:\.\/)?/gm,
         `url($1${i}/`,
-      )).replace(/url\((['"])?\//gm, `url($1${n}/`));
+      ).replace(/url\((['"])?\//gm, `url($1${n}/`);
     }
     getAnimationTimelineOptions(e, t) {
       for (let n = this.cssRulesWithTimelineName.length - 1; n >= 0; n--) {
@@ -2854,8 +2854,9 @@ var __defProp = Object.defineProperty,
           (new URL(e.href, document.baseURI).origin == location.origin &&
             fetch(e.getAttribute('href')).then(async (t) => {
               const n = await t.text();
-              let i = It.transpileStyleSheet(n, !0);
-              if (((i = It.transpileStyleSheet(n, !1, t.url)), i != n)) {
+              It.transpileStyleSheet(n, !0);
+              const i = It.transpileStyleSheet(n, !1, t.url);
+              if (i != n) {
                 const t = new Blob([i], { type: 'text/css' }),
                   n = URL.createObjectURL(t);
                 e.setAttribute('href', n);
