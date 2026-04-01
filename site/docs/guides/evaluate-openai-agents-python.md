@@ -24,7 +24,10 @@ pip install -r requirements.txt
 
 export OPENAI_API_KEY=your_api_key_here
 
-# Optional: emit a provider-level Python span
+# Run the eval
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
+
+# Optional: also emit a provider-level Python OpenTelemetry span
 PROMPTFOO_ENABLE_OTEL=true npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 npx promptfoo@latest view
 ```
@@ -49,7 +52,7 @@ At a high level:
 
 If you skip this exporter, Promptfoo will not see the SDK's tool and handoff spans, so `trajectory:*` assertions will not have the trace data they need.
 
-If you also enable Promptfoo's Python wrapper OTEL path with `PROMPTFOO_ENABLE_OTEL=true`, the example will emit a provider-level Python span as well. The custom SDK spans will inherit that active OTEL span as their parent. The example config accepts both OTLP JSON and protobuf because the SDK bridge emits JSON while the wrapper exporter uses protobuf by default.
+If you also enable Promptfoo's Python OpenTelemetry wrapper instrumentation with `PROMPTFOO_ENABLE_OTEL=true`, the example will emit a provider-level Python span as well. The custom SDK spans will inherit that active OpenTelemetry span as their parent. The example config accepts both OTLP JSON and OTLP/protobuf because the SDK bridge emits JSON while the wrapper exporter uses protobuf by default.
 
 ## Assertion Pattern
 

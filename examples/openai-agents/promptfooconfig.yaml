@@ -95,5 +95,5 @@ tracing:
     http:
       enabled: true
       port: 4318
-      # The SDK bridge exports JSON; wrapper OTEL spans use protobuf by default.
+      # The SDK bridge exports OTLP/JSON; the Python wrapper exporter uses OTLP/protobuf by default.
       acceptFormats: ['json', 'protobuf']
