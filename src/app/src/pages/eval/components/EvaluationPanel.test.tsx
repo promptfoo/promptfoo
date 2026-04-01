@@ -156,4 +156,55 @@ describe('EvaluationPanel', () => {
     expect(screen.getByText('promptfoo:redteam:policy - Full Grading Prompt')).toBeInTheDocument();
     expect(screen.getByText('promptfoo:redteam:harmful - Full Grading Prompt')).toBeInTheDocument();
   });
+
+  it('renders assert-set rows as a nested hierarchy with assertion type and value labels', () => {
+    const childResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion: {
+          type: 'contains',
+          value: 'google_docs/batch_update',
+        },
+      },
+      {
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion: {
+          type: 'contains',
+          value: 'google_docs/create_document',
+        },
+      },
+    ];
+
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'All assertions passed',
+        componentResults: childResults,
+        metadata: {
+          assertionSet: {
+            type: 'assert-set',
+            metric: 'tool-calls',
+            assert: childResults.map((childResult) => childResult.assertion),
+          },
+        },
+      },
+      ...childResults,
+    ];
+
+    const { container } = render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    expect(screen.getByText('Metric')).toBeInTheDocument();
+    expect(screen.getByText('tool-calls')).toBeInTheDocument();
+    expect(screen.getByText('assert-set')).toBeInTheDocument();
+    expect(screen.getByText('2 nested assertions')).toBeInTheDocument();
+    expect(screen.getAllByText('contains')).toHaveLength(2);
+    expect(screen.getByText('google_docs/batch_update')).toBeInTheDocument();
+    expect(screen.getByText('google_docs/create_document')).toBeInTheDocument();
+    expect(container.querySelectorAll('.lucide-corner-down-right')).toHaveLength(2);
+  });
 });

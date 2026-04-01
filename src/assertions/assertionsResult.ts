@@ -157,6 +157,11 @@ export class AssertionsResult {
       namedScores: this.namedScores,
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
+      ...(this._parentAssertionSet && {
+        metadata: {
+          assertionSet: this._parentAssertionSet.assertionSet,
+        },
+      }),
     };
 
     if (scoringFunction) {
