@@ -201,16 +201,18 @@ export function formatDuration(ms: number): string {
 }
 
 /**
- * Truncate text to specified length with ellipsis
+ * Truncate text to specified length with ellipsis.
+ * The returned string is guaranteed to be at most maxLength characters.
  */
 export function truncateText(text: string, maxLength: number): string {
+  if (maxLength <= 0) {
+    return '';
+  }
   if (text.length <= maxLength) {
     return text;
   }
-
-  if (maxLength < 3) {
-    return text.slice(0, Math.max(0, maxLength));
+  if (maxLength <= 3) {
+    return text.slice(0, maxLength);
   }
-
   return text.slice(0, maxLength - 3) + '...';
 }

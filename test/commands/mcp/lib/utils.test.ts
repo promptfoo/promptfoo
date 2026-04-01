@@ -434,18 +434,16 @@ describe('MCP Utility Functions', () => {
       expect(result).toHaveLength(20);
     });
 
-    it('should handle max length less than ellipsis length', () => {
-      const text = 'Hello';
-      const result = truncateText(text, 2);
-
-      // Truncate without ellipsis so the result never exceeds maxLength.
-      expect(result).toBe('He');
+    it('should truncate without ellipsis when max length is 3 or less', () => {
+      expect(truncateText('Hello', 3)).toBe('Hel');
+      expect(truncateText('Hello', 2)).toBe('He');
+      expect(truncateText('Hello', 1)).toBe('H');
     });
 
-    it('should return ellipsis when max length equals ellipsis length', () => {
-      const result = truncateText('Hello', 3);
-
-      expect(result).toBe('...');
+    it('should use ellipsis starting at max length 4', () => {
+      const result = truncateText('Hello World', 4);
+      expect(result).toBe('H...');
+      expect(result).toHaveLength(4);
     });
 
     it('should return empty string when max length is zero', () => {
