@@ -776,12 +776,16 @@ describe('OpenAICodexSDKProvider', () => {
 
       it('should accept a repository subdirectory when a parent directory contains .git', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
+        const repoRoot = path.join(path.parse(process.cwd()).root, 'repo');
+        const workingDir = path.join(repoRoot, 'src', 'providers');
+        const gitDir = path.join(repoRoot, '.git');
+
         existsSyncSpy.mockImplementation((candidatePath: fs.PathLike) => {
-          return candidatePath === '/repo/.git';
+          return candidatePath === gitDir;
         });
 
         const provider = new OpenAICodexSDKProvider({
-          config: { working_dir: '/repo/src/providers' },
+          config: { working_dir: workingDir },
           env: { OPENAI_API_KEY: 'test-api-key' },
         });
 
@@ -790,7 +794,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result.output).toBe('Response');
         expect(result.error).toBeUndefined();
         expect(mockStartThread).toHaveBeenCalledWith({
-          workingDirectory: '/repo/src/providers',
+          workingDirectory: workingDir,
           skipGitRepoCheck: false,
         });
       });

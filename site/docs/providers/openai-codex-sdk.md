@@ -273,7 +273,7 @@ providers:
   - id: openai:codex-sdk
     config:
       persist_threads: true
-      thread_pool_size: 2 # Allow up to 2 concurrent threads
+      thread_pool_size: 2 # Keep up to 2 prompt-template threads cached
 ```
 
 Threads are pooled by cache key built from the prompt template (`prompt.raw` when available), working dir, model, output schema, sandbox/search/network/approval settings, and constructor-level SDK options. That means tests rendered from the same template with different vars share a thread, while different prompt templates get separate threads. If you call the provider directly without a `prompt.raw` context, the rendered prompt text becomes part of the cache key.
@@ -902,7 +902,7 @@ Expected outcomes:
 - The thread-persistence eval should return `STORED` on the first row, `BLUE-OTTER-19` on the second row, and reuse one `sessionId`.
 - The sandbox eval should report that `hello.txt` could not be created, and `examples/openai-codex-sdk/sandbox/sample-workspace/hello.txt` should not exist after the run.
 
-If you authenticate through a host-local Codex login instead of `OPENAI_API_KEY`/`CODEX_API_KEY`, set `CODEX_HOME_OVERRIDE="$HOME/.codex"` for the skill examples. That is useful for local smoke tests, but it makes skill discovery depend on host-local Codex config and skills.
+The skill examples above intentionally keep `CODEX_HOME_OVERRIDE` pointed at `examples/openai-codex-sdk/skills/sample-codex-home` so the verified runs use only checked-in fixtures. If you want a host-login smoke test instead, set `CODEX_HOME_OVERRIDE="$HOME/.codex"` locally and expect the result to depend on your personal Codex config and skills.
 
 ## See Also
 
