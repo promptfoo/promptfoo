@@ -10,18 +10,42 @@ type ChatMessage = {
   content?: unknown;
 };
 
+function getModerationText(content: unknown): string | undefined {
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    const textParts = content
+      .map((part) => getModerationText(part))
+      .filter((part): part is string => typeof part === 'string');
+    return textParts.length > 0 ? textParts.join('\n') : undefined;
+  }
+
+  if (content && typeof content === 'object') {
+    const contentObject = content as Record<string, unknown>;
+    return getModerationText(contentObject.text ?? contentObject.content);
+  }
+
+  return undefined;
+}
+
 function getLastModerationPrompt(parsedPrompt: ChatMessage[]): string | undefined {
   for (let i = parsedPrompt.length - 1; i >= 0; i--) {
     const message = parsedPrompt[i];
-    if (message?.role === 'user' && typeof message.content === 'string') {
-      return message.content;
+    if (message?.role === 'user') {
+      const userPrompt = getModerationText(message.content);
+      if (userPrompt !== undefined) {
+        return userPrompt;
+      }
     }
   }
 
   for (let i = parsedPrompt.length - 1; i >= 0; i--) {
     const message = parsedPrompt[i];
-    if (typeof message?.content === 'string') {
-      return message.content;
+    const prompt = getModerationText(message?.content);
+    if (prompt !== undefined) {
+      return prompt;
     }
   }
 

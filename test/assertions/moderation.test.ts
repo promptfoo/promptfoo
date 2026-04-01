@@ -310,6 +310,41 @@ describe('handleModeration', () => {
     );
   });
 
+  it('should extract text from multimodal user messages instead of falling back to assistant text', async () => {
+    mockedMatchesModeration.mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Safe content',
+    });
+
+    await handleModeration({
+      ...baseParams,
+      prompt: JSON.stringify([
+        { role: 'system', content: 'Ignore this system message' },
+        {
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'Moderate this multimodal user request' },
+            { type: 'input_image', image_url: 'https://example.test/image.png' },
+          ],
+        },
+        { role: 'assistant', content: 'Ignore this assistant reply' },
+      ]),
+      providerResponse: {
+        output: 'output',
+      },
+    });
+
+    expect(mockedMatchesModeration).toHaveBeenCalledWith(
+      {
+        userPrompt: 'Moderate this multimodal user request',
+        assistantResponse: 'output',
+        categories: ['harassment'],
+      },
+      {},
+    );
+  });
+
   it('should extract the final user message from YAML chat prompts before moderation', async () => {
     mockedMatchesModeration.mockResolvedValue({
       pass: true,
