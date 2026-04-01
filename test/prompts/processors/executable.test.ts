@@ -182,11 +182,14 @@ esac
       ).rejects.toThrow();
     });
 
-    it('should work with exec: prefix and relative paths', async () => {
-      const relativeScriptPath = path.relative(__dirname, scriptPath);
-      const prompts = await processExecutableFile(relativeScriptPath, {});
+    it('should resolve relative paths from prompt.config.basePath', async () => {
+      const relativeScriptPath = `.${path.sep}${path.basename(scriptPath)}`;
+      const prompts = await processExecutableFile(relativeScriptPath, {
+        config: { basePath: tempDir },
+      });
 
       expect(prompts).toHaveLength(1);
+      expect(prompts[0].label).toBe(relativeScriptPath);
       expect(typeof prompts[0].function).toBe('function');
 
       const result = await prompts[0].function!({

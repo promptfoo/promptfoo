@@ -59,14 +59,29 @@ vi.mock('../../src/python/wrapper', () => ({
 
 describe('trace assertions', () => {
   const originalBasePath = cliState.basePath;
+  const originalTraceFetchEnv = {
+    PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS,
+    PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS,
+    PROMPTFOO_TRACE_FETCH_STABLE_POLLS: process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS,
+  };
   const mockTraceStore = {
     getTrace: vi.fn(),
+  };
+
+  const restoreTraceFetchEnv = () => {
+    for (const [name, value] of Object.entries(originalTraceFetchEnv)) {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    }
   };
 
   beforeEach(() => {
     mockTraceStore.getTrace.mockReset();
     vi.clearAllMocks();
-    delete process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS;
+    restoreTraceFetchEnv();
     process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS = '0';
     process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS = '1';
     vi.mocked(getTraceStore).mockReturnValue(
@@ -76,6 +91,7 @@ describe('trace assertions', () => {
 
   afterEach(() => {
     cliState.basePath = originalBasePath;
+    restoreTraceFetchEnv();
     vi.resetAllMocks();
     vi.useRealTimers();
   });
