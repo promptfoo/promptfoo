@@ -112,7 +112,7 @@ That pattern is useful when you want to evaluate:
 
 ## Multimodal Input
 
-Because the Python SDK runs through your own provider function, you can pass structured multimodal input directly to `Runner.run_sync()` instead of a plain string:
+The Python provider runs your own function, so you can pass structured multimodal input directly to `Runner.run_sync()` instead of a plain string:
 
 ```python
 result = Runner.run_sync(
@@ -129,7 +129,7 @@ result = Runner.run_sync(
 )
 ```
 
-The Python SDK uses `image_url` for image input items; the JavaScript SDK example uses `image`.
+Python SDK image input items use `image_url`; the JavaScript SDK examples use `image`.
 
 ## Telemetry
 

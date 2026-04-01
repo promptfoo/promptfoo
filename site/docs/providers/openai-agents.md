@@ -78,7 +78,7 @@ Top-level `tools`, `handoffs`, `inputGuardrails`, and `outputGuardrails` augment
 
 ## Multimodal Input
 
-If a rendered prompt is a JSON object or array matching the SDK's `AgentInputItem` shape, Promptfoo passes it to `run()` as structured input instead of a plain string. Use this for image, audio, or file inputs:
+If a rendered prompt is a JSON object or array that matches the SDK's `AgentInputItem` shape, Promptfoo passes it to `run()` as structured input instead of a plain string. This supports image, audio, and file inputs:
 
 ```yaml
 prompts:
@@ -90,7 +90,7 @@ providers:
       agent: file://./agents/vision-agent.ts
 ```
 
-**Example prompt file (`prompts/vision-input.json`):**
+Example prompt file (`prompts/vision-input.json`):
 
 ```json
 [
