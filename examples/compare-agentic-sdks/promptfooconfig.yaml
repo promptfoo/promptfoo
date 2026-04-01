@@ -81,6 +81,7 @@ tests:
             try {
               parsedOutput = JSON.parse(output);
             } catch {
+              // Expected fallback for plain LLM text responses.
               parsedOutput = output;
             }
           }

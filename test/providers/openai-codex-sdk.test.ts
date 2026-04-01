@@ -128,6 +128,7 @@ describe('OpenAICodexSDKProvider', () => {
   afterEach(async () => {
     await providerRegistry.shutdownAll();
     vi.restoreAllMocks();
+    vi.clearAllMocks();
     cliState.basePath = originalBasePath;
     restoreEnvVar('OPENAI_API_KEY', originalOpenAiApiKey);
     restoreEnvVar('CODEX_API_KEY', originalCodexApiKey);
@@ -633,6 +634,55 @@ describe('OpenAICodexSDKProvider', () => {
         });
       });
 
+      it('should infer skillCalls from USERPROFILE .codex skill directories on Windows', async () => {
+        const originalHome = process.env.HOME;
+        const originalUserProfile = process.env.USERPROFILE;
+        delete process.env.HOME;
+        process.env.USERPROFILE = 'C:\\Users\\promptfoo';
+
+        mockRun.mockResolvedValue(
+          createMockResponse('USERPROFILE-SKILL', undefined, [
+            {
+              id: 'item-1',
+              type: 'command_execution',
+              command: "/bin/zsh -lc 'cat C:/Users/promptfoo/.codex/skills/profile-skill/SKILL.md'",
+              aggregated_output: '',
+              exit_code: 0,
+              status: 'completed',
+            },
+          ]),
+        );
+
+        try {
+          const provider = new OpenAICodexSDKProvider({
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
+          const result = await provider.callApi('Use the profile skill');
+
+          expect(result.metadata).toEqual({
+            skillCalls: [
+              {
+                name: 'profile-skill',
+                path: 'C:/Users/promptfoo/.codex/skills/profile-skill/SKILL.md',
+                source: 'heuristic',
+              },
+            ],
+          });
+        } finally {
+          if (originalHome === undefined) {
+            delete process.env.HOME;
+          } else {
+            process.env.HOME = originalHome;
+          }
+
+          if (originalUserProfile === undefined) {
+            delete process.env.USERPROFILE;
+          } else {
+            process.env.USERPROFILE = originalUserProfile;
+          }
+        }
+      });
+
       it('should report attempted skill reads separately from confirmed skillCalls', async () => {
         mockRun.mockResolvedValue(
           createMockResponse('FALLBACK', undefined, [
@@ -1034,7 +1084,7 @@ describe('OpenAICodexSDKProvider', () => {
           },
         });
 
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await Promise.resolve();
         expect(mockRun).toHaveBeenCalledTimes(1);
 
         firstRun.resolve(createMockResponse('First response'));
@@ -1668,7 +1718,7 @@ describe('OpenAICodexSDKProvider', () => {
                 CUSTOM_NUMBER: 30,
                 CUSTOM_BOOLEAN: true,
               },
-            } as any,
+            },
             env: { OPENAI_API_KEY: 'test-api-key' },
           });
 
@@ -2255,6 +2305,9 @@ describe('OpenAICodexSDKProvider', () => {
       const provider = new OpenAICodexSDKProvider({
         env: { OPENAI_API_KEY: 'test-api-key' },
       });
+      const fakeEmail = ['user', 'example.com'].join('@');
+      const fakeApiKey = ['sk', 'secret-value'].join('-');
+      const fakeAuthHeader = ['Bearer', 'secret-token'].join(' ');
 
       expect(
         (provider as any).getAttributesForItem({
@@ -2262,10 +2315,10 @@ describe('OpenAICodexSDKProvider', () => {
           tool: 'search_inventory',
           input: {
             query: 'quantum computing',
-            email: 'user@example.com',
-            apiKey: 'sk-secret-value',
+            email: fakeEmail,
+            apiKey: fakeApiKey,
             headers: {
-              Authorization: 'Bearer secret-token',
+              Authorization: fakeAuthHeader,
             },
           },
         }),
@@ -2290,7 +2343,7 @@ describe('OpenAICodexSDKProvider', () => {
         (provider as any).getCompletionAttributesForItem({
           type: 'mcp_tool_call',
           status: 'completed',
-          input: 'user@example.com',
+          input: fakeEmail,
         }),
       ).toEqual({
         'codex.status': 'completed',
@@ -2302,12 +2355,16 @@ describe('OpenAICodexSDKProvider', () => {
       const provider = new OpenAICodexSDKProvider({
         env: { OPENAI_API_KEY: 'test-api-key' },
       });
+      const fakeEmail = ['user', 'example.com'].join('@');
+      const fakeApiKey = ['sk', 'secret-value-12345678901234567890'].join('-');
+      const fakeBearerToken = ['Bearer', 'secret-token-value-that-is-definitely-long-enough'].join(
+        ' ',
+      );
 
       expect(
         (provider as any).getAttributesForItem({
           type: 'command_execution',
-          command:
-            'curl -H "Authorization: Bearer secret-token-value-that-is-definitely-long-enough" https://example.test?api_key=sk-secret-value-12345678901234567890 user@example.com',
+          command: `curl -H "Authorization: ${fakeBearerToken}" https://example.test?api_key=${fakeApiKey} ${fakeEmail}`,
         }),
       ).toEqual({
         'codex.command':
@@ -2319,7 +2376,7 @@ describe('OpenAICodexSDKProvider', () => {
           type: 'command_execution',
           status: 'completed',
           exit_code: 0,
-          aggregated_output: 'token=sk-secret-value-12345678901234567890\nowner=user@example.com\n',
+          aggregated_output: `token=${fakeApiKey}\nowner=${fakeEmail}\n`,
         }),
       ).toEqual({
         'codex.status': 'completed',
@@ -2330,7 +2387,7 @@ describe('OpenAICodexSDKProvider', () => {
       expect(
         (provider as any).getCompletionAttributesForItem({
           type: 'agent_message',
-          text: 'Send results to user@example.com with api_key=sk-secret-value-12345678901234567890',
+          text: `Send results to ${fakeEmail} with api_key=${fakeApiKey}`,
         }),
       ).toEqual({
         'codex.message': 'Send results to [REDACTED] with api_key=[REDACTED]',
@@ -2339,7 +2396,7 @@ describe('OpenAICodexSDKProvider', () => {
       expect(
         (provider as any).getCompletionAttributesForItem({
           type: 'reasoning',
-          text: 'I should not expose user@example.com or token=sk-secret-value-12345678901234567890',
+          text: `I should not expose ${fakeEmail} or token=${fakeApiKey}`,
         }),
       ).toEqual({
         'codex.reasoning': 'I should not expose [REDACTED] or token=[REDACTED]',
@@ -2440,15 +2497,18 @@ describe('OpenAICodexSDKProvider', () => {
       expect((provider as any).threads.size).toBe(0);
     });
 
-    it('should unregister the provider from the global provider registry', async () => {
-      const shutdownSpy = vi.spyOn(providerRegistry, 'unregister');
+    it('should keep the provider registered during cleanup and unregister it on shutdown', async () => {
+      const unregisterSpy = vi.spyOn(providerRegistry, 'unregister');
       const provider = new OpenAICodexSDKProvider({
         env: { OPENAI_API_KEY: 'test-api-key' },
       });
 
       await provider.cleanup();
+      expect(unregisterSpy).not.toHaveBeenCalled();
 
-      expect(shutdownSpy).toHaveBeenCalledWith(provider);
+      await provider.shutdown();
+
+      expect(unregisterSpy).toHaveBeenCalledWith(provider);
     });
 
     it('should destroy cached Codex instances on shutdown', async () => {

@@ -244,7 +244,7 @@ export interface OpenAICodexSDKConfig {
    * By default, Promptfoo passes a minimal shell environment plus provider credentials.
    * Set inherit_process_env: true to merge the full Node.js process environment.
    */
-  cli_env?: Record<string, string>;
+  cli_env?: Record<string, string | number | boolean>;
 
   /**
    * Merge process.env into the Codex CLI environment.
@@ -536,11 +536,14 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
     this.codexInstances.clear();
-    providerRegistry.unregister(this);
   }
 
   async shutdown(): Promise<void> {
-    await this.cleanup();
+    try {
+      await this.cleanup();
+    } finally {
+      providerRegistry.unregister(this);
+    }
   }
 
   private prepareEnvironment(
@@ -549,9 +552,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     apiKey: string | undefined = this.getApiKey(config),
   ): Record<string, string> {
     const inheritProcessEnv = config.inherit_process_env === true;
+    const cliEnv = Object.fromEntries(
+      Object.entries(config.cli_env ?? {}).map(([key, value]) => [key, String(value)]),
+    );
     const env: Record<string, string> = {
       ...(inheritProcessEnv ? (process.env as Record<string, string>) : getMinimalProcessEnv()),
-      ...(config.cli_env ?? {}),
+      ...cliEnv,
     };
 
     const ignoredProviderEnvKeys = Object.keys(this.env ?? {})
@@ -680,7 +686,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
 
-    const homeDir = env.HOME || process.env.HOME;
+    const homeDir = env.HOME || env.USERPROFILE || process.env.HOME || process.env.USERPROFILE;
     if (homeDir) {
       addPrefix(path.posix.join(homeDir.replace(/\\/g, '/'), '.codex'));
     }
@@ -1802,11 +1808,6 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           activeInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config, apiKey));
           this.codexInstances.set(instanceKey, activeInstance);
         }
-      }
-
-      // Guard against undefined instance (shouldn't happen, but defensive coding)
-      if (!activeInstance) {
-        throw new Error('Failed to create Codex instance - SDK module may have failed to load');
       }
 
       // Persist threads by prompt template (when available) rather than rendered prompt values
