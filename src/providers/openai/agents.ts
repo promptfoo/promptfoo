@@ -395,10 +395,49 @@ function isAgentMessageContent(
 }
 
 function isAgentMessageContentPart(value: unknown, allowedContentTypes: Set<string>): boolean {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const item = value as Record<string, unknown>;
+  if (typeof item.type !== 'string' || !allowedContentTypes.has(item.type)) {
+    return false;
+  }
+
+  switch (item.type) {
+    case 'input_text':
+    case 'output_text':
+      return typeof item.text === 'string';
+    case 'refusal':
+      return typeof item.refusal === 'string';
+    case 'audio':
+      return isStringOrIdReference(item.audio);
+    case 'input_image':
+      return item.image === undefined || isStringOrIdReference(item.image);
+    case 'input_file':
+      return (
+        item.file === undefined || isStringOrIdReference(item.file) || isUrlReference(item.file)
+      );
+    case 'image':
+      return typeof item.image === 'string';
+    default:
+      return false;
+  }
+}
+
+function isStringOrIdReference(value: unknown): boolean {
+  return (
+    typeof value === 'string' ||
+    (Boolean(value) &&
+      typeof value === 'object' &&
+      typeof (value as Record<string, unknown>).id === 'string')
+  );
+}
+
+function isUrlReference(value: unknown): boolean {
   return (
     Boolean(value) &&
     typeof value === 'object' &&
-    typeof (value as Record<string, unknown>).type === 'string' &&
-    allowedContentTypes.has((value as Record<string, unknown>).type as string)
+    typeof (value as Record<string, unknown>).url === 'string'
   );
 }

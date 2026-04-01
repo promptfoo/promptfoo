@@ -547,6 +547,22 @@ describe('OpenAiAgentsProvider', () => {
     expect(mockRun).toHaveBeenCalledWith(expect.any(Agent), prompt, expect.any(Object));
   });
 
+  it('keeps malformed content-part JSON prompts as plain text', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
+    const prompt = '{"role":"user","content":[{"type":"input_text"}]}';
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(expect.any(Agent), prompt, expect.any(Object));
+  });
+
   it('keeps malformed assistant JSON prompts without status as plain text', async () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {
