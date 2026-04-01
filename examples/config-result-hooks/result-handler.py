@@ -52,7 +52,8 @@ def after_all(context):
     # Alert on low success rate
     if success_rate < 80:
         print(f"WARNING: Success rate {success_rate:.1f}% is below 80% threshold!")
-        # Add webhook notification logic here if you want alerting.
+        # Example: send a Slack/webhook notification that includes `eval_id` and
+        # `success_rate` so regressions are visible in your team's alerting.
 
     # Log failures
     if failed > 0:
@@ -62,4 +63,5 @@ def after_all(context):
                 error = r.get("error") or "Assertion failed"
                 print(f"  {i + 1}. {error}")
 
-    # Export `results` here if you need durable reporting.
+    # Example: export `results` to CSV or JSON for durable reporting, keeping
+    # fields like `success`, `latencyMs`, and `cost` for downstream analysis.
