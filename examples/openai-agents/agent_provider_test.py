@@ -157,11 +157,50 @@ class AgentProviderTests(unittest.TestCase):
         self.assertEqual(context.seat_number, "4C")
         self.assertIsNone(context.verified_confirmation_number)
 
+    def test_switching_to_unknown_confirmation_clears_stale_booking_fields(self):
+        context = AGENT_PROVIDER.AirlineContext()
+        wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+
+        AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
+        AGENT_PROVIDER.update_seat(wrapper, "ABC123", "14D")
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "My confirmation number is ZZZ999.", context
+        )
+
+        self.assertEqual(context.confirmation_number, "ZZZ999")
+        self.assertIsNone(context.passenger_name)
+        self.assertIsNone(context.flight_number)
+        self.assertIsNone(context.seat_number)
+        self.assertIsNone(context.verified_confirmation_number)
+
+    def test_unknown_lookup_clears_stale_booking_fields(self):
+        context = AGENT_PROVIDER.AirlineContext()
+        wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+
+        AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
+        result = AGENT_PROVIDER.lookup_reservation(wrapper, "ZZZ999")
+
+        self.assertEqual(result, {"error": "Unknown confirmation number: ZZZ999"})
+        self.assertEqual(context.confirmation_number, "ZZZ999")
+        self.assertIsNone(context.passenger_name)
+        self.assertIsNone(context.flight_number)
+        self.assertIsNone(context.seat_number)
+        self.assertIsNone(context.verified_confirmation_number)
+
     def test_invalid_steps_json_raises(self):
         with self.assertRaisesRegex(
             ValueError, "steps_json must be valid JSON containing a non-empty list"
         ):
             AGENT_PROVIDER._build_steps("task", {"steps_json": "{not json"})
+
+    def test_invalid_steps_json_values_raise(self):
+        for steps_json in (None, "", "   ", [], {}):
+            with self.subTest(steps_json=steps_json):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "steps_json must be valid JSON containing a non-empty list",
+                ):
+                    AGENT_PROVIDER._build_steps("task", {"steps_json": steps_json})
 
     def test_empty_steps_list_raises(self):
         with self.assertRaisesRegex(
@@ -172,6 +211,14 @@ class AgentProviderTests(unittest.TestCase):
     def test_call_api_returns_error_for_invalid_steps_json(self):
         result = AGENT_PROVIDER.call_api(
             "overall task", {}, {"vars": {"steps_json": "{not json"}}
+        )
+
+        self.assertIn("steps_json must be valid JSON", result["error"])
+        self.assertTrue(result["output"].startswith("Error:"))
+
+    def test_call_api_returns_error_for_blank_steps_json(self):
+        result = AGENT_PROVIDER.call_api(
+            "overall task", {}, {"vars": {"steps_json": ""}}
         )
 
         self.assertIn("steps_json must be valid JSON", result["error"])

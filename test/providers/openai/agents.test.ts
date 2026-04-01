@@ -510,4 +510,72 @@ describe('OpenAiAgentsProvider', () => {
 
     expect(mockRun).toHaveBeenCalledWith(expect.any(Agent), prompt, expect.any(Object));
   });
+
+  it('passes a single JSON message item to the SDK as structured agent input', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
+    const prompt = '{"role":"user","content":"Describe this request."}';
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(
+      expect.any(Agent),
+      [{ role: 'user', content: 'Describe this request.' }],
+      expect.any(Object),
+    );
+  });
+
+  it('keeps malformed role-shaped JSON prompts as plain text', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
+    const prompt = '{"role":"user","foo":"bar"}';
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(expect.any(Agent), prompt, expect.any(Object));
+  });
+
+  it('keeps malformed assistant JSON prompts without status as plain text', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
+    const prompt = '{"role":"assistant","content":[{"type":"output_text","text":"hello"}]}';
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(expect.any(Agent), prompt, expect.any(Object));
+  });
+
+  it('keeps empty JSON arrays as plain text', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
+    const prompt = '[]';
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(expect.any(Agent), prompt, expect.any(Object));
+  });
 });

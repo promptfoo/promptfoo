@@ -302,7 +302,11 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       if (isAgentInputItem(parsedPrompt)) {
         return [parsedPrompt];
       }
-      if (Array.isArray(parsedPrompt) && parsedPrompt.every(isAgentInputItem)) {
+      if (
+        Array.isArray(parsedPrompt) &&
+        parsedPrompt.length > 0 &&
+        parsedPrompt.every(isAgentInputItem)
+      ) {
         return parsedPrompt;
       }
     } catch {
@@ -321,6 +325,10 @@ function mergeArrays<T>(existing?: T[], additions?: T[]): T[] | undefined {
   return [...(existing ?? []), ...(additions ?? [])];
 }
 
+const USER_CONTENT_TYPES = new Set(['input_text', 'input_image', 'input_file', 'audio']);
+const ASSISTANT_CONTENT_TYPES = new Set(['output_text', 'refusal', 'audio', 'image']);
+const ASSISTANT_MESSAGE_STATUSES = new Set(['in_progress', 'completed', 'incomplete']);
+
 function isAgentInputItem(value: unknown): value is AgentInputItem {
   if (!value || typeof value !== 'object') {
     return false;
@@ -328,7 +336,27 @@ function isAgentInputItem(value: unknown): value is AgentInputItem {
 
   const item = value as Record<string, unknown>;
   if (typeof item.role === 'string') {
-    return ['user', 'assistant', 'system'].includes(item.role);
+    if (item.type !== undefined && item.type !== 'message') {
+      return false;
+    }
+
+    if (item.role === 'system') {
+      return typeof item.content === 'string';
+    }
+
+    if (item.role === 'user') {
+      return isAgentMessageContent(item.content, USER_CONTENT_TYPES, true);
+    }
+
+    if (item.role === 'assistant') {
+      return (
+        typeof item.status === 'string' &&
+        ASSISTANT_MESSAGE_STATUSES.has(item.status) &&
+        isAgentMessageContent(item.content, ASSISTANT_CONTENT_TYPES, false)
+      );
+    }
+
+    return false;
   }
 
   return (
@@ -347,5 +375,30 @@ function isAgentInputItem(value: unknown): value is AgentInputItem {
       'tool_search_call',
       'tool_search_output',
     ].includes(item.type)
+  );
+}
+
+function isAgentMessageContent(
+  value: unknown,
+  allowedContentTypes: Set<string>,
+  allowStringContent: boolean,
+): boolean {
+  if (allowStringContent && typeof value === 'string') {
+    return true;
+  }
+
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((contentPart) => isAgentMessageContentPart(contentPart, allowedContentTypes))
+  );
+}
+
+function isAgentMessageContentPart(value: unknown, allowedContentTypes: Set<string>): boolean {
+  return (
+    Boolean(value) &&
+    typeof value === 'object' &&
+    typeof (value as Record<string, unknown>).type === 'string' &&
+    allowedContentTypes.has((value as Record<string, unknown>).type as string)
   );
 }

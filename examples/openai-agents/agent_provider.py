@@ -145,6 +145,26 @@ def _reservation_view(
     )
 
 
+def _apply_reservation_to_context(
+    airline_context: AirlineContext,
+    normalized_confirmation_number: str,
+    reservation: dict[str, str] | None,
+) -> None:
+    airline_context.confirmation_number = normalized_confirmation_number
+    if reservation is None:
+        airline_context.passenger_name = None
+        airline_context.flight_number = None
+        airline_context.seat_number = None
+        airline_context.verified_confirmation_number = None
+        return
+
+    if airline_context.verified_confirmation_number != normalized_confirmation_number:
+        airline_context.verified_confirmation_number = None
+    airline_context.passenger_name = reservation["passenger_name"]
+    airline_context.flight_number = reservation["flight_number"]
+    airline_context.seat_number = reservation["seat_number"]
+
+
 def _extract_token_usage(raw_responses: Iterable[Any]) -> dict[str, int]:
     usage = {"total": 0, "prompt": 0, "completion": 0}
     for response in raw_responses:
@@ -199,17 +219,16 @@ def lookup_reservation(
     normalized_confirmation_number, reservation = _reservation_view(
         context.context, confirmation_number
     )
-    if context.context.verified_confirmation_number != normalized_confirmation_number:
-        context.context.verified_confirmation_number = None
+    _apply_reservation_to_context(
+        context.context,
+        normalized_confirmation_number,
+        reservation,
+    )
     if reservation is None:
         return {
             "error": f"Unknown confirmation number: {normalized_confirmation_number}",
         }
 
-    context.context.confirmation_number = normalized_confirmation_number
-    context.context.passenger_name = reservation["passenger_name"]
-    context.context.flight_number = reservation["flight_number"]
-    context.context.seat_number = reservation["seat_number"]
     context.context.verified_confirmation_number = normalized_confirmation_number
 
     return {
@@ -363,12 +382,16 @@ def _build_steps(prompt: str, vars_dict: dict[str, Any]) -> list[str]:
         raise ValueError(f"{key} must be a non-empty list of steps")
 
     for key in ("steps_json", "task_steps_json"):
-        configured_steps_json = vars_dict.get(key)
+        if key not in vars_dict:
+            continue
+        configured_steps_json = vars_dict[key]
         if (
             not isinstance(configured_steps_json, str)
             or not configured_steps_json.strip()
         ):
-            continue
+            raise ValueError(
+                f"{key} must be valid JSON containing a non-empty list of steps"
+            )
         try:
             parsed_steps = json.loads(configured_steps_json)
         except json.JSONDecodeError as exc:
@@ -392,22 +415,17 @@ def _hydrate_context_from_step(step: str, airline_context: AirlineContext) -> No
             confirmation_match.group(1)
         )
         previous_confirmation_number = airline_context.confirmation_number
-        if (
-            airline_context.verified_confirmation_number
-            != normalized_confirmation_number
-        ):
-            airline_context.verified_confirmation_number = None
-        airline_context.confirmation_number = normalized_confirmation_number
         _, reservation = _reservation_view(
             airline_context
             if previous_confirmation_number == normalized_confirmation_number
             else None,
             normalized_confirmation_number,
         )
-        if reservation is not None:
-            airline_context.passenger_name = reservation["passenger_name"]
-            airline_context.flight_number = reservation["flight_number"]
-            airline_context.seat_number = reservation["seat_number"]
+        _apply_reservation_to_context(
+            airline_context,
+            normalized_confirmation_number,
+            reservation,
+        )
 
     passenger_match = PASSENGER_NAME_RE.search(step)
     if passenger_match and not airline_context.passenger_name:
