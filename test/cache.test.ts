@@ -115,7 +115,13 @@ const mockFetchWithRetriesResponse = (
     status: ok ? 200 : 400,
     statusText: ok ? 'OK' : 'Bad Request',
     text: () => Promise.resolve(responseText),
-    json: () => (ok ? Promise.resolve(response) : Promise.reject(new Error('Invalid JSON'))),
+    json: () => {
+      try {
+        return Promise.resolve(JSON.parse(responseText));
+      } catch (err) {
+        return Promise.reject(err);
+      }
+    },
     headers: new Headers({
       'content-type': contentType,
       'x-session-id': '45',
