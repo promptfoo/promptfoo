@@ -256,6 +256,51 @@ describe('Provider Registry', () => {
       ).rejects.toThrow('Unknown Azure model type');
     });
 
+    it('should handle azure:moderation and reject azureopenai:moderation', async () => {
+      const factory = providerMap.find((f) => f.test('azure:moderation'));
+      expect(factory).toBeDefined();
+
+      // Both prefixes should resolve to the same factory
+      const azureOpenAiFactory = providerMap.find((f) => f.test('azureopenai:moderation'));
+      expect(azureOpenAiFactory).toBe(factory);
+
+      const moderationProvider = (await factory!.create(
+        'azure:moderation',
+        mockProviderOptions,
+        mockContext,
+      )) as any;
+      expect(moderationProvider).toBeDefined();
+      expect(moderationProvider.modelName).toBe('text-content-safety');
+
+      const moderationWithModel = (await factory!.create(
+        'azure:moderation:text-content-safety',
+        mockProviderOptions,
+        mockContext,
+      )) as any;
+      expect(moderationWithModel).toBeDefined();
+      expect(moderationWithModel.modelName).toBe('text-content-safety');
+
+      // config.deploymentName fallback with valid model
+      const moderationFromConfig = (await factory!.create(
+        'azure:moderation',
+        {
+          ...mockProviderOptions,
+          config: { deploymentName: 'text-content-safety' },
+        },
+        mockContext,
+      )) as any;
+      expect(moderationFromConfig.modelName).toBe('text-content-safety');
+
+      await expect(
+        factory!.create('azureopenai:moderation', mockProviderOptions, mockContext),
+      ).rejects.toThrow('Azure OpenAI does not support moderation');
+
+      // Unknown model names should be rejected
+      await expect(
+        factory!.create('azure:moderation:typo-model', mockProviderOptions, mockContext),
+      ).rejects.toThrow('Unknown Azure moderation model: typo-model');
+    });
+
     it('should handle bedrock providers correctly', async () => {
       const factory = providerMap.find((f) => f.test('bedrock:completion:anthropic.claude-v2'));
       expect(factory).toBeDefined();
