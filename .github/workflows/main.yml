@@ -286,7 +286,7 @@ jobs:
 
       - name: Check Formatting
         run: |
-          ruff check --select I --fix
+          ruff check --select F401,F841,I --fix
           ruff format
           git diff --exit-code || (echo "Files were modified by ruff. Please commit these changes." && exit 1)
 
