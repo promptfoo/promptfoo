@@ -1240,7 +1240,7 @@ describe('logger', () => {
       const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
       // When undefined is passed through sanitizeObject, it may be omitted or converted to null
       // Just verify the log message exists and doesn't crash
-      expect(loggedMessage).toContain('Api Request');
+      expect(loggedMessage).toContain('API request');
       expect(loggedMessage).toContain('"url"');
     });
 
