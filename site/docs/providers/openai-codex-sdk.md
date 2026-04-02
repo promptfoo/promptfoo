@@ -6,7 +6,7 @@ description: 'Use OpenAI Codex SDK for evals with thread management, structured 
 
 # OpenAI Codex SDK
 
-This provider makes OpenAI's Codex SDK available for text-based agent evals in promptfoo. It can evaluate Codex's final response text, token usage, thread/session IDs, heuristic skill usage, and traced shell/MCP/search/file steps. It does not expose embeddings, moderation, image generation, or realtime APIs.
+This provider makes OpenAI's Codex SDK available for agent evals in promptfoo. It can evaluate Codex's final response text, token usage, thread/session IDs, heuristic skill usage, and traced shell/MCP/search/file steps. It accepts plain text prompts and JSON-encoded Codex input arrays with `text` and `local_image` items, but it does not expose embeddings, moderation, image generation, or realtime APIs.
 
 The provider runs Codex with an explicit working directory, sandbox policy, approval policy, network/search settings, and a controlled CLI environment. The model output returned to promptfoo is the final Codex text response; if you request JSON schema output, `output` is still a string and your assertions should parse it with `is-json` or `JSON.parse(output)`.
 
@@ -28,6 +28,7 @@ You can reference this provider using either base ID, and you can inline the mod
 | Eval surface                       | Supported? | Notes                                                                                                                                                                                                                                                                         |
 | ---------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Final assistant text               | Yes        | Returned in `response.output` as a string.                                                                                                                                                                                                                                    |
+| Text + local image prompt inputs   | Partial    | Pass plain text as usual, or pass a JSON array of `{"type":"text","text":"..."}` and `{"type":"local_image","path":"/abs/file.png"}` entries. Other JSON prompt shapes are treated as plain text.                                                                             |
 | JSON schema output                 | Yes        | Pass `output_schema`; use `is-json` and `JSON.parse(output)` in JS assertions because the provider does not auto-parse the final text.                                                                                                                                        |
 | Token usage and estimated cost     | Yes        | `tokenUsage` is returned when the SDK reports usage. Cost is estimated only when `config.model` is known to promptfoo's pricing table. Codex's own instruction preamble and tool schemas are included in prompt tokens, so tiny prompts can still report high `input_tokens`. |
 | Session/thread IDs                 | Yes        | `sessionId` is returned from the underlying Codex thread.                                                                                                                                                                                                                     |
@@ -826,6 +827,7 @@ This works because all three test cases render from the same prompt template (`{
 ## Unsupported Capabilities and Caveats
 
 - This provider implements `callApi` only. It does not implement embeddings, classification, moderation, image, video, transcription, or realtime APIs.
+- Prompt input arrays are supported only for Codex `text` and `local_image` items. Remote image URLs and other SDK item types are not forwarded by this provider.
 - The provider returns a final response after the Codex turn completes. `enable_streaming` is for event aggregation and tracing, not live partial output in assertions.
 - `output_schema` does not change the response type exposed to promptfoo assertions. `response.output` remains a string.
 - `temperature`, `top_p`, `max_tokens`, `stop`, and `logprobs` are not exposed as first-class provider config fields.
