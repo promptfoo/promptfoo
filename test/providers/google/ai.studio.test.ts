@@ -473,6 +473,35 @@ describe('AIStudioChatProvider', () => {
         false,
       );
     });
+
+    it('should preserve cache busting for Gemma models routed through generateContent', async () => {
+      const provider = new AIStudioChatProvider('gemma-4-31b-it', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'fresh gemma response' }] } }],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callApi('test prompt', { bustCache: true });
+
+      expect(response.output).toBe('fresh gemma response');
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        expect.any(Number),
+        'json',
+        true,
+      );
+    });
   });
 
   describe('callGemini', () => {

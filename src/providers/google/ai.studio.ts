@@ -33,6 +33,10 @@ function usesGenerateContentApi(modelName: string): boolean {
   return GENERATE_CONTENT_MODEL_PREFIXES.some((prefix) => modelName.startsWith(prefix));
 }
 
+function shouldBustCache(context?: CallApiContextParams): boolean {
+  return context?.bustCache ?? context?.debug ?? false;
+}
+
 class AIStudioGenericProvider implements ApiProvider {
   modelName: string;
 
@@ -439,7 +443,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         } as RequestInit,
         REQUEST_TIMEOUT_MS,
         'json',
-        false,
+        shouldBustCache(context),
       )) as {
         data: GeminiResponseData;
         cached: boolean;
