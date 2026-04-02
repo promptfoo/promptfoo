@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import { OpenAiAssistantProvider } from '../../../src/providers/openai/assistant';
+import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 import type { CallbackContext } from '../../../src/providers/openai/types';
 
@@ -271,14 +272,48 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle missing API key', async () => {
-      const providerNoKey = new OpenAiAssistantProvider('test-assistant-id');
-      process.env.OPENAI_API_KEY = '';
+      const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
 
-      await expect(providerNoKey.callApi('Test prompt')).rejects.toThrow(
-        'OpenAI API key is not set',
-      );
+      try {
+        const providerNoKey = new OpenAiAssistantProvider('test-assistant-id', {
+          env: {
+            OPENAI_API_KEY: undefined,
+          },
+        });
 
-      process.env.OPENAI_API_KEY = 'test-key'; // Restore for other tests
+        await expect(providerNoKey.callApi('Test prompt')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage(),
+        );
+      } finally {
+        restoreEnvVar('OPENAI_API_KEY', originalOpenAiApiKey);
+      }
+    });
+
+    it('should use custom apiKeyEnvar in missing API key errors', async () => {
+      const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+      const originalCustomApiKey = process.env.CUSTOM_ASSISTANT_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.CUSTOM_ASSISTANT_API_KEY;
+
+      try {
+        const providerNoKey = new OpenAiAssistantProvider('test-assistant-id', {
+          config: {
+            apiKeyEnvar: 'CUSTOM_ASSISTANT_API_KEY',
+          },
+          env: {
+            OPENAI_API_KEY: undefined,
+            CUSTOM_ASSISTANT_API_KEY: undefined,
+          },
+        });
+
+        await expect(providerNoKey.callApi('Test prompt')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage('CUSTOM_ASSISTANT_API_KEY'),
+        );
+      } finally {
+        restoreEnvVar('OPENAI_API_KEY', originalOpenAiApiKey);
+        restoreEnvVar('CUSTOM_ASSISTANT_API_KEY', originalCustomApiKey);
+      }
     });
   });
 

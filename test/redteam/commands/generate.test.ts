@@ -4,7 +4,12 @@ import { Command } from 'commander';
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_MAX_CONCURRENCY } from '../../../src/constants';
-import { getAuthor, getUserEmail } from '../../../src/globalConfig/accounts';
+import {
+  checkEmailStatusAndMaybeExit,
+  getAuthor,
+  getUserEmail,
+  promptForEmailUnverified,
+} from '../../../src/globalConfig/accounts';
 import { cloudConfig } from '../../../src/globalConfig/cloud';
 import logger from '../../../src/logger';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
@@ -197,9 +202,11 @@ vi.mock('../../../src/util/config/manage', () => ({
 vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => {
   return {
     ...(await importOriginal()),
+    checkEmailStatusAndMaybeExit: vi.fn().mockResolvedValue('ok'),
     getAuthor: vi.fn(),
     getUserEmail: vi.fn(),
     getUserId: vi.fn().mockReturnValue('test-id'),
+    promptForEmailUnverified: vi.fn().mockResolvedValue({ emailNeedsValidation: false }),
   };
 });
 vi.mock('../../../src/providers', async (importOriginal) => {
@@ -225,6 +232,10 @@ describe('doGenerateRedteam', () => {
     vi.clearAllMocks();
     // Reset mock implementations that persist across tests (clearAllMocks only clears call history)
     vi.mocked(extractMcpToolsInfo).mockReset();
+    vi.mocked(checkEmailStatusAndMaybeExit).mockReset().mockResolvedValue('ok');
+    vi.mocked(promptForEmailUnverified)
+      .mockReset()
+      .mockResolvedValue({ emailNeedsValidation: false });
     mockProvider = {
       id: () => 'test-provider',
       callApi: vi.fn().mockResolvedValue({ output: 'test output' }),

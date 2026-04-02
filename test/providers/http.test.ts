@@ -35,6 +35,7 @@ import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../.
 import { functionCache } from '../../src/util/functions/loadFunction';
 import { TOKEN_REFRESH_BUFFER_MS } from '../../src/util/oauth';
 import { sanitizeObject, sanitizeUrl } from '../../src/util/sanitizer';
+import { createDeferred } from '../util/utils';
 
 // Mock console.warn to prevent test noise
 const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(function () {});
@@ -5978,7 +5979,10 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
     const provider = new HttpProvider(mockUrl, {
       config: {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer {{token}}',
+        },
         body: { key: '{{ prompt }}' },
         auth: {
           type: 'oauth',
@@ -6138,6 +6142,8 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
       cached: false,
     };
 
+    const firstRefreshStarted = createDeferred<void>();
+    const firstRefreshContinue = createDeferred<void>();
     let callCount = 0;
     vi.mocked(fetchWithCache).mockImplementation(async (url: RequestInfo) => {
       const urlString =
@@ -6146,7 +6152,8 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
         callCount++;
         if (callCount === 1) {
           // First call fails
-          await new Promise((resolve) => setTimeout(resolve, 20));
+          firstRefreshStarted.resolve(undefined);
+          await firstRefreshContinue.promise;
           return failingTokenResponse;
         }
         // Second call succeeds
@@ -6159,18 +6166,117 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
     const promise1 = provider.callApi('test 1').catch(() => {
       // Expected to fail
     });
-    // Wait a bit for the first call to start failing
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await firstRefreshStarted.promise;
     // Second call should trigger a retry
     const promise2 = provider.callApi('test 2');
+    firstRefreshContinue.resolve(undefined);
 
-    await Promise.allSettled([promise1, promise2]);
+    const response2 = await promise2;
+    expect(response2.error).toBeUndefined();
+    await promise1;
 
     // Should have attempted token refresh twice (initial + retry)
     const tokenRefreshCalls = vi
       .mocked(fetchWithCache)
       .mock.calls.filter((call) => call[0] === tokenUrl);
-    expect(tokenRefreshCalls.length).toBeGreaterThanOrEqual(1);
+    expect(tokenRefreshCalls).toHaveLength(2);
+
+    const apiCalls = vi.mocked(fetchWithCache).mock.calls.filter((call) => call[0] === mockUrl);
+    expect(apiCalls).toHaveLength(1);
+    const headers = apiCalls[0][1]?.headers as Record<string, string> | undefined;
+    expect(headers?.authorization).toBe('Bearer retry-success-token');
+  });
+
+  it('should deduplicate retries when multiple callers observe a failed in-progress refresh', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          tokenUrl,
+          clientId: 'test-client-id',
+          clientSecret: 'test-client-secret',
+        },
+      },
+    });
+
+    const failingTokenResponse = {
+      data: JSON.stringify({ error: 'invalid_client' }),
+      status: 401,
+      statusText: 'Unauthorized',
+      cached: false,
+    };
+
+    const successTokenResponse = {
+      data: JSON.stringify({
+        access_token: 'retry-success-token',
+        expires_in: 3600,
+      }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    const apiResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    const firstRefreshStarted = createDeferred<void>();
+    const firstRefreshContinue = createDeferred<void>();
+    const secondRefreshStarted = createDeferred<void>();
+    const secondRefreshContinue = createDeferred<void>();
+
+    let callCount = 0;
+    vi.mocked(fetchWithCache).mockImplementation(async (url: RequestInfo) => {
+      const urlString =
+        typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
+      if (urlString === tokenUrl) {
+        callCount++;
+        if (callCount === 1) {
+          firstRefreshStarted.resolve(undefined);
+          await firstRefreshContinue.promise;
+          return failingTokenResponse;
+        }
+        secondRefreshStarted.resolve(undefined);
+        await secondRefreshContinue.promise;
+        return successTokenResponse;
+      }
+      return apiResponse;
+    });
+
+    const promise1 = provider.callApi('test 1').catch(() => {
+      // Expected to fail on the first refresh attempt.
+    });
+    await firstRefreshStarted.promise;
+    const promise2 = provider.callApi('test 2');
+    const promise3 = provider.callApi('test 3');
+
+    firstRefreshContinue.resolve(undefined);
+    await secondRefreshStarted.promise;
+    secondRefreshContinue.resolve(undefined);
+
+    const [response2, response3] = await Promise.all([promise2, promise3]);
+    expect(response2.error).toBeUndefined();
+    expect(response3.error).toBeUndefined();
+    await promise1;
+
+    const tokenRefreshCalls = vi
+      .mocked(fetchWithCache)
+      .mock.calls.filter((call) => call[0] === tokenUrl);
+    expect(tokenRefreshCalls).toHaveLength(2);
+
+    const apiCalls = vi.mocked(fetchWithCache).mock.calls.filter((call) => call[0] === mockUrl);
+    expect(apiCalls).toHaveLength(2);
+    for (const apiCall of apiCalls) {
+      const headers = apiCall[1]?.headers as Record<string, string> | undefined;
+      expect(headers?.authorization).toBe('Bearer retry-success-token');
+    }
   });
 
   it('should use cached token if refresh is already in progress', async () => {
@@ -6475,6 +6581,70 @@ describe('HttpProvider - File Auth', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('should deduplicate retries when multiple callers observe a failed in-progress file auth refresh', async () => {
+    const firstRefreshStarted = createDeferred<void>();
+    const firstRefreshContinue = createDeferred<void>();
+    const secondRefreshStarted = createDeferred<void>();
+    const secondRefreshContinue = createDeferred<void>();
+
+    const authFn = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        firstRefreshStarted.resolve(undefined);
+        await firstRefreshContinue.promise;
+        throw new Error('file auth failed');
+      })
+      .mockImplementationOnce(async () => {
+        secondRefreshStarted.resolve(undefined);
+        await secondRefreshContinue.promise;
+        return {
+          token: 'retry-file-token',
+          expiration: Date.now() + 3_600_000,
+        };
+      });
+    vi.mocked(importModule).mockResolvedValue(authFn);
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer {{token}}',
+        },
+        body: { key: '{{ prompt }}' },
+        auth: {
+          type: 'file',
+          path: 'file://auth.js',
+        },
+      },
+    });
+
+    const promise1 = provider.callApi('test 1').catch(() => {
+      // Expected to fail on the first refresh attempt.
+    });
+    await firstRefreshStarted.promise;
+    const promise2 = provider.callApi('test 2');
+    const promise3 = provider.callApi('test 3');
+
+    firstRefreshContinue.resolve(undefined);
+    await secondRefreshStarted.promise;
+    secondRefreshContinue.resolve(undefined);
+
+    const [response2, response3] = await Promise.all([promise2, promise3]);
+    expect(response2.error).toBeUndefined();
+    expect(response3.error).toBeUndefined();
+    await promise1;
+
+    expect(authFn).toHaveBeenCalledTimes(2);
+
+    const apiCalls = vi.mocked(fetchWithCache).mock.calls.filter((call) => call[0] === mockUrl);
+    expect(apiCalls).toHaveLength(2);
+    for (const apiCall of apiCalls) {
+      const headers = apiCall[1]?.headers as Record<string, string> | undefined;
+      expect(headers?.authorization).toBe('Bearer retry-file-token');
+    }
   });
 
   it('should parse auth.type file in the provider config schema', () => {

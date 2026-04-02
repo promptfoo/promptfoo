@@ -196,33 +196,25 @@ export async function doGenerateRedteam(
     logger.debug(`Using Promptfoo Cloud-originated config at ${tmpFile}`);
   }
 
-  // Check for updates to the config file and decide whether to generate
-  let shouldGenerate = options.force || options.configFromCloud; // Always generate for live configs
+  // Skip generation when a YAML output already matches the current config hash.
   if (
     !options.force &&
     !options.configFromCloud &&
+    !outputPath.endsWith('.burp') &&
     fs.existsSync(outputPath) &&
     configPath &&
     fs.existsSync(configPath)
   ) {
-    // Skip hash check for .burp files since they're not YAML
-    if (!outputPath.endsWith('.burp')) {
-      const redteamContent = yaml.load(
-        fs.readFileSync(outputPath, 'utf8'),
-      ) as Partial<UnifiedConfig>;
-      const storedHash = redteamContent.metadata?.configHash;
-      const currentHash = getConfigHash(configPath);
+    const redteamContent = yaml.load(fs.readFileSync(outputPath, 'utf8')) as Partial<UnifiedConfig>;
+    const storedHash = redteamContent.metadata?.configHash;
+    const currentHash = getConfigHash(configPath);
 
-      shouldGenerate = storedHash !== currentHash;
-      if (!shouldGenerate) {
-        logger.warn(
-          'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
-        );
-        return redteamContent;
-      }
+    if (storedHash === currentHash) {
+      logger.warn(
+        'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
+      );
+      return redteamContent;
     }
-  } else {
-    shouldGenerate = true;
   }
 
   let pluginSeverityOverrides: Map<Plugin, Severity> = new Map();
@@ -525,7 +517,7 @@ export async function doGenerateRedteam(
   // Check for contexts - if present, generate tests for each context
   const contexts = redteamConfig?.contexts;
   let redteamTests: any[] = [];
-  let purpose: string = enhancedPurpose;
+  let purpose: string;
   let entities: string[] = [];
   let finalInjectVar: string = '';
   let failedPlugins: { pluginId: string; requested: number }[] = [];

@@ -13,6 +13,7 @@ import { within } from '@testing-library/dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestCaseGenerationProvider, useTestCaseGeneration } from './TestCaseGenerationProvider';
+import type { PluginConfig } from '@promptfoo/redteam/types';
 
 // ===================================================================
 // Mocks
@@ -125,11 +126,13 @@ callApiMock.mockImplementation((path, options) => {
  */
 const TestConsumer = ({
   testPlugin,
+  pluginConfig = {},
   testStrategy,
   isPluginStatic = false,
   isStrategyStatic = false,
 }: {
   testPlugin: Plugin;
+  pluginConfig?: PluginConfig;
   testStrategy: Strategy;
   isPluginStatic?: boolean;
   isStrategyStatic?: boolean;
@@ -138,7 +141,7 @@ const TestConsumer = ({
 
   async function handleGenerateTestCase() {
     await generateTestCase(
-      { id: testPlugin, config: {}, isStatic: isPluginStatic },
+      { id: testPlugin, config: pluginConfig, isStatic: isPluginStatic },
       { id: testStrategy, config: {}, isStatic: isStrategyStatic },
     );
   }
@@ -239,6 +242,91 @@ describe('TestCaseGenerationProvider', () => {
       const targetResponseComponent =
         within(testCaseDialogComponent).queryByTestId('chat-message-1');
       expect(targetResponseComponent).not.toBeInTheDocument();
+    });
+
+    it('should apply the configured review language to generated example tests', async () => {
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              language: 'Japanese',
+            }}
+          >
+            <TestConsumer testPlugin="harmful:hate" testStrategy="basic" />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      fireEvent.click(screen.getByTestId('test-case-generation-btn'));
+
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+
+      const generateCall = callApiMock.mock.calls.find(
+        (call) => call[0] === '/redteam/generate-test',
+      );
+      expect(generateCall).toBeDefined();
+
+      const requestBody = JSON.parse(generateCall![1]?.body as string);
+      expect(requestBody.plugin.config.language).toBe('Japanese');
+    });
+
+    it('should preserve plugin-specific language when review language is configured', async () => {
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              language: 'Japanese',
+            }}
+          >
+            <TestConsumer
+              testPlugin="harmful:hate"
+              pluginConfig={{ language: 'Spanish' }}
+              testStrategy="basic"
+            />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      fireEvent.click(screen.getByTestId('test-case-generation-btn'));
+
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+
+      const generateCall = callApiMock.mock.calls.find(
+        (call) => call[0] === '/redteam/generate-test',
+      );
+      expect(generateCall).toBeDefined();
+
+      const requestBody = JSON.parse(generateCall![1]?.body as string);
+      expect(requestBody.plugin.config.language).toBe('Spanish');
+    });
+
+    it('should use the first configured review language for generated example tests', async () => {
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              language: ['Japanese', 'Spanish'],
+            }}
+          >
+            <TestConsumer testPlugin="harmful:hate" testStrategy="basic" />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      fireEvent.click(screen.getByTestId('test-case-generation-btn'));
+
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+
+      const generateCall = callApiMock.mock.calls.find(
+        (call) => call[0] === '/redteam/generate-test',
+      );
+      expect(generateCall).toBeDefined();
+
+      const requestBody = JSON.parse(generateCall![1]?.body as string);
+      expect(requestBody.plugin.config.language).toBe('Japanese');
     });
 
     it('should hide plugin documentation link when plugin is static', async () => {

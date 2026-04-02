@@ -6,12 +6,11 @@ import Editor from '@app/components/ui/code-editor';
 import { CopyButton } from '@app/components/ui/copy-button';
 import { CancelIcon, DownloadIcon, SaveIcon, TerminalIcon } from '@app/components/ui/icons';
 import { useToast } from '@app/hooks/useToast';
+import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import yaml from 'js-yaml';
-import Prism from 'prismjs';
 import type { UnifiedConfig } from '@promptfoo/types';
-import 'prismjs/components/prism-yaml';
 import 'prismjs/themes/prism.css';
 
 interface YamlEditorProps {

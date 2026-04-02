@@ -618,6 +618,11 @@ type ProviderFunction = (
 
 ProviderOptions is an object that includes the `id` of the provider and an optional `config` object that can be used to pass provider-specific configurations.
 
+For providers with built-in cost estimation, `config` can also include pricing overrides such
+as `cost`, `inputCost`, and `outputCost`. When supported, `inputCost` and `outputCost` take
+precedence over the legacy shared `cost` value. OpenAI audio-capable models also support
+`audioCost`, `audioInputCost`, and `audioOutputCost`.
+
 ```typescript
 interface ProviderOptions {
   id?: ProviderId;
@@ -889,7 +894,10 @@ interface GradingResult {
   pass: boolean;                        # did test pass?
   score: number;                        # score between 0 and 1
   reason: string;                       # plaintext reason for outcome
+  namedScores?: Record<string, number>; # labeled metrics attached to this result
+  namedScoreWeights?: Record<string, number>; # weighted denominator for namedScores
   tokensUsed?: TokenUsage;              # tokens consumed by the test
+  metadata?: Record<string, any>;       # additional matcher/provider metadata
   componentResults?: GradingResult[];   # if this is a composite score, it can have nested results
   assertion: Assertion | null;          # source of assertion
   latencyMs?: number;                   # latency of LLM call
@@ -920,6 +928,7 @@ interface CompletedPrompt {
     tokenUsage: TokenUsage;
     namedScores: Record<string, number>;
     namedScoresCount: Record<string, number>;
+    namedScoreWeights?: Record<string, number>;
     redteam?: {
       pluginPassCount: Record<string, number>;
       pluginFailCount: Record<string, number>;

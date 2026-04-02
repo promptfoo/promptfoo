@@ -35,7 +35,7 @@ import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from './util/
 import { isJavascriptFile } from './util/fileExtensions';
 import { parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
-import { extractFirstJsonObject, extractJsonObjects } from './util/json';
+import { extractFirstJsonObject, extractJsonObjects, safeJsonStringify } from './util/json';
 import { getNunjucksEngine } from './util/templates';
 import { accumulateTokenUsage } from './util/tokenUsageUtils';
 
@@ -136,6 +136,29 @@ async function loadFromProviderOptions(provider: ProviderOptions) {
   });
 }
 
+function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boolean {
+  if (typeof provider === 'string') {
+    return provider === 'promptfoo:simulated-user';
+  }
+
+  if (!provider || typeof provider !== 'object' || Array.isArray(provider)) {
+    return false;
+  }
+
+  if (typeof (provider as ApiProvider).id === 'function') {
+    return (provider as ApiProvider).id() === 'promptfoo:simulated-user';
+  }
+
+  const providerId = (provider as ProviderOptions).id;
+  if (typeof providerId === 'string') {
+    return providerId === 'promptfoo:simulated-user';
+  }
+
+  return Object.values(provider as ProviderTypeMap).some((providerTypeConfig) =>
+    isSimulatedUserProviderConfig(providerTypeConfig),
+  );
+}
+
 export async function getGradingProvider(
   type: ProviderType,
   provider: GradingConfig['provider'],
@@ -174,22 +197,33 @@ export async function getGradingProvider(
       );
     }
   } else {
-    // No provider specified - check defaultTest.options.provider as fallback
+    // No provider specified - check defaultTest providers as fallback
     const defaultTest = cliState.config?.defaultTest;
     const defaultTestObj = typeof defaultTest === 'object' ? (defaultTest as TestCase) : null;
-    const cfg =
-      defaultTestObj?.provider ||
-      defaultTestObj?.options?.provider?.text ||
-      defaultTestObj?.options?.provider ||
-      undefined;
+    const fallbackProviders = [
+      defaultTestObj?.provider || undefined,
+      defaultTestObj?.options?.provider?.text || undefined,
+      defaultTestObj?.options?.provider || undefined,
+    ];
+
+    const cfg = fallbackProviders.find((candidateProvider) => {
+      if (!candidateProvider) {
+        return false;
+      }
+
+      if (isSimulatedUserProviderConfig(candidateProvider)) {
+        logger.debug('[Grading] Skipping promptfoo:simulated-user as an implicit grader fallback');
+        return false;
+      }
+
+      return true;
+    });
 
     if (cfg) {
       // Recursively call getGradingProvider to handle all provider types (string, object, etc.)
       finalProvider = await getGradingProvider(type, cfg, defaultProvider);
       if (finalProvider) {
-        logger.debug(
-          `[Grading] Using provider from defaultTest.options.provider: ${finalProvider.id()}`,
-        );
+        logger.debug(`[Grading] Using provider from defaultTest fallback: ${finalProvider.id()}`);
       }
     } else {
       finalProvider = defaultProvider;
@@ -602,7 +636,7 @@ function parseJsonGradingResponse(
   label: string,
   resp: ProviderResponse,
 ): { parsed?: Partial<GradingResult>; failure?: Omit<GradingResult, 'assertion'> } {
-  let jsonObjects: object[] = [];
+  let jsonObjects: unknown[] = [];
   if (typeof resp.output === 'string') {
     try {
       jsonObjects = extractJsonObjects(resp.output);
@@ -619,7 +653,11 @@ function parseJsonGradingResponse(
         ),
       };
     }
-  } else if (typeof resp.output === 'object') {
+  } else if (
+    typeof resp.output === 'object' &&
+    resp.output !== null &&
+    !Array.isArray(resp.output)
+  ) {
     jsonObjects = [resp.output];
   } else {
     return {
@@ -630,8 +668,8 @@ function parseJsonGradingResponse(
     };
   }
 
-  const parsed = jsonObjects[0] as Partial<GradingResult>;
-  if (typeof parsed !== 'object' || parsed === null || parsed === undefined) {
+  const parsed = jsonObjects[0];
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return {
       failure: fail(
         `${label} produced malformed response. We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
@@ -640,7 +678,7 @@ function parseJsonGradingResponse(
     };
   }
 
-  return { parsed };
+  return { parsed: parsed as Partial<GradingResult> };
 }
 
 async function runJsonGradingPrompt({
@@ -711,6 +749,14 @@ async function runJsonGradingPrompt({
   const reason =
     parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`);
 
+  let responseMetadata: Record<string, unknown> = {};
+  if (resp.metadata && typeof resp.metadata === 'object' && !Array.isArray(resp.metadata)) {
+    const serializedMetadata = safeJsonStringify(resp.metadata);
+    responseMetadata = serializedMetadata
+      ? (JSON.parse(serializedMetadata) as Record<string, unknown>)
+      : {};
+  }
+
   return {
     assertion,
     pass,
@@ -729,6 +775,7 @@ async function runJsonGradingPrompt({
       },
     },
     metadata: {
+      ...responseMetadata,
       renderedGradingPrompt: prompt,
     },
   };

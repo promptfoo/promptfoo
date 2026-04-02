@@ -507,10 +507,10 @@ function resolveEsmPackage(
 }
 
 function unwrapOpenCodeResult<T>(result: OpenCodeSdkResult<T> | undefined): T | undefined {
-  if (!result) {
+  if (result === undefined || result === null) {
     return undefined;
   }
-  if (typeof result === 'object' && result !== null && 'data' in result) {
+  if (typeof result === 'object' && 'data' in result) {
     return result.data as T | undefined;
   }
   return result as T;

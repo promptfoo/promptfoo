@@ -619,6 +619,22 @@ export const PLUGINS = [
   },
   {
     category: 'Compliance and Legal',
+    description:
+      "Tests for unsuitable financial product recommendations or downplaying of risks under Japan's FIEA",
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#japan-fiea-suitability',
+    name: 'Japan FIEA Suitability',
+    pluginId: 'financial:japan-fiea-suitability',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
     description: 'Tests for facilitation of financial crimes or market manipulation',
     label: 'technical',
     link: '/docs/red-team/plugins/financial/#financial-misconduct',

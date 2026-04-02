@@ -274,7 +274,7 @@ export class RubyProvider implements ApiProvider {
       }
 
       // Set cached=false on fresh results
-      if (typeof result === 'object' && result !== null && apiType === 'call_api') {
+      if (apiType === 'call_api') {
         logger.debug(`RubyProvider explicitly setting cached=false for fresh result`);
         result.cached = false;
       }

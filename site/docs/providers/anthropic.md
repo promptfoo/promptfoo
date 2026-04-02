@@ -74,6 +74,9 @@ Claude models are available across multiple platforms. Here's how the model name
 | apiBaseUrl      | ANTHROPIC_BASE_URL    | The base URL for requests to the Anthropic API                                      |
 | temperature     | ANTHROPIC_TEMPERATURE | Controls the randomness of the output (default: 0)                                  |
 | max_tokens      | ANTHROPIC_MAX_TOKENS  | The maximum length of the generated text (default: 1024)                            |
+| cost            | -                     | Legacy per-token override applied to both input and output pricing                  |
+| inputCost       | -                     | Override input token pricing in promptfoo cost estimates                            |
+| outputCost      | -                     | Override output token pricing in promptfoo cost estimates                           |
 | top_p           | -                     | Controls nucleus sampling, affecting the randomness of the output                   |
 | top_k           | -                     | Only sample from the top K options for each subsequent token                        |
 | tools           | -                     | An array of tool or function definitions for the model to call                      |

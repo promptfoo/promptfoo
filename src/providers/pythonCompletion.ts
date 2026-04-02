@@ -337,7 +337,7 @@ export class PythonProvider implements ApiProvider {
       }
 
       // Set cached=false on fresh results and ensure numRequests is set
-      if (typeof result === 'object' && result !== null && apiType === 'call_api') {
+      if (apiType === 'call_api') {
         logger.debug(`PythonProvider explicitly setting cached=false for fresh result`);
         result.cached = false;
 

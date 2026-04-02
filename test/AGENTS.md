@@ -188,6 +188,8 @@ Every provider needs tests covering:
 3. Configuration validation
 4. Token usage tracking
 
+When a change introduces request-format gating, parser selection, or middleware validation, add negative-path tests for malformed inputs and assert the exact response contract.
+
 See `test/providers/openai-codex-sdk.test.ts` for reference patterns.
 
 ## Smoke Tests

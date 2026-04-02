@@ -268,6 +268,7 @@ const PromptMetricsSchema = z.object({
   tokenUsage: BaseTokenUsageSchema,
   namedScores: z.record(z.string(), z.number()),
   namedScoresCount: z.record(z.string(), z.number()),
+  namedScoreWeights: z.record(z.string(), z.number()).optional(),
   redteam: z
     .object({
       pluginPassCount: z.record(z.string(), z.number()),
@@ -464,6 +465,9 @@ export interface GradingResult {
   // Map of labeled metrics to values
   namedScores?: Record<string, number>;
 
+  // Total weight contributing to each named score
+  namedScoreWeights?: Record<string, number>;
+
   // Record of tokens usage for this assertion
   tokensUsed?: TokenUsage;
 
@@ -503,6 +507,8 @@ export function isGradingResult(result: any): result is GradingResult {
     typeof result.score === 'number' &&
     typeof result.reason === 'string' &&
     (typeof result.namedScores === 'undefined' || typeof result.namedScores === 'object') &&
+    (typeof result.namedScoreWeights === 'undefined' ||
+      typeof result.namedScoreWeights === 'object') &&
     (typeof result.tokensUsed === 'undefined' || typeof result.tokensUsed === 'object') &&
     (typeof result.componentResults === 'undefined' || Array.isArray(result.componentResults)) &&
     (typeof result.assertion === 'undefined' ||
@@ -1033,7 +1039,7 @@ export const TestSuiteSchema = z.object({
               enabled: z.boolean(),
               port: z.number(),
               host: z.string().optional(),
-              acceptFormats: z.array(z.string()),
+              acceptFormats: z.array(z.enum(['protobuf', 'json'])).optional(),
             })
             .optional(),
           grpc: z
@@ -1173,7 +1179,7 @@ export const TestSuiteConfigSchema = z.object({
               enabled: z.boolean().prefault(true),
               port: z.number().prefault(4318),
               host: z.string().prefault('0.0.0.0'),
-              acceptFormats: z.array(z.enum(['protobuf', 'json'])).prefault(['json']),
+              acceptFormats: z.array(z.enum(['protobuf', 'json'])).prefault(['json', 'protobuf']),
             })
             .optional(),
           grpc: z

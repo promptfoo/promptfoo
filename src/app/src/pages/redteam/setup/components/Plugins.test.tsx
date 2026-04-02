@@ -8,7 +8,6 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Plugins from './Plugins';
-import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
@@ -53,6 +52,15 @@ vi.mock('./PluginConfigDialog', () => ({
   default: () => <div data-testid="plugin-config-dialog"></div>,
 }));
 
+vi.mock('./TestCaseDialog', () => ({
+  TestCaseDialog: () => <div data-testid="test-case-dialog" />,
+  TestCaseGenerateButton: ({ children, ...props }: React.ComponentProps<'button'>) => (
+    <button type="button" {...props}>
+      {children ?? 'Generate test case'}
+    </button>
+  ),
+}));
+
 vi.mock('react-error-boundary', () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -62,15 +70,10 @@ const mockUseRecentlyUsedPlugins = useRecentlyUsedPlugins as unknown as Mock;
 
 // Helper function for rendering with providers
 const renderWithProviders = (ui: React.ReactNode, initialEntries: string[] = ['/']) => {
-  const redTeamConfig = mockUseRedTeamConfig();
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <TooltipProvider>
-        <ToastProvider>
-          <TestCaseGenerationProvider redTeamConfig={redTeamConfig}>
-            {ui}
-          </TestCaseGenerationProvider>
-        </ToastProvider>
+        <ToastProvider>{ui}</ToastProvider>
       </TooltipProvider>
     </MemoryRouter>,
   );

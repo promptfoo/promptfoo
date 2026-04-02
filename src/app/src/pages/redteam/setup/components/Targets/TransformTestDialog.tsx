@@ -17,9 +17,9 @@ import {
 } from '@app/components/ui/dialog';
 import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import { AlertCircle, AlignLeft, CheckCircle, ChevronDown, Code2, Info, Play } from 'lucide-react';
-import Prism from 'prismjs';
 
 interface TransformTestDialogProps {
   open: boolean;

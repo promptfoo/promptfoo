@@ -2,10 +2,10 @@ import React from 'react';
 
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
+import Prism from '@app/lib/prism';
 import { callApi } from '@app/utils/api';
 import dedent from 'dedent';
 import { Play } from 'lucide-react';
-import Prism from 'prismjs';
 import TransformTestDialog from '../TransformTestDialog';
 
 import type { HttpProviderOptions } from '../../../types';

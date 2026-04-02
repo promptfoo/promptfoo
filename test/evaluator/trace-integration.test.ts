@@ -126,7 +126,7 @@ describe('evaluator trace integration', () => {
             enabled: true,
             port: 4318,
             host: '0.0.0.0',
-            acceptFormats: ['application/x-protobuf'],
+            acceptFormats: ['protobuf'],
           },
         },
       },

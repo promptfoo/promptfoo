@@ -459,7 +459,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
    * Format the request payload based on model type
    */
   formatPayload(prompt: string): string {
-    const maxTokens = this.config.maxTokens || getEnvInt('AWS_SAGEMAKER_MAX_TOKENS') || 1024;
+    const maxTokens = this.config.maxTokens ?? getEnvInt('AWS_SAGEMAKER_MAX_TOKENS') ?? 1024;
     const temperature =
       typeof this.config.temperature === 'number'
         ? this.config.temperature

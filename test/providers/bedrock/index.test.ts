@@ -2456,6 +2456,24 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
+    it('should prefer API-reported total_tokens when it differs from prompt + completion', async () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 25,
+          completion_tokens: 50,
+          total_tokens: 99,
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 25,
+        completion: 50,
+        total: 99,
+        numRequests: 1,
+      });
+    });
+
     it('should return undefined token counts when not provided by the API', async () => {
       const mockResponse = {
         outputs: [{ text: 'This is a generated response' }],
@@ -2512,6 +2530,24 @@ describe('BEDROCK_MODEL token counting functionality', () => {
         prompt: 30,
         completion: 45,
         total: 75, // 30 + 45 = 75, not "3045"
+        numRequests: 1,
+      });
+    });
+
+    it('should prefer API-reported total_tokens when chat completion totals differ', async () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 30,
+          completion_tokens: 45,
+          total_tokens: 101,
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 30,
+        completion: 45,
+        total: 101,
         numRequests: 1,
       });
     });

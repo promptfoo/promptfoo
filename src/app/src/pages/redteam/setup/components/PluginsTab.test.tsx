@@ -93,6 +93,15 @@ vi.mock('./PluginConfigDialog', () => ({
   default: () => <div data-testid="plugin-config-dialog" />,
 }));
 
+vi.mock('./TestCaseDialog', () => ({
+  TestCaseDialog: () => <div data-testid="test-case-dialog" />,
+  TestCaseGenerateButton: ({ children, ...props }: React.ComponentProps<'button'>) => (
+    <button type="button" {...props}>
+      {children ?? 'Generate test case'}
+    </button>
+  ),
+}));
+
 vi.mock('react-error-boundary', () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -312,6 +321,22 @@ describe('PluginsTab', () => {
         expect(
           screen.queryByTestId(`plugin-list-item-${datasetsPlugins[0]}`),
         ).not.toBeInTheDocument();
+      });
+
+      test('Recently Used count dedupes duplicate plugin ids', async () => {
+        const [recentPlugin] = riskCategories['Security & Access Control'];
+
+        act(() => {
+          useRecentlyUsedPlugins.setState({
+            plugins: [recentPlugin, recentPlugin],
+          });
+        });
+
+        renderComponent();
+
+        await waitFor(() => {
+          expect(screen.getByRole('button', { name: /^Recently Used\s*1$/ })).toBeInTheDocument();
+        });
       });
 
       test('Selecting "Security & Access Control" renders correct plugins', async () => {

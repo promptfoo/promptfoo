@@ -9,6 +9,8 @@ providers:
     config:
       model: gpt-5.2-codex
       model_reasoning_effort: high
+      sandbox_mode: read-only
+      skip_git_repo_check: true
 
 tests:
   - vars: {}

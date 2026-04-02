@@ -1,5 +1,3 @@
-import 'prismjs/components/prism-json';
-
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
@@ -13,6 +11,7 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import {
   AlertCircle,
@@ -24,7 +23,6 @@ import {
   Server,
   Terminal,
 } from 'lucide-react';
-import Prism from 'prismjs';
 
 import type { ProviderOptions } from '../../types';
 

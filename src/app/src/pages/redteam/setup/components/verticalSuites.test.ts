@@ -49,6 +49,15 @@ describe('VERTICAL_SUITES', () => {
     ]);
   });
 
+  it('should have financial suite with Japan FIEA coverage', () => {
+    const financialSuite = VERTICAL_SUITES.find((suite) => suite.id === 'financial');
+    expect(financialSuite?.complianceFrameworks).toEqual(['SEC', 'FINRA', 'SOX', 'Japan FIEA']);
+    expect(financialSuite?.plugins).toContain('financial:japan-fiea-suitability');
+    expect(
+      financialSuite?.pluginGroups.find((group) => group.name === 'Compliance & Ethics')?.plugins,
+    ).toContain('financial:japan-fiea-suitability');
+  });
+
   it('should have telecom suite with all expected plugins', () => {
     const telecomSuite = VERTICAL_SUITES.find((suite) => suite.id === 'telecom');
     const expectedPlugins = [

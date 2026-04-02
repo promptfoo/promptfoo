@@ -97,7 +97,7 @@ class SimpleTracedProvider {
       );
 
       if (matches) {
-        const [, version, traceId, parentId, traceFlags] = matches;
+        const [, _version, traceId, parentId, traceFlags] = matches;
         console.log('[Provider] Using trace context:', { traceId, parentId });
 
         // Create parent context from Promptfoo's trace

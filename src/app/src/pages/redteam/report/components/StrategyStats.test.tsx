@@ -1,6 +1,6 @@
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StrategyStats from './StrategyStats';
@@ -154,7 +154,7 @@ describe('StrategyStats', () => {
       expect(totalAttemptsValue).toBeInTheDocument();
     });
 
-    it('should display the correct total attempts, flagged attempts, and success rate for the selected strategy in the drawer', async () => {
+    it('should display the correct total attempts, flagged attempts, and attack success rate for the selected strategy in the drawer', async () => {
       render(
         <StrategyStats
           strategyStats={strategyStats}
@@ -170,7 +170,7 @@ describe('StrategyStats', () => {
       // Check for the stats in the drawer - use more specific queries
       expect(screen.getByText('Total Attempts')).toBeInTheDocument();
       expect(screen.getByText('Flagged Attempts')).toBeInTheDocument();
-      expect(screen.getByText('Success Rate')).toBeInTheDocument();
+      expect(screen.getAllByText('Attack Success Rate').length).toBeGreaterThan(0);
       const percentages80 = screen.getAllByText('80.00%');
       expect(percentages80.length).toBeGreaterThan(0);
     });
@@ -191,9 +191,9 @@ describe('StrategyStats', () => {
       expect(table).toBeInTheDocument();
 
       expect(screen.getByText('Plugin')).toBeInTheDocument();
-      expect(screen.getByText('Attack Success Rate')).toBeInTheDocument();
-      expect(screen.getByText('# Flagged Attempts')).toBeInTheDocument();
-      expect(screen.getByText('# Attempts')).toBeInTheDocument();
+      expect(within(table).getByText('Attack Success Rate')).toBeInTheDocument();
+      expect(within(table).getByText('# Flagged Attempts')).toBeInTheDocument();
+      expect(within(table).getByText('# Attempts')).toBeInTheDocument();
 
       const pluginAStats = {
         plugin: 'plugin-A',

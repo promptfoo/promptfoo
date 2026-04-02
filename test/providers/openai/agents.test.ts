@@ -22,7 +22,9 @@ const mockRetryPolicies = vi.hoisted(() => {
   };
 });
 
-vi.mock('@openai/agents', () => {
+vi.mock('@openai/agents', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@openai/agents')>();
+
   class MockAgent {
     name: string;
     instructions: unknown;
@@ -65,6 +67,7 @@ vi.mock('@openai/agents', () => {
   }
 
   return {
+    ...actual,
     Agent: MockAgent,
     BatchTraceProcessor: class BatchTraceProcessor {
       exporter: unknown;
@@ -126,6 +129,7 @@ import { Agent, handoff, tool } from '@openai/agents';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import { OpenAiAgentsProvider } from '../../../src/providers/openai/agents';
+import { loadAgentDefinition } from '../../../src/providers/openai/agents-loader';
 
 describe('OpenAiAgentsProvider', () => {
   const mockImportModule = vi.mocked(importModule);
@@ -386,5 +390,339 @@ describe('OpenAiAgentsProvider', () => {
     const toolResult = await agent.tools[0].invoke({}, '{}');
 
     expect(toolResult).toEqual({ status: 'mocked' });
+  });
+
+  it('preserves explicit zero-valued token usage fields', async () => {
+    mockRun.mockResolvedValue({
+      finalOutput: 'Agent answer',
+      usage: {
+        totalTokens: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+      },
+      newItems: [],
+    });
+
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+      },
+    });
+
+    const result = await provider.callApi('Where is my order?');
+
+    expect(result.tokenUsage).toEqual({
+      total: 0,
+      prompt: 0,
+      completion: 0,
+    });
+  });
+
+  it('preserves an explicit maxTurns value of 0 in run options', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        maxTurns: 0,
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+      },
+    });
+
+    await provider.callApi('Where is my order?');
+
+    expect(mockRun).toHaveBeenCalledWith(
+      expect.any(Agent),
+      'Where is my order?',
+      expect.objectContaining({ maxTurns: 0 }),
+    );
+  });
+
+  it('passes structured multimodal JSON prompts to the SDK as agent input items', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Vision Agent',
+          instructions: 'Describe the image.',
+        },
+      },
+    });
+    const prompt = JSON.stringify([
+      {
+        role: 'user',
+        content: [
+          { type: 'input_text', text: 'What is in this image?' },
+          {
+            type: 'input_image',
+            image: 'data:image/png;base64,iVBORw0KGgo=',
+          },
+        ],
+      },
+    ]);
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(
+      expect.any(Agent),
+      [
+        {
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'What is in this image?' },
+            {
+              type: 'input_image',
+              image: 'data:image/png;base64,iVBORw0KGgo=',
+            },
+          ],
+        },
+      ],
+      expect.any(Object),
+    );
+  });
+
+  it('keeps arbitrary JSON object prompts as plain text', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
+    const prompt = '{"foo":"bar"}';
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(expect.any(Agent), prompt, expect.any(Object));
+  });
+
+  it('keeps arbitrary JSON prompts with unknown type fields as plain text', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
+    const prompt = '{"type":"custom_payload","value":"bar"}';
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(expect.any(Agent), prompt, expect.any(Object));
+  });
+
+  it('passes a single JSON message item to the SDK as structured agent input', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
+    const prompt = '{"role":"user","content":"Describe this request."}';
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(
+      expect.any(Agent),
+      [{ role: 'user', content: 'Describe this request.' }],
+      expect.any(Object),
+    );
+  });
+
+  it('keeps malformed role-shaped JSON prompts as plain text', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
+    const prompt = '{"role":"user","foo":"bar"}';
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(expect.any(Agent), prompt, expect.any(Object));
+  });
+
+  it('keeps malformed content-part JSON prompts as plain text', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
+    const prompt = '{"role":"user","content":[{"type":"input_text"}]}';
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(expect.any(Agent), prompt, expect.any(Object));
+  });
+
+  it('keeps malformed assistant JSON prompts without status as plain text', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
+    const prompt = '{"role":"assistant","content":[{"type":"output_text","text":"hello"}]}';
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(expect.any(Agent), prompt, expect.any(Object));
+  });
+
+  it('keeps malformed tool-call JSON prompts as plain text', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
+    const prompt = '{"type":"function_call"}';
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(expect.any(Agent), prompt, expect.any(Object));
+  });
+
+  it('passes SDK tool outputs, compaction, and unknown items as structured input', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Continue from prior items.',
+        },
+      },
+    });
+    const prompt = JSON.stringify([
+      {
+        type: 'shell_call_output',
+        callId: 'shell-call-1',
+        output: [
+          {
+            stdout: 'done',
+            stderr: '',
+            outcome: {
+              type: 'exit',
+              exitCode: 0,
+            },
+          },
+        ],
+      },
+      {
+        type: 'apply_patch_call_output',
+        callId: 'patch-call-1',
+        status: 'completed',
+      },
+      {
+        type: 'compaction',
+        encrypted_content: 'opaque-payload',
+      },
+      {
+        type: 'unknown',
+      },
+    ]);
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(
+      expect.any(Agent),
+      [
+        {
+          type: 'shell_call_output',
+          callId: 'shell-call-1',
+          output: [
+            {
+              stdout: 'done',
+              stderr: '',
+              outcome: {
+                type: 'exit',
+                exitCode: 0,
+              },
+            },
+          ],
+        },
+        {
+          type: 'apply_patch_call_output',
+          callId: 'patch-call-1',
+          status: 'completed',
+        },
+        {
+          type: 'compaction',
+          encrypted_content: 'opaque-payload',
+        },
+        {
+          type: 'unknown',
+        },
+      ],
+      expect.any(Object),
+    );
+  });
+
+  it('passes valid messages with empty content arrays as structured input', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Continue from prior messages.',
+        },
+      },
+    });
+    const prompt = '{"role":"user","content":[]}';
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(
+      expect.any(Agent),
+      [{ role: 'user', content: [] }],
+      expect.any(Object),
+    );
+  });
+
+  it('keeps empty JSON arrays as plain text', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'JSON Agent',
+          instructions: 'Echo JSON.',
+        },
+      },
+    });
+    const prompt = '[]';
+
+    await provider.callApi(prompt);
+
+    expect(mockRun).toHaveBeenCalledWith(expect.any(Agent), prompt, expect.any(Object));
+  });
+});
+
+describe('loadAgentDefinition', () => {
+  it('rejects nullish agent configs with the standard validation error', async () => {
+    await expect(loadAgentDefinition(null)).rejects.toThrow(
+      'Invalid agent configuration: expected Agent instance, file:// URL, or inline definition',
+    );
+    await expect(loadAgentDefinition(undefined)).rejects.toThrow(
+      'Invalid agent configuration: expected Agent instance, file:// URL, or inline definition',
+    );
+  });
+
+  it('rejects array agent configs with the standard validation error', async () => {
+    await expect(loadAgentDefinition([] as any)).rejects.toThrow(
+      'Invalid agent configuration: expected Agent instance, file:// URL, or inline definition',
+    );
   });
 });

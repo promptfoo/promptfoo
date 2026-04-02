@@ -2,6 +2,7 @@ import {
   addTraceProcessor,
   BatchTraceProcessor,
   getOrCreateTrace,
+  protocol,
   run,
   startTraceExportLoop,
 } from '@openai/agents';
@@ -16,7 +17,7 @@ import {
 import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
-import type { Agent } from '@openai/agents';
+import type { Agent, AgentInputItem } from '@openai/agents';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -204,13 +205,13 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     try {
       logger.debug('[AgentsProvider] Running agent', {
         agentName: this.agent?.name,
-        maxTurns: this.agentConfig.maxTurns || 10,
+        maxTurns: this.agentConfig.maxTurns ?? 10,
       });
 
       // Build run options
       const runOptions: any = {
         context: context?.vars,
-        maxTurns: this.agentConfig.maxTurns || 10,
+        maxTurns: this.agentConfig.maxTurns ?? 10,
         signal: callApiOptions?.abortSignal,
       };
 
@@ -226,7 +227,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
       // Run the agent within a trace context to ensure proper trace ID generation
       const result = await getOrCreateTrace(async () => {
-        return await run(this.agent!, prompt, runOptions);
+        return await run(this.agent!, this.parsePromptInput(prompt), runOptions);
       });
 
       logger.debug('[AgentsProvider] Agent run result', {
@@ -260,9 +261,9 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     const usage = result.usage;
 
     return {
-      total: usage.totalTokens || undefined,
-      prompt: usage.promptTokens || undefined,
-      completion: usage.completionTokens || undefined,
+      total: usage.totalTokens ?? undefined,
+      prompt: usage.promptTokens ?? undefined,
+      completion: usage.completionTokens ?? undefined,
     };
   }
 
@@ -295,6 +296,20 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
     return agent.clone({ tools });
   }
+
+  private parsePromptInput(prompt: string): string | AgentInputItem[] {
+    try {
+      const parsedPrompt: unknown = JSON.parse(prompt);
+      const parsedInput = parseAgentInputItems(parsedPrompt);
+      if (parsedInput) {
+        return parsedInput;
+      }
+    } catch {
+      // Fall back to plain text input.
+    }
+
+    return prompt;
+  }
 }
 
 function mergeArrays<T>(existing?: T[], additions?: T[]): T[] | undefined {
@@ -303,4 +318,29 @@ function mergeArrays<T>(existing?: T[], additions?: T[]): T[] | undefined {
   }
 
   return [...(existing ?? []), ...(additions ?? [])];
+}
+
+function parseAgentInputItems(value: unknown): AgentInputItem[] | undefined {
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return undefined;
+    }
+
+    const parsedItems: AgentInputItem[] = [];
+    for (const item of value) {
+      const parsedItem = protocol.ModelItem.safeParse(item);
+      if (!parsedItem.success) {
+        return undefined;
+      }
+      parsedItems.push(parsedItem.data);
+    }
+    return parsedItems;
+  }
+
+  const parsedItem = protocol.ModelItem.safeParse(value);
+  if (!parsedItem.success) {
+    return undefined;
+  }
+
+  return [parsedItem.data];
 }

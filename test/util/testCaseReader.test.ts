@@ -124,7 +124,7 @@ vi.mock('../../src/util/file', () => ({
     }
 
     // Handle objects (but not arrays)
-    if (config && typeof config === 'object' && config !== null) {
+    if (typeof config === 'object' && config !== null) {
       const result = { ...config };
       for (const [key, value] of Object.entries(config)) {
         if (typeof value === 'string' && value.startsWith('file://')) {
@@ -179,7 +179,7 @@ describe('readStandaloneTestsFile', () => {
       }
 
       // Mock implementation that handles file:// references
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -596,7 +596,7 @@ describe('readStandaloneTestsFile', () => {
         });
       }
 
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -673,7 +673,7 @@ describe('readTest', () => {
       }
 
       // Mock implementation that handles file:// references
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -932,7 +932,7 @@ describe('readTests', () => {
       }
 
       // Mock implementation that handles file:// references
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -1594,7 +1594,7 @@ describe('readVarsFiles', () => {
       }
 
       // Handle objects (but not arrays)
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {

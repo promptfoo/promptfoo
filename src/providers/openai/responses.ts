@@ -192,14 +192,24 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     const isReasoningModel = this.isReasoningModel();
+    const maxOutputTokensDefault = config.omitDefaults
+      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
+        ? undefined
+        : getEnvInt('OPENAI_MAX_TOKENS')
+      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
+    const reasoningMaxOutputTokensDefault =
+      getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
     const maxOutputTokens =
       config.max_output_tokens ??
-      (isReasoningModel
-        ? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS')
-        : getEnvInt('OPENAI_MAX_TOKENS', 1024));
+      (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
 
+    const temperatureDefault = config.omitDefaults
+      ? getEnvString('OPENAI_TEMPERATURE') === undefined
+        ? undefined
+        : getEnvFloat('OPENAI_TEMPERATURE')
+      : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature = this.supportsTemperature()
-      ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
+      ? (config.temperature ?? temperatureDefault)
       : undefined;
     const reasoningEffort = isReasoningModel
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
@@ -306,9 +316,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.requiresApiKey() && !this.getApiKey()) {
-      throw new Error(
-        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
+      throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);

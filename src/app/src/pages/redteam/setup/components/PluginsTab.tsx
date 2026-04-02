@@ -69,6 +69,103 @@ const ErrorFallback = ({ error }: { error: unknown }) => (
   </div>
 );
 
+type PluginPreset = {
+  name: keyof typeof PLUGIN_PRESET_DESCRIPTIONS;
+  plugins: ReadonlySet<Plugin>;
+};
+
+const STANDARD_PRESETS: PluginPreset[] = [
+  {
+    name: 'Recommended',
+    plugins: DEFAULT_PLUGINS,
+  },
+  {
+    name: 'Minimal Test',
+    plugins: MINIMAL_TEST_PLUGINS,
+  },
+  {
+    name: 'RAG',
+    plugins: RAG_PLUGINS,
+  },
+  {
+    name: 'Foundation',
+    plugins: new Set(FOUNDATION_PLUGINS),
+  },
+  {
+    name: 'Guardrails Evaluation',
+    plugins: new Set(GUARDRAILS_EVALUATION_PLUGINS),
+  },
+  {
+    name: 'MCP',
+    plugins: new Set(MCP_PLUGINS),
+  },
+  {
+    name: 'Harmful',
+    plugins: new Set(Object.keys(HARM_PLUGINS) as Plugin[]),
+  },
+  {
+    name: 'NIST',
+    plugins: new Set(Object.values(NIST_AI_RMF_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'OWASP LLM Top 10',
+    plugins: new Set(Object.values(OWASP_LLM_TOP_10_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'OWASP Gen AI Red Team',
+    plugins: new Set(Object.values(OWASP_LLM_RED_TEAM_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'OWASP API Top 10',
+    plugins: new Set(Object.values(OWASP_API_TOP_10_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'OWASP Top 10 for Agentic Applications',
+    plugins: new Set(Object.values(OWASP_AGENTIC_TOP_10_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'MITRE',
+    plugins: new Set(Object.values(MITRE_ATLAS_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'EU AI Act',
+    plugins: new Set(Object.values(EU_AI_ACT_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'ISO 42001',
+    plugins: new Set(Object.values(ISO_42001_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'GDPR',
+    plugins: new Set(Object.values(GDPR_MAPPING).flatMap((v) => v.plugins)),
+  },
+];
+
+const ENTERPRISE_PRESETS: PluginPreset[] = [
+  ...STANDARD_PRESETS,
+  {
+    name: 'DoD AI Ethical Principles',
+    plugins: new Set(Object.values(DOD_AI_ETHICS_MAPPING).flatMap((v) => v.plugins)),
+  },
+];
+
+const CATEGORY_FILTERS = Object.entries(riskCategories).map(([category, plugins]) => ({
+  key: category,
+  label: category,
+  count: plugins.filter((p) => p !== 'intent' && p !== 'policy').length,
+}));
+
+const DOMAIN_SPECIFIC_PLUGIN_SET = new Set<Plugin>(DOMAIN_SPECIFIC_PLUGINS);
+
+const PLUGIN_CATEGORY_BY_ID = new Map<Plugin, string>();
+for (const [category, plugins] of Object.entries(riskCategories)) {
+  for (const plugin of plugins) {
+    if (!PLUGIN_CATEGORY_BY_ID.has(plugin)) {
+      PLUGIN_CATEGORY_BY_ID.set(plugin, category);
+    }
+  }
+}
+
 export interface PluginsTabProps {
   selectedPlugins: Set<Plugin>;
   handlePluginToggle: (plugin: Plugin) => void;
@@ -128,90 +225,7 @@ export default function PluginsTab({
     plugin: generatingPlugin,
   } = useTestCaseGeneration();
 
-  // Presets
-  const presets: {
-    name: keyof typeof PLUGIN_PRESET_DESCRIPTIONS;
-    plugins: Set<Plugin> | ReadonlySet<Plugin>;
-  }[] = useMemo(() => {
-    const availablePresets: {
-      name: keyof typeof PLUGIN_PRESET_DESCRIPTIONS;
-      plugins: Set<Plugin> | ReadonlySet<Plugin>;
-    }[] = [
-      {
-        name: 'Recommended',
-        plugins: DEFAULT_PLUGINS,
-      },
-      {
-        name: 'Minimal Test',
-        plugins: MINIMAL_TEST_PLUGINS,
-      },
-      {
-        name: 'RAG',
-        plugins: RAG_PLUGINS,
-      },
-      {
-        name: 'Foundation',
-        plugins: new Set(FOUNDATION_PLUGINS),
-      },
-      {
-        name: 'Guardrails Evaluation',
-        plugins: new Set(GUARDRAILS_EVALUATION_PLUGINS),
-      },
-      {
-        name: 'MCP',
-        plugins: new Set(MCP_PLUGINS),
-      },
-      {
-        name: 'Harmful',
-        plugins: new Set(Object.keys(HARM_PLUGINS) as Plugin[]),
-      },
-      {
-        name: 'NIST',
-        plugins: new Set(Object.values(NIST_AI_RMF_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'OWASP LLM Top 10',
-        plugins: new Set(Object.values(OWASP_LLM_TOP_10_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'OWASP Gen AI Red Team',
-        plugins: new Set(Object.values(OWASP_LLM_RED_TEAM_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'OWASP API Top 10',
-        plugins: new Set(Object.values(OWASP_API_TOP_10_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'OWASP Top 10 for Agentic Applications',
-        plugins: new Set(Object.values(OWASP_AGENTIC_TOP_10_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'MITRE',
-        plugins: new Set(Object.values(MITRE_ATLAS_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'EU AI Act',
-        plugins: new Set(Object.values(EU_AI_ACT_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'ISO 42001',
-        plugins: new Set(Object.values(ISO_42001_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'GDPR',
-        plugins: new Set(Object.values(GDPR_MAPPING).flatMap((v) => v.plugins)),
-      },
-    ];
-
-    if (showEnterpriseMappings) {
-      availablePresets.push({
-        name: 'DoD AI Ethical Principles',
-        plugins: new Set(Object.values(DOD_AI_ETHICS_MAPPING).flatMap((v) => v.plugins)),
-      });
-    }
-
-    return availablePresets;
-  }, [showEnterpriseMappings]);
+  const presets = showEnterpriseMappings ? ENTERPRISE_PRESETS : STANDARD_PRESETS;
 
   // Helper functions
   const isPluginConfigured = useCallback(
@@ -239,28 +253,19 @@ export default function PluginsTab({
   );
 
   // Category filters with plugin counts
-  const categoryFilters = useMemo(
-    () =>
-      Object.entries(riskCategories).map(([category, plugins]) => ({
-        key: category,
-        label: category,
-        count: plugins.filter((p) => p !== 'intent' && p !== 'policy').length,
-      })),
-    [],
-  );
+  const allCategoryFilters = useMemo(() => {
+    const recentlyUsedCount = new Set(recentlyUsedPlugins).size;
 
-  const allCategoryFilters = useMemo(
-    () => [
-      ...(recentlyUsedPlugins.length > 0
-        ? [{ key: 'Recently Used', label: 'Recently Used', count: recentlyUsedPlugins.length }]
+    return [
+      ...(recentlyUsedCount > 0
+        ? [{ key: 'Recently Used', label: 'Recently Used', count: recentlyUsedCount }]
         : []),
       ...(selectedPlugins.size > 0
         ? [{ key: 'Selected', label: 'Selected', count: selectedPlugins.size }]
         : []),
-      ...categoryFilters,
-    ],
-    [recentlyUsedPlugins.length, selectedPlugins.size, categoryFilters],
-  );
+      ...CATEGORY_FILTERS,
+    ];
+  }, [recentlyUsedPlugins, selectedPlugins.size]);
 
   // Check if we're showing domain-specific category
   const showingDomainSpecific = selectedCategory === 'Domain-Specific Risks';
@@ -268,21 +273,24 @@ export default function PluginsTab({
   // Get all plugins with categories
   const allPluginsWithCategories = useMemo(() => {
     const pluginsWithCategories: Array<{ plugin: Plugin; category: string }> = [];
+    const seenPlugins = new Set<Plugin>();
+
+    const appendPlugin = (plugin: Plugin, category: string) => {
+      if (seenPlugins.has(plugin)) {
+        return;
+      }
+      seenPlugins.add(plugin);
+      pluginsWithCategories.push({ plugin, category });
+    };
 
     if (selectedCategory === 'Selected') {
       Array.from(selectedPlugins).forEach((plugin) => {
-        let originalCategory = 'Other';
-        if (recentlyUsedPlugins.includes(plugin)) {
-          originalCategory = 'Recently Used';
-        } else {
-          for (const [category, plugins] of Object.entries(riskCategories)) {
-            if (plugins.includes(plugin)) {
-              originalCategory = category;
-              break;
-            }
-          }
-        }
-        pluginsWithCategories.push({ plugin, category: originalCategory });
+        appendPlugin(
+          plugin,
+          recentlyUsedPlugins.includes(plugin)
+            ? 'Recently Used'
+            : PLUGIN_CATEGORY_BY_ID.get(plugin) || 'Other',
+        );
       });
       return pluginsWithCategories;
     }
@@ -292,7 +300,7 @@ export default function PluginsTab({
       (!selectedCategory || selectedCategory === 'Recently Used')
     ) {
       recentlyUsedPlugins.forEach((plugin) => {
-        pluginsWithCategories.push({ plugin, category: 'Recently Used' });
+        appendPlugin(plugin, 'Recently Used');
       });
     }
 
@@ -306,10 +314,8 @@ export default function PluginsTab({
             .filter((plugin) => plugin !== 'intent' && plugin !== 'policy')
             .forEach((plugin) => {
               // Skip domain-specific plugins when rendering flat list
-              if (!DOMAIN_SPECIFIC_PLUGINS.includes(plugin)) {
-                if (!pluginsWithCategories.some((p) => p.plugin === plugin)) {
-                  pluginsWithCategories.push({ plugin, category });
-                }
+              if (!DOMAIN_SPECIFIC_PLUGIN_SET.has(plugin)) {
+                appendPlugin(plugin, category);
               }
             });
         }
@@ -347,7 +353,7 @@ export default function PluginsTab({
       return (displayNameOverrides[plugin] || categoryAliases[plugin] || plugin).toLowerCase();
     };
 
-    return plugins.sort((a, b) => {
+    return [...plugins].sort((a, b) => {
       const displayNameA = getDisplayName(a.plugin);
       const displayNameB = getDisplayName(b.plugin);
 
@@ -387,7 +393,7 @@ export default function PluginsTab({
   }, []);
 
   const handlePresetSelect = useCallback(
-    (preset: { name: string; plugins: Set<Plugin> | ReadonlySet<Plugin> }) => {
+    (preset: PluginPreset) => {
       recordEvent('feature_used', {
         feature: 'redteam_config_plugins_preset_selected',
         preset: preset.name,
@@ -396,7 +402,7 @@ export default function PluginsTab({
         setIsCustomMode(true);
       } else {
         // Use setSelectedPlugins for efficient bulk update
-        setSelectedPlugins(new Set(preset.plugins as Set<Plugin>));
+        setSelectedPlugins(new Set(preset.plugins));
         setIsCustomMode(false);
       }
     },

@@ -385,6 +385,47 @@ describe('WatsonXProvider', () => {
       );
     });
 
+    it('should preserve an explicit maxNewTokens value of 0', async () => {
+      const zeroConfig = {
+        ...config,
+        maxNewTokens: 0,
+      };
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn().mockResolvedValue({
+          result: {
+            model_id: 'ibm/test-model',
+            model_version: '1.0.0',
+            created_at: '2023-10-10T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Test response from WatsonX',
+                generated_token_count: 0,
+                input_token_count: 5,
+                stop_reason: 'max_tokens',
+              },
+            ],
+          },
+        }),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
+
+      vi.mocked(getCache).mockImplementation(() => null as any);
+      vi.mocked(isCacheEnabled).mockImplementation(() => false);
+
+      const provider = new WatsonXProvider(modelName, { config: zeroConfig });
+      await provider.callApi(prompt);
+
+      expect(mockedWatsonXAIClient.generateText).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parameters: expect.objectContaining({
+            max_new_tokens: 0,
+          }),
+        }),
+      );
+    });
+
     it('should return cached response if available', async () => {
       // What's stored in the cache doesn't have cached: true
       const storedCachedData = {

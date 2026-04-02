@@ -7,9 +7,9 @@ import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
 import { Switch } from '@app/components/ui/switch';
 import { Textarea } from '@app/components/ui/textarea';
+import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import dedent from 'dedent';
-import Prism from 'prismjs';
 import {
   DEFAULT_WEBSOCKET_STREAM_RESPONSE,
   DEFAULT_WEBSOCKET_TIMEOUT_MS,

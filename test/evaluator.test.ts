@@ -19,6 +19,7 @@ import Eval from '../src/models/eval';
 import {
   type ApiProvider,
   type Prompt,
+  type ProviderResponse,
   ResultFailureReason,
   type TestSuite,
 } from '../src/types/index';
@@ -1736,7 +1737,7 @@ describe('evaluator', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
   });
 
-  it('evaluator should correctly count named scores based on contributing assertions', async () => {
+  it('evaluator should count named score assertions per metric', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt for namedScoresCount')],
@@ -1786,7 +1787,7 @@ describe('evaluator', () => {
     );
   });
 
-  it('evaluator should correctly count named scores with template metric variables', async () => {
+  it('evaluator should count named scores with template metric variables per assertion', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt for template metrics')],
@@ -1829,12 +1830,51 @@ describe('evaluator', () => {
               Accuracy: expect.any(Number),
             }),
             namedScoresCount: expect.objectContaining({
-              Accuracy: 3, // 2 assertions in first test + 1 in second
+              Accuracy: 3, // 2 assertions in the first test + 1 in the second
             }),
           }),
         }),
       ]),
     );
+  });
+
+  it('evaluator should preserve weighted named score totals alongside prompt denominators', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt for weighted metrics')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Test output',
+              metric: 'Accuracy',
+              weight: 3,
+            },
+            {
+              type: 'contains',
+              value: 'Missing output',
+              metric: 'Accuracy',
+              weight: 1,
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const results = await evalRecord.getResults();
+    const promptMetrics = evalRecord.prompts[0]?.metrics;
+
+    expect(results[0].namedScores?.Accuracy).toBeCloseTo(0.75, 10);
+    expect(results[0].gradingResult?.namedScoreWeights?.Accuracy).toBe(4);
+    expect(promptMetrics?.namedScores.Accuracy).toBeCloseTo(3, 10);
+    expect(promptMetrics?.namedScoresCount.Accuracy).toBe(2);
+    expect(promptMetrics?.namedScoreWeights?.Accuracy).toBe(4);
+    expect(
+      (promptMetrics?.namedScores.Accuracy ?? 0) /
+        (promptMetrics?.namedScoreWeights?.Accuracy ?? 1),
+    ).toBeCloseTo(0.75, 10);
   });
 
   it('evaluator should handle mixed static and template metrics correctly', async () => {
@@ -3488,7 +3528,7 @@ describe('evaluator', () => {
     expect(mockApiProviderWithError.callApi).toHaveBeenCalledTimes(1);
   });
 
-  it('should handle evaluation timeout', async () => {
+  it('should handle evaluation timeout without tearing down the shared provider', async () => {
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let longTimer: NodeJS.Timeout | null = null;
 
@@ -3558,12 +3598,139 @@ describe('evaluator', () => {
         }),
       );
 
-      expect(slowApiProvider.cleanup).toHaveBeenCalledWith();
+      expect(slowApiProvider.cleanup).not.toHaveBeenCalled();
     } finally {
       if (longTimer) {
         clearTimeout(longTimer);
       }
     }
+  });
+
+  it('should not block timeout rows when a provider call does not settle after abort', async () => {
+    const mockAddResult = vi.fn().mockResolvedValue(undefined);
+
+    const hangingProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('hanging-provider'),
+      callApi: vi.fn().mockImplementation(
+        () =>
+          new Promise(() => {
+            // Intentionally never resolves; timeout handling must still emit a row.
+          }),
+      ),
+      cleanup: vi.fn(),
+    };
+
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 0,
+          failures: 0,
+          errors: 1,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: vi.fn().mockResolvedValue(undefined),
+      setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [hangingProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    const startedAt = Date.now();
+    await evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
+    const elapsedMs = Date.now() - startedAt;
+
+    expect(hangingProvider.cleanup).not.toHaveBeenCalled();
+    expect(mockAddResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.stringContaining('Evaluation timed out after 50ms'),
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+      }),
+    );
+    expect(elapsedMs).toBeLessThan(1000);
+  });
+
+  it('should ignore stale provider rows that resolve after a timeout row is recorded', async () => {
+    const mockAddResult = vi.fn().mockResolvedValue(undefined);
+    let resolveLateResponse!: (value: ProviderResponse) => void;
+
+    const slowApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('slow-provider'),
+      callApi: vi.fn().mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveLateResponse = resolve;
+          }),
+      ),
+      cleanup: vi.fn(),
+    };
+
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 0,
+          failures: 0,
+          errors: 1,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: vi.fn().mockResolvedValue(undefined),
+      setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [slowApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    await evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
+
+    expect(mockAddResult).toHaveBeenCalledTimes(1);
+    expect(mockAddResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.stringContaining('Evaluation timed out after 50ms'),
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+      }),
+    );
+
+    resolveLateResponse({
+      output: 'Late response',
+      tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(mockAddResult).toHaveBeenCalledTimes(1);
   });
 
   it('should honor external abortSignal when timeoutMs is set', async () => {
@@ -4864,6 +5031,214 @@ describe('runEval', () => {
     expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
   });
 
+  it('should infer a non-default injectVar when redteam config omits it and prompt is absent', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{query}}', label: 'test-label' },
+      test: {
+        vars: {
+          query:
+            'Based on your role as "{{purpose | trim}}", provide a response to a typical request.',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: {},
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  it('should skip rendering generated redteam exports without a top-level redteam block', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          prompt: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
+        },
+        assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
+        metadata: {
+          pluginId: 'ascii-smuggling',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  it('should skip rendering generated redteam exports identified by metadata and llm-rubric assertions', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{query}}', label: 'test-label' },
+      test: {
+        vars: {
+          query: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
+        },
+        assert: [
+          {
+            type: 'llm-rubric',
+            value: 'Return pass when the response is a string',
+          },
+        ],
+        metadata: {
+          pluginId: 'xstest',
+          pluginConfig: {
+            modifiers: {},
+          },
+          severity: 'medium',
+        },
+        options: { provider: mockGradingApiProviderPasses },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  it('should infer the inject variable for generated redteam exports without config', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{query}}', label: 'test-label' },
+      test: {
+        vars: {
+          query: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
+        },
+        assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
+        metadata: {
+          pluginId: 'ascii-smuggling',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  it('should infer the inject variable from the undecorated prompt template', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: {
+        raw: 'Locale: {{locale}}\nUser said: {{query}}',
+        template: 'User said: {{query}}',
+        label: 'test-label',
+      },
+      test: {
+        vars: {
+          locale: 'en-US',
+          query: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
+        },
+        assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
+        metadata: {
+          pluginId: 'ascii-smuggling',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  it('should skip rendering when redteam assertions are nested inside assert-set', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          prompt: 'Please answer in two sentences for a user whose role is "{{purpose | trim}}".',
+        },
+        assert: [
+          {
+            type: 'assert-set',
+            assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
+          },
+        ],
+        metadata: {
+          pluginId: 'ascii-smuggling',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
+  });
+
+  it('should continue rendering non-redteam tests that only set pluginId metadata', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{query}}', label: 'test-label' },
+      test: {
+        vars: {
+          name: 'Alice',
+          query: 'Hello {{name}}',
+        },
+        metadata: {
+          pluginId: 'ascii-smuggling',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(results[0].prompt.raw).toContain('Hello Alice');
+    expect(results[0].prompt.raw).not.toContain('{{name}}');
+  });
+
   describe('latencyMs handling', () => {
     it('should use provider-supplied latencyMs when available', async () => {
       const providerWithLatency: ApiProvider = {
@@ -5415,6 +5790,70 @@ describe('Evaluator with external defaultTest', () => {
       expect(prompt2TotalTests).toBeGreaterThan(0);
     } finally {
       // Always restore original state
+      cliState.resume = originalResume;
+    }
+  });
+
+  it('should backfill legacy named score weights when resuming evaluation', async () => {
+    const originalResume = cliState.resume;
+    cliState.resume = false;
+
+    try {
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [{ raw: 'Test prompt 1', label: 'test1' }],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'equals',
+                value: 'Test output',
+                metric: 'accuracy',
+                weight: 3,
+              },
+              {
+                type: 'contains',
+                value: 'Missing output',
+                metric: 'accuracy',
+                weight: 1,
+              },
+            ],
+          },
+        ],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+      evalRecord.prompts = [
+        {
+          raw: 'Test prompt 1',
+          label: 'test1',
+          id: 'prompt-test1',
+          provider: 'test-provider',
+          metrics: {
+            score: 1,
+            testPassCount: 1,
+            testFailCount: 0,
+            testErrorCount: 0,
+            assertPassCount: 1,
+            assertFailCount: 0,
+            totalLatencyMs: 100,
+            tokenUsage: createEmptyTokenUsage(),
+            namedScores: { accuracy: 1 },
+            namedScoresCount: { accuracy: 1 },
+            cost: 0.001,
+          },
+        },
+      ];
+      evalRecord.persisted = true;
+      cliState.resume = true;
+
+      await evaluate(testSuite, evalRecord, {});
+
+      expect(evalRecord.prompts[0].metrics?.namedScores.accuracy).toBeCloseTo(4, 10);
+      expect(evalRecord.prompts[0].metrics?.namedScoresCount.accuracy).toBe(3);
+      expect(evalRecord.prompts[0].metrics?.namedScoreWeights?.accuracy).toBe(5);
+    } finally {
       cliState.resume = originalResume;
     }
   });

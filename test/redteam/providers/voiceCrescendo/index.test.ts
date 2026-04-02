@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { sleep } from '../../../../src/util/time';
 
 import type { ApiProvider, CallApiContextParams } from '../../../../src/types/index';
 
@@ -43,9 +44,12 @@ describe('VoiceCrescendoProvider', () => {
   let mockTargetProvider: ApiProvider;
   let getTargetResponse: typeof import('../../../../src/redteam/providers/shared').getTargetResponse;
   let redteamProviderManager: typeof import('../../../../src/redteam/providers/shared').redteamProviderManager;
+  const mockedSleep = vi.mocked(sleep);
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockedSleep.mockReset();
+    mockedSleep.mockResolvedValue(undefined);
 
     // Import mocked modules
     const sharedModule = await import('../../../../src/redteam/providers/shared');
@@ -184,6 +188,7 @@ describe('VoiceCrescendoProvider', () => {
     expect(result.tokenUsage?.numRequests).toBe(result.metadata?.voiceCrescendoTurnsCompleted);
     // Token totals still include internal calls.
     expect(result.tokenUsage?.total).toBeGreaterThan(0);
+    expect(mockedSleep).not.toHaveBeenCalled();
   });
 
   it('should track token usage even when audio generation fails', async () => {
@@ -271,6 +276,7 @@ describe('VoiceCrescendoProvider', () => {
     // Should still track token usage from attempted calls
     expect(result.tokenUsage).toBeDefined();
     expect(result.tokenUsage?.numRequests).toBeGreaterThanOrEqual(1);
+    expect(result.metadata?.voiceCrescendoBacktrackCount).toBe(0);
     expect(vi.mocked(getTargetResponse)).toHaveBeenCalledTimes(1);
   });
 
@@ -326,5 +332,31 @@ describe('VoiceCrescendoProvider', () => {
 
     expect(result.metadata?.voiceCrescendoTurnsCompleted).toBeLessThanOrEqual(3);
     expect(result.metadata?.stopReason).toBeDefined();
+  });
+
+  it('should preserve an explicit maxTurns value of 0', async () => {
+    vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockRedteamProvider);
+
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 0,
+      delayBetweenTurns: 0,
+    });
+
+    const context: CallApiContextParams = {
+      originalProvider: mockTargetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    const result = await provider.callApi('Test objective', context);
+
+    expect(result.output).toBe('');
+    expect(result.prompt).toBe('');
+    expect(result.metadata?.voiceCrescendoTurnsCompleted).toBe(0);
+    expect(result.metadata?.stopReason).toBe('Max turns reached');
+    expect(result.metadata?.audioHistory).toEqual([]);
+    expect(vi.mocked(redteamProviderManager.getProvider)).not.toHaveBeenCalled();
+    expect(vi.mocked(getTargetResponse)).not.toHaveBeenCalled();
   });
 });

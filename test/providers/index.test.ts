@@ -49,6 +49,7 @@ import RedteamGoatProvider from '../../src/redteam/providers/goat';
 import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
+import { checkProviderApiKeys } from '../../src/util/provider';
 
 import type { ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
 
@@ -1130,6 +1131,21 @@ describe('loadApiProvider', () => {
     })) as OpenAiChatCompletionProvider;
 
     expect(provider.env?.OPENAI_API_KEY).toBe('override-key');
+  });
+
+  it('passes provider env overrides through the registry to Claude Agent SDK providers', async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.CLAUDE_CODE_USE_VERTEX;
+
+    const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
+      options: {
+        env: {
+          CLAUDE_CODE_USE_VERTEX: 'true',
+        },
+      },
+    });
+
+    expect(checkProviderApiKeys([provider]).size).toBe(0);
   });
 
   it('isolates env overrides between multiple provider loads', async () => {

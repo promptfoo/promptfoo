@@ -3,7 +3,6 @@ import os
 import shutil
 import subprocess
 import tempfile
-import time
 from textwrap import dedent
 
 from e2b_code_interpreter import Sandbox
@@ -55,15 +54,9 @@ def model_call_patch(fail_log: str, relevant_files: dict) -> str:
     if not relevant_files:
         demo_path = "README.md"
         old = ""
-        new = "# patched-by-demo\n"
     else:
         demo_path = next(iter(relevant_files.keys()))
         old = relevant_files[demo_path]
-        new = (
-            (old or "")
-            + ("\n" if old and not old.endswith("\n") else "")
-            + "# patched-by-demo\n"
-        )
 
     # Minimal unified diff; uses -p0 friendly paths (a/ and b/)
     fallback_patch = dedent(f"""\
