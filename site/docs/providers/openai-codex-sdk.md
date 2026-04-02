@@ -582,7 +582,7 @@ providers:
 
 By default, promptfoo now passes a minimal shell environment (`PATH`, `HOME`, `SHELL`, temp vars, locale vars, and similar OS basics), merges `cli_env`, and injects only the provider's resolved Codex/OpenAI API key from promptfoo-level env overrides. Other config-level `env:` keys are not forwarded to the Codex subprocess; pass those explicitly through `cli_env`. The provider emits a one-time warning if it sees non-auth promptfoo env overrides that are not present in `cli_env`. This keeps Codex agent commands isolated from unrelated process secrets while still leaving a usable shell path.
 
-Common Codex home, SSH agent, and certificate process variables such as `CODEX_HOME`, `SSL_CERT_FILE`, `SSH_AUTH_SOCK`, and `GIT_SSH_COMMAND` are also omitted from that minimal default unless you set them in `cli_env` or enable `inherit_process_env: true`. If those variables are present in the parent process and not forwarded, the provider emits a one-time warning so network-enabled, private-repo, or custom-home evals do not fail silently.
+Common Codex home and certificate process variables such as `CODEX_HOME` and `SSL_CERT_FILE` are also omitted from that minimal default unless you set them in `cli_env` or enable `inherit_process_env: true`. If those variables are present in the parent process and not forwarded, the provider emits a one-time warning so custom-home or TLS-sensitive evals do not fail silently. SSH agent variables such as `SSH_AUTH_SOCK` and `GIT_SSH_COMMAND` are only included in that warning when network access or live web search is enabled.
 
 To merge the full process environment anyway, set `inherit_process_env: true`:
 
