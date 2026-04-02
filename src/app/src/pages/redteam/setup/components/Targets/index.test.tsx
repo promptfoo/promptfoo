@@ -9,6 +9,8 @@ import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamCon
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 import Targets from './index';
 
+import type { ProviderOptions } from '../../types';
+
 vi.mock('react-simple-code-editor', () => ({
   default: ({ value, onValueChange }: any) => (
     <textarea
@@ -30,6 +32,136 @@ vi.mock('@app/hooks/useToast', () => ({
     showToast: vi.fn(),
   }),
 }));
+vi.mock('./ProviderEditor', async () => {
+  const React = await import('react');
+  const { callApi } = await import('@app/utils/api');
+
+  const makeHttpTarget = (provider: ProviderOptions): ProviderOptions => ({
+    id: 'http',
+    label: provider.label ?? '',
+    config: {
+      url: '',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: '{{prompt}}' }),
+    },
+  });
+
+  const makeWebSocketTarget = (provider: ProviderOptions): ProviderOptions => ({
+    id: 'websocket',
+    label: provider.label ?? '',
+    config: {
+      url: 'wss://example.com/ws',
+    },
+  });
+
+  return {
+    default: ({
+      provider,
+      setProvider,
+      onTargetTested,
+      onSessionTested,
+    }: {
+      provider: ProviderOptions | undefined;
+      setProvider: (provider: ProviderOptions) => void;
+      onTargetTested?: (success: boolean) => void;
+      onSessionTested?: (success: boolean) => void;
+    }) => {
+      const [targetMessage, setTargetMessage] = React.useState('');
+      const [sessionMessage, setSessionMessage] = React.useState('');
+
+      if (!provider) {
+        return null;
+      }
+
+      const isHttp = provider.id === 'http';
+      const isWebSocket = provider.id === 'websocket';
+      const canTestTarget = isHttp
+        ? provider.config.request === undefined
+          ? Boolean(provider.config.url?.trim())
+          : Boolean(provider.config.request?.trim())
+        : true;
+
+      const runTargetTest = async () => {
+        const response = await callApi('/providers/test', {
+          method: 'POST',
+          body: JSON.stringify({ providerOptions: provider }),
+        });
+        const data = await response.json();
+        setTargetMessage(data.testResult?.message || '');
+        onTargetTested?.(Boolean(data.testResult?.success));
+      };
+
+      const runSessionTest = async () => {
+        const response = await callApi('/providers/test', {
+          method: 'POST',
+          body: JSON.stringify({ providerOptions: provider }),
+        });
+        const data = await response.json();
+        setSessionMessage(data.message || '');
+        onSessionTested?.(Boolean(data.success));
+      };
+
+      return (
+        <div>
+          <button
+            type="button"
+            role="button"
+            onClick={() => setProvider(makeWebSocketTarget(provider))}
+          >
+            WebSocket
+          </button>
+          <button type="button" role="button" onClick={() => setProvider(makeHttpTarget(provider))}>
+            HTTP/HTTPS Endpoint
+          </button>
+
+          <label htmlFor="provider-name">Provider Name</label>
+          <input
+            id="provider-name"
+            value={provider.label ?? ''}
+            onChange={(event) => {
+              setProvider({
+                ...provider,
+                label: event.target.value,
+              });
+            }}
+          />
+
+          {isWebSocket && (
+            <>
+              <label htmlFor="websocket-url">WebSocket URL</label>
+              <input
+                id="websocket-url"
+                value={provider.config.url ?? ''}
+                onChange={(event) => {
+                  setProvider({
+                    ...provider,
+                    config: {
+                      ...provider.config,
+                      url: event.target.value,
+                    },
+                  });
+                }}
+              />
+            </>
+          )}
+
+          <div>Test Target Configuration</div>
+          <button type="button" onClick={runTargetTest} disabled={!canTestTarget}>
+            Test Target
+          </button>
+          {targetMessage && <div>{targetMessage}</div>}
+
+          <div>Test Session Configuration</div>
+          <button type="button" onClick={runSessionTest}>
+            Test Session
+          </button>
+          {sessionMessage && <div>{sessionMessage}</div>}
+        </div>
+      );
+    },
+  };
+});
 vi.mock('../PageWrapper', () => ({
   default: ({
     children,

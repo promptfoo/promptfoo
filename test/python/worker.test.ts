@@ -13,10 +13,11 @@ const TEST_TIMEOUT = process.platform === 'win32' ? 90000 : 15000;
 const describeOrSkip = process.platform === 'win32' && process.env.CI ? describe.skip : describe;
 
 describeOrSkip('PythonWorker', () => {
-  let worker: PythonWorker;
+  let sharedWorker: PythonWorker;
+  let worker: PythonWorker | undefined;
   const testScriptPath = path.join(__dirname, 'fixtures', 'simple_provider.py');
 
-  beforeAll(() => {
+  beforeAll(async () => {
     // Create test fixture
     const fixturesDir = path.join(__dirname, 'fixtures');
     if (!fs.existsSync(fixturesDir)) {
@@ -30,24 +31,27 @@ def call_api(prompt, options, context):
     return {"output": f"Echo: {prompt}"}
 `,
     );
+
+    sharedWorker = new PythonWorker(testScriptPath, 'call_api');
+    await sharedWorker.initialize();
   });
 
-  afterAll(() => {
+  afterAll(async () => {
+    await sharedWorker.shutdown();
     fs.unlinkSync(testScriptPath);
   });
 
   afterEach(async () => {
     if (worker) {
       await worker.shutdown();
+      worker = undefined;
     }
   });
 
   it(
     'should initialize and become ready',
     async () => {
-      worker = new PythonWorker(testScriptPath, 'call_api');
-      await worker.initialize();
-      expect(worker.isReady()).toBe(true);
+      expect(sharedWorker.isReady()).toBe(true);
     },
     TEST_TIMEOUT,
   );
@@ -55,10 +59,7 @@ def call_api(prompt, options, context):
   it(
     'should execute a function call',
     async () => {
-      worker = new PythonWorker(testScriptPath, 'call_api');
-      await worker.initialize();
-
-      const result = (await worker.call('call_api', ['Hello world', {}, {}])) as {
+      const result = (await sharedWorker.call('call_api', ['Hello world', {}, {}])) as {
         output: string;
       };
       expect(result.output).toBe('Echo: Hello world');
@@ -69,11 +70,12 @@ def call_api(prompt, options, context):
   it(
     'should reuse the same process for multiple calls',
     async () => {
-      worker = new PythonWorker(testScriptPath, 'call_api');
-      await worker.initialize();
-
-      const result1 = (await worker.call('call_api', ['First', {}, {}])) as { output: string };
-      const result2 = (await worker.call('call_api', ['Second', {}, {}])) as { output: string };
+      const result1 = (await sharedWorker.call('call_api', ['First', {}, {}])) as {
+        output: string;
+      };
+      const result2 = (await sharedWorker.call('call_api', ['Second', {}, {}])) as {
+        output: string;
+      };
 
       expect(result1.output).toBe('Echo: First');
       expect(result2.output).toBe('Echo: Second');
