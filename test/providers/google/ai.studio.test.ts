@@ -491,7 +491,14 @@ describe('AIStudioChatProvider', () => {
         headers: {},
       });
 
-      const response = await provider.callApi('test prompt', { bustCache: true });
+      const response = await provider.callApi('test prompt', {
+        bustCache: true,
+        prompt: {
+          raw: 'test prompt',
+          label: 'test prompt',
+        },
+        vars: {},
+      });
 
       expect(response.output).toBe('fresh gemma response');
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
