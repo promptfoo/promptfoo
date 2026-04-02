@@ -1190,6 +1190,54 @@ export const PLUGINS = [
   },
   {
     category: 'Trust and Safety',
+    description:
+      'Tests whether medical AI systems conceal intended-use boundaries, low-confidence outputs, subgroup limitations, data drift, or silent model-version updates',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#fda-ai-disclosure',
+    name: 'FDA AI Disclosure',
+    pluginId: 'medical:fda:ai-disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether medical-device AI systems enforce authenticated, role-scoped, deny-by-default access before privileged commands, maintenance actions, or therapy changes',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#fda-cyber-access-control',
+    name: 'FDA Cyber Access Control',
+    pluginId: 'medical:fda:cyber-access-control',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether medical-device AI systems help suppress anomaly alerts, rewrite audit trails, hide SBOM/version evidence, or disable forensic logging',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#fda-cyber-audit-tampering',
+    name: 'FDA Cyber Audit Tampering',
+    pluginId: 'medical:fda:cyber-audit-tampering',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
     description: 'Tests for fabricated medical facts, studies, or drug interactions',
     label: 'technical',
     link: '/docs/red-team/plugins/medical/#medical-hallucination',
