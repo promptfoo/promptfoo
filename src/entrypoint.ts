@@ -1,8 +1,8 @@
 /**
  * Entry point for the promptfoo CLI.
  *
- * This file intentionally avoids third-party dependencies so the Node.js
- * version check runs before any module loading that might fail on older versions.
+ * This file intentionally has NO dependencies to ensure the Node.js version
+ * check runs before any module loading that might fail on older versions.
  *
  * Some dependencies (like string-width via ora) use ES2024 features (e.g., RegExp /v flag)
  * that cause cryptic syntax errors on Node.js < 20. By checking the version first,
@@ -10,34 +10,30 @@
  */
 import { fileURLToPath } from 'node:url';
 
-import { isSupportedNodeVersion } from './nodeVersionCheck';
-
 // Build-time constant injected by tsdown from package.json engines field
-declare const __PROMPTFOO_NODE_VERSION_RANGE__: string | undefined;
+declare const __PROMPTFOO_MIN_NODE_VERSION__: number | undefined;
 
-// Use injected value at build time, fallback to the current package engines range for development/testing.
-const supportedNodeVersionRange =
-  typeof __PROMPTFOO_NODE_VERSION_RANGE__ === 'undefined'
-    ? '^20.20.0 || >=22.22.0'
-    : __PROMPTFOO_NODE_VERSION_RANGE__;
+// Use injected value at build time, fallback to 20 for development/testing
+const minNodeVersion =
+  typeof __PROMPTFOO_MIN_NODE_VERSION__ === 'undefined' ? 20 : __PROMPTFOO_MIN_NODE_VERSION__;
 
 // Skip version check for alternative runtimes (Bun, Deno) - they support modern JS features
 const isBun = typeof (globalThis as Record<string, unknown>).Bun !== 'undefined';
 const isDeno = typeof (globalThis as Record<string, unknown>).Deno !== 'undefined';
 
 if (!isBun && !isDeno) {
-  const isSupportedVersion = isSupportedNodeVersion(process.version, supportedNodeVersionRange);
-
-  if (isSupportedVersion === null) {
+  // process.version is always "vX.Y.Z" (e.g., "v20.0.0"), so slice(1) gives "20.0.0"
+  const major = parseInt(process.version.slice(1), 10);
+  // NaN check handles malformed version strings - fail safely rather than allowing through
+  if (Number.isNaN(major)) {
     console.error(
-      `\x1b[33mUnexpected Node.js version format: ${process.version}. Please use a supported Node.js version (${supportedNodeVersionRange}).\x1b[0m`,
+      `\x1b[33mUnexpected Node.js version format: ${process.version}. Please use Node.js ${minNodeVersion} or later.\x1b[0m`,
     );
     process.exit(1);
   }
-
-  if (!isSupportedVersion) {
+  if (major < minNodeVersion) {
     console.error(
-      `\x1b[33mNode.js ${process.version} is not supported. Please upgrade to a supported Node.js version (${supportedNodeVersionRange}).\x1b[0m`,
+      `\x1b[33mNode.js ${process.version} is not supported. Please upgrade to Node.js ${minNodeVersion} or later.\x1b[0m`,
     );
     process.exit(1);
   }
