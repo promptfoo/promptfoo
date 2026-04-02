@@ -608,6 +608,8 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
 
   it('maintains expanded state if second click is after threshold', async () => {
     const longValue = 'a'.repeat(400);
+    let now = 1_000;
+    const dateNowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
     const propsWithLongValue = {
       ...defaultProps,
       metadata: {
@@ -626,13 +628,14 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
 
     expect(screen.getByText(longValue)).toBeInTheDocument();
 
-    // Wait just over the double-click threshold (300ms) using real delay
-    await new Promise((resolve) => setTimeout(resolve, 310));
+    // Advance logical time beyond the double-click threshold without a real delay.
+    now += 310;
 
     // Second click should keep it expanded (not counted as double-click)
     await user.click(cell);
 
     expect(screen.getByText(longValue)).toBeInTheDocument();
+    dateNowSpy.mockRestore();
   });
 
   it('should reset filters, apply the selected metadata filter, and close the dialog when the filter button is clicked in the Metadata tab', async () => {
