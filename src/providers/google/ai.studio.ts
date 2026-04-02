@@ -27,6 +27,11 @@ import type { CompletionOptions } from './types';
 import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
+const GENERATE_CONTENT_MODEL_PREFIXES = ['gemini', 'gemma', 'codegemma', 'paligemma'];
+
+function usesGenerateContentApi(modelName: string): boolean {
+  return GENERATE_CONTENT_MODEL_PREFIXES.some((prefix) => modelName.startsWith(prefix));
+}
 
 class AIStudioGenericProvider implements ApiProvider {
   modelName: string;
@@ -245,8 +250,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       );
     }
 
-    const isGemini = this.modelName.startsWith('gemini');
-    if (isGemini) {
+    if (usesGenerateContentApi(this.modelName)) {
       return this.callGemini(prompt, context);
     }
 

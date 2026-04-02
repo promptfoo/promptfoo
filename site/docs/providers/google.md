@@ -5,7 +5,7 @@ description: Configure Google's Gemini models with support for text, images, and
 
 # Google AI / Gemini
 
-The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's state-of-the-art language models with support for text, images, and video inputs.
+The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's Gemini and hosted Gemma models with support for text, images, and video inputs.
 
 If you are using Vertex AI instead of Google AI Studio, see the [`vertex` provider](/docs/providers/vertex).
 
@@ -133,10 +133,11 @@ promptfoo eval
 
 ### 2. Comparing Models
 
-Compare different Gemini models:
+Compare different Gemini and Gemma models:
 
 ```yaml
 providers:
+  - google:gemma-4-31b-it
   - google:gemini-2.5-flash
   - google:gemini-2.5-pro
   - google:gemini-2.0-flash

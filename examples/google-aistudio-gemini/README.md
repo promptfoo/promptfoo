@@ -1,4 +1,4 @@
-# google-aistudio-gemini (Google AI Studio (Gemini) Example)
+# google-aistudio-gemini (Google AI Studio (Gemini and Gemma) Example)
 
 You can run this example with:
 
@@ -7,7 +7,7 @@ npx promptfoo@latest init --example google-aistudio-gemini
 cd google-aistudio-gemini
 ```
 
-This example demonstrates using Google's Gemini models with promptfoo to evaluate math puzzle solving capabilities.
+This example demonstrates using Google's Gemini and Gemma models with promptfoo to evaluate math puzzle solving capabilities.
 
 ## Prerequisites
 
@@ -18,6 +18,7 @@ This example demonstrates using Google's Gemini models with promptfoo to evaluat
 
 The example tests across multiple Gemini models:
 
+- **Gemma 4 31B IT** - Open model with strong reasoning, coding, and agentic capabilities
 - **Gemini 2.5 Pro** - Latest stable model with enhanced reasoning, coding, and multimodal understanding
 - **Gemini 2.5 Flash** - Latest stable Flash model with enhanced reasoning and thinking capabilities
 - **Gemini 2.5 Flash-Lite** - Most cost-efficient and fastest 2.5 model, optimized for high-volume, latency-sensitive tasks
