@@ -91,6 +91,18 @@ export type WebSearchMode = 'disabled' | 'cached' | 'live';
  */
 export type CollaborationMode = 'coding' | 'plan';
 
+type CodexPromptInputItem =
+  | {
+      type: 'text';
+      text: string;
+    }
+  | {
+      type: 'local_image';
+      path: string;
+    };
+
+type CodexPromptInput = string | CodexPromptInputItem[];
+
 const MINIMAL_CLI_ENV_KEYS = [
   'PATH',
   'Path',
@@ -963,7 +975,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
   private async runStreaming(
     thread: any,
-    prompt: string,
+    prompt: CodexPromptInput,
     runOptions: any,
     callOptions?: CallApiOptionsParams,
     skillRootPrefixes: readonly string[] = [],
@@ -986,7 +998,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const conversationMessages: Array<{ role: string; content: string }> = [];
 
     // Add the initial user prompt
-    conversationMessages.push({ role: 'user', content: prompt });
+    conversationMessages.push({ role: 'user', content: this.formatPromptInputForTrace(prompt) });
 
     try {
       for await (const event of events) {
@@ -1217,6 +1229,51 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       reasoningTexts,
       conversationMessages,
     };
+  }
+
+  private parsePromptInput(prompt: string): CodexPromptInput {
+    let parsedPrompt: unknown;
+    try {
+      parsedPrompt = JSON.parse(prompt);
+    } catch {
+      return prompt;
+    }
+
+    if (
+      !Array.isArray(parsedPrompt) ||
+      parsedPrompt.length === 0 ||
+      !parsedPrompt.every((item): item is CodexPromptInputItem => this.isCodexPromptInputItem(item))
+    ) {
+      return prompt;
+    }
+
+    return parsedPrompt;
+  }
+
+  private isCodexPromptInputItem(item: unknown): item is CodexPromptInputItem {
+    if (!item || typeof item !== 'object') {
+      return false;
+    }
+
+    if ('type' in item && item.type === 'text') {
+      return 'text' in item && typeof item.text === 'string';
+    }
+
+    if ('type' in item && item.type === 'local_image') {
+      return 'path' in item && typeof item.path === 'string';
+    }
+
+    return false;
+  }
+
+  private formatPromptInputForTrace(prompt: CodexPromptInput): string {
+    if (typeof prompt === 'string') {
+      return prompt;
+    }
+
+    return prompt
+      .map((item) => (item.type === 'text' ? item.text : `[local_image: ${item.path}]`))
+      .join('\n');
   }
 
   /**
@@ -1801,6 +1858,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       apiKey,
     );
     const skillRootPrefixes = this.getSkillRootPrefixes(env, resolvedConfig.working_dir);
+    const promptInput = this.parsePromptInput(prompt);
 
     if (apiKey) {
       logger.debug('[CodexSDK] Using explicit API credentials from promptfoo config/environment');
@@ -1899,8 +1957,14 @@ export class OpenAICodexSDKProvider implements ApiProvider {
             activeInstance,
           );
           const turnResult = resolvedConfig.enable_streaming
-            ? await this.runStreaming(thread, prompt, runOptions, callOptions, skillRootPrefixes)
-            : await thread.run(prompt, runOptions);
+            ? await this.runStreaming(
+                thread,
+                promptInput,
+                runOptions,
+                callOptions,
+                skillRootPrefixes,
+              )
+            : await thread.run(promptInput, runOptions);
 
           return {
             turn: turnResult,
