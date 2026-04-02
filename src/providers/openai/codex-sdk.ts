@@ -111,6 +111,7 @@ const MINIMAL_CLI_ENV_KEYS = [
 ] as const;
 
 const COMMON_OPTIONAL_PROCESS_ENV_KEYS = [
+  'CODEX_HOME',
   'HTTP_PROXY',
   'HTTPS_PROXY',
   'ALL_PROXY',
@@ -1175,6 +1176,15 @@ export class OpenAICodexSDKProvider implements ApiProvider {
             logger.error('Codex turn failed', { error: errorMsg });
             throw new Error(`Codex turn failed: ${errorMsg}`);
           }
+          case 'error': {
+            const errorMsg =
+              typeof event.message === 'string' && event.message ? event.message : 'Stream failed';
+            logger.error('Codex stream error', { error: errorMsg });
+            throw new Error(`Codex stream error: ${errorMsg}`);
+          }
+          case 'thread.started':
+          case 'turn.started':
+            break;
           default:
             // Log unknown event types for debugging
             logger.debug('Codex unknown event type', { type: event.type });
@@ -1652,7 +1662,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       ...context?.prompt?.config,
     };
 
-    const modelName = typeof config.model === 'string' && config.model ? config.model : 'codex';
+    const requestedModel =
+      typeof config.model === 'string' && config.model ? config.model : undefined;
+    const modelName = requestedModel ?? 'codex';
 
     // Build GenAI span context for tracing
     const spanContext: GenAISpanContext = {
@@ -1688,8 +1700,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         result.cacheHit = response.cached;
       }
 
-      // Confirm actual model used (may differ from requested)
-      result.responseModel = modelName;
+      // The current Codex SDK turn payload does not expose the backend-resolved model.
+      // Only set responseModel when the caller explicitly requested a model, so traces
+      // do not claim that the generic fallback label (`codex`) was the actual response model.
+      if (requestedModel) {
+        result.responseModel = requestedModel;
+      }
 
       if (response.output !== undefined) {
         try {
@@ -1772,10 +1788,19 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // This allows the Codex CLI to export its internal spans as children of our span
     const currentTraceparent = getTraceparent();
     const apiKey = this.getApiKey(config);
+    const workingDirectory = config.working_dir ?? process.cwd();
+    const resolvedConfig: OpenAICodexSDKConfig = {
+      ...config,
+      working_dir: workingDirectory,
+    };
 
     // Prepare environment with OTEL config for deep tracing
-    const env: Record<string, string> = this.prepareEnvironment(config, currentTraceparent, apiKey);
-    const skillRootPrefixes = this.getSkillRootPrefixes(env, config.working_dir);
+    const env: Record<string, string> = this.prepareEnvironment(
+      resolvedConfig,
+      currentTraceparent,
+      apiKey,
+    );
+    const skillRootPrefixes = this.getSkillRootPrefixes(env, resolvedConfig.working_dir);
 
     if (apiKey) {
       logger.debug('[CodexSDK] Using explicit API credentials from promptfoo config/environment');
@@ -1808,9 +1833,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Execute turn
     try {
-      if (config.working_dir) {
-        this.validateWorkingDirectory(config.working_dir, config.skip_git_repo_check);
-      }
+      this.validateWorkingDirectory(
+        resolvedConfig.working_dir as string,
+        resolvedConfig.skip_git_repo_check,
+      );
 
       // Load SDK module (lazy)
       if (!this.codexModule) {
@@ -1820,12 +1846,14 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       // Exclude TRACEPARENT from cache keys to preserve thread persistence across traces.
       const stableEnv = { ...env };
       delete stableEnv.TRACEPARENT;
-      const instanceKey = this.generateInstanceKey(stableEnv, config);
+      const instanceKey = this.generateInstanceKey(stableEnv, resolvedConfig);
 
       if (useLocalInstance) {
         // Warn about ignored thread options (only once)
         if (
-          (config.persist_threads || config.thread_id || (config.thread_pool_size ?? 0) > 1) &&
+          (resolvedConfig.persist_threads ||
+            resolvedConfig.thread_id ||
+            (resolvedConfig.thread_pool_size ?? 0) > 1) &&
           !this.deepTracingWarningShown
         ) {
           logger.warn(
@@ -1836,7 +1864,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         }
 
         // Create a fresh instance for this call only (not cached)
-        localInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config, apiKey));
+        localInstance = new this.codexModule.Codex(
+          this.buildCodexOptions(env, resolvedConfig, apiKey),
+        );
         activeInstance = localInstance;
       } else {
         // Standard caching path for non-deep-tracing mode.
@@ -1844,7 +1874,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         // with different prompt-level credentials/config do not tear each other down.
         activeInstance = this.codexInstances.get(instanceKey);
         if (!activeInstance) {
-          activeInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config, apiKey));
+          activeInstance = new this.codexModule.Codex(
+            this.buildCodexOptions(env, resolvedConfig, apiKey),
+          );
           this.codexInstances.set(instanceKey, activeInstance);
         }
       }
@@ -1852,21 +1884,21 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       // Persist threads by prompt template (when available) rather than rendered prompt values
       // so test vars can drive a multi-turn conversation on the same thread.
       const promptCacheBasis = context?.prompt?.raw ?? prompt;
-      cacheKey = this.generateCacheKey(config, promptCacheBasis, instanceKey);
+      cacheKey = this.generateCacheKey(resolvedConfig, promptCacheBasis, instanceKey);
 
-      const queueKey = this.getThreadRunQueueKey(config, cacheKey, instanceKey);
+      const queueKey = this.getThreadRunQueueKey(resolvedConfig, cacheKey, instanceKey);
       const { turn, sessionId } = await this.runSerializedThreadTurn(
         queueKey,
         callOptions?.abortSignal,
         async () => {
           // Get or create thread (pass instance to avoid using stale this.codexInstance)
           const thread = await this.getOrCreateThread(
-            config,
+            resolvedConfig,
             cacheKey,
             instanceKey,
             activeInstance,
           );
-          const turnResult = config.enable_streaming
+          const turnResult = resolvedConfig.enable_streaming
             ? await this.runStreaming(thread, prompt, runOptions, callOptions, skillRootPrefixes)
             : await thread.run(prompt, runOptions);
 
@@ -1904,8 +1936,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
       // Calculate cost from usage
       let cost = 0;
-      if (tokenUsage && config.model) {
-        const pricing = CODEX_MODEL_PRICING[config.model];
+      if (tokenUsage && resolvedConfig.model) {
+        const pricing = CODEX_MODEL_PRICING[resolvedConfig.model];
         if (pricing) {
           // Pricing is per 1M tokens. Some models have discounted cached input pricing.
           const cachedTokens = tokenUsage.cached || 0;
@@ -1945,7 +1977,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       };
     } finally {
       // Clean up ephemeral threads (only for non-deep-tracing mode)
-      if (!config.deep_tracing && !config.persist_threads && !config.thread_id && cacheKey) {
+      if (
+        !resolvedConfig.deep_tracing &&
+        !resolvedConfig.persist_threads &&
+        !resolvedConfig.thread_id &&
+        cacheKey
+      ) {
         this.threads.delete(cacheKey);
       }
 

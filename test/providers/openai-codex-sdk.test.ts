@@ -251,7 +251,7 @@ describe('OpenAICodexSDKProvider', () => {
         });
 
         expect(mockStartThread).toHaveBeenCalledWith({
-          workingDirectory: undefined,
+          workingDirectory: process.cwd(),
           skipGitRepoCheck: false,
         });
 
@@ -817,6 +817,24 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result.error).toMatch(/is not inside a Git repository/);
       });
 
+      it('should validate process.cwd() when working_dir is omitted', async () => {
+        existsSyncSpy.mockReturnValue(false);
+        const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue('/path/to/non-git-cwd');
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toMatch(
+          /Working directory \/path\/to\/non-git-cwd is not inside a Git repository/,
+        );
+        expect(mockStartThread).not.toHaveBeenCalled();
+
+        cwdSpy.mockRestore();
+      });
+
       it('should accept a repository subdirectory when a parent directory contains .git', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
         const repoRoot = path.join(path.parse(process.cwd()).root, 'repo');
@@ -1171,7 +1189,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         expect(mockResumeThread).toHaveBeenCalledWith('existing-thread-123', {
           skipGitRepoCheck: false,
-          workingDirectory: undefined,
+          workingDirectory: process.cwd(),
         });
         expect(mockStartThread).not.toHaveBeenCalled();
       });
@@ -1843,7 +1861,7 @@ describe('OpenAICodexSDKProvider', () => {
         await provider.callApi('Test prompt');
 
         expect(mockStartThread).toHaveBeenCalledWith({
-          workingDirectory: undefined,
+          workingDirectory: process.cwd(),
           skipGitRepoCheck: false,
           model: 'gpt-5.2',
         });
@@ -1859,7 +1877,7 @@ describe('OpenAICodexSDKProvider', () => {
         await provider.callApi('Test prompt');
 
         expect(mockStartThread).toHaveBeenCalledWith({
-          workingDirectory: undefined,
+          workingDirectory: process.cwd(),
           skipGitRepoCheck: false,
         });
       });
@@ -2007,6 +2025,36 @@ describe('OpenAICodexSDKProvider', () => {
           );
         } finally {
           delete process.env.PROMPTFOO_TEST_EXISTING;
+        }
+      });
+
+      it('should warn when CODEX_HOME from process.env is omitted from the default minimal CLI env', async () => {
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const originalCodexHome = process.env.CODEX_HOME;
+        process.env.CODEX_HOME = '/tmp/process-codex-home';
+
+        try {
+          const provider = new OpenAICodexSDKProvider({
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
+
+          await provider.callApi('Test prompt');
+
+          expect(warnSpy).toHaveBeenCalledWith(
+            '[CodexSDK] Common proxy/SSH/certificate process env vars are not inherited by default. ' +
+              'Move these keys into config.cli_env or set inherit_process_env: true if Codex CLI commands need them.',
+            {
+              envKeys: expect.arrayContaining(['CODEX_HOME']),
+            },
+          );
+        } finally {
+          if (originalCodexHome === undefined) {
+            delete process.env.CODEX_HOME;
+          } else {
+            process.env.CODEX_HOME = originalCodexHome;
+          }
+          warnSpy.mockRestore();
         }
       });
     });
@@ -2314,6 +2362,26 @@ describe('OpenAICodexSDKProvider', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toContain('Codex turn failed: Model overloaded');
+      });
+
+      it('should handle fatal stream error events', async () => {
+        const mockEvents = async function* () {
+          yield {
+            type: 'error',
+            message: 'Stream transport failed',
+          };
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Codex stream error: Stream transport failed');
       });
     });
   });
