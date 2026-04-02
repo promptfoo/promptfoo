@@ -33,6 +33,8 @@ function parseChatMessages(prompt: string): ChatMessage[] | undefined {
     if (
       Array.isArray(parsed) &&
       parsed.every(
+        // TODO(ian): Support multimodal chat content arrays and count only text parts instead of
+        // falling back to the full serialized JSON payload, which can include base64 media blobs.
         (item) =>
           isRecord(item) && typeof item.role === 'string' && typeof item.content === 'string',
       )

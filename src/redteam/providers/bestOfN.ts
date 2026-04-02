@@ -129,6 +129,8 @@ export default class BestOfNProvider implements ApiProvider {
           );
 
           try {
+            // TODO(ian): Pass the strategy/plugin metadata maxCharsPerMessage limit here so
+            // plugin-scoped caps are enforced even when no top-level redteam cap is configured.
             throwIfTargetPromptExceedsMaxChars(renderedPrompt);
             const response = await targetProvider.callApi(renderedPrompt, context, options);
             const sessionId = getSessionId(response, context);
