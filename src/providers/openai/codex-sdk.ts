@@ -600,13 +600,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
 
     if (!inheritProcessEnv && !this.omittedProcessEnvWarningShown) {
-      const omittedProcessEnvKeys = COMMON_OPTIONAL_PROCESS_ENV_KEYS.filter(
-        (key) => typeof process.env[key] === 'string' && !(key in env),
-      );
+      const omittedProcessEnvKeys = this.getOmittedOptionalProcessEnvKeys(config, env);
 
       if (omittedProcessEnvKeys.length > 0) {
         logger.warn(
-          '[CodexSDK] Common proxy/SSH/certificate process env vars are not inherited by default. ' +
+          '[CodexSDK] Optional Codex CLI process env vars are not inherited by default. ' +
             'Move these keys into config.cli_env or set inherit_process_env: true if Codex CLI commands need them.',
           { envKeys: omittedProcessEnvKeys },
         );
@@ -668,6 +666,23 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
 
     return sortedEnv;
+  }
+
+  private getOmittedOptionalProcessEnvKeys(
+    config: OpenAICodexSDKConfig,
+    env: Record<string, string>,
+  ): string[] {
+    const shouldWarnForSshEnv =
+      config.network_access_enabled === true ||
+      config.web_search_enabled === true ||
+      config.web_search_mode === 'live';
+
+    return COMMON_OPTIONAL_PROCESS_ENV_KEYS.filter(
+      (key) =>
+        typeof process.env[key] === 'string' &&
+        !(key in env) &&
+        (shouldWarnForSshEnv || (key !== 'SSH_AUTH_SOCK' && key !== 'GIT_SSH_COMMAND')),
+    );
   }
 
   private getResolvedCliConfig(config: OpenAICodexSDKConfig): Record<string, unknown> | undefined {

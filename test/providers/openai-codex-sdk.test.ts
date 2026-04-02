@@ -2077,7 +2077,7 @@ describe('OpenAICodexSDKProvider', () => {
           await provider.callApi('Test prompt');
 
           expect(warnSpy).toHaveBeenCalledWith(
-            '[CodexSDK] Common proxy/SSH/certificate process env vars are not inherited by default. ' +
+            '[CodexSDK] Optional Codex CLI process env vars are not inherited by default. ' +
               'Move these keys into config.cli_env or set inherit_process_env: true if Codex CLI commands need them.',
             {
               envKeys: expect.arrayContaining(['CODEX_HOME']),
@@ -2088,6 +2088,73 @@ describe('OpenAICodexSDKProvider', () => {
             delete process.env.CODEX_HOME;
           } else {
             process.env.CODEX_HOME = originalCodexHome;
+          }
+          warnSpy.mockRestore();
+        }
+      });
+
+      it('should not warn about omitted SSH agent vars when network and web search are disabled', async () => {
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const originalSshAuthSock = process.env.SSH_AUTH_SOCK;
+        process.env.SSH_AUTH_SOCK = '/tmp/ssh-agent.sock';
+
+        try {
+          const provider = new OpenAICodexSDKProvider({
+            config: {
+              network_access_enabled: false,
+              web_search_mode: 'disabled',
+            },
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
+
+          await provider.callApi('Test prompt');
+
+          expect(warnSpy).not.toHaveBeenCalledWith(
+            '[CodexSDK] Optional Codex CLI process env vars are not inherited by default. ' +
+              'Move these keys into config.cli_env or set inherit_process_env: true if Codex CLI commands need them.',
+            expect.objectContaining({
+              envKeys: expect.arrayContaining(['SSH_AUTH_SOCK']),
+            }),
+          );
+        } finally {
+          if (originalSshAuthSock === undefined) {
+            delete process.env.SSH_AUTH_SOCK;
+          } else {
+            process.env.SSH_AUTH_SOCK = originalSshAuthSock;
+          }
+          warnSpy.mockRestore();
+        }
+      });
+
+      it('should warn about omitted SSH agent vars when network access is enabled', async () => {
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const originalSshAuthSock = process.env.SSH_AUTH_SOCK;
+        process.env.SSH_AUTH_SOCK = '/tmp/ssh-agent.sock';
+
+        try {
+          const provider = new OpenAICodexSDKProvider({
+            config: {
+              network_access_enabled: true,
+            },
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
+
+          await provider.callApi('Test prompt');
+
+          expect(warnSpy).toHaveBeenCalledWith(
+            '[CodexSDK] Optional Codex CLI process env vars are not inherited by default. ' +
+              'Move these keys into config.cli_env or set inherit_process_env: true if Codex CLI commands need them.',
+            {
+              envKeys: expect.arrayContaining(['SSH_AUTH_SOCK']),
+            },
+          );
+        } finally {
+          if (originalSshAuthSock === undefined) {
+            delete process.env.SSH_AUTH_SOCK;
+          } else {
+            process.env.SSH_AUTH_SOCK = originalSshAuthSock;
           }
           warnSpy.mockRestore();
         }
