@@ -56,7 +56,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       logger.debug(`Using unknown chat model: ${modelName}`);
     }
     super(modelName, options);
-    this.config = options.config || {};
+    this.config = options.config ? { ...options.config } : {};
 
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
@@ -339,6 +339,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
     if (config.store !== undefined) {
       body.store = config.store;
+    }
+
+    // Sanitize body for models that reject max_tokens (e.g. GPT-5, reasoning models).
+    // This catches max_tokens introduced via passthrough or YAML anchors that bypass
+    // the normal maxTokens variable logic above.
+    if ((isReasoningModel || isGPT5Model) && 'max_tokens' in body) {
+      delete body.max_tokens;
     }
 
     return { body, config };
