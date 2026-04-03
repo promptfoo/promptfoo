@@ -17,7 +17,7 @@ import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover
 import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/commands/generate';
 import { Severity } from '../../../src/redteam/constants';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
-import { synthesize } from '../../../src/redteam/index';
+import { MAX_MAX_CONCURRENCY, synthesize } from '../../../src/redteam/index';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { PartialGenerationError } from '../../../src/redteam/types';
 import {
@@ -50,6 +50,7 @@ type SynthesizeMockResult = {
 
 vi.mock('node:fs');
 vi.mock('../../../src/redteam', () => ({
+  MAX_MAX_CONCURRENCY: 20,
   synthesize: vi.fn().mockResolvedValue({
     testCases: [],
     purpose: '',
@@ -2208,6 +2209,48 @@ describe('doGenerateRedteam', () => {
       ]);
 
       expect(cliState.maxConcurrency).toBe(9);
+    });
+
+    it('should cap cliState maxConcurrency at the redteam generation limit before synthesizing', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            maxConcurrency: 200,
+            plugins: [{ id: 'harmful', numTests: 1 }],
+          },
+        },
+        commandLineOptions: {},
+      });
+      vi.mocked(synthesize).mockImplementation(async () => {
+        expect(cliState.maxConcurrency).toBe(MAX_MAX_CONCURRENCY);
+        return {
+          testCases: [],
+          purpose: 'Test purpose',
+          entities: [],
+          injectVar: 'input',
+          failedPlugins: [],
+        } satisfies SynthesizeMockResult;
+      });
+
+      await doGenerateRedteam({
+        config: 'config.yaml',
+        output: 'output.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: false,
+      });
+
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          maxConcurrency: 200,
+        }),
+      );
     });
 
     it('should prioritize CLI maxConcurrency over commandLineOptions.maxConcurrency', async () => {

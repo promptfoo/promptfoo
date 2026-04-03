@@ -48,7 +48,7 @@ import {
   type Severity,
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
-import { synthesize } from '../index';
+import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
 import { PartialGenerationError } from '../types';
@@ -156,7 +156,8 @@ async function withGenerationConcurrency<T>(
   delay: number | undefined,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const effectiveMaxConcurrency = delay !== undefined && delay > 0 ? 1 : maxConcurrency;
+  const cappedMaxConcurrency = Math.min(maxConcurrency, MAX_MAX_CONCURRENCY);
+  const effectiveMaxConcurrency = delay !== undefined && delay > 0 ? 1 : cappedMaxConcurrency;
   return cliState.withMaxConcurrency(effectiveMaxConcurrency, fn);
 }
 
