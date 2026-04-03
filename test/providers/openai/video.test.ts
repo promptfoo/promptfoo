@@ -357,29 +357,36 @@ describe('OpenAiVideoProvider', () => {
     });
 
     it('should handle polling timeout', async () => {
-      const provider = new OpenAiVideoProvider('sora-2', {
-        config: {
-          apiKey: 'test-key',
-          poll_interval_ms: 10,
-          max_poll_time_ms: 50,
-        },
-      });
+      vi.useFakeTimers();
+      try {
+        const provider = new OpenAiVideoProvider('sora-2', {
+          config: {
+            apiKey: 'test-key',
+            poll_interval_ms: 10,
+            max_poll_time_ms: 50,
+          },
+        });
 
-      // Mock job creation
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_123', status: 'queued' }),
-      });
+        // Mock job creation
+        mockFetchWithProxy.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_123', status: 'queued' }),
+        });
 
-      // Always return in_progress to trigger timeout
-      mockFetchWithProxy.mockResolvedValue({
-        ok: true,
-        json: async () => ({ id: 'video_123', status: 'in_progress', progress: 10 }),
-      });
+        // Always return in_progress to trigger timeout
+        mockFetchWithProxy.mockResolvedValue({
+          ok: true,
+          json: async () => ({ id: 'video_123', status: 'in_progress', progress: 10 }),
+        });
 
-      const result = await provider.callApi('test prompt');
+        const resultPromise = provider.callApi('test prompt');
+        await vi.runAllTimersAsync();
+        const result = await resultPromise;
 
-      expect(result.error).toContain('timed out');
+        expect(result.error).toContain('timed out');
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should throw error if API key is not set', async () => {

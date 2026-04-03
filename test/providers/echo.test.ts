@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { EchoProvider } from '../../src/providers/echo';
 
 describe('EchoProvider', () => {
@@ -112,11 +112,18 @@ describe('EchoProvider', () => {
       const input = 'Test input';
       const provider = new EchoProvider({ delay: 100 });
 
-      const startTime = Date.now();
-      await provider.callApi(input);
-      const endTime = Date.now();
+      vi.useFakeTimers();
+      try {
+        const startTime = Date.now();
+        const responsePromise = provider.callApi(input);
 
-      expect(endTime - startTime).toBeGreaterThanOrEqual(90); // Allow for small timing variations
+        await vi.runAllTimersAsync();
+        await responsePromise;
+
+        expect(Date.now() - startTime).toBeGreaterThanOrEqual(100);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should handle empty input', async () => {
