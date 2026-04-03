@@ -102,10 +102,23 @@ def call_api(prompt, options, context):
 
   afterAll(async () => {
     // Cleanup providers
-    await Promise.all(providers.map((p) => p.shutdown().catch(() => {})));
+    const shutdownResults = await Promise.allSettled(
+      providers.map(async (provider) => ({
+        providerId: provider.id(),
+        result: await provider.shutdown(),
+      })),
+    );
+    const shutdownFailures = shutdownResults
+      .map((result, index) =>
+        result.status === 'rejected'
+          ? `${providers[index]?.id() ?? `provider-${index}`}: ${String(result.reason)}`
+          : null,
+      )
+      .filter((failure): failure is string => failure !== null);
+
     providers.length = 0;
 
-    if (fs.existsSync(tempDir)) {
+    if (tempDir && fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true });
     }
 
@@ -116,6 +129,10 @@ def call_api(prompt, options, context):
       delete process.env.PROMPTFOO_CACHE_ENABLED;
     } else {
       process.env.PROMPTFOO_CACHE_ENABLED = previousCacheEnabled;
+    }
+
+    if (shutdownFailures.length > 0) {
+      throw new Error(`PythonProvider shutdown failed: ${shutdownFailures.join('; ')}`);
     }
   });
 

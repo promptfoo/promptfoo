@@ -68,7 +68,12 @@ def call_embedding_api(prompt, options, context):
   });
 
   beforeEach(async () => {
-    await singleWorkerPool.execute('reset_call_count', []);
+    await Promise.all([
+      singleWorkerPool.execute('reset_call_count', []),
+      ...Array.from({ length: multiWorkerPool.getWorkerCount() }, () =>
+        multiWorkerPool.execute('reset_call_count', []),
+      ),
+    ]);
   });
 
   afterAll(async () => {
