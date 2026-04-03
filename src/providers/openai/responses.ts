@@ -169,6 +169,32 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return !this.isReasoningModel();
   }
 
+  private isAzureOpenAiHost(value: string | undefined): boolean {
+    return typeof value === 'string' && value.includes('openai.azure.com');
+  }
+
+  private getDeploymentCapabilities(config: OpenAiCompletionOptions) {
+    const hasAzureCustomDeploymentHost =
+      this.isAzureOpenAiHost(config.apiHost) || this.isAzureOpenAiHost(config.apiBaseUrl);
+    const isAzureResponsesDeploymentWithReasoningConfig =
+      hasAzureCustomDeploymentHost &&
+      (config.reasoning !== undefined || config.reasoning_effort !== undefined);
+    const isAzureResponsesDeploymentWithVerbosityConfig =
+      hasAzureCustomDeploymentHost && config.verbosity !== undefined;
+    const isReasoningModel =
+      this.isReasoningModel() ||
+      isAzureResponsesDeploymentWithReasoningConfig ||
+      isAzureResponsesDeploymentWithVerbosityConfig;
+    const isGPT5Model = this.isGPT5Model() || isAzureResponsesDeploymentWithVerbosityConfig;
+
+    return {
+      isAzureResponsesDeploymentWithReasoningConfig,
+      isAzureResponsesDeploymentWithVerbosityConfig,
+      isReasoningModel,
+      isGPT5Model,
+    };
+  }
+
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
@@ -191,25 +217,15 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       input = prompt;
     }
 
-    const isReasoningModel = this.isReasoningModel();
-    const maxOutputTokensDefault = config.omitDefaults
-      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
-        ? undefined
-        : getEnvInt('OPENAI_MAX_TOKENS')
-      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
-    const reasoningMaxOutputTokensDefault =
-      getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
+    const { isReasoningModel, isGPT5Model } = this.getDeploymentCapabilities(config);
     const maxOutputTokens =
       config.max_output_tokens ??
-      (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
+      (isReasoningModel
+        ? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS')
+        : getEnvInt('OPENAI_MAX_TOKENS', 1024));
 
-    const temperatureDefault = config.omitDefaults
-      ? getEnvString('OPENAI_TEMPERATURE') === undefined
-        ? undefined
-        : getEnvFloat('OPENAI_TEMPERATURE')
-      : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature = this.supportsTemperature()
-      ? (config.temperature ?? temperatureDefault)
+      ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
       : undefined;
     const reasoningEffort = isReasoningModel
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
@@ -255,7 +271,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     // Add verbosity for GPT-5 models if configured
-    if (this.isGPT5Model() && config.verbosity) {
+    if (isGPT5Model && config.verbosity) {
       textFormat = { ...textFormat, verbosity: config.verbosity };
     }
 
@@ -296,7 +312,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     // Handle reasoning parameters for o-series and gpt-5 models
     // Note: reasoning_effort is deprecated and has been moved to reasoning.effort
-    if (config.reasoning && this.isReasoningModel()) {
+    if (config.reasoning && isReasoningModel) {
       body.reasoning = config.reasoning;
     }
 
