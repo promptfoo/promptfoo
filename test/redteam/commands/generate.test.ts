@@ -141,11 +141,11 @@ vi.mock('../../../src/util/config/writer', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../src/cliState', () => ({
-  default: {
-    remote: false,
-  },
-}));
+vi.mock('../../../src/cliState', async (importOriginal) => {
+  const actual = (await importOriginal()) as typeof import('../../../src/cliState');
+  actual.default.remote = false;
+  return actual;
+});
 
 vi.mock('../../../src/globalConfig/cloud', async (importOriginal) => {
   return {
@@ -2043,7 +2043,7 @@ describe('doGenerateRedteam', () => {
       );
     });
 
-    it('should expose config maxConcurrency to cliState while synthesizing and restore it afterwards', async () => {
+    it('should expose config maxConcurrency to cliState only while synthesizing and preserve the outer process value', async () => {
       vi.mocked(configModule.resolveConfigs).mockResolvedValue({
         basePath: '/mock/path',
         testSuite: {
@@ -2059,6 +2059,7 @@ describe('doGenerateRedteam', () => {
         },
         commandLineOptions: {},
       });
+      cliState.maxConcurrency = 3;
       vi.mocked(synthesize).mockImplementation(async () => {
         expect(cliState.maxConcurrency).toBe(16);
         return {
@@ -2078,7 +2079,135 @@ describe('doGenerateRedteam', () => {
         write: false,
       });
 
-      expect(cliState.maxConcurrency).toBeUndefined();
+      expect(cliState.maxConcurrency).toBe(3);
+    });
+
+    it('should expose DEFAULT_MAX_CONCURRENCY to cliState while synthesizing when no explicit concurrency is set', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            plugins: [{ id: 'harmful', numTests: 1 }],
+          },
+        },
+        commandLineOptions: {},
+      });
+      cliState.maxConcurrency = 9;
+      vi.mocked(synthesize).mockImplementation(async () => {
+        expect(cliState.maxConcurrency).toBe(DEFAULT_MAX_CONCURRENCY);
+        return {
+          testCases: [],
+          purpose: 'Test purpose',
+          entities: [],
+          injectVar: 'input',
+          failedPlugins: [],
+        } satisfies SynthesizeMockResult;
+      });
+
+      await doGenerateRedteam({
+        config: 'config.yaml',
+        output: 'output.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: false,
+      });
+
+      expect(cliState.maxConcurrency).toBe(9);
+    });
+
+    it('should isolate concurrent synthesize calls with different maxConcurrency values', async () => {
+      let releaseFirstSynthesize: (() => void) | undefined;
+      let markFirstSynthesizeStarted: (() => void) | undefined;
+      const firstSynthesizeStarted = new Promise<void>((resolve) => {
+        markFirstSynthesizeStarted = resolve;
+      });
+      const releaseFirstSynthesizePromise = new Promise<void>((resolve) => {
+        releaseFirstSynthesize = resolve;
+      });
+
+      vi.mocked(configModule.resolveConfigs)
+        .mockResolvedValueOnce({
+          basePath: '/mock/path',
+          testSuite: {
+            providers: [mockProvider],
+            prompts: [{ raw: 'Test prompt', label: 'Test' }],
+            tests: [],
+          },
+          config: {
+            redteam: {
+              maxConcurrency: 16,
+              plugins: [{ id: 'harmful', numTests: 1 }],
+            },
+          },
+          commandLineOptions: {},
+        })
+        .mockResolvedValueOnce({
+          basePath: '/mock/path',
+          testSuite: {
+            providers: [mockProvider],
+            prompts: [{ raw: 'Test prompt', label: 'Test' }],
+            tests: [],
+          },
+          config: {
+            redteam: {
+              maxConcurrency: 3,
+              plugins: [{ id: 'harmful', numTests: 1 }],
+            },
+          },
+          commandLineOptions: {},
+        });
+
+      cliState.maxConcurrency = 9;
+      vi.mocked(synthesize)
+        .mockImplementationOnce(async () => {
+          expect(cliState.maxConcurrency).toBe(16);
+          markFirstSynthesizeStarted!();
+          await releaseFirstSynthesizePromise;
+          expect(cliState.maxConcurrency).toBe(16);
+          return {
+            testCases: [],
+            purpose: 'Test purpose',
+            entities: [],
+            injectVar: 'input',
+            failedPlugins: [],
+          } satisfies SynthesizeMockResult;
+        })
+        .mockImplementationOnce(async () => {
+          await firstSynthesizeStarted;
+          expect(cliState.maxConcurrency).toBe(3);
+          releaseFirstSynthesize!();
+          return {
+            testCases: [],
+            purpose: 'Test purpose',
+            entities: [],
+            injectVar: 'input',
+            failedPlugins: [],
+          } satisfies SynthesizeMockResult;
+        });
+
+      await Promise.all([
+        doGenerateRedteam({
+          config: 'config-a.yaml',
+          output: 'output-a.yaml',
+          cache: true,
+          defaultConfig: {},
+          write: false,
+        }),
+        doGenerateRedteam({
+          config: 'config-b.yaml',
+          output: 'output-b.yaml',
+          cache: true,
+          defaultConfig: {},
+          write: false,
+        }),
+      ]);
+
+      expect(cliState.maxConcurrency).toBe(9);
     });
 
     it('should prioritize CLI maxConcurrency over commandLineOptions.maxConcurrency', async () => {
@@ -2281,6 +2410,43 @@ describe('doGenerateRedteam', () => {
         cache: true,
         defaultConfig: {},
         delay: 1000, // CLI override
+        write: false,
+      };
+
+      await doGenerateRedteam(options);
+
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          delay: 1000,
+        }),
+      );
+    });
+
+    it('should prioritize CLI delay over redteamConfig.delay', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            delay: 200,
+            plugins: [{ id: 'harmful', numTests: 1 }],
+          },
+        },
+        commandLineOptions: {
+          delay: 500,
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        config: 'config.yaml',
+        output: 'output.yaml',
+        cache: true,
+        defaultConfig: {},
+        delay: 1000,
         write: false,
       };
 

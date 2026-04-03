@@ -154,22 +154,10 @@ function createHeaderComments({
 async function withGenerationConcurrency<T>(
   maxConcurrency: number,
   delay: number | undefined,
-  hasExplicitMaxConcurrency: boolean,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const previousMaxConcurrency = cliState.maxConcurrency;
-
-  if (delay !== undefined && delay > 0) {
-    cliState.maxConcurrency = 1;
-  } else if (hasExplicitMaxConcurrency) {
-    cliState.maxConcurrency = maxConcurrency;
-  }
-
-  try {
-    return await fn();
-  } finally {
-    cliState.maxConcurrency = previousMaxConcurrency;
-  }
+  const effectiveMaxConcurrency = delay !== undefined && delay > 0 ? 1 : maxConcurrency;
+  return cliState.withMaxConcurrency(effectiveMaxConcurrency, fn);
 }
 
 export async function doGenerateRedteam(
@@ -489,8 +477,8 @@ export async function doGenerateRedteam(
     purpose: redteamConfig?.purpose ?? options.purpose,
     strategies: strategyObjs,
     delay:
-      redteamConfig?.delay ??
       options.delay ??
+      redteamConfig?.delay ??
       commandLineOptions?.delay ??
       resolvedConfig?.evaluateOptions?.delay,
     sharing: redteamConfig?.sharing || options.sharing,
@@ -567,7 +555,6 @@ export async function doGenerateRedteam(
       const contextResult = await withGenerationConcurrency(
         config.maxConcurrency,
         config.delay,
-        explicitMaxConcurrency !== undefined,
         () =>
           synthesize({
             ...parsedConfig.data,
@@ -626,24 +613,20 @@ export async function doGenerateRedteam(
     );
   } else {
     // Single purpose mode (existing behavior)
-    const result = await withGenerationConcurrency(
-      config.maxConcurrency,
-      config.delay,
-      explicitMaxConcurrency !== undefined,
-      () =>
-        synthesize({
-          ...parsedConfig.data,
-          inputs: targetInputs,
-          purpose: enhancedPurpose,
-          numTests: config.numTests,
-          prompts: testSuite.prompts.map((prompt) => prompt.raw),
-          maxConcurrency: config.maxConcurrency,
-          delay: config.delay,
-          abortSignal: options.abortSignal,
-          targetIds,
-          showProgressBar: options.progressBar !== false,
-          testGenerationInstructions: augmentedTestGenerationInstructions,
-        } as SynthesizeOptions),
+    const result = await withGenerationConcurrency(config.maxConcurrency, config.delay, () =>
+      synthesize({
+        ...parsedConfig.data,
+        inputs: targetInputs,
+        purpose: enhancedPurpose,
+        numTests: config.numTests,
+        prompts: testSuite.prompts.map((prompt) => prompt.raw),
+        maxConcurrency: config.maxConcurrency,
+        delay: config.delay,
+        abortSignal: options.abortSignal,
+        targetIds,
+        showProgressBar: options.progressBar !== false,
+        testGenerationInstructions: augmentedTestGenerationInstructions,
+      } as SynthesizeOptions),
     );
 
     redteamTests = result.testCases;
