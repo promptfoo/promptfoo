@@ -1971,8 +1971,12 @@ class Evaluator {
     // Separate serial and concurrent eval options
     const serialRunEvalOptions: RunEvalOptions[] = [];
     const concurrentRunEvalOptions: RunEvalOptions[] = [];
+    // O(1) lookup for the original index of each eval step (avoids O(n) indexOf in hot loop)
+    const evalStepIndexMap = new Map<RunEvalOptions, number>();
 
-    for (const evalOption of runEvalOptions) {
+    for (let i = 0; i < runEvalOptions.length; i++) {
+      const evalOption = runEvalOptions[i];
+      evalStepIndexMap.set(evalOption, i);
       if (evalOption.test.options?.runSerially) {
         serialRunEvalOptions.push(evalOption);
       } else {
@@ -2010,7 +2014,7 @@ class Evaluator {
               `[${numComplete}/${runEvalOptions.length}] Running ${provider} with vars: ${vars}`,
             );
           }
-          const idx = runEvalOptions.indexOf(evalStep);
+          const idx = evalStepIndexMap.get(evalStep)!;
           await processEvalStepWithTimeout(evalStep, idx);
           processedIndices.add(idx);
         }
@@ -2021,7 +2025,7 @@ class Evaluator {
       // Then run concurrent evaluations
       await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep) => {
         checkAbort();
-        const idx = runEvalOptions.indexOf(evalStep);
+        const idx = evalStepIndexMap.get(evalStep)!;
         await processEvalStepWithTimeout(evalStep, idx);
         processedIndices.add(idx);
         await this.evalRecord.addPrompts(prompts);
