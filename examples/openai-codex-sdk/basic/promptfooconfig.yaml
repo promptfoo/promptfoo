@@ -17,5 +17,3 @@ tests:
     assert:
       - type: contains
         value: 'def factorial'
-      - type: llm-rubric
-        value: 'Should generate working Python code for factorial calculation'
