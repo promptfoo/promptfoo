@@ -2247,6 +2247,8 @@ class Evaluator {
       logger.info(`Processing ${maxScoreRowsCount} max-score assertions...`);
 
       for (const testIdx of rowsWithMaxScoreAssertion) {
+        compareCount++;
+
         const resultsToCompare = this.evalRecord.persisted
           ? await this.evalRecord.fetchResultsByTestIdx(testIdx)
           : this.evalRecord.results.filter((r) => r.testIdx === testIdx);
