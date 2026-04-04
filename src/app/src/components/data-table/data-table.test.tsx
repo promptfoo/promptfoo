@@ -907,6 +907,8 @@ describe('DataTable', () => {
     expect(headerCells[1].className).not.toContain('overflow-hidden');
     expect(headerCells[2].className).toContain('px-4');
     expect(headerCells[2].className).toContain('overflow-hidden');
+    expect(headerCells[3].className).toContain('px-4');
+    expect(headerCells[3].className).toContain('overflow-hidden');
   });
 
   describe('cell content wrapper', () => {
