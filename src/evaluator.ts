@@ -2023,12 +2023,20 @@ class Evaluator {
       }
 
       // Then run concurrent evaluations
+      // Throttle addPrompts to avoid a DB write on every concurrent step.
+      // The final addPrompts call after comparisons ensures the last state is always persisted.
+      let lastPromptsFlush = 0;
+      const PROMPTS_FLUSH_INTERVAL_MS = 1000;
       await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep) => {
         checkAbort();
         const idx = evalStepIndexMap.get(evalStep)!;
         await processEvalStepWithTimeout(evalStep, idx);
         processedIndices.add(idx);
-        await this.evalRecord.addPrompts(prompts);
+        const now = Date.now();
+        if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
+          lastPromptsFlush = now;
+          await this.evalRecord.addPrompts(prompts);
+        }
       });
     } catch (err) {
       if (combinedAbortSignal.aborted) {
