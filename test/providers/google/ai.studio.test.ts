@@ -429,7 +429,84 @@ describe('AIStudioChatProvider', () => {
         }),
         expect.any(Number),
         'json',
-        undefined,
+        false,
+      );
+    });
+  });
+
+  describe('Gemma models', () => {
+    it('should route Gemma 4 models to the generateContent API', async () => {
+      const provider = new AIStudioChatProvider('gemma-4-31b-it', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'gemma response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 8,
+            candidatesTokenCount: 4,
+            totalTokenCount: 12,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(response.output).toBe('gemma response');
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('/v1beta/models/gemma-4-31b-it:generateContent'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining(
+            '"contents":[{"parts":[{"text":"test prompt"}],"role":"user"}]',
+          ),
+        }),
+        expect.any(Number),
+        'json',
+        false,
+      );
+    });
+
+    it('should preserve cache busting for Gemma models routed through generateContent', async () => {
+      const provider = new AIStudioChatProvider('gemma-4-31b-it', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'fresh gemma response' }] } }],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callApi('test prompt', {
+        bustCache: true,
+        prompt: {
+          raw: 'test prompt',
+          label: 'test prompt',
+        },
+        vars: {},
+      });
+
+      expect(response.output).toBe('fresh gemma response');
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        expect.any(Number),
+        'json',
+        true,
       );
     });
   });
