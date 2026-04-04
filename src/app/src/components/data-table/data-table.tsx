@@ -23,12 +23,170 @@ import type {
   ColumnFiltersState,
   ColumnSizingState,
   ExpandedState,
+  Header,
   RowSelectionState,
   SortingState,
   VisibilityState,
 } from '@tanstack/react-table';
 
 import type { DataTableProps } from './types';
+
+const UTILITY_COLUMN_IDS = new Set(['select', 'expand']);
+
+type DataTableHeaderActionsProps<TData, TValue> = {
+  canFilter: boolean;
+  canSort: boolean;
+  header: Header<TData, TValue>;
+  isFiltered: boolean;
+  isRightAligned: boolean;
+  sortDirection: false | 'asc' | 'desc';
+};
+
+type DataTableHeaderSortButtonProps = {
+  onToggleSorting?: (event: unknown) => void;
+  sortDirection: false | 'asc' | 'desc';
+};
+
+function renderDataTableHeaderSortButton({
+  onToggleSorting,
+  sortDirection,
+}: DataTableHeaderSortButtonProps) {
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className={cn(
+        'h-6 w-6 p-0',
+        sortDirection ? 'text-blue-700 dark:text-blue-100' : 'text-zinc-400 dark:text-zinc-500',
+      )}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggleSorting?.(e);
+      }}
+    >
+      {sortDirection === 'asc' ? (
+        <ArrowUp className="size-4" />
+      ) : sortDirection === 'desc' ? (
+        <ArrowDown className="size-4" />
+      ) : (
+        <ArrowUpDown className="size-4" />
+      )}
+    </Button>
+  );
+}
+
+function renderDataTableHeaderActions<TData, TValue>({
+  canFilter,
+  canSort,
+  header,
+  isFiltered,
+  isRightAligned,
+  sortDirection,
+}: DataTableHeaderActionsProps<TData, TValue>) {
+  if (!canSort && !canFilter) {
+    return null;
+  }
+
+  return (
+    <span
+      className={cn(
+        'absolute top-1/2 -translate-y-1/2 flex items-center gap-0.5',
+        'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity',
+        'bg-inherit',
+        isRightAligned ? 'left-0 pr-1' : 'right-0 pl-1',
+        (sortDirection || isFiltered) && 'opacity-100 pointer-events-auto',
+      )}
+    >
+      {canSort &&
+        renderDataTableHeaderSortButton({
+          onToggleSorting: header.column.getToggleSortingHandler(),
+          sortDirection,
+        })}
+      {canFilter && <DataTableHeaderFilter column={header.column} />}
+    </span>
+  );
+}
+
+function renderDataTableHeaderResizeHandle<TData, TValue>(header: Header<TData, TValue>) {
+  if (!header.column.getCanResize()) {
+    return null;
+  }
+
+  return (
+    <div
+      onMouseDown={header.getResizeHandler()}
+      onTouchStart={header.getResizeHandler()}
+      onClick={(e) => e.stopPropagation()}
+      className="group/resize absolute -right-[5px] top-0 z-[1] h-full w-[10px] cursor-col-resize select-none touch-none flex items-center justify-center"
+    >
+      <div
+        className={cn(
+          'h-[calc(100%-22px)] w-[1.5px] rounded-sm bg-zinc-300 dark:bg-zinc-600 transition-all duration-200',
+          'group-hover/resize:w-[3px] group-hover/resize:bg-zinc-500 dark:group-hover/resize:bg-zinc-400 group-hover/resize:rounded',
+          header.column.getIsResizing() && 'w-[3px] bg-zinc-500/70 dark:bg-zinc-400/70 rounded',
+        )}
+      />
+    </div>
+  );
+}
+
+function renderDataTableHeaderCell<TData, TValue = unknown>(header: Header<TData, TValue>) {
+  const canSort = header.column.getCanSort();
+  const canFilter = header.column.getCanFilter();
+  const isFiltered = header.column.getIsFiltered();
+  const isRightAligned = header.column.columnDef.meta?.align === 'right';
+  const sortDirection = header.column.getIsSorted();
+  const headerSize = `${header.getSize()}px`;
+  const isUtilityColumn = UTILITY_COLUMN_IDS.has(header.column.id);
+
+  return (
+    <th
+      key={header.id}
+      className={cn(
+        'group py-3 text-sm font-medium relative bg-white dark:bg-zinc-900',
+        isRightAligned ? 'text-right' : 'text-left',
+        isUtilityColumn ? 'px-3' : 'px-4 overflow-hidden',
+        canSort && 'cursor-pointer select-none',
+      )}
+      style={{
+        width: headerSize,
+        minWidth: headerSize,
+        maxWidth: headerSize,
+      }}
+      onClick={header.column.getToggleSortingHandler()}
+    >
+      {header.isPlaceholder ? null : (
+        <div
+          className={cn(
+            'relative min-w-0 overflow-hidden',
+            isRightAligned && 'flex flex-row-reverse',
+          )}
+        >
+          <span className="truncate block">
+            {flexRender(header.column.columnDef.header, header.getContext())}
+          </span>
+          {renderDataTableHeaderActions({
+            canFilter,
+            canSort,
+            header,
+            isFiltered,
+            isRightAligned,
+            sortDirection,
+          })}
+        </div>
+      )}
+      {renderDataTableHeaderResizeHandle(header)}
+    </th>
+  );
+}
+
+function shouldShowEmptyDataState(
+  hasData: boolean,
+  globalFilter: string,
+  columnFilters: ColumnFiltersState,
+) {
+  return !hasData && !(globalFilter || columnFilters.length > 0);
+}
 
 export function DataTable<TData, TValue = unknown>({
   columns,
@@ -348,12 +506,11 @@ export function DataTable<TData, TValue = unknown>({
   }
 
   const hasData = table.getRowModel().rows.length > 0;
-  const hasActiveFilters = globalFilter || columnFilters.length > 0;
 
   // Show initial empty state only when there's no data AND no active filters
   // If filters are active but return no results, we show the table with "no results" message
   // so users can still access the toolbar to clear/modify their filters
-  if (!hasData && !hasActiveFilters) {
+  if (shouldShowEmptyDataState(hasData, globalFilter, columnFilters)) {
     return (
       <div className={cn('space-y-4 pb-4', className)}>
         {showToolbar && toolbarActions && (
@@ -422,107 +579,7 @@ export function DataTable<TData, TValue = unknown>({
                   key={headerGroup.id}
                   className="border-b border-zinc-200 dark:border-zinc-800 print:border-gray-300"
                 >
-                  {headerGroup.headers.map((header) => {
-                    const canSort = header.column.getCanSort();
-                    const sortDirection = header.column.getIsSorted();
-                    const canResize = header.column.getCanResize();
-                    const canFilter = header.column.getCanFilter();
-                    const align = header.column.columnDef.meta?.align ?? 'left';
-                    const isRightAligned = align === 'right';
-                    const headerSize = `${header.getSize()}px`;
-
-                    return (
-                      <th
-                        key={header.id}
-                        className={cn(
-                          'group py-3 text-sm font-medium relative bg-white dark:bg-zinc-900',
-                          isRightAligned ? 'text-right' : 'text-left',
-                          header.column.id === 'select' || header.column.id === 'expand'
-                            ? 'px-3'
-                            : 'px-4 overflow-hidden',
-                          canSort && 'cursor-pointer select-none',
-                        )}
-                        style={{
-                          width: headerSize,
-                          minWidth: headerSize,
-                          maxWidth: headerSize,
-                        }}
-                        onClick={header.column.getToggleSortingHandler()}
-                      >
-                        {header.isPlaceholder ? null : (
-                          <div
-                            className={cn(
-                              'relative min-w-0 overflow-hidden',
-                              isRightAligned && 'flex flex-row-reverse',
-                            )}
-                          >
-                            <span className="truncate block">
-                              {flexRender(header.column.columnDef.header, header.getContext())}
-                            </span>
-                            {(canSort || canFilter) && (
-                              <span
-                                className={cn(
-                                  'absolute top-1/2 -translate-y-1/2 flex items-center gap-0.5',
-                                  'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity',
-                                  'bg-inherit',
-                                  isRightAligned ? 'left-0 pr-1' : 'right-0 pl-1',
-                                  // When sort is active, always show
-                                  sortDirection && 'opacity-100 pointer-events-auto',
-                                  // When filter is active, always show
-                                  header.column.getIsFiltered() &&
-                                    'opacity-100 pointer-events-auto',
-                                )}
-                              >
-                                {canSort && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className={cn(
-                                      'h-6 w-6 p-0',
-                                      sortDirection
-                                        ? 'text-blue-700 dark:text-blue-100'
-                                        : 'text-zinc-400 dark:text-zinc-500',
-                                    )}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      header.column.getToggleSortingHandler()?.(e);
-                                    }}
-                                  >
-                                    {sortDirection === 'asc' ? (
-                                      <ArrowUp className="size-4" />
-                                    ) : sortDirection === 'desc' ? (
-                                      <ArrowDown className="size-4" />
-                                    ) : (
-                                      <ArrowUpDown className="size-4" />
-                                    )}
-                                  </Button>
-                                )}
-                                {canFilter && <DataTableHeaderFilter column={header.column} />}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        {/* Column resize handle */}
-                        {canResize && (
-                          <div
-                            onMouseDown={header.getResizeHandler()}
-                            onTouchStart={header.getResizeHandler()}
-                            onClick={(e) => e.stopPropagation()}
-                            className="group/resize absolute -right-[5px] top-0 z-[1] h-full w-[10px] cursor-col-resize select-none touch-none flex items-center justify-center"
-                          >
-                            <div
-                              className={cn(
-                                'h-[calc(100%-22px)] w-[1.5px] rounded-sm bg-zinc-300 dark:bg-zinc-600 transition-all duration-200',
-                                'group-hover/resize:w-[3px] group-hover/resize:bg-zinc-500 dark:group-hover/resize:bg-zinc-400 group-hover/resize:rounded',
-                                header.column.getIsResizing() &&
-                                  'w-[3px] bg-zinc-500/70 dark:bg-zinc-400/70 rounded',
-                              )}
-                            />
-                          </div>
-                        )}
-                      </th>
-                    );
-                  })}
+                  {headerGroup.headers.map(renderDataTableHeaderCell)}
                 </tr>
               ))}
             </thead>
@@ -548,8 +605,7 @@ export function DataTable<TData, TValue = unknown>({
                       {row.getVisibleCells().map((cell) => {
                         const cellAlign = cell.column.columnDef.meta?.align ?? 'left';
                         const cellSize = `${cell.column.getSize()}px`;
-                        const isUtilityColumn =
-                          cell.column.id === 'select' || cell.column.id === 'expand';
+                        const isUtilityColumn = UTILITY_COLUMN_IDS.has(cell.column.id);
 
                         return (
                           <td

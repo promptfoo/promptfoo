@@ -49,6 +49,8 @@ redteam:
   language: string | string[]
   testGenerationInstructions: string
   graderExamples: Array<object>
+  maxConcurrency: number
+  delay: number
 ```
 
 ### Configuration Fields
@@ -66,6 +68,8 @@ redteam:
 | `frameworks`                 | `string[]`                | List of compliance frameworks to surface in reports and CLI commands                                    | All supported frameworks        |
 | `testGenerationInstructions` | `string`                  | Additional instructions for test generation to guide attack creation                                    | Empty                           |
 | `graderExamples`             | `Array<object>`           | Global grading examples applied to all plugins; merged before plugin-level `config.graderExamples`      | None                            |
+| `maxConcurrency`             | `number`                  | Maximum number of concurrent plugin generation requests                                                 | 4                               |
+| `delay`                      | `number`                  | Delay in milliseconds between plugin generation requests; forces concurrency to 1 when greater than 0   | 0                               |
 
 ### Framework Filtering
 
