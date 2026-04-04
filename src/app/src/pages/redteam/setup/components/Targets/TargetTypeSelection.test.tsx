@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TargetTypeSelection from './TargetTypeSelection';
 
+import type { ProviderOptions } from '../../types';
+
 const mockUpdateConfig = vi.fn();
 const mockUseRedTeamConfig = vi.fn();
 vi.mock('../../hooks/useRedTeamConfig', () => ({
@@ -24,6 +26,47 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 
 vi.mock('../LoadExampleButton', () => ({
   default: () => <button>Load Example</button>,
+}));
+
+vi.mock('./ProviderTypeSelector', () => ({
+  default: ({
+    provider,
+    setProvider,
+  }: {
+    provider: ProviderOptions;
+    setProvider: (provider: ProviderOptions, providerType: string) => void;
+  }) => (
+    <div>
+      <div
+        role="button"
+        className="cursor-pointer"
+        onClick={() =>
+          setProvider({ id: 'openai:gpt-4.1', label: provider.label ?? '', config: {} }, 'openai')
+        }
+      >
+        OpenAI
+      </div>
+      <div
+        role="button"
+        className="cursor-pointer"
+        onClick={() =>
+          setProvider(
+            { id: 'anthropic:messages:claude-sonnet-4', label: provider.label ?? '', config: {} },
+            'anthropic',
+          )
+        }
+      >
+        Anthropic
+      </div>
+      <div
+        role="button"
+        className="cursor-pointer"
+        onClick={() => setProvider({ id: '', label: provider.label ?? '', config: {} }, 'custom')}
+      >
+        LangChain
+      </div>
+    </div>
+  ),
 }));
 
 describe('TargetTypeSelection', () => {
