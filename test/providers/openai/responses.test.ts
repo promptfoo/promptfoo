@@ -497,6 +497,149 @@ describe('OpenAiResponsesProvider', () => {
     expect('temperature' in body).toBe(true);
   });
 
+  it('should omit default temperature and max_output_tokens when omitDefaults is true', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'gpt-4o',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Response' }],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+        omitDefaults: true,
+      },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
+    const reqOptions = mockCall[1] as { body: string };
+    const body = JSON.parse(reqOptions.body);
+
+    expect(body.temperature).toBeUndefined();
+    expect('temperature' in body).toBe(false);
+    expect(body.max_output_tokens).toBeUndefined();
+    expect('max_output_tokens' in body).toBe(false);
+  });
+
+  describe('env var token and temperature defaults', () => {
+    const ENV_KEYS = [
+      'OPENAI_TEMPERATURE',
+      'OPENAI_MAX_TOKENS',
+      'OPENAI_MAX_COMPLETION_TOKENS',
+    ] as const;
+
+    const savedEnv: Record<string, string | undefined> = {};
+
+    beforeEach(() => {
+      for (const key of ENV_KEYS) {
+        savedEnv[key] = process.env[key];
+        delete process.env[key];
+      }
+    });
+
+    afterEach(() => {
+      for (const key of ENV_KEYS) {
+        if (savedEnv[key] === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = savedEnv[key];
+        }
+      }
+    });
+
+    it('should use env defaults with omitDefaults when OPENAI env vars are set', async () => {
+      process.env.OPENAI_TEMPERATURE = '0.5';
+      process.env.OPENAI_MAX_TOKENS = '2048';
+
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Response' }],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+      };
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          omitDefaults: true,
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      expect(body.temperature).toBe(0.5);
+      expect(body.max_output_tokens).toBe(2048);
+    });
+
+    it('should prefer OPENAI_MAX_COMPLETION_TOKENS over OPENAI_MAX_TOKENS for reasoning models', async () => {
+      process.env.OPENAI_MAX_COMPLETION_TOKENS = '4096';
+      process.env.OPENAI_MAX_TOKENS = '2048';
+
+      const provider = new OpenAiResponsesProvider('o1-preview', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+      expect(body.max_output_tokens).toBe(4096);
+    });
+
+    it('should fall back to OPENAI_MAX_TOKENS for reasoning models when OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
+      process.env.OPENAI_MAX_TOKENS = '2048';
+
+      const provider = new OpenAiResponsesProvider('o1-preview', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+      expect(body.max_output_tokens).toBe(2048);
+    });
+
+    it('should not apply a hardcoded max_output_tokens default for reasoning models', async () => {
+      const provider = new OpenAiResponsesProvider('o1-preview', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+      expect(body.max_output_tokens).toBeUndefined();
+      expect('max_output_tokens' in body).toBe(false);
+    });
+  });
+
   it('should correctly send max_output_tokens: 0 in the request body when explicitly set', async () => {
     const mockApiResponse = {
       id: 'resp_abc123',
@@ -2067,247 +2210,184 @@ describe('OpenAiResponsesProvider', () => {
     expect(body.temperature).toBeUndefined(); // codex-mini-latest model should not have temperature
   });
 
-  it('should include explicit reasoning and verbosity for Azure custom deployment names', async () => {
-    const mockApiResponse = {
-      id: 'resp_abc123',
-      status: 'completed',
-      model: 'my-company-gpt-54-prod',
-      output: [
-        {
-          type: 'message',
-          role: 'assistant',
-          content: [
+  describe('Azure custom deployment detection', () => {
+    const AZURE_BASE_URL = 'https://my-resource.openai.azure.com/openai/v1';
+    const AZURE_MODEL = 'my-company-gpt-54-prod';
+
+    function mockAzureSuccessResponse(): void {
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: {
+          id: 'resp_abc123',
+          status: 'completed',
+          model: AZURE_MODEL,
+          output: [
             {
-              type: 'output_text',
-              text: 'Response from Azure custom deployment',
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Response from Azure custom deployment' }],
             },
           ],
+          usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
         },
-      ],
-      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
-    };
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    }
 
-    vi.mocked(cache.fetchWithCache).mockResolvedValue({
-      data: mockApiResponse,
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    function getRequestBody(): Record<string, any> {
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      return JSON.parse(reqOptions.body);
+    }
 
-    const provider = new OpenAiResponsesProvider('my-company-gpt-54-prod', {
-      config: {
-        apiKey: 'test-key',
-        apiBaseUrl: 'https://my-resource.openai.azure.com/openai/v1',
-        reasoning: { effort: 'medium' },
-        temperature: 0.7,
-        verbosity: 'low',
-      },
-    });
+    it('should include explicit reasoning and verbosity for Azure custom deployment names', async () => {
+      mockAzureSuccessResponse();
 
-    await provider.callApi('Test prompt');
-
-    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
-    const reqOptions = mockCall[1] as { body: string };
-    const body = JSON.parse(reqOptions.body);
-
-    expect(body.model).toBe('my-company-gpt-54-prod');
-    expect(body.reasoning).toEqual({ effort: 'medium' });
-    expect(body.text).toMatchObject({
-      format: { type: 'text' },
-      verbosity: 'low',
-    });
-    expect(body.temperature).toBeUndefined();
-  });
-
-  it('should include reasoning_effort for Azure custom deployment names without verbosity', async () => {
-    const mockApiResponse = {
-      id: 'resp_abc123',
-      status: 'completed',
-      model: 'my-company-gpt-54-prod',
-      output: [
-        {
-          type: 'message',
-          role: 'assistant',
-          content: [
-            {
-              type: 'output_text',
-              text: 'Response from Azure custom deployment',
-            },
-          ],
+      const provider = new OpenAiResponsesProvider(AZURE_MODEL, {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: AZURE_BASE_URL,
+          reasoning: { effort: 'medium' },
+          temperature: 0.7,
+          verbosity: 'low',
         },
-      ],
-      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
-    };
+      });
 
-    vi.mocked(cache.fetchWithCache).mockResolvedValue({
-      data: mockApiResponse,
-      cached: false,
-      status: 200,
-      statusText: 'OK',
+      await provider.callApi('Test prompt');
+      const body = getRequestBody();
+
+      expect(body.model).toBe(AZURE_MODEL);
+      expect(body.reasoning).toEqual({ effort: 'medium' });
+      expect(body.text).toMatchObject({ format: { type: 'text' }, verbosity: 'low' });
+      expect(body.temperature).toBeUndefined();
     });
 
-    const provider = new OpenAiResponsesProvider('my-company-gpt-54-prod', {
-      config: {
-        apiKey: 'test-key',
-        apiBaseUrl: 'https://my-resource.openai.azure.com/openai/v1',
-        reasoning_effort: 'medium',
-        temperature: 0.7,
-      },
-    });
+    it('should include reasoning_effort for Azure custom deployment names without verbosity', async () => {
+      mockAzureSuccessResponse();
 
-    await provider.callApi('Test prompt');
-
-    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
-    const reqOptions = mockCall[1] as { body: string };
-    const body = JSON.parse(reqOptions.body);
-
-    expect(body.model).toBe('my-company-gpt-54-prod');
-    expect(body.reasoning).toEqual({ effort: 'medium' });
-    expect(body.text).toEqual({ format: { type: 'text' } });
-    expect(body.temperature).toBeUndefined();
-  });
-
-  it('should include verbosity for Azure custom deployment names without reasoning', async () => {
-    const mockApiResponse = {
-      id: 'resp_abc123',
-      status: 'completed',
-      model: 'my-company-gpt-54-prod',
-      output: [
-        {
-          type: 'message',
-          role: 'assistant',
-          content: [
-            {
-              type: 'output_text',
-              text: 'Response from Azure custom deployment',
-            },
-          ],
+      const provider = new OpenAiResponsesProvider(AZURE_MODEL, {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: AZURE_BASE_URL,
+          reasoning_effort: 'medium',
+          temperature: 0.7,
         },
-      ],
-      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
-    };
+      });
 
-    vi.mocked(cache.fetchWithCache).mockResolvedValue({
-      data: mockApiResponse,
-      cached: false,
-      status: 200,
-      statusText: 'OK',
+      await provider.callApi('Test prompt');
+      const body = getRequestBody();
+
+      expect(body.model).toBe(AZURE_MODEL);
+      expect(body.reasoning).toEqual({ effort: 'medium' });
+      expect(body.text).toEqual({ format: { type: 'text' } });
+      expect(body.temperature).toBeUndefined();
     });
 
-    const provider = new OpenAiResponsesProvider('my-company-gpt-54-prod', {
-      config: {
-        apiKey: 'test-key',
-        apiBaseUrl: 'https://my-resource.openai.azure.com/openai/v1',
-        temperature: 0.7,
-        verbosity: 'low',
-      },
-    });
+    it('should include verbosity for Azure custom deployment names without reasoning', async () => {
+      mockAzureSuccessResponse();
 
-    await provider.callApi('Test prompt');
-
-    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
-    const reqOptions = mockCall[1] as { body: string };
-    const body = JSON.parse(reqOptions.body);
-
-    expect(body.model).toBe('my-company-gpt-54-prod');
-    expect(body.reasoning).toBeUndefined();
-    expect(body.text).toMatchObject({
-      format: { type: 'text' },
-      verbosity: 'low',
-    });
-    expect(body.temperature).toBe(0.7);
-  });
-
-  it('should preserve temperature for Azure custom deployment names when reasoning_effort is none', async () => {
-    const mockApiResponse = {
-      id: 'resp_abc123',
-      status: 'completed',
-      model: 'my-company-gpt-54-prod',
-      output: [
-        {
-          type: 'message',
-          role: 'assistant',
-          content: [
-            {
-              type: 'output_text',
-              text: 'Response from Azure custom deployment',
-            },
-          ],
+      const provider = new OpenAiResponsesProvider(AZURE_MODEL, {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: AZURE_BASE_URL,
+          temperature: 0.7,
+          verbosity: 'low',
         },
-      ],
-      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
-    };
+      });
 
-    vi.mocked(cache.fetchWithCache).mockResolvedValue({
-      data: mockApiResponse,
-      cached: false,
-      status: 200,
-      statusText: 'OK',
+      await provider.callApi('Test prompt');
+      const body = getRequestBody();
+
+      expect(body.model).toBe(AZURE_MODEL);
+      expect(body.reasoning).toBeUndefined();
+      expect(body.text).toMatchObject({ format: { type: 'text' }, verbosity: 'low' });
+      expect(body.temperature).toBe(0.7);
     });
 
-    const provider = new OpenAiResponsesProvider('my-company-gpt-54-prod', {
-      config: {
-        apiKey: 'test-key',
-        apiBaseUrl: 'https://my-resource.openai.azure.com/openai/v1',
-        reasoning_effort: 'none',
-        temperature: 0.7,
-      },
-    });
+    it('should preserve temperature when reasoning_effort is none', async () => {
+      mockAzureSuccessResponse();
 
-    await provider.callApi('Test prompt');
-
-    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
-    const reqOptions = mockCall[1] as { body: string };
-    const body = JSON.parse(reqOptions.body);
-
-    expect(body.reasoning).toEqual({ effort: 'none' });
-    expect(body.temperature).toBe(0.7);
-  });
-
-  it('should include reasoning_effort for Azure custom deployments configured via apiHost', async () => {
-    const mockApiResponse = {
-      id: 'resp_abc123',
-      status: 'completed',
-      model: 'my-company-gpt-54-prod',
-      output: [
-        {
-          type: 'message',
-          role: 'assistant',
-          content: [
-            {
-              type: 'output_text',
-              text: 'Response from Azure custom deployment',
-            },
-          ],
+      const provider = new OpenAiResponsesProvider(AZURE_MODEL, {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: AZURE_BASE_URL,
+          reasoning_effort: 'none',
+          temperature: 0.7,
         },
-      ],
-      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
-    };
+      });
 
-    vi.mocked(cache.fetchWithCache).mockResolvedValue({
-      data: mockApiResponse,
-      cached: false,
-      status: 200,
-      statusText: 'OK',
+      await provider.callApi('Test prompt');
+      const body = getRequestBody();
+
+      expect(body.reasoning).toEqual({ effort: 'none' });
+      expect(body.temperature).toBe(0.7);
     });
 
-    const provider = new OpenAiResponsesProvider('my-company-gpt-54-prod', {
-      config: {
-        apiKey: 'test-key',
-        apiHost: 'my-resource.openai.azure.com',
-        reasoning_effort: 'medium',
-        temperature: 0.7,
-      },
+    it('should detect Azure deployment via apiHost', async () => {
+      mockAzureSuccessResponse();
+
+      const provider = new OpenAiResponsesProvider(AZURE_MODEL, {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'my-resource.openai.azure.com',
+          reasoning_effort: 'medium',
+          temperature: 0.7,
+        },
+      });
+
+      await provider.callApi('Test prompt');
+      const body = getRequestBody();
+
+      expect(body.reasoning).toEqual({ effort: 'medium' });
+      expect(body.temperature).toBeUndefined();
     });
 
-    await provider.callApi('Test prompt');
+    it('should not trigger Azure reasoning detection for non-Azure hosts', async () => {
+      const provider = new OpenAiResponsesProvider('custom-model', {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: 'https://api.example.com/v1',
+          reasoning_effort: 'medium',
+          temperature: 0.5,
+        },
+      });
 
-    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
-    const reqOptions = mockCall[1] as { body: string };
-    const body = JSON.parse(reqOptions.body);
+      const { body } = await provider.getOpenAiBody('Test prompt');
 
-    expect(body.reasoning).toEqual({ effort: 'medium' });
-    expect(body.temperature).toBeUndefined();
+      expect(body.reasoning).toBeUndefined();
+      expect(body.temperature).toBe(0.5);
+    });
+
+    it('should merge reasoning object with reasoning_effort', async () => {
+      const provider = new OpenAiResponsesProvider(AZURE_MODEL, {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: AZURE_BASE_URL,
+          reasoning_effort: 'high',
+          reasoning: { summary: 'concise' },
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.reasoning).toEqual({ effort: 'high', summary: 'concise' });
+    });
+
+    it('should use correct max_output_tokens default for verbosity-only deployments', async () => {
+      const provider = new OpenAiResponsesProvider(AZURE_MODEL, {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: AZURE_BASE_URL,
+          verbosity: 'low',
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.max_output_tokens).toBe(1024);
+      expect(body.text).toMatchObject({ verbosity: 'low' });
+    });
   });
 
   describe('MCP (Model Context Protocol) support', () => {
