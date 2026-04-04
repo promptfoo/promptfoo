@@ -102,6 +102,24 @@ function getNamespacedCache(namespace: string) {
     set: (key: string, value: unknown, ttl?: number) =>
       cache.set(getScopedCacheKey(key, namespace), value, ttl),
     del: (key: string) => cache.del(getScopedCacheKey(key, namespace)),
+    mget: <T>(keys: string[]) =>
+      cache.mget<T>(keys.map((key) => getScopedCacheKey(key, namespace))),
+    mset: async <T>(list: Array<{ key: string; value: T; ttl?: number }>) => {
+      const scopedList = list.map(({ key, value, ttl }) => ({
+        key: getScopedCacheKey(key, namespace),
+        value,
+        ttl,
+      }));
+      const savedList = await cache.mset<T>(scopedList);
+      return (savedList ?? scopedList).map(({ key, value, ttl }) => ({
+        key: getUnscopedCacheKey(key, namespace),
+        value,
+        ttl,
+      }));
+    },
+    mdel: (keys: string[]) => cache.mdel(keys.map((key) => getScopedCacheKey(key, namespace))),
+    ttl: (key: string) => cache.ttl(getScopedCacheKey(key, namespace)),
+    clear: () => clearNamespacedCache(cache, namespace),
     wrap: (...args: Parameters<Cache['wrap']>) =>
       cache.wrap(
         getScopedCacheKey(args[0] as string, namespace),
@@ -121,6 +139,42 @@ function getCurrentCacheNamespace() {
 
 function getScopedCacheKey(cacheKey: string, namespace = getCurrentCacheNamespace()) {
   return namespace ? `${namespace}:${cacheKey}` : cacheKey;
+}
+
+function getUnscopedCacheKey(cacheKey: string, namespace: string) {
+  const namespacePrefix = `${namespace}:`;
+  return cacheKey.startsWith(namespacePrefix) ? cacheKey.slice(namespacePrefix.length) : cacheKey;
+}
+
+async function clearNamespacedCache(cache: Cache, namespace: string) {
+  const namespacePrefix = `${namespace}:`;
+
+  for (const store of cache.stores) {
+    if (!store.iterator) {
+      throw new Error(
+        `[Cache] Cannot clear namespace ${namespace} because a cache store does not support key iteration.`,
+      );
+    }
+
+    const keysToDelete: string[] = [];
+    for await (const [key] of store.iterator(undefined)) {
+      if (typeof key === 'string' && key.startsWith(namespacePrefix)) {
+        keysToDelete.push(key);
+      }
+    }
+
+    if (keysToDelete.length === 0) {
+      continue;
+    }
+
+    if (store.deleteMany) {
+      await store.deleteMany(keysToDelete);
+    } else {
+      await Promise.all(keysToDelete.map((key) => store.delete(key)));
+    }
+  }
+
+  return true;
 }
 
 export function withCacheNamespace<T>(namespace: string | undefined, fn: () => Promise<T>) {
