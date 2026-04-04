@@ -353,10 +353,13 @@ describe('evaluator', () => {
     cliState.webUI = false;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.clearAllMocks();
     // Reset cliState after each test
     cliState.resume = false;
+    cliState.basePath = '';
+    cliState.webUI = false;
+    await clearCache();
     if (global.gc) {
       global.gc(); // Force garbage collection
     }
@@ -3449,12 +3452,23 @@ describe('evaluator', () => {
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     const errorSpy = vi.spyOn(logger, 'error');
-    await evaluate(testSuite, evalRecord, {});
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Error saving result: Error: Mock save error'),
-    );
-    Eval.prototype.addResult = originalAddResult;
-    errorSpy.mockRestore();
+    try {
+      await evaluate(testSuite, evalRecord, {});
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[Evaluator] Error saving result',
+        expect.objectContaining({
+          error: expect.any(Error),
+          resultSummary: expect.objectContaining({
+            testIdx: 0,
+            promptIdx: 0,
+            success: true,
+          }),
+        }),
+      );
+    } finally {
+      Eval.prototype.addResult = originalAddResult;
+      errorSpy.mockRestore();
+    }
   });
 
   it('evaluate with assertScoringFunction', async () => {

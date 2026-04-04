@@ -1654,7 +1654,7 @@ class Evaluator {
           });
           evalStep.test = beforeEachOut.test;
 
-          const rows = await runEval(evalStep);
+          const rows = await runEvalInternal(evalStep);
           onRowsReady?.();
 
           for (const row of rows) {
@@ -1716,7 +1716,10 @@ class Evaluator {
               await this.evalRecord.addResult(row);
             } catch (error) {
               const resultSummary = summarizeEvaluateResultForLogging(row);
-              logger.error(`Error saving result: ${error} ${safeJsonStringify(resultSummary)}`);
+              logger.error('[Evaluator] Error saving result', {
+                error,
+                resultSummary,
+              });
             }
 
             for (const writer of this.fileWriters) {
@@ -1730,7 +1733,11 @@ class Evaluator {
               targetUnavailable = true;
               targetErrorStatus = httpStatus;
               logger.error(
-                `Target returned HTTP ${httpStatus}. Aborting scan - this error will not resolve on retry.`,
+                '[Evaluator] Target returned non-transient HTTP status. Aborting scan.',
+                {
+                  httpStatus,
+                  responseMetadata: row.response?.metadata,
+                },
               );
               targetErrorAbortController.abort();
               // Break out of the row processing loop - result is already saved

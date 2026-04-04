@@ -137,7 +137,13 @@ vi.mock('cache-manager', () => ({
         return Promise.resolve(true);
       }),
       reset: vi.fn(),
-      ttl: vi.fn().mockImplementation((key: string) => Promise.resolve(expiresAt.get(key))),
+      ttl: vi.fn().mockImplementation((key: string) => {
+        const expiry = expiresAt.get(key);
+        if (expiry === undefined) {
+          return Promise.resolve(undefined);
+        }
+        return Promise.resolve(Math.max(0, expiry - Date.now()));
+      }),
       on: vi.fn(),
       removeAllListeners: vi.fn(),
     } as any;

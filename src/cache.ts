@@ -389,7 +389,7 @@ export async function fetchWithCache<T = unknown>(
   const copy = Object.assign({}, options);
   delete copy.headers;
   const cacheKey = getScopedCacheKey(`fetch:v2:${url}:${JSON.stringify(copy)}`);
-  const cache = await getCacheInstance();
+  const cache = getCacheInstance();
 
   const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
   if (cachedResponse != null) {
