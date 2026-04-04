@@ -155,7 +155,10 @@ async function ensureTypescriptLoader(modulePath: string): Promise<void> {
     // Use the same loader entrypoint as `NODE_OPTIONS=--import tsx` so package-less
     // providers can resolve extensionless transitive TypeScript imports.
     // @ts-ignore: tsx's loader entrypoint does not publish declaration files.
-    tsxLoaderPromise = import('tsx');
+    tsxLoaderPromise = import('tsx').catch((err) => {
+      tsxLoaderPromise = undefined;
+      throw err;
+    });
   }
 
   await tsxLoaderPromise;
