@@ -101,7 +101,7 @@
     },
     "serialize-javascript": ">=7.0.4",
     "gaxios": "^7.1.4",
-    "https-proxy-agent": "^8.0.0",
+    "https-proxy-agent": "^9.0.0",
     "mongoose": {
       "gcp-metadata": "^8.1.2"
     },
