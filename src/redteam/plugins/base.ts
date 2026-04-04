@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import logger from '../../logger';
-import { matchesLlmRubric } from '../../matchers';
+import { matchesLlmRubric } from '../../matchers/llmGrading';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';

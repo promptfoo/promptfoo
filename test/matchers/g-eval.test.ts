@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesGEval } from '../../src/matchers';
+import { matchesGEval } from '../../src/matchers/llmGrading';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
 describe('matchesGEval', () => {

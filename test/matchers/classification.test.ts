@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { matchesClassification } from '../../src/matchers';
+import { matchesClassification } from '../../src/matchers/classification';
 import { HuggingfaceTextClassificationProvider } from '../../src/providers/huggingface';
 
 import type {

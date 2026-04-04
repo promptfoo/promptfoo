@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesSimilarity } from '../../src/matchers';
+import { matchesSimilarity } from '../../src/matchers/similarity';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 

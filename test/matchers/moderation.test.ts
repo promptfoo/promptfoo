@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesModeration } from '../../src/matchers';
+import { matchesModeration } from '../../src/matchers/moderation';
 import { OpenAiModerationProvider } from '../../src/providers/openai/moderation';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../../src/redteam/constants';

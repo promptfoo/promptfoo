@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { getAndCheckProvider, getGradingProvider, renderLlmRubricPrompt } from '../../src/matchers';
+import { getAndCheckProvider, getGradingProvider } from '../../src/matchers/providers';
+import { renderLlmRubricPrompt } from '../../src/matchers/rubric';
 import {
   DefaultEmbeddingProvider,
   DefaultGradingProvider,

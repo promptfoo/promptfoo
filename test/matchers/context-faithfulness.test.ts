@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesContextFaithfulness } from '../../src/matchers';
+import { matchesContextFaithfulness } from '../../src/matchers/rag';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
 describe('matchesContextFaithfulness', () => {

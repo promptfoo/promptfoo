@@ -17,8 +17,8 @@ const createMockProvider = (output: string, reason?: string): ApiProvider => ({
 });
 
 // Mock getAndCheckProvider
-vi.mock('../../src/matchers', async () => {
-  const actual = await vi.importActual('../../src/matchers');
+vi.mock('../../src/matchers/providers', async () => {
+  const actual = await vi.importActual('../../src/matchers/providers');
   return {
     ...actual,
     getAndCheckProvider: vi.fn().mockImplementation((_type, provider) => {

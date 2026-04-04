@@ -2823,7 +2823,7 @@ describe('evaluator', () => {
 
   it('should apply select-best to overall pass/fail and stats', async () => {
     // Mock matchesSelectBest to return deterministic results (first wins, second loses)
-    const matchers = await import('../src/matchers');
+    const matchers = await import('../src/matchers/comparison');
     const matchesSelectBestSpy = vi.spyOn(matchers, 'matchesSelectBest').mockResolvedValue([
       { pass: true, score: 1, reason: 'Selected as best' },
       { pass: false, score: 0, reason: 'Not selected' },

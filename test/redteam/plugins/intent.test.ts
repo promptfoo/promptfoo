@@ -3,7 +3,7 @@ import * as path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
-import { matchesLlmRubric } from '../../../src/matchers';
+import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';
 
 import type {
@@ -13,7 +13,7 @@ import type {
   TestCase,
 } from '../../../src/types/index';
 
-vi.mock('../../../src/matchers', async (importOriginal) => {
+vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     matchesLlmRubric: vi.fn(),

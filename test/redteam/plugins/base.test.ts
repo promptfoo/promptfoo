@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
-import { matchesLlmRubric } from '../../../src/matchers';
+import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants';
 import { RedteamGraderBase, RedteamPluginBase } from '../../../src/redteam/plugins/base';
 import {
@@ -16,7 +16,7 @@ import type {
   GradingResult,
 } from '../../../src/types/index';
 
-vi.mock('../../../src/matchers', async (importOriginal) => {
+vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     matchesLlmRubric: vi.fn(),
