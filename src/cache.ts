@@ -167,10 +167,16 @@ async function clearNamespacedCache(cache: Cache, namespace: string) {
       continue;
     }
 
-    if (store.deleteMany) {
-      await store.deleteMany(keysToDelete);
-    } else {
-      await Promise.all(keysToDelete.map((key) => store.delete(key)));
+    try {
+      if (store.deleteMany) {
+        await store.deleteMany(keysToDelete);
+      } else {
+        await Promise.all(keysToDelete.map((key) => store.delete(key)));
+      }
+    } catch (err) {
+      throw new Error(
+        `[Cache] Failed to clear ${keysToDelete.length} keys for namespace "${namespace}": ${(err as Error).message}`,
+      );
     }
   }
 
@@ -432,6 +438,7 @@ export function disableCache() {
 
 export async function clearCache() {
   inflightFetchResponses.clear();
+  namespacedCacheInstances.clear();
   return getCacheInstance().clear();
 }
 
