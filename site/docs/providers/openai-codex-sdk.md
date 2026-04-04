@@ -243,7 +243,7 @@ Supported models include:
 - **GPT-5 Codex** - Previous generation (`gpt-5-codex`, `gpt-5-codex-mini`)
 - **GPT-5** - Base GPT-5 model (`gpt-5`)
 
-If you omit `config.model`, the Codex CLI may choose an internal default model alias and the backend may resolve that alias to a different concrete model. The current Codex SDK turn payload exposed to promptfoo includes `items`, `finalResponse`, and `usage`, but not the backend-resolved model name, so tracing and cost attribution use the requested `config.model` when present and otherwise fall back to the provider's generic `codex` label with `response.cost: 0`.
+If you omit `config.model`, the Codex CLI may choose an internal default model alias and the backend may resolve that alias to a different concrete model. The current Codex SDK turn payload exposed to Promptfoo includes `items`, `finalResponse`, and `usage`, but not the backend-resolved model name, so tracing and cost attribution use the requested `config.model` when present and otherwise fall back to the provider's generic `codex` label with `response.cost: 0`.
 
 ### Mini Models
 

@@ -293,6 +293,34 @@ describe('OpenAICodexSDKProvider', () => {
         expect(mockRun).toHaveBeenCalledWith(prompt, {});
       });
 
+      it('should preserve JSON text arrays with extra object fields as plain text prompts', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Text JSON response'));
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const prompt = JSON.stringify([{ type: 'text', text: 'hello', id: 123 }]);
+
+        const result = await provider.callApi(prompt);
+
+        expect(result.output).toBe('Text JSON response');
+        expect(mockRun).toHaveBeenCalledWith(prompt, {});
+      });
+
+      it('should preserve JSON local_image arrays with extra object fields as plain text prompts', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Image JSON response'));
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const prompt = JSON.stringify([
+          { type: 'local_image', path: '/tmp/screenshot.png', mimeType: 'image/png' },
+        ]);
+
+        const result = await provider.callApi(prompt);
+
+        expect(result.output).toBe('Image JSON response');
+        expect(mockRun).toHaveBeenCalledWith(prompt, {});
+      });
+
       it('should handle SDK exceptions', async () => {
         const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
         mockRun.mockRejectedValue(new Error('Network error'));

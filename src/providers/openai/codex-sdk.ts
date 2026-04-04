@@ -1331,16 +1331,28 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   private isCodexPromptInputItem(item: unknown): item is CodexPromptInputItem {
-    if (!item || typeof item !== 'object') {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
       return false;
     }
 
+    const keys = Object.keys(item);
+
     if ('type' in item && item.type === 'text') {
-      return 'text' in item && typeof item.text === 'string';
+      return (
+        keys.length === 2 &&
+        keys.includes('type') &&
+        'text' in item &&
+        typeof item.text === 'string'
+      );
     }
 
     if ('type' in item && item.type === 'local_image') {
-      return 'path' in item && typeof item.path === 'string';
+      return (
+        keys.length === 2 &&
+        keys.includes('type') &&
+        'path' in item &&
+        typeof item.path === 'string'
+      );
     }
 
     return false;
