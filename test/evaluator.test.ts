@@ -16,6 +16,7 @@ import { runExtensionHook } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
+import EvalResult from '../src/models/evalResult';
 import {
   type ApiProvider,
   type Prompt,
@@ -23,6 +24,7 @@ import {
   ResultFailureReason,
   type TestSuite,
 } from '../src/types/index';
+import { getEvalStepDeduplicationKey } from '../src/util/comparison';
 import { processConfigFileReferences } from '../src/util/fileReference';
 import { sleep } from '../src/util/time';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
@@ -3666,6 +3668,60 @@ describe('evaluator', () => {
     expect(elapsedMs).toBeLessThan(1000);
   });
 
+  it('should persist repeatIndex on timeout-generated rows for repeated evals', async () => {
+    const mockAddResult = vi.fn().mockResolvedValue(undefined);
+
+    const hangingProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('hanging-provider'),
+      callApi: vi.fn().mockImplementation(
+        () =>
+          new Promise(() => {
+            // Intentionally never resolves; timeout handling must still emit rows.
+          }),
+      ),
+      cleanup: vi.fn(),
+    };
+
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 0,
+          failures: 0,
+          errors: 2,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: vi.fn().mockResolvedValue(undefined),
+      setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [hangingProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    await evaluate(testSuite, mockEval as unknown as Eval, { repeat: 2, timeoutMs: 50 });
+
+    expect(mockAddResult).toHaveBeenCalledTimes(2);
+    const repeatIndices = mockAddResult.mock.calls
+      .map(([result]) => result.testCase.metadata?.repeatIndex)
+      .sort((a, b) => a - b);
+    expect(repeatIndices).toEqual([0, 1]);
+  });
+
   it('should ignore stale provider rows that resolve after a timeout row is recorded', async () => {
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let resolveLateResponse!: (value: ProviderResponse) => void;
@@ -3890,6 +3946,87 @@ describe('evaluator', () => {
           failureReason: ResultFailureReason.ERROR,
         }),
       );
+    } finally {
+      if (longTimer) {
+        clearTimeout(longTimer);
+      }
+    }
+  });
+
+  it('should persist repeatIndex on maxEvalTimeMs timeout rows for repeated evals', async () => {
+    const mockAddResult = vi.fn().mockResolvedValue(undefined);
+    let longTimer: NodeJS.Timeout | null = null;
+
+    const slowApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('slow-provider'),
+      callApi: vi.fn().mockImplementation((_, __, opts) => {
+        return new Promise((resolve, reject) => {
+          longTimer = setTimeout(() => {
+            resolve({
+              output: 'Slow response',
+              tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 1 },
+            });
+          }, 1000);
+
+          opts?.abortSignal?.addEventListener('abort', () => {
+            if (longTimer) {
+              clearTimeout(longTimer);
+            }
+            reject(new Error('aborted'));
+          });
+        });
+      }),
+      cleanup: vi.fn(),
+    };
+
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 0,
+          failures: 0,
+          errors: 2,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: vi.fn().mockResolvedValue(undefined),
+      setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [slowApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    try {
+      await evaluate(testSuite, mockEval as unknown as Eval, {
+        maxConcurrency: 1,
+        maxEvalTimeMs: 100,
+        repeat: 2,
+      });
+
+      expect(mockAddResult).toHaveBeenCalledTimes(2);
+      const repeatIndices = mockAddResult.mock.calls
+        .map(([result]) => result.testCase.metadata?.repeatIndex)
+        .sort((a, b) => a - b);
+      expect(repeatIndices).toEqual([0, 1]);
+      expect(
+        mockAddResult.mock.calls.some(
+          ([result]) => typeof result.error === 'string' && result.error.includes('max duration'),
+        ),
+      ).toBe(true);
     } finally {
       if (longTimer) {
         clearTimeout(longTimer);
@@ -5855,6 +5992,117 @@ describe('Evaluator with external defaultTest', () => {
       expect(evalRecord.prompts[0].metrics?.namedScoreWeights?.accuracy).toBe(5);
     } finally {
       cliState.resume = originalResume;
+    }
+  });
+
+  it('should resume only missing repeats for a persisted eval', async () => {
+    const originalResume = cliState.resume;
+    cliState.resume = false;
+
+    try {
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [{ raw: 'Test prompt 1', label: 'test1' }],
+        tests: [{ vars: { var: 'value1' } }],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+      await evaluate(testSuite, evalRecord, { repeat: 1 });
+      expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+
+      const getCompletedStepCountsSpy = vi
+        .spyOn(EvalResult, 'getCompletedStepCounts')
+        .mockResolvedValue(
+          new Map([
+            [
+              getEvalStepDeduplicationKey({
+                promptIdx: 0,
+                testCase: testSuite.tests![0],
+                testIdx: 0,
+              }),
+              1,
+            ],
+          ]),
+        );
+
+      vi.mocked(mockApiProvider.callApi).mockClear();
+      cliState.resume = true;
+
+      await evaluate(testSuite, evalRecord, { repeat: 3 });
+
+      expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(getCompletedStepCountsSpy).toHaveBeenCalledTimes(1);
+      getCompletedStepCountsSpy.mockRestore();
+    } finally {
+      cliState.resume = originalResume;
+    }
+  });
+  it('should resume repeated evals when beforeEach mutates the persisted test identity', async () => {
+    const originalResume = cliState.resume;
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
+
+    cliState.resume = false;
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName !== 'beforeEach') {
+        return context;
+      }
+
+      return {
+        ...context,
+        test: {
+          ...context.test,
+          metadata: {
+            ...(context.test.metadata || {}),
+            strategyId: 'hooked-strategy',
+          },
+        },
+      };
+    });
+
+    try {
+      const testSuite: TestSuite = {
+        extensions: ['file://before-each-extension.js'],
+        providers: [mockApiProvider],
+        prompts: [{ raw: 'Test prompt 1', label: 'test1' }],
+        tests: [{ vars: { var: 'value1' } }],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+      await evaluate(testSuite, evalRecord, { repeat: 1 });
+      expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+
+      const getCompletedStepCountsSpy = vi
+        .spyOn(EvalResult, 'getCompletedStepCounts')
+        .mockResolvedValue(
+          new Map([
+            [
+              getEvalStepDeduplicationKey({
+                promptIdx: 0,
+                testCase: {
+                  ...testSuite.tests![0],
+                  metadata: { strategyId: 'hooked-strategy' },
+                },
+                testIdx: 0,
+              }),
+              1,
+            ],
+          ]),
+        );
+
+      vi.mocked(mockApiProvider.callApi).mockClear();
+      cliState.resume = true;
+
+      await evaluate(testSuite, evalRecord, { repeat: 3 });
+
+      expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(getCompletedStepCountsSpy).toHaveBeenCalledTimes(1);
+      getCompletedStepCountsSpy.mockRestore();
+    } finally {
+      cliState.resume = originalResume;
+      mockedRunExtensionHook.mockReset();
+      mockedRunExtensionHook.mockImplementation(async (_extensions, _hookName, context) => context);
     }
   });
 });

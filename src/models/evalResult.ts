@@ -18,6 +18,7 @@ import {
   ResultFailureReason,
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
+import { getEvalStepDeduplicationKey } from '../util/comparison';
 import { safeJsonStringify } from '../util/json';
 import { getCurrentTimestamp } from '../util/time';
 
@@ -271,6 +272,45 @@ export default class EvalResult {
     const ret = new Set<string>();
     for (const r of rows) {
       ret.add(`${r.testIdx}:${r.promptIdx}`);
+    }
+    return ret;
+  }
+
+  /**
+   * Returns counts of completed eval steps for a given eval.
+   * The key includes test/prompt indices, repeat index, and filtered test identity.
+   *
+   * @param evalId - The evaluation ID to query
+   * @param opts.excludeErrors - If true, excludes results with ERROR failureReason (used in retry mode)
+   */
+  static async getCompletedStepCounts(
+    evalId: string,
+    opts?: { excludeErrors?: boolean },
+  ): Promise<Map<string, number>> {
+    const db = getDb();
+    const whereClause = opts?.excludeErrors
+      ? and(
+          eq(evalResultsTable.evalId, evalId),
+          ne(evalResultsTable.failureReason, ResultFailureReason.ERROR),
+        )
+      : eq(evalResultsTable.evalId, evalId);
+
+    const rows = await db
+      .select({
+        promptIdx: evalResultsTable.promptIdx,
+        testCase: evalResultsTable.testCase,
+        testIdx: evalResultsTable.testIdx,
+      })
+      .from(evalResultsTable)
+      .where(whereClause);
+    const ret = new Map<string, number>();
+    for (const row of rows) {
+      const key = getEvalStepDeduplicationKey({
+        promptIdx: row.promptIdx,
+        testCase: row.testCase,
+        testIdx: row.testIdx,
+      });
+      ret.set(key, (ret.get(key) ?? 0) + 1);
     }
     return ret;
   }

@@ -19,6 +19,7 @@ import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from 
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers';
+import EvalResult from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
@@ -56,6 +57,7 @@ import {
   type TestSuite,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
+import { getEvalStepDeduplicationKey } from './util/comparison';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { isNonTransientHttpStatus } from './util/fetch/errors';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
@@ -84,7 +86,6 @@ import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
 
 import type Eval from './models/eval';
-import type EvalResult from './models/evalResult';
 import type {
   EvalConversations,
   EvalRegisters,
@@ -423,6 +424,20 @@ function getRedteamInjectVar(test: AtomicTestCase, prompt: Prompt, testSuite?: T
  * }
  * @returns The result of the test case.
  */
+function getPersistedTestCase(
+  test: AtomicTestCase,
+  repeatIndex?: number,
+  repeatCount?: number,
+): AtomicTestCase {
+  return {
+    ...test,
+    metadata: {
+      ...(test.metadata || {}),
+      ...(repeatCount && repeatCount > 1 && repeatIndex !== undefined ? { repeatIndex } : {}),
+    },
+  };
+}
+
 export async function runEval({
   provider,
   prompt, // raw prompt
@@ -456,6 +471,7 @@ export async function runEval({
   // Without this deep clone, mutations to nested objects would persist to the stored
   // testCase, causing non-deterministic behavior where test execution order affects results.
   const vars = structuredClone(test.vars || {});
+  const persistedTestCase = getPersistedTestCase(test, repeatIndex, evaluateOptions?.repeat);
 
   // Collect file metadata for the test case before rendering the prompt.
   const fileMetadata = collectFileMetadata(test.vars || vars);
@@ -667,7 +683,7 @@ export async function runEval({
       },
       promptIdx,
       testIdx,
-      testCase: test,
+      testCase: persistedTestCase,
       promptId: prompt.id || '',
       tokenUsage: createEmptyTokenUsage(),
     };
@@ -827,7 +843,7 @@ export async function runEval({
         latencyMs,
         promptIdx,
         testIdx,
-        testCase: test,
+        testCase: persistedTestCase,
         promptId: prompt.id || '',
         metadata,
       },
@@ -1577,19 +1593,62 @@ class Evaluator {
       }
     }
 
-    // Resume support: if CLI is in resume mode, skip already-completed (testIdx,promptIdx) pairs
+    const preparedEvalSteps = new WeakSet<RunEvalOptions>();
+    const prepareEvalStep = async (evalStep: RunEvalOptions) => {
+      if (preparedEvalSteps.has(evalStep)) {
+        return;
+      }
+
+      const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
+        test: evalStep.test,
+      });
+      evalStep.test = beforeEachOut.test;
+      preparedEvalSteps.add(evalStep);
+    };
+
+    // Resume support: skip completed eval steps, including repeat index and expanded test variants
     if (cliState.resume && this.evalRecord.persisted) {
       try {
-        const { default: EvalResult } = await import('./models/evalResult');
-        // In retry mode, exclude ERROR results from completed pairs so they can be retried
-        const completedPairs = await EvalResult.getCompletedIndexPairs(this.evalRecord.id, {
+        // In retry mode, exclude ERROR results so they can be retried
+        const completedStepCounts = await EvalResult.getCompletedStepCounts(this.evalRecord.id, {
           excludeErrors: cliState.retryMode,
         });
         const originalCount = runEvalOptions.length;
-        // Filter out steps that already exist in DB
+        // Filter out steps that already exist in DB. Prepare each step first so the dedupe
+        // key uses the same beforeEach-mutated test state that gets persisted later.
+        const consumeCompletedStep = (key: string) => {
+          const completedCount = completedStepCounts.get(key) ?? 0;
+          if (completedCount < 1) {
+            return false;
+          }
+
+          completedStepCounts.set(key, completedCount - 1);
+          return true;
+        };
+
         for (let i = runEvalOptions.length - 1; i >= 0; i--) {
           const step = runEvalOptions[i];
-          if (completedPairs.has(`${step.testIdx}:${step.promptIdx}`)) {
+          await prepareEvalStep(step);
+
+          const completedStepKey = getEvalStepDeduplicationKey({
+            promptIdx: step.promptIdx,
+            repeatIndex: step.repeatIndex,
+            testCase: step.test,
+            testIdx: step.testIdx,
+          });
+
+          const matchedCompletedStep =
+            consumeCompletedStep(completedStepKey) ||
+            (step.repeatIndex === 0 &&
+              consumeCompletedStep(
+                getEvalStepDeduplicationKey({
+                  promptIdx: step.promptIdx,
+                  testCase: step.test,
+                  testIdx: step.testIdx,
+                }),
+              ));
+
+          if (matchedCompletedStep) {
             runEvalOptions.splice(i, 1);
           }
         }
@@ -1633,10 +1692,7 @@ class Evaluator {
         throw new Error('Expected index to be a number');
       }
 
-      const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
-        test: evalStep.test,
-      });
-      evalStep.test = beforeEachOut.test;
+      await prepareEvalStep(evalStep);
 
       const rows = await runEval(evalStep);
       onRowsReady?.();
@@ -1852,7 +1908,13 @@ class Evaluator {
         if (!didTimeout) {
           throw error;
         }
-        const sanitizedTestCase = { ...evalStep.test };
+        const sanitizedTestCase = {
+          ...getPersistedTestCase(
+            evalStep.test,
+            evalStep.repeatIndex,
+            evalStep.evaluateOptions?.repeat,
+          ),
+        };
         delete (sanitizedTestCase as Partial<AtomicTestCase>).provider;
 
         // Create and add an error result for timeout
@@ -2374,7 +2436,11 @@ class Evaluator {
             latencyMs: Date.now() - startTime,
             promptIdx: evalStep.promptIdx,
             testIdx: evalStep.testIdx,
-            testCase: evalStep.test,
+            testCase: getPersistedTestCase(
+              evalStep.test,
+              evalStep.repeatIndex,
+              evalStep.evaluateOptions?.repeat,
+            ),
             promptId: evalStep.prompt.id || '',
           } as EvaluateResult;
 

@@ -90,6 +90,34 @@ export function getTestCaseDeduplicationKey(testCase: TestCase): string {
 }
 
 /**
+ * Generate a unique key for an eval step.
+ * Includes repeat index so resume logic can distinguish repeated executions,
+ * while still filtering runtime-only vars from the stored test case identity.
+ */
+export function getEvalStepDeduplicationKey({
+  promptIdx,
+  repeatIndex,
+  testCase,
+  testIdx,
+}: {
+  promptIdx: number;
+  repeatIndex?: number;
+  testCase: TestCase;
+  testIdx: number;
+}): string {
+  const resolvedRepeatIndex = repeatIndex ?? testCase.metadata?.repeatIndex;
+  const repeatIndexPart =
+    resolvedRepeatIndex === undefined ? {} : { repeatIndex: resolvedRepeatIndex };
+
+  return JSON.stringify({
+    promptIdx,
+    ...repeatIndexPart,
+    testCase: getTestCaseDeduplicationKey(testCase),
+    testIdx,
+  });
+}
+
+/**
  * Deduplicates an array of test cases based on their vars and strategyId.
  * Tests with the same vars but different strategies are considered different.
  * Runtime variables (like _conversation, sessionId) are filtered out before comparison.

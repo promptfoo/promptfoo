@@ -5,6 +5,7 @@ import {
   deduplicateTestCases,
   extractRuntimeVars,
   filterRuntimeVars,
+  getEvalStepDeduplicationKey,
   getTestCaseDeduplicationKey,
   isRuntimeVar,
   resultIsForTestCase,
@@ -562,6 +563,24 @@ describe('getTestCaseDeduplicationKey', () => {
       vars: undefined,
       strategyId: 'test',
     });
+  });
+});
+
+describe('getEvalStepDeduplicationKey', () => {
+  it('should omit repeatIndex when neither the argument nor metadata includes it', () => {
+    const key = getEvalStepDeduplicationKey({
+      promptIdx: 1,
+      testCase: { vars: { prompt: 'hello' } },
+      testIdx: 2,
+    });
+    const parsedKey = JSON.parse(key);
+
+    expect(parsedKey).toEqual({
+      promptIdx: 1,
+      testCase: JSON.stringify({ vars: { prompt: 'hello' }, strategyId: 'none' }),
+      testIdx: 2,
+    });
+    expect(parsedKey).not.toHaveProperty('repeatIndex');
   });
 });
 
