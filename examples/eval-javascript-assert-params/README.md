@@ -15,16 +15,17 @@ No environment variables are required to run this example.
 
 ```bash
 npx promptfoo@latest init --example eval-javascript-assert-params
+cd eval-javascript-assert-params
 ```
 
 Run the config-based version:
 
 ```bash
-npm run local -- eval -c examples/eval-javascript-assert-params/promptfooconfig.yaml --no-cache
+promptfoo eval -c promptfooconfig.yaml --no-cache
 ```
 
 Run the test-vars workaround version for comparison:
 
 ```bash
-npm run local -- eval -c examples/eval-javascript-assert-params/promptfooconfig.test-vars.yaml --no-cache
+promptfoo eval -c promptfooconfig.test-vars.yaml --no-cache
 ```
