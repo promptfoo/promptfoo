@@ -424,18 +424,14 @@ export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConf
         // Pass through other tool types (standard Anthropic tools)
         processedTools.push(tool as Anthropic.Tool);
       }
-
-      if ('strict' in tool && tool.strict === true) {
-        addRequiredBetaFeature('structured-outputs-2025-11-13');
-      }
     } else {
       // Standard Anthropic tool
       processedTools.push(tool as Anthropic.Tool);
+    }
 
-      // Check if tool uses strict mode (structured outputs for tools)
-      if ('strict' in tool && tool.strict === true) {
-        addRequiredBetaFeature('structured-outputs-2025-11-13');
-      }
+    // Check if tool uses strict mode (structured outputs for tools)
+    if ('strict' in tool && tool.strict === true) {
+      addRequiredBetaFeature('structured-outputs-2025-11-13');
     }
   }
 
