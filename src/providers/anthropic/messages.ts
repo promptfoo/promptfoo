@@ -274,6 +274,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       // Anthropic docs: top_k is incompatible with extended thinking
       ...(config.top_k == null || thinkingEnabled ? {} : { top_k: config.top_k }),
       ...(config.cache_control ? { cache_control: config.cache_control } : {}),
+      ...(config.service_tier ? { service_tier: config.service_tier } : {}),
       ...(config.stop_sequences?.length ? { stop_sequences: config.stop_sequences } : {}),
       ...(config.metadata ? { metadata: config.metadata } : {}),
       ...(allTools.length > 0 ? { tools: allTools as any } : {}),

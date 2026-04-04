@@ -86,6 +86,7 @@ export interface AnthropicMessageOptions {
   max_tokens?: number;
   metadata?: Anthropic.Messages.Metadata; // Request metadata for tracking/abuse detection
   model?: string;
+  service_tier?: 'auto' | 'standard_only'; // Priority tier for API requests
   stop_sequences?: string[]; // Custom stop sequences
   stream?: boolean; // Enable streaming for long-running operations like extended thinking
   temperature?: number;

@@ -29,7 +29,7 @@ export const ANTHROPIC_MODELS = [
       output: 25 / 1e6, // $25 / MTok
     },
   })),
-  ...['claude-opus-4-5-20251101', 'claude-opus-4-5-latest'].map((model) => ({
+  ...['claude-opus-4-5', 'claude-opus-4-5-20251101', 'claude-opus-4-5-latest'].map((model) => ({
     id: model,
     cost: {
       input: 5 / 1e6, // $5 / MTok
@@ -37,6 +37,7 @@ export const ANTHROPIC_MODELS = [
     },
   })),
   ...[
+    'claude-opus-4-1',
     'claude-opus-4-1-20250805',
     'claude-opus-4-20250514',
     'claude-opus-4-0',
@@ -49,6 +50,7 @@ export const ANTHROPIC_MODELS = [
     },
   })),
   ...[
+    'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
     'claude-sonnet-4-5-latest',
     'claude-sonnet-4-20250514',
@@ -61,7 +63,7 @@ export const ANTHROPIC_MODELS = [
       output: 15 / 1e6, // $15 / MTok
     },
   })),
-  ...['claude-haiku-4-5-20251001', 'claude-haiku-4-5-latest'].map((model) => ({
+  ...['claude-haiku-4-5', 'claude-haiku-4-5-20251001', 'claude-haiku-4-5-latest'].map((model) => ({
     id: model,
     cost: {
       input: 1 / 1e6, // $1 / MTok
@@ -306,6 +308,7 @@ export function calculateAnthropicCost(
 
   // Claude Sonnet models with 1M context support have tiered pricing based on prompt size
   const hasTieredPricing = [
+    'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
     'claude-sonnet-4-5-latest',
     'claude-sonnet-4-6',

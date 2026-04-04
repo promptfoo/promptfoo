@@ -89,6 +89,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | showThinking    | -                     | Whether to include thinking content in the output (default: true)                   |
 | cache_control   | -                     | Auto-apply cache_control to the last cacheable block in the request                 |
 | metadata        | -                     | Request metadata such as `user_id` for tracking purposes                            |
+| service_tier    | -                     | Priority tier: `auto` (default) or `standard_only`                                  |
 | headers         | -                     | Additional headers to be sent with the API request                                  |
 | extra_body      | -                     | Additional parameters to be included in the API request body                        |
 
@@ -147,7 +148,7 @@ prompts:
 
 Use `stop_sequences` to halt generation when Claude encounters specific strings:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
@@ -160,7 +161,7 @@ providers:
 
 Pass request metadata to the API for tracking or auditing purposes:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
@@ -354,7 +355,7 @@ prompts:
 
 As a simpler alternative, use the top-level `cache_control` parameter to automatically apply a cache marker to the last cacheable block in the request, without annotating each block individually:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
@@ -404,7 +405,7 @@ See [Anthropic's Citations Guide](https://docs.anthropic.com/en/docs/build-with-
 
 Claude can process PDF files using document content blocks. Pass the PDF as base64-encoded data:
 
-```yaml title="prompts.yaml"
+```yaml
 - role: user
   content:
     - type: document
@@ -418,7 +419,7 @@ Claude can process PDF files using document content blocks. Pass the PDF as base
 
 Use a test var to supply the base64-encoded PDF content:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 tests:
   - vars:
       pdf_base64: file://document.pdf
