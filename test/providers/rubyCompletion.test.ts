@@ -510,5 +510,37 @@ describe('RubyProvider', () => {
       // The second call should contain the custom function name
       expect(cacheSetCalls[1][0]).toContain(':custom_function:');
     });
+
+    it('should not apply cached metadata to embedding results', async () => {
+      const provider = new RubyProvider('script.rb');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(JSON.stringify({ embedding: [0.1, 0.2, 0.3] })),
+        set: vi.fn(),
+      };
+      vi.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+
+      const result = await provider.callEmbeddingApi('test prompt');
+
+      expect(result).toEqual({ embedding: [0.1, 0.2, 0.3] });
+      expect(result).not.toHaveProperty('cached');
+    });
+
+    it('should not apply cached metadata to classification results', async () => {
+      const provider = new RubyProvider('script.rb');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi
+          .fn()
+          .mockResolvedValue(JSON.stringify({ classification: { label: 'test', score: 0.9 } })),
+        set: vi.fn(),
+      };
+      vi.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+
+      const result = await provider.callClassificationApi('test prompt');
+
+      expect(result).toEqual({ classification: { label: 'test', score: 0.9 } });
+      expect(result).not.toHaveProperty('cached');
+    });
   });
 });

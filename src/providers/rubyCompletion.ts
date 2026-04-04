@@ -92,7 +92,7 @@ function applyCachedRubyCallApiMetadata(apiType: RubyApiType, parsedResult: any)
 }
 
 function applyFreshRubyCallApiMetadata(apiType: RubyApiType, result: any) {
-  if (apiType !== 'call_api') {
+  if (apiType !== 'call_api' || typeof result !== 'object' || result === null) {
     return result;
   }
 
@@ -113,9 +113,9 @@ function hasRubyResultError(result: any): boolean {
 
 function validateRubyCallApiResult(functionName: string, result: any): void {
   // Log result structure for debugging
-  logger.debug(
-    `Ruby provider result structure: ${result ? typeof result : 'undefined'}, keys: ${result && typeof result === 'object' ? Object.keys(result).join(',') : 'none'}`,
-  );
+  const resultType = result === null ? 'null' : typeof result;
+  const resultKeys = result && typeof result === 'object' ? Object.keys(result).join(',') : 'none';
+  logger.debug(`Ruby provider result structure: ${resultType}, keys: ${resultKeys}`);
   if (hasRubyResultProperty(result, 'output')) {
     logger.debug(
       `Ruby provider output type: ${typeof result.output}, isArray: ${Array.isArray(result.output)}`,
@@ -165,15 +165,6 @@ function validateRubyScriptResult(apiType: RubyApiType, functionName: string, re
     default:
       throw new Error(`Unsupported apiType: ${apiType}`);
   }
-}
-
-async function runRubyApiFunction(
-  absPath: string,
-  functionName: string,
-  args: (string | number | object | undefined)[],
-  rubyExecutable: string | undefined,
-) {
-  return runRuby(absPath, functionName, args, { rubyExecutable });
 }
 
 /**
@@ -318,12 +309,9 @@ export class RubyProvider implements ApiProvider {
       );
 
       const functionName = this.functionName || apiType;
-      const result = await runRubyApiFunction(
-        absPath,
-        functionName,
-        args,
-        this.config.rubyExecutable,
-      );
+      const result = await runRuby(absPath, functionName, args, {
+        rubyExecutable: this.config.rubyExecutable,
+      });
 
       validateRubyScriptResult(apiType, functionName, result);
 

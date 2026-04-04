@@ -98,7 +98,7 @@ function applyCachedCallApiMetadata(apiType: PythonApiType, parsedResult: any) {
 }
 
 function applyFreshCallApiMetadata(apiType: PythonApiType, result: any) {
-  if (apiType !== 'call_api') {
+  if (apiType !== 'call_api' || typeof result !== 'object' || result === null) {
     return result;
   }
 
