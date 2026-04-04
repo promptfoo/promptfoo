@@ -182,4 +182,30 @@ describe('Ruby assertions', () => {
       score: expectedScore,
     });
   });
+
+  it('should not leak rendered template variables in failed inline ruby assertion reasons', async () => {
+    vi.mocked(runRubyCode).mockResolvedValueOnce(false);
+
+    const assertion: Assertion = {
+      type: 'ruby',
+      value: "output.include?('{{secret}}')",
+    };
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: {
+        vars: {
+          secret: 'sk-test-secret-123',
+        },
+      } as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain("output.include?('{{secret}}')");
+    expect(result.reason).not.toContain('sk-test-secret-123');
+  });
 });

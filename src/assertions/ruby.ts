@@ -7,20 +7,24 @@ import type { AssertionParams } from '../types/index';
 
 type RubyAssertionResult = string | number | boolean | object | GradingResult | undefined;
 
-function appendRenderedValueToReason(reason: string, renderedValue: string): string {
-  return renderedValue ? `${reason}\n${renderedValue}` : reason;
+function appendAssertionValueToReason(
+  reason: string,
+  assertion: AssertionParams['assertion'],
+): string {
+  return typeof assertion.value === 'string' && assertion.value
+    ? `${reason}\n${assertion.value}`
+    : reason;
 }
 
 function normalizeRubyAssertionResult(
   assertion: AssertionParams['assertion'],
   result: boolean | number | GradingResult,
   inverse: boolean,
-  renderedValue: string,
 ): GradingResult {
   const getFailureReason = (rawPass: boolean) => {
-    return appendRenderedValueToReason(
+    return appendAssertionValueToReason(
       `Ruby code returned ${rawPass ? 'true' : 'false'}`,
-      renderedValue,
+      assertion,
     );
   };
 
@@ -89,7 +93,6 @@ function normalizeRubyObjectResult(
   assertion: AssertionParams['assertion'],
   result: object,
   inverse: boolean,
-  renderedValue: string,
 ): GradingResult {
   // Support snake_case keys from Ruby (recursively).
   const mappedObj = mapSnakeCaseToCamelCase(result);
@@ -120,7 +123,6 @@ function normalizeRubyObjectResult(
       assertion,
     },
     inverse,
-    renderedValue,
   );
 }
 
@@ -128,16 +130,15 @@ function normalizeRubyScriptResult(
   assertion: AssertionParams['assertion'],
   result: RubyAssertionResult,
   inverse: boolean,
-  renderedValue: string,
 ): GradingResult {
   const lowerStringResult = typeof result === 'string' ? result.toLowerCase() : undefined;
 
   if ((typeof result === 'boolean' && result) || lowerStringResult === 'true') {
-    return normalizeRubyAssertionResult(assertion, true, inverse, renderedValue);
+    return normalizeRubyAssertionResult(assertion, true, inverse);
   }
 
   if ((typeof result === 'boolean' && !result) || lowerStringResult === 'false') {
-    return normalizeRubyAssertionResult(assertion, false, inverse, renderedValue);
+    return normalizeRubyAssertionResult(assertion, false, inverse);
   }
 
   if (typeof result === 'string' && result.startsWith('{')) {
@@ -153,11 +154,11 @@ function normalizeRubyScriptResult(
         `Ruby assertion must return a boolean, number, or {pass, score, reason} object. Got instead: ${result}`,
       );
     }
-    return normalizeRubyObjectResult(assertion, parsed, inverse, renderedValue);
+    return normalizeRubyObjectResult(assertion, parsed, inverse);
   }
 
   if (typeof result === 'object' && result !== null) {
-    return normalizeRubyObjectResult(assertion, result, inverse, renderedValue);
+    return normalizeRubyObjectResult(assertion, result, inverse);
   }
 
   const score = Number.parseFloat(String(result));
@@ -166,7 +167,7 @@ function normalizeRubyScriptResult(
       `Ruby assertion must return a boolean, number, or {pass, score, reason} object. Instead got:\n${result}`,
     );
   }
-  return normalizeRubyAssertionResult(assertion, score, inverse, renderedValue);
+  return normalizeRubyAssertionResult(assertion, score, inverse);
 }
 
 export const handleRuby = async ({
@@ -184,7 +185,7 @@ export const handleRuby = async ({
         ? await runRubyCode(buildRubyScript(renderedValue), 'main', [output, assertionValueContext])
         : valueFromScript;
 
-    return normalizeRubyScriptResult(assertion, result, inverse, renderedValue);
+    return normalizeRubyScriptResult(assertion, result, inverse);
   } catch (err) {
     return {
       pass: false,

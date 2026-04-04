@@ -7,20 +7,24 @@ import type { AssertionParams } from '../types/index';
 
 type PythonAssertionResult = string | number | boolean | object | GradingResult | undefined;
 
-function appendRenderedValueToReason(reason: string, renderedValue: string): string {
-  return renderedValue ? `${reason}\n${renderedValue}` : reason;
+function appendAssertionValueToReason(
+  reason: string,
+  assertion: AssertionParams['assertion'],
+): string {
+  return typeof assertion.value === 'string' && assertion.value
+    ? `${reason}\n${assertion.value}`
+    : reason;
 }
 
 function normalizePythonAssertionResult(
   assertion: AssertionParams['assertion'],
   result: boolean | number | GradingResult,
   inverse: boolean,
-  renderedValue: string,
 ): GradingResult {
   const getFailureReason = (rawPass: boolean) => {
-    return appendRenderedValueToReason(
+    return appendAssertionValueToReason(
       `Python code returned ${rawPass ? 'true' : 'false'}`,
-      renderedValue,
+      assertion,
     );
   };
 
@@ -88,7 +92,6 @@ function normalizePythonObjectResult(
   assertion: AssertionParams['assertion'],
   result: object,
   inverse: boolean,
-  renderedValue: string,
 ): GradingResult {
   // Support snake_case keys from Python dataclass (recursively).
   const mappedObj = mapSnakeCaseToCamelCase(result);
@@ -119,7 +122,6 @@ function normalizePythonObjectResult(
       assertion,
     },
     inverse,
-    renderedValue,
   );
 }
 
@@ -127,16 +129,15 @@ function normalizePythonScriptResult(
   assertion: AssertionParams['assertion'],
   result: PythonAssertionResult,
   inverse: boolean,
-  renderedValue: string,
 ): GradingResult {
   const lowerStringResult = typeof result === 'string' ? result.toLowerCase() : undefined;
 
   if ((typeof result === 'boolean' && result) || lowerStringResult === 'true') {
-    return normalizePythonAssertionResult(assertion, true, inverse, renderedValue);
+    return normalizePythonAssertionResult(assertion, true, inverse);
   }
 
   if ((typeof result === 'boolean' && !result) || lowerStringResult === 'false') {
-    return normalizePythonAssertionResult(assertion, false, inverse, renderedValue);
+    return normalizePythonAssertionResult(assertion, false, inverse);
   }
 
   if (typeof result === 'string' && result.startsWith('{')) {
@@ -152,11 +153,11 @@ function normalizePythonScriptResult(
         `Python assertion must return a boolean, number, or {pass, score, reason} object. Got instead: ${result}`,
       );
     }
-    return normalizePythonObjectResult(assertion, parsed, inverse, renderedValue);
+    return normalizePythonObjectResult(assertion, parsed, inverse);
   }
 
   if (typeof result === 'object' && result !== null) {
-    return normalizePythonObjectResult(assertion, result, inverse, renderedValue);
+    return normalizePythonObjectResult(assertion, result, inverse);
   }
 
   const score = Number.parseFloat(String(result));
@@ -165,7 +166,7 @@ function normalizePythonScriptResult(
       `Python assertion must return a boolean, number, or {pass, score, reason} object. Instead got:\n${result}`,
     );
   }
-  return normalizePythonAssertionResult(assertion, score, inverse, renderedValue);
+  return normalizePythonAssertionResult(assertion, score, inverse);
 }
 
 export const handlePython = async ({
@@ -186,7 +187,7 @@ export const handlePython = async ({
           ])
         : valueFromScript;
 
-    return normalizePythonScriptResult(assertion, result, inverse, renderedValue);
+    return normalizePythonScriptResult(assertion, result, inverse);
   } catch (err) {
     return {
       pass: false,

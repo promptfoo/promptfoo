@@ -391,6 +391,33 @@ describe('Python file references', { timeout: 15000 }, () => {
     });
   });
 
+  it('should not leak rendered template variables in failed inline python assertion reasons', async () => {
+    const output = 'Expected output';
+    vi.mocked(runPythonCode).mockResolvedValueOnce(false);
+
+    const pythonAssertion: Assertion = {
+      type: 'python',
+      value: "'{{secret}}' in output",
+    };
+
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion: pythonAssertion,
+      test: {
+        vars: {
+          secret: 'sk-test-secret-123',
+        },
+      } as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain("'{{secret}}' in output");
+    expect(result.reason).not.toContain('sk-test-secret-123');
+  });
+
   it.each([
     ['boolean', 'True', true, 'Assertion passed'],
     ['number', '0.5', true, 'Assertion passed'],
