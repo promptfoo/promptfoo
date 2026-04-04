@@ -13,6 +13,7 @@ Promptfoo is an open-source framework for evaluating and testing LLM application
 | `src/`           | Core library                  | -                         |
 | `src/app/`       | Web UI (React 19/Vite/MUI v7) | `src/app/AGENTS.md`       |
 | `src/commands/`  | CLI commands                  | `src/commands/AGENTS.md`  |
+| `src/matchers/`  | Assertion matcher helpers     | `src/matchers/AGENTS.md`  |
 | `src/providers/` | LLM providers                 | `src/providers/AGENTS.md` |
 | `src/redteam/`   | Security testing              | `src/redteam/AGENTS.md`   |
 | `src/server/`    | Backend server                | `src/server/AGENTS.md`    |
