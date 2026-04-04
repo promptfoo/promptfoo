@@ -48,7 +48,7 @@ import {
   type Severity,
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
-import { synthesize } from '../index';
+import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
 import { PartialGenerationError } from '../types';
@@ -149,6 +149,16 @@ function createHeaderComments({
     `  Strategies:  ${strategies.map((s) => s.id).join(', ')}`,
     `===================================================================`,
   ].filter(Boolean) as string[];
+}
+
+async function withGenerationConcurrency<T>(
+  maxConcurrency: number,
+  delay: number | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const cappedMaxConcurrency = Math.min(maxConcurrency, MAX_MAX_CONCURRENCY);
+  const effectiveMaxConcurrency = delay !== undefined && delay > 0 ? 1 : cappedMaxConcurrency;
+  return cliState.withMaxConcurrency(effectiveMaxConcurrency, fn);
 }
 
 export async function doGenerateRedteam(
@@ -449,20 +459,29 @@ export async function doGenerateRedteam(
   // Read inputs from the first target/provider
   const targetInputs = testSuite.providers[0]?.inputs;
 
+  const explicitMaxConcurrency =
+    options.maxConcurrency ??
+    redteamConfig?.maxConcurrency ??
+    commandLineOptions?.maxConcurrency ??
+    resolvedConfig?.evaluateOptions?.maxConcurrency;
+
   const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
     // Multi-variable inputs for test case generation (read from target)
     inputs: targetInputs,
     language: redteamConfig?.language || options.language,
-    maxConcurrency:
-      options.maxConcurrency ?? commandLineOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
+    maxConcurrency: explicitMaxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
     numTests: redteamConfig?.numTests ?? options.numTests,
     entities: redteamConfig?.entities,
     plugins,
     provider: redteamConfig?.provider || options.provider,
     purpose: redteamConfig?.purpose ?? options.purpose,
     strategies: strategyObjs,
-    delay: redteamConfig?.delay || options.delay || commandLineOptions?.delay,
+    delay:
+      options.delay ??
+      redteamConfig?.delay ??
+      commandLineOptions?.delay ??
+      resolvedConfig?.evaluateOptions?.delay,
     sharing: redteamConfig?.sharing || options.sharing,
     excludeTargetOutputFromAgenticAttackGeneration:
       redteamConfig?.excludeTargetOutputFromAgenticAttackGeneration,
@@ -534,19 +553,24 @@ export async function doGenerateRedteam(
 
       const contextPurpose = context.purpose + (enhancedPurpose ? `\n\n${enhancedPurpose}` : '');
 
-      const contextResult = await synthesize({
-        ...parsedConfig.data,
-        inputs: targetInputs,
-        purpose: contextPurpose,
-        numTests: config.numTests,
-        prompts: testSuite.prompts.map((prompt) => prompt.raw),
-        maxConcurrency: config.maxConcurrency,
-        delay: config.delay,
-        abortSignal: options.abortSignal,
-        targetIds,
-        showProgressBar: options.progressBar !== false,
-        testGenerationInstructions: augmentedTestGenerationInstructions,
-      } as SynthesizeOptions);
+      const contextResult = await withGenerationConcurrency(
+        config.maxConcurrency,
+        config.delay,
+        () =>
+          synthesize({
+            ...parsedConfig.data,
+            inputs: targetInputs,
+            purpose: contextPurpose,
+            numTests: config.numTests,
+            prompts: testSuite.prompts.map((prompt) => prompt.raw),
+            maxConcurrency: config.maxConcurrency,
+            delay: config.delay,
+            abortSignal: options.abortSignal,
+            targetIds,
+            showProgressBar: options.progressBar !== false,
+            testGenerationInstructions: augmentedTestGenerationInstructions,
+          } as SynthesizeOptions),
+      );
 
       // Collect failed plugins from this context
       if (contextResult.failedPlugins.length > 0) {
@@ -590,19 +614,21 @@ export async function doGenerateRedteam(
     );
   } else {
     // Single purpose mode (existing behavior)
-    const result = await synthesize({
-      ...parsedConfig.data,
-      inputs: targetInputs,
-      purpose: enhancedPurpose,
-      numTests: config.numTests,
-      prompts: testSuite.prompts.map((prompt) => prompt.raw),
-      maxConcurrency: config.maxConcurrency,
-      delay: config.delay,
-      abortSignal: options.abortSignal,
-      targetIds,
-      showProgressBar: options.progressBar !== false,
-      testGenerationInstructions: augmentedTestGenerationInstructions,
-    } as SynthesizeOptions);
+    const result = await withGenerationConcurrency(config.maxConcurrency, config.delay, () =>
+      synthesize({
+        ...parsedConfig.data,
+        inputs: targetInputs,
+        purpose: enhancedPurpose,
+        numTests: config.numTests,
+        prompts: testSuite.prompts.map((prompt) => prompt.raw),
+        maxConcurrency: config.maxConcurrency,
+        delay: config.delay,
+        abortSignal: options.abortSignal,
+        targetIds,
+        showProgressBar: options.progressBar !== false,
+        testGenerationInstructions: augmentedTestGenerationInstructions,
+      } as SynthesizeOptions),
+    );
 
     redteamTests = result.testCases;
     purpose = result.purpose;
