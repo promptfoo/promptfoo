@@ -2166,16 +2166,7 @@ class Evaluator {
               completion: 0,
             };
 
-            // Use the helper function instead of direct updates
             if (gradingResult.tokensUsed) {
-              if (!result.gradingResult.tokensUsed) {
-                result.gradingResult.tokensUsed = {
-                  total: 0,
-                  prompt: 0,
-                  completion: 0,
-                };
-              }
-
               // Update the metrics using the helper function
               updateAssertionMetrics(
                 { tokenUsage: { assertions: result.gradingResult.tokensUsed } },
