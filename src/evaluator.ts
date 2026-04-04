@@ -1387,6 +1387,11 @@ class Evaluator {
     const runEvalOptions: RunEvalOptions[] = [];
     let testIdx = 0;
     let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
+    // Pre-compute prompt IDs to avoid redundant SHA-256 hashing in the inner loop
+    const promptIdCache = new Map<Prompt, string>();
+    for (const prompt of testSuite.prompts) {
+      promptIdCache.set(prompt, generateIdFromPrompt(prompt));
+    }
     for (let index = 0; index < tests.length; index++) {
       const testCase = tests[index];
       invariant(
@@ -1497,7 +1502,7 @@ class Evaluator {
               // Look up the correct index in the prompts array using the map
               // built during prompts array construction. This ensures promptIdx
               // is correct even when test-level filtering skips some combinations.
-              const promptId = generateIdFromPrompt(prompt);
+              const promptId = promptIdCache.get(prompt)!;
               const promptIdx = promptIndexMap.get(`${providerKey}:${promptId}`);
               if (promptIdx === undefined) {
                 logger.warn(`Could not find prompt index for ${providerKey}:${promptId}, skipping`);
