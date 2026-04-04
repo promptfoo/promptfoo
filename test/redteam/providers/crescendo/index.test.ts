@@ -49,12 +49,9 @@ vi.mock('../../../../src/redteam/providers/shared', async () => ({
   tryUnblocking: vi.fn(),
 }));
 
-vi.mock('../../../../src/redteam/graders', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    getGraderById: mockGetGraderById,
-  };
-});
+vi.mock('../../../../src/redteam/graders', () => ({
+  getGraderById: mockGetGraderById,
+}));
 
 vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => {
   return {

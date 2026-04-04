@@ -167,16 +167,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Determine the system based on model name
-    let system = 'vertex';
-    if (this.modelName.includes('claude')) {
-      system = 'vertex:anthropic';
-    } else if (this.modelName.includes('gemini')) {
-      system = 'vertex:gemini';
-    } else if (this.modelName.includes('llama')) {
-      system = 'vertex:llama';
-    } else {
-      system = 'vertex:palm2';
-    }
+    const system = this.modelName.includes('claude')
+      ? 'vertex:anthropic'
+      : this.modelName.includes('gemini')
+        ? 'vertex:gemini'
+        : this.modelName.includes('llama')
+          ? 'vertex:llama'
+          : 'vertex:palm2';
 
     // Set up tracing context
     const spanContext: GenAISpanContext = {

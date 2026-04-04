@@ -1,5 +1,23 @@
 import type { ApiProvider, ProviderResponse } from '../../src/types/index';
 
+/**
+ * Creates a deferred promise that can be resolved or rejected externally.
+ * Useful for controlling async flow in tests.
+ */
+export function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 export class TestGrader implements ApiProvider {
   async callApi(): Promise<ProviderResponse> {
     return {

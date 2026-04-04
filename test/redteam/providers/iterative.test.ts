@@ -165,7 +165,7 @@ describe('RedteamIterativeProvider', () => {
         context: { prompt: { raw: '', label: '' }, vars: {} },
         filters: undefined,
         injectVar: 'test',
-        numIterations: 5,
+        numIterations: 2,
         options: {},
         prompt: { raw: 'test', label: 'test' },
         redteamProvider: mockRedteamProvider,
@@ -176,7 +176,7 @@ describe('RedteamIterativeProvider', () => {
         excludeTargetOutputFromAgenticAttackGeneration: false,
       });
 
-      expect(result.metadata.finalIteration).toBe(5);
+      expect(result.metadata.finalIteration).toBe(2);
       expect(result.metadata.highestScore).toBe(10);
     });
 

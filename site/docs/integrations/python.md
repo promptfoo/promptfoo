@@ -229,15 +229,15 @@ def create_prompt(context):
 
 Test Python agent frameworks by wrapping them as providers:
 
-| Framework          | Example                                                                                                      | Guide                                                        |
-| ------------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| **LangGraph**      | [`langgraph`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-langgraph)               | [Evaluate LangGraph agents](/docs/guides/evaluate-langgraph) |
-| **LangChain**      | [`langchain-python`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-langchain)        | [Test LLM chains](/docs/configuration/testing-llm-chains)    |
-| **CrewAI**         | [`crewai`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-crewai)                     | [Evaluate CrewAI agents](/docs/guides/evaluate-crewai)       |
-| **OpenAI Agents**  | [`openai-agents`](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents)                   | [Multi-turn agent workflows](/docs/providers/openai-agents)  |
-| **PydanticAI**     | [`pydantic-ai`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-pydantic-ai)           | Type-safe agents with Pydantic                               |
-| **Google ADK**     | [`integration-google-adk`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-google-adk) | Google Agent Development Kit                                 |
-| **Strands Agents** | [`strands-agents`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-strands-agents)     | AWS open-source agent framework                              |
+| Framework          | Example                                                                                                      | Guide                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| **LangGraph**      | [`langgraph`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-langgraph)               | [Evaluate LangGraph agents](/docs/guides/evaluate-langgraph)           |
+| **LangChain**      | [`langchain-python`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-langchain)        | [Test LLM chains](/docs/configuration/testing-llm-chains)              |
+| **CrewAI**         | [`crewai`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-crewai)                     | [Evaluate CrewAI agents](/docs/guides/evaluate-crewai)                 |
+| **OpenAI Agents**  | [`openai-agents`](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents)                   | [OpenAI Agents Python SDK](/docs/guides/evaluate-openai-agents-python) |
+| **PydanticAI**     | [`pydantic-ai`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-pydantic-ai)           | Type-safe agents with Pydantic                                         |
+| **Google ADK**     | [`integration-google-adk`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-google-adk) | Google Agent Development Kit                                           |
+| **Strands Agents** | [`strands-agents`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-strands-agents)     | AWS open-source agent framework                                        |
 
 To get started with any example:
 

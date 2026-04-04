@@ -18,6 +18,12 @@ sidebar_label: OpenAI Agents
 
 Test multi-turn agentic workflows built with the [@openai/agents](https://github.com/openai/openai-agents-js) SDK. Evaluate agents that use tools, hand off between specialists, and handle multi-step tasks.
 
+:::note
+This page covers the JavaScript `@openai/agents` SDK and the built-in `openai:agents:*` provider.
+
+If you are using the Python `openai-agents` SDK, use the [OpenAI Agents Python SDK guide](/docs/guides/evaluate-openai-agents-python) and the [`openai-agents` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents) instead.
+:::
+
 ## Prerequisites
 
 - Install SDK: `npm install @openai/agents`
@@ -69,6 +75,42 @@ providers:
 ```
 
 Top-level `tools`, `handoffs`, `inputGuardrails`, and `outputGuardrails` augment whatever is already defined on the loaded agent.
+
+## Multimodal Input
+
+If a rendered prompt is a JSON object or array that matches the SDK's `AgentInputItem` shape, Promptfoo passes it to `run()` as structured input instead of a plain string. This supports image, audio, and file inputs:
+
+```yaml
+prompts:
+  - file://./prompts/vision-input.json
+
+providers:
+  - id: openai:agents:vision-agent
+    config:
+      agent: file://./agents/vision-agent.ts
+
+tests:
+  - vars:
+      image: file://./images/cat.jpg
+```
+
+Example prompt file (`prompts/vision-input.json`):
+
+```json
+[
+  {
+    "role": "user",
+    "content": [
+      { "type": "input_text", "text": "What is in this image?" },
+      { "type": "input_image", "image": "{{image}}" }
+    ]
+  }
+]
+```
+
+Promptfoo resolves local image vars like `file://./images/cat.jpg` to data URLs before the prompt is passed to the SDK.
+
+Arbitrary JSON prompts that do not match an agent input item are still sent as plain text.
 
 **Example agent file (`agents/support-agent.ts`):**
 
@@ -308,6 +350,7 @@ Tools must be async functions. Synchronous tools will cause runtime errors.
 ## Related Documentation
 
 - [OpenAI Provider](/docs/providers/openai) - Standard OpenAI completions and chat
+- [OpenAI Agents Python SDK Guide](/docs/guides/evaluate-openai-agents-python) - Python SDK example with Promptfoo tracing
 - [Red Team Guide](/docs/red-team/quickstart) - Test agent safety
 - [Assertions](/docs/configuration/expected-outputs) - Validate agent responses
 - [OpenAI Agents SDK](https://github.com/openai/openai-agents-js) - Official SDK documentation

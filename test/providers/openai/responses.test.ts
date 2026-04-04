@@ -30,13 +30,35 @@ vi.mock('../../../src/python/pythonUtils', async (importOriginal) => {
   };
 });
 
+const originalOpenAiTemperature = process.env.OPENAI_TEMPERATURE;
+const originalOpenAiMaxTokens = process.env.OPENAI_MAX_TOKENS;
+const originalOpenAiMaxCompletionTokens = process.env.OPENAI_MAX_COMPLETION_TOKENS;
+
 describe('OpenAiResponsesProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.OPENAI_TEMPERATURE;
+    delete process.env.OPENAI_MAX_TOKENS;
+    delete process.env.OPENAI_MAX_COMPLETION_TOKENS;
   });
 
   afterEach(() => {
     vi.resetAllMocks();
+    if (originalOpenAiTemperature === undefined) {
+      delete process.env.OPENAI_TEMPERATURE;
+    } else {
+      process.env.OPENAI_TEMPERATURE = originalOpenAiTemperature;
+    }
+    if (originalOpenAiMaxTokens === undefined) {
+      delete process.env.OPENAI_MAX_TOKENS;
+    } else {
+      process.env.OPENAI_MAX_TOKENS = originalOpenAiMaxTokens;
+    }
+    if (originalOpenAiMaxCompletionTokens === undefined) {
+      delete process.env.OPENAI_MAX_COMPLETION_TOKENS;
+    } else {
+      process.env.OPENAI_MAX_COMPLETION_TOKENS = originalOpenAiMaxCompletionTokens;
+    }
   });
 
   it('should support various model names', async () => {
@@ -495,6 +517,165 @@ describe('OpenAiResponsesProvider', () => {
     // temperature: 0 should be present in the request body
     expect(body.temperature).toBe(0);
     expect('temperature' in body).toBe(true);
+  });
+
+  it('should omit default temperature and max_output_tokens when omitDefaults is true', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'gpt-4o',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Response' }],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+        omitDefaults: true,
+      },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
+    const reqOptions = mockCall[1] as { body: string };
+    const body = JSON.parse(reqOptions.body);
+
+    expect(body.temperature).toBeUndefined();
+    expect('temperature' in body).toBe(false);
+    expect(body.max_output_tokens).toBeUndefined();
+    expect('max_output_tokens' in body).toBe(false);
+  });
+
+  it('should use env defaults with omitDefaults when OPENAI env vars are set', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'gpt-4o',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Response' }],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    process.env.OPENAI_TEMPERATURE = '0.5';
+    process.env.OPENAI_MAX_TOKENS = '2048';
+
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+        omitDefaults: true,
+      },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
+    const reqOptions = mockCall[1] as { body: string };
+    const body = JSON.parse(reqOptions.body);
+
+    expect(body.temperature).toBe(0.5);
+    expect('temperature' in body).toBe(true);
+    expect(body.max_output_tokens).toBe(2048);
+    expect('max_output_tokens' in body).toBe(true);
+  });
+
+  it('should prefer OPENAI_MAX_COMPLETION_TOKENS over OPENAI_MAX_TOKENS for reasoning models', async () => {
+    process.env.OPENAI_MAX_COMPLETION_TOKENS = '4096';
+    process.env.OPENAI_MAX_TOKENS = '2048';
+
+    const provider = new OpenAiResponsesProvider('o1-preview', {
+      config: {
+        apiKey: 'test-key',
+        omitDefaults: true,
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.max_output_tokens).toBe(4096);
+    expect('max_output_tokens' in body).toBe(true);
+  });
+
+  it('should fall back to OPENAI_MAX_TOKENS for reasoning models when OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
+    process.env.OPENAI_MAX_TOKENS = '2048';
+
+    const provider = new OpenAiResponsesProvider('o1-preview', {
+      config: {
+        apiKey: 'test-key',
+        omitDefaults: true,
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.max_output_tokens).toBe(2048);
+    expect('max_output_tokens' in body).toBe(true);
+  });
+
+  it('should use OPENAI_MAX_TOKENS for reasoning models when omitDefaults is false and OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
+    process.env.OPENAI_MAX_TOKENS = '2048';
+
+    const provider = new OpenAiResponsesProvider('o1-preview', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.max_output_tokens).toBe(2048);
+    expect('max_output_tokens' in body).toBe(true);
+  });
+
+  it('should not apply a hardcoded max_output_tokens default for reasoning models when omitDefaults is false', async () => {
+    const provider = new OpenAiResponsesProvider('o1-preview', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.max_output_tokens).toBeUndefined();
+    expect('max_output_tokens' in body).toBe(false);
+  });
+
+  it('should omit default max_output_tokens when omitDefaults is true for reasoning models', async () => {
+    const provider = new OpenAiResponsesProvider('o1-preview', {
+      config: {
+        apiKey: 'test-key',
+        omitDefaults: true,
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.max_output_tokens).toBeUndefined();
+    expect('max_output_tokens' in body).toBe(false);
   });
 
   it('should correctly send max_output_tokens: 0 in the request body when explicitly set', async () => {

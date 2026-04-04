@@ -216,7 +216,7 @@ const DrawerContent = ({
               )}
               %
             </p>
-            <p className="text-sm text-muted-foreground">Success Rate</p>
+            <p className="text-sm text-muted-foreground">Attack Success Rate</p>
           </div>
         </div>
       </div>

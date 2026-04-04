@@ -281,6 +281,65 @@ describe('matchesLlmRubric', () => {
     });
   });
 
+  it('should fail when output is null', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: null,
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason: 'No output',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        completionDetails: undefined,
+        numRequests: 0,
+      },
+    });
+  });
+
+  it('should fail when output is an array', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: [{ pass: false, score: 0, reason: 'bad' }],
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason:
+        'llm-rubric produced malformed response - output must be string or object. Output: [{"pass":false,"score":0,"reason":"bad"}]',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        completionDetails: undefined,
+        numRequests: 0,
+      },
+    });
+  });
+
   it('should handle string output with invalid JSON format', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';

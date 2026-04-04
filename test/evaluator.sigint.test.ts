@@ -111,10 +111,28 @@ describe('evaluate SIGINT/abort handling', () => {
 
     const slowProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('slow-provider'),
-      callApi: vi.fn().mockImplementation(() => {
+      callApi: vi.fn().mockImplementation((_prompt, _context, callApiOptions) => {
         // Long-running call that will be interrupted by timeout
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
+          const abortSignal = callApiOptions?.abortSignal;
+          const onAbort = () => {
+            if (longTimer) {
+              clearTimeout(longTimer);
+              longTimer = null;
+            }
+            const abortError = new Error('Operation aborted');
+            abortError.name = 'AbortError';
+            reject(abortError);
+          };
+
+          if (abortSignal?.aborted) {
+            onAbort();
+            return;
+          }
+
+          abortSignal?.addEventListener('abort', onAbort, { once: true });
           longTimer = setTimeout(() => {
+            abortSignal?.removeEventListener('abort', onAbort);
             resolve({
               output: 'Slow response',
               tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
@@ -174,8 +192,9 @@ describe('evaluate SIGINT/abort handling', () => {
         }),
       );
 
-      // Provider cleanup should be called
-      expect(slowProvider.cleanup).toHaveBeenCalled();
+      // Timeout should abort the in-flight call without invoking provider-wide cleanup
+      expect(vi.mocked(slowProvider.callApi).mock.calls[0]?.[2]?.abortSignal?.aborted).toBe(true);
+      expect(slowProvider.cleanup).not.toHaveBeenCalled();
     } finally {
       if (longTimer) {
         clearTimeout(longTimer);

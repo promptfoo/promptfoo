@@ -320,6 +320,33 @@ describe('Advanced Features Smoke Tests', () => {
       // The weighted assertions should both pass
       expect(parsed.results.results[0].gradingResult.componentResults.length).toBe(2);
     });
+
+    it('5.3.2 - weighted named metrics preserve prompt totals and denominators', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/weighted-named-metric.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'weighted-named-metric-output.json');
+
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
+
+      expect(exitCode).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+
+      expect(parsed.results.results[0].success).toBe(true);
+      expect(parsed.results.results[0].score).toBeCloseTo(0.75, 10);
+      expect(parsed.results.results[0].gradingResult.namedScores.weightedMetric).toBeCloseTo(
+        0.75,
+        10,
+      );
+      expect(parsed.results.results[0].gradingResult.namedScoreWeights.weightedMetric).toBe(4);
+      expect(parsed.results.prompts[0].metrics.namedScores.weightedMetric).toBeCloseTo(3, 10);
+      expect(parsed.results.prompts[0].metrics.namedScoresCount.weightedMetric).toBe(2);
+      expect(parsed.results.prompts[0].metrics.namedScoreWeights.weightedMetric).toBe(4);
+      expect(
+        parsed.results.prompts[0].metrics.namedScores.weightedMetric /
+          parsed.results.prompts[0].metrics.namedScoreWeights.weightedMetric,
+      ).toBeCloseTo(0.75, 10);
+    });
   });
 
   describe('7.4 Test Threshold', () => {

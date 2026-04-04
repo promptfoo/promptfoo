@@ -230,7 +230,7 @@ const MCPConnectionSimulator: React.FC = () => {
         <div className={`${styles.client} ${styles[clientStatus.status]}`}>
           <div className={styles.componentHeader}>
             Client (IDE)
-            <span className={styles.statusIcon}>●</span>
+            <span className={styles.statusIcon}>{getStatusIcon(clientStatus.status)}</span>
           </div>
           <div className={styles.componentBody}>
             <div
@@ -265,7 +265,7 @@ const MCPConnectionSimulator: React.FC = () => {
         <div className={`${styles.server} ${styles[serverStatus.status]}`}>
           <div className={styles.componentHeader}>
             Server (Tools)
-            <span className={styles.statusIcon}>●</span>
+            <span className={styles.statusIcon}>{getStatusIcon(serverStatus.status)}</span>
           </div>
           <div className={styles.componentBody}>
             <div
