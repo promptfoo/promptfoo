@@ -2116,7 +2116,7 @@ describe('OpenAiResponsesProvider', () => {
       format: { type: 'text' },
       verbosity: 'low',
     });
-    expect(body.temperature).toBe(0.7);
+    expect(body.temperature).toBeUndefined();
   });
 
   it('should include reasoning_effort for Azure custom deployment names without verbosity', async () => {
@@ -2164,7 +2164,7 @@ describe('OpenAiResponsesProvider', () => {
     expect(body.model).toBe('my-company-gpt-54-prod');
     expect(body.reasoning).toEqual({ effort: 'medium' });
     expect(body.text).toEqual({ format: { type: 'text' } });
-    expect(body.temperature).toBe(0.7);
+    expect(body.temperature).toBeUndefined();
   });
 
   it('should include verbosity for Azure custom deployment names without reasoning', async () => {
@@ -2218,6 +2218,52 @@ describe('OpenAiResponsesProvider', () => {
     expect(body.temperature).toBe(0.7);
   });
 
+  it('should preserve temperature for Azure custom deployment names when reasoning_effort is none', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'my-company-gpt-54-prod',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'output_text',
+              text: 'Response from Azure custom deployment',
+            },
+          ],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('my-company-gpt-54-prod', {
+      config: {
+        apiKey: 'test-key',
+        apiBaseUrl: 'https://my-resource.openai.azure.com/openai/v1',
+        reasoning_effort: 'none',
+        temperature: 0.7,
+      },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
+    const reqOptions = mockCall[1] as { body: string };
+    const body = JSON.parse(reqOptions.body);
+
+    expect(body.reasoning).toEqual({ effort: 'none' });
+    expect(body.temperature).toBe(0.7);
+  });
+
   it('should include reasoning_effort for Azure custom deployments configured via apiHost', async () => {
     const mockApiResponse = {
       id: 'resp_abc123',
@@ -2261,7 +2307,7 @@ describe('OpenAiResponsesProvider', () => {
     const body = JSON.parse(reqOptions.body);
 
     expect(body.reasoning).toEqual({ effort: 'medium' });
-    expect(body.temperature).toBe(0.7);
+    expect(body.temperature).toBeUndefined();
   });
 
   describe('MCP (Model Context Protocol) support', () => {

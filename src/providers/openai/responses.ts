@@ -217,19 +217,28 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       input = prompt;
     }
 
-    const { isReasoningModel, isGPT5Model } = this.getDeploymentCapabilities(config);
+    const { isAzureResponsesDeploymentWithReasoningConfig, isReasoningModel, isGPT5Model } =
+      this.getDeploymentCapabilities(config);
     const maxOutputTokens =
       config.max_output_tokens ??
       (isReasoningModel
         ? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS')
         : getEnvInt('OPENAI_MAX_TOKENS', 1024));
 
-    const temperature = this.supportsTemperature()
-      ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
-      : undefined;
-    const reasoningEffort = isReasoningModel
+    const renderedReasoning = renderVarsInObject(config.reasoning, context?.vars) as typeof config.reasoning;
+    const renderedReasoningEffort = isReasoningModel
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
       : undefined;
+    const effectiveReasoningEffort = renderedReasoning?.effort ?? renderedReasoningEffort;
+    const hasAzureReasoningEffort =
+      isAzureResponsesDeploymentWithReasoningConfig &&
+      effectiveReasoningEffort !== undefined &&
+      effectiveReasoningEffort !== 'none';
+
+    const temperature = this.supportsTemperature() && !hasAzureReasoningEffort
+      ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
+      : undefined;
+    const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;
 
     const instructions = config.instructions;
 
@@ -312,8 +321,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     // Handle reasoning parameters for o-series and gpt-5 models
     // Note: reasoning_effort is deprecated and has been moved to reasoning.effort
-    if (config.reasoning && isReasoningModel) {
-      body.reasoning = config.reasoning;
+    if (renderedReasoning && isReasoningModel) {
+      body.reasoning = renderedReasoning;
     }
 
     return {
