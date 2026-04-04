@@ -27,8 +27,8 @@ import type { FetchOptions } from './types';
 // Note: TLS options (rejectUnauthorized, CA cert) are captured at agent
 // creation time. This is acceptable because these env vars don't change
 // mid-process. If that assumption changes, add cache-invalidation logic.
-let cachedAgents: Map<number, Agent> = new Map();
-let cachedProxyAgents: Map<string, ProxyAgent> = new Map();
+const cachedAgents: Map<number, Agent> = new Map();
+const cachedProxyAgents: Map<string, ProxyAgent> = new Map();
 
 /**
  * Get the connection pool size for HTTP agents.
@@ -57,30 +57,30 @@ export function clearAgentCache(): void {
       agent.close();
     }
   }
-  cachedAgents = new Map();
+  cachedAgents.clear();
   for (const agent of cachedProxyAgents.values()) {
     if (typeof agent.close === 'function') {
       agent.close();
     }
   }
-  cachedProxyAgents = new Map();
+  cachedProxyAgents.clear();
 }
 
 function getOrCreateAgent(tlsOptions: ConnectionOptions): Agent {
   const concurrency = getConnectionPoolSize();
-  if (!cachedAgents.has(concurrency)) {
-    cachedAgents.set(
-      concurrency,
-      new Agent({
-        headersTimeout: REQUEST_TIMEOUT_MS,
-        keepAliveTimeout: 30_000,
-        keepAliveMaxTimeout: 60_000,
-        connections: concurrency,
-        connect: tlsOptions,
-      }),
-    );
+  const existing = cachedAgents.get(concurrency);
+  if (existing) {
+    return existing;
   }
-  return cachedAgents.get(concurrency)!;
+  const agent = new Agent({
+    headersTimeout: REQUEST_TIMEOUT_MS,
+    keepAliveTimeout: 30_000,
+    keepAliveMaxTimeout: 60_000,
+    connections: concurrency,
+    connect: tlsOptions,
+  });
+  cachedAgents.set(concurrency, agent);
+  return agent;
 }
 
 function getProxyAgentCacheKey(proxyUrl: string, concurrency: number): string {
@@ -90,19 +90,21 @@ function getProxyAgentCacheKey(proxyUrl: string, concurrency: number): string {
 function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions): ProxyAgent {
   const concurrency = getConnectionPoolSize();
   const cacheKey = getProxyAgentCacheKey(proxyUrl, concurrency);
-  if (!cachedProxyAgents.has(cacheKey)) {
-    const agent = new ProxyAgent({
-      uri: proxyUrl,
-      proxyTls: tlsOptions,
-      requestTls: tlsOptions,
-      headersTimeout: REQUEST_TIMEOUT_MS,
-      keepAliveTimeout: 30_000,
-      keepAliveMaxTimeout: 60_000,
-      connections: concurrency,
-    });
-    cachedProxyAgents.set(cacheKey, agent);
+  const existing = cachedProxyAgents.get(cacheKey);
+  if (existing) {
+    return existing;
   }
-  return cachedProxyAgents.get(cacheKey)!;
+  const agent = new ProxyAgent({
+    uri: proxyUrl,
+    proxyTls: tlsOptions,
+    requestTls: tlsOptions,
+    headersTimeout: REQUEST_TIMEOUT_MS,
+    keepAliveTimeout: 30_000,
+    keepAliveMaxTimeout: 60_000,
+    connections: concurrency,
+  });
+  cachedProxyAgents.set(cacheKey, agent);
+  return agent;
 }
 
 export async function fetchWithProxy(
