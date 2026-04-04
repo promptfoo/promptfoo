@@ -341,6 +341,15 @@ describe('Python file references', { timeout: 15000 }, () => {
       'Python code returned true',
     ],
     [
+      'JSON-stringified GradingResult below threshold',
+      '{"pass": true, "score": 0.25, "reason": "Custom reason"}',
+      '{"pass": true, "score": 0.25, "reason": "Custom reason"}',
+      0.5,
+      true,
+      0.25,
+      'Assertion passed',
+    ],
+    [
       'snake_case GradingResult object',
       '{"pass_": true, "score": 0.6, "reason": "Custom reason"}',
       {

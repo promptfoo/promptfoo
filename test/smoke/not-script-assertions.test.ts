@@ -79,9 +79,9 @@ describe('Negated script assertion smoke tests', () => {
     const parsed = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
     const results = parsed.results.results;
 
-    expect(results).toHaveLength(3);
-    expectComponentResult(results[0], 1);
-    expectComponentResult(results[1], 0.25);
-    expectComponentResult(results[2], 0.4);
+    expect(results).toHaveLength(5);
+    [1, 0.25, 0.25, 0.4, 0.4].forEach((expectedScore, index) => {
+      expectComponentResult(results[index], expectedScore);
+    });
   });
 });

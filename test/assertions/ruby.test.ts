@@ -85,6 +85,15 @@ describe('Ruby assertions', () => {
       0.6,
       'Ruby code returned true',
     ],
+    [
+      'JSON-stringified GradingResult below threshold',
+      '\'{"pass": true, "score": 0.25, "reason": "Custom reason"}\'',
+      '{"pass": true, "score": 0.25, "reason": "Custom reason"}',
+      0.5,
+      true,
+      0.25,
+      'Assertion passed',
+    ],
   ])('should honor inverse mode for inline not-ruby assertions with %s results', async (_type, assertionValue, rubyOutput, threshold, expectedPass, expectedScore, expectedReason) => {
     vi.mocked(runRubyCode).mockResolvedValueOnce(rubyOutput);
 

@@ -141,19 +141,19 @@ function normalizeRubyScriptResult(
   }
 
   if (typeof result === 'string' && result.startsWith('{')) {
-    let parsed;
+    let parsed: unknown;
     try {
       parsed = JSON.parse(result);
     } catch (err) {
       throw new Error(`Invalid JSON: ${err} when parsing result: ${result}`);
     }
 
-    if (!isGradingResult(parsed)) {
+    if (typeof parsed !== 'object' || parsed === null) {
       throw new Error(
         `Ruby assertion must return a boolean, number, or {pass, score, reason} object. Got instead: ${result}`,
       );
     }
-    return normalizeRubyAssertionResult(assertion, parsed, inverse, renderedValue);
+    return normalizeRubyObjectResult(assertion, parsed, inverse, renderedValue);
   }
 
   if (typeof result === 'object' && result !== null) {
