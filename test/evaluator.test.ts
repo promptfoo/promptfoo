@@ -3,6 +3,7 @@ import fs from 'fs';
 
 import { glob } from 'glob';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { clearCache, getCache } from '../src/cache';
 import cliState from '../src/cliState';
 import { FILE_METADATA_KEY } from '../src/constants';
 import {
@@ -3949,7 +3950,7 @@ describe('evaluator', () => {
     });
   });
 
-  it('forces cache busting for repeat iterations', async () => {
+  it('preserves provider cache settings for repeat iterations', async () => {
     const contexts: Array<Record<string, any> | undefined> = [];
     const provider: ApiProvider = {
       id: () => 'mock-provider',
@@ -3993,7 +3994,150 @@ describe('evaluator', () => {
       repeatIndex: 1,
     });
 
-    expect(contexts[0]?.bustCache).toBe(true);
+    expect(contexts[0]?.bustCache).toBeFalsy();
+  });
+
+  it('isolates manual provider cache entries by repeat index', async () => {
+    await clearCache();
+
+    let cacheMissCount = 0;
+    const provider: ApiProvider = {
+      id: () => 'mock-provider',
+      callApi: vi
+        .fn()
+        .mockImplementation(async (_prompt: string, context?: Record<string, any>) => {
+          const cache = await context?.getCache();
+          const cachedResponse = await cache?.get('manual-provider-key');
+          if (cachedResponse) {
+            return {
+              ...(cachedResponse as ProviderResponse),
+              cached: true,
+            };
+          }
+
+          cacheMissCount += 1;
+          const response = {
+            cached: false,
+            output: `result-repeat-${context?.repeatIndex}-miss-${cacheMissCount}`,
+            tokenUsage: createEmptyTokenUsage(),
+          };
+          await cache?.set('manual-provider-key', response);
+          return response;
+        }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    const firstEval = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, firstEval, { maxConcurrency: 1, repeat: 2 });
+    const firstSummary = await firstEval.toEvaluateSummary();
+
+    expect(cacheMissCount).toBe(2);
+    expect(firstSummary.results.map((result) => result.response?.output)).toEqual([
+      'result-repeat-0-miss-1',
+      'result-repeat-1-miss-2',
+    ]);
+    expect(firstSummary.results.map((result) => result.response?.cached)).toEqual([false, false]);
+
+    const secondEval = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, secondEval, { maxConcurrency: 1, repeat: 2 });
+    const secondSummary = await secondEval.toEvaluateSummary();
+
+    expect(cacheMissCount).toBe(2);
+    expect(secondSummary.results.map((result) => result.response?.output)).toEqual([
+      'result-repeat-0-miss-1',
+      'result-repeat-1-miss-2',
+    ]);
+    expect(secondSummary.results.map((result) => result.response?.cached)).toEqual([true, true]);
+  });
+
+  it('isolates beforeEach extension cache entries by repeat index', async () => {
+    await clearCache();
+
+    let extensionCacheMissCount = 0;
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName !== 'beforeEach' || !('test' in context)) {
+        return context;
+      }
+
+      const hookContext = context as typeof context & {
+        test: {
+          vars?: Record<string, unknown>;
+        };
+      };
+
+      const cache = getCache();
+      const cachedHookValue = await cache.get<string>('extension-hook-key');
+      if (cachedHookValue) {
+        return {
+          ...hookContext,
+          test: {
+            ...hookContext.test,
+            vars: {
+              ...hookContext.test.vars,
+              hookValue: cachedHookValue,
+            },
+          },
+        };
+      }
+
+      extensionCacheMissCount += 1;
+      const hookValue = `hook-repeat-${extensionCacheMissCount}`;
+      await cache.set('extension-hook-key', hookValue);
+
+      return {
+        ...hookContext,
+        test: {
+          ...hookContext.test,
+          vars: {
+            ...hookContext.test.vars,
+            hookValue,
+          },
+        },
+      };
+    });
+
+    const provider: ApiProvider = {
+      id: () => 'mock-provider',
+      callApi: vi
+        .fn()
+        .mockImplementation(async (_prompt: string, context?: Record<string, any>) => ({
+          cached: false,
+          output: context?.vars?.hookValue,
+          tokenUsage: createEmptyTokenUsage(),
+        })),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ vars: {} }],
+      extensions: ['file://hook.js'],
+    };
+
+    const firstEval = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, firstEval, { maxConcurrency: 1, repeat: 2 });
+    const firstSummary = await firstEval.toEvaluateSummary();
+
+    expect(extensionCacheMissCount).toBe(2);
+    expect(firstSummary.results.map((result) => result.response?.output)).toEqual([
+      'hook-repeat-1',
+      'hook-repeat-2',
+    ]);
+
+    const secondEval = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, secondEval, { maxConcurrency: 1, repeat: 2 });
+    const secondSummary = await secondEval.toEvaluateSummary();
+
+    expect(extensionCacheMissCount).toBe(2);
+    expect(secondSummary.results.map((result) => result.response?.output)).toEqual([
+      'hook-repeat-1',
+      'hook-repeat-2',
+    ]);
   });
 
   it('should NOT include assertion tokens in main token totals', async () => {

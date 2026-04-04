@@ -15,7 +15,9 @@ import {
   disableCache,
   enableCache,
   fetchWithCache,
+  getCache,
   isCacheEnabled,
+  withCacheNamespace,
 } from '../src/cache';
 import { fetchWithRetries } from '../src/util/fetch/index';
 
@@ -215,6 +217,27 @@ describe('fetchWithCache', () => {
   });
 
   describe('with cache enabled', () => {
+    it('should isolate direct cache access by namespace', async () => {
+      const cache = getCache();
+
+      await cache.set('shared-key', 'global-value');
+
+      await withCacheNamespace('repeat:0', async () => {
+        const scopedCache = getCache();
+        await scopedCache.set('shared-key', 'repeat-0-value');
+
+        expect(await scopedCache.get('shared-key')).toBe('repeat-0-value');
+      });
+
+      await withCacheNamespace('repeat:1', async () => {
+        const scopedCache = getCache();
+
+        expect(await scopedCache.get('shared-key')).toBeUndefined();
+      });
+
+      expect(await cache.get('shared-key')).toBe('global-value');
+    });
+
     it('should fetch and cache successful requests', async () => {
       const mockResponse = mockFetchWithRetriesResponse(true, response);
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
@@ -269,6 +292,38 @@ describe('fetchWithCache', () => {
       expect(cachedResult.cached).toBe(true);
       expect(cachedResult.data).toEqual(response);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
+    it('should isolate in-flight fetch deduping by namespace', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'repeat 0' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'repeat 1' }));
+
+      const [repeat0Result, repeat1Result] = await Promise.all([
+        withCacheNamespace('repeat:0', () => fetchWithCache(url, {}, 1000)),
+        withCacheNamespace('repeat:1', () => fetchWithCache(url, {}, 1000)),
+      ]);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(repeat0Result.data).toEqual({ data: 'repeat 0' });
+      expect(repeat1Result.data).toEqual({ data: 'repeat 1' });
+
+      const repeat0CachedResult = await withCacheNamespace('repeat:0', () =>
+        fetchWithCache(url, {}, 1000),
+      );
+      const repeat1CachedResult = await withCacheNamespace('repeat:1', () =>
+        fetchWithCache(url, {}, 1000),
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(repeat0CachedResult).toMatchObject({
+        cached: true,
+        data: { data: 'repeat 0' },
+      });
+      expect(repeat1CachedResult).toMatchObject({
+        cached: true,
+        data: { data: 'repeat 1' },
+      });
     });
 
     it('should not cache failed requests', async () => {

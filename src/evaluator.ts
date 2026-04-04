@@ -11,7 +11,7 @@ import {
   runCompareAssertion,
 } from './assertions/index';
 import { extractAndStoreBinaryData } from './blobs/extractor';
-import { getCache } from './cache';
+import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
@@ -360,6 +360,16 @@ function hasNestedRedteamAssertion(assertion: NestedAssertion): boolean {
   );
 }
 
+function getRepeatCacheNamespace(
+  repeatIndex: number,
+  evaluateOptions?: EvaluateOptions,
+): string | undefined {
+  if (repeatIndex > 0 || (evaluateOptions?.repeat ?? 1) > 1) {
+    return `repeat:${repeatIndex}`;
+  }
+  return undefined;
+}
+
 function hasGeneratedRedteamMetadata(test: AtomicTestCase): boolean {
   return (
     typeof test.metadata?.pluginId === 'string' &&
@@ -423,7 +433,14 @@ function getRedteamInjectVar(test: AtomicTestCase, prompt: Prompt, testSuite?: T
  * }
  * @returns The result of the test case.
  */
-export async function runEval({
+export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]> {
+  return withCacheNamespace(
+    getRepeatCacheNamespace(options.repeatIndex, options.evaluateOptions),
+    () => runEvalInternal(options),
+  );
+}
+
+async function runEvalInternal({
   provider,
   prompt, // raw prompt
   test,
@@ -569,10 +586,6 @@ export async function runEval({
         getCache,
         repeatIndex,
       };
-
-      if (repeatIndex > 0) {
-        callApiContext.bustCache = true;
-      }
 
       // Always set evaluationId if available (needed by redteam strategies like indirect-web-pwn)
       if (evalId) {
@@ -1633,175 +1646,188 @@ class Evaluator {
         throw new Error('Expected index to be a number');
       }
 
-      const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
-        test: evalStep.test,
-      });
-      evalStep.test = beforeEachOut.test;
+      return withCacheNamespace(
+        getRepeatCacheNamespace(evalStep.repeatIndex, evalStep.evaluateOptions),
+        async () => {
+          const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
+            test: evalStep.test,
+          });
+          evalStep.test = beforeEachOut.test;
 
-      const rows = await runEval(evalStep);
-      onRowsReady?.();
+          const rows = await runEval(evalStep);
+          onRowsReady?.();
 
-      for (const row of rows) {
-        if (shouldSkipStaleRows?.()) {
-          // Timed-out provider calls can still settle later; ignore stale rows
-          // so the timeout row remains the canonical result for this test case.
-          return;
-        }
+          for (const row of rows) {
+            if (shouldSkipStaleRows?.()) {
+              // Timed-out provider calls can still settle later; ignore stale rows
+              // so the timeout row remains the canonical result for this test case.
+              return;
+            }
 
-        for (const varName of Object.keys(row.vars)) {
-          vars.add(varName);
-        }
-        // Print token usage for model-graded assertions and add to stats
-        if (row.gradingResult?.tokensUsed && row.testCase?.assert) {
-          for (const assertion of row.testCase.assert) {
-            if (MODEL_GRADED_ASSERTION_TYPES.has(assertion.type as AssertionType)) {
-              const tokensUsed = row.gradingResult.tokensUsed;
+            for (const varName of Object.keys(row.vars)) {
+              vars.add(varName);
+            }
+            // Print token usage for model-graded assertions and add to stats
+            if (row.gradingResult?.tokensUsed && row.testCase?.assert) {
+              for (const assertion of row.testCase.assert) {
+                if (MODEL_GRADED_ASSERTION_TYPES.has(assertion.type as AssertionType)) {
+                  const tokensUsed = row.gradingResult.tokensUsed;
 
-              if (!this.stats.tokenUsage.assertions) {
-                this.stats.tokenUsage.assertions = createEmptyAssertions();
+                  if (!this.stats.tokenUsage.assertions) {
+                    this.stats.tokenUsage.assertions = createEmptyAssertions();
+                  }
+
+                  // Accumulate assertion tokens using the specialized assertion function
+                  accumulateAssertionTokenUsage(this.stats.tokenUsage.assertions, tokensUsed);
+
+                  break;
+                }
               }
+            }
 
-              // Accumulate assertion tokens using the specialized assertion function
-              accumulateAssertionTokenUsage(this.stats.tokenUsage.assertions, tokensUsed);
+            // capture metrics
+            if (row.success) {
+              this.stats.successes++;
+            } else if (row.failureReason === ResultFailureReason.ERROR) {
+              this.stats.errors++;
+            } else {
+              this.stats.failures++;
+            }
 
+            if (row.tokenUsage) {
+              accumulateResponseTokenUsage(this.stats.tokenUsage, { tokenUsage: row.tokenUsage });
+            }
+
+            if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
+              rowsWithSelectBestAssertion.add(row.testIdx);
+            }
+            if (evalStep.test.assert?.some((a) => a.type === 'max-score')) {
+              rowsWithMaxScoreAssertion.add(row.testIdx);
+            }
+            for (const assert of evalStep.test.assert || []) {
+              if (assert.type) {
+                assertionTypes.add(assert.type);
+              }
+            }
+
+            numComplete++;
+
+            try {
+              await this.evalRecord.addResult(row);
+            } catch (error) {
+              const resultSummary = summarizeEvaluateResultForLogging(row);
+              logger.error(`Error saving result: ${error} ${safeJsonStringify(resultSummary)}`);
+            }
+
+            for (const writer of this.fileWriters) {
+              await writer.write(row);
+            }
+
+            // Check for non-transient HTTP errors from target (401, 403, 404, 501)
+            // These indicate the target is unavailable/misconfigured and won't resolve on retry
+            const httpStatus = row.response?.metadata?.http?.status;
+            if (typeof httpStatus === 'number' && isNonTransientHttpStatus(httpStatus)) {
+              targetUnavailable = true;
+              targetErrorStatus = httpStatus;
+              logger.error(
+                `Target returned HTTP ${httpStatus}. Aborting scan - this error will not resolve on retry.`,
+              );
+              targetErrorAbortController.abort();
+              // Break out of the row processing loop - result is already saved
               break;
             }
-          }
-        }
 
-        // capture metrics
-        if (row.success) {
-          this.stats.successes++;
-        } else if (row.failureReason === ResultFailureReason.ERROR) {
-          this.stats.errors++;
-        } else {
-          this.stats.failures++;
-        }
-
-        if (row.tokenUsage) {
-          accumulateResponseTokenUsage(this.stats.tokenUsage, { tokenUsage: row.tokenUsage });
-        }
-
-        if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
-          rowsWithSelectBestAssertion.add(row.testIdx);
-        }
-        if (evalStep.test.assert?.some((a) => a.type === 'max-score')) {
-          rowsWithMaxScoreAssertion.add(row.testIdx);
-        }
-        for (const assert of evalStep.test.assert || []) {
-          if (assert.type) {
-            assertionTypes.add(assert.type);
-          }
-        }
-
-        numComplete++;
-
-        try {
-          await this.evalRecord.addResult(row);
-        } catch (error) {
-          const resultSummary = summarizeEvaluateResultForLogging(row);
-          logger.error(`Error saving result: ${error} ${safeJsonStringify(resultSummary)}`);
-        }
-
-        for (const writer of this.fileWriters) {
-          await writer.write(row);
-        }
-
-        // Check for non-transient HTTP errors from target (401, 403, 404, 501)
-        // These indicate the target is unavailable/misconfigured and won't resolve on retry
-        const httpStatus = row.response?.metadata?.http?.status;
-        if (typeof httpStatus === 'number' && isNonTransientHttpStatus(httpStatus)) {
-          targetUnavailable = true;
-          targetErrorStatus = httpStatus;
-          logger.error(
-            `Target returned HTTP ${httpStatus}. Aborting scan - this error will not resolve on retry.`,
-          );
-          targetErrorAbortController.abort();
-          // Break out of the row processing loop - result is already saved
-          break;
-        }
-
-        const { promptIdx } = row;
-        const metrics = prompts[promptIdx].metrics;
-        invariant(metrics, 'Expected prompt.metrics to be set');
-        metrics.score += row.score;
-        for (const [key, value] of Object.entries(row.namedScores)) {
-          accumulateNamedMetric(metrics, {
-            metricName: key,
-            metricValue: value,
-            gradingResult: row.gradingResult,
-            testVars: row.testCase?.vars || {},
-          });
-        }
-
-        if (testSuite.derivedMetrics) {
-          const math = await import('mathjs');
-          // Calculate per-prompt evaluation count (pass + fail + error + 1 for current row)
-          // This is the number of test evaluations for THIS prompt, not global progress
-          const promptEvalCount =
-            metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount + 1;
-          // Warn if user has a metric named __count (it will be overridden)
-          if (Object.prototype.hasOwnProperty.call(metrics.namedScores, '__count')) {
-            logger.warn(
-              "Metric name '__count' is reserved for derived metrics and will be overridden.",
-            );
-          }
-          // Create evaluation context with named scores and __count for average calculations
-          const evalContext: Record<string, number> = {
-            ...metrics.namedScores,
-            __count: promptEvalCount,
-          };
-          for (const metric of testSuite.derivedMetrics) {
-            if (metrics.namedScores[metric.name] === undefined) {
-              metrics.namedScores[metric.name] = 0;
+            const { promptIdx } = row;
+            const metrics = prompts[promptIdx].metrics;
+            invariant(metrics, 'Expected prompt.metrics to be set');
+            metrics.score += row.score;
+            for (const [key, value] of Object.entries(row.namedScores)) {
+              accumulateNamedMetric(metrics, {
+                metricName: key,
+                metricValue: value,
+                gradingResult: row.gradingResult,
+                testVars: row.testCase?.vars || {},
+              });
             }
-            try {
-              if (typeof metric.value === 'function') {
-                metrics.namedScores[metric.name] = metric.value(evalContext, evalStep);
-              } else {
-                const evaluatedValue = math.evaluate(metric.value, evalContext);
-                metrics.namedScores[metric.name] = evaluatedValue;
+
+            if (testSuite.derivedMetrics) {
+              const math = await import('mathjs');
+              // Calculate per-prompt evaluation count (pass + fail + error + 1 for current row)
+              // This is the number of test evaluations for THIS prompt, not global progress
+              const promptEvalCount =
+                metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount + 1;
+              // Warn if user has a metric named __count (it will be overridden)
+              if (Object.prototype.hasOwnProperty.call(metrics.namedScores, '__count')) {
+                logger.warn(
+                  "Metric name '__count' is reserved for derived metrics and will be overridden.",
+                );
               }
-              // Update context with the new derived metric value for subsequent metrics
-              evalContext[metric.name] = metrics.namedScores[metric.name];
-            } catch (error) {
-              logger.debug(
-                `Could not evaluate derived metric '${metric.name}': ${(error as Error).message}`,
+              // Create evaluation context with named scores and __count for average calculations
+              const evalContext: Record<string, number> = {
+                ...metrics.namedScores,
+                __count: promptEvalCount,
+              };
+              for (const metric of testSuite.derivedMetrics) {
+                if (metrics.namedScores[metric.name] === undefined) {
+                  metrics.namedScores[metric.name] = 0;
+                }
+                try {
+                  if (typeof metric.value === 'function') {
+                    metrics.namedScores[metric.name] = metric.value(evalContext, evalStep);
+                  } else {
+                    const evaluatedValue = math.evaluate(metric.value, evalContext);
+                    metrics.namedScores[metric.name] = evaluatedValue;
+                  }
+                  // Update context with the new derived metric value for subsequent metrics
+                  evalContext[metric.name] = metrics.namedScores[metric.name];
+                } catch (error) {
+                  logger.debug(
+                    `Could not evaluate derived metric '${metric.name}': ${
+                      (error as Error).message
+                    }`,
+                  );
+                }
+              }
+            }
+            metrics.testPassCount += row.success ? 1 : 0;
+            if (!row.success) {
+              if (row.failureReason === ResultFailureReason.ERROR) {
+                metrics.testErrorCount += 1;
+              } else {
+                metrics.testFailCount += 1;
+              }
+            }
+            metrics.assertPassCount +=
+              row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
+            metrics.assertFailCount +=
+              row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
+            metrics.totalLatencyMs += row.latencyMs || 0;
+            accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
+
+            // Add assertion token usage to the metrics
+            if (row.gradingResult?.tokensUsed) {
+              updateAssertionMetrics(metrics, row.gradingResult.tokensUsed);
+            }
+
+            metrics.cost += row.cost || 0;
+
+            await runExtensionHook(testSuite.extensions, 'afterEach', {
+              test: evalStep.test,
+              result: row,
+            });
+
+            if (options.progressCallback) {
+              options.progressCallback(
+                numComplete,
+                runEvalOptions.length,
+                index,
+                evalStep,
+                metrics,
               );
             }
           }
-        }
-        metrics.testPassCount += row.success ? 1 : 0;
-        if (!row.success) {
-          if (row.failureReason === ResultFailureReason.ERROR) {
-            metrics.testErrorCount += 1;
-          } else {
-            metrics.testFailCount += 1;
-          }
-        }
-        metrics.assertPassCount +=
-          row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
-        metrics.assertFailCount +=
-          row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
-        metrics.totalLatencyMs += row.latencyMs || 0;
-        accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
-
-        // Add assertion token usage to the metrics
-        if (row.gradingResult?.tokensUsed) {
-          updateAssertionMetrics(metrics, row.gradingResult.tokensUsed);
-        }
-
-        metrics.cost += row.cost || 0;
-
-        await runExtensionHook(testSuite.extensions, 'afterEach', {
-          test: evalStep.test,
-          result: row,
-        });
-
-        if (options.progressCallback) {
-          options.progressCallback(numComplete, runEvalOptions.length, index, evalStep, metrics);
-        }
-      }
+        },
+      );
     };
 
     // Add a wrapper function that implements timeout
