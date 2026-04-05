@@ -5,7 +5,11 @@ import { getUserEmail, isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
 
@@ -129,7 +133,7 @@ export async function addGcgTestCases(
   }
 
   if (neverGenerateRemote()) {
-    throw new Error('GCG strategy requires remote generation to be enabled');
+    throw new Error(getRemoteGenerationExplicitlyDisabledError('GCG strategy'));
   }
 
   const gcgTestCases = await generateGcgPrompts(testCases, injectVar, config);

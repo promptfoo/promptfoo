@@ -8,7 +8,11 @@ import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
 import { getSessionId } from '../util';
 
 import type {
@@ -46,7 +50,7 @@ export default class BestOfNProvider implements ApiProvider {
     } = {},
   ) {
     if (neverGenerateRemote()) {
-      throw new Error(`Best-of-N strategy requires remote generation to be enabled`);
+      throw new Error(getRemoteGenerationExplicitlyDisabledError('Best-of-N strategy'));
     }
 
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');

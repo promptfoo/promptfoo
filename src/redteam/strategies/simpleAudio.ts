@@ -6,7 +6,11 @@ import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import { isMediaStorageEnabled, storeMedia } from '../../storage';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
 
@@ -31,9 +35,7 @@ export async function textToAudio(
 ): Promise<TextToAudioResult> {
   // Check if remote generation is disabled
   if (neverGenerateRemote()) {
-    throw new Error(
-      'Remote generation is disabled but required for audio strategy. Please enable remote generation to use this strategy.',
-    );
+    throw new Error(getRemoteGenerationExplicitlyDisabledError('Audio strategy'));
   }
 
   try {

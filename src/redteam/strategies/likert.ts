@@ -5,7 +5,11 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
 
@@ -128,7 +132,7 @@ export async function addLikertTestCases(
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
   if (neverGenerateRemote()) {
-    throw new Error('Likert jailbreak strategy requires remote generation to be enabled');
+    throw new Error(getRemoteGenerationExplicitlyDisabledError('Likert jailbreak strategy'));
   }
 
   const likertTestCases = await generateLikertPrompts(testCases, injectVar, config);
