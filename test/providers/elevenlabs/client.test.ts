@@ -221,6 +221,26 @@ describe('ElevenLabsClient', () => {
         }),
       );
     });
+
+    it('should normalize caller Headers to a plain object for GET requests', async () => {
+      const mockResponse = { voice_id: 'test-voice', name: 'Test Voice' };
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => mockResponse,
+      } as Response);
+
+      await client.get('/voices/test-voice', {
+        headers: new Headers({ 'Idempotency-Key': 'request-123' }),
+      });
+
+      const [, options] = mockFetch.mock.calls[0];
+      expect(options?.headers).toEqual({
+        'idempotency-key': 'request-123',
+        'xi-api-key': 'test-api-key',
+      });
+    });
   });
 
   describe('delete', () => {
@@ -242,6 +262,24 @@ describe('ElevenLabsClient', () => {
           }),
         }),
       );
+    });
+
+    it('should normalize caller Headers to a plain object for DELETE requests', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        headers: new Headers(),
+      } as Response);
+
+      await client.delete('/agents/test-agent', {
+        headers: new Headers({ 'Idempotency-Key': 'request-123' }),
+      });
+
+      const [, options] = mockFetch.mock.calls[0];
+      expect(options?.headers).toEqual({
+        'idempotency-key': 'request-123',
+        'xi-api-key': 'test-api-key',
+      });
     });
   });
 });
