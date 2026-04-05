@@ -8,7 +8,7 @@ export function createGitHubProvider(
   _context: LoadApiProviderContext,
 ) {
   const splits = providerPath.split(':');
-  const modelName = splits.slice(1).join(':') || 'openai/gpt-5';
+  const modelName = splits.slice(1).join(':') || 'openai/gpt-5.4';
   return new OpenAiChatCompletionProvider(modelName, {
     ...providerOptions,
     config: {
