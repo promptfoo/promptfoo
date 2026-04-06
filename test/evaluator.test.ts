@@ -20,6 +20,7 @@ import {
   type ApiProvider,
   type Prompt,
   type ProviderResponse,
+  type RateLimitRegistryRef,
   ResultFailureReason,
   type TestSuite,
 } from '../src/types/index';
@@ -3991,6 +3992,72 @@ describe('evaluator', () => {
         },
       },
     });
+  });
+
+  it('schedules model-graded assertion provider calls through the rate limit registry', async () => {
+    const abortController = new AbortController();
+    const execute = vi.fn(async (_provider: ApiProvider, callFn: () => Promise<unknown>) =>
+      callFn(),
+    );
+    const rateLimitRegistry = {
+      execute,
+      dispose: vi.fn(),
+    } as RateLimitRegistryRef;
+    const targetProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test response',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const gradingProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('grading-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({ pass: true, reason: 'Scheduled grading passed' }),
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+
+    const results = await runEval({
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: false,
+      provider: targetProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        assert: [
+          {
+            type: 'llm-rubric',
+            value: 'Output should be valid',
+            provider: gradingProvider,
+          },
+        ],
+      },
+      conversations: {},
+      registers: {},
+      abortSignal: abortController.signal,
+      rateLimitRegistry,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute.mock.calls.map(([provider]) => provider.id())).toEqual([
+      'target-provider',
+      'grading-provider',
+    ]);
+    expect(gradingProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Output should be valid'),
+      expect.objectContaining({
+        prompt: { raw: expect.any(String), label: 'llm-rubric' },
+        vars: expect.objectContaining({
+          output: 'Test response',
+          rubric: 'Output should be valid',
+        }),
+      }),
+      { abortSignal: abortController.signal },
+    );
   });
 
   it('forces cache busting for repeat iterations', async () => {

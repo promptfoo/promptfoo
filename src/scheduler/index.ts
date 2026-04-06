@@ -15,6 +15,11 @@ export {
   parseRateLimitHeaders,
   parseRetryAfter,
 } from './headerParser';
+// Scoped execution context for provider calls that happen inside assertions.
+export {
+  getProviderCallExecutionContext,
+  withProviderCallExecutionContext,
+} from './providerCallExecutionContext';
 // Provider state
 export { ProviderRateLimitState } from './providerRateLimitState';
 // Provider wrapper
@@ -53,6 +58,7 @@ export type {
   SlotAcquiredEvent,
   SlotReleasedEvent,
 } from './events';
+export type { ProviderCallExecutionContext } from './providerCallExecutionContext';
 export type { ProviderMetrics } from './providerRateLimitState';
 export type { RateLimitRegistryOptions } from './rateLimitRegistry';
 export type { SlotQueueOptions } from './slotQueue';

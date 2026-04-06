@@ -31,6 +31,11 @@ import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import { doRemoteScoringWithPi } from './remoteScoring';
+import {
+  createProviderRateLimitOptions,
+  getProviderCallExecutionContext,
+  isRateLimitWrapped,
+} from './scheduler';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from './util/file';
 import { isJavascriptFile } from './util/fileExtensions';
 import { parseFileUrl } from './util/functions/loadFunction';
@@ -110,14 +115,32 @@ export function callProviderWithContext(
   vars: Record<string, VarValue>,
   context?: CallApiContextParams,
 ): Promise<ProviderResponse> {
-  return provider.callApi(prompt, {
+  const callApiContext = {
     ...context,
     prompt: {
       raw: prompt,
       label,
     },
     vars,
-  });
+  };
+  const executionContext = getProviderCallExecutionContext();
+  const callApiOptions = executionContext?.abortSignal
+    ? { abortSignal: executionContext.abortSignal }
+    : undefined;
+  const callApi = () =>
+    callApiOptions
+      ? provider.callApi(prompt, callApiContext, callApiOptions)
+      : provider.callApi(prompt, callApiContext);
+
+  if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
+    return executionContext.rateLimitRegistry.execute(
+      provider,
+      callApi,
+      createProviderRateLimitOptions(),
+    );
+  }
+
+  return callApi();
 }
 
 async function loadFromProviderOptions(provider: ProviderOptions) {

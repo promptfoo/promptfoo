@@ -30,6 +30,7 @@ import {
   createProviderRateLimitOptions,
   createRateLimitRegistry,
   type RateLimitRegistry,
+  withProviderCallExecutionContext,
 } from './scheduler';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
@@ -754,20 +755,24 @@ export async function runEval({
 
       // Pass providerTransformedOutput for contextTransform to use
       // Pass resolved vars so assertions can access file:// variables that were resolved during prompt rendering
-      const checkResult = await runAssertions({
-        prompt: renderedPrompt,
-        provider,
-        providerResponse: {
-          ...processedResponse,
-          // Add provider-transformed output for contextTransform
-          providerTransformedOutput,
-        },
-        test,
-        vars,
-        latencyMs: response.latencyMs ?? latencyMs,
-        assertScoringFunction: test.assertScoringFunction as ScoringFunction,
-        traceId,
-      });
+      const checkResult = await withProviderCallExecutionContext(
+        { abortSignal, rateLimitRegistry },
+        () =>
+          runAssertions({
+            prompt: renderedPrompt,
+            provider,
+            providerResponse: {
+              ...processedResponse,
+              // Add provider-transformed output for contextTransform
+              providerTransformedOutput,
+            },
+            test,
+            vars,
+            latencyMs: response.latencyMs ?? latencyMs,
+            assertScoringFunction: test.assertScoringFunction as ScoringFunction,
+            traceId,
+          }),
+      );
 
       if (!checkResult.pass) {
         ret.error = checkResult.reason;
@@ -2135,11 +2140,15 @@ class Evaluator {
             }
           : undefined;
 
-        const gradingResults = await runCompareAssertion(
-          resultsToCompare[0].testCase,
-          compareAssertion,
-          outputs,
-          callApiContext,
+        const gradingResults = await withProviderCallExecutionContext(
+          { abortSignal: providerAbortSignal, rateLimitRegistry: this.rateLimitRegistry },
+          () =>
+            runCompareAssertion(
+              resultsToCompare[0].testCase,
+              compareAssertion,
+              outputs,
+              callApiContext,
+            ),
         );
         for (let index = 0; index < resultsToCompare.length; index++) {
           const result = resultsToCompare[index];
