@@ -119,7 +119,8 @@ describe('ConfigModal', () => {
 
     fireEvent.click(getDownloadButton());
 
-    const anchor = vi.mocked(HTMLAnchorElement.prototype.click).mock.contexts[0];
+    const anchor = vi.mocked(HTMLAnchorElement.prototype.click).mock
+      .contexts[0] as HTMLAnchorElement;
     expect(anchor.download).toBe('config.yaml');
   });
 
