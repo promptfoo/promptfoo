@@ -176,6 +176,25 @@ describe('DataTable', () => {
     expect(screen.getByText('No results match your search')).toBeInTheDocument();
   });
 
+  it('should show no-results state instead of empty state when manual column filters are active with no data', () => {
+    const activeColumnFilters = [{ id: 'name', value: 'Apple' }];
+
+    render(
+      <DataTable
+        columns={columns}
+        data={[]}
+        manualFiltering
+        columnFilters={activeColumnFilters}
+        onColumnFiltersChange={vi.fn()}
+        showToolbar
+      />,
+    );
+
+    expect(screen.queryByText('No data found')).not.toBeInTheDocument();
+    expect(screen.getByText('No results match your search')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
+  });
+
   it('should rehydrate toolbar filter rows from active column filters when reopened', async () => {
     const user = userEvent.setup();
     const data: TestRow[] = [
