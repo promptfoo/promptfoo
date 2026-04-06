@@ -20,13 +20,13 @@ For technical details on our security model, trust boundaries, and hardening rec
 
 The OSS CLI runs in your environment with your user permissions. It is **permissive by default** and executes user-configured code (assertions, providers, transforms, hooks, plugins, and templates in code-executing fields) without sandboxing.
 
-Treat OSS eval bundles as trusted code and data. This includes configs, referenced scripts, prompt packs, and referenced test fixtures or datasets. Runtime values such as test vars, model outputs, `_conversation`, and `storeOutputAs` can be intentionally interpolated into configured templates.
+Treat OSS eval bundles as trusted code and data. This includes configs, referenced scripts, prompt packs, and referenced test fixtures or datasets. Do not run Promptfoo against untrusted configs, fixtures, prompt packs, providers, models, remote content, or pull requests unless the run is isolated and secrets are scoped for that run.
 
-Unexpectedly evaluating runtime data as a template or script outside a configured code-executing field remains in scope.
+Runtime data is part of the configured OSS eval flow, not a sandbox boundary. Built-in eval logic and trusted templates may render, transform, score, store, or send runtime data through prompts, providers, graders, assertions, transforms, and reports.
 
-**In scope for OSS:** vulnerabilities where runtime data inputs (prompts, test cases, model outputs) can trigger code execution, file access, or network access without being explicitly placed into a trusted code-executing configuration context, or where runtime data is unexpectedly evaluated as a template or script outside that context.
+**In scope for OSS:** vulnerabilities where behavior escapes the documented OSS eval trust model, bypasses a supported isolation boundary or hardening control, or exposes secrets to destinations not configured as part of the eval flow.
 
-**Out of scope for OSS:** code execution from explicitly configured custom code or templates in code-executing fields, and direct local API or browser access to the OSS local server (`promptfoo view`), since these are part of the documented local trust model for the open-source tool.
+**Out of scope for OSS:** effects caused by adversarial runtime data within a configured OSS eval flow, code execution from explicitly configured custom code or templates in code-executing fields, and direct local API or browser access to the OSS local server (`promptfoo view`), since these are part of the documented local trust model for the open-source tool.
 
 ### Cloud Services
 
@@ -106,7 +106,8 @@ The following are out-of-scope:
 
 - Code execution from explicitly configured custom code or templates in code-executing fields in OSS (expected behavior)
 - Direct local API access or browser access to the OSS local server (`promptfoo view`)
-- Issues requiring users to run untrusted eval bundles, configs, fixtures, or scripts with local privileges
+- Effects caused by adversarial runtime data within a configured OSS eval flow, including template or script evaluation in providers, graders, assertions, transforms, reports, or other eval logic
+- Issues requiring users to run untrusted eval bundles, configs, fixtures, providers, models, remote content, or scripts with local privileges
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Social engineering, phishing, or physical attacks
 - Volumetric denial of service
