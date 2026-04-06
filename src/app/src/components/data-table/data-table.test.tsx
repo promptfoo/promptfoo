@@ -886,6 +886,31 @@ describe('DataTable', () => {
     });
   });
 
+  it('should keep compact header padding for utility columns', () => {
+    const data: TestRow[] = [{ id: '1', name: 'Test Item' }];
+    const renderSubComponent = () => <div data-testid="expanded-content">Details</div>;
+
+    const { container } = render(
+      <DataTable
+        columns={columns}
+        data={data}
+        enableRowSelection
+        renderSubComponent={renderSubComponent}
+      />,
+    );
+
+    const headerCells = container.querySelectorAll('thead th');
+    expect(headerCells).toHaveLength(4);
+    expect(headerCells[0].className).toContain('px-3');
+    expect(headerCells[1].className).toContain('px-3');
+    expect(headerCells[0].className).not.toContain('overflow-hidden');
+    expect(headerCells[1].className).not.toContain('overflow-hidden');
+    expect(headerCells[2].className).toContain('px-4');
+    expect(headerCells[2].className).toContain('overflow-hidden');
+    expect(headerCells[3].className).toContain('px-4');
+    expect(headerCells[3].className).toContain('overflow-hidden');
+  });
+
   describe('cell content wrapper', () => {
     it('should wrap data cell content in a div with overflow-hidden but not select cells', () => {
       const data: TestRow[] = [{ id: '1', name: 'Test Item' }];
