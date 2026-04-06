@@ -241,6 +241,29 @@ describe('ElevenLabsClient', () => {
         'xi-api-key': 'test-api-key',
       });
     });
+
+    it('should prefer client xi-api-key when GET caller headers include mixed-case api key', async () => {
+      const mockResponse = { voice_id: 'test-voice', name: 'Test Voice' };
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => mockResponse,
+      } as Response);
+
+      await client.get('/voices/test-voice', {
+        headers: {
+          'Idempotency-Key': 'request-123',
+          'Xi-Api-Key': 'caller-key',
+        },
+      });
+
+      const [, options] = mockFetch.mock.calls[0];
+      expect(options?.headers).toEqual({
+        'idempotency-key': 'request-123',
+        'xi-api-key': 'test-api-key',
+      });
+    });
   });
 
   describe('delete', () => {
@@ -273,6 +296,27 @@ describe('ElevenLabsClient', () => {
 
       await client.delete('/agents/test-agent', {
         headers: new Headers({ 'Idempotency-Key': 'request-123' }),
+      });
+
+      const [, options] = mockFetch.mock.calls[0];
+      expect(options?.headers).toEqual({
+        'idempotency-key': 'request-123',
+        'xi-api-key': 'test-api-key',
+      });
+    });
+
+    it('should prefer client xi-api-key when DELETE caller Headers include api key', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        headers: new Headers(),
+      } as Response);
+
+      await client.delete('/agents/test-agent', {
+        headers: new Headers({
+          'Idempotency-Key': 'request-123',
+          'xi-api-key': 'caller-key',
+        }),
       });
 
       const [, options] = mockFetch.mock.calls[0];
