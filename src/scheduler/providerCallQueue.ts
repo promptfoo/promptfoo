@@ -1,27 +1,23 @@
-import type { ApiProvider } from '../types/index';
-
 export interface QueuedProviderCall<T> {
   call: () => Promise<T>;
-  provider: ApiProvider;
   providerId: string;
   reject: (error: unknown) => void;
   resolve: (result: T) => void;
 }
 
 export interface ProviderCallQueue {
-  enqueue<T>(provider: ApiProvider, call: () => Promise<T>): Promise<T>;
+  enqueue<T>(providerId: string, call: () => Promise<T>): Promise<T>;
 }
 
 export class ProviderGroupedCallQueue implements ProviderCallQueue {
   private jobs: QueuedProviderCall<unknown>[] = [];
   private waiters: (() => void)[] = [];
 
-  enqueue<T>(provider: ApiProvider, call: () => Promise<T>): Promise<T> {
+  enqueue<T>(providerId: string, call: () => Promise<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       this.jobs.push({
         call,
-        provider,
-        providerId: provider.id(),
+        providerId,
         reject,
         resolve: resolve as (result: unknown) => void,
       });

@@ -55,7 +55,7 @@ export interface RateLimitRegistryRef {
  * Minimal interface for deferred provider-call queues used by serial grading orchestration.
  */
 export interface ProviderCallQueueRef {
-  enqueue: <T>(provider: ApiProvider, call: () => Promise<T>) => Promise<T>;
+  enqueue: <T>(providerId: string, call: () => Promise<T>) => Promise<T>;
 }
 
 export * from '../redteam/types';

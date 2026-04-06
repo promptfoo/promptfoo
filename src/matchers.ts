@@ -145,7 +145,7 @@ export function callProviderWithContext(
   };
 
   if (executionContext?.providerCallQueue) {
-    return executionContext.providerCallQueue.enqueue(provider, executeCall);
+    return executionContext.providerCallQueue.enqueue(provider.id(), executeCall);
   }
 
   return executeCall();

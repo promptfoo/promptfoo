@@ -411,11 +411,7 @@ function getRedteamInjectVar(test: AtomicTestCase, prompt: Prompt, testSuite?: T
   return matchingVars.at(-1) ?? promptVars.at(-1) ?? 'prompt';
 }
 
-interface DeferredGradingContext {
-  gradingPromise: Promise<void>;
-}
-
-const deferredGradingContexts = new WeakMap<EvaluateResult, DeferredGradingContext>();
+const deferredGradingPromises = new WeakMap<EvaluateResult, Promise<void>>();
 
 const PROVIDER_GROUPED_ASSERTION_TYPES = new Set<AssertionType>([
   ...MODEL_GRADED_ASSERTION_TYPES,
@@ -834,7 +830,7 @@ export async function runEval({
           },
         );
         gradingPromise.catch(() => {});
-        deferredGradingContexts.set(ret, { gradingPromise });
+        deferredGradingPromises.set(ret, gradingPromise);
       } else {
         const checkResult = await withProviderCallExecutionContext(
           { abortSignal, rateLimitRegistry },
@@ -1688,15 +1684,23 @@ class Evaluator {
     // Actually run the eval
     let numComplete = 0;
 
+    interface ProcessEvalStepOptions {
+      deferGrading?: boolean;
+      onRowsReady?: () => void;
+      precomputedRows?: EvaluateResult[];
+      providerCallQueue?: ProviderCallQueue;
+      shouldSkipStaleRows?: () => boolean;
+    }
+
     const runGroupedGradingForRows = async (
       rows: EvaluateResult[],
       providerCallQueue: ProviderGroupedCallQueue,
     ) => {
       const rowsWithDeferredGrading = rows
-        .map((row) => ({ row, context: deferredGradingContexts.get(row) }))
+        .map((row) => ({ row, gradingPromise: deferredGradingPromises.get(row) }))
         .filter(
-          (item): item is { row: EvaluateResult; context: DeferredGradingContext } =>
-            item.context !== undefined,
+          (item): item is { row: EvaluateResult; gradingPromise: Promise<void> } =>
+            item.gradingPromise !== undefined,
         );
       if (rowsWithDeferredGrading.length === 0) {
         return;
@@ -1708,9 +1712,9 @@ class Evaluator {
         resolveAllDone = resolve;
       });
 
-      const gradingPromises = rowsWithDeferredGrading.map(({ row, context }) =>
-        context.gradingPromise.finally(() => {
-          deferredGradingContexts.delete(row);
+      const gradingPromises = rowsWithDeferredGrading.map(({ row, gradingPromise }) =>
+        gradingPromise.finally(() => {
+          deferredGradingPromises.delete(row);
           pendingCount--;
           if (pendingCount === 0) {
             resolveAllDone();
@@ -1742,11 +1746,13 @@ class Evaluator {
     const processEvalStep = async (
       evalStep: RunEvalOptions,
       index: number | string,
-      shouldSkipStaleRows?: () => boolean,
-      onRowsReady?: () => void,
-      deferGrading = false,
-      providerCallQueue?: ProviderCallQueue,
-      precomputedRows?: EvaluateResult[],
+      {
+        deferGrading = false,
+        onRowsReady,
+        precomputedRows,
+        providerCallQueue,
+        shouldSkipStaleRows,
+      }: ProcessEvalStepOptions = {},
     ) => {
       if (typeof index !== 'number') {
         throw new Error('Expected index to be a number');
@@ -1941,22 +1947,15 @@ class Evaluator {
     const processEvalStepWithTimeout = async (
       evalStep: RunEvalOptions,
       index: number | string,
-      deferGrading = false,
-      providerCallQueue?: ProviderCallQueue,
+      processOptions: Pick<ProcessEvalStepOptions, 'deferGrading' | 'providerCallQueue'> = {},
     ) => {
+      const { deferGrading = false, providerCallQueue } = processOptions;
       // Get timeout value from options or environment, defaults to 0 (no timeout)
       const timeoutMs = options.timeoutMs || getEvalTimeoutMs();
 
       if (timeoutMs <= 0) {
         // No timeout, process normally
-        return processEvalStep(
-          evalStep,
-          index,
-          undefined,
-          undefined,
-          deferGrading,
-          providerCallQueue,
-        );
+        return processEvalStep(evalStep, index, { deferGrading, providerCallQueue });
       }
 
       // Create an AbortController to cancel the request if it times out
@@ -1982,14 +1981,12 @@ class Evaluator {
 
       try {
         return await Promise.race([
-          processEvalStep(
-            evalStepWithSignal,
-            index,
-            () => didTimeout,
-            clearEvalStepTimeout,
+          processEvalStep(evalStepWithSignal, index, {
             deferGrading,
+            onRowsReady: clearEvalStepTimeout,
             providerCallQueue,
-          ),
+            shouldSkipStaleRows: () => didTimeout,
+          }),
           new Promise<void>((_, reject) => {
             timeoutId = setTimeout(() => {
               didTimeout = true;
@@ -2171,12 +2168,10 @@ class Evaluator {
           const idx = runEvalOptions.indexOf(evalStep);
           const shouldDeferEvalStepGrading = shouldDeferGradingForTest(evalStep.test);
           const rows =
-            (await processEvalStepWithTimeout(
-              evalStep,
-              idx,
-              shouldDeferEvalStepGrading,
+            (await processEvalStepWithTimeout(evalStep, idx, {
+              deferGrading: shouldDeferEvalStepGrading,
               providerCallQueue,
-            )) || [];
+            })) || [];
           if (!shouldDeferEvalStepGrading) {
             processedIndices.add(idx);
             if (targetUnavailable) {
@@ -2186,10 +2181,10 @@ class Evaluator {
           }
 
           if (rows.length > 0) {
-            if (rows.some((row) => deferredGradingContexts.has(row))) {
+            if (rows.some((row) => deferredGradingPromises.has(row))) {
               groupedRows.push({ evalStep, index: idx, rows });
             } else {
-              await processEvalStep(evalStep, idx, undefined, undefined, false, undefined, rows);
+              await processEvalStep(evalStep, idx, { precomputedRows: rows });
               processedIndices.add(idx);
               if (targetUnavailable) {
                 break;
@@ -2206,7 +2201,7 @@ class Evaluator {
         );
 
         for (const { evalStep, index, rows } of groupedRows) {
-          await processEvalStep(evalStep, index, undefined, undefined, false, undefined, rows);
+          await processEvalStep(evalStep, index, { precomputedRows: rows });
           processedIndices.add(index);
           await this.evalRecord.addPrompts(prompts);
         }
