@@ -2,10 +2,15 @@ const fs = require('fs');
 
 let loadedModel = null;
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 class StatefulOllamaGrader {
   constructor(options) {
     this.config = options.config || {};
     this.modelName = this.config.modelName || 'unknown-grader';
+    this.reloadDelayMs = Number(this.config.reloadDelayMs) || 0;
   }
 
   id() {
@@ -15,6 +20,10 @@ class StatefulOllamaGrader {
   async callApi(prompt) {
     const switchedModel = loadedModel !== this.modelName;
     loadedModel = this.modelName;
+
+    if (switchedModel && this.reloadDelayMs > 0) {
+      await sleep(this.reloadDelayMs);
+    }
 
     if (this.config.logPath) {
       fs.appendFileSync(
