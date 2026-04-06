@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import * as pythonUtils from '../../src/python/pythonUtils';
 
@@ -18,54 +18,46 @@ const describeOrSkip = process.platform === 'win32' && process.env.CI ? describe
 
 describeOrSkip('PythonProvider Unicode handling', () => {
   let tempDir: string;
-  const providers: PythonProvider[] = [];
+  let provider: PythonProvider;
 
   beforeAll(() => {
     // Disable caching for tests to ensure fresh runs
     process.env.PROMPTFOO_CACHE_ENABLED = 'false';
-  });
-
-  beforeEach(() => {
-    // Reset Python state to avoid test interference
     pythonUtils.state.cachedPythonPath = null;
     pythonUtils.state.validationPromise = null;
+
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-unicode-test-'));
-  });
 
-  afterEach(async () => {
-    // Cleanup providers
-    await Promise.all(providers.map((p) => p.shutdown().catch(() => {})));
-    providers.length = 0;
-
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true });
-    }
-  });
-
-  afterAll(async () => {
-    // Final cleanup
-    await Promise.all(providers.map((p) => p.shutdown().catch(() => {})));
-  });
-
-  // Helper to create a provider with less overhead
-  const createProvider = (scriptName: string, scriptContent: string) => {
-    const scriptPath = path.join(tempDir, scriptName);
-    fs.writeFileSync(scriptPath, scriptContent);
-    const provider = new PythonProvider(scriptPath, {
-      id: `python:${scriptName}`,
-      config: { basePath: tempDir },
-    });
-    providers.push(provider);
-    return provider;
-  };
-
-  it(
-    'should correctly handle Unicode characters in prompt',
-    async () => {
-      const provider = createProvider(
-        'unicode_test.py',
-        `
+    const scriptPath = path.join(tempDir, 'unicode_test.py');
+    fs.writeFileSync(
+      scriptPath,
+      `
 def call_api(prompt, options, context):
+    vars = context.get('vars', {}) if context else {}
+    if vars.get('mode') == 'nested':
+        return {
+            "output": "Complex Unicode test",
+            "nested": {
+                "products": [
+                    {"name": "Product®", "price": "€100"},
+                    {"name": "Brand™", "price": "€200"},
+                    {"name": "Item© 2025", "price": "€300"}
+                ],
+                "metadata": {
+                    "temperature": "25°C",
+                    "description": "Advanced Product® with Brand™ technology ©2025"
+                }
+            }
+        }
+    if 'product' in vars:
+        product_name = vars.get('product', 'Unknown')
+        return {
+            "output": f"{prompt} - Product: {product_name}",
+            "metadata": {
+                "product_name": product_name,
+                "product_bytes": len(product_name.encode('utf-8'))
+            }
+        }
     return {
         "output": f"Received: {prompt}",
         "metadata": {
@@ -74,8 +66,25 @@ def call_api(prompt, options, context):
         }
     }
 `,
-      );
+    );
 
+    provider = new PythonProvider(scriptPath, {
+      id: 'python:unicode_test.py',
+      config: { basePath: tempDir },
+    });
+  });
+
+  afterAll(async () => {
+    await provider?.shutdown().catch(() => {});
+
+    if (tempDir && fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true });
+    }
+  });
+
+  it(
+    'should correctly handle Unicode characters in prompt',
+    async () => {
       const result = await provider.callApi('Product® Plus');
 
       // Verify the result structure and Unicode preservation
@@ -96,22 +105,6 @@ def call_api(prompt, options, context):
   it(
     'should handle Unicode in context vars',
     async () => {
-      const provider = createProvider(
-        'context_unicode_test.py',
-        `
-def call_api(prompt, options, context):
-    vars = context.get('vars', {})
-    product_name = vars.get('product', 'Unknown')
-    return {
-        "output": f"{prompt} - Product: {product_name}",
-        "metadata": {
-            "product_name": product_name,
-            "product_bytes": len(product_name.encode('utf-8'))
-        }
-    }
-`,
-      );
-
       const context: CallApiContextParams = {
         prompt: { raw: 'Test prompt', label: 'test' },
         vars: {
@@ -135,28 +128,10 @@ def call_api(prompt, options, context):
   it(
     'should handle complex nested Unicode data',
     async () => {
-      const provider = createProvider(
-        'nested_unicode_test.py',
-        `
-def call_api(prompt, options, context):
-    return {
-        "output": "Complex Unicode test",
-        "nested": {
-            "products": [
-                {"name": "Product®", "price": "€100"},
-                {"name": "Brand™", "price": "€200"},
-                {"name": "Item© 2025", "price": "€300"}
-            ],
-            "metadata": {
-                "temperature": "25°C",
-                "description": "Advanced Product® with Brand™ technology ©2025"
-            }
-        }
-    }
-`,
-      );
-
-      const result = await provider.callApi('Test');
+      const result = await provider.callApi('Test', {
+        prompt: { raw: 'Test', label: 'test' },
+        vars: { mode: 'nested' },
+      });
 
       // Verify complex nested Unicode structures are preserved
       const resultAny = result as any;
