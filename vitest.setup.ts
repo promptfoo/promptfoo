@@ -4,9 +4,12 @@
  * This file configures the test environment for all tests in the test/ directory.
  */
 
+import { rmSync } from 'node:fs';
+import path from 'node:path';
+
 import { afterAll, afterEach, vi } from 'vitest';
 
-const TEST_CONFIG_DIR = './.local/vitest/config';
+const TEST_CONFIG_DIR = path.join('.local', 'vitest', 'config', `worker-${process.pid}`);
 
 // Set up test environment variables
 process.env.NODE_ENV = 'test';
@@ -50,4 +53,7 @@ afterEach(() => {
 afterAll(() => {
   // Reset all modules to clear any cached state
   vi.resetModules();
+
+  // Each worker gets a unique config dir, so we can safely remove only its own files.
+  rmSync(TEST_CONFIG_DIR, { recursive: true, force: true });
 });
