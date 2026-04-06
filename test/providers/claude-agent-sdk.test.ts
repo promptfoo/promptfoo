@@ -12,7 +12,12 @@ import {
 } from '../../src/providers/claude-agent-sdk';
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
 import { checkProviderApiKeys } from '../../src/util/provider';
-import type { NonNullableUsage, Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import type {
+  NonNullableUsage,
+  Query,
+  SDKMessage,
+  TerminalReason,
+} from '@anthropic-ai/claude-agent-sdk';
 import type { MockInstance } from 'vitest';
 
 import type { EnvOverrides } from '../../src/types/env';
@@ -66,7 +71,7 @@ const createMockUsage = (input = 0, output = 0): NonNullableUsage => ({
 });
 
 // Helper to create a mock BetaMessage with required fields
-// The BetaMessage type requires: id, container, content, context_management, model, role, stop_reason, stop_sequence, type, usage
+// The BetaMessage type requires: id, container, content, context_management, model, role, stop_details, stop_reason, stop_sequence, type, usage
 // We use 'as any' for content since test mocks don't need the full BetaContentBlock discriminated union
 const createMockBetaMessage = (
   content: Array<{ type: string; id?: string; name?: string; input?: unknown; text?: string }>,
@@ -77,6 +82,7 @@ const createMockBetaMessage = (
   context_management: null,
   model: 'claude-sonnet-4-20250514' as const,
   role: 'assistant' as const,
+  stop_details: null,
   stop_reason: 'tool_use' as const,
   stop_sequence: null,
   type: 'message' as const,
@@ -117,6 +123,7 @@ const createMockResponse = (
   usage?: { input_tokens?: number; output_tokens?: number },
   cost = 0.001,
   sessionId = 'test-session-123',
+  terminalReason?: TerminalReason,
 ): Query => {
   return createMockQuery({
     type: 'result',
@@ -131,6 +138,7 @@ const createMockResponse = (
     is_error: false,
     num_turns: 1,
     permission_denials: [],
+    ...(terminalReason === undefined ? {} : { terminal_reason: terminalReason }),
   });
 };
 
@@ -330,6 +338,26 @@ describe('ClaudeCodeSDKProvider', () => {
             strictMcpConfig: true,
           }),
         });
+      });
+
+      it('should include terminal reason metadata when provided by SDK', async () => {
+        mockQuery.mockReturnValue(
+          createMockResponse(
+            'Test response',
+            { input_tokens: 10, output_tokens: 20 },
+            0.002,
+            'test-session-123',
+            'completed',
+          ),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata?.terminalReason).toBe('completed');
+        expect(JSON.parse(result.raw as string).terminal_reason).toBe('completed');
       });
 
       it('should handle SDK error response', async () => {
@@ -1272,12 +1300,32 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
+        it('with auto permission mode', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              permission_mode: 'auto',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              permissionMode: 'auto',
+            }),
+          });
+        });
+
         it('with sandbox configuration', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
           const sandbox = {
             enabled: true,
             autoAllowBashIfSandboxed: true,
+            failIfUnavailable: false,
             network: {
               allowedDomains: ['api.example.com'],
               allowLocalBinding: true,
