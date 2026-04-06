@@ -2163,10 +2163,10 @@ class Evaluator {
           checkAbort();
           if (isWebUI) {
             const provider = evalStep.provider.label || evalStep.provider.id();
-            const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);
-            logger.info(
-              `[${numComplete}/${runEvalOptions.length}] Running ${provider} with vars: ${vars}`,
-            );
+            logger.info(`[${numComplete}/${runEvalOptions.length}] Running eval step`, {
+              provider,
+              vars: evalStep.test.vars || {},
+            });
           }
           const idx = runEvalOptions.indexOf(evalStep);
           const shouldDeferEvalStepGrading = shouldDeferGradingForTest(evalStep.test);
