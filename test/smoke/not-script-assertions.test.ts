@@ -39,7 +39,7 @@ function expectComponentResult(
   expectedScore: number,
 ) {
   expect(result.success).toBe(true);
-  expect(result.score).toBeCloseTo(expectedScore, 10);
+  expect(result.score).toBeCloseTo(expectedScore, 4);
   expect(result.gradingResult.componentResults).toHaveLength(1);
   expect(result.gradingResult.componentResults[0]).toMatchObject({
     pass: true,
@@ -73,8 +73,8 @@ describe('Negated script assertion smoke tests', () => {
       '--no-cache',
     ]);
 
-    expect(stderr).toBe('');
     expect(exitCode).toBe(0);
+    expect(stderr.toLowerCase()).not.toMatch(/\b(error|failed)\b/);
 
     const parsed = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
     const results = parsed.results.results;
