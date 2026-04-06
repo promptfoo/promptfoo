@@ -228,7 +228,7 @@
     "@inquirer/input": "^5.0.8",
     "@inquirer/select": "^5.1.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@openai/agents": "^0.8.1",
+    "@openai/agents": "^0.8.2",
     "@opencode-ai/sdk": "^1.2.19",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.6.0",
