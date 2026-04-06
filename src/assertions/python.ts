@@ -136,7 +136,7 @@ function normalizePythonScriptResult(
     return normalizePythonAssertionResult(assertion, true, inverse);
   }
 
-  if ((typeof result === 'boolean' && !result) || lowerStringResult === 'false') {
+  if (typeof result === 'boolean' || lowerStringResult === 'false') {
     return normalizePythonAssertionResult(assertion, false, inverse);
   }
 

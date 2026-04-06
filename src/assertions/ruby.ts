@@ -137,7 +137,7 @@ function normalizeRubyScriptResult(
     return normalizeRubyAssertionResult(assertion, true, inverse);
   }
 
-  if ((typeof result === 'boolean' && !result) || lowerStringResult === 'false') {
+  if (typeof result === 'boolean' || lowerStringResult === 'false') {
     return normalizeRubyAssertionResult(assertion, false, inverse);
   }
 
