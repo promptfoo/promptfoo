@@ -139,16 +139,17 @@ export class ElevenLabsClient {
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+    const { headers: optionsHeaders, ...restOptions } = options || {};
 
     try {
       const response = await fetchWithProxy(url, {
         method: 'GET',
         headers: {
-          ...toPlainHeaders(options?.headers),
+          ...toPlainHeaders(optionsHeaders),
           'xi-api-key': this.apiKey,
         },
         signal: controller.signal,
-        ...options,
+        ...restOptions,
       });
 
       clearTimeout(timeoutId);
@@ -174,16 +175,17 @@ export class ElevenLabsClient {
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+    const { headers: optionsHeaders, ...restOptions } = options || {};
 
     try {
       const response = await fetchWithProxy(url, {
         method: 'DELETE',
         headers: {
-          ...toPlainHeaders(options?.headers),
+          ...toPlainHeaders(optionsHeaders),
           'xi-api-key': this.apiKey,
         },
         signal: controller.signal,
-        ...options,
+        ...restOptions,
       });
 
       clearTimeout(timeoutId);
