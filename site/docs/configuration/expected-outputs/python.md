@@ -16,6 +16,14 @@ For an overview of all Python integrations (providers, assertions, test generato
 
 A variable named `output` is injected into the context. The function should return `true` if the output passes the assertion, and `false` otherwise. If the function returns a number, it will be treated as a score.
 
+Use `not-python` to invert the final pass/fail result for boolean, numeric, and `GradingResult.pass` returns while preserving the returned `score`. Numeric scores are still compared against `threshold` before the pass/fail result is inverted:
+
+```yaml
+assert:
+  - type: not-python
+    value: "'error' in output"
+```
+
 Example:
 
 ```yaml
