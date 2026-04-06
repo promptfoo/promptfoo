@@ -298,6 +298,20 @@ export interface ClaudeCodeOptions {
   thinking?: ThinkingConfig;
 
   /**
+   * Token budget for the task. The model will pace its tool use to stay within this budget.
+   * Useful for cost-conscious evaluations.
+   *
+   * @example
+   * ```yaml
+   * task_budget:
+   *   total: 50000
+   * ```
+   */
+  task_budget?: {
+    total: number;
+  };
+
+  /**
    * Controls how much effort Claude puts into its response.
    * Works with adaptive thinking to guide thinking depth.
    * - 'low' - Minimal thinking, fastest responses
@@ -823,6 +837,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       tools: config.tools,
       enableFileCheckpointing: config.enable_file_checkpointing,
       persistSession: config.persist_session,
+      taskBudget: config.task_budget,
       env,
     };
 
@@ -1047,6 +1062,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
    * Users can also use Bedrock (with CLAUDE_CODE_USE_BEDROCK env var) or Vertex (with CLAUDE_CODE_USE_VERTEX env var)
    */
   requiresApiKey(): boolean {
+    if (this.config.apiKeyRequired === false) {
+      return false;
+    }
     return !(
       this.env?.CLAUDE_CODE_USE_BEDROCK ||
       this.env?.CLAUDE_CODE_USE_VERTEX ||

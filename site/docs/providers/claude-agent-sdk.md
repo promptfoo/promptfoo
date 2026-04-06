@@ -144,6 +144,7 @@ prompts:
 | `max_turns`                          | number       | Maximum conversation turns                                                                                   | Claude Agent SDK default |
 | `max_thinking_tokens`                | number       | Maximum tokens for thinking                                                                                  | Claude Agent SDK default |
 | `max_budget_usd`                     | number       | Maximum cost budget in USD for the agent execution                                                           | None                     |
+| `task_budget`                        | object       | Token budget for pacing tool use: `{total: N}`                                                               | None                     |
 | `permission_mode`                    | string       | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk`                            | `default`                |
 | `allow_dangerously_skip_permissions` | boolean      | Required safety flag when using `bypassPermissions` mode                                                     | false                    |
 | `thinking`                           | object       | Thinking config: `{type: 'adaptive'}`, `{type: 'enabled', budgetTokens: N}`, or `{type: 'disabled'}`         | Model default            |
@@ -544,6 +545,20 @@ providers:
 ```
 
 The agent will stop execution if the cost exceeds the specified budget.
+
+## Task Budget
+
+Control how the model paces its tool use within a token budget using `task_budget`:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      task_budget:
+        total: 50000
+```
+
+The `total` field sets the token budget for the task. The model uses this to pace its tool use—for example, being more selective about which tools to invoke as the budget is consumed.
 
 ## Additional Directories
 

@@ -72,19 +72,24 @@ Claude models are available across multiple platforms. Here's how the model name
 | --------------- | --------------------- | ----------------------------------------------------------------------------------- |
 | apiKey          | ANTHROPIC_API_KEY     | Your API key from Anthropic                                                         |
 | apiBaseUrl      | ANTHROPIC_BASE_URL    | The base URL for requests to the Anthropic API                                      |
-| temperature     | ANTHROPIC_TEMPERATURE | Controls the randomness of the output (default: 0)                                  |
+| temperature     | ANTHROPIC_TEMPERATURE | Controls the randomness of the output (default: 0). Omitted when `top_p` is set.    |
 | max_tokens      | ANTHROPIC_MAX_TOKENS  | The maximum length of the generated text (default: 1024)                            |
 | cost            | -                     | Legacy per-token override applied to both input and output pricing                  |
 | inputCost       | -                     | Override input token pricing in promptfoo cost estimates                            |
 | outputCost      | -                     | Override output token pricing in promptfoo cost estimates                           |
-| top_p           | -                     | Controls nucleus sampling, affecting the randomness of the output                   |
+| top_p           | -                     | Controls nucleus sampling. Mutually exclusive with `temperature`.                   |
 | top_k           | -                     | Only sample from the top K options for each subsequent token                        |
+| stop_sequences  | -                     | Array of strings that will stop generation when encountered                         |
+| stream          | -                     | Enable streaming (required when `max_tokens` > 21,333)                              |
 | tools           | -                     | An array of tool or function definitions for the model to call                      |
 | tool_choice     | -                     | An object specifying the tool to call                                               |
 | effort          | -                     | Output effort level: `low`, `medium`, `high`, or `max`                              |
 | output_format   | -                     | JSON schema configuration for structured outputs                                    |
 | thinking        | -                     | Configuration for Claude's extended thinking (`enabled`, `adaptive`, or `disabled`) |
 | showThinking    | -                     | Whether to include thinking content in the output (default: true)                   |
+| cache_control   | -                     | Auto-apply cache_control to the last cacheable block in the request                 |
+| metadata        | -                     | Request metadata such as `user_id` for tracking purposes                            |
+| service_tier    | -                     | Priority tier: `auto` (default) or `standard_only`                                  |
 | headers         | -                     | Additional headers to be sent with the API request                                  |
 | extra_body      | -                     | Additional parameters to be included in the API request body                        |
 
@@ -121,6 +126,8 @@ The Anthropic provider supports several options to customize the behavior of the
 - `top_k`: Only sample from the top K options for each subsequent token.
 - `tools`: An array of tool or function definitions for the model to call.
 - `tool_choice`: An object specifying the tool to call.
+- `stop_sequences`: An array of strings that stop generation when encountered.
+- `metadata`: Request metadata (e.g., `user_id`) passed to the API.
 - `extra_body`: Additional parameters to pass directly to the Anthropic API request body.
 
 Example configuration with options and prompts:
@@ -135,6 +142,31 @@ providers:
         custom_param: 'test_value'
 prompts:
   - file://prompt.json
+```
+
+### Stop Sequences
+
+Use `stop_sequences` to halt generation when Claude encounters specific strings:
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    config:
+      stop_sequences:
+        - "\n\nHuman:"
+        - 'STOP'
+```
+
+### Metadata
+
+Pass request metadata to the API for tracking or auditing purposes:
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    config:
+      metadata:
+        user_id: 'user-123'
 ```
 
 ### Tool Calling
@@ -171,7 +203,7 @@ Anthropic provides specialized tools for web search and web fetching capabilitie
 
 The web fetch tool allows Claude to retrieve full content from web pages and PDF documents. This is useful when you want Claude to access and analyze specific web content.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
@@ -187,53 +219,82 @@ providers:
           max_content_tokens: 50000
 ```
 
+Promptfoo also supports the stable `web_fetch_20260209` variant. A newer version `web_fetch_20260309` adds `use_cache` support for controlling whether cached content is used:
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    config:
+      tools:
+        - type: web_fetch_20260209
+          name: web_fetch
+          max_uses: 3
+          defer_loading: true
+        - type: web_fetch_20260309
+          name: web_fetch
+          max_uses: 3
+          use_cache: false # Bypass cache for fresh content
+```
+
 **Web Fetch Tool Configuration Options:**
 
-| Parameter            | Type     | Description                                                                                  |
-| -------------------- | -------- | -------------------------------------------------------------------------------------------- |
-| `type`               | string   | Must be `web_fetch_20250910`                                                                 |
-| `name`               | string   | Must be `web_fetch`                                                                          |
-| `max_uses`           | number   | Maximum number of web fetches per request (optional)                                         |
-| `allowed_domains`    | string[] | List of domains to allow fetching from (optional, mutually exclusive with `blocked_domains`) |
-| `blocked_domains`    | string[] | List of domains to block fetching from (optional, mutually exclusive with `allowed_domains`) |
-| `citations`          | object   | Enable citations with `{ enabled: true }` (optional)                                         |
-| `max_content_tokens` | number   | Maximum tokens for web content (optional)                                                    |
+| Parameter            | Type     | Description                                                                                   |
+| -------------------- | -------- | --------------------------------------------------------------------------------------------- |
+| `type`               | string   | `web_fetch_20250910` (beta), `web_fetch_20260209`, or `web_fetch_20260309` (adds `use_cache`) |
+| `name`               | string   | Must be `web_fetch`                                                                           |
+| `max_uses`           | number   | Maximum number of web fetches per request (optional)                                          |
+| `allowed_callers`    | string[] | Restrict which tool callers may invoke the server tool (optional)                             |
+| `allowed_domains`    | string[] | List of domains to allow fetching from (optional, mutually exclusive with `blocked_domains`)  |
+| `blocked_domains`    | string[] | List of domains to block fetching from (optional, mutually exclusive with `allowed_domains`)  |
+| `defer_loading`      | boolean  | Load the tool lazily instead of including it in the initial system prompt (optional)          |
+| `citations`          | object   | Enable citations with `{ enabled: true }` (optional)                                          |
+| `max_content_tokens` | number   | Maximum tokens for web content (optional)                                                     |
+| `cache_control`      | object   | Apply Anthropic cache control to the tool definition (optional)                               |
+| `strict`             | boolean  | Enable strict schema validation for tool names and inputs (optional)                          |
+| `use_cache`          | boolean  | Whether to use cached content (`web_fetch_20260309` only, optional)                           |
 
 ##### Web Search Tool
 
 The web search tool allows Claude to search the internet for information:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       tools:
-        - type: web_search_20250305
+        - type: web_search_20260209
           name: web_search
           max_uses: 3
 ```
 
 **Web Search Tool Configuration Options:**
 
-| Parameter  | Type   | Description                                       |
-| ---------- | ------ | ------------------------------------------------- |
-| `type`     | string | Must be `web_search_20250305`                     |
-| `name`     | string | Must be `web_search`                              |
-| `max_uses` | number | Maximum number of searches per request (optional) |
+| Parameter         | Type     | Description                                                                                |
+| ----------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `type`            | string   | `web_search_20250305` (beta) or `web_search_20260209`                                      |
+| `name`            | string   | Must be `web_search`                                                                       |
+| `max_uses`        | number   | Maximum number of searches per request (optional)                                          |
+| `allowed_callers` | string[] | Restrict which tool callers may invoke the server tool (optional)                          |
+| `allowed_domains` | string[] | Restrict results to specific domains (optional, mutually exclusive with `blocked_domains`) |
+| `blocked_domains` | string[] | Exclude domains from results (optional, mutually exclusive with `allowed_domains`)         |
+| `cache_control`   | object   | Apply Anthropic cache control to the tool definition (optional)                            |
+| `defer_loading`   | boolean  | Load the tool lazily instead of including it in the initial system prompt (optional)       |
+| `strict`          | boolean  | Enable strict schema validation for tool names and inputs (optional)                       |
+| `user_location`   | object   | Approximate user location to improve search relevance (optional)                           |
 
 ##### Combined Web Search and Web Fetch
 
 You can use both tools together for comprehensive web information gathering:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       tools:
-        - type: web_search_20250305
+        - type: web_search_20260209
           name: web_search
           max_uses: 3
-        - type: web_fetch_20250910
+        - type: web_fetch_20260309
           name: web_fetch
           max_uses: 5
           citations:
@@ -292,12 +353,24 @@ prompts:
   content: '{{question}}'
 ```
 
+As a simpler alternative, use the top-level `cache_control` parameter to automatically apply a cache marker to the last cacheable block in the request, without annotating each block individually:
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    config:
+      cache_control:
+        type: ephemeral
+```
+
 Common use cases for caching:
 
 - System messages and instructions
 - Tool/function definitions
 - Large context documents
 - Frequently used images
+
+Cache read and creation token counts are tracked in the response's token usage details.
 
 See [Anthropic's Prompt Caching Guide](https://docs.anthropic.com/claude/docs/prompt-caching) for more details on requirements, pricing, and best practices.
 
@@ -327,6 +400,30 @@ prompts:
 ```
 
 See [Anthropic's Citations Guide](https://docs.anthropic.com/en/docs/build-with-claude/citations) for more details.
+
+### PDF Documents
+
+Claude can process PDF files using document content blocks. Pass the PDF as base64-encoded data:
+
+```yaml
+- role: user
+  content:
+    - type: document
+      source:
+        type: base64
+        media_type: application/pdf
+        data: '{{pdf_base64}}'
+    - type: text
+      text: 'Summarize this document'
+```
+
+Use a test var to supply the base64-encoded PDF content:
+
+```yaml
+tests:
+  - vars:
+      pdf_base64: file://document.pdf
+```
 
 ### Extended Thinking
 
@@ -376,6 +473,18 @@ thinking:
   type: 'disabled'
 ```
 
+The `display` field controls how thinking content is returned:
+
+- `'summarized'` (default) - thinking content is included in the response
+- `'omitted'` - thinking content is redacted but a signature is returned for multi-turn continuity (saves tokens)
+
+```yaml
+thinking:
+  type: enabled
+  budget_tokens: 10000
+  display: omitted
+```
+
 When thinking is enabled or adaptive:
 
 - Responses will include `thinking` content blocks showing Claude's reasoning process
@@ -384,7 +493,9 @@ When thinking is enabled or adaptive:
 - The tokens used for thinking count towards your max_tokens limit
 - A specialized 28 or 29 token system prompt is automatically included
 - Previous turn thinking blocks are ignored and not counted as input tokens
-- Thinking is not compatible with temperature, top_p, or top_k modifications
+- `temperature` and `top_k` are incompatible with thinking and will be omitted with a warning
+- `top_p` is clamped to the range [0.95, 1.0] when thinking is enabled
+- Forced tool use (`tool_choice` type `any` or `tool`) is incompatible with thinking and will be omitted with a warning; use `auto` instead
 
 Example response with thinking enabled:
 

@@ -489,6 +489,18 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(result.size).toBe(1);
         expect(result.get('ANTHROPIC_API_KEY')).toEqual(['anthropic:claude-agent-sdk']);
       });
+
+      it('should not report missing key when apiKeyRequired is false', () => {
+        delete process.env.ANTHROPIC_API_KEY;
+        delete process.env.CLAUDE_CODE_USE_VERTEX;
+        delete process.env.CLAUDE_CODE_USE_BEDROCK;
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: { apiKeyRequired: false },
+        });
+        const result = checkProviderApiKeys([provider]);
+        expect(result.size).toBe(0);
+      });
     });
 
     describe('provider-level env overrides via loadApiProvider', () => {
@@ -979,6 +991,25 @@ describe('ClaudeCodeSDKProvider', () => {
             prompt: 'Test prompt',
             options: expect.objectContaining({
               maxBudgetUsd: 5.0,
+            }),
+          });
+        });
+
+        it('with taskBudget configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              task_budget: { total: 50000 },
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              taskBudget: { total: 50000 },
             }),
           });
         });
