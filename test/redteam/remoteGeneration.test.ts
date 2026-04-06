@@ -110,12 +110,20 @@ describe('shouldGenerateRemote', () => {
     expect(shouldGenerateRemote()).toBe(false);
   });
 
-  it('should return false when Codex default credentials exist and no OpenAI key is set', () => {
+  it('should return true for redteam generation when only Codex default credentials exist', () => {
     vi.mocked(getEnvBool).mockReturnValue(false);
     vi.mocked(getEnvString).mockReturnValue('');
     vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
 
-    expect(shouldGenerateRemote()).toBe(false);
+    expect(shouldGenerateRemote()).toBe(true);
+  });
+
+  it('should return false when the caller can use Codex default providers locally', () => {
+    vi.mocked(getEnvBool).mockReturnValue(false);
+    vi.mocked(getEnvString).mockReturnValue('');
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+
+    expect(shouldGenerateRemote({ canUseCodexDefaultProvider: true })).toBe(false);
   });
 
   it('should return true for embedding-backed checks when only Codex default credentials exist', () => {
@@ -123,7 +131,12 @@ describe('shouldGenerateRemote', () => {
     vi.mocked(getEnvString).mockReturnValue('');
     vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
 
-    expect(shouldGenerateRemote({ requireEmbeddingProvider: true })).toBe(true);
+    expect(
+      shouldGenerateRemote({
+        canUseCodexDefaultProvider: true,
+        requireEmbeddingProvider: true,
+      }),
+    ).toBe(true);
   });
 
   it('should return true when neither OpenAI nor Codex credentials exist', () => {

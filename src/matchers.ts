@@ -803,7 +803,7 @@ export async function matchesLlmRubric(
     !grading.rubricPrompt &&
     !cliState.config?.redteam?.provider &&
     cliState.config?.redteam &&
-    shouldGenerateRemote()
+    shouldGenerateRemote({ canUseCodexDefaultProvider: true })
   ) {
     return {
       ...(await doRemoteGrading({

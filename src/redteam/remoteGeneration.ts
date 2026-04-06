@@ -5,6 +5,7 @@ import { CloudConfig } from '../globalConfig/cloud';
 import { hasCodexDefaultCredentials } from '../providers/openai/codexDefaults';
 
 interface ShouldGenerateRemoteOptions {
+  canUseCodexDefaultProvider?: boolean;
   requireEmbeddingProvider?: boolean;
 }
 
@@ -112,9 +113,13 @@ export function shouldGenerateRemote(options?: ShouldGenerateRemoteOptions): boo
   }
 
   // Generate remotely when local credentials for the requested task are unavailable.
+  // Codex defaults only cover text default-provider paths, not redteam's task-specific
+  // generation providers.
   const hasLocalCredentials =
     Boolean(getEnvString('OPENAI_API_KEY')) ||
-    (!options?.requireEmbeddingProvider && hasCodexDefaultCredentials());
+    (options?.canUseCodexDefaultProvider &&
+      !options?.requireEmbeddingProvider &&
+      hasCodexDefaultCredentials());
 
   return !hasLocalCredentials || (cliState.remote ?? false);
 }
