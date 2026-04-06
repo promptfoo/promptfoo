@@ -5,6 +5,8 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
 
+import type { OpenAICodexSDKProvider } from '../../../src/providers/openai/codex-sdk';
+
 const mockGetDirectory = vi.hoisted(() => vi.fn(() => process.cwd()));
 const mockResolvePackageEntryPoint = vi.hoisted(() =>
   vi.fn<(packageName: string, baseDir: string) => string | null>(() => '/tmp/codex-sdk/index.js'),
@@ -164,7 +166,7 @@ describe('Codex default providers', () => {
     });
   });
 
-  it('creates a new cached provider set when process API credentials change', async () => {
+  it('does not include raw API credentials in the provider cache key', async () => {
     const { getCodexDefaultProviders } = await import(
       '../../../src/providers/openai/codexDefaults'
     );
@@ -175,7 +177,9 @@ describe('Codex default providers', () => {
     process.env.CODEX_API_KEY = 'second-codex-key';
     const secondProviders = getCodexDefaultProviders();
 
-    expect(secondProviders).not.toBe(firstProviders);
-    expect(secondProviders.gradingProvider).not.toBe(firstProviders.gradingProvider);
+    expect(secondProviders).toBe(firstProviders);
+    expect((secondProviders.gradingProvider as OpenAICodexSDKProvider).getApiKey()).toBe(
+      'second-codex-key',
+    );
   });
 });

@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -127,15 +126,11 @@ function getCodexDefaultProviderConfig(
   };
 }
 
-function getCredentialCacheFingerprint(value?: string): string | undefined {
-  return value ? createHash('sha256').update(value).digest('hex') : undefined;
-}
-
 function getCodexDefaultProvidersCacheKey(env?: EnvOverrides): string {
   return JSON.stringify({
-    CODEX_API_KEY: getCredentialCacheFingerprint(getCodexEnvString(env, 'CODEX_API_KEY')),
     CODEX_HOME: getCodexEnvString(env, 'CODEX_HOME'),
-    OPENAI_API_KEY: getCredentialCacheFingerprint(getCodexEnvString(env, 'OPENAI_API_KEY')),
+    hasCodexApiKey: Boolean(getCodexEnvString(env, 'CODEX_API_KEY')),
+    hasOpenAiApiKey: Boolean(getCodexEnvString(env, 'OPENAI_API_KEY')),
   });
 }
 
