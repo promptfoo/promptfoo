@@ -305,7 +305,7 @@ export async function matchesSimilarity(
   grading?: GradingConfig,
   metric: 'cosine' | 'dot_product' | 'euclidean' = 'cosine',
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  if (cliState.config?.redteam && shouldGenerateRemote()) {
+  if (cliState.config?.redteam && shouldGenerateRemote({ requireEmbeddingProvider: true })) {
     try {
       return doRemoteGrading({
         task: 'similar',

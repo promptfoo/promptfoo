@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDefaultProviders } from '../src/providers/defaults';
 import { generatePrompts } from '../src/suggestions';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
@@ -11,6 +11,10 @@ vi.mock('../src/providers/defaults', () => ({
 
 describe('generatePrompts', () => {
   beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
     vi.resetAllMocks();
   });
 

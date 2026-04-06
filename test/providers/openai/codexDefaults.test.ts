@@ -20,6 +20,7 @@ describe('Codex default providers', () => {
   let codexHome: string;
   let originalCodexApiKey: string | undefined;
   let originalCodexHome: string | undefined;
+  let originalOpenAiApiKey: string | undefined;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -30,7 +31,9 @@ describe('Codex default providers', () => {
 
     originalCodexApiKey = process.env.CODEX_API_KEY;
     originalCodexHome = process.env.CODEX_HOME;
+    originalOpenAiApiKey = process.env.OPENAI_API_KEY;
     delete process.env.CODEX_API_KEY;
+    delete process.env.OPENAI_API_KEY;
 
     codexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-codex-defaults-'));
     process.env.CODEX_HOME = codexHome;
@@ -47,6 +50,7 @@ describe('Codex default providers', () => {
     );
     clearCodexDefaultProvidersForTesting();
     await providerRegistry.shutdownAll();
+    vi.resetAllMocks();
 
     fs.rmSync(codexHome, { force: true, recursive: true });
 
@@ -60,6 +64,12 @@ describe('Codex default providers', () => {
       delete process.env.CODEX_HOME;
     } else {
       process.env.CODEX_HOME = originalCodexHome;
+    }
+
+    if (originalOpenAiApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
     }
   });
 
@@ -124,6 +134,13 @@ describe('Codex default providers', () => {
       sandbox_mode: 'read-only',
       skip_git_repo_check: true,
     });
+    expect(providers.gradingProvider.config.working_dir).toMatch(/promptfoo-codex-default-/);
+    expect(providers.gradingProvider.config.working_dir).not.toBe(
+      path.join(os.tmpdir(), 'promptfoo-codex-default'),
+    );
+    expect(providers.gradingJsonProvider.config.working_dir).toBe(
+      providers.gradingProvider.config.working_dir,
+    );
     expect(providers.gradingJsonProvider.config.output_schema).toEqual({
       type: 'object',
       properties: {
@@ -142,7 +159,23 @@ describe('Codex default providers', () => {
     });
     expect(providers.webSearchProvider?.config).toMatchObject({
       network_access_enabled: true,
+      working_dir: providers.gradingProvider.config.working_dir,
       web_search_mode: 'live',
     });
+  });
+
+  it('creates a new cached provider set when process API credentials change', async () => {
+    const { getCodexDefaultProviders } = await import(
+      '../../../src/providers/openai/codexDefaults'
+    );
+
+    process.env.CODEX_API_KEY = 'first-codex-key';
+    const firstProviders = getCodexDefaultProviders();
+
+    process.env.CODEX_API_KEY = 'second-codex-key';
+    const secondProviders = getCodexDefaultProviders();
+
+    expect(secondProviders).not.toBe(firstProviders);
+    expect(secondProviders.gradingProvider).not.toBe(firstProviders.gradingProvider);
   });
 });

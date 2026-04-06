@@ -118,6 +118,14 @@ describe('shouldGenerateRemote', () => {
     expect(shouldGenerateRemote()).toBe(false);
   });
 
+  it('should return true for embedding-backed checks when only Codex default credentials exist', () => {
+    vi.mocked(getEnvBool).mockReturnValue(false);
+    vi.mocked(getEnvString).mockReturnValue('');
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+
+    expect(shouldGenerateRemote({ requireEmbeddingProvider: true })).toBe(true);
+  });
+
   it('should return true when neither OpenAI nor Codex credentials exist', () => {
     vi.mocked(getEnvBool).mockReturnValue(false);
     vi.mocked(getEnvString).mockReturnValue('');

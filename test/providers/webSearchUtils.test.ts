@@ -126,6 +126,16 @@ describe('webSearchUtils', () => {
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
     });
 
+    it('should return true for Codex SDK with cached web search enabled', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'openai:codex-sdk',
+        config: {
+          web_search_mode: 'cached',
+        },
+      };
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
+    });
+
     it('should return true for Codex SDK with web_search_enabled set', () => {
       const provider: Partial<ApiProvider> = {
         id: () => 'openai:codex:gpt-5.4',
@@ -141,6 +151,16 @@ describe('webSearchUtils', () => {
         id: () => 'openai:codex-sdk',
         config: {
           web_search_mode: 'disabled',
+        },
+      };
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
+    });
+
+    it('should return false for provider IDs that only contain openai:codex later in the ID', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'custom:openai:codex-sdk',
+        config: {
+          web_search_mode: 'live',
         },
       };
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);

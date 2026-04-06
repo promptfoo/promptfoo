@@ -4,6 +4,10 @@ import { isLoggedIntoCloud } from '../globalConfig/accounts';
 import { CloudConfig } from '../globalConfig/cloud';
 import { hasCodexDefaultCredentials } from '../providers/openai/codexDefaults';
 
+interface ShouldGenerateRemoteOptions {
+  requireEmbeddingProvider?: boolean;
+}
+
 /**
  * Gets the remote generation API endpoint URL.
  * Prioritizes: env var > cloud config > default endpoint.
@@ -96,7 +100,7 @@ export function getRemoteVersionUrl(): string | null {
  * Determines if remote generation should be used based on configuration.
  * @returns true if remote generation should be used
  */
-export function shouldGenerateRemote(): boolean {
+export function shouldGenerateRemote(options?: ShouldGenerateRemoteOptions): boolean {
   // If remote generation is explicitly disabled, respect that even for cloud users
   if (neverGenerateRemote()) {
     return false;
@@ -107,10 +111,12 @@ export function shouldGenerateRemote(): boolean {
     return true;
   }
 
-  // Generate remotely when local OpenAI/Codex credentials are unavailable.
-  return (
-    (!getEnvString('OPENAI_API_KEY') && !hasCodexDefaultCredentials()) || (cliState.remote ?? false)
-  );
+  // Generate remotely when local credentials for the requested task are unavailable.
+  const hasLocalCredentials =
+    Boolean(getEnvString('OPENAI_API_KEY')) ||
+    (!options?.requireEmbeddingProvider && hasCodexDefaultCredentials());
+
+  return !hasLocalCredentials || (cliState.remote ?? false);
 }
 
 /**
