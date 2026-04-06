@@ -6,9 +6,9 @@ Promptfoo takes security seriously. We appreciate responsible disclosure and wil
 
 Promptfoo is a developer tool that runs in your environment with your user permissions. It is designed to be **permissive by default**.
 
-Some features intentionally execute user-provided code (custom assertions, providers, transforms, hooks, plugins, and templates in code-executing fields). This code execution is **not sandboxed** and should be treated the same way you would treat running a Node.js script locally.
+Some features intentionally execute user-provided code (custom assertions, custom or script-based providers, transforms, hooks, plugins, and templates in fields documented to execute code). This code execution is **not sandboxed** and should be treated the same way you would treat running a Node.js script locally.
 
-**Important:** Treat Promptfoo eval bundles as **trusted code and data**. This includes configuration files, referenced scripts, prompt packs, and referenced test fixtures or datasets. Do not run Promptfoo against untrusted configs, fixtures, prompt packs, providers, models, remote content, or pull requests unless the run is isolated and secrets are scoped for that run.
+**Important:** Treat Promptfoo eval bundles as **trusted code and data**. An eval bundle is the complete set of files and configured sources Promptfoo uses for an eval run, such as the main config plus anything it references. This includes configuration files, referenced scripts, prompt packs, and referenced test fixtures or datasets. Do not run Promptfoo against untrusted configs, fixtures, prompt packs, providers, models, remote content, or pull requests unless the run is isolated and secrets are scoped for that run.
 
 ### Local Web Server
 
@@ -22,8 +22,8 @@ The server includes **CSRF/origin checks** that use browser-provided `Sec-Fetch-
 
 - Promptfoo config files (`promptfooconfig.yaml`, etc.)
 - Configured references to local scripts, modules, prompt packs, test fixtures, and datasets
-- Fields documented to execute code, including custom JS/Python/Ruby assertions, providers, transforms, hooks, session parsers, plugins, and `file://`-backed scripts
-- Runtime values intentionally interpolated into code-executing fields, such as inline script assertions or transforms
+- Fields documented to execute code, including custom JS/Python/Ruby assertions, custom or script-based providers, transforms, hooks, session parsers, plugins, and `file://`-backed scripts
+- Runtime values intentionally interpolated into fields documented to execute code, such as inline script assertions or transforms
 
 **Trusted templates:**
 
@@ -153,7 +153,7 @@ We request CVEs through GitHub Security Advisories when appropriate. Final advis
 
 **We generally do not request a CVE for:**
 
-- Issues in explicitly configured custom code or templates in code-executing fields, including JS/Python/Ruby assertions, providers, transforms, hooks, session parsers, plugins, and script assertion templates populated from test vars, `_conversation`, or `storeOutputAs`
+- Issues in explicitly configured custom code or templates in fields documented to execute code, including JS/Python/Ruby assertions, custom or script-based providers, transforms, hooks, session parsers, plugins, and script assertion templates populated from test vars, `_conversation`, or `storeOutputAs`
 - Effects caused by adversarial runtime data processed within a configured OSS eval flow, including template or script evaluation in provider requests, grader prompts, assertions, transforms, reports, `_conversation`, `storeOutputAs`, model outputs, grader outputs, fixtures, datasets, or remote content
 - Local API access issues within the documented trust model
 - Self-XSS requiring the user to paste payloads into their own console or UI
@@ -195,9 +195,9 @@ When a fix is released, we will:
 
 **Out of scope:**
 
-- Code execution from **explicitly configured** custom code or templates in code-executing fields (JS/Python/Ruby assertions, providers, transforms, hooks, session parsers, plugins, or `file://`-backed scripts configured in your config file)
+- Code execution from **explicitly configured** custom code or templates in fields documented to execute code (JS/Python/Ruby assertions, custom or script-based providers, transforms, hooks, session parsers, plugins, or `file://`-backed scripts configured in your config file)
 - Effects caused by adversarial runtime data within a configured OSS eval run, including template or script evaluation of prompt text, test variables, fixture or dataset rows, model outputs, grader outputs, `_conversation`, `storeOutputAs`, or remote content in providers, graders, assertions, transforms, reports, or other eval logic
-- Code execution caused by intentionally interpolating runtime data into an explicitly configured code-executing field, such as `value: 'output === "{{expected}}"'` in a JavaScript assertion. Use `context.vars.expected` or safe serialization when the value should remain data.
+- Code execution caused by intentionally interpolating runtime data into an explicitly configured field documented to execute code, such as `value: 'output === "{{expected}}"'` in a JavaScript assertion. Use `context.vars.expected` or safe serialization when the value should remain data.
 - Code execution via **direct local web API access** or **browser access to the OSS local server** (e.g., `curl`, scripts, SDKs, the bundled UI, or malicious webpages reaching `promptfoo view`) — the local server has the same trust level as the CLI and its CSRF/origin checks are best-effort hardening, not a supported security boundary
 - Issues requiring the user to run untrusted eval bundles, configs, fixtures, providers, models, remote content, or scripts with local privileges
 - Network requests triggered by content in **user-controlled config files** (test variables, prompts, fixtures defined in your config) — users are responsible for what they put in their own configs
@@ -211,7 +211,7 @@ When a fix is released, we will:
 - "A malicious custom assertion reads `process.env` and posts it to a webhook" → Expected behavior; custom code runs with your permissions
 - "A third-party prompt pack includes a transform that runs shell commands" → Expected behavior; don't run untrusted configs
 - "A third-party model returns template syntax that is rendered during a local OSS eval and included in a configured grader request" → Expected behavior under the OSS eval trust model; run adversarial models with isolation and scoped credentials
-- "A CSV value breaks out of a JavaScript assertion template like `output === '{{expected}}'` and runs code" → Expected behavior when untrusted data is intentionally interpolated into a template in a code-executing field; don't run untrusted fixtures this way without isolation
+- "A CSV value breaks out of a JavaScript assertion template like `output === '{{expected}}'` and runs code" → Expected behavior when untrusted data is intentionally interpolated into a template in a field documented to execute code; don't run untrusted fixtures this way without isolation
 - "The Web UI fetches a URL when a test variable contains a URL" → Expected behavior; users control their own config content
 - "The local web API executes provider transforms as code" → Expected behavior; the web API has the same trust model as the CLI
 - "A malicious website can reach the local server if I replay browser headers with `curl`" → Not a valid browser repro, and local-server browser-origin claims are out of scope
