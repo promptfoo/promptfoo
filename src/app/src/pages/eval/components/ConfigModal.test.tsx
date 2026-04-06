@@ -1,7 +1,7 @@
 import { renderWithProviders } from '@app/utils/testutils';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import yaml from 'js-yaml';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ConfigModal from './ConfigModal';
 import { useTableStore } from './store';
 
@@ -31,7 +31,15 @@ describe('ConfigModal', () => {
     // Mock URL.createObjectURL and URL.revokeObjectURL
     global.URL.createObjectURL = vi.fn(() => 'blob:mock-url');
     global.URL.revokeObjectURL = vi.fn();
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
   });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const getCopyButton = () => screen.getByRole('button', { name: 'Copy config to clipboard' });
+  const getDownloadButton = () => screen.getByRole('button', { name: 'Download config' });
 
   it('does not render when closed', () => {
     renderWithProviders(<ConfigModal open={false} onClose={mockOnClose} />);
@@ -63,10 +71,8 @@ describe('ConfigModal', () => {
   it('renders copy and download buttons', () => {
     renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
 
-    // Check for buttons by finding all buttons in the dialog
-    const buttons = screen.getAllByRole('button');
-    // Should have at least the X close button and copy/download buttons
-    expect(buttons.length).toBeGreaterThanOrEqual(2);
+    expect(getCopyButton()).toBeInTheDocument();
+    expect(getDownloadButton()).toBeInTheDocument();
   });
 
   it('copies config to clipboard when copy button is clicked', () => {
@@ -75,11 +81,7 @@ describe('ConfigModal', () => {
     const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
     textarea.select = vi.fn();
 
-    const buttons = screen.getAllByRole('button');
-    // Find the first non-close button (should be copy button)
-    const copyButton = buttons.find((btn) => !btn.querySelector('.lucide-x'));
-
-    fireEvent.click(copyButton!);
+    fireEvent.click(getCopyButton());
 
     expect(document.execCommand).toHaveBeenCalledWith('copy');
   });
@@ -90,15 +92,12 @@ describe('ConfigModal', () => {
     const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
     textarea.select = vi.fn();
 
-    const buttons = screen.getAllByRole('button');
-    const copyButton = buttons.find((btn) => !btn.querySelector('.lucide-x'));
-
     // Click copy button
-    fireEvent.click(copyButton!);
+    fireEvent.click(getCopyButton());
 
     // After clicking, should show check icon somewhere in the dialog
     await waitFor(() => {
-      const checkIcon = document.querySelector('.lucide-check');
+      const checkIcon = getCopyButton().querySelector('.lucide-check');
       expect(checkIcon).toBeTruthy();
     });
 
@@ -108,29 +107,20 @@ describe('ConfigModal', () => {
   it('downloads config as YAML file when download button is clicked', () => {
     renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
 
-    const buttons = screen.getAllByRole('button');
-    // Find the second non-close button (should be download button)
-    const nonCloseButtons = buttons.filter((btn) => !btn.querySelector('.lucide-x'));
-    const downloadButton = nonCloseButtons[1];
+    fireEvent.click(getDownloadButton());
 
-    fireEvent.click(downloadButton!);
-
-    expect(global.URL.createObjectURL).toHaveBeenCalled();
-    expect(global.URL.revokeObjectURL).toHaveBeenCalled();
+    expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
+    expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
   });
 
-  it('triggers download when download button is clicked', () => {
+  it('sets the config download filename', () => {
     renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
 
-    const buttons = screen.getAllByRole('button');
-    const nonCloseButtons = buttons.filter((btn) => !btn.querySelector('.lucide-x'));
-    const downloadButton = nonCloseButtons[1];
+    fireEvent.click(getDownloadButton());
 
-    fireEvent.click(downloadButton!);
-
-    // Verify download was triggered via URL creation
-    expect(global.URL.createObjectURL).toHaveBeenCalled();
-    expect(global.URL.revokeObjectURL).toHaveBeenCalled();
+    const anchor = vi.mocked(HTMLAnchorElement.prototype.click).mock.contexts[0];
+    expect(anchor.download).toBe('config.yaml');
   });
 
   it('calls onClose when close button is clicked', () => {
@@ -141,19 +131,6 @@ describe('ConfigModal', () => {
     fireEvent.click(closeButtons[0]);
 
     expect(mockOnClose).toHaveBeenCalled();
-  });
-
-  it('handles dialog close via onOpenChange', () => {
-    renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
-
-    const dialog = screen.getByRole('dialog');
-
-    // Simulate closing dialog via overlay click or escape key
-    // The Dialog component's onOpenChange will be called with false
-    fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' });
-
-    // The onClose callback should eventually be called
-    // This tests the handleClose logic
   });
 
   it('generates YAML when dialog opens', () => {
@@ -225,11 +202,7 @@ describe('ConfigModal', () => {
 
     renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
 
-    const buttons = screen.getAllByRole('button');
-    const nonCloseButtons = buttons.filter((btn) => !btn.querySelector('.lucide-x'));
-    const downloadButton = nonCloseButtons[1];
-
-    fireEvent.click(downloadButton!);
+    fireEvent.click(getDownloadButton());
 
     expect(blobSpy).toHaveBeenCalledWith([expect.any(String)], { type: 'text/yaml;charset=utf-8' });
   });
@@ -240,9 +213,7 @@ describe('ConfigModal', () => {
     const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
     const selectSpy = vi.spyOn(textarea, 'select');
 
-    const buttons = screen.getAllByRole('button');
-    const copyButton = buttons.find((btn) => !btn.querySelector('.lucide-x'));
-    fireEvent.click(copyButton!);
+    fireEvent.click(getCopyButton());
 
     expect(selectSpy).toHaveBeenCalled();
   });
