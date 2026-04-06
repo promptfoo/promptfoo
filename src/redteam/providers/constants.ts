@@ -1,8 +1,8 @@
 import { getEnvFloat } from '../../envars';
 
-export const ATTACKER_MODEL = 'gpt-5.4';
+export const ATTACKER_MODEL = 'gpt-5.4-2026-03-05';
 
-export const ATTACKER_MODEL_SMALL = 'gpt-5.4-mini';
+export const ATTACKER_MODEL_SMALL = 'gpt-5.4-mini-2026-03-17';
 
 export const TEMPERATURE = getEnvFloat('PROMPTFOO_JAILBREAK_TEMPERATURE')
   ? getEnvFloat('PROMPTFOO_JAILBREAK_TEMPERATURE')

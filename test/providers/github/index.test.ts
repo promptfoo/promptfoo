@@ -22,14 +22,14 @@ describe('createGitHubProvider', () => {
   });
 
   it('should create provider with default model when no model specified', () => {
-    const mockProvider = { id: vi.fn().mockReturnValue('github:openai/gpt-5.4') };
+    const mockProvider = { id: vi.fn().mockReturnValue('github:openai/gpt-5') };
     mockOpenAiChatCompletionProvider.mockImplementation(function () {
       return mockProvider as any;
     });
 
     const result = createGitHubProvider('github:', {}, {} as any);
 
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-5.4', {
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-5', {
       config: {
         apiBaseUrl: 'https://models.github.ai/inference',
         apiKeyEnvar: 'GITHUB_TOKEN',

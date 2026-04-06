@@ -7,44 +7,30 @@ const githubConfig = {
   apiKeyEnvar: 'GITHUB_TOKEN',
 };
 
-const DEFAULT_GITHUB_GRADING_MODEL = 'openai/gpt-5.4';
+export const DefaultGitHubGradingProvider = new OpenAiChatCompletionProvider('openai/gpt-5', {
+  config: githubConfig,
+});
 
-export const DefaultGitHubGradingProvider = new OpenAiChatCompletionProvider(
-  DEFAULT_GITHUB_GRADING_MODEL,
-  {
-    config: githubConfig,
+export const DefaultGitHubGradingJsonProvider = new OpenAiChatCompletionProvider('openai/gpt-5', {
+  config: {
+    ...githubConfig,
+    response_format: { type: 'json_object' },
   },
-);
+});
 
-export const DefaultGitHubGradingJsonProvider = new OpenAiChatCompletionProvider(
-  DEFAULT_GITHUB_GRADING_MODEL,
-  {
-    config: {
-      ...githubConfig,
-      response_format: { type: 'json_object' },
-    },
-  },
-);
-
-export const DefaultGitHubSuggestionsProvider = new OpenAiChatCompletionProvider(
-  DEFAULT_GITHUB_GRADING_MODEL,
-  {
-    config: githubConfig,
-  },
-);
+export const DefaultGitHubSuggestionsProvider = new OpenAiChatCompletionProvider('openai/gpt-5', {
+  config: githubConfig,
+});
 
 // Fast model for quick evaluations
-export const DefaultGitHubFastProvider = new OpenAiChatCompletionProvider('openai/gpt-5.4-nano', {
+export const DefaultGitHubFastProvider = new OpenAiChatCompletionProvider('openai/gpt-5-nano', {
   config: githubConfig,
 });
 
 // Balanced model for general use
-export const DefaultGitHubBalancedProvider = new OpenAiChatCompletionProvider(
-  'openai/gpt-5.4-mini',
-  {
-    config: githubConfig,
-  },
-);
+export const DefaultGitHubBalancedProvider = new OpenAiChatCompletionProvider('openai/gpt-5-mini', {
+  config: githubConfig,
+});
 
 // Reasoning model for complex evaluations
 export const DefaultGitHubReasoningProvider = new OpenAiChatCompletionProvider('openai/o4-mini', {

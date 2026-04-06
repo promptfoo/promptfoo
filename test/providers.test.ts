@@ -643,7 +643,7 @@ describe('loadApiProvider', () => {
 
   it('should load GitHub provider with default model', async () => {
     const provider = await loadApiProvider('github:');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-5.4', {
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-5', {
       config: expect.objectContaining({
         apiBaseUrl: 'https://models.github.ai/inference',
         apiKeyEnvar: 'GITHUB_TOKEN',
