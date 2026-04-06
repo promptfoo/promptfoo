@@ -18,11 +18,15 @@ For technical details on our security model, trust boundaries, and hardening rec
 
 ### Open Source (CLI)
 
-The OSS CLI runs in your environment with your user permissions. It is **permissive by default** and executes user-configured code (assertions, providers, transforms, plugins) without sandboxing.
+The OSS CLI runs in your environment with your user permissions. It is **permissive by default** and executes user-configured code (assertions, providers, transforms, hooks, plugins, and templates in code-executing fields) without sandboxing.
 
-**In scope for OSS:** vulnerabilities where untrusted data inputs (prompts, test cases, model outputs) can trigger code execution, file access, or network access without explicit configuration.
+Treat OSS eval bundles as trusted code and data. This includes configs, referenced scripts, prompt packs, and referenced test fixtures or datasets. Runtime values such as test vars, model outputs, `_conversation`, and `storeOutputAs` can be intentionally interpolated into configured templates.
 
-**Out of scope for OSS:** code execution from explicitly configured custom code, and direct local API or browser access to the OSS local server (`promptfoo view`), since these are part of the documented local trust model for the open-source tool.
+Unexpectedly evaluating runtime data as a template or script outside a configured code-executing field remains in scope.
+
+**In scope for OSS:** vulnerabilities where runtime data inputs (prompts, test cases, model outputs) can trigger code execution, file access, or network access without being explicitly placed into a trusted code-executing configuration context, or where runtime data is unexpectedly evaluated as a template or script outside that context.
+
+**Out of scope for OSS:** code execution from explicitly configured custom code or templates in code-executing fields, and direct local API or browser access to the OSS local server (`promptfoo view`), since these are part of the documented local trust model for the open-source tool.
 
 ### Cloud Services
 
@@ -100,9 +104,9 @@ If you act in good faith and follow this policy, we will not pursue legal action
 
 The following are out-of-scope:
 
-- Code execution from explicitly configured custom code in OSS (expected behavior)
+- Code execution from explicitly configured custom code or templates in code-executing fields in OSS (expected behavior)
 - Direct local API access or browser access to the OSS local server (`promptfoo view`)
-- Issues requiring users to run untrusted configs with local privileges
+- Issues requiring users to run untrusted eval bundles, configs, fixtures, or scripts with local privileges
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Social engineering, phishing, or physical attacks
 - Volumetric denial of service
