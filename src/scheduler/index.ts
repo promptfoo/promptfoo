@@ -20,6 +20,7 @@ export {
   getProviderCallExecutionContext,
   withProviderCallExecutionContext,
 } from './providerCallExecutionContext';
+export { ProviderGroupedCallQueue } from './providerCallQueue';
 // Provider state
 export { ProviderRateLimitState } from './providerRateLimitState';
 // Provider wrapper
@@ -59,6 +60,7 @@ export type {
   SlotReleasedEvent,
 } from './events';
 export type { ProviderCallExecutionContext } from './providerCallExecutionContext';
+export type { ProviderCallQueue, QueuedProviderCall } from './providerCallQueue';
 export type { ProviderMetrics } from './providerRateLimitState';
 export type { RateLimitRegistryOptions } from './rateLimitRegistry';
 export type { SlotQueueOptions } from './slotQueue';

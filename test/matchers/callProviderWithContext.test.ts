@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { callProviderWithContext } from '../../src/matchers';
 import {
+  ProviderGroupedCallQueue,
   withProviderCallExecutionContext,
   wrapProviderWithRateLimiting,
 } from '../../src/scheduler';
@@ -134,5 +135,27 @@ describe('callProviderWithContext', () => {
       },
       undefined,
     );
+  });
+
+  it('queues provider calls when a provider call queue is available', async () => {
+    const response = { output: 'queued response' };
+    const provider = createProvider(response);
+    const providerCallQueue = new ProviderGroupedCallQueue();
+
+    const promise = withProviderCallExecutionContext({ providerCallQueue }, () =>
+      callProviderWithContext(provider, 'grade this', 'rubric', vars),
+    );
+
+    expect(provider.callApi).not.toHaveBeenCalled();
+    const group = providerCallQueue.takeNextGroup();
+    expect(group).toHaveLength(1);
+    expect(group[0].providerId).toBe('test-grader');
+
+    await providerCallQueue.run(group[0]);
+    await expect(promise).resolves.toBe(response);
+    expect(provider.callApi).toHaveBeenCalledWith('grade this', {
+      prompt: { raw: 'grade this', label: 'rubric' },
+      vars,
+    });
   });
 });

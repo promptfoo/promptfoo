@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import type { RateLimitRegistryRef } from '../types/index';
+import type { ProviderCallQueue } from './providerCallQueue';
 
 /**
  * Runtime-only scheduler context for provider calls made below the evaluator.
@@ -11,6 +12,7 @@ import type { RateLimitRegistryRef } from '../types/index';
  */
 export interface ProviderCallExecutionContext {
   abortSignal?: AbortSignal;
+  providerCallQueue?: ProviderCallQueue;
   rateLimitRegistry?: RateLimitRegistryRef;
 }
 

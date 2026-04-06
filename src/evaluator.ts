@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import {
+  getAssertionBaseType,
   hasTraceAwareAssertions,
   MODEL_GRADED_ASSERTION_TYPES,
   runAssertions,
@@ -29,6 +30,8 @@ import { getSessionId } from './redteam/util';
 import {
   createProviderRateLimitOptions,
   createRateLimitRegistry,
+  type ProviderCallQueue,
+  ProviderGroupedCallQueue,
   type RateLimitRegistry,
   withProviderCallExecutionContext,
 } from './scheduler';
@@ -44,12 +47,14 @@ import { getDefaultOtelConfig } from './tracing/otelConfig';
 import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
 import {
   type Assertion,
+  type AssertionOrSet,
   type AssertionType,
   type AtomicTestCase,
   type CompletedPrompt,
   type EvaluateOptions,
   type EvaluateResult,
   type EvaluateStats,
+  type GradingResult,
   type Prompt,
   type ProviderResponse,
   ResultFailureReason,
@@ -406,6 +411,53 @@ function getRedteamInjectVar(test: AtomicTestCase, prompt: Prompt, testSuite?: T
   return matchingVars.at(-1) ?? promptVars.at(-1) ?? 'prompt';
 }
 
+interface DeferredGradingContext {
+  gradingPromise: Promise<void>;
+}
+
+const deferredGradingContexts = new WeakMap<EvaluateResult, DeferredGradingContext>();
+
+const PROVIDER_GROUPED_ASSERTION_TYPES = new Set<AssertionType>([
+  ...MODEL_GRADED_ASSERTION_TYPES,
+  'conversation-relevance',
+  'g-eval',
+]);
+
+function hasProviderGroupedAssertion(assertion: AssertionOrSet): boolean {
+  if (assertion.type === 'assert-set') {
+    return assertion.assert.some(hasProviderGroupedAssertion);
+  }
+
+  return PROVIDER_GROUPED_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
+}
+
+function shouldDeferGradingForTest(test: AtomicTestCase): boolean {
+  return Boolean(test.assert?.some(hasProviderGroupedAssertion));
+}
+
+function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
+  if (!checkResult.pass) {
+    row.error = checkResult.reason;
+    row.failureReason = ResultFailureReason.ASSERT;
+  }
+  row.success = checkResult.pass;
+  row.score = checkResult.score;
+  row.namedScores = checkResult.namedScores || {};
+
+  if (!row.tokenUsage) {
+    row.tokenUsage = createEmptyTokenUsage();
+  }
+  if (!row.tokenUsage.assertions) {
+    row.tokenUsage.assertions = createEmptyAssertions();
+  }
+  row.tokenUsage.assertions.numRequests = (row.tokenUsage.assertions.numRequests ?? 0) + 1;
+
+  if (checkResult.tokensUsed) {
+    accumulateAssertionTokenUsage(row.tokenUsage.assertions, checkResult.tokensUsed);
+  }
+  row.gradingResult = checkResult;
+}
+
 /**
  * Runs a single test case.
  * @param options - The options for running the test case.
@@ -439,7 +491,9 @@ export async function runEval({
   registers,
   isRedteam,
   abortSignal,
+  deferGrading,
   evalId,
+  providerCallQueue,
   rateLimitRegistry,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
@@ -755,44 +809,50 @@ export async function runEval({
 
       // Pass providerTransformedOutput for contextTransform to use
       // Pass resolved vars so assertions can access file:// variables that were resolved during prompt rendering
-      const checkResult = await withProviderCallExecutionContext(
-        { abortSignal, rateLimitRegistry },
-        () =>
-          runAssertions({
-            prompt: renderedPrompt,
-            provider,
-            providerResponse: {
-              ...processedResponse,
-              // Add provider-transformed output for contextTransform
-              providerTransformedOutput,
-            },
-            test,
-            vars,
-            latencyMs: response.latencyMs ?? latencyMs,
-            assertScoringFunction: test.assertScoringFunction as ScoringFunction,
-            traceId,
-          }),
-      );
-
-      if (!checkResult.pass) {
-        ret.error = checkResult.reason;
-        ret.failureReason = ResultFailureReason.ASSERT;
+      const assertionProviderResponse = {
+        ...processedResponse,
+        // Add provider-transformed output for contextTransform
+        providerTransformedOutput,
+      };
+      if (deferGrading) {
+        invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
+        ret.response = processedResponse;
+        const gradingPromise = withProviderCallExecutionContext(
+          { abortSignal, providerCallQueue, rateLimitRegistry },
+          async () => {
+            const checkResult = await runAssertions({
+              prompt: renderedPrompt,
+              provider,
+              providerResponse: assertionProviderResponse,
+              test,
+              vars,
+              latencyMs: response.latencyMs ?? latencyMs,
+              assertScoringFunction: test.assertScoringFunction as ScoringFunction,
+              traceId,
+            });
+            applyGradingResult(ret, checkResult);
+          },
+        );
+        gradingPromise.catch(() => {});
+        deferredGradingContexts.set(ret, { gradingPromise });
+      } else {
+        const checkResult = await withProviderCallExecutionContext(
+          { abortSignal, rateLimitRegistry },
+          () =>
+            runAssertions({
+              prompt: renderedPrompt,
+              provider,
+              providerResponse: assertionProviderResponse,
+              test,
+              vars,
+              latencyMs: response.latencyMs ?? latencyMs,
+              assertScoringFunction: test.assertScoringFunction as ScoringFunction,
+              traceId,
+            }),
+        );
+        applyGradingResult(ret, checkResult);
+        ret.response = processedResponse;
       }
-      ret.success = checkResult.pass;
-      ret.score = checkResult.score;
-      ret.namedScores = checkResult.namedScores || {};
-      // Track assertion request count
-      if (!ret.tokenUsage.assertions) {
-        ret.tokenUsage.assertions = createEmptyAssertions();
-      }
-      ret.tokenUsage.assertions.numRequests = (ret.tokenUsage.assertions.numRequests ?? 0) + 1;
-
-      // Track assertion token usage if provided
-      if (checkResult.tokensUsed) {
-        accumulateAssertionTokenUsage(ret.tokenUsage.assertions, checkResult.tokensUsed);
-      }
-      ret.response = processedResponse;
-      ret.gradingResult = checkResult;
     }
 
     // Update token usage stats
@@ -1628,23 +1688,90 @@ class Evaluator {
     // Actually run the eval
     let numComplete = 0;
 
+    const runGroupedGradingForRows = async (
+      rows: EvaluateResult[],
+      providerCallQueue: ProviderGroupedCallQueue,
+    ) => {
+      const rowsWithDeferredGrading = rows
+        .map((row) => ({ row, context: deferredGradingContexts.get(row) }))
+        .filter(
+          (item): item is { row: EvaluateResult; context: DeferredGradingContext } =>
+            item.context !== undefined,
+        );
+      if (rowsWithDeferredGrading.length === 0) {
+        return;
+      }
+
+      let pendingCount = rowsWithDeferredGrading.length;
+      let resolveAllDone: () => void = () => {};
+      const allDone = new Promise<void>((resolve) => {
+        resolveAllDone = resolve;
+      });
+
+      const gradingPromises = rowsWithDeferredGrading.map(({ row, context }) =>
+        context.gradingPromise.finally(() => {
+          deferredGradingContexts.delete(row);
+          pendingCount--;
+          if (pendingCount === 0) {
+            resolveAllDone();
+          }
+        }),
+      );
+
+      let currentProviderId: string | undefined;
+      while (pendingCount > 0 || providerCallQueue.hasJobs()) {
+        if (!providerCallQueue.hasJobs()) {
+          await Promise.race([providerCallQueue.waitForJob(), allDone]);
+        }
+
+        const group = providerCallQueue.takeNextGroup(currentProviderId);
+        if (group.length === 0) {
+          continue;
+        }
+
+        currentProviderId = group[0].providerId;
+        for (const job of group) {
+          await providerCallQueue.run(job);
+        }
+        await Promise.resolve();
+      }
+
+      await Promise.all(gradingPromises);
+    };
+
     const processEvalStep = async (
       evalStep: RunEvalOptions,
       index: number | string,
       shouldSkipStaleRows?: () => boolean,
       onRowsReady?: () => void,
+      deferGrading = false,
+      providerCallQueue?: ProviderCallQueue,
+      precomputedRows?: EvaluateResult[],
     ) => {
       if (typeof index !== 'number') {
         throw new Error('Expected index to be a number');
       }
 
-      const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
-        test: evalStep.test,
-      });
-      evalStep.test = beforeEachOut.test;
+      let rows: EvaluateResult[];
+      if (precomputedRows) {
+        rows = precomputedRows;
+      } else {
+        const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
+          test: evalStep.test,
+        });
+        evalStep.test = beforeEachOut.test;
 
-      const rows = await runEval(evalStep);
-      onRowsReady?.();
+        rows = await runEval({
+          ...evalStep,
+          deferGrading,
+          providerCallQueue: deferGrading ? providerCallQueue : undefined,
+        });
+        onRowsReady?.();
+      }
+
+      if (deferGrading) {
+        return rows;
+      }
 
       for (const row of rows) {
         if (shouldSkipStaleRows?.()) {
@@ -1807,16 +1934,29 @@ class Evaluator {
           options.progressCallback(numComplete, runEvalOptions.length, index, evalStep, metrics);
         }
       }
+      return rows;
     };
 
     // Add a wrapper function that implements timeout
-    const processEvalStepWithTimeout = async (evalStep: RunEvalOptions, index: number | string) => {
+    const processEvalStepWithTimeout = async (
+      evalStep: RunEvalOptions,
+      index: number | string,
+      deferGrading = false,
+      providerCallQueue?: ProviderCallQueue,
+    ) => {
       // Get timeout value from options or environment, defaults to 0 (no timeout)
       const timeoutMs = options.timeoutMs || getEvalTimeoutMs();
 
       if (timeoutMs <= 0) {
         // No timeout, process normally
-        return processEvalStep(evalStep, index);
+        return processEvalStep(
+          evalStep,
+          index,
+          undefined,
+          undefined,
+          deferGrading,
+          providerCallQueue,
+        );
       }
 
       // Create an AbortController to cancel the request if it times out
@@ -1842,7 +1982,14 @@ class Evaluator {
 
       try {
         return await Promise.race([
-          processEvalStep(evalStepWithSignal, index, () => didTimeout, clearEvalStepTimeout),
+          processEvalStep(
+            evalStepWithSignal,
+            index,
+            () => didTimeout,
+            clearEvalStepTimeout,
+            deferGrading,
+            providerCallQueue,
+          ),
           new Promise<void>((_, reject) => {
             timeoutId = setTimeout(() => {
               didTimeout = true;
@@ -1984,6 +2131,8 @@ class Evaluator {
         concurrentRunEvalOptions.push(evalOption);
       }
     }
+    const hasEvalStepTimeout = (options.timeoutMs || getEvalTimeoutMs()) > 0;
+    const shouldGroupGradingByProvider = concurrency === 1 && !hasEvalStepTimeout;
 
     // Print info messages before starting progress bar
     if (!this.options.silent) {
@@ -2004,7 +2153,64 @@ class Evaluator {
     }
 
     try {
-      if (serialRunEvalOptions.length > 0) {
+      if (shouldGroupGradingByProvider) {
+        const providerCallQueue = new ProviderGroupedCallQueue();
+        const groupedRows: { evalStep: RunEvalOptions; index: number; rows: EvaluateResult[] }[] =
+          [];
+        const groupedRunEvalOptions = [...serialRunEvalOptions, ...concurrentRunEvalOptions];
+
+        for (const evalStep of groupedRunEvalOptions) {
+          checkAbort();
+          if (isWebUI) {
+            const provider = evalStep.provider.label || evalStep.provider.id();
+            const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);
+            logger.info(
+              `[${numComplete}/${runEvalOptions.length}] Running ${provider} with vars: ${vars}`,
+            );
+          }
+          const idx = runEvalOptions.indexOf(evalStep);
+          const shouldDeferEvalStepGrading = shouldDeferGradingForTest(evalStep.test);
+          const rows =
+            (await processEvalStepWithTimeout(
+              evalStep,
+              idx,
+              shouldDeferEvalStepGrading,
+              providerCallQueue,
+            )) || [];
+          if (!shouldDeferEvalStepGrading) {
+            processedIndices.add(idx);
+            if (targetUnavailable) {
+              break;
+            }
+            continue;
+          }
+
+          if (rows.length > 0) {
+            if (rows.some((row) => deferredGradingContexts.has(row))) {
+              groupedRows.push({ evalStep, index: idx, rows });
+            } else {
+              await processEvalStep(evalStep, idx, undefined, undefined, false, undefined, rows);
+              processedIndices.add(idx);
+              if (targetUnavailable) {
+                break;
+              }
+            }
+          } else {
+            processedIndices.add(idx);
+          }
+        }
+
+        await runGroupedGradingForRows(
+          groupedRows.flatMap(({ rows }) => rows),
+          providerCallQueue,
+        );
+
+        for (const { evalStep, index, rows } of groupedRows) {
+          await processEvalStep(evalStep, index, undefined, undefined, false, undefined, rows);
+          processedIndices.add(index);
+          await this.evalRecord.addPrompts(prompts);
+        }
+      } else if (serialRunEvalOptions.length > 0) {
         // Run serial evaluations
         for (const evalStep of serialRunEvalOptions) {
           checkAbort();
@@ -2023,14 +2229,16 @@ class Evaluator {
         // Serial phase complete - progress is tracked automatically by updateProgress
       }
 
-      // Then run concurrent evaluations
-      await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep) => {
-        checkAbort();
-        const idx = runEvalOptions.indexOf(evalStep);
-        await processEvalStepWithTimeout(evalStep, idx);
-        processedIndices.add(idx);
-        await this.evalRecord.addPrompts(prompts);
-      });
+      if (!shouldGroupGradingByProvider) {
+        // Then run concurrent evaluations
+        await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep) => {
+          checkAbort();
+          const idx = runEvalOptions.indexOf(evalStep);
+          await processEvalStepWithTimeout(evalStep, idx);
+          processedIndices.add(idx);
+          await this.evalRecord.addPrompts(prompts);
+        });
+      }
     } catch (err) {
       if (combinedAbortSignal.aborted) {
         // Distinguish between max-duration timeout and user SIGINT

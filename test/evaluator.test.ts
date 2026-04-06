@@ -4060,6 +4060,196 @@ describe('evaluator', () => {
     );
   });
 
+  it('groups model-graded assertion calls by provider id when maxConcurrency is 1', async () => {
+    const callOrder: string[] = [];
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: `Target output for ${prompt}`,
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const judgeOne: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge-one'),
+      callApi: vi.fn(async () => {
+        callOrder.push('judge-one');
+        return {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'judge one passed' }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const judgeTwo: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge-two'),
+      callApi: vi.fn(async () => {
+        callOrder.push('judge-two');
+        return {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'judge two passed' }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: [
+        {
+          vars: { topic: 'alpha' },
+          assert: [
+            { type: 'llm-rubric', value: 'Judge alpha one', provider: judgeOne },
+            { type: 'llm-rubric', value: 'Judge alpha two', provider: judgeTwo },
+          ],
+        },
+        {
+          vars: { topic: 'beta' },
+          assert: [
+            { type: 'llm-rubric', value: 'Judge beta one', provider: judgeOne },
+            { type: 'llm-rubric', value: 'Judge beta two', provider: judgeTwo },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(2);
+    expect(callOrder).toEqual(['judge-one', 'judge-one', 'judge-two', 'judge-two']);
+  });
+
+  it('groups model-graded assert-set children by provider id when maxConcurrency is 1', async () => {
+    const callOrder: string[] = [];
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: `Target output for ${prompt}`,
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const judgeOne: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge-one'),
+      callApi: vi.fn(async () => {
+        callOrder.push('judge-one');
+        return {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'judge one passed' }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const judgeTwo: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge-two'),
+      callApi: vi.fn(async () => {
+        callOrder.push('judge-two');
+        return {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'judge two passed' }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: [
+        {
+          vars: { topic: 'alpha' },
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                { type: 'llm-rubric', value: 'Judge alpha one', provider: judgeOne },
+                { type: 'llm-rubric', value: 'Judge alpha two', provider: judgeTwo },
+              ],
+            },
+          ],
+        },
+        {
+          vars: { topic: 'beta' },
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                { type: 'llm-rubric', value: 'Judge beta one', provider: judgeOne },
+                { type: 'llm-rubric', value: 'Judge beta two', provider: judgeTwo },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(2);
+    expect(callOrder).toEqual(['judge-one', 'judge-one', 'judge-two', 'judge-two']);
+  });
+
+  it('keeps multi-call model-graded assertions grouped by provider id when maxConcurrency is 1', async () => {
+    const callOrder: string[] = [];
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: `Target output for ${prompt}`,
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const createJudge = (id: string): ApiProvider => ({
+      id: vi.fn().mockReturnValue(id),
+      callApi: vi.fn(async (_prompt: string, context?: { prompt?: { label?: string } }) => {
+        const label = context?.prompt?.label ?? 'unknown';
+        callOrder.push(`${id}:${label}`);
+
+        return {
+          output:
+            label === 'g-eval-steps'
+              ? JSON.stringify({ steps: ['Check the answer'] })
+              : JSON.stringify({ score: 10, reason: 'passed' }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    });
+    const judgeOne = createJudge('judge-one');
+    const judgeTwo = createJudge('judge-two');
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: [
+        {
+          vars: { topic: 'alpha' },
+          assert: [
+            { type: 'g-eval', value: 'Judge alpha one', provider: judgeOne },
+            { type: 'g-eval', value: 'Judge alpha two', provider: judgeTwo },
+          ],
+        },
+        {
+          vars: { topic: 'beta' },
+          assert: [
+            { type: 'g-eval', value: 'Judge beta one', provider: judgeOne },
+            { type: 'g-eval', value: 'Judge beta two', provider: judgeTwo },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(2);
+    expect(callOrder).toEqual([
+      'judge-one:g-eval-steps',
+      'judge-one:g-eval-steps',
+      'judge-one:g-eval',
+      'judge-one:g-eval',
+      'judge-two:g-eval-steps',
+      'judge-two:g-eval-steps',
+      'judge-two:g-eval',
+      'judge-two:g-eval',
+    ]);
+  });
+
   it('forces cache busting for repeat iterations', async () => {
     const contexts: Array<Record<string, any> | undefined> = [];
     const provider: ApiProvider = {

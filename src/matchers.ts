@@ -132,15 +132,23 @@ export function callProviderWithContext(
       ? provider.callApi(prompt, callApiContext, callApiOptions)
       : provider.callApi(prompt, callApiContext);
 
-  if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
-    return executionContext.rateLimitRegistry.execute(
-      provider,
-      callApi,
-      createProviderRateLimitOptions(),
-    );
+  const executeCall = () => {
+    if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
+      return executionContext.rateLimitRegistry.execute(
+        provider,
+        callApi,
+        createProviderRateLimitOptions(),
+      );
+    }
+
+    return callApi();
+  };
+
+  if (executionContext?.providerCallQueue) {
+    return executionContext.providerCallQueue.enqueue(provider, executeCall);
   }
 
-  return callApi();
+  return executeCall();
 }
 
 async function loadFromProviderOptions(provider: ProviderOptions) {
