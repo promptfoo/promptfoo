@@ -10,7 +10,7 @@ The `ruby` assertion allows you to provide a custom Ruby method to validate the 
 
 A variable named `output` is injected into the context. The method should return `true` if the output passes the assertion, and `false` otherwise. If the method returns a number, it will be treated as a score.
 
-Use `not-ruby` to invert the final pass/fail result for boolean, numeric, and `GradingResult.pass` returns while preserving the returned `score`. Numeric scores are still compared against `threshold` before the pass/fail result is inverted:
+Use `not-ruby` to invert the final pass/fail result for boolean, numeric, and `GradingResult.pass` returns. Numeric and `GradingResult` scores are preserved; boolean scores follow the final pass/fail result (`1` for pass, `0` for fail). Numeric scores are still compared against `threshold` before the pass/fail result is inverted:
 
 ```yaml
 assert:
