@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { callProviderWithContext } from '../../src/matchers';
-import { wrapProviderWithRateLimiting } from '../../src/scheduler';
 import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
+import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
 
-import type { RateLimitRegistry } from '../../src/scheduler';
+import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import type {
   ApiProvider,
   ProviderResponse,
