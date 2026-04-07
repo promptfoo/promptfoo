@@ -90,6 +90,10 @@ interface PromptfooExecCall {
   options?: { env?: Record<string, string> };
 }
 
+interface NpmExecCall {
+  options?: { env?: Record<string, string> };
+}
+
 function setupMocks() {
   mocks.core.getInput.mockImplementation((name: string) => {
     if (name === 'github-token') {
@@ -161,6 +165,31 @@ async function importActionAndGetPromptfooCall(): Promise<PromptfooExecCall> {
   };
 }
 
+async function importActionAndGetNpmInstallCall(): Promise<NpmExecCall> {
+  await import('../../code-scan-action/src/main');
+
+  const call = await vi.waitFor(() => {
+    const npmCall = mocks.exec.exec.mock.calls.find(
+      ([command, args]) =>
+        command === 'npm' &&
+        Array.isArray(args) &&
+        args[0] === 'install' &&
+        args[1] === '-g' &&
+        args[2] === 'promptfoo',
+    );
+
+    if (!npmCall) {
+      throw new Error('npm install exec call not found');
+    }
+
+    return npmCall;
+  });
+
+  return {
+    options: call[2] as NpmExecCall['options'],
+  };
+}
+
 function expectCliArg(args: string[], name: string, value: string): void {
   const argIndex = args.indexOf(name);
   expect(argIndex).toBeGreaterThan(-1);
@@ -211,6 +240,17 @@ describe('code-scan-action main', () => {
       process.env.npm_config_before = '2026-03-29T00:00:00.000Z';
 
       const { options } = await importActionAndGetPromptfooCall();
+
+      expect(options?.env?.NPM_CONFIG_BEFORE).toBeUndefined();
+      expect(options?.env?.npm_config_before).toBeUndefined();
+    });
+
+    it('should not pass NPM_CONFIG_BEFORE to npm install', async () => {
+      process.env.GITHUB_BASE_REF = 'main';
+      process.env.NPM_CONFIG_BEFORE = '2026-03-29T00:00:00.000Z';
+      process.env.npm_config_before = '2026-03-29T00:00:00.000Z';
+
+      const { options } = await importActionAndGetNpmInstallCall();
 
       expect(options?.env?.NPM_CONFIG_BEFORE).toBeUndefined();
       expect(options?.env?.npm_config_before).toBeUndefined();
