@@ -13,6 +13,10 @@ import { FilesystemMcpError } from '../../types/codeScan';
 const FILESYSTEM_MCP_READY_MARKER = 'running on stdio';
 const FILESYSTEM_MCP_READY_TIMEOUT_MS = 30000;
 
+function formatFilesystemMcpExitReason(code: number | null, signal: NodeJS.Signals | null): string {
+  return code === null ? (signal ? `signal ${signal}` : 'unknown reason') : `code ${code}`;
+}
+
 function createFilesystemMcpEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
 
@@ -100,6 +104,17 @@ export function waitForFilesystemMcpServerReady(
   mcpProcess: ChildProcess,
   timeoutMs = FILESYSTEM_MCP_READY_TIMEOUT_MS,
 ): Promise<void> {
+  if (mcpProcess.exitCode !== null || mcpProcess.signalCode !== null || mcpProcess.killed) {
+    return Promise.reject(
+      new FilesystemMcpError(
+        `Filesystem MCP server exited before ready: ${formatFilesystemMcpExitReason(
+          mcpProcess.exitCode,
+          mcpProcess.signalCode,
+        )}`,
+      ),
+    );
+  }
+
   const stderr = mcpProcess.stderr;
 
   if (!stderr) {
@@ -149,8 +164,7 @@ export function waitForFilesystemMcpServerReady(
 
     const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
       settle(() => {
-        const reason =
-          code === null ? (signal ? `signal ${signal}` : 'unknown reason') : `code ${code}`;
+        const reason = formatFilesystemMcpExitReason(code, signal);
         reject(new FilesystemMcpError(`Filesystem MCP server exited before ready: ${reason}`));
       });
     };

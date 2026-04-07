@@ -85,7 +85,10 @@ vi.mock('fs', async () => {
 
 const originalEnv = { ...process.env };
 
-type ExecCall = [string, string[] | undefined, { env?: Record<string, string> } | undefined];
+interface PromptfooExecCall {
+  args: string[];
+  options?: { env?: Record<string, string> };
+}
 
 function setupMocks() {
   mocks.core.getInput.mockImplementation((name: string) => {
@@ -137,67 +140,69 @@ function setupMocks() {
   mocks.config.generateConfigFile.mockReturnValue('/tmp/test-config.yaml');
 }
 
-async function importActionAndGetPromptfooCall() {
+async function importActionAndGetPromptfooCall(): Promise<PromptfooExecCall> {
   await import('../../code-scan-action/src/main');
 
-  await vi.waitFor(() => {
-    expect(
-      mocks.exec.exec.mock.calls.some(
-        ([command, args]) => command === 'promptfoo' && Array.isArray(args),
-      ),
-    ).toBe(true);
+  const call = await vi.waitFor(() => {
+    const promptfooCall = mocks.exec.exec.mock.calls.find(
+      ([command, args]) => command === 'promptfoo' && Array.isArray(args),
+    );
+
+    if (!promptfooCall || !Array.isArray(promptfooCall[1])) {
+      throw new Error('promptfoo exec call not found');
+    }
+
+    return promptfooCall;
   });
 
-  return mocks.exec.exec.mock.calls.find(
-    ([command, args]) => command === 'promptfoo' && Array.isArray(args),
-  ) as ExecCall;
+  return {
+    args: call[1],
+    options: call[2] as PromptfooExecCall['options'],
+  };
+}
+
+function expectCliArg(args: string[], name: string, value: string): void {
+  const argIndex = args.indexOf(name);
+  expect(argIndex).toBeGreaterThan(-1);
+  expect(args[argIndex + 1]).toBe(value);
 }
 
 describe('code-scan-action main', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     vi.resetModules();
-    process.env = { ...originalEnv };
-    process.env.GITHUB_WORKSPACE = '/test/workspace';
+    process.env = { ...originalEnv, GITHUB_WORKSPACE: '/test/workspace' };
     setupMocks();
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    process.env = { ...originalEnv };
+    vi.clearAllMocks();
   });
 
   describe('CLI args construction', () => {
     it('should pass --base with GITHUB_BASE_REF when set', async () => {
       process.env.GITHUB_BASE_REF = 'feat/my-feature-branch';
 
-      const promptfooCall = await importActionAndGetPromptfooCall();
-      const cliArgs = promptfooCall[1] as string[];
-      const baseIndex = cliArgs.indexOf('--base');
+      const { args } = await importActionAndGetPromptfooCall();
 
-      expect(baseIndex).toBeGreaterThan(-1);
-      expect(cliArgs[baseIndex + 1]).toBe('feat/my-feature-branch');
+      expectCliArg(args, '--base', 'feat/my-feature-branch');
     });
 
     it('should pass --base with "main" when GITHUB_BASE_REF is not set', async () => {
       delete process.env.GITHUB_BASE_REF;
 
-      const promptfooCall = await importActionAndGetPromptfooCall();
-      const cliArgs = promptfooCall[1] as string[];
-      const baseIndex = cliArgs.indexOf('--base');
+      const { args } = await importActionAndGetPromptfooCall();
 
-      expect(baseIndex).toBeGreaterThan(-1);
-      expect(cliArgs[baseIndex + 1]).toBe('main');
+      expectCliArg(args, '--base', 'main');
     });
 
     it('should pass --base for stacked PR base branches', async () => {
       process.env.GITHUB_BASE_REF = 'feat/openai-sora-video-provider';
 
-      const promptfooCall = await importActionAndGetPromptfooCall();
-      const cliArgs = promptfooCall[1] as string[];
-      const baseIndex = cliArgs.indexOf('--base');
+      const { args } = await importActionAndGetPromptfooCall();
 
-      expect(baseIndex).toBeGreaterThan(-1);
-      expect(cliArgs[baseIndex + 1]).toBe('feat/openai-sora-video-provider');
+      expectCliArg(args, '--base', 'feat/openai-sora-video-provider');
     });
 
     it('should not pass NPM_CONFIG_BEFORE to the promptfoo scan command', async () => {
@@ -205,11 +210,10 @@ describe('code-scan-action main', () => {
       process.env.NPM_CONFIG_BEFORE = '2026-03-29T00:00:00.000Z';
       process.env.npm_config_before = '2026-03-29T00:00:00.000Z';
 
-      const promptfooCall = await importActionAndGetPromptfooCall();
-      const promptfooOptions = promptfooCall[2];
+      const { options } = await importActionAndGetPromptfooCall();
 
-      expect(promptfooOptions?.env?.NPM_CONFIG_BEFORE).toBeUndefined();
-      expect(promptfooOptions?.env?.npm_config_before).toBeUndefined();
+      expect(options?.env?.NPM_CONFIG_BEFORE).toBeUndefined();
+      expect(options?.env?.npm_config_before).toBeUndefined();
     });
   });
 });
