@@ -1,15 +1,15 @@
 ---
 sidebar_label: Kelly Intelligence
-description: Configure Kelly Intelligence (api.thedailylesson.com) — an OpenAI-compatible API with a built-in 162,000-word vocabulary RAG layer — for evaluating tutoring, language learning, and word-grounded chat.
+description: OpenAI-compatible API with a built-in 162,000-word vocabulary RAG layer. Built on Claude. Use for tutoring, language-learning, and word-grounded evals.
 ---
 
 # Kelly Intelligence
 
-[Kelly Intelligence](https://api.thedailylesson.com) exposes an [OpenAI-compatible HTTP endpoint](https://api.thedailylesson.com/openapi.json) at `https://api.thedailylesson.com/v1`, so you can override the [OpenAI provider](/docs/providers/openai/) to talk to it. It is built on top of Claude and operated by [Lesson of the Day, PBC](https://lotdpbc.com).
+[Kelly Intelligence](https://api.thedailylesson.com) is an [OpenAI-compatible API](https://api.thedailylesson.com/openapi.json) at `https://api.thedailylesson.com/v1`. Configure it by overriding the [OpenAI provider](/docs/providers/openai/) base URL. It is built on Claude and operated by [Lesson of the Day, PBC](https://lotdpbc.com).
 
-To use Kelly Intelligence in an eval, set `apiBaseUrl` to `https://api.thedailylesson.com/v1` and `apiKey` to your `KELLY_API_KEY` (or any value if you only want to call the public `/v1/demo` endpoint, which is rate-limited at 5 requests per hour per IP).
+To use Kelly Intelligence in an eval, set `apiBaseUrl` to `https://api.thedailylesson.com/v1` and `apiKey` to your `KELLY_API_KEY`. The public `/v1/demo` endpoint accepts any `apiKey` value but is rate-limited to 5 requests per hour per IP.
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:chat:kelly-haiku
     config:
