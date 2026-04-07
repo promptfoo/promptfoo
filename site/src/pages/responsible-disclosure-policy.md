@@ -24,7 +24,7 @@ Treat OSS eval bundles as trusted code and data. An eval bundle is the complete 
 
 If you explicitly write code or templates in a field documented to execute code, the result is your responsibility. If runtime data unexpectedly triggers code execution, secret exposure, or file/network access through internal processing without being placed into a field documented to execute code, that is a vulnerability.
 
-**In scope for OSS:** runtime data triggering code execution, secret exposure, or file/network access through internal processing (template rendering, variable substitution, file loading) without being placed into a field documented to execute code; bypasses of isolation boundaries or hardening controls; secret leakage to unconfigured destinations.
+**In scope for OSS:** runtime data triggering code execution, secret exposure, or file/network access through internal processing (template rendering, variable substitution, file loading) without being placed into a field documented to execute code; bypasses of isolation boundaries or hardening controls; secret leakage to destinations not configured as part of the eval flow.
 
 **Out of scope for OSS:** code execution from explicitly configured custom code or templates in fields documented to execute code, direct local API or browser access to the OSS local server (`promptfoo view`), and issues requiring the user to run untrusted eval bundles with local privileges.
 
