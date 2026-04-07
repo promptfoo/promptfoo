@@ -313,15 +313,15 @@ Do not add extra words, punctuation, or explanation.
         // (different config values create different cache keys/threads)
         const response1 = await provider.callApi('Test 1', {
           vars: {},
-          prompt: { config: { sandbox_mode: 'off' } } as any,
+          prompt: { config: { sandbox_mode: 'read-only' } } as any,
         });
         const response2 = await provider.callApi('Test 2', {
           vars: {},
-          prompt: { config: { sandbox_mode: 'host_only' } } as any,
+          prompt: { config: { sandbox_mode: 'workspace-write' } } as any,
         });
         const response3 = await provider.callApi('Test 3', {
           vars: {},
-          prompt: { config: { sandbox_mode: 'network' } } as any,
+          prompt: { config: { sandbox_mode: 'danger-full-access' } } as any,
         });
 
         expect(response1.error).toBeUndefined();
@@ -367,7 +367,9 @@ Do not add extra words, punctuation, or explanation.
           },
         });
 
-        await expect(provider.callApi('Test')).rejects.toThrow(/Git repository/);
+        const response = await provider.callApi('Test');
+
+        expect(response.error).toMatch(/is not inside a Git repository/);
       } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
       }

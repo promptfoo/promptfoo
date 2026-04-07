@@ -207,6 +207,8 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   { id: 'codechat-bison@002' },
   { id: 'gemini-ultra' },
   { id: 'gemma' },
+  { id: 'gemma-4-31b-it' },
+  { id: 'gemma-4-26b-a4b-it' },
   { id: 'codegemma' },
   { id: 'paligemma' },
   { id: 'medlm-medium' },

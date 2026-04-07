@@ -1,7 +1,8 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { processExecutableFile } from '../../../src/prompts/processors/executable';
 
 import type { ApiProvider } from '../../../src/types/index';
@@ -75,159 +76,124 @@ describe('processExecutableFile', () => {
 
   // Unix-specific tests
   describeUnix('Unix shell script tests', () => {
-    it('should process a simple shell script', async () => {
-      const scriptPath = path.join(__dirname, 'test-prompt.sh');
-      const scriptContent = `#!/bin/bash
-echo "Hello from shell script"`;
+    let sharedPrompts: Awaited<ReturnType<typeof processExecutableFile>>;
+    let tempDir: string;
+    let scriptPath: string;
 
-      // Create a temporary test script
-      fs.writeFileSync(scriptPath, scriptContent);
+    beforeAll(async () => {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-executable-test-'));
+      scriptPath = path.join(tempDir, 'shared-test-script.sh');
+      fs.writeFileSync(
+        scriptPath,
+        `#!/bin/sh
+context="$1"
+case "$context" in
+  *'"mode":"args"'*)
+    printf '%s\\n' "Context received: $context"
+    ;;
+  *'"mode":"config"'*)
+    printf '%s\\n' "Test output"
+    ;;
+  *'"mode":"stderr"'*)
+    printf '%s\\n' "Error message" >&2
+    printf '%s\\n' "Normal output"
+    ;;
+  *'"mode":"error"'*)
+    printf '%s\\n' "Error only" >&2
+    exit 1
+    ;;
+  *'"mode":"relative"'*)
+    printf '%s\\n' "Relative path works"
+    ;;
+  *)
+    printf '%s\\n' "Hello from shell script"
+    ;;
+esac
+`,
+      );
       fs.chmodSync(scriptPath, 0o755);
+      sharedPrompts = await processExecutableFile(scriptPath, {});
+    });
 
-      try {
-        const prompts = await processExecutableFile(scriptPath, {});
+    afterAll(() => {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    });
 
-        expect(prompts).toHaveLength(1);
-        expect(prompts[0].label).toBe(scriptPath);
-        expect(prompts[0].raw).toContain('#!/bin/bash');
-        expect(typeof prompts[0].function).toBe('function');
+    it('should process a simple shell script', async () => {
+      expect(sharedPrompts).toHaveLength(1);
+      expect(sharedPrompts[0].label).toBe(scriptPath);
+      expect(sharedPrompts[0].raw).toContain('#!/bin/sh');
+      expect(typeof sharedPrompts[0].function).toBe('function');
 
-        // Test the function execution
-        const result = await prompts[0].function!({
-          vars: { test: 'value' },
-          provider: mockProvider,
-        });
+      const result = await sharedPrompts[0].function!({
+        vars: { test: 'value' },
+        provider: mockProvider,
+      });
 
-        expect(result).toBe('Hello from shell script');
-      } finally {
-        // Clean up
-        fs.unlinkSync(scriptPath);
-      }
+      expect(result).toBe('Hello from shell script');
     });
 
     it('should handle scripts with arguments', async () => {
-      const scriptPath = path.join(__dirname, 'test-args.sh');
-      const scriptContent = `#!/bin/bash
-CONTEXT=$1
-echo "Context received: $CONTEXT"`;
+      const result = await sharedPrompts[0].function!({
+        vars: { mode: 'args', name: 'test' },
+        provider: mockProvider,
+      });
 
-      fs.writeFileSync(scriptPath, scriptContent);
-      fs.chmodSync(scriptPath, 0o755);
-
-      try {
-        const prompts = await processExecutableFile(scriptPath, {});
-        const result = await prompts[0].function!({
-          vars: { name: 'test' },
-          provider: mockProvider,
-        });
-
-        // The script should receive the context as JSON
-        expect(result).toContain('Context received:');
-        expect(result).toContain('"vars"');
-        expect(result).toContain('"name":"test"');
-      } finally {
-        fs.unlinkSync(scriptPath);
-      }
+      // The script should receive the context as JSON
+      expect(result).toContain('Context received:');
+      expect(result).toContain('"vars"');
+      expect(result).toContain('"name":"test"');
     });
 
     it('should pass config to the function', async () => {
-      const scriptPath = path.join(__dirname, 'test-config.sh');
-      const scriptContent = `#!/bin/bash
-echo "Test output"`;
+      const config = { temperature: 0.5 };
+      const prompts = await processExecutableFile(scriptPath, { config });
 
-      fs.writeFileSync(scriptPath, scriptContent);
-      fs.chmodSync(scriptPath, 0o755);
+      expect(prompts[0].config).toEqual(config);
 
-      try {
-        const config = { temperature: 0.5 };
-        const prompts = await processExecutableFile(scriptPath, { config });
+      const result = await prompts[0].function!({
+        vars: { mode: 'config' },
+        provider: mockProvider,
+      });
 
-        expect(prompts[0].config).toEqual(config);
-
-        // The function should include config in the context
-        const result = await prompts[0].function!({
-          vars: {},
-          provider: mockProvider,
-        });
-
-        expect(result).toBe('Test output');
-      } finally {
-        fs.unlinkSync(scriptPath);
-      }
+      expect(result).toBe('Test output');
     });
 
     it('should handle scripts that output to stderr', async () => {
-      const scriptPath = path.join(__dirname, 'test-stderr.sh');
-      const scriptContent = `#!/bin/bash
-echo "Error message" >&2
-echo "Normal output"`;
+      const result = await sharedPrompts[0].function!({
+        vars: { mode: 'stderr' },
+        provider: mockProvider,
+      });
 
-      fs.writeFileSync(scriptPath, scriptContent);
-      fs.chmodSync(scriptPath, 0o755);
-
-      try {
-        const prompts = await processExecutableFile(scriptPath, {});
-        const result = await prompts[0].function!({
-          vars: {},
-          provider: mockProvider,
-        });
-
-        // Should return stdout even if there's stderr
-        expect(result).toBe('Normal output');
-      } finally {
-        fs.unlinkSync(scriptPath);
-      }
+      // Should return stdout even if there's stderr
+      expect(result).toBe('Normal output');
     });
 
     it('should reject when script fails with no stdout', async () => {
-      const scriptPath = path.join(__dirname, 'test-error.sh');
-      const scriptContent = `#!/bin/bash
-echo "Error only" >&2
-exit 1`;
-
-      fs.writeFileSync(scriptPath, scriptContent);
-      fs.chmodSync(scriptPath, 0o755);
-
-      try {
-        const prompts = await processExecutableFile(scriptPath, {});
-
-        await expect(
-          prompts[0].function!({
-            vars: {},
-            provider: mockProvider,
-          }),
-        ).rejects.toThrow();
-      } finally {
-        fs.unlinkSync(scriptPath);
-      }
-    });
-  });
-
-  describeUnix('Relative path tests', () => {
-    it('should work with exec: prefix and relative paths', async () => {
-      const scriptPath = path.join(__dirname, 'test-relative.sh');
-      const scriptContent = `#!/bin/bash
-echo "Relative path works"`;
-
-      fs.writeFileSync(scriptPath, scriptContent);
-      fs.chmodSync(scriptPath, 0o755);
-
-      try {
-        // This simulates how the system would call it from processPrompt with basePath
-        const prompts = await processExecutableFile(scriptPath, {});
-
-        expect(prompts).toHaveLength(1);
-        expect(typeof prompts[0].function).toBe('function');
-
-        const result = await prompts[0].function!({
-          vars: {},
+      await expect(
+        sharedPrompts[0].function!({
+          vars: { mode: 'error' },
           provider: mockProvider,
-        });
+        }),
+      ).rejects.toThrow();
+    });
 
-        expect(result).toBe('Relative path works');
-      } finally {
-        fs.unlinkSync(scriptPath);
-      }
+    it('should resolve relative paths from prompt.config.basePath', async () => {
+      const relativeScriptPath = `.${path.sep}${path.basename(scriptPath)}`;
+      const prompts = await processExecutableFile(relativeScriptPath, {
+        config: { basePath: tempDir },
+      });
+
+      expect(prompts).toHaveLength(1);
+      expect(prompts[0].label).toBe(relativeScriptPath);
+      expect(typeof prompts[0].function).toBe('function');
+
+      const result = await prompts[0].function!({
+        vars: { mode: 'relative' },
+        provider: mockProvider,
+      });
+
+      expect(result).toBe('Relative path works');
     });
   });
 });

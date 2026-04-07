@@ -25,7 +25,6 @@ import StorefrontIcon from '@mui/icons-material/Storefront';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import CountUp from 'react-countup';
-import NewsletterForm from '../components/NewsletterForm';
 import { SITE_CONSTANTS } from '../constants';
 import styles from './index.module.css';
 

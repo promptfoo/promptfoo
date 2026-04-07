@@ -19,7 +19,7 @@ import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
-import { TOKEN_REFRESH_BUFFER_MS } from '../util/oauth';
+import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../util/oauth';
 import { safeResolve } from '../util/pathUtils';
 import { sanitizeObject, sanitizeUrl } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
@@ -1476,7 +1476,7 @@ export class HttpProvider implements ApiProvider {
   private lastSignature?: string;
   private lastToken?: string;
   private lastTokenExpiresAt?: number;
-  private tokenRefreshPromise?: Promise<void>;
+  private tokenRefreshLock?: TokenRefreshLock;
   private httpsAgent?: Agent;
   private httpsAgentPromise?: Promise<Agent>;
   /**
@@ -1610,44 +1610,24 @@ export class HttpProvider implements ApiProvider {
               : undefined,
           }
         : baseConfig;
-    const now = Date.now();
-
-    if (this.hasValidCachedToken(now)) {
+    if (this.hasValidCachedToken()) {
       logger.debug('[HTTP Provider Auth]: Using cached OAuth token');
       return;
     }
 
-    if (this.tokenRefreshPromise != null && (await this.waitForInFlightTokenRefresh())) {
-      return;
-    }
-
-    // Start a new token refresh and store the promise for deduplication
-    logger.debug('[HTTP Provider Auth]: Refreshing OAuth token');
-    const refreshPromise = this.performTokenRefresh(oauthConfig, now);
-    this.tokenRefreshPromise = refreshPromise;
-
-    try {
-      await refreshPromise;
-    } finally {
-      // Only clear the promise if it's still the one we created (prevents race conditions)
-      if (this.tokenRefreshPromise === refreshPromise) {
-        this.tokenRefreshPromise = undefined;
-      }
-    }
+    logger.debug('[HTTP Provider Auth]: Starting or waiting for OAuth token refresh');
+    await this.refreshTokenWithLock(() => this.performTokenRefresh(oauthConfig));
   }
 
-  private async performTokenRefresh(
-    oauthConfig: {
-      grantType: string;
-      clientId?: string;
-      clientSecret?: string;
-      tokenUrl: string;
-      scopes?: string[];
-      username?: string;
-      password?: string;
-    },
-    now: number,
-  ): Promise<void> {
+  private async performTokenRefresh(oauthConfig: {
+    grantType: string;
+    clientId?: string;
+    clientSecret?: string;
+    tokenUrl: string;
+    scopes?: string[];
+    username?: string;
+    password?: string;
+  }): Promise<void> {
     try {
       // Prepare the token request body
       const tokenRequestBody = new URLSearchParams();
@@ -1712,7 +1692,7 @@ export class HttpProvider implements ApiProvider {
       // Calculate expiration time
       // expires_in is typically in seconds, default to 3600 (1 hour) if not provided
       const expiresInSeconds = tokenData.expires_in || 3600;
-      this.lastTokenExpiresAt = now + expiresInSeconds * 1000;
+      this.lastTokenExpiresAt = Date.now() + expiresInSeconds * 1000;
 
       logger.debug('[HTTP Provider Auth]: Successfully refreshed OAuth token');
     } catch (err) {
@@ -1736,14 +1716,15 @@ export class HttpProvider implements ApiProvider {
   }
 
   private async waitForInFlightTokenRefresh(): Promise<boolean> {
-    if (this.tokenRefreshPromise == null) {
+    const refreshPromise = this.tokenRefreshLock?.promise;
+    if (refreshPromise == null) {
       return false;
     }
 
     logger.debug('[HTTP Provider Auth]: Token refresh already in progress, waiting...');
 
     try {
-      await this.tokenRefreshPromise;
+      await refreshPromise;
       if (this.hasValidCachedToken()) {
         return true;
       }
@@ -1753,6 +1734,26 @@ export class HttpProvider implements ApiProvider {
     }
 
     return false;
+  }
+
+  private async refreshTokenWithLock(refreshToken: () => Promise<void>): Promise<void> {
+    while (this.tokenRefreshLock != null) {
+      if (await this.waitForInFlightTokenRefresh()) {
+        return;
+      }
+    }
+
+    const refreshLock = { promise: refreshToken() };
+    this.tokenRefreshLock = refreshLock;
+
+    try {
+      await refreshLock.promise;
+    } finally {
+      // Only clear the lock if it's still the one we created (prevents race conditions)
+      if (this.tokenRefreshLock === refreshLock) {
+        this.tokenRefreshLock = undefined;
+      }
+    }
   }
 
   private async refreshFileTokenIfNeeded(
@@ -1770,21 +1771,8 @@ export class HttpProvider implements ApiProvider {
       return;
     }
 
-    if (this.tokenRefreshPromise != null && (await this.waitForInFlightTokenRefresh())) {
-      return;
-    }
-
-    logger.debug('[HTTP Provider Auth]: Refreshing file auth token');
-    const refreshPromise = this.performFileTokenRefresh(prompt, vars, context);
-    this.tokenRefreshPromise = refreshPromise;
-
-    try {
-      await refreshPromise;
-    } finally {
-      if (this.tokenRefreshPromise === refreshPromise) {
-        this.tokenRefreshPromise = undefined;
-      }
-    }
+    logger.debug('[HTTP Provider Auth]: Starting or waiting for file auth token refresh');
+    await this.refreshTokenWithLock(() => this.performFileTokenRefresh(prompt, vars, context));
   }
 
   private async performFileTokenRefresh(

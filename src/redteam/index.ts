@@ -75,7 +75,7 @@ function getPolicyText(metadata: TestCase['metadata'] | undefined): string | und
   return undefined;
 }
 
-const MAX_MAX_CONCURRENCY = 20;
+export const MAX_MAX_CONCURRENCY = 20;
 
 /**
  * Gets the severity level for a plugin based on its ID and configuration.
@@ -860,8 +860,6 @@ export async function synthesize({
         strategies
           .filter((s) => !['basic', 'retry'].includes(s.id))
           .map((s) => {
-            // For non-basic strategies, we want to show the additional tests they generate
-            let testCount = totalPluginTests;
             // Apply fan-out multiplier if this is a fan-out strategy
             let n = 1;
             if (typeof s.config?.n === 'number') {
@@ -869,7 +867,8 @@ export async function synthesize({
             } else if (isFanoutStrategy(s.id)) {
               n = getDefaultNFanout(s.id);
             }
-            testCount = totalPluginTests * n;
+            // For non-basic strategies, we want to show the additional tests they generate
+            let testCount = totalPluginTests * n;
             // Apply numTests cap if configured (consistent with calculateExpectedStrategyTests)
             const numTestsCap = s.config?.numTests;
             if (

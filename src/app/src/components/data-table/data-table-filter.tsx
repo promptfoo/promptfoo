@@ -152,7 +152,7 @@ export function getHeaderFilterState<TData>(column: Column<TData, unknown>): Hea
   const defaultOperator: FilterOperator = isSelectFilter ? 'equals' : 'contains';
   const filterValue = column.getFilterValue();
 
-  if (!filterValue || typeof filterValue !== 'object' || filterValue === null) {
+  if (typeof filterValue !== 'object' || filterValue === null) {
     return { operator: defaultOperator, value: isSelectFilter ? '' : '' };
   }
 

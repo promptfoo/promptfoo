@@ -697,23 +697,24 @@ These properties can be set under the provider `config` key:
 
 ### OpenAI Configuration
 
-| Name                  | Description                                                                                                                 |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                   |
-| isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o1, o3, o3-mini, o4-mini). **Required for reasoning models** |
-| max_completion_tokens | Maximum tokens to generate for reasoning models. Only used when `isReasoningModel` is `true`                                |
-| reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Only used when `isReasoningModel` is `true`                           |
-| temperature           | Controls randomness (0-2). Not supported for reasoning models                                                               |
-| max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                              |
-| top_p                 | Controls nucleus sampling (0-1)                                                                                             |
-| frequency_penalty     | Penalizes repeated tokens (-2 to 2)                                                                                         |
-| presence_penalty      | Penalizes new tokens based on presence (-2 to 2)                                                                            |
-| best_of               | Generates multiple outputs and returns the best                                                                             |
-| functions             | Array of functions available for the model to call                                                                          |
-| function_call         | Controls how the model calls functions                                                                                      |
-| response_format       | Specifies output format (e.g., `{ type: "json_object" }`)                                                                   |
-| stop                  | Array of sequences where the model will stop generating                                                                     |
-| passthrough           | Additional parameters to send with the request                                                                              |
+| Name                  | Description                                                                                                                                     |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                                       |
+| isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o1, o3, o3-mini, o4-mini). **Required for reasoning models**                     |
+| max_completion_tokens | Maximum tokens to generate for reasoning models. Only used when `isReasoningModel` is `true`                                                    |
+| reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Only used when `isReasoningModel` is `true`                                               |
+| temperature           | Controls randomness (0-2). Not supported for reasoning models                                                                                   |
+| max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                                                  |
+| top_p                 | Controls nucleus sampling (0-1)                                                                                                                 |
+| frequency_penalty     | Penalizes repeated tokens (-2 to 2)                                                                                                             |
+| presence_penalty      | Penalizes new tokens based on presence (-2 to 2)                                                                                                |
+| omitDefaults          | Omits hardcoded defaults unless values are explicitly set via config or environment variables. Supported by `azure:chat` and `azure:responses`. |
+| best_of               | Generates multiple outputs and returns the best                                                                                                 |
+| functions             | Array of functions available for the model to call                                                                                              |
+| function_call         | Controls how the model calls functions                                                                                                          |
+| response_format       | Specifies output format (e.g., `{ type: "json_object" }`)                                                                                       |
+| stop                  | Array of sequences where the model will stop generating                                                                                         |
+| passthrough           | Additional parameters to send with the request                                                                                                  |
 
 ## Using Reasoning Models (o1, o3, o3-mini, o4-mini)
 
@@ -735,7 +736,7 @@ providers:
       isReasoningModel: true
       # Use max_completion_tokens instead of max_tokens
       max_completion_tokens: 25000
-      # Optional: Set reasoning effort (default is 'medium')
+      # Optional: Set reasoning effort (default is 'medium' unless omitDefaults is true)
       reasoning_effort: 'medium'
 
 # For completion endpoints

@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DefaultTestVariables from './DefaultTestVariables';
 
 // Mock the useRedTeamConfig hook
@@ -35,12 +35,23 @@ describe('DefaultTestVariables Component', () => {
   };
 
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
     mockUseRedTeamConfig.mockReturnValue({
       config: defaultConfig,
       updateConfig: mockUpdateConfig,
     });
   });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function flushDebouncedUpdate() {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+  }
 
   describe('Initial Rendering', () => {
     it('renders Test Variables section with empty state', () => {
@@ -89,10 +100,10 @@ describe('DefaultTestVariables Component', () => {
       const addButton = screen.getByText('Add Variable');
       fireEvent.click(addButton);
 
-      await waitFor(() => {
-        expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
-          vars: { newVar: '' },
-        });
+      await flushDebouncedUpdate();
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
+        vars: { newVar: '' },
       });
     });
 
@@ -110,10 +121,10 @@ describe('DefaultTestVariables Component', () => {
       const addButton = screen.getByText('Add Variable');
       fireEvent.click(addButton);
 
-      await waitFor(() => {
-        expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
-          vars: { newVar: 'value1', newVar1: '' },
-        });
+      await flushDebouncedUpdate();
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
+        vars: { newVar: 'value1', newVar1: '' },
       });
     });
   });
@@ -132,14 +143,14 @@ describe('DefaultTestVariables Component', () => {
       const nameField = screen.getByDisplayValue('apiKey');
       fireEvent.change(nameField, { target: { value: 'newApiKey' } });
 
-      await waitFor(() => {
-        expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
-          vars: {
-            newApiKey: 'test-key',
-            language: 'en',
-            endpoint: 'https://api.example.com',
-          },
-        });
+      await flushDebouncedUpdate();
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
+        vars: {
+          newApiKey: 'test-key',
+          language: 'en',
+          endpoint: 'https://api.example.com',
+        },
       });
     });
 
@@ -149,14 +160,14 @@ describe('DefaultTestVariables Component', () => {
       const valueField = screen.getByDisplayValue('test-key');
       fireEvent.change(valueField, { target: { value: 'new-test-key' } });
 
-      await waitFor(() => {
-        expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
-          vars: {
-            apiKey: 'new-test-key',
-            language: 'en',
-            endpoint: 'https://api.example.com',
-          },
-        });
+      await flushDebouncedUpdate();
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
+        vars: {
+          apiKey: 'new-test-key',
+          language: 'en',
+          endpoint: 'https://api.example.com',
+        },
       });
     });
 
@@ -169,13 +180,13 @@ describe('DefaultTestVariables Component', () => {
 
       fireEvent.click(deleteButtons[0]);
 
-      await waitFor(() => {
-        expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
-          vars: {
-            language: 'en',
-            endpoint: 'https://api.example.com',
-          },
-        });
+      await flushDebouncedUpdate();
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
+        vars: {
+          language: 'en',
+          endpoint: 'https://api.example.com',
+        },
       });
     });
 
@@ -186,18 +197,16 @@ describe('DefaultTestVariables Component', () => {
       fireEvent.change(nameField, { target: { value: 'language' } });
 
       // Should show validation error for duplicate names
-      await waitFor(() => {
-        const errors = screen.getAllByText('Duplicate variable name');
-        expect(errors).toHaveLength(2); // Both duplicates should show error
-      });
+      const errors = screen.getAllByText('Duplicate variable name');
+      expect(errors).toHaveLength(2); // Both duplicates should show error
 
       // Variables with validation errors should not be included in global state
-      await waitFor(() => {
-        expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
-          vars: {
-            endpoint: 'https://api.example.com',
-          },
-        });
+      await flushDebouncedUpdate();
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
+        vars: {
+          endpoint: 'https://api.example.com',
+        },
       });
     });
   });
@@ -297,10 +306,10 @@ describe('DefaultTestVariables Component', () => {
       const addButton = screen.getByText('Add Variable');
       fireEvent.click(addButton);
 
-      await waitFor(() => {
-        expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
-          vars: { newVar: '' },
-        });
+      await flushDebouncedUpdate();
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
+        vars: { newVar: '' },
       });
     });
 
@@ -331,14 +340,14 @@ describe('DefaultTestVariables Component', () => {
       const nameField = screen.getByDisplayValue('apiKey');
       fireEvent.change(nameField, { target: { value: 'invalid@#$ name' } });
 
-      await waitFor(() => {
-        expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
-          vars: {
-            'invalid@#$ name': 'test-key',
-            language: 'en',
-            endpoint: 'https://api.example.com',
-          },
-        });
+      await flushDebouncedUpdate();
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
+        vars: {
+          'invalid@#$ name': 'test-key',
+          language: 'en',
+          endpoint: 'https://api.example.com',
+        },
       });
     });
 
@@ -354,13 +363,13 @@ describe('DefaultTestVariables Component', () => {
       fireEvent.change(nameField, { target: { value: '' } });
 
       // Variables with empty names should be filtered out from global state
-      await waitFor(() => {
-        expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
-          vars: {
-            language: 'en',
-            endpoint: 'https://api.example.com',
-          },
-        });
+      await flushDebouncedUpdate();
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
+        vars: {
+          language: 'en',
+          endpoint: 'https://api.example.com',
+        },
       });
     });
 
@@ -385,16 +394,16 @@ describe('DefaultTestVariables Component', () => {
       fireEvent.change(nameField, { target: { value: longString } });
       fireEvent.change(valueField, { target: { value: longString } });
 
-      await waitFor(() => {
-        expect(mockUpdateConfig).toHaveBeenCalled();
-        const calls = mockUpdateConfig.mock.calls;
-        const lastCall = calls[calls.length - 1];
-        expect(lastCall[0]).toBe('defaultTest');
-        expect(Object.keys(lastCall[1].vars as Record<string, string>).length).toBe(1);
+      await flushDebouncedUpdate();
 
-        const varsEntries = Object.entries(lastCall[1].vars as Record<string, string>)[0];
-        expect(varsEntries[0].length > 1000 || varsEntries[1].length > 1000).toBe(true);
-      });
+      expect(mockUpdateConfig).toHaveBeenCalled();
+      const calls = mockUpdateConfig.mock.calls;
+      const lastCall = calls[calls.length - 1];
+      expect(lastCall[0]).toBe('defaultTest');
+      expect(Object.keys(lastCall[1].vars as Record<string, string>).length).toBe(1);
+
+      const varsEntries = Object.entries(lastCall[1].vars as Record<string, string>)[0];
+      expect(varsEntries[0].length > 1000 || varsEntries[1].length > 1000).toBe(true);
     });
   });
 
@@ -425,9 +434,7 @@ describe('DefaultTestVariables Component', () => {
         updateConfig: mockUpdateConfig,
       });
 
-      await waitFor(() => {
-        expect(screen.getByDisplayValue('edited-key')).toBeInTheDocument();
-      });
+      expect(screen.getByDisplayValue('edited-key')).toBeInTheDocument();
     });
   });
 
@@ -436,24 +443,18 @@ describe('DefaultTestVariables Component', () => {
 
     const addButton = screen.getByText('Add Variable');
     fireEvent.click(addButton);
-    await waitFor(() => {
-      // Use placeholder text to find inputs since labels are sr-only
-      const variableInputs = screen.getAllByPlaceholderText('Variable name');
-      expect(variableInputs.length).toBe(1);
-      fireEvent.change(variableInputs[0], { target: { value: ' var' } });
-    });
+
+    let variableInputs = screen.getAllByPlaceholderText('Variable name');
+    expect(variableInputs.length).toBe(1);
+    fireEvent.change(variableInputs[0], { target: { value: ' var' } });
 
     fireEvent.click(addButton);
-    await waitFor(() => {
-      const variableInputs = screen.getAllByPlaceholderText('Variable name');
-      expect(variableInputs.length).toBe(2);
-      fireEvent.change(variableInputs[1], { target: { value: 'var ' } });
-    });
 
-    await waitFor(() => {
-      const errors = screen.getAllByText('Duplicate variable name');
-      expect(errors).toHaveLength(2);
-    });
+    variableInputs = screen.getAllByPlaceholderText('Variable name');
+    expect(variableInputs.length).toBe(2);
+    fireEvent.change(variableInputs[1], { target: { value: 'var ' } });
+
+    expect(screen.getAllByText('Duplicate variable name')).toHaveLength(2);
   });
 
   describe('ID Generation', () => {
@@ -461,37 +462,35 @@ describe('DefaultTestVariables Component', () => {
       const timestamp = Date.now();
       const originalDateNow = Date.now;
       Date.now = vi.fn(() => timestamp);
+      try {
+        mockUseRedTeamConfig.mockReturnValue({
+          config: {
+            ...defaultConfig,
+            defaultTest: { vars: {} },
+          },
+          updateConfig: mockUpdateConfig,
+        });
 
-      mockUseRedTeamConfig.mockReturnValue({
-        config: {
-          ...defaultConfig,
-          defaultTest: { vars: {} },
-        },
-        updateConfig: mockUpdateConfig,
-      });
+        render(<DefaultTestVariables />);
 
-      render(<DefaultTestVariables />);
+        const addButton = screen.getByText('Add Variable');
+        fireEvent.click(addButton);
+        fireEvent.click(addButton);
+        fireEvent.click(addButton);
 
-      const addButton = screen.getByText('Add Variable');
-      fireEvent.click(addButton);
-      fireEvent.click(addButton);
-      fireEvent.click(addButton);
+        await flushDebouncedUpdate();
 
-      await waitFor(
-        () => {
-          expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
-        },
-        { timeout: 500 },
-      );
+        expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
 
-      Date.now = originalDateNow;
+        const vars = mockUpdateConfig.mock.calls[0][1].vars;
+        const ids = Object.keys(vars);
 
-      const vars = mockUpdateConfig.mock.calls[0][1].vars;
-      const ids = Object.keys(vars);
-
-      expect(ids[0]).not.toBe(ids[1]);
-      expect(ids[0]).not.toBe(ids[2]);
-      expect(ids[1]).not.toBe(ids[2]);
+        expect(ids[0]).not.toBe(ids[1]);
+        expect(ids[0]).not.toBe(ids[2]);
+        expect(ids[1]).not.toBe(ids[2]);
+      } finally {
+        Date.now = originalDateNow;
+      }
     });
   });
 
@@ -514,22 +513,22 @@ describe('DefaultTestVariables Component', () => {
 
     fireEvent.change(valueField, { target: { value: '123' } });
 
-    await waitFor(() => {
-      expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
-        vars: {
-          myVar: '123',
-        },
-      });
+    await flushDebouncedUpdate();
+
+    expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
+      vars: {
+        myVar: '123',
+      },
     });
 
     fireEvent.change(valueField, { target: { value: 'true' } });
 
-    await waitFor(() => {
-      expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
-        vars: {
-          myVar: 'true',
-        },
-      });
+    await flushDebouncedUpdate();
+
+    expect(mockUpdateConfig).toHaveBeenCalledWith('defaultTest', {
+      vars: {
+        myVar: 'true',
+      },
     });
   });
 });

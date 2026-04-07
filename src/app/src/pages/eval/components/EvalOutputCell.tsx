@@ -771,26 +771,24 @@ function EvalOutputCell({
   // Compute provider override badge for test case-level model overrides
   let providerOverride: React.ReactNode = null;
   const testCaseProvider = output.testCase?.provider;
-  if (testCaseProvider) {
-    const providerId: string | null =
-      typeof testCaseProvider === 'string'
-        ? testCaseProvider
-        : typeof testCaseProvider === 'object' &&
-            testCaseProvider !== null &&
-            'id' in testCaseProvider &&
-            typeof testCaseProvider.id === 'string'
-          ? testCaseProvider.id
-          : null;
-    if (providerId) {
-      providerOverride = (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="provider pill">{providerId}</span>
-          </TooltipTrigger>
-          <TooltipContent side="top">Model override for this test</TooltipContent>
-        </Tooltip>
-      );
-    }
+  const providerId: string | null =
+    typeof testCaseProvider === 'string'
+      ? testCaseProvider
+      : typeof testCaseProvider === 'object' &&
+          testCaseProvider !== null &&
+          'id' in testCaseProvider &&
+          typeof testCaseProvider.id === 'string'
+        ? testCaseProvider.id
+        : null;
+  if (providerId) {
+    providerOverride = (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="provider pill">{providerId}</span>
+        </TooltipTrigger>
+        <TooltipContent side="top">Model override for this test</TooltipContent>
+      </Tooltip>
+    );
   }
 
   const commentTextToDisplay = output.gradingResult?.comment?.startsWith('!highlight')
