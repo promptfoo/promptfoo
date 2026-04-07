@@ -8,7 +8,7 @@ Promptfoo is a developer tool that runs in your environment with your user permi
 
 Some features intentionally execute user-provided code (custom assertions, custom or script-based providers, transforms, hooks, plugins, and templates in fields documented to execute code). This code execution is **not sandboxed** and should be treated the same way you would treat running a Node.js script locally.
 
-**Important:** Treat Promptfoo eval bundles as **trusted code and data**. An eval bundle is the complete set of files and configured sources Promptfoo uses for an eval run, such as the main config plus anything it references. This includes configuration files, referenced scripts, prompt packs, referenced test fixtures or datasets, configured providers, models, and remote content. Do not run Promptfoo against untrusted eval bundles or pull requests unless the run is isolated and secrets are scoped for that run.
+**Important:** Treat Promptfoo configuration files and everything they reference as **trusted code and data**. This includes referenced scripts, prompt packs, test fixtures or datasets, configured providers, models, and remote content. Do not run Promptfoo against untrusted configs, scripts, fixtures, or pull requests unless the run is isolated and secrets are scoped for that run.
 
 ### Local Web Server
 
@@ -198,7 +198,7 @@ When a fix is released, we will:
 - Code execution from **explicitly configured** custom code or templates in fields documented to execute code (e.g., JS/Python assertions, custom providers, transforms, hooks, plugins, `file://`-backed scripts)
 - Code execution caused by intentionally interpolating runtime data into an explicitly configured field documented to execute code, such as `value: 'output === "{{expected}}"'` in a JavaScript assertion — use `context.vars.expected` or safe serialization when the value should remain data
 - Code execution via **direct local web API access** or **browser access to the OSS local server** (e.g., `curl`, scripts, SDKs, the bundled UI, or malicious webpages reaching `promptfoo view`) — the local server has the same trust level as the CLI and its CSRF/origin checks are best-effort hardening, not a supported security boundary
-- Issues requiring the user to run untrusted eval bundles with local privileges
+- Issues requiring the user to run untrusted configs, scripts, or fixtures with local privileges
 - Network requests triggered by content in **user-controlled config files** (test variables, prompts, fixtures defined in your config) — users are responsible for what they put in their own configs
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Third-party dependency issues that don't materially affect Promptfoo's security posture (report upstream)
