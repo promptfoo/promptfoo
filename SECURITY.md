@@ -8,9 +8,9 @@ Promptfoo is a developer tool that runs in your environment with your user permi
 
 Some features intentionally execute user-provided code (custom assertions, custom or script-based providers, transforms, hooks, plugins, and templates in code-executing fields). This code execution is **not sandboxed** and should be treated the same way you would treat running a Node.js script locally.
 
-**The guiding principle:** if you explicitly write code or templates in a field that executes code, the result is your responsibility. If runtime data unexpectedly triggers code execution, secret exposure, or file/network access through internal processing (template rendering, variable substitution, file loading) without being placed into a code-executing field, that is a vulnerability.
+**The guiding principle:** Promptfoo OSS is a local eval runner, not a sandbox for adversarial eval content. If you explicitly write code or templates in a field that executes code, or run evals against adversarial configs, scripts, fixtures, providers, models, remote content, or model-output feedback loops, the result is your responsibility. A vulnerability exists when behavior escapes the documented OSS eval trust model, bypasses a supported isolation boundary or hardening control, affects Cloud/on-prem tenant isolation, or sends secrets or data to a destination that is not configured as part of the eval flow.
 
-**Important:** Treat Promptfoo configuration files and everything they reference as **trusted code and data**. This includes referenced scripts, prompt packs, test fixtures or datasets, configured providers, models, and remote content. Do not run Promptfoo against untrusted configs, scripts, fixtures, or pull requests unless the run is isolated and secrets are scoped for that run.
+**Important:** Treat Promptfoo configuration files and everything they reference or evaluate against as **trusted code and data**. This includes referenced scripts, prompt packs, test fixtures or datasets, configured providers, models, remote content, and model-output feedback loops. Do not run Promptfoo against untrusted configs, scripts, fixtures, providers, models, remote content, or pull requests unless the run is isolated and secrets are scoped for that run.
 
 ### Local Web Server
 
@@ -38,7 +38,7 @@ The server includes **CSRF/origin checks** that use browser-provided `Sec-Fetch-
 - Model outputs, grader outputs, `_conversation` history, and values saved with `storeOutputAs`
 - Remote content fetched during evaluation
 
-Built-in eval logic and trusted templates may pass runtime data through prompts, provider requests, graders, assertions, transforms, and reports as **data** — for example, interpolating model output into a grading prompt. This is normal operation. However, runtime data must not be promoted to **code** (evaluated as a template, executed as a script, or loaded as a file path) unless the user placed it into a code-executing field.
+Built-in eval logic and trusted templates may render, transform, score, store, or send runtime data through prompts, provider requests, graders, assertions, transforms, and reports — for example, interpolating model output into a grading prompt. These effects are part of the local OSS eval trust model when they occur inside a configured eval flow. They are not a supported sandbox boundary for adversarial eval content.
 
 Treat adversarial providers, models, fixtures, remote content, and model-output feedback loops as untrusted eval content and run them with isolation, least-privileged credentials, and restricted egress.
 
@@ -124,7 +124,7 @@ Severity is assessed using [CVSS v4.0](https://www.first.org/cvss/v4.0/specifica
 
 **Promptfoo-specific severity considerations (illustrative, not automatic):**
 
-- Runtime data triggering code execution through internal processing without being placed into a code-executing field: typically **Critical**
+- Code execution that escapes the documented OSS eval trust model or a supported isolation boundary: typically **Critical**
 - Secret or credential leakage to destinations not configured as part of the eval flow: typically **High**
 - Algorithmic DoS in CI pipelines causing significant resource exhaustion: typically **Medium–High**
 - Web UI XSS requiring deliberate user interaction (for example, self-XSS): typically **Low** or no CVE (see Scope)
@@ -144,7 +144,7 @@ We request CVEs through GitHub Security Advisories when appropriate. Final advis
 
 **We usually request a CVE for:**
 
-- Runtime data triggering code execution through internal processing without being placed into a code-executing field
+- Code execution that escapes the documented OSS eval trust model or a supported hardening control
 - Bypasses of Cloud/on-prem isolation boundaries
 - Secret or credential leakage to destinations not configured as part of the eval flow
 - Supply chain compromise affecting Promptfoo-published packages, dependencies, or build artifacts
@@ -157,7 +157,7 @@ We request CVEs through GitHub Security Advisories when appropriate. Final advis
 **We generally do not request a CVE for:**
 
 - Issues in explicitly configured custom code or templates in code-executing fields (e.g., JS/Python assertions, custom providers, transforms, hooks, plugins)
-- Runtime data rendered as data (not as code) within built-in eval logic — for example, model output interpolated into a grading prompt as a template variable
+- Effects caused by adversarial eval content within a configured OSS eval flow, including provider or model outputs, grader outputs, `_conversation`, `storeOutputAs`, fixtures, datasets, remote content, built-in graders/assertions, provider requests, reports, transforms, and template rendering
 - Local API access issues within the documented trust model
 - Self-XSS requiring the user to paste payloads into their own console or UI
 - Quality, UX, or non-security functional bugs
@@ -189,7 +189,7 @@ When a fix is released, we will:
 
 **In scope:**
 
-- Runtime data triggering code execution, file access, network access, or secret exposure through internal processing (template rendering, variable substitution, file loading) without being placed into a code-executing field
+- Code execution, file access, network access, or secret exposure that escapes the documented OSS eval trust model or bypasses a supported isolation boundary or hardening control
 - Bypasses of documented restrictions or isolation boundaries
 - Secret exposure or credential leakage to destinations not configured as part of the eval flow
 - Path traversal or arbitrary file read/write from data-only fields
@@ -199,9 +199,10 @@ When a fix is released, we will:
 **Out of scope:**
 
 - Code execution from **explicitly configured** custom code or templates in code-executing fields (e.g., JS/Python assertions, custom providers, transforms, hooks, plugins, `file://`-backed scripts)
-- Code execution caused by interpolating runtime data into a code-executing field the user configured, such as `value: 'output === "{{expected}}"'` in a JavaScript assertion — use `context.vars.expected` or safe serialization when the value should remain data. (Note: this is distinct from runtime data being promoted to code by Promptfoo's own internal processing, which is in scope.)
+- Code execution or secret exposure caused by adversarial eval content within a configured OSS eval flow, including provider or model outputs, grader outputs, `_conversation`, `storeOutputAs`, fixtures, datasets, remote content, built-in graders/assertions, provider requests, reports, transforms, and template rendering
+- Code execution caused by interpolating runtime data into a code-executing field the user configured, such as `value: 'output === "{{expected}}"'` in a JavaScript assertion — use `context.vars.expected` or safe serialization when the value should remain data
 - Code execution via **direct local web API access** or **browser access to the OSS local server** (e.g., `curl`, scripts, SDKs, the bundled UI, or malicious webpages reaching `promptfoo view`) — the local server has the same trust level as the CLI and its CSRF/origin checks are best-effort hardening, not a supported security boundary
-- Issues requiring the user to run untrusted configs, scripts, or fixtures with local privileges
+- Issues requiring the user to run untrusted configs, scripts, fixtures, providers, models, remote content, or model-output feedback loops with local privileges
 - Network requests triggered by content in **user-controlled config files** (test variables, prompts, fixtures defined in your config) — users are responsible for what they put in their own configs
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Third-party dependency issues that don't materially affect Promptfoo's security posture (report upstream)
@@ -212,6 +213,7 @@ When a fix is released, we will:
 
 - "A malicious custom assertion reads `process.env` and posts it to a webhook" → Expected behavior; custom code runs with your permissions
 - "A third-party prompt pack includes a transform that runs shell commands" → Expected behavior; don't run untrusted configs
+- "A third-party model returns template syntax that a built-in OSS grader/assertion renders and sends to a configured grader provider" → Expected behavior under the OSS eval trust model; run adversarial models with isolation and scoped credentials
 - "The Web UI fetches a URL when a test variable contains a URL" → Expected behavior; users control their own config content
 - "The local web API executes provider transforms as code" → Expected behavior; the web API has the same trust model as the CLI
 - "A malicious website can reach the local server if I replay browser headers with `curl`" → Not a valid browser repro, and local-server browser-origin claims are out of scope

@@ -20,13 +20,13 @@ For technical details on our security model, trust boundaries, and hardening rec
 
 The OSS CLI runs in your environment with your user permissions. It is **permissive by default** and executes user-configured code (custom assertions, custom or script-based providers, transforms, hooks, plugins, and templates in code-executing fields) without sandboxing.
 
-Treat Promptfoo configuration files and everything they reference as trusted code and data. This includes referenced scripts, prompt packs, test fixtures or datasets, configured providers, models, and remote content. Do not run Promptfoo against untrusted configs, scripts, fixtures, or pull requests unless the run is isolated and secrets are scoped for that run.
+Treat Promptfoo configuration files and everything they reference or evaluate against as trusted code and data. This includes referenced scripts, prompt packs, test fixtures or datasets, configured providers, models, remote content, and model-output feedback loops. Do not run Promptfoo against untrusted configs, scripts, fixtures, providers, models, remote content, or pull requests unless the run is isolated and secrets are scoped for that run.
 
-If you explicitly write code or templates in a code-executing field, the result is your responsibility. If runtime data unexpectedly triggers code execution, secret exposure, or file/network access through internal processing without being placed into a code-executing field, that is a vulnerability.
+Promptfoo OSS is a local eval runner, not a sandbox for adversarial eval content. Effects caused by configured eval content flowing through the local OSS eval pipeline, including provider or model outputs, built-in graders/assertions, provider requests, reports, transforms, and template rendering, are part of the OSS trust model.
 
-**In scope for OSS:** runtime data triggering code execution, secret exposure, or file/network access through internal processing (template rendering, variable substitution, file loading) without being placed into a code-executing field; bypasses of isolation boundaries or hardening controls; secret leakage to destinations not configured as part of the eval flow.
+**In scope for OSS:** behavior that escapes the documented OSS eval trust model; bypasses of supported isolation boundaries or hardening controls; Cloud/on-prem tenant isolation issues; secret leakage to destinations not configured as part of the eval flow.
 
-**Out of scope for OSS:** code execution from explicitly configured custom code or templates in code-executing fields, direct local API or browser access to the OSS local server (`promptfoo view`), and issues requiring the user to run untrusted configs, scripts, or fixtures with local privileges.
+**Out of scope for OSS:** effects caused by adversarial eval content within a configured OSS eval flow; code execution from explicitly configured custom code or templates in code-executing fields; direct local API or browser access to the OSS local server (`promptfoo view`); and issues requiring users to run untrusted configs, scripts, fixtures, providers, models, remote content, or model-output feedback loops with local privileges.
 
 ### Cloud Services
 
@@ -106,7 +106,8 @@ The following are out-of-scope:
 
 - Code execution from explicitly configured custom code or templates in code-executing fields in OSS (expected behavior)
 - Direct local API access or browser access to the OSS local server (`promptfoo view`)
-- Issues requiring users to run untrusted configs, scripts, or fixtures with local privileges
+- Effects caused by adversarial eval content within a configured OSS eval flow, including provider or model outputs, built-in graders/assertions, provider requests, reports, transforms, and template rendering
+- Issues requiring users to run untrusted configs, scripts, fixtures, providers, models, remote content, or model-output feedback loops with local privileges
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Social engineering, phishing, or physical attacks
 - Volumetric denial of service
