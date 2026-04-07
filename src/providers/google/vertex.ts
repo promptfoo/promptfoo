@@ -236,12 +236,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     const { system, extractedMessages, thinking } = parseMessages(normalizedPrompt);
 
-    // Merge config.systemInstruction (if set) with any system messages from the prompt.
-    // Uses parseConfigSystemInstruction for file:// loading and Nunjucks template rendering.
+    // Merge config.systemInstruction (if set) with the system instruction extracted from the prompt.
     let mergedSystem = system;
     const parsedConfigInstruction = parseConfigSystemInstruction(
       this.config.systemInstruction,
-      context?.vars as Record<string, string | object> | undefined,
+      context?.vars,
     );
     if (parsedConfigInstruction) {
       const configSystemBlocks: Array<{ type: 'text'; text: string }> = [];
