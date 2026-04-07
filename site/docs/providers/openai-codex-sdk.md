@@ -93,7 +93,7 @@ export CODEX_API_KEY=your_api_key_here
 
 :::note
 
-ChatGPT login support is specific to the Codex SDK provider. Other `openai:*` providers in promptfoo still use Platform API credentials, and [ChatGPT subscriptions are billed separately from API usage](https://help.openai.com/en/articles/8156019).
+ChatGPT login support is specific to the Codex SDK provider. Promptfoo can now use that provider automatically for default text grading and synthesis when Codex is signed in and no higher-priority API credentials are set. Explicit `openai:chat`, `openai:responses`, embedding, and moderation providers still use Platform API credentials, and [ChatGPT subscriptions are billed separately from API usage](https://help.openai.com/en/articles/8156019).
 
 :::
 

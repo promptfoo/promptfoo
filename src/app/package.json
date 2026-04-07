@@ -20,8 +20,8 @@
     "build-storybook": "storybook build"
   },
   "devDependencies": {
-    "@chromatic-com/storybook": "^5.0.2",
     "@babel/core": "^7.29.0",
+    "@chromatic-com/storybook": "^5.0.2",
     "@kurkle/color": "^0.4.0",
     "@storybook/addon-a11y": "^10.3.3",
     "@storybook/addon-docs": "^10.3.3",
@@ -75,7 +75,7 @@
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0.2",
     "use-debounce": "^10.1.0",
-    "vite": "^8.0.0",
+    "vite": "^8.0.5",
     "vitest": "^4.1.0",
     "zustand": "^5.0.12"
   },

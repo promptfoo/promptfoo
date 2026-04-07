@@ -333,7 +333,7 @@ export async function matchesSimilarity(
   grading?: GradingConfig,
   metric: 'cosine' | 'dot_product' | 'euclidean' = 'cosine',
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  if (cliState.config?.redteam && shouldGenerateRemote()) {
+  if (cliState.config?.redteam && shouldGenerateRemote({ requireEmbeddingProvider: true })) {
     try {
       return doRemoteGrading({
         task: 'similar',
@@ -831,7 +831,7 @@ export async function matchesLlmRubric(
     !grading.rubricPrompt &&
     !cliState.config?.redteam?.provider &&
     cliState.config?.redteam &&
-    shouldGenerateRemote()
+    shouldGenerateRemote({ canUseCodexDefaultProvider: true })
   ) {
     return {
       ...(await doRemoteGrading({

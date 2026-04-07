@@ -216,7 +216,9 @@ See the [FAQ](/docs/faq/#how-do-i-configure-promptfoo-for-corporate-networks-or-
 
 If you're using OpenAI, set the `OPENAI_API_KEY` environment variable or add `apiKey` to the provider config.
 
-If you're not using OpenAI but still receiving this message, you probably have some [model-graded metric](/docs/configuration/expected-outputs/model-graded/) such as `llm-rubric` or `similar` that requires you to [override the grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader).
+For default text-only model grading and synthesis, you can also install `@openai/codex-sdk`, sign in through the Codex CLI, and let Promptfoo use `openai:codex-sdk` automatically when no higher-priority API credentials are set. This does not cover embedding or moderation providers.
+
+If you're not using OpenAI but still receiving this message, you probably have some [model-graded metric](/docs/configuration/expected-outputs/model-graded/) such as `similar` or `moderation` that requires you to [override the grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader) or configure an embedding/moderation provider explicitly.
 
 Follow the instructions to override the grader, e.g., using the `defaultTest` property:
 
