@@ -10,14 +10,6 @@ The `javascript` [assertion](/docs/configuration/expected-outputs) allows you to
 
 A variable named `output` is injected into the context. The function should return `true` if the output passes the assertion, and `false` otherwise. If the function returns a number, it will be treated as a score.
 
-Use `not-javascript` to invert the final pass/fail result for boolean, numeric, and `GradingResult.pass` returns. Numeric and `GradingResult` scores are preserved; boolean scores follow the final pass/fail result (`1` for pass, `0` for fail). Numeric scores are still compared against `threshold` before the pass/fail result is inverted:
-
-```yaml
-assert:
-  - type: not-javascript
-    value: output.includes('error')
-```
-
 You can use any valid JavaScript code in your function. The output of the LLM is provided as the `output` variable:
 
 ```yaml
@@ -441,6 +433,16 @@ if (context.trace && maxDepth(context.trace.spans) > 5) {
 ### ES modules
 
 ES modules are supported, but must have a `.mjs` file extension. Alternatively, if you are transpiling Javascript or Typescript, we recommend pointing promptfoo to the transpiled plain Javascript output.
+
+## Negation
+
+Use `not-javascript` to invert the final pass/fail result while preserving the returned score. Numeric scores are still compared against `threshold` before the result is inverted:
+
+```yaml
+assert:
+  - type: not-javascript
+    value: output.includes('error')
+```
 
 ## Other assertion types
 

@@ -10,14 +10,6 @@ The `ruby` assertion allows you to provide a custom Ruby method to validate the 
 
 A variable named `output` is injected into the context. The method should return `true` if the output passes the assertion, and `false` otherwise. If the method returns a number, it will be treated as a score.
 
-Use `not-ruby` to invert the final pass/fail result for boolean, numeric, and `GradingResult.pass` returns. Numeric and `GradingResult` scores are preserved; boolean scores follow the final pass/fail result (`1` for pass, `0` for fail). Numeric scores are still compared against `threshold` before the pass/fail result is inverted:
-
-```yaml
-assert:
-  - type: not-ruby
-    value: output.include?('error')
-```
-
 Example:
 
 ```yaml
@@ -306,6 +298,16 @@ By default, promptfoo will run `ruby` in your shell. Make sure `ruby` points to 
 If a `ruby` binary is not present, you will see a "ruby: command not found" error.
 
 To override the Ruby binary, set the `PROMPTFOO_RUBY` environment variable. You may set it to a path (such as `/path/to/ruby`) or just an executable in your PATH (such as `ruby`).
+
+## Negation
+
+Use `not-ruby` to invert the final pass/fail result while preserving the returned score. Numeric scores are still compared against `threshold` before the result is inverted:
+
+```yaml
+assert:
+  - type: not-ruby
+    value: output.include?('error')
+```
 
 ## Other assertion types
 

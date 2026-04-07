@@ -16,14 +16,6 @@ For an overview of all Python integrations (providers, assertions, test generato
 
 A variable named `output` is injected into the context. The function should return `true` if the output passes the assertion, and `false` otherwise. If the function returns a number, it will be treated as a score.
 
-Use `not-python` to invert the final pass/fail result for boolean, numeric, and `GradingResult.pass` returns. Numeric and `GradingResult` scores are preserved; boolean scores follow the final pass/fail result (`1` for pass, `0` for fail). Numeric scores are still compared against `threshold` before the pass/fail result is inverted:
-
-```yaml
-assert:
-  - type: not-python
-    value: "'error' in output"
-```
-
 Example:
 
 ```yaml
@@ -289,6 +281,16 @@ By default, promptfoo will run `python` in your shell. Make sure `python` points
 If a `python` binary is not present, you will see a "python: command not found" error.
 
 To override the Python binary, set the `PROMPTFOO_PYTHON` environment variable. You may set it to a path (such as `/path/to/python3.11`) or just an executable in your PATH (such as `python3.11`).
+
+## Negation
+
+Use `not-python` to invert the final pass/fail result while preserving the returned score. Numeric scores are still compared against `threshold` before the result is inverted:
+
+```yaml
+assert:
+  - type: not-python
+    value: "'error' in output"
+```
 
 ## Other assertion types
 
