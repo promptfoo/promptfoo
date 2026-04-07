@@ -6,11 +6,11 @@ Promptfoo takes security seriously. We appreciate responsible disclosure and wil
 
 Promptfoo is a developer tool that runs in your environment with your user permissions. It is designed to be **permissive by default**.
 
-Some features intentionally execute user-provided code (custom assertions, custom or script-based providers, transforms, hooks, plugins, and templates in code-executing fields). This code execution is **not sandboxed** and should be treated the same way you would treat running a Node.js script locally.
+Some features intentionally execute user-provided code (custom assertions, custom or script-based providers, transforms, hooks, plugins, and templates in fields that execute code). This code execution is **not sandboxed** and should be treated the same way you would treat running a Node.js script locally.
 
-**The guiding principle:** Promptfoo OSS is a local eval runner, not a sandbox for adversarial eval content. If you explicitly write code or templates in a field that executes code, or run evals against adversarial configs, scripts, fixtures, providers, models, remote content, or model-output feedback loops, the result is your responsibility. A vulnerability exists when behavior escapes the documented OSS eval trust model, bypasses a supported isolation boundary or hardening control, affects Cloud/on-prem tenant isolation, or sends secrets or data to a destination that is not configured as part of the eval flow.
+**The guiding principle:** Promptfoo OSS is a local eval runner, not a sandbox for adversarial eval content. If you explicitly write code or templates in a field that executes code, or run evals against adversarial configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops, the result is your responsibility. A vulnerability exists when behavior escapes the documented OSS eval trust model, bypasses a supported isolation boundary or hardening control, affects Cloud/on-prem tenant isolation, or sends secrets or data to a destination that is not configured as part of the eval flow.
 
-**Important:** Treat Promptfoo configuration files and everything they reference or evaluate against as **trusted code and data**. This includes referenced scripts, prompt packs, test fixtures or datasets, configured providers, models, remote content, and model-output feedback loops. Do not run Promptfoo against untrusted configs, scripts, fixtures, providers, models, remote content, or pull requests unless the run is isolated and secrets are scoped for that run.
+**Important:** Treat Promptfoo configuration files and everything they reference or evaluate against as **trusted code and data**. This includes referenced scripts, prompt packs, test fixtures or datasets, configured providers, models, remote content, and model-output feedback loops. Do not run Promptfoo against untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, model-output feedback loops, or pull requests unless the run is isolated and secrets are scoped for that run.
 
 ### Local Web Server
 
@@ -40,11 +40,11 @@ The server includes **CSRF/origin checks** that use browser-provided `Sec-Fetch-
 
 Built-in eval logic and trusted templates may render, transform, score, store, or send runtime data through prompts, provider requests, graders, assertions, transforms, and reports — for example, interpolating model output into a grading prompt. These effects are part of the local OSS eval trust model when they occur inside a configured eval flow. They are not a supported sandbox boundary for adversarial eval content.
 
-Treat adversarial providers, models, fixtures, remote content, and model-output feedback loops as untrusted eval content and run them with isolation, least-privileged credentials, and restricted egress.
+Treat adversarial providers, models, prompt packs, fixtures, datasets, remote content, and model-output feedback loops as untrusted eval content and run them with isolation, least-privileged credentials, and restricted egress.
 
 ## Hardening Recommendations
 
-If you run Promptfoo in higher-risk contexts (CI, shared machines, third-party configs, adversarial providers or models, model-output feedback loops):
+If you run Promptfoo in higher-risk contexts (CI, shared machines, third-party configs or prompt packs, adversarial providers or models, model-output feedback loops):
 
 - Run inside a container or VM with minimal privileges
 - Use dedicated, least-privileged API keys
@@ -192,7 +192,7 @@ When a fix is released, we will:
 - Code execution, file access, network access, or secret exposure that escapes the documented OSS eval trust model or bypasses a supported isolation boundary or hardening control
 - Bypasses of documented restrictions or isolation boundaries
 - Secret exposure or credential leakage to destinations not configured as part of the eval flow
-- Path traversal or arbitrary file read/write from data-only fields
+- Path traversal or arbitrary file read/write that escapes the configured eval flow, documented file access behavior, or supported path restrictions
 - Vulnerabilities in CLI, config parsing, or web UI affecting confidentiality, integrity, or availability beyond the intended trust model described above
 - Algorithmic complexity DoS (crafted input causing hang/crash with modest input size)
 
@@ -202,7 +202,7 @@ When a fix is released, we will:
 - Code execution or secret exposure caused by adversarial eval content within a configured OSS eval flow, including provider or model outputs, grader outputs, `_conversation`, `storeOutputAs`, fixtures, datasets, remote content, built-in graders/assertions, provider requests, reports, transforms, and template rendering
 - Code execution caused by interpolating runtime data into a code-executing field the user configured, such as `value: 'output === "{{expected}}"'` in a JavaScript assertion — use `context.vars.expected` or safe serialization when the value should remain data
 - Code execution via **direct local web API access** or **browser access to the OSS local server** (e.g., `curl`, scripts, SDKs, the bundled UI, or malicious webpages reaching `promptfoo view`) — the local server has the same trust level as the CLI and its CSRF/origin checks are best-effort hardening, not a supported security boundary
-- Issues requiring the user to run untrusted configs, scripts, fixtures, providers, models, remote content, or model-output feedback loops with local privileges
+- Issues requiring the user to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges
 - Network requests triggered by content in **user-controlled config files** (test variables, prompts, fixtures defined in your config) — users are responsible for what they put in their own configs
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Third-party dependency issues that don't materially affect Promptfoo's security posture (report upstream)
