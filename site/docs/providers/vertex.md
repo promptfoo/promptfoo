@@ -553,9 +553,10 @@ providers:
               enabled: true
               llama_guard_settings: {}
 
-  # For Claude models
+  # For Claude models (require specific regions like us-east5)
   - id: vertex:claude-3-5-sonnet-v2@20241022
     config:
+      region: us-east5
       anthropic_version: 'vertex-2023-10-16'
       max_tokens: 1024
       systemInstruction: 'You are a helpful assistant'
@@ -758,9 +759,10 @@ providers:
     config:
       systemInstruction: 'You are a helpful assistant'
 
-  # Also works with Claude models
+  # Also works with Claude models (require specific regions like us-east5)
   - id: vertex:claude-sonnet-4-6
     config:
+      region: us-east5
       systemInstruction: 'You are a helpful assistant'
 ```
 
