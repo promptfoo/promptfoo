@@ -148,7 +148,7 @@ tests:
         threshold: 0.85
 ```
 
-When running with `--max-concurrency 1` and no per-eval timeout, promptfoo groups eligible model-graded assertion calls by grading provider ID to reduce local model switching. This is not request batching; each assertion call still runs separately, and report row order is unchanged.
+When running with `--max-concurrency 1` and no per-eval timeout, Promptfoo groups eligible model-graded assertion calls by grading provider ID to reduce local model switching. This is not request batching; each assertion call still runs separately, and report row order is unchanged.
 
 ### Using Ollama Embedding Models for Similarity Assertions
 
