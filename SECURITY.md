@@ -30,7 +30,7 @@ The server includes **CSRF/origin checks** that use browser-provided `Sec-Fetch-
 **Trusted templates:**
 
 - Prompt, provider, assertion, and transform templates configured by the user
-- Template output is usually data sent to providers or assertions, but it becomes trusted generated code when the target field is a code-executing field
+- Template output is usually data — for example, a prompt template `Tell me about {{topic}}` produces text sent to a provider. However, template output becomes trusted generated code when the target is a code-executing field — for example, a JavaScript assertion `value: 'output.includes("{{keyword}}")'`
 
 **Runtime data:**
 
@@ -38,7 +38,9 @@ The server includes **CSRF/origin checks** that use browser-provided `Sec-Fetch-
 - Model outputs, grader outputs, `_conversation` history, and values saved with `storeOutputAs`
 - Remote content fetched during evaluation
 
-Built-in eval logic and trusted templates may pass runtime data through prompts, provider requests, graders, assertions, transforms, and reports as **data** — for example, interpolating model output into a grading prompt. This is normal operation. However, runtime data must not be promoted to **code** (evaluated as a template, executed as a script, or loaded as a file path) unless the user placed it into a code-executing field. Treat adversarial providers, models, fixtures, remote content, and model-output feedback loops as untrusted eval content and run them with isolation, least-privileged credentials, and restricted egress.
+Built-in eval logic and trusted templates may pass runtime data through prompts, provider requests, graders, assertions, transforms, and reports as **data** — for example, interpolating model output into a grading prompt. This is normal operation. However, runtime data must not be promoted to **code** (evaluated as a template, executed as a script, or loaded as a file path) unless the user placed it into a code-executing field.
+
+Treat adversarial providers, models, fixtures, remote content, and model-output feedback loops as untrusted eval content and run them with isolation, least-privileged credentials, and restricted egress.
 
 ## Hardening Recommendations
 
@@ -197,7 +199,7 @@ When a fix is released, we will:
 **Out of scope:**
 
 - Code execution from **explicitly configured** custom code or templates in code-executing fields (e.g., JS/Python assertions, custom providers, transforms, hooks, plugins, `file://`-backed scripts)
-- Code execution caused by interpolating runtime data into a code-executing field, such as `value: 'output === "{{expected}}"'` in a JavaScript assertion — use `context.vars.expected` or safe serialization when the value should remain data
+- Code execution caused by interpolating runtime data into a code-executing field the user configured, such as `value: 'output === "{{expected}}"'` in a JavaScript assertion — use `context.vars.expected` or safe serialization when the value should remain data. (Note: this is distinct from runtime data being promoted to code by Promptfoo's own internal processing, which is in scope.)
 - Code execution via **direct local web API access** or **browser access to the OSS local server** (e.g., `curl`, scripts, SDKs, the bundled UI, or malicious webpages reaching `promptfoo view`) — the local server has the same trust level as the CLI and its CSRF/origin checks are best-effort hardening, not a supported security boundary
 - Issues requiring the user to run untrusted configs, scripts, or fixtures with local privileges
 - Network requests triggered by content in **user-controlled config files** (test variables, prompts, fixtures defined in your config) — users are responsible for what they put in their own configs
