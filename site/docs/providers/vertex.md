@@ -558,6 +558,7 @@ providers:
     config:
       anthropic_version: 'vertex-2023-10-16'
       max_tokens: 1024
+      systemInstruction: 'You are a helpful assistant'
 ```
 
 ### Safety Settings
@@ -752,16 +753,27 @@ Configure system-level instructions for the model:
 
 ```yaml
 providers:
+  # Works with Gemini models
   - id: vertex:gemini-2.5-pro
     config:
-      # Direct text
       systemInstruction: 'You are a helpful assistant'
 
-      # Or load from file
+  # Also works with Claude models
+  - id: vertex:claude-sonnet-4-6
+    config:
+      systemInstruction: 'You are a helpful assistant'
+```
+
+You can also load system instructions from a file:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-pro
+    config:
       systemInstruction: file://system-instruction.txt
 ```
 
-System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability.
+System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability. The `systemInstruction` config works across both Gemini and Claude models on Vertex AI.
 
 ### Generation Configuration
 
