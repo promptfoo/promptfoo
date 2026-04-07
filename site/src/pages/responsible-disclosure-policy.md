@@ -20,13 +20,13 @@ For technical details on our security model, trust boundaries, and hardening rec
 
 The OSS CLI runs in your environment with your user permissions. It is **permissive by default** and executes user-configured code (custom assertions, custom or script-based providers, transforms, hooks, plugins, and templates in fields documented to execute code) without sandboxing.
 
-Treat OSS eval bundles as trusted code and data. An eval bundle is the complete set of files and configured sources Promptfoo uses for an eval run, such as the main config plus anything it references. This includes configs, referenced scripts, prompt packs, and referenced test fixtures or datasets. Do not run Promptfoo against untrusted configs, fixtures, prompt packs, providers, models, remote content, or pull requests unless the run is isolated and secrets are scoped for that run.
+Treat OSS eval bundles as trusted code and data. An eval bundle is the complete set of files and configured sources Promptfoo uses for an eval run, such as the main config plus anything it references. This includes configs, referenced scripts, prompt packs, referenced test fixtures or datasets, configured providers, models, and remote content. Do not run Promptfoo against untrusted eval bundles or pull requests unless the run is isolated and secrets are scoped for that run.
 
-Runtime data is part of the configured OSS eval flow, not a sandbox boundary. Built-in eval logic and trusted templates may render, transform, score, store, or send runtime data through prompts, providers, graders, assertions, transforms, and reports.
+If you explicitly write code or templates in a field documented to execute code, the result is your responsibility. If runtime data unexpectedly triggers code execution, secret exposure, or file/network access through internal processing without being placed into a field documented to execute code, that is a vulnerability.
 
-**In scope for OSS:** vulnerabilities where behavior escapes the documented OSS eval trust model, bypasses a supported isolation boundary or hardening control, or exposes secrets to destinations not configured as part of the eval flow.
+**In scope for OSS:** runtime data triggering code execution, secret exposure, or file/network access through internal processing (template rendering, variable substitution, file loading) without being placed into a field documented to execute code; bypasses of isolation boundaries or hardening controls; secret leakage to unconfigured destinations.
 
-**Out of scope for OSS:** effects caused by adversarial runtime data within a configured OSS eval flow, code execution from explicitly configured custom code or templates in fields documented to execute code, and direct local API or browser access to the OSS local server (`promptfoo view`), since these are part of the documented local trust model for the open-source tool.
+**Out of scope for OSS:** code execution from explicitly configured custom code or templates in fields documented to execute code, direct local API or browser access to the OSS local server (`promptfoo view`), and issues requiring the user to run untrusted eval bundles with local privileges.
 
 ### Cloud Services
 
@@ -106,8 +106,7 @@ The following are out-of-scope:
 
 - Code execution from explicitly configured custom code or templates in fields documented to execute code in OSS (expected behavior)
 - Direct local API access or browser access to the OSS local server (`promptfoo view`)
-- Effects caused by adversarial runtime data within a configured OSS eval flow, including template or script evaluation in providers, graders, assertions, transforms, reports, or other eval logic
-- Issues requiring users to run untrusted eval bundles, configs, fixtures, providers, models, remote content, or scripts with local privileges
+- Issues requiring users to run untrusted eval bundles with local privileges
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Social engineering, phishing, or physical attacks
 - Volumetric denial of service
