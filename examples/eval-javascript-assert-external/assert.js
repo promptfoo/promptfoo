@@ -10,14 +10,14 @@ module.exports = {
     // return 0.5;
 
     // Or an entire grading result, which can be simple...
-    let result = {
-      pass: output.toLowerCase().includes('bananas'),
-      score: 0.5,
-      reason: 'Contains banana',
-    };
+    // return {
+    //   pass: output.toLowerCase().includes('bananas'),
+    //   score: 0.5,
+    //   reason: 'Contains banana',
+    // };
 
     // Or include nested assertions...
-    result = {
+    const result = {
       pass: true,
       score: 0.75,
       reason: 'Looks good to me',

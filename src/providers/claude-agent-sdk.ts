@@ -187,8 +187,9 @@ export interface ClaudeCodeOptions {
    * - 'acceptEdits' - Auto-accept file edit operations
    * - 'bypassPermissions' - Bypass all permission checks (requires allow_dangerously_skip_permissions)
    * - 'dontAsk' - Don't prompt for permissions, deny if not pre-approved
+   * - 'auto' - Use a model classifier to approve or deny permission prompts
    */
-  permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk';
+  permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk' | 'auto';
 
   /**
    * User can set a custom system prompt, or append to the default Claude Agent SDK system prompt
@@ -298,6 +299,20 @@ export interface ClaudeCodeOptions {
   thinking?: ThinkingConfig;
 
   /**
+   * Token budget for the task. The model will pace its tool use to stay within this budget.
+   * Useful for cost-conscious evaluations.
+   *
+   * @example
+   * ```yaml
+   * task_budget:
+   *   total: 50000
+   * ```
+   */
+  task_budget?: {
+    total: number;
+  };
+
+  /**
    * Controls how much effort Claude puts into its response.
    * Works with adaptive thinking to guide thinking depth.
    * - 'low' - Minimal thinking, fastest responses
@@ -346,6 +361,7 @@ export interface ClaudeCodeOptions {
    * - `allowUnsandboxedCommands` - Allow commands that can't be sandboxed
    * - `enableWeakerNestedSandbox` - Enable weaker sandbox for nested environments
    * - `excludedCommands` - Commands to exclude from sandboxing
+   * - `failIfUnavailable` - Fail closed when sandbox dependencies or platform support are missing
    * - `ignoreViolations` - Map of command patterns to violation types to ignore
    * - `network` - Network configuration:
    *   - `allowedDomains` - Domains the sandbox can access
@@ -823,6 +839,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       tools: config.tools,
       enableFileCheckpointing: config.enable_file_checkpointing,
       persistSession: config.persist_session,
+      taskBudget: config.task_budget,
       env,
     };
 
@@ -984,6 +1001,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 durationApiMs: msg.duration_api_ms,
                 modelUsage: msg.modelUsage,
                 permissionDenials: msg.permission_denials,
+                ...(msg.terminal_reason === undefined
+                  ? {}
+                  : { terminalReason: msg.terminal_reason }),
                 ...(msg.structured_output === undefined
                   ? {}
                   : { structuredOutput: msg.structured_output }),
@@ -1008,6 +1028,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 durationApiMs: msg.duration_api_ms,
                 modelUsage: msg.modelUsage,
                 permissionDenials: msg.permission_denials,
+                ...(msg.terminal_reason === undefined
+                  ? {}
+                  : { terminalReason: msg.terminal_reason }),
               },
             };
           }
@@ -1047,6 +1070,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
    * Users can also use Bedrock (with CLAUDE_CODE_USE_BEDROCK env var) or Vertex (with CLAUDE_CODE_USE_VERTEX env var)
    */
   requiresApiKey(): boolean {
+    if (this.config.apiKeyRequired === false) {
+      return false;
+    }
     return !(
       this.env?.CLAUDE_CODE_USE_BEDROCK ||
       this.env?.CLAUDE_CODE_USE_VERTEX ||

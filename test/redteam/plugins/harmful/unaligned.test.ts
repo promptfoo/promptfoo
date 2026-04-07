@@ -114,19 +114,27 @@ describe('harmful plugin', () => {
         .mockResolvedValueOnce({ output: ['Test output'] })
         .mockResolvedValueOnce({ output: ['Another output'] });
 
-      const startTime = Date.now();
-      await getHarmfulTests(
-        {
-          provider: mockProvider,
-          purpose: 'test purpose',
-          injectVar: 'testVar',
-          n: 2,
-          delayMs: 100,
-        },
-        unalignedPlugin as keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS,
-      );
+      vi.useFakeTimers();
+      try {
+        const startTime = Date.now();
+        const testsPromise = getHarmfulTests(
+          {
+            provider: mockProvider,
+            purpose: 'test purpose',
+            injectVar: 'testVar',
+            n: 2,
+            delayMs: 100,
+          },
+          unalignedPlugin as keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS,
+        );
 
-      expect(Date.now() - startTime).toBeGreaterThanOrEqual(100);
+        await vi.runAllTimersAsync();
+        await testsPromise;
+
+        expect(Date.now() - startTime).toBeGreaterThanOrEqual(100);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should handle moderation assertions with OPENAI_API_KEY', async () => {

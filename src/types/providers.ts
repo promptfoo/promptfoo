@@ -120,9 +120,9 @@ export interface ApiProvider {
   transform?: string;
   toJSON?: () => any;
   /**
-   * Cleanup method called when a provider call is aborted (e.g., due to timeout)
-   * Providers should implement this to clean up any resources they might have
-   * allocated, such as file handles, network connections, etc.
+   * Provider-wide cleanup hook for releasing long-lived resources such as worker
+   * processes, browser sessions, or pooled connections at eval shutdown.
+   * Request-scoped cancellation should be implemented with `abortSignal`.
    */
   cleanup?: () => void | Promise<void>;
 }

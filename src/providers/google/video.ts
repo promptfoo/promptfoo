@@ -796,7 +796,7 @@ export class GoogleVideoProvider implements ApiProvider {
       ...context?.prompt?.config,
     };
     let effectiveConfig = config;
-    let isVertexMode = this.isVertexMode(effectiveConfig);
+    const isVertexMode = this.isVertexMode(effectiveConfig);
 
     if (isVertexMode) {
       let projectId =
@@ -825,7 +825,6 @@ export class GoogleVideoProvider implements ApiProvider {
       try {
         const adcProjectId = await resolveProjectId(effectiveConfig, this.env);
         if (adcProjectId) {
-          isVertexMode = true;
           effectiveConfig = {
             ...effectiveConfig,
             vertexai: true,

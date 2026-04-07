@@ -289,6 +289,8 @@ type ScoringFunction = (
 };
 ```
 
+When assertions use `weight`, each named score passed into the scoring function is already normalized as a weighted average. Eval outputs also include `namedScoreWeights` so downstream consumers can recover the weighted denominator when needed.
+
 See the [custom assertion scoring example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-assertion-scoring-override) for complete implementations in JavaScript and Python.
 
 ## Load assertions from external file

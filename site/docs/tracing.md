@@ -312,7 +312,7 @@ Key points:
 
 ### Python
 
-For complete provider implementation details, see the [Python Provider documentation](/docs/providers/python/). For a working example with protobuf tracing, see the [Python OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/python).
+For complete provider implementation details, see the [Python Provider documentation](/docs/providers/python/). For a working example with protobuf tracing, see the [Python OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/python). For a framework-specific example that exports OpenAI Agents SDK traces into Promptfoo, see the [OpenAI Agents Python SDK guide](/docs/guides/evaluate-openai-agents-python).
 
 :::note
 
@@ -334,7 +334,7 @@ provider.add_span_processor(SimpleSpanProcessor(exporter))
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
 
-def call_api(prompt, context):
+def call_api(prompt, options, context):
     # Extract trace context
     if 'traceparent' in context:
         ctx = extract({"traceparent": context["traceparent"]})
@@ -347,6 +347,8 @@ def call_api(prompt, context):
     # Fallback without tracing
     return {"output": your_llm_call(prompt)}
 ```
+
+If you only need provider-level timing for a Python provider, enable the wrapper OTEL path by installing the Python OpenTelemetry packages and setting `PROMPTFOO_ENABLE_OTEL=true`. Add custom child spans only when you want internal workflow visibility such as tools, searches, or multi-step agent trajectories.
 
 ## Trace Visualization
 

@@ -117,7 +117,6 @@ const stateDescriptions: Record<TaskState, string> = {
 export default function A2ATaskSimulator() {
   const [selectedTask, setSelectedTask] = useState<Task>(sampleTasks['lead-qualification']);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [currentSequenceIndex, setCurrentSequenceIndex] = useState(0);
 
   const resetTask = (taskKey: TaskKey) => {
     const task = { ...sampleTasks[taskKey] };
@@ -136,7 +135,6 @@ export default function A2ATaskSimulator() {
       return;
     }
     setSelectedTask(resetTask(taskKey));
-    setCurrentSequenceIndex(0);
   };
 
   const addHistoryEntry = (task: Task, newState: TaskState, message: string) => {
@@ -217,7 +215,6 @@ export default function A2ATaskSimulator() {
         const updated = addHistoryEntry(prev, state, message);
         return generateArtifact(updated);
       });
-      setCurrentSequenceIndex(i);
     }
 
     setIsAnimating(false);

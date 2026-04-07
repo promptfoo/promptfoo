@@ -10,6 +10,7 @@ import { importModule } from '../../src/esm';
 import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
 import { fetchHuggingFaceDataset } from '../../src/integrations/huggingfaceDatasets';
 import logger from '../../src/logger';
+import { fetchCsvFromSharepoint } from '../../src/microsoftSharepoint';
 import { loadApiProvider } from '../../src/providers/index';
 import { runPython } from '../../src/python/pythonUtils';
 import { maybeLoadConfigFromExternalFile } from '../../src/util/file';
@@ -79,6 +80,10 @@ vi.mock('../../src/googleSheets', () => ({
   fetchCsvFromGoogleSheet: vi.fn(),
 }));
 
+vi.mock('../../src/microsoftSharepoint', () => ({
+  fetchCsvFromSharepoint: vi.fn(),
+}));
+
 vi.mock('../../src/envars', async () => ({
   ...(await vi.importActual('../../src/envars')),
   getEnvBool: vi.fn(),
@@ -124,7 +129,7 @@ vi.mock('../../src/util/file', () => ({
     }
 
     // Handle objects (but not arrays)
-    if (config && typeof config === 'object' && config !== null) {
+    if (typeof config === 'object' && config !== null) {
       const result = { ...config };
       for (const [key, value] of Object.entries(config)) {
         if (typeof value === 'string' && value.startsWith('file://')) {
@@ -156,6 +161,7 @@ const clearAllMocks = () => {
   vi.mocked(getEnvBool).mockReset();
   vi.mocked(getEnvString).mockReset();
   vi.mocked(fetchCsvFromGoogleSheet).mockReset();
+  vi.mocked(fetchCsvFromSharepoint).mockReset();
   vi.mocked(loadApiProvider).mockReset();
   vi.mocked(runPython).mockReset();
   vi.mocked(fetchHuggingFaceDataset).mockReset();
@@ -179,7 +185,7 @@ describe('readStandaloneTestsFile', () => {
       }
 
       // Mock implementation that handles file:// references
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -347,6 +353,31 @@ describe('readStandaloneTestsFile', () => {
         vars: { var1: 'value3', var2: 'value4' },
       },
     ]);
+  });
+
+  it('should prefer SharePoint URL handling over local JSON parsing when URL ends with .json', async () => {
+    const sharepointUrls = [
+      'https://example.sharepoint.com/sites/team/tests.json',
+      'https://example.sharepoint.com/:x:/r/sites/team/tests.json',
+    ];
+    vi.mocked(fetchCsvFromSharepoint).mockResolvedValue([
+      { var1: 'value1', __expected: 'expected1' },
+    ]);
+
+    for (const sharepointUrl of sharepointUrls) {
+      const result = await readStandaloneTestsFile(sharepointUrl);
+
+      expect(fetchCsvFromSharepoint).toHaveBeenCalledWith(sharepointUrl);
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+      expect(result).toEqual([
+        {
+          assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
+          description: 'Row #1',
+          options: {},
+          vars: { var1: 'value1' },
+        },
+      ]);
+    }
   });
 
   it('should read JS file and return test cases', async () => {
@@ -596,7 +627,7 @@ describe('readStandaloneTestsFile', () => {
         });
       }
 
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -673,7 +704,7 @@ describe('readTest', () => {
       }
 
       // Mock implementation that handles file:// references
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -932,7 +963,7 @@ describe('readTests', () => {
       }
 
       // Mock implementation that handles file:// references
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -1594,7 +1625,7 @@ describe('readVarsFiles', () => {
       }
 
       // Handle objects (but not arrays)
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {

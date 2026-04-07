@@ -7,7 +7,6 @@ import { globSync } from 'glob';
 import {
   hasTraceAwareAssertions,
   MODEL_GRADED_ASSERTION_TYPES,
-  renderMetricName,
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
@@ -62,6 +61,7 @@ import { isNonTransientHttpStatus } from './util/fetch/errors';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
+import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
 import { isPromptAllowed } from './util/promptMatching';
 import {
   isAnthropicProvider,
@@ -1228,6 +1228,9 @@ class Evaluator {
         const promptId = generateIdFromPrompt(prompt);
         const existingPromptKey = `${providerKey}:${promptId}`;
         const existingPrompt = existingPromptsMap.get(existingPromptKey);
+        if (existingPrompt?.metrics) {
+          backfillNamedScoreWeights(existingPrompt.metrics);
+        }
 
         const completedPrompt = {
           ...prompt,
@@ -1245,6 +1248,7 @@ class Evaluator {
             tokenUsage: createEmptyTokenUsage(),
             namedScores: {},
             namedScoresCount: {},
+            namedScoreWeights: {},
             cost: 0,
           },
         };
@@ -1619,7 +1623,12 @@ class Evaluator {
     // Actually run the eval
     let numComplete = 0;
 
-    const processEvalStep = async (evalStep: RunEvalOptions, index: number | string) => {
+    const processEvalStep = async (
+      evalStep: RunEvalOptions,
+      index: number | string,
+      shouldSkipStaleRows?: () => boolean,
+      onRowsReady?: () => void,
+    ) => {
       if (typeof index !== 'number') {
         throw new Error('Expected index to be a number');
       }
@@ -1630,8 +1639,15 @@ class Evaluator {
       evalStep.test = beforeEachOut.test;
 
       const rows = await runEval(evalStep);
+      onRowsReady?.();
 
       for (const row of rows) {
+        if (shouldSkipStaleRows?.()) {
+          // Timed-out provider calls can still settle later; ignore stale rows
+          // so the timeout row remains the canonical result for this test case.
+          return;
+        }
+
         for (const varName of Object.keys(row.vars)) {
           vars.add(varName);
         }
@@ -1710,22 +1726,12 @@ class Evaluator {
         invariant(metrics, 'Expected prompt.metrics to be set');
         metrics.score += row.score;
         for (const [key, value] of Object.entries(row.namedScores)) {
-          // Update named score value
-          metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
-
-          // Count assertions contributing to this named score
-          // Note: We need to render template variables in assertion metrics before comparing
-          const testVars = row.testCase?.vars || {};
-          let contributingAssertions = 0;
-          row.gradingResult?.componentResults?.forEach((result) => {
-            const renderedMetric = renderMetricName(result.assertion?.metric, testVars);
-            if (renderedMetric === key) {
-              contributingAssertions++;
-            }
+          accumulateNamedMetric(metrics, {
+            metricName: key,
+            metricValue: value,
+            gradingResult: row.gradingResult,
+            testVars: row.testCase?.vars || {},
           });
-
-          metrics.namedScoresCount[key] =
-            (metrics.namedScoresCount[key] || 0) + (contributingAssertions || 1);
         }
 
         if (testSuite.derivedMetrics) {
@@ -1822,24 +1828,21 @@ class Evaluator {
 
       let timeoutId: NodeJS.Timeout | undefined;
       let didTimeout = false;
+      const clearEvalStepTimeout = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = undefined;
+        }
+      };
 
       try {
         return await Promise.race([
-          processEvalStep(evalStepWithSignal, index),
+          processEvalStep(evalStepWithSignal, index, () => didTimeout, clearEvalStepTimeout),
           new Promise<void>((_, reject) => {
             timeoutId = setTimeout(() => {
               didTimeout = true;
               // Abort any ongoing requests
               abortController.abort();
-
-              // If the provider has a cleanup method, call it
-              if (typeof evalStep.provider.cleanup === 'function') {
-                try {
-                  void evalStep.provider.cleanup();
-                } catch (cleanupErr) {
-                  logger.warn(`Error during provider cleanup: ${cleanupErr}`);
-                }
-              }
 
               reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
             }, timeoutMs);
@@ -1916,14 +1919,13 @@ class Evaluator {
               },
               namedScores: {},
               namedScoresCount: {},
+              namedScoreWeights: {},
               cost: 0,
             },
           );
         }
       } finally {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
+        clearEvalStepTimeout();
       }
     };
 

@@ -148,8 +148,7 @@ describe('DataTable', () => {
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
   });
 
-  it('should show toolbar when filter returns no results so users can clear filters', async () => {
-    const user = userEvent.setup();
+  it('should show toolbar when filter returns no results so users can clear filters', () => {
     const toolbarActions = <button data-testid="custom-action">Add Item</button>;
 
     const data: TestRow[] = [
@@ -165,7 +164,7 @@ describe('DataTable', () => {
 
     // Type a search term that matches nothing
     const searchInput = screen.getByPlaceholderText('Search...');
-    await user.type(searchInput, 'xyz-no-match');
+    fireEvent.change(searchInput, { target: { value: 'xyz-no-match' } });
 
     // Data should be filtered out
     expect(screen.queryByText('Apple')).not.toBeInTheDocument();
@@ -193,7 +192,7 @@ describe('DataTable', () => {
 
     await user.click(screen.getByRole('button', { name: 'Filter Name' }));
     const headerFilterInput = await screen.findByPlaceholderText('Value...');
-    await user.type(headerFilterInput, 'Item 2');
+    fireEvent.change(headerFilterInput, { target: { value: 'Item 2' } });
     await user.click(screen.getByRole('button', { name: 'Filter Name' }));
 
     await user.click(screen.getByRole('button', { name: /^Filters/ }));
@@ -445,7 +444,7 @@ describe('DataTable', () => {
       expect(screen.queryByText('Target-6')).not.toBeInTheDocument();
 
       const searchInput = screen.getByPlaceholderText('Search...');
-      await user.type(searchInput, 'Target');
+      fireEvent.change(searchInput, { target: { value: 'Target' } });
 
       expect(screen.getByText(/Showing 1 to 5 of 10 rows/)).toBeInTheDocument();
       expect(screen.getByText('Target-5')).toBeInTheDocument();
@@ -521,7 +520,7 @@ describe('DataTable', () => {
       );
 
       await user.click(screen.getByRole('button', { name: 'Filter Name' }));
-      await user.type(screen.getByPlaceholderText('Value...'), 'test');
+      fireEvent.change(screen.getByPlaceholderText('Value...'), { target: { value: 'test' } });
 
       expect(onColumnFiltersChange).toHaveBeenCalled();
       const lastCall =
@@ -593,7 +592,7 @@ describe('DataTable', () => {
       render(<DataTable columns={headerFilterColumns} data={data} showPagination={false} />);
 
       await user.click(screen.getByRole('button', { name: 'Filter Name' }));
-      await user.type(screen.getByPlaceholderText('Value...'), 'Alpha');
+      fireEvent.change(screen.getByPlaceholderText('Value...'), { target: { value: 'Alpha' } });
 
       expect(screen.getByText('Alpha Row')).toBeInTheDocument();
       expect(screen.queryByText('Row Two')).not.toBeInTheDocument();
@@ -663,7 +662,7 @@ describe('DataTable', () => {
       expect(valueInput).toBeInTheDocument();
       expect(valueInput).toBeEnabled();
 
-      await user.type(valueInput, 'Row');
+      fireEvent.change(valueInput, { target: { value: 'Row' } });
       expect(screen.getByText('Row One')).toBeInTheDocument();
     });
 
@@ -885,6 +884,31 @@ describe('DataTable', () => {
       const dataCell = cells?.[1];
       expect(dataCell?.className).toContain('overflow-hidden');
     });
+  });
+
+  it('should keep compact header padding for utility columns', () => {
+    const data: TestRow[] = [{ id: '1', name: 'Test Item' }];
+    const renderSubComponent = () => <div data-testid="expanded-content">Details</div>;
+
+    const { container } = render(
+      <DataTable
+        columns={columns}
+        data={data}
+        enableRowSelection
+        renderSubComponent={renderSubComponent}
+      />,
+    );
+
+    const headerCells = container.querySelectorAll('thead th');
+    expect(headerCells).toHaveLength(4);
+    expect(headerCells[0].className).toContain('px-3');
+    expect(headerCells[1].className).toContain('px-3');
+    expect(headerCells[0].className).not.toContain('overflow-hidden');
+    expect(headerCells[1].className).not.toContain('overflow-hidden');
+    expect(headerCells[2].className).toContain('px-4');
+    expect(headerCells[2].className).toContain('overflow-hidden');
+    expect(headerCells[3].className).toContain('px-4');
+    expect(headerCells[3].className).toContain('overflow-hidden');
   });
 
   describe('cell content wrapper', () => {

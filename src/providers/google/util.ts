@@ -212,11 +212,6 @@ export function maybeCoerceToGeminiFormat(
     let systemInst = undefined;
     if (typeof contents === 'object' && 'system_instruction' in contents) {
       systemInst = contents.system_instruction;
-      // We need to modify the contents to remove system_instruction
-      // since it's already extracted to systemInst
-      if (typeof contents === 'object' && 'contents' in contents) {
-        contents = contents.contents;
-      }
       coerced = true;
     }
 

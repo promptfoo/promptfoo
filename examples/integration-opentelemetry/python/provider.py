@@ -12,9 +12,8 @@ testing protobuf support in Promptfoo.
 
 import re
 import time
-from typing import Any
 
-from opentelemetry import context, trace
+from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
