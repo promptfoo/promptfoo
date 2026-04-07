@@ -1,6 +1,6 @@
 const fs = require('fs');
 
-let loadedModel = null;
+const loadedModels = new Map();
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -18,8 +18,12 @@ class StatefulOllamaGrader {
   }
 
   async callApi(prompt) {
-    const switchedModel = loadedModel !== this.modelName;
-    loadedModel = this.modelName;
+    const stateKey = this.config.logPath || null;
+    const previousModel = stateKey ? (loadedModels.get(stateKey) ?? null) : null;
+    const switchedModel = previousModel !== this.modelName;
+    if (stateKey) {
+      loadedModels.set(stateKey, this.modelName);
+    }
 
     if (switchedModel && this.reloadDelayMs > 0) {
       await sleep(this.reloadDelayMs);

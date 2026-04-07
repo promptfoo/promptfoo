@@ -30,11 +30,10 @@ import { getSessionId } from './redteam/util';
 import {
   createProviderRateLimitOptions,
   createRateLimitRegistry,
-  type ProviderCallQueue,
-  ProviderGroupedCallQueue,
   type RateLimitRegistry,
-  withProviderCallExecutionContext,
 } from './scheduler';
+import { withProviderCallExecutionContext } from './scheduler/providerCallExecutionContext';
+import { type ProviderCallQueue, ProviderGroupedCallQueue } from './scheduler/providerCallQueue';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
@@ -454,6 +453,27 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   row.gradingResult = checkResult;
 }
 
+function applyGradingError(row: EvaluateResult, error: unknown) {
+  const errorMessage = error instanceof Error ? (error.stack ?? error.message) : String(error);
+  logger.error('Assertion grading failed during eval', {
+    error: errorMessage,
+    promptIdx: row.promptIdx,
+    testIdx: row.testIdx,
+  });
+  row.error = errorMessage;
+  row.failureReason = ResultFailureReason.ERROR;
+  row.success = false;
+  row.score = 0;
+  row.namedScores = {};
+}
+
+function getNonTransientTargetStatus(row: EvaluateResult): number | undefined {
+  const httpStatus = row.response?.metadata?.http?.status;
+  return typeof httpStatus === 'number' && isNonTransientHttpStatus(httpStatus)
+    ? httpStatus
+    : undefined;
+}
+
 /**
  * Runs a single test case.
  * @param options - The options for running the test case.
@@ -828,8 +848,9 @@ export async function runEval({
             });
             applyGradingResult(ret, checkResult);
           },
-        );
-        gradingPromise.catch(() => {});
+        ).catch((error) => {
+          applyGradingError(ret, error);
+        });
         deferredGradingPromises.set(ret, gradingPromise);
       } else {
         const checkResult = await withProviderCallExecutionContext(
@@ -1692,20 +1713,36 @@ class Evaluator {
       shouldSkipStaleRows?: () => boolean;
     }
 
+    interface GroupedRows {
+      evalStep: RunEvalOptions;
+      index: number;
+      rows: EvaluateResult[];
+    }
+
     const runGroupedGradingForRows = async (
-      rows: EvaluateResult[],
+      entries: GroupedRows[],
       providerCallQueue: ProviderGroupedCallQueue,
+      onRowsGraded: (entry: GroupedRows) => Promise<void>,
     ) => {
-      const rowsWithDeferredGrading = rows
-        .map((row) => ({ row, gradingPromise: deferredGradingPromises.get(row) }))
+      const rowsWithDeferredGrading = entries
+        .flatMap((entry) => entry.rows.map((row) => ({ entry, row })))
+        .map(({ entry, row }) => ({ entry, row, gradingPromise: deferredGradingPromises.get(row) }))
         .filter(
-          (item): item is { row: EvaluateResult; gradingPromise: Promise<void> } =>
-            item.gradingPromise !== undefined,
+          (
+            item,
+          ): item is {
+            entry: GroupedRows;
+            row: EvaluateResult;
+            gradingPromise: Promise<void>;
+          } => item.gradingPromise !== undefined,
         );
       if (rowsWithDeferredGrading.length === 0) {
         return;
       }
 
+      const deferredRows = new Set(rowsWithDeferredGrading.map(({ row }) => row));
+      const completedRows = new Set<EvaluateResult>();
+      const processedEntries = new Set<GroupedRows>();
       let pendingCount = rowsWithDeferredGrading.length;
       let resolveAllDone: () => void = () => {};
       const allDone = new Promise<void>((resolve) => {
@@ -1715,6 +1752,7 @@ class Evaluator {
       const gradingPromises = rowsWithDeferredGrading.map(({ row, gradingPromise }) =>
         gradingPromise.finally(() => {
           deferredGradingPromises.delete(row);
+          completedRows.add(row);
           pendingCount--;
           if (pendingCount === 0) {
             resolveAllDone();
@@ -1722,10 +1760,24 @@ class Evaluator {
         }),
       );
 
+      const processReadyEntries = async () => {
+        for (const entry of entries) {
+          if (processedEntries.has(entry)) {
+            continue;
+          }
+          if (!entry.rows.every((row) => !deferredRows.has(row) || completedRows.has(row))) {
+            break;
+          }
+          processedEntries.add(entry);
+          await onRowsGraded(entry);
+        }
+      };
+
       let currentProviderId: string | undefined;
       while (pendingCount > 0 || providerCallQueue.hasJobs()) {
         if (!providerCallQueue.hasJobs()) {
           await Promise.race([providerCallQueue.waitForJob(), allDone]);
+          await processReadyEntries();
         }
 
         const group = providerCallQueue.takeNextGroup(currentProviderId);
@@ -1736,11 +1788,13 @@ class Evaluator {
         currentProviderId = group[0].providerId;
         for (const job of group) {
           await providerCallQueue.run(job);
+          await Promise.resolve();
+          await processReadyEntries();
         }
-        await Promise.resolve();
       }
 
       await Promise.all(gradingPromises);
+      await processReadyEntries();
     };
 
     const processEvalStep = async (
@@ -1847,8 +1901,8 @@ class Evaluator {
 
         // Check for non-transient HTTP errors from target (401, 403, 404, 501)
         // These indicate the target is unavailable/misconfigured and won't resolve on retry
-        const httpStatus = row.response?.metadata?.http?.status;
-        if (typeof httpStatus === 'number' && isNonTransientHttpStatus(httpStatus)) {
+        const httpStatus = getNonTransientTargetStatus(row);
+        if (httpStatus !== undefined) {
           targetUnavailable = true;
           targetErrorStatus = httpStatus;
           logger.error(
@@ -2152,9 +2206,13 @@ class Evaluator {
     try {
       if (shouldGroupGradingByProvider) {
         const providerCallQueue = new ProviderGroupedCallQueue();
-        const groupedRows: { evalStep: RunEvalOptions; index: number; rows: EvaluateResult[] }[] =
-          [];
+        const groupedRows: GroupedRows[] = [];
         const groupedRunEvalOptions = [...serialRunEvalOptions, ...concurrentRunEvalOptions];
+        const processGroupedRows = async ({ evalStep, index, rows }: GroupedRows) => {
+          await processEvalStep(evalStep, index, { precomputedRows: rows });
+          processedIndices.add(index);
+          await this.evalRecord.addPrompts(prompts);
+        };
 
         for (const evalStep of groupedRunEvalOptions) {
           checkAbort();
@@ -2183,9 +2241,11 @@ class Evaluator {
           if (rows.length > 0) {
             if (rows.some((row) => deferredGradingPromises.has(row))) {
               groupedRows.push({ evalStep, index: idx, rows });
+              if (rows.some((row) => getNonTransientTargetStatus(row) !== undefined)) {
+                break;
+              }
             } else {
-              await processEvalStep(evalStep, idx, { precomputedRows: rows });
-              processedIndices.add(idx);
+              await processGroupedRows({ evalStep, index: idx, rows });
               if (targetUnavailable) {
                 break;
               }
@@ -2195,16 +2255,7 @@ class Evaluator {
           }
         }
 
-        await runGroupedGradingForRows(
-          groupedRows.flatMap(({ rows }) => rows),
-          providerCallQueue,
-        );
-
-        for (const { evalStep, index, rows } of groupedRows) {
-          await processEvalStep(evalStep, index, { precomputedRows: rows });
-          processedIndices.add(index);
-          await this.evalRecord.addPrompts(prompts);
-        }
+        await runGroupedGradingForRows(groupedRows, providerCallQueue, processGroupedRows);
       } else if (serialRunEvalOptions.length > 0) {
         // Run serial evaluations
         for (const evalStep of serialRunEvalOptions) {

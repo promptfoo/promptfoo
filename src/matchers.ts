@@ -31,11 +31,8 @@ import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import { doRemoteScoringWithPi } from './remoteScoring';
-import {
-  createProviderRateLimitOptions,
-  getProviderCallExecutionContext,
-  isRateLimitWrapped,
-} from './scheduler';
+import { createProviderRateLimitOptions, isRateLimitWrapped } from './scheduler';
+import { getProviderCallExecutionContext } from './scheduler/providerCallExecutionContext';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from './util/file';
 import { isJavascriptFile } from './util/fileExtensions';
 import { parseFileUrl } from './util/functions/loadFunction';

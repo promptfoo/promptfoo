@@ -4133,6 +4133,99 @@ describe('evaluator', () => {
     expect(callOrder).toEqual(['judge-one', 'judge-one', 'judge-two', 'judge-two']);
   });
 
+  it('records deferred model-graded provider failures as row errors when maxConcurrency is 1', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: `Target output for ${prompt}`,
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const judge: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge'),
+      callApi: vi.fn(async (prompt: string) => {
+        if (prompt.includes('Judge alpha')) {
+          throw new Error('grader exploded');
+        }
+        return {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'judge passed' }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: [
+        {
+          vars: { topic: 'alpha' },
+          assert: [{ type: 'llm-rubric', value: 'Judge alpha', provider: judge }],
+        },
+        {
+          vars: { topic: 'beta' },
+          assert: [{ type: 'llm-rubric', value: 'Judge beta', provider: judge }],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    const failedResult = summary.results.find((result) => result.vars.topic === 'alpha');
+    expect(summary.stats.errors).toBe(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.results).toHaveLength(2);
+    expect(failedResult?.failureReason).toBe(ResultFailureReason.ERROR);
+    expect(failedResult?.error).toContain('grader exploded');
+  });
+
+  it('stops grouped serial evals after a non-transient target status', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: `Target output for ${prompt}`,
+        metadata: {
+          http: {
+            status: 403,
+            statusText: 'Forbidden',
+          },
+        },
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const judge: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge'),
+      callApi: vi.fn(async () => ({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'judge passed' }),
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: [
+        {
+          vars: { topic: 'alpha' },
+          assert: [{ type: 'llm-rubric', value: 'Judge alpha', provider: judge }],
+        },
+        {
+          vars: { topic: 'beta' },
+          assert: [{ type: 'llm-rubric', value: 'Judge beta', provider: judge }],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(provider.callApi).toHaveBeenCalledTimes(1);
+    expect(judge.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].vars.topic).toBe('alpha');
+  });
+
   it('groups model-graded assert-set children by provider id when maxConcurrency is 1', async () => {
     const callOrder: string[] = [];
     const provider: ApiProvider = {
