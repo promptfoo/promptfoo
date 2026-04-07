@@ -6,7 +6,9 @@ Promptfoo takes security seriously. We appreciate responsible disclosure and wil
 
 Promptfoo is a developer tool that runs in your environment with your user permissions. It is designed to be **permissive by default**.
 
-Some features intentionally execute user-provided code (custom assertions, custom or script-based providers, transforms, hooks, plugins, and templates in fields documented to execute code). This code execution is **not sandboxed** and should be treated the same way you would treat running a Node.js script locally.
+Some features intentionally execute user-provided code (custom assertions, custom or script-based providers, transforms, hooks, plugins, and templates in code-executing fields). This code execution is **not sandboxed** and should be treated the same way you would treat running a Node.js script locally.
+
+**The guiding principle:** if you explicitly write code or templates in a field that executes code, the result is your responsibility. If runtime data unexpectedly triggers code execution, secret exposure, or file/network access through internal processing (template rendering, variable substitution, file loading) without being placed into a code-executing field, that is a vulnerability.
 
 **Important:** Treat Promptfoo configuration files and everything they reference as **trusted code and data**. This includes referenced scripts, prompt packs, test fixtures or datasets, configured providers, models, and remote content. Do not run Promptfoo against untrusted configs, scripts, fixtures, or pull requests unless the run is isolated and secrets are scoped for that run.
 
@@ -22,13 +24,13 @@ The server includes **CSRF/origin checks** that use browser-provided `Sec-Fetch-
 
 - Promptfoo config files (`promptfooconfig.yaml`, etc.)
 - Configured references to local scripts, modules, prompt packs, test fixtures, and datasets
-- Fields documented to execute code, including custom JS/Python/Ruby assertions, custom or script-based providers, transforms, hooks, session parsers, plugins, and `file://`-backed scripts
-- Runtime values intentionally interpolated into fields documented to execute code, such as inline script assertions or transforms
+- **Code-executing fields** — config fields where Promptfoo evaluates the value as code rather than data. These include: custom JS/Python/Ruby assertions, custom or script-based providers, transforms, hooks, session parsers, plugins, and `file://`-backed scripts
+- Runtime values interpolated into code-executing fields, such as inline script assertions or transforms
 
 **Trusted templates:**
 
 - Prompt, provider, assertion, and transform templates configured by the user
-- Template output is usually data sent to providers or assertions, but it becomes trusted generated code when the configured target field is documented to execute code
+- Template output is usually data sent to providers or assertions, but it becomes trusted generated code when the target field is a code-executing field
 
 **Runtime data:**
 
@@ -36,9 +38,7 @@ The server includes **CSRF/origin checks** that use browser-provided `Sec-Fetch-
 - Model outputs, grader outputs, `_conversation` history, and values saved with `storeOutputAs`
 - Remote content fetched during evaluation
 
-Built-in eval logic and trusted configuration templates may render, transform, score, store, or send runtime data through prompts, provider requests, graders, assertions, transforms, and reports. Treat adversarial providers, models, fixtures, remote content, and model-output feedback loops as untrusted eval content and run them with isolation, least-privileged credentials, and restricted egress.
-
-**The guiding principle:** if you explicitly write code or templates in a field documented to execute code, the result is your responsibility. If runtime data unexpectedly triggers code execution, secret exposure, or file/network access through internal processing (template rendering, variable substitution, file loading) without being placed into a field documented to execute code, that is a vulnerability.
+Built-in eval logic and trusted templates may pass runtime data through prompts, provider requests, graders, assertions, transforms, and reports as **data** — for example, interpolating model output into a grading prompt. This is normal operation. However, runtime data must not be promoted to **code** (evaluated as a template, executed as a script, or loaded as a file path) unless the user placed it into a code-executing field. Treat adversarial providers, models, fixtures, remote content, and model-output feedback loops as untrusted eval content and run them with isolation, least-privileged credentials, and restricted egress.
 
 ## Hardening Recommendations
 
@@ -122,7 +122,7 @@ Severity is assessed using [CVSS v4.0](https://www.first.org/cvss/v4.0/specifica
 
 **Promptfoo-specific severity considerations (illustrative, not automatic):**
 
-- Runtime data triggering code execution through internal processing without being placed into a field documented to execute code: typically **Critical**
+- Runtime data triggering code execution through internal processing without being placed into a code-executing field: typically **Critical**
 - Secret or credential leakage to destinations not configured as part of the eval flow: typically **High**
 - Algorithmic DoS in CI pipelines causing significant resource exhaustion: typically **Medium–High**
 - Web UI XSS requiring deliberate user interaction (for example, self-XSS): typically **Low** or no CVE (see Scope)
@@ -142,7 +142,8 @@ We request CVEs through GitHub Security Advisories when appropriate. Final advis
 
 **We usually request a CVE for:**
 
-- Runtime data triggering code execution through internal processing without being placed into a field documented to execute code, or bypassing Cloud/on-prem isolation
+- Runtime data triggering code execution through internal processing without being placed into a code-executing field
+- Bypasses of Cloud/on-prem isolation boundaries
 - Secret or credential leakage to destinations not configured as part of the eval flow
 - Supply chain compromise affecting Promptfoo-published packages, dependencies, or build artifacts
 
@@ -153,7 +154,7 @@ We request CVEs through GitHub Security Advisories when appropriate. Final advis
 
 **We generally do not request a CVE for:**
 
-- Issues in explicitly configured custom code or templates in fields documented to execute code (e.g., JS/Python assertions, custom providers, transforms, hooks, plugins)
+- Issues in explicitly configured custom code or templates in code-executing fields (e.g., JS/Python assertions, custom providers, transforms, hooks, plugins)
 - Runtime data rendered as data (not as code) within built-in eval logic — for example, model output interpolated into a grading prompt as a template variable
 - Local API access issues within the documented trust model
 - Self-XSS requiring the user to paste payloads into their own console or UI
@@ -186,7 +187,7 @@ When a fix is released, we will:
 
 **In scope:**
 
-- Runtime data triggering code execution, file access, network access, or secret exposure through internal processing (template rendering, variable substitution, file loading) without being placed into a field documented to execute code
+- Runtime data triggering code execution, file access, network access, or secret exposure through internal processing (template rendering, variable substitution, file loading) without being placed into a code-executing field
 - Bypasses of documented restrictions or isolation boundaries
 - Secret exposure or credential leakage to destinations not configured as part of the eval flow
 - Path traversal or arbitrary file read/write from data-only fields
@@ -195,8 +196,8 @@ When a fix is released, we will:
 
 **Out of scope:**
 
-- Code execution from **explicitly configured** custom code or templates in fields documented to execute code (e.g., JS/Python assertions, custom providers, transforms, hooks, plugins, `file://`-backed scripts)
-- Code execution caused by intentionally interpolating runtime data into an explicitly configured field documented to execute code, such as `value: 'output === "{{expected}}"'` in a JavaScript assertion — use `context.vars.expected` or safe serialization when the value should remain data
+- Code execution from **explicitly configured** custom code or templates in code-executing fields (e.g., JS/Python assertions, custom providers, transforms, hooks, plugins, `file://`-backed scripts)
+- Code execution caused by interpolating runtime data into a code-executing field, such as `value: 'output === "{{expected}}"'` in a JavaScript assertion — use `context.vars.expected` or safe serialization when the value should remain data
 - Code execution via **direct local web API access** or **browser access to the OSS local server** (e.g., `curl`, scripts, SDKs, the bundled UI, or malicious webpages reaching `promptfoo view`) — the local server has the same trust level as the CLI and its CSRF/origin checks are best-effort hardening, not a supported security boundary
 - Issues requiring the user to run untrusted configs, scripts, or fixtures with local privileges
 - Network requests triggered by content in **user-controlled config files** (test variables, prompts, fixtures defined in your config) — users are responsible for what they put in their own configs

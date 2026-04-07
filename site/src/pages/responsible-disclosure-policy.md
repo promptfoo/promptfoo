@@ -18,15 +18,15 @@ For technical details on our security model, trust boundaries, and hardening rec
 
 ### Open Source (CLI)
 
-The OSS CLI runs in your environment with your user permissions. It is **permissive by default** and executes user-configured code (custom assertions, custom or script-based providers, transforms, hooks, plugins, and templates in fields documented to execute code) without sandboxing.
+The OSS CLI runs in your environment with your user permissions. It is **permissive by default** and executes user-configured code (custom assertions, custom or script-based providers, transforms, hooks, plugins, and templates in code-executing fields) without sandboxing.
 
 Treat Promptfoo configuration files and everything they reference as trusted code and data. This includes referenced scripts, prompt packs, test fixtures or datasets, configured providers, models, and remote content. Do not run Promptfoo against untrusted configs, scripts, fixtures, or pull requests unless the run is isolated and secrets are scoped for that run.
 
-If you explicitly write code or templates in a field documented to execute code, the result is your responsibility. If runtime data unexpectedly triggers code execution, secret exposure, or file/network access through internal processing without being placed into a field documented to execute code, that is a vulnerability.
+If you explicitly write code or templates in a code-executing field, the result is your responsibility. If runtime data unexpectedly triggers code execution, secret exposure, or file/network access through internal processing without being placed into a code-executing field, that is a vulnerability.
 
-**In scope for OSS:** runtime data triggering code execution, secret exposure, or file/network access through internal processing (template rendering, variable substitution, file loading) without being placed into a field documented to execute code; bypasses of isolation boundaries or hardening controls; secret leakage to destinations not configured as part of the eval flow.
+**In scope for OSS:** runtime data triggering code execution, secret exposure, or file/network access through internal processing (template rendering, variable substitution, file loading) without being placed into a code-executing field; bypasses of isolation boundaries or hardening controls; secret leakage to destinations not configured as part of the eval flow.
 
-**Out of scope for OSS:** code execution from explicitly configured custom code or templates in fields documented to execute code, direct local API or browser access to the OSS local server (`promptfoo view`), and issues requiring the user to run untrusted configs, scripts, or fixtures with local privileges.
+**Out of scope for OSS:** code execution from explicitly configured custom code or templates in code-executing fields, direct local API or browser access to the OSS local server (`promptfoo view`), and issues requiring the user to run untrusted configs, scripts, or fixtures with local privileges.
 
 ### Cloud Services
 
@@ -104,7 +104,7 @@ If you act in good faith and follow this policy, we will not pursue legal action
 
 The following are out-of-scope:
 
-- Code execution from explicitly configured custom code or templates in fields documented to execute code in OSS (expected behavior)
+- Code execution from explicitly configured custom code or templates in code-executing fields in OSS (expected behavior)
 - Direct local API access or browser access to the OSS local server (`promptfoo view`)
 - Issues requiring users to run untrusted configs, scripts, or fixtures with local privileges
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
