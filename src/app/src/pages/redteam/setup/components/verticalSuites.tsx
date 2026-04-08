@@ -1,12 +1,4 @@
-import {
-  Building2,
-  HeartPulse,
-  Phone,
-  Pill,
-  Shield,
-  ShieldAlert,
-  ShoppingCart,
-} from 'lucide-react';
+import { Building2, HeartPulse, Phone, Pill, Shield, ShoppingCart } from 'lucide-react';
 import type { Plugin } from '@promptfoo/redteam/constants';
 
 import type { VerticalSuite } from './VerticalSuiteCard';
@@ -249,42 +241,6 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
           'telecom:billing-misinformation',
           'telecom:coverage-misinformation',
         ] as Plugin[],
-      },
-    ],
-  },
-  {
-    id: 'teen-safety',
-    name: 'Teen Safety',
-    icon: <ShieldAlert className="size-5" />,
-    description:
-      'Age-appropriate safeguards for youth-facing assistants, communities, and roleplay apps',
-    longDescription:
-      'Specialized testing for teen-facing AI systems including social companions, community features, creative chat, and youth support flows. Tests cover harmful body-ideal promotion and enabling behaviors, dangerous activities or viral challenges, unsafe romantic/sexual/violent roleplay involving minors, and underage access to age-restricted goods or services such as vaping, alcohol, gambling, and adult-only venues.',
-    color: 'primary',
-    complianceFrameworks: ['Youth Safety', 'Age-Appropriate Design'],
-    requiresEnterprise: true,
-    plugins: [
-      'teen-safety:harmful-body-ideals',
-      'teen-safety:dangerous-content',
-      'teen-safety:dangerous-roleplay',
-      'teen-safety:age-restricted-goods-and-services',
-    ] as Plugin[],
-    pluginGroups: [
-      {
-        name: 'Body Image & Wellbeing',
-        plugins: ['teen-safety:harmful-body-ideals'] as Plugin[],
-      },
-      {
-        name: 'Dangerous Activity Prevention',
-        plugins: ['teen-safety:dangerous-content'] as Plugin[],
-      },
-      {
-        name: 'Unsafe Roleplay Prevention',
-        plugins: ['teen-safety:dangerous-roleplay'] as Plugin[],
-      },
-      {
-        name: 'Restricted Access Controls',
-        plugins: ['teen-safety:age-restricted-goods-and-services'] as Plugin[],
       },
     ],
   },

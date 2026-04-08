@@ -11,7 +11,7 @@ describe('VERTICAL_SUITES', () => {
     expect(suiteIds).toContain('insurance');
     expect(suiteIds).toContain('pharmacy');
     expect(suiteIds).toContain('telecom');
-    expect(suiteIds).toContain('teen-safety');
+    expect(suiteIds).not.toContain('teen-safety');
   });
 
   it('should have telecom suite with correct structure', () => {
@@ -137,15 +137,6 @@ describe('DOMAIN_SPECIFIC_PLUGINS', () => {
     expect(DOMAIN_SPECIFIC_PLUGINS).toContain('insurance:data-disclosure' as Plugin);
   });
 
-  it('should include teen safety plugins', () => {
-    expect(DOMAIN_SPECIFIC_PLUGINS).toContain('teen-safety:harmful-body-ideals' as Plugin);
-    expect(DOMAIN_SPECIFIC_PLUGINS).toContain('teen-safety:dangerous-content' as Plugin);
-    expect(DOMAIN_SPECIFIC_PLUGINS).toContain('teen-safety:dangerous-roleplay' as Plugin);
-    expect(DOMAIN_SPECIFIC_PLUGINS).toContain(
-      'teen-safety:age-restricted-goods-and-services' as Plugin,
-    );
-  });
-
   it('should have correct total number of plugins', () => {
     // Count expected: ecommerce(4) + financial(10) + medical(6) + insurance(4) + pharmacy(3) + telecom(12)
     const expectedCount = VERTICAL_SUITES.reduce((sum, suite) => sum + suite.plugins.length, 0);
@@ -188,12 +179,6 @@ describe('getPluginSuite', () => {
     const suite = getPluginSuite('pharmacy:drug-interaction' as Plugin);
     expect(suite).toBeDefined();
     expect(suite?.id).toBe('pharmacy');
-  });
-
-  it('should find suite for teen safety plugin', () => {
-    const suite = getPluginSuite('teen-safety:dangerous-content' as Plugin);
-    expect(suite).toBeDefined();
-    expect(suite?.id).toBe('teen-safety');
   });
 
   it('should return undefined for non-existent plugin', () => {

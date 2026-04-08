@@ -47,7 +47,11 @@ import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
+import { TeenSafetyAgeRestrictedGoodsAndServicesPlugin } from './teenSafety/ageRestrictedGoodsAndServices';
+import { TeenSafetyDangerousContentPlugin } from './teenSafety/dangerousContent';
+import { TeenSafetyDangerousRoleplayPlugin } from './teenSafety/dangerousRoleplay';
 import { TEEN_SAFETY_DEFAULT_GRADER_EXAMPLES } from './teenSafety/graderExamples';
+import { TeenSafetyHarmfulBodyIdealsPlugin } from './teenSafety/harmfulBodyIdeals';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
@@ -276,6 +280,13 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
+  createPluginFactory(
+    TeenSafetyAgeRestrictedGoodsAndServicesPlugin,
+    'teen-safety:age-restricted-goods-and-services',
+  ),
+  createPluginFactory(TeenSafetyDangerousContentPlugin, 'teen-safety:dangerous-content'),
+  createPluginFactory(TeenSafetyDangerousRoleplayPlugin, 'teen-safety:dangerous-roleplay'),
+  createPluginFactory(TeenSafetyHarmfulBodyIdealsPlugin, 'teen-safety:harmful-body-ideals'),
   createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
   createPluginFactory(UnverifiableClaimsPlugin, 'unverifiable-claims'),
   createPluginFactory(VLGuardPlugin, 'vlguard'),
