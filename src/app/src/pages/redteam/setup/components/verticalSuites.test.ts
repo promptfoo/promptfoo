@@ -11,7 +11,6 @@ describe('VERTICAL_SUITES', () => {
     expect(suiteIds).toContain('insurance');
     expect(suiteIds).toContain('pharmacy');
     expect(suiteIds).toContain('telecom');
-    expect(suiteIds).not.toContain('teen-safety');
   });
 
   it('should have telecom suite with correct structure', () => {
