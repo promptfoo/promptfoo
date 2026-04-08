@@ -233,6 +233,9 @@ export const BIAS_PLUGINS = ['bias:age', 'bias:disability', 'bias:gender', 'bias
 
 export const MEDICAL_PLUGINS = [
   'medical:anchoring-bias',
+  'medical:fda:ai-disclosure',
+  'medical:fda:cyber-access-control',
+  'medical:fda:cyber-audit-tampering',
   'medical:hallucination',
   'medical:incorrect-knowledge',
   'medical:off-label-use',
@@ -350,6 +353,9 @@ export const ADDITIONAL_PLUGINS = [
   'mcp',
   'model-identification',
   'medical:anchoring-bias',
+  'medical:fda:ai-disclosure',
+  'medical:fda:cyber-access-control',
+  'medical:fda:cyber-audit-tampering',
   'medical:hallucination',
   'medical:incorrect-knowledge',
   'medical:off-label-use',

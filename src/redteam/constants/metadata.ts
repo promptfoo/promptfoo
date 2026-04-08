@@ -114,6 +114,12 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information',
+  'medical:fda:ai-disclosure':
+    'Tests whether medical AI systems conceal intended-use limits, low-confidence outputs, subgroup caveats, data drift, or silent model updates',
+  'medical:fda:cyber-access-control':
+    'Tests whether medical-device AI systems enforce authenticated, role-scoped, deny-by-default access before privileged commands or therapy changes',
+  'medical:fda:cyber-audit-tampering':
+    'Tests whether medical-device AI systems suppress anomaly alerts, rewrite audit trails, hide SBOM/version evidence, or disable forensic logging',
   'medical:hallucination': 'Tests for fabricated medical facts, studies, or drug interactions',
   'medical:incorrect-knowledge':
     'Tests for factually wrong medical information that could cause harm',
@@ -286,6 +292,9 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   layer: 'Strategy Layer',
   mcp: 'Model Context Protocol',
   'medical:anchoring-bias': 'Medical Anchoring Bias',
+  'medical:fda:ai-disclosure': 'FDA AI Disclosure',
+  'medical:fda:cyber-access-control': 'FDA Cyber Access Control',
+  'medical:fda:cyber-audit-tampering': 'FDA Cyber Audit Tampering',
   'medical:hallucination': 'Medical Hallucination',
   'medical:incorrect-knowledge': 'Medical Incorrect Knowledge',
   'medical:off-label-use': 'Medical Off-Label Use',
@@ -505,6 +514,9 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   default: Severity.Low,
   mcp: Severity.High,
   'medical:anchoring-bias': Severity.High,
+  'medical:fda:ai-disclosure': Severity.High,
+  'medical:fda:cyber-access-control': Severity.Critical,
+  'medical:fda:cyber-audit-tampering': Severity.Critical,
   'medical:hallucination': Severity.Critical,
   'medical:incorrect-knowledge': Severity.Critical,
   'medical:off-label-use': Severity.High,
@@ -749,6 +761,9 @@ export const riskCategories: Record<string, Plugin[]> = {
     'financial:sycophancy',
     'medical:hallucination',
     'medical:anchoring-bias',
+    'medical:fda:ai-disclosure',
+    'medical:fda:cyber-access-control',
+    'medical:fda:cyber-audit-tampering',
     'medical:incorrect-knowledge',
     'medical:off-label-use',
     'medical:prioritization-error',
@@ -837,6 +852,9 @@ export const categoryAliases: Record<Plugin, string> = {
   ferpa: 'FERPACompliance',
   mcp: 'MCP',
   'medical:anchoring-bias': 'MedicalAnchoringBias',
+  'medical:fda:ai-disclosure': 'MedicalFdaAiDisclosure',
+  'medical:fda:cyber-access-control': 'MedicalFdaCyberAccessControl',
+  'medical:fda:cyber-audit-tampering': 'MedicalFdaCyberAuditTampering',
   'medical:hallucination': 'Medical Hallucination',
   'medical:incorrect-knowledge': 'MedicalIncorrectKnowledge',
   'medical:off-label-use': 'MedicalOffLabelUse',
@@ -1134,6 +1152,12 @@ export const pluginDescriptions: Record<Plugin, string> = {
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information in medical contexts',
+  'medical:fda:ai-disclosure':
+    'Tests whether AI-enabled medical-device or clinical LLM systems disclose intended-use boundaries, confidence and uncertainty, subgroup limitations, data drift, and model or device version changes instead of concealing them',
+  'medical:fda:cyber-access-control':
+    'Tests whether medical-device AI systems enforce authenticated, role-scoped, deny-by-default workflows and refuse privileged device, telemetry, update, or therapy actions from unauthorized users or stale sessions',
+  'medical:fda:cyber-audit-tampering':
+    'Tests whether medical-device AI systems preserve anomaly alerts, SBOM/version records, and forensic audit trails instead of helping users suppress, rewrite, or delete cybersecurity evidence',
   'medical:hallucination':
     'Tests for fabricated medical facts, non-existent studies, made-up drug interactions, or other false medical information',
   'medical:incorrect-knowledge':

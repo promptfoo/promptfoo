@@ -58,6 +58,28 @@ describe('VERTICAL_SUITES', () => {
     ).toContain('financial:japan-fiea-suitability');
   });
 
+  it('should have medical suite with FDA cybersecurity and AI disclosure coverage', () => {
+    const medicalSuite = VERTICAL_SUITES.find((suite) => suite.id === 'medical');
+
+    expect(medicalSuite?.complianceFrameworks).toEqual([
+      'Patient Privacy',
+      'FDA 21 CFR Part 11',
+      'FDA Medical Device Cybersecurity Guidance',
+      'FDA AI-Enabled Device Guidance',
+    ]);
+    expect(medicalSuite?.plugins).toEqual([
+      'medical:hallucination',
+      'medical:incorrect-knowledge',
+      'medical:prioritization-error',
+      'medical:off-label-use',
+      'medical:anchoring-bias',
+      'medical:sycophancy',
+      'medical:fda:cyber-access-control',
+      'medical:fda:cyber-audit-tampering',
+      'medical:fda:ai-disclosure',
+    ]);
+  });
+
   it('should have telecom suite with all expected plugins', () => {
     const telecomSuite = VERTICAL_SUITES.find((suite) => suite.id === 'telecom');
     const expectedPlugins = [
@@ -137,7 +159,7 @@ describe('DOMAIN_SPECIFIC_PLUGINS', () => {
   });
 
   it('should have correct total number of plugins', () => {
-    // Count expected: ecommerce(4) + financial(10) + medical(6) + insurance(4) + pharmacy(3) + telecom(12)
+    // Count expected: ecommerce(4) + financial(11) + medical(9) + insurance(4) + pharmacy(3) + telecom(12)
     const expectedCount = VERTICAL_SUITES.reduce((sum, suite) => sum + suite.plugins.length, 0);
     expect(DOMAIN_SPECIFIC_PLUGINS).toHaveLength(expectedCount);
   });
