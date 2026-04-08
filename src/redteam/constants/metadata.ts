@@ -114,6 +114,12 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information',
+  'medical:fda:ai-disclosure':
+    'Tests whether medical AI systems conceal intended-use limits, low-confidence outputs, subgroup caveats, data drift, or silent model updates',
+  'medical:fda:cyber-access-control':
+    'Tests whether medical-device AI systems enforce authenticated, role-scoped, deny-by-default access before privileged commands or therapy changes',
+  'medical:fda:cyber-audit-tampering':
+    'Tests whether medical-device AI systems suppress anomaly alerts, rewrite audit trails, hide SBOM/version evidence, or disable forensic logging',
   'medical:hallucination': 'Tests for fabricated medical facts, studies, or drug interactions',
   'medical:incorrect-knowledge':
     'Tests for factually wrong medical information that could cause harm',
@@ -218,6 +224,16 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'telecom:coverage-misinformation': 'Tests for false coverage or service claims',
   'telecom:law-enforcement-request-handling': 'Tests for improper law enforcement request handling',
   'telecom:accessibility-violation': 'Tests for accessibility compliance violations',
+  'teen-safety':
+    'Teen safety testing for harmful body ideals, dangerous challenges, unsafe roleplay, and underage access to restricted goods or services',
+  'teen-safety:harmful-body-ideals':
+    'Tests for harmful body ideals, body shaming, and enabling disordered eating or exercise behaviors that are unsafe for teens',
+  'teen-safety:dangerous-content':
+    'Tests for dangerous activities, viral challenges, unsafe stunts, and dangerous at-home procedures inappropriate for teens',
+  'teen-safety:dangerous-roleplay':
+    'Tests for unsafe roleplay involving minors, including romantic, sexual, or violent interactive scenarios',
+  'teen-safety:age-restricted-goods-and-services':
+    'Tests for enabling or normalizing underage access to alcohol, vaping, gambling, weapons, and other age-restricted goods or services',
   realestate:
     'Real Estate AI safety testing for Fair Housing Act compliance, steering prevention, and housing discrimination vulnerabilities',
   'realestate:fair-housing-discrimination':
@@ -276,6 +292,9 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   layer: 'Strategy Layer',
   mcp: 'Model Context Protocol',
   'medical:anchoring-bias': 'Medical Anchoring Bias',
+  'medical:fda:ai-disclosure': 'FDA AI Disclosure',
+  'medical:fda:cyber-access-control': 'FDA Cyber Access Control',
+  'medical:fda:cyber-audit-tampering': 'FDA Cyber Audit Tampering',
   'medical:hallucination': 'Medical Hallucination',
   'medical:incorrect-knowledge': 'Medical Incorrect Knowledge',
   'medical:off-label-use': 'Medical Off-Label Use',
@@ -363,6 +382,11 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'telecom:coverage-misinformation': 'Coverage Misinformation',
   'telecom:law-enforcement-request-handling': 'Law Enforcement Request Handling',
   'telecom:accessibility-violation': 'Accessibility Violation',
+  'teen-safety': 'Teen Safety Suite',
+  'teen-safety:harmful-body-ideals': 'Harmful Body Ideals',
+  'teen-safety:dangerous-content': 'Dangerous Activities & Challenges',
+  'teen-safety:dangerous-roleplay': 'Dangerous Roleplay',
+  'teen-safety:age-restricted-goods-and-services': 'Age-Restricted Goods & Services',
   realestate: 'Real Estate Safety Suite',
   'realestate:fair-housing-discrimination': 'Fair Housing Discrimination',
   'realestate:steering': 'Real Estate Steering',
@@ -490,6 +514,9 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   default: Severity.Low,
   mcp: Severity.High,
   'medical:anchoring-bias': Severity.High,
+  'medical:fda:ai-disclosure': Severity.High,
+  'medical:fda:cyber-access-control': Severity.Critical,
+  'medical:fda:cyber-audit-tampering': Severity.Critical,
   'medical:hallucination': Severity.Critical,
   'medical:incorrect-knowledge': Severity.Critical,
   'medical:off-label-use': Severity.High,
@@ -566,6 +593,11 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'telecom:coverage-misinformation': Severity.Medium,
   'telecom:law-enforcement-request-handling': Severity.Medium,
   'telecom:accessibility-violation': Severity.Medium,
+  'teen-safety': Severity.Low,
+  'teen-safety:harmful-body-ideals': Severity.Low,
+  'teen-safety:dangerous-content': Severity.Low,
+  'teen-safety:dangerous-roleplay': Severity.Low,
+  'teen-safety:age-restricted-goods-and-services': Severity.Low,
   realestate: Severity.Critical,
   'realestate:fair-housing-discrimination': Severity.Critical,
   'realestate:steering': Severity.Critical,
@@ -686,6 +718,10 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:radicalization',
     'harmful:self-harm',
     'harmful:sexual-content',
+    'teen-safety:harmful-body-ideals',
+    'teen-safety:dangerous-content',
+    'teen-safety:dangerous-roleplay',
+    'teen-safety:age-restricted-goods-and-services',
     'wordplay',
   ],
 
@@ -725,6 +761,9 @@ export const riskCategories: Record<string, Plugin[]> = {
     'financial:sycophancy',
     'medical:hallucination',
     'medical:anchoring-bias',
+    'medical:fda:ai-disclosure',
+    'medical:fda:cyber-access-control',
+    'medical:fda:cyber-audit-tampering',
     'medical:incorrect-knowledge',
     'medical:off-label-use',
     'medical:prioritization-error',
@@ -813,6 +852,9 @@ export const categoryAliases: Record<Plugin, string> = {
   ferpa: 'FERPACompliance',
   mcp: 'MCP',
   'medical:anchoring-bias': 'MedicalAnchoringBias',
+  'medical:fda:ai-disclosure': 'MedicalFdaAiDisclosure',
+  'medical:fda:cyber-access-control': 'MedicalFdaCyberAccessControl',
+  'medical:fda:cyber-audit-tampering': 'MedicalFdaCyberAuditTampering',
   'medical:hallucination': 'Medical Hallucination',
   'medical:incorrect-knowledge': 'MedicalIncorrectKnowledge',
   'medical:off-label-use': 'MedicalOffLabelUse',
@@ -872,6 +914,11 @@ export const categoryAliases: Record<Plugin, string> = {
   'telecom:coverage-misinformation': 'TelecomCoverageMisinformation',
   'telecom:law-enforcement-request-handling': 'TelecomLawEnforcementRequestHandling',
   'telecom:accessibility-violation': 'TelecomAccessibilityViolation',
+  'teen-safety': 'TeenSafety',
+  'teen-safety:harmful-body-ideals': 'TeenSafetyHarmfulBodyIdeals',
+  'teen-safety:dangerous-content': 'TeenSafetyDangerousContent',
+  'teen-safety:dangerous-roleplay': 'TeenSafetyDangerousRoleplay',
+  'teen-safety:age-restricted-goods-and-services': 'TeenSafetyAgeRestrictedGoodsAndServices',
   realestate: 'Real Estate Safety',
   'realestate:fair-housing-discrimination': 'RealEstateFairHousingDiscrimination',
   'realestate:steering': 'RealEstateSteering',
@@ -1030,6 +1077,16 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for improper handling of law enforcement data requests in violation of CALEA requirements and privacy laws',
   'telecom:accessibility-violation':
     'Tests for accessibility compliance violations under Section 255, Section 508, ADA, and 21st Century CVAA',
+  'teen-safety':
+    'Comprehensive teen safety testing for age-appropriate AI behavior across body image harms, dangerous activities, unsafe roleplay, and underage access risks',
+  'teen-safety:harmful-body-ideals':
+    'Tests for harmful body-ideal promotion, body shaming, and facilitation of unsafe restriction, purging, over-exercise, or concealment behaviors that can harm teens',
+  'teen-safety:dangerous-content':
+    'Tests for promotion, glorification, or facilitation of dangerous challenges, unsafe stunts, risky experimentation, and dangerous at-home procedures inappropriate for teens',
+  'teen-safety:dangerous-roleplay':
+    'Tests for interactive roleplay involving minors that simulates romantic, sexual, or violent scenarios that could normalize exploitation or harm',
+  'teen-safety:age-restricted-goods-and-services':
+    'Tests for encouragement, sourcing, or circumvention tactics that help minors access age-restricted goods or services such as alcohol, vaping, gambling, weapons, or adult-only venues',
   realestate:
     'Comprehensive real estate AI safety testing for Fair Housing Act compliance, steering prevention, lending discrimination (ECOA), valuation bias, and housing discrimination vulnerabilities',
   'realestate:fair-housing-discrimination':
@@ -1095,6 +1152,12 @@ export const pluginDescriptions: Record<Plugin, string> = {
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information in medical contexts',
+  'medical:fda:ai-disclosure':
+    'Tests whether AI-enabled medical-device or clinical LLM systems disclose intended-use boundaries, confidence and uncertainty, subgroup limitations, data drift, and model or device version changes instead of concealing them',
+  'medical:fda:cyber-access-control':
+    'Tests whether medical-device AI systems enforce authenticated, role-scoped, deny-by-default workflows and refuse privileged device, telemetry, update, or therapy actions from unauthorized users or stale sessions',
+  'medical:fda:cyber-audit-tampering':
+    'Tests whether medical-device AI systems preserve anomaly alerts, SBOM/version records, and forensic audit trails instead of helping users suppress, rewrite, or delete cybersecurity evidence',
   'medical:hallucination':
     'Tests for fabricated medical facts, non-existent studies, made-up drug interactions, or other false medical information',
   'medical:incorrect-knowledge':

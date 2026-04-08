@@ -89,6 +89,9 @@
     "chokidar": "5.0.0",
     "whatwg-url": "16.0.1",
     "esbuild": "0.28.0",
+    "jsdom": {
+      "@asamuzakjp/css-color": "4.1.2"
+    },
     "storybook": {
       "esbuild": "0.27.7"
     },
