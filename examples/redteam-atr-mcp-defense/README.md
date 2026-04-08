@@ -6,10 +6,10 @@ This example adds a deterministic defense layer to Promptfoo's MCP red teaming u
 
 Promptfoo's LLM-based grading catches novel attacks through semantic understanding. ATR catches known attack patterns through regex in <5ms without LLM calls. They complement each other:
 
-| Layer | Method | Catches | Latency | Cost |
-|-------|--------|---------|---------|------|
-| Promptfoo grading | LLM rubric | Novel/semantic attacks | seconds | API calls |
-| ATR assertion | 108 regex rules | Known tool poisoning, injection, exfiltration patterns | <5ms | free |
+| Layer             | Method          | Catches                                                | Latency | Cost      |
+| ----------------- | --------------- | ------------------------------------------------------ | ------- | --------- |
+| Promptfoo grading | LLM rubric      | Novel/semantic attacks                                 | seconds | API calls |
+| ATR assertion     | 108 regex rules | Known tool poisoning, injection, exfiltration patterns | <5ms    | free      |
 
 ## Getting Started
 
@@ -49,7 +49,8 @@ Adjust severity threshold in `atr-assertion.js`:
 ```javascript
 // Include medium severity for stricter scanning
 const threats = matches.filter(
-  (m) => m.rule.severity === 'critical' || m.rule.severity === 'high' || m.rule.severity === 'medium',
+  (m) =>
+    m.rule.severity === 'critical' || m.rule.severity === 'high' || m.rule.severity === 'medium',
 );
 ```
 
@@ -57,14 +58,13 @@ Filter by category:
 
 ```javascript
 // Only check for credential exfiltration
-const threats = matches.filter(
-  (m) => m.rule.tags.category === 'context-exfiltration',
-);
+const threats = matches.filter((m) => m.rule.tags.category === 'context-exfiltration');
 ```
 
 ## Limitations
 
 ATR uses regex detection. It cannot catch:
+
 - Novel semantic attacks that paraphrase known patterns
 - Context-dependent threats requiring conversation history
 - Encoded attacks not covered by the current 108 rules
