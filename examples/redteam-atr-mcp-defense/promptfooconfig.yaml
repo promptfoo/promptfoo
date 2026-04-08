@@ -31,9 +31,8 @@ redteam:
   numTests: 30
   plugins:
     - mcp
-    - prompt-injection
-    - hijacking
 
   strategies:
     - jailbreak
     - prompt-injection
+    - hijacking
