@@ -196,6 +196,13 @@ function expectCliArg(args: string[], name: string, value: string): void {
   expect(args[argIndex + 1]).toBe(value);
 }
 
+function expectSanitizedExecEnv(options: PromptfooExecCall['options'] | NpmExecCall['options']) {
+  expect(options).toBeDefined();
+  expect(options?.env).toBeDefined();
+  expect(options?.env?.NPM_CONFIG_BEFORE).toBeUndefined();
+  expect(options?.env?.npm_config_before).toBeUndefined();
+}
+
 describe('code-scan-action main', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -241,8 +248,7 @@ describe('code-scan-action main', () => {
 
       const { options } = await importActionAndGetPromptfooCall();
 
-      expect(options?.env?.NPM_CONFIG_BEFORE).toBeUndefined();
-      expect(options?.env?.npm_config_before).toBeUndefined();
+      expectSanitizedExecEnv(options);
     });
 
     it('should not pass NPM_CONFIG_BEFORE to npm install', async () => {
@@ -252,8 +258,7 @@ describe('code-scan-action main', () => {
 
       const { options } = await importActionAndGetNpmInstallCall();
 
-      expect(options?.env?.NPM_CONFIG_BEFORE).toBeUndefined();
-      expect(options?.env?.npm_config_before).toBeUndefined();
+      expectSanitizedExecEnv(options);
     });
   });
 });
