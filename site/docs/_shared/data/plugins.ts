@@ -1826,7 +1826,6 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'harmful',
-    isRemote: true,
   },
   {
     category: 'Trust and Safety',
@@ -1842,7 +1841,6 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'harmful',
-    isRemote: true,
   },
   {
     category: 'Trust and Safety',
@@ -1858,7 +1856,6 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'harmful',
-    isRemote: true,
   },
   {
     category: 'Trust and Safety',
@@ -1874,7 +1871,6 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'harmful',
-    isRemote: true,
   },
   {
     category: 'Compliance and Legal',
