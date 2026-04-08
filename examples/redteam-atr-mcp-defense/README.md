@@ -16,14 +16,28 @@ Promptfoo's LLM-based grading catches novel attacks through semantic understandi
 ```bash
 npx promptfoo@latest init --example redteam-atr-mcp-defense
 cd redteam-atr-mcp-defense
-npm install agent-threat-rules
 export ANTHROPIC_API_KEY=your_key_here
 npx promptfoo redteam run
 ```
 
-## How It Works
+## Adding ATR Deterministic Defense (Optional)
 
-The `atr-assertion.js` file provides a custom JavaScript assertion that:
+Add the ATR assertion to your `defaultTest` block for regex-based threat detection alongside Promptfoo's LLM grading:
+
+```bash
+npm install agent-threat-rules
+```
+
+Then add to `promptfooconfig.yaml`:
+
+```yaml
+defaultTest:
+  assert:
+    - type: javascript
+      value: file://atr-assertion.js
+```
+
+The `atr-assertion.js` file:
 
 1. Loads ATR's 108 rules once (cached across test cases)
 2. Scans each LLM output for known threat patterns
