@@ -2263,6 +2263,23 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       expect(requestData.system).toEqual([{ type: 'text', text: 'Always respond NO.' }]);
     });
 
+    it('should render context vars in config.systemInstruction for Claude system parameter', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          systemInstruction: 'Answer {{ style }}.',
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello', {
+        vars: { style: 'briefly' },
+        prompt: { raw: 'Hello', label: 'test' },
+      });
+
+      const requestData = getRequestData();
+      expect(requestData.system).toEqual([{ type: 'text', text: 'Answer briefly.' }]);
+    });
+
     it('should use config.systemInstruction Content object for Claude system parameter', async () => {
       provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
         config: {
