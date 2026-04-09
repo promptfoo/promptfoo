@@ -265,12 +265,12 @@ export async function executeScanRequestWithRetry(
         throw error;
       }
 
-      // Exponential backoff with jitter: base * 2^attempt * (0.7 to 1.3)
+      // Exponential backoff with jitter: base * 2^(per-policy attempt) * (0.7 to 1.3)
       const jitter = 0.7 + 0.6 * Math.random();
-      const delay = BASE_DELAY_MS * Math.pow(2, attempt) * jitter;
+      const delay = BASE_DELAY_MS * Math.pow(2, policyAttempts - 1) * jitter;
 
       logger.debug(
-        `${retryPolicy.status}, retrying in ${Math.round(delay / 1000)}s (attempt ${attempt + 1}/${retryPolicy.maxAttempts})`,
+        `${retryPolicy.status}, retrying in ${Math.round(delay / 1000)}s (attempt ${policyAttempts}/${retryPolicy.maxAttempts})`,
       );
 
       // Update spinner during retry wait (abort-aware)
@@ -285,6 +285,7 @@ export async function executeScanRequestWithRetry(
     }
   }
 
-  // TypeScript: This should never be reached due to throw on last attempt
+  // Safety fallback: reached if mixed error types exhaust the outer loop
+  // without any single policy exceeding its budget.
   throw new Error('Scan failed: exceeded maximum retries');
 }
