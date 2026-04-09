@@ -40,6 +40,16 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
     return true;
   }
 
+  // Codex SDK supports web search when explicitly enabled.
+  if (
+    id.startsWith('openai:codex') &&
+    (provider.config?.web_search_mode === 'live' ||
+      provider.config?.web_search_mode === 'cached' ||
+      provider.config?.web_search_enabled === true)
+  ) {
+    return true;
+  }
+
   // Check for Anthropic with web_search tool
   if (
     id.includes('anthropic') &&
@@ -84,10 +94,10 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // OpenAI GPT-5.1 with web search tool (via responses API)
+  // OpenAI GPT-5.4 snapshot with web search tool (via responses API)
   const loadOpenAIWebSearch = async () => {
     try {
-      return await loadApiProvider('openai:responses:gpt-5.1', {
+      return await loadApiProvider('openai:responses:gpt-5.4-2026-03-05', {
         options: {
           config: { tools: [{ type: 'web_search_preview' }] },
         },

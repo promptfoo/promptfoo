@@ -21,7 +21,12 @@ import {
   DefaultSuggestionsProvider as MistralSuggestionsProvider,
   DefaultSynthesizeProvider as MistralSynthesizeProvider,
 } from '../../src/providers/mistral/defaults';
+import {
+  clearCodexDefaultProvidersForTesting,
+  hasCodexDefaultCredentials,
+} from '../../src/providers/openai/codexDefaults';
 import { DefaultModerationProvider } from '../../src/providers/openai/defaults';
+import { providerRegistry } from '../../src/providers/providerRegistry';
 
 import type { EnvOverrides } from '../../src/types/env';
 import type { ApiProvider } from '../../src/types/index';
@@ -30,6 +35,13 @@ vi.mock('../../src/providers/google/util', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     hasGoogleDefaultCredentials: vi.fn().mockResolvedValue(false),
+  };
+});
+
+vi.mock('../../src/providers/openai/codexDefaults', async (importOriginal) => {
+  return {
+    ...(await importOriginal<typeof import('../../src/providers/openai/codexDefaults')>()),
+    hasCodexDefaultCredentials: vi.fn().mockReturnValue(false),
   };
 });
 
@@ -57,6 +69,8 @@ describe('Provider override tests', () => {
     setDefaultCompletionProviders(undefined as any);
     setDefaultEmbeddingProviders(undefined as any);
     vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(false);
+    clearCodexDefaultProvidersForTesting();
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.MISTRAL_API_KEY;
@@ -69,8 +83,10 @@ describe('Provider override tests', () => {
     delete process.env.AZURE_OPENAI_DEPLOYMENT_NAME;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     process.env = originalEnv;
+    clearCodexDefaultProvidersForTesting();
+    await providerRegistry.shutdownAll();
     vi.resetAllMocks();
   });
 
@@ -172,6 +188,46 @@ describe('Provider override tests', () => {
     const providers = await getDefaultProviders();
 
     expect(providers.embeddingProvider).toBe(MistralEmbeddingProvider);
+    expect(providers.gradingJsonProvider).toBe(MistralGradingJsonProvider);
+    expect(providers.gradingProvider).toBe(MistralGradingProvider);
+    expect(providers.suggestionsProvider).toBe(MistralSuggestionsProvider);
+    expect(providers.synthesizeProvider).toBe(MistralSynthesizeProvider);
+  });
+
+  it('should use Codex SDK providers when ChatGPT/Codex credentials exist without API provider keys', async () => {
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.gradingJsonProvider.id()).toBe('openai:codex-sdk');
+    expect(providers.gradingProvider.id()).toBe('openai:codex-sdk');
+    expect(providers.llmRubricProvider?.id()).toBe('openai:codex-sdk');
+    expect(providers.suggestionsProvider.id()).toBe('openai:codex-sdk');
+    expect(providers.synthesizeProvider.id()).toBe('openai:codex-sdk');
+    expect(providers.webSearchProvider?.id()).toBe('openai:codex-sdk');
+    expect(providers.webSearchProvider?.config?.web_search_mode).toBe('live');
+    expect(providers.embeddingProvider.id()).toBe('openai:text-embedding-3-large');
+    expect(providers.moderationProvider).toBe(DefaultModerationProvider);
+  });
+
+  it('should prefer OpenAI API defaults over Codex SDK defaults when OPENAI_API_KEY exists', async () => {
+    process.env.OPENAI_API_KEY = 'test-openai-key';
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.gradingJsonProvider.id()).toBe('openai:gpt-5-2025-08-07');
+    expect(providers.gradingProvider.id()).toBe('openai:gpt-5-2025-08-07');
+    expect(providers.suggestionsProvider.id()).toBe('openai:gpt-5-2025-08-07');
+    expect(providers.synthesizeProvider.id()).toBe('openai:gpt-5-2025-08-07');
+  });
+
+  it('should prefer Mistral defaults over Codex SDK defaults when MISTRAL_API_KEY exists', async () => {
+    process.env.MISTRAL_API_KEY = 'test-mistral-key';
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+
+    const providers = await getDefaultProviders();
+
     expect(providers.gradingJsonProvider).toBe(MistralGradingJsonProvider);
     expect(providers.gradingProvider).toBe(MistralGradingProvider);
     expect(providers.suggestionsProvider).toBe(MistralSuggestionsProvider);

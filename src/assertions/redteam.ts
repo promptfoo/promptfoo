@@ -1,10 +1,11 @@
 import logger from '../logger';
+import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
 import invariant from '../util/invariant';
 
 import type { RedteamGradingContext } from '../redteam/grading/types';
-import type { AssertionParams, GradingResult } from '../types/index';
+import type { AssertionParams, AtomicTestCase, GradingResult } from '../types/index';
 
 /**
  * Analyzes grader errors in the redteam history.
@@ -26,6 +27,22 @@ function analyzeGraderErrors(redteamHistory: Array<{ graderError?: string }> | u
   const allTurnsHaveErrors = turnsWithErrors.length === redteamHistory.length;
 
   return { hasAnyErrors, allTurnsHaveErrors };
+}
+
+function getRedteamPrompt(prompt: string | undefined, test: AtomicTestCase): string | undefined {
+  if (prompt) {
+    return prompt;
+  }
+
+  if (typeof test.vars?.[MULTI_INPUT_VAR] === 'string') {
+    return test.vars[MULTI_INPUT_VAR];
+  }
+
+  if (typeof test.vars?.prompt === 'string') {
+    return test.vars.prompt;
+  }
+
+  return undefined;
 }
 
 /**
@@ -73,7 +90,8 @@ export const handleRedteam = async ({
 
   const grader = getGraderById(assertion.type);
   invariant(grader, `Unknown grader: ${baseType}`);
-  invariant(prompt, `Grader ${baseType} must have a prompt`);
+  const effectivePrompt = getRedteamPrompt(prompt, test);
+  invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
 
   // Build grading context from provider response metadata or test metadata
   // This includes exfil tracking data from indirect-web-pwn strategy
@@ -109,7 +127,7 @@ export const handleRedteam = async ({
 
   try {
     const { grade, rubric, suggestions } = await grader.getResult(
-      prompt,
+      effectivePrompt,
       outputString,
       test,
       provider,

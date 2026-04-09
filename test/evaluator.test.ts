@@ -403,6 +403,8 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
       },
       assertions: {
         total: 0,
@@ -414,6 +416,8 @@ describe('evaluator', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       },
     });
@@ -449,6 +453,8 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
       },
       assertions: {
         total: 0,
@@ -460,6 +466,8 @@ describe('evaluator', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       },
     });
@@ -495,6 +503,8 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
       },
       assertions: {
         total: 0,
@@ -506,6 +516,8 @@ describe('evaluator', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       },
     });
@@ -597,6 +609,8 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
       },
       assertions: {
         total: 0,
@@ -608,6 +622,8 @@ describe('evaluator', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       },
     });
@@ -643,6 +659,8 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
       },
       assertions: {
         total: 0,
@@ -654,6 +672,8 @@ describe('evaluator', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       },
     });
@@ -689,6 +709,8 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
       },
       assertions: {
         total: 0,
@@ -700,6 +722,8 @@ describe('evaluator', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       },
     });
@@ -730,6 +754,8 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
       },
       assertions: {
         total: 0,
@@ -741,6 +767,8 @@ describe('evaluator', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       },
     });
@@ -771,6 +799,8 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
       },
       assertions: {
         total: 0,
@@ -782,6 +812,8 @@ describe('evaluator', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       },
     });
@@ -812,6 +844,8 @@ describe('evaluator', () => {
         reasoning: 11,
         acceptedPrediction: 12,
         rejectedPrediction: 13,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
       },
       assertions: {
         total: 0,
@@ -823,6 +857,8 @@ describe('evaluator', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       },
     });
@@ -1474,6 +1510,8 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
       },
       assertions: {
         total: 0,
@@ -1485,6 +1523,8 @@ describe('evaluator', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       },
     });
@@ -3529,6 +3569,8 @@ describe('evaluator', () => {
   });
 
   it('should handle evaluation timeout without tearing down the shared provider', async () => {
+    vi.useFakeTimers();
+
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let longTimer: NodeJS.Timeout | null = null;
 
@@ -3580,6 +3622,7 @@ describe('evaluator', () => {
 
     try {
       const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 100 });
+      await vi.advanceTimersByTimeAsync(100);
       await evalPromise;
 
       expect(slowApiProvider.callApi).toHaveBeenCalledWith(
@@ -3607,6 +3650,8 @@ describe('evaluator', () => {
   });
 
   it('should not block timeout rows when a provider call does not settle after abort', async () => {
+    vi.useFakeTimers();
+
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
 
     const hangingProvider: ApiProvider = {
@@ -3651,9 +3696,9 @@ describe('evaluator', () => {
       tests: [{}],
     };
 
-    const startedAt = Date.now();
-    await evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
-    const elapsedMs = Date.now() - startedAt;
+    const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
+    await vi.advanceTimersByTimeAsync(50);
+    await evalPromise;
 
     expect(hangingProvider.cleanup).not.toHaveBeenCalled();
     expect(mockAddResult).toHaveBeenCalledWith(
@@ -3663,10 +3708,11 @@ describe('evaluator', () => {
         failureReason: ResultFailureReason.ERROR,
       }),
     );
-    expect(elapsedMs).toBeLessThan(1000);
   });
 
   it('should ignore stale provider rows that resolve after a timeout row is recorded', async () => {
+    vi.useFakeTimers();
+
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let resolveLateResponse!: (value: ProviderResponse) => void;
 
@@ -3712,7 +3758,9 @@ describe('evaluator', () => {
       tests: [{}],
     };
 
-    await evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
+    const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
+    await vi.advanceTimersByTimeAsync(50);
+    await evalPromise;
 
     expect(mockAddResult).toHaveBeenCalledTimes(1);
     expect(mockAddResult).toHaveBeenCalledWith(
@@ -3734,6 +3782,8 @@ describe('evaluator', () => {
   });
 
   it('should honor external abortSignal when timeoutMs is set', async () => {
+    vi.useFakeTimers();
+
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let longTimer: NodeJS.Timeout | null = null;
     let abortTimer: NodeJS.Timeout | null = null;
@@ -3800,10 +3850,12 @@ describe('evaluator', () => {
     };
 
     try {
-      await evaluate(testSuite, mockEval as unknown as Eval, {
+      const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, {
         timeoutMs: 1000,
         abortSignal: abortController.signal,
       });
+      await vi.advanceTimersByTimeAsync(10);
+      await evalPromise;
 
       expect(mockAddResult).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -3823,6 +3875,8 @@ describe('evaluator', () => {
   });
 
   it('should abort when exceeding maxEvalTimeMs', async () => {
+    vi.useFakeTimers();
+
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let longTimer: NodeJS.Timeout | null = null;
 
@@ -3881,6 +3935,7 @@ describe('evaluator', () => {
 
     try {
       const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { maxEvalTimeMs: 100 });
+      await vi.advanceTimersByTimeAsync(100);
       await evalPromise;
 
       expect(mockAddResult).toHaveBeenCalledWith(
@@ -3932,6 +3987,8 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
       },
       numRequests: 1, // Only provider requests
       assertions: {
@@ -3944,6 +4001,8 @@ describe('evaluator', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       },
     });
@@ -4062,6 +4121,8 @@ describe('evaluator', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
       },
       assertions: {
         total: 50, // Assertion tokens tracked separately
@@ -4073,6 +4134,8 @@ describe('evaluator', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       },
     });
@@ -4954,6 +5017,8 @@ describe('runEval', () => {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
       },
       numRequests: 1, // Only provider requests
       assertions: {
@@ -4966,6 +5031,8 @@ describe('runEval', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       },
     });
@@ -5287,6 +5354,8 @@ describe('runEval', () => {
     });
 
     it('should fall back to measured latency when provider does not supply latencyMs', async () => {
+      vi.useFakeTimers();
+
       const providerWithoutLatency: ApiProvider = {
         id: vi.fn().mockReturnValue('no-latency-provider'),
         callApi: vi.fn().mockImplementation(async () => {
@@ -5298,7 +5367,7 @@ describe('runEval', () => {
         }),
       };
 
-      const results = await runEval({
+      const resultPromise = runEval({
         ...defaultOptions,
         provider: providerWithoutLatency,
         prompt: { raw: 'Test prompt', label: 'test-label' },
@@ -5306,6 +5375,8 @@ describe('runEval', () => {
         conversations: {},
         registers: {},
       });
+      await vi.advanceTimersByTimeAsync(50);
+      const results = await resultPromise;
 
       // Should have measured latency (>= 45ms accounting for timer precision)
       expect(results[0].latencyMs).toBeGreaterThanOrEqual(45);

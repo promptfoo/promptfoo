@@ -458,7 +458,7 @@ export async function runEval({
   const vars = structuredClone(test.vars || {});
 
   // Collect file metadata for the test case before rendering the prompt.
-  const fileMetadata = collectFileMetadata(test.vars || vars);
+  const fileMetadata = collectFileMetadata(vars);
 
   const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
   const usesConversation = prompt.raw.includes('_conversation');
@@ -1387,6 +1387,11 @@ class Evaluator {
     const runEvalOptions: RunEvalOptions[] = [];
     let testIdx = 0;
     let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
+    // Pre-compute prompt IDs to avoid redundant SHA-256 hashing in the inner loop
+    const promptIdCache = new Map<Prompt, string>();
+    for (const prompt of testSuite.prompts) {
+      promptIdCache.set(prompt, generateIdFromPrompt(prompt));
+    }
     for (let index = 0; index < tests.length; index++) {
       const testCase = tests[index];
       invariant(
@@ -1497,7 +1502,7 @@ class Evaluator {
               // Look up the correct index in the prompts array using the map
               // built during prompts array construction. This ensures promptIdx
               // is correct even when test-level filtering skips some combinations.
-              const promptId = generateIdFromPrompt(prompt);
+              const promptId = promptIdCache.get(prompt)!;
               const promptIdx = promptIndexMap.get(`${providerKey}:${promptId}`);
               if (promptIdx === undefined) {
                 logger.warn(`Could not find prompt index for ${providerKey}:${promptId}, skipping`);
@@ -1971,8 +1976,12 @@ class Evaluator {
     // Separate serial and concurrent eval options
     const serialRunEvalOptions: RunEvalOptions[] = [];
     const concurrentRunEvalOptions: RunEvalOptions[] = [];
+    // O(1) lookup for the original index of each eval step (avoids O(n) indexOf in hot loop)
+    const evalStepIndexMap = new Map<RunEvalOptions, number>();
 
-    for (const evalOption of runEvalOptions) {
+    for (let i = 0; i < runEvalOptions.length; i++) {
+      const evalOption = runEvalOptions[i];
+      evalStepIndexMap.set(evalOption, i);
       if (evalOption.test.options?.runSerially) {
         serialRunEvalOptions.push(evalOption);
       } else {
@@ -2010,7 +2019,7 @@ class Evaluator {
               `[${numComplete}/${runEvalOptions.length}] Running ${provider} with vars: ${vars}`,
             );
           }
-          const idx = runEvalOptions.indexOf(evalStep);
+          const idx = evalStepIndexMap.get(evalStep)!;
           await processEvalStepWithTimeout(evalStep, idx);
           processedIndices.add(idx);
         }
@@ -2019,12 +2028,20 @@ class Evaluator {
       }
 
       // Then run concurrent evaluations
+      // Throttle addPrompts to avoid a DB write on every concurrent step.
+      // The final addPrompts call after comparisons ensures the last state is always persisted.
+      let lastPromptsFlush = 0;
+      const PROMPTS_FLUSH_INTERVAL_MS = 1000;
       await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep) => {
         checkAbort();
-        const idx = runEvalOptions.indexOf(evalStep);
+        const idx = evalStepIndexMap.get(evalStep)!;
         await processEvalStepWithTimeout(evalStep, idx);
         processedIndices.add(idx);
-        await this.evalRecord.addPrompts(prompts);
+        const now = Date.now();
+        if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
+          lastPromptsFlush = now;
+          await this.evalRecord.addPrompts(prompts);
+        }
       });
     } catch (err) {
       if (combinedAbortSignal.aborted) {
@@ -2154,16 +2171,7 @@ class Evaluator {
               completion: 0,
             };
 
-            // Use the helper function instead of direct updates
             if (gradingResult.tokensUsed) {
-              if (!result.gradingResult.tokensUsed) {
-                result.gradingResult.tokensUsed = {
-                  total: 0,
-                  prompt: 0,
-                  completion: 0,
-                };
-              }
-
               // Update the metrics using the helper function
               updateAssertionMetrics(
                 { tokenUsage: { assertions: result.gradingResult.tokensUsed } },
@@ -2235,6 +2243,8 @@ class Evaluator {
       logger.info(`Processing ${maxScoreRowsCount} max-score assertions...`);
 
       for (const testIdx of rowsWithMaxScoreAssertion) {
+        compareCount++;
+
         const resultsToCompare = this.evalRecord.persisted
           ? await this.evalRecord.fetchResultsByTestIdx(testIdx)
           : this.evalRecord.results.filter((r) => r.testIdx === testIdx);

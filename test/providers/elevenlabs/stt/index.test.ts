@@ -48,6 +48,16 @@ describe('ElevenLabsSTTProvider', () => {
       expect(provider.config.language).toBe('es');
     });
 
+    it('should preserve explicit zero retries', () => {
+      const provider = new ElevenLabsSTTProvider('elevenlabs:stt', {
+        config: {
+          retries: 0,
+        },
+      });
+
+      expect(provider.config.retries).toBe(0);
+    });
+
     it('should use custom label if provided', () => {
       const provider = new ElevenLabsSTTProvider('elevenlabs:stt', {
         label: 'Custom STT Label',

@@ -42,25 +42,21 @@ vi.mock('../src/globalConfig/cloud', () => ({
 }));
 
 vi.mock('undici', () => {
-  const mockProxyAgentInstance = {
-    options: null,
-    addRequest: vi.fn(),
-    destroy: vi.fn(),
-  };
-
-  const mockAgentInstance = {
-    addRequest: vi.fn(),
-    destroy: vi.fn(),
-  };
-
   // Use regular functions instead of arrow functions for constructors
   const ProxyAgent = vi.fn(function (this: any, options: any) {
-    mockProxyAgentInstance.options = options;
-    return mockProxyAgentInstance;
+    return {
+      options,
+      addRequest: vi.fn(),
+      destroy: vi.fn(),
+    };
   });
 
-  const Agent = vi.fn(function (this: any) {
-    return mockAgentInstance;
+  const Agent = vi.fn(function (this: any, options: any) {
+    return {
+      options,
+      addRequest: vi.fn(),
+      destroy: vi.fn(),
+    };
   });
 
   return {
@@ -133,6 +129,7 @@ vi.mock('node:fs/promises', () => ({
 vi.mock('../src/cliState', () => ({
   default: {
     basePath: undefined,
+    maxConcurrency: undefined,
   },
 }));
 
@@ -142,6 +139,7 @@ describe('fetchWithProxy', () => {
     clearAgentCache();
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
     vi.mocked(ProxyAgent).mockClear();
+    cliState.maxConcurrency = undefined;
 
     delete process.env.HTTPS_PROXY;
     delete process.env.https_proxy;
@@ -707,6 +705,70 @@ describe('fetchWithProxy', () => {
     for (const d of dispatchers) {
       expect(d).toBe(first);
     }
+  });
+
+  it('should reuse a dedicated Agent dispatcher per maxConcurrency value', async () => {
+    const dispatchers: unknown[] = [];
+    const mockFetch = vi.fn().mockImplementation((_url: string, opts: any) => {
+      dispatchers.push(opts?.dispatcher);
+      return Promise.resolve(new Response());
+    });
+    global.fetch = mockFetch;
+
+    cliState.maxConcurrency = 2;
+    await fetchWithProxy('https://example.com/api/low-1');
+
+    cliState.maxConcurrency = 5;
+    await fetchWithProxy('https://example.com/api/high');
+
+    cliState.maxConcurrency = 2;
+    await fetchWithProxy('https://example.com/api/low-2');
+
+    expect(Agent).toHaveBeenCalledTimes(2);
+    expect(Agent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        connections: 2,
+      }),
+    );
+    expect(Agent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        connections: 5,
+      }),
+    );
+    expect(dispatchers[0]).toBe(dispatchers[2]);
+    expect(dispatchers[1]).not.toBe(dispatchers[0]);
+  });
+
+  it('should create a dedicated ProxyAgent dispatcher per proxy URL and maxConcurrency value', async () => {
+    const mockProxyUrl = 'http://proxy.example.com';
+    process.env.HTTPS_PROXY = mockProxyUrl;
+
+    cliState.maxConcurrency = 2;
+    await fetchWithProxy('https://example.com/api/low');
+
+    cliState.maxConcurrency = 5;
+    await fetchWithProxy('https://example.com/api/high');
+
+    cliState.maxConcurrency = 2;
+    await fetchWithProxy('https://example.com/api/low-again');
+
+    expect(ProxyAgent).toHaveBeenCalledTimes(2);
+    expect(ProxyAgent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        uri: mockProxyUrl,
+        connections: 2,
+      }),
+    );
+    expect(ProxyAgent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        uri: mockProxyUrl,
+        connections: 5,
+      }),
+    );
   });
 
   it('should preserve a caller-provided dispatcher instead of overwriting it', async () => {

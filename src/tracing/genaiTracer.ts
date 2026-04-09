@@ -47,6 +47,8 @@ export const GenAIAttributes = {
   USAGE_REASONING_TOKENS: 'gen_ai.usage.reasoning_tokens',
   USAGE_ACCEPTED_PREDICTION_TOKENS: 'gen_ai.usage.accepted_prediction_tokens',
   USAGE_REJECTED_PREDICTION_TOKENS: 'gen_ai.usage.rejected_prediction_tokens',
+  USAGE_CACHE_READ_INPUT_TOKENS: 'gen_ai.usage.cache_read_input_tokens',
+  USAGE_CACHE_CREATION_INPUT_TOKENS: 'gen_ai.usage.cache_creation_input_tokens',
 } as const;
 
 // Promptfoo-specific attributes
@@ -405,6 +407,18 @@ export function setGenAIResponseAttributes(
         span.setAttribute(
           GenAIAttributes.USAGE_REJECTED_PREDICTION_TOKENS,
           usage.completionDetails.rejectedPrediction,
+        );
+      }
+      if (usage.completionDetails.cacheReadInputTokens !== undefined) {
+        span.setAttribute(
+          GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+          usage.completionDetails.cacheReadInputTokens,
+        );
+      }
+      if (usage.completionDetails.cacheCreationInputTokens !== undefined) {
+        span.setAttribute(
+          GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS,
+          usage.completionDetails.cacheCreationInputTokens,
         );
       }
     }

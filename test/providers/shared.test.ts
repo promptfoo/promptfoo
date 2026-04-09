@@ -249,8 +249,8 @@ describe('Shared Provider Functions', () => {
         expect(openaiToolChoiceToAnthropic('auto')).toEqual({ type: 'auto' });
       });
 
-      it('should convert none to auto (Anthropic has no none)', () => {
-        expect(openaiToolChoiceToAnthropic('none')).toEqual({ type: 'auto' });
+      it('should convert none', () => {
+        expect(openaiToolChoiceToAnthropic('none')).toEqual({ type: 'none' });
       });
 
       it('should convert required to any', () => {
@@ -338,6 +338,7 @@ describe('Shared Provider Functions', () => {
 
       it('should transform OpenAI format for Anthropic', () => {
         expect(transformToolChoice('auto', 'anthropic')).toEqual({ type: 'auto' });
+        expect(transformToolChoice('none', 'anthropic')).toEqual({ type: 'none' });
         expect(transformToolChoice('required', 'anthropic')).toEqual({ type: 'any' });
       });
 

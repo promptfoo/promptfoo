@@ -61,6 +61,9 @@
   "optionalDependencies": {
     "sharp": "^0.34.5"
   },
+  "overrides": {
+    "lodash-es": "^4.18.1"
+  },
   "browserslist": {
     "production": [
       ">0.5%",

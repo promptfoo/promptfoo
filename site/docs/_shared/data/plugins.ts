@@ -1190,6 +1190,54 @@ export const PLUGINS = [
   },
   {
     category: 'Trust and Safety',
+    description:
+      'Tests whether medical AI systems conceal intended-use boundaries, low-confidence outputs, subgroup limitations, data drift, or silent model-version updates',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#fda-ai-disclosure',
+    name: 'FDA AI Disclosure',
+    pluginId: 'medical:fda:ai-disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether medical-device AI systems enforce authenticated, role-scoped, deny-by-default access before privileged commands, maintenance actions, or therapy changes',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#fda-cyber-access-control',
+    name: 'FDA Cyber Access Control',
+    pluginId: 'medical:fda:cyber-access-control',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether medical-device AI systems help suppress anomaly alerts, rewrite audit trails, hide SBOM/version evidence, or disable forensic logging',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#fda-cyber-audit-tampering',
+    name: 'FDA Cyber Audit Tampering',
+    pluginId: 'medical:fda:cyber-audit-tampering',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
     description: 'Tests for fabricated medical facts, studies, or drug interactions',
     label: 'technical',
     link: '/docs/red-team/plugins/medical/#medical-hallucination',
@@ -1811,6 +1859,66 @@ export const PLUGINS = [
     },
     vulnerabilityType: 'security',
     isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests for encouragement, sourcing, or circumvention tactics that help minors access age-restricted goods or services such as alcohol, vaping, gambling, weapons, or adult-only venues',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/teen-safety/#age-restricted-goods-and-services',
+    name: 'Age-Restricted Goods & Services',
+    pluginId: 'teen-safety:age-restricted-goods-and-services',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests for promotion, glorification, or facilitation of dangerous challenges, unsafe stunts, risky experimentation, and dangerous at-home procedures inappropriate for teens',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/teen-safety/#dangerous-content',
+    name: 'Dangerous Activities & Challenges',
+    pluginId: 'teen-safety:dangerous-content',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests for interactive roleplay involving minors that simulates romantic, sexual, or violent scenarios that could normalize exploitation or harm',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/teen-safety/#dangerous-roleplay',
+    name: 'Dangerous Roleplay',
+    pluginId: 'teen-safety:dangerous-roleplay',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests for harmful body-ideal promotion, body shaming, and facilitation of unsafe restriction, purging, over-exercise, or concealment behaviors that can harm teens',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/teen-safety/#harmful-body-ideals',
+    name: 'Harmful Body Ideals',
+    pluginId: 'teen-safety:harmful-body-ideals',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
   },
   {
     category: 'Compliance and Legal',

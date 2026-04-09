@@ -317,11 +317,18 @@ describe('IntentPlugin', () => {
       intent: ['intent1', 'intent2'],
     });
 
-    const start = Date.now();
-    await plugin.generateTests(1, 100);
-    const duration = Date.now() - start;
+    vi.useFakeTimers();
+    try {
+      const start = Date.now();
+      const testsPromise = plugin.generateTests(1, 100);
 
-    expect(duration).toBeGreaterThanOrEqual(100);
+      await vi.runAllTimersAsync();
+      await testsPromise;
+
+      expect(Date.now() - start).toBeGreaterThanOrEqual(100);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should handle concurrent intent extractions', async () => {
