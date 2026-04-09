@@ -2203,6 +2203,8 @@ class Evaluator {
       progressBarManager.installLogInterceptor();
     }
 
+    let flushGroupedRows: (() => Promise<void>) | undefined;
+
     try {
       if (shouldGroupGradingByProvider) {
         const providerCallQueue = new ProviderGroupedCallQueue();
@@ -2213,6 +2215,8 @@ class Evaluator {
           processedIndices.add(index);
           await this.evalRecord.addPrompts(prompts);
         };
+        flushGroupedRows = () =>
+          runGroupedGradingForRows(groupedRows, providerCallQueue, processGroupedRows);
 
         for (const evalStep of groupedRunEvalOptions) {
           checkAbort();
@@ -2255,7 +2259,8 @@ class Evaluator {
           }
         }
 
-        await runGroupedGradingForRows(groupedRows, providerCallQueue, processGroupedRows);
+        await flushGroupedRows();
+        flushGroupedRows = undefined;
       } else if (serialRunEvalOptions.length > 0) {
         // Run serial evaluations
         for (const evalStep of serialRunEvalOptions) {
@@ -2287,6 +2292,9 @@ class Evaluator {
       }
     } catch (err) {
       if (combinedAbortSignal.aborted) {
+        await flushGroupedRows?.();
+        flushGroupedRows = undefined;
+
         // Distinguish between max-duration timeout and user SIGINT
         // Note: targetUnavailable is handled after this block since concurrent tests
         // complete normally (abort doesn't interrupt in-flight async operations)
