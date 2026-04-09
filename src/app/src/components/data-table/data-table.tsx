@@ -32,7 +32,6 @@ import type {
 import type { DataTableProps } from './types';
 
 const UTILITY_COLUMN_IDS = new Set(['select', 'expand']);
-const SELECTION_COLUMN_SIZE = 40;
 
 type DataTableHeaderActionsProps<TData, TValue> = {
   canFilter: boolean;
@@ -344,7 +343,7 @@ export function DataTable<TData, TValue = unknown>({
           aria-label="Select row"
         />
       ),
-      size: SELECTION_COLUMN_SIZE,
+      size: 40,
       enableSorting: false,
       enableHiding: false,
       enableResizing: false,
