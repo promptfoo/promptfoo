@@ -22,11 +22,11 @@ The OSS CLI runs in your environment with your user permissions. It is **permiss
 
 Treat Promptfoo configuration files and everything they reference or evaluate against as trusted code and data. This includes referenced scripts, prompt packs, test fixtures or datasets, configured providers, models, remote content, and model-output feedback loops. Do not run Promptfoo against untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, model-output feedback loops, or pull requests unless the run is isolated and secrets are scoped for that run.
 
-Promptfoo OSS is a local eval runner, not a sandbox for adversarial eval content. Effects caused by configured eval content flowing through the local OSS eval pipeline, including provider or model outputs, built-in graders/assertions, provider requests, reports, transforms, and template rendering, are part of the OSS trust model.
+Promptfoo OSS is a local eval runner, not a sandbox for adversarial eval content. Adversarial data flowing through the configured template engine and eval pipeline (e.g., model output in grading prompts, variable values rendered through Nunjucks) is normal operation. However, if a code path outside the configured template engine or user-configured code-executing fields promotes runtime data to code, that is a vulnerability.
 
-**In scope for OSS:** behavior that escapes the documented OSS eval trust model; bypasses of supported isolation boundaries or hardening controls; secret leakage to destinations not configured as part of the eval flow.
+**In scope for OSS:** runtime data promoted to code by a code path outside the configured template engine and user-configured code-executing fields; bypasses of supported isolation boundaries or hardening controls; secret leakage to destinations not configured as part of the eval flow.
 
-**Out of scope for OSS:** effects caused by adversarial eval content within a configured OSS eval flow; code execution from explicitly configured custom code or templates in fields that execute code; direct local API or browser access to the OSS local server (`promptfoo view`); and issues requiring users to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges.
+**Out of scope for OSS:** adversarial eval content flowing through the configured template engine and eval pipeline; code execution from explicitly configured custom code or templates in fields that execute code; direct local API or browser access to the OSS local server (`promptfoo view`); and issues requiring users to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges.
 
 ### Cloud Services
 
@@ -106,7 +106,7 @@ The following are out-of-scope:
 
 - Code execution from explicitly configured custom code or templates in fields that execute code in OSS (expected behavior)
 - Direct local API access or browser access to the OSS local server (`promptfoo view`)
-- Effects caused by adversarial eval content within a configured OSS eval flow, including provider or model outputs, built-in graders/assertions, provider requests, reports, transforms, and template rendering
+- Adversarial eval content flowing through the configured template engine and eval pipeline (e.g., model output in grading prompts or reports)
 - Issues requiring users to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Social engineering, phishing, or physical attacks
