@@ -20,8 +20,16 @@ import type { Config } from '../config/schema';
 
 // Capacity error detection and retry configuration
 const CAPACITY_ERROR_MESSAGE = 'Server at capacity';
-const MAX_RETRIES = 7;
+const MCP_REQUEST_TIMEOUT_ERROR_MESSAGE = 'MCP error -32001: Request timed out';
+const MAX_CAPACITY_ATTEMPTS = 7;
+const MAX_MCP_TIMEOUT_ATTEMPTS = 2;
 const BASE_DELAY_MS = 1000;
+
+interface RetryPolicy {
+  maxAttempts: number;
+  status: string;
+  waitStatus: string;
+}
 
 /**
  * Options for scan execution
@@ -182,11 +190,38 @@ function isCapacityError(error: unknown): boolean {
   return false;
 }
 
+function isMcpRequestTimeout(error: unknown): boolean {
+  if (error instanceof Error) {
+    return error.message.includes(MCP_REQUEST_TIMEOUT_ERROR_MESSAGE);
+  }
+  return false;
+}
+
+function getRetryPolicy(error: unknown): RetryPolicy | undefined {
+  if (isCapacityError(error)) {
+    return {
+      maxAttempts: MAX_CAPACITY_ATTEMPTS,
+      status: 'Server busy',
+      waitStatus: 'Server busy',
+    };
+  }
+
+  if (isMcpRequestTimeout(error)) {
+    return {
+      maxAttempts: MAX_MCP_TIMEOUT_ATTEMPTS,
+      status: 'Code scan timed out waiting for repository access',
+      waitStatus: 'Repository access timed out',
+    };
+  }
+}
+
 /**
- * Execute scan request with retry for capacity errors
+ * Execute scan request with retry for transient scanner errors
  *
  * When the server is at capacity, it returns "Server at capacity. Please retry."
- * This wrapper retries with exponential backoff + jitter to spread load.
+ * This wrapper retries with exponential backoff + jitter to spread load. Remote
+ * MCP request timeouts get one retry because each failed attempt already waited
+ * on the server-side request timeout.
  *
  * Backoff schedule: ~1s, ~2s, ~4s, ~8s, ~16s, ~32s (total ~63s max)
  *
@@ -203,17 +238,19 @@ export async function executeScanRequestWithRetry(
 ): Promise<ScanResponse> {
   const { showSpinner, spinner } = options;
 
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+  for (let attempt = 0; attempt < MAX_CAPACITY_ATTEMPTS; attempt++) {
     try {
       return await executeScanRequest(client, request, options);
     } catch (error) {
-      // Only retry capacity errors, not other failures
-      if (!isCapacityError(error)) {
+      const retryPolicy = getRetryPolicy(error);
+
+      // Only retry known transient scanner errors, not other failures.
+      if (!retryPolicy) {
         throw error;
       }
 
       // On last attempt, throw the error
-      if (attempt === MAX_RETRIES - 1) {
+      if (attempt === retryPolicy.maxAttempts - 1) {
         throw error;
       }
 
@@ -222,13 +259,13 @@ export async function executeScanRequestWithRetry(
       const delay = BASE_DELAY_MS * Math.pow(2, attempt) * jitter;
 
       logger.debug(
-        `Server busy, retrying in ${Math.round(delay / 1000)}s (attempt ${attempt + 1}/${MAX_RETRIES})`,
+        `${retryPolicy.status}, retrying in ${Math.round(delay / 1000)}s (attempt ${attempt + 1}/${retryPolicy.maxAttempts})`,
       );
 
       // Update spinner during retry wait (abort-aware)
       if (showSpinner && spinner) {
         const originalText = spinner.text;
-        spinner.text = `Server busy, retrying in ${Math.round(delay / 1000)}s...`;
+        spinner.text = `${retryPolicy.waitStatus}, retrying in ${Math.round(delay / 1000)}s...`;
         await sleepWithAbort(delay, options.abortController.signal);
         spinner.text = originalText;
       } else {
