@@ -4133,6 +4133,56 @@ describe('evaluator', () => {
     expect(callOrder).toEqual(['judge-one', 'judge-one', 'judge-two', 'judge-two']);
   });
 
+  it('keeps model-graded assertions row-first when prompts use _conversation', async () => {
+    const callOrder: string[] = [];
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string) => {
+        const topic = prompt.endsWith('Current: alpha') ? 'alpha' : 'beta';
+        callOrder.push(`target:${topic}`);
+        return {
+          output: `Target output for ${topic}`,
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const judge: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge'),
+      callApi: vi.fn(async () => {
+        callOrder.push('judge');
+        return {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'judge passed' }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [
+        toPrompt(
+          '{% for turn in _conversation %}{{ turn.input }} => {{ turn.output }}\n{% endfor %}Current: {{topic}}',
+        ),
+      ],
+      tests: [
+        {
+          vars: { topic: 'alpha' },
+          assert: [{ type: 'llm-rubric', value: 'Judge alpha', provider: judge }],
+        },
+        {
+          vars: { topic: 'beta' },
+          assert: [{ type: 'llm-rubric', value: 'Judge beta', provider: judge }],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(2);
+    expect(callOrder).toEqual(['target:alpha', 'judge', 'target:beta', 'judge']);
+  });
+
   it('records deferred model-graded provider failures as row errors when maxConcurrency is 1', async () => {
     const provider: ApiProvider = {
       id: vi.fn().mockReturnValue('target-provider'),

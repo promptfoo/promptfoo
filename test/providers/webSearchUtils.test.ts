@@ -108,7 +108,7 @@ describe('webSearchUtils', () => {
 
     it('should return true for OpenAI responses provider with web_search_preview tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.1',
+        id: () => 'openai:responses:gpt-5.4-2026-03-05',
         config: {
           tools: [{ type: 'web_search_preview' }],
         },
@@ -168,7 +168,7 @@ describe('webSearchUtils', () => {
 
     it('should return false for OpenAI responses provider without web_search_preview', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.1',
+        id: () => 'openai:responses:gpt-5.4-2026-03-05',
         config: {
           tools: [{ type: 'code_interpreter' }],
         },
@@ -215,7 +215,7 @@ describe('webSearchUtils', () => {
 
     it('should return false for provider with no tools configured', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.1',
+        id: () => 'openai:responses:gpt-5.4-2026-03-05',
         config: {},
       };
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
@@ -266,7 +266,7 @@ describe('webSearchUtils', () => {
 
     it('should load OpenAI provider first when preferAnthropic is false', async () => {
       const mockProvider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.1',
+        id: () => 'openai:responses:gpt-5.4-2026-03-05',
       };
       mockLoadApiProvider.mockResolvedValueOnce(mockProvider as ApiProvider);
 
@@ -274,7 +274,7 @@ describe('webSearchUtils', () => {
 
       expect(result).toBe(mockProvider);
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'openai:responses:gpt-5.1',
+        'openai:responses:gpt-5.4-2026-03-05',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({
@@ -289,7 +289,7 @@ describe('webSearchUtils', () => {
 
     it('should fallback to next provider when first fails', async () => {
       const mockProvider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.1',
+        id: () => 'openai:responses:gpt-5.4-2026-03-05',
       };
       mockLoadApiProvider
         .mockRejectedValueOnce(new Error('Anthropic API key not found'))
@@ -382,7 +382,7 @@ describe('webSearchUtils', () => {
 
     it('should use default value (false) for preferAnthropic parameter', async () => {
       const mockProvider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.1',
+        id: () => 'openai:responses:gpt-5.4-2026-03-05',
       };
       mockLoadApiProvider.mockResolvedValueOnce(mockProvider as ApiProvider);
 
@@ -390,7 +390,7 @@ describe('webSearchUtils', () => {
 
       // Should try OpenAI first (since preferAnthropic defaults to false)
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'openai:responses:gpt-5.1',
+        'openai:responses:gpt-5.4-2026-03-05',
         expect.anything(),
       );
     });

@@ -30,6 +30,7 @@ import {
   Severity,
   STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
+  TEEN_SAFETY_PLUGINS,
   TELECOM_PLUGINS,
 } from './constants';
 import { extractEntities } from './extraction/entities';
@@ -253,6 +254,7 @@ const categories = {
   insurance: INSURANCE_PLUGINS,
   financial: FINANCIAL_PLUGINS,
   telecom: TELECOM_PLUGINS,
+  'teen-safety': TEEN_SAFETY_PLUGINS,
 } as const;
 
 /**
