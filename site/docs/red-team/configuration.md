@@ -448,6 +448,8 @@ You can target specific tactics within MITRE ATLAS:
 plugins:
   - mitre:atlas:reconnaissance
   - mitre:atlas:initial-access
+  - mitre:atlas:persistence
+  - mitre:atlas:credential-access
   - mitre:atlas:impact
 ```
 
