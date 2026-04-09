@@ -103,9 +103,9 @@ async function createMultipartDocumentSummarizerServer() {
           documentQuery,
         }),
       );
-    } catch (error) {
+    } catch {
       res.writeHead(500, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
+      res.end(JSON.stringify({ error: 'mock server failed to parse multipart request' }));
     }
   });
 
