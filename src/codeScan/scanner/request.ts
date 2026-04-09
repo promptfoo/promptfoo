@@ -26,6 +26,7 @@ const MAX_MCP_TIMEOUT_ATTEMPTS = 2;
 const BASE_DELAY_MS = 1000;
 
 interface RetryPolicy {
+  key: string;
   maxAttempts: number;
   status: string;
   waitStatus: string;
@@ -200,6 +201,7 @@ function isMcpRequestTimeout(error: unknown): boolean {
 function getRetryPolicy(error: unknown): RetryPolicy | undefined {
   if (isCapacityError(error)) {
     return {
+      key: 'capacity',
       maxAttempts: MAX_CAPACITY_ATTEMPTS,
       status: 'Server busy',
       waitStatus: 'Server busy',
@@ -208,6 +210,7 @@ function getRetryPolicy(error: unknown): RetryPolicy | undefined {
 
   if (isMcpRequestTimeout(error)) {
     return {
+      key: 'mcp_timeout',
       maxAttempts: MAX_MCP_TIMEOUT_ATTEMPTS,
       status: 'Code scan timed out waiting for repository access',
       waitStatus: 'Repository access timed out',
@@ -225,7 +228,8 @@ function getRetryPolicy(error: unknown): RetryPolicy | undefined {
  * MCP request timeouts get one retry because each failed attempt already waited
  * on the server-side request timeout.
  *
- * Backoff schedule: ~1s, ~2s, ~4s, ~8s, ~16s, ~32s (total ~63s max)
+ * Capacity backoff schedule: ~1s, ~2s, ~4s, ~8s, ~16s, ~32s (up to 7 attempts, ~63s max)
+ * MCP timeout backoff: ~1s (up to 2 attempts)
  *
  * @param client - Connected agent client
  * @param request - Scan request to send
@@ -254,8 +258,8 @@ export async function executeScanRequestWithRetry(
       }
 
       // Track attempts per error type so mixed error sequences respect each policy's budget.
-      const policyAttempts = (attemptsByPolicy.get(retryPolicy.status) ?? 0) + 1;
-      attemptsByPolicy.set(retryPolicy.status, policyAttempts);
+      const policyAttempts = (attemptsByPolicy.get(retryPolicy.key) ?? 0) + 1;
+      attemptsByPolicy.set(retryPolicy.key, policyAttempts);
 
       if (policyAttempts >= retryPolicy.maxAttempts) {
         throw error;
