@@ -13,6 +13,8 @@ import type {
 } from '../../types/index';
 import type { OpenAiCompletionOptions } from './types';
 
+const MAX_RESPONSE_OUTPUT_TOKENS_MAX = 4096;
+
 /**
  * Convert PCM16 audio data to WAV format for browser playback
  * @param pcmData Raw PCM16 audio data buffer
@@ -138,8 +140,21 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
   private getMaxResponseOutputTokens(): number | 'inf' {
     const value = this.config.max_response_output_tokens;
-    if (typeof value === 'number' && value > 0) {
+    if (value === 'inf') {
       return value;
+    }
+    if (
+      typeof value === 'number' &&
+      Number.isInteger(value) &&
+      value >= 1 &&
+      value <= MAX_RESPONSE_OUTPUT_TOKENS_MAX
+    ) {
+      return value;
+    }
+    if (value !== undefined) {
+      logger.debug(
+        `Invalid Realtime max_response_output_tokens value ${JSON.stringify(value)}; using 'inf'`,
+      );
     }
     return 'inf';
   }

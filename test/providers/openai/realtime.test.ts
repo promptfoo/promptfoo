@@ -207,17 +207,27 @@ describe('OpenAI Realtime Provider', () => {
       });
     });
 
-    it('should fall back to inf when max_response_output_tokens is 0 in the session body', async () => {
+    it.each([
+      [0, 'inf'],
+      [-1, 'inf'],
+      [1.5, 'inf'],
+      [4097, 'inf'],
+      ['0', 'inf'],
+      ['1', 'inf'],
+      ['inf', 'inf'],
+      [1, 1],
+      [4096, 4096],
+    ] as const)('normalizes max_response_output_tokens=%s to %s in the session body', async (maxResponseOutputTokens, expected) => {
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
         config: {
           modalities: ['text'],
-          max_response_output_tokens: 0,
+          max_response_output_tokens: maxResponseOutputTokens as any,
         },
       });
 
       const body = await provider.getRealtimeSessionBody();
 
-      expect(body.max_response_output_tokens).toBe('inf');
+      expect(body.max_response_output_tokens).toBe(expected);
     });
 
     it('should handle basic text response with persistent connection', async () => {
@@ -771,18 +781,16 @@ describe('OpenAI Realtime Provider', () => {
       );
     });
 
-    it('falls back to inf when max_response_output_tokens is 0 in session.update', async () => {
+    it('normalizes invalid max_response_output_tokens in session.update', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
-        config: { max_response_output_tokens: 0 },
+        config: { max_response_output_tokens: -1 },
       });
       const promise = provider.directWebSocketRequest('hi');
 
       mockHandlers.open.forEach((h) => h());
 
-      expect(mockWs.send).toHaveBeenNthCalledWith(
-        1,
-        expect.stringContaining('"max_response_output_tokens":"inf"'),
-      );
+      const sessionUpdate = JSON.parse(mockWs.send.mock.calls[0][0]);
+      expect(sessionUpdate.session.max_response_output_tokens).toBe('inf');
 
       const messageHandlers = mockHandlers.message;
       const lastHandler = messageHandlers[messageHandlers.length - 1];
