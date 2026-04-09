@@ -213,6 +213,8 @@ function getRetryPolicy(error: unknown): RetryPolicy | undefined {
       waitStatus: 'Repository access timed out',
     };
   }
+
+  return undefined;
 }
 
 /**
@@ -238,6 +240,8 @@ export async function executeScanRequestWithRetry(
 ): Promise<ScanResponse> {
   const { showSpinner, spinner } = options;
 
+  const attemptsByPolicy = new Map<string, number>();
+
   for (let attempt = 0; attempt < MAX_CAPACITY_ATTEMPTS; attempt++) {
     try {
       return await executeScanRequest(client, request, options);
@@ -249,8 +253,11 @@ export async function executeScanRequestWithRetry(
         throw error;
       }
 
-      // On last attempt, throw the error
-      if (attempt === retryPolicy.maxAttempts - 1) {
+      // Track attempts per error type so mixed error sequences respect each policy's budget.
+      const policyAttempts = (attemptsByPolicy.get(retryPolicy.status) ?? 0) + 1;
+      attemptsByPolicy.set(retryPolicy.status, policyAttempts);
+
+      if (policyAttempts >= retryPolicy.maxAttempts) {
         throw error;
       }
 

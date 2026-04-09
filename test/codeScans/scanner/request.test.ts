@@ -129,6 +129,52 @@ describe('executeScanRequestWithRetry', () => {
     expect(sleepWithAbort).toHaveBeenCalledTimes(2);
   });
 
+  it('succeeds on first attempt without retrying', async () => {
+    const { client } = createMockAgentClient([{ type: 'complete', response: scanResponse }]);
+
+    await expect(
+      executeScanRequestWithRetry(client, scanRequest, createExecutionOptions()),
+    ).resolves.toEqual(scanResponse);
+
+    expect(client.start).toHaveBeenCalledTimes(1);
+    expect(sleepWithAbort).not.toHaveBeenCalled();
+  });
+
+  it('enforces MCP timeout budget independently when preceded by capacity errors', async () => {
+    const { client } = createMockAgentClient([
+      { type: 'error', message: 'Server at capacity. Please retry.' },
+      { type: 'error', message: 'Server at capacity. Please retry.' },
+      { type: 'error', message: 'Internal server error: MCP error -32001: Request timed out' },
+      { type: 'error', message: 'Internal server error: MCP error -32001: Request timed out' },
+      { type: 'complete', response: scanResponse },
+    ]);
+
+    // Two capacity retries succeed, then the MCP timeout budget (2) is exhausted
+    await expect(
+      executeScanRequestWithRetry(client, scanRequest, createExecutionOptions()),
+    ).rejects.toThrow('Internal server error: MCP error -32001: Request timed out');
+
+    // 2 capacity + 2 MCP timeout = 4 total starts
+    expect(client.start).toHaveBeenCalledTimes(4);
+    expect(sleepWithAbort).toHaveBeenCalledTimes(3);
+  });
+
+  it('enforces capacity budget independently when preceded by MCP timeout', async () => {
+    const { client } = createMockAgentClient([
+      { type: 'error', message: 'Internal server error: MCP error -32001: Request timed out' },
+      { type: 'error', message: 'Server at capacity. Please retry.' },
+      { type: 'complete', response: scanResponse },
+    ]);
+
+    // MCP timeout uses 1 of its 2 attempts, then capacity error uses 1 of its 7 → succeeds
+    await expect(
+      executeScanRequestWithRetry(client, scanRequest, createExecutionOptions()),
+    ).resolves.toEqual(scanResponse);
+
+    expect(client.start).toHaveBeenCalledTimes(3);
+    expect(sleepWithAbort).toHaveBeenCalledTimes(2);
+  });
+
   it('does not retry non-transient scanner errors', async () => {
     const { client } = createMockAgentClient([
       { type: 'error', message: 'Invalid scan request' },
