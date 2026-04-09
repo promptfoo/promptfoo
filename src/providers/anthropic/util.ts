@@ -3,7 +3,14 @@ import { calculateCost as calculateCostBase } from '../shared';
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type { TokenUsage } from '../../types/index';
-import type { AnthropicToolConfig, WebFetchToolConfig, WebSearchToolConfig } from './types';
+import type {
+  AnthropicToolConfig,
+  WebFetchToolConfig,
+  WebFetchToolConfig20260209,
+  WebFetchToolConfigV2,
+  WebSearchToolConfig,
+  WebSearchToolConfig20260209,
+} from './types';
 
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
@@ -22,7 +29,7 @@ export const ANTHROPIC_MODELS = [
       output: 25 / 1e6, // $25 / MTok
     },
   })),
-  ...['claude-opus-4-5-20251101', 'claude-opus-4-5-latest'].map((model) => ({
+  ...['claude-opus-4-5', 'claude-opus-4-5-20251101', 'claude-opus-4-5-latest'].map((model) => ({
     id: model,
     cost: {
       input: 5 / 1e6, // $5 / MTok
@@ -30,6 +37,7 @@ export const ANTHROPIC_MODELS = [
     },
   })),
   ...[
+    'claude-opus-4-1',
     'claude-opus-4-1-20250805',
     'claude-opus-4-20250514',
     'claude-opus-4-0',
@@ -42,6 +50,7 @@ export const ANTHROPIC_MODELS = [
     },
   })),
   ...[
+    'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
     'claude-sonnet-4-5-latest',
     'claude-sonnet-4-20250514',
@@ -54,7 +63,7 @@ export const ANTHROPIC_MODELS = [
       output: 15 / 1e6, // $15 / MTok
     },
   })),
-  ...['claude-haiku-4-5-20251001', 'claude-haiku-4-5-latest'].map((model) => ({
+  ...['claude-haiku-4-5', 'claude-haiku-4-5-20251001', 'claude-haiku-4-5-latest'].map((model) => ({
     id: model,
     cost: {
       input: 1 / 1e6, // $1 / MTok
@@ -252,34 +261,80 @@ export function parseMessages(messages: string): {
   return { system, extractedMessages, thinking };
 }
 
+/**
+ * Compute input cost with Anthropic cache pricing applied.
+ * Anthropic docs: input_tokens is the non-cached portion; cache_read and cache_creation are additive.
+ * Cache reads cost 10% of base rate (90% discount), cache writes cost 125% of base rate (25% surcharge).
+ */
+function calculateCacheInputCost(
+  baseInputRate: number,
+  uncachedInputTokens: number,
+  cacheRead: number,
+  cacheCreation: number,
+): number {
+  return (
+    uncachedInputTokens * baseInputRate +
+    cacheRead * baseInputRate * 0.1 +
+    cacheCreation * baseInputRate * 1.25
+  );
+}
+
 export function calculateAnthropicCost(
   modelName: string,
   config: any,
   promptTokens?: number,
   completionTokens?: number,
+  cacheReadTokens?: number,
+  cacheCreationTokens?: number,
 ): number | undefined {
+  if (config.cost != null) {
+    return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
+  }
+
+  if (
+    !Number.isFinite(promptTokens) ||
+    !Number.isFinite(completionTokens) ||
+    typeof promptTokens === 'undefined' ||
+    typeof completionTokens === 'undefined'
+  ) {
+    return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
+  }
+
+  const cacheRead = cacheReadTokens ?? 0;
+  const cacheCreation = cacheCreationTokens ?? 0;
+
+  // Anthropic docs: the >200k threshold considers input + cache read + cache creation tokens
+  const effectiveInputTokens = promptTokens + cacheRead + cacheCreation;
+
   // Claude Sonnet models with 1M context support have tiered pricing based on prompt size
   const hasTieredPricing = [
+    'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
     'claude-sonnet-4-5-latest',
     'claude-sonnet-4-6',
     'claude-sonnet-4-6-latest',
   ].includes(modelName);
 
-  if (
-    hasTieredPricing &&
-    Number.isFinite(promptTokens) &&
-    Number.isFinite(completionTokens) &&
-    typeof promptTokens !== 'undefined' &&
-    typeof completionTokens !== 'undefined'
-  ) {
-    // Tiered pricing for Claude Sonnet 4.5+:
-    // - If prompt > 200k tokens: $6/MTok input, $22.50/MTok output
-    // - Otherwise: $3/MTok input, $15/MTok output
-    const inputCost = config.cost ?? (promptTokens > 200_000 ? 6 / 1e6 : 3 / 1e6);
-    const outputCost = config.cost ?? (promptTokens > 200_000 ? 22.5 / 1e6 : 15 / 1e6);
+  if (hasTieredPricing) {
+    const isLongContext = effectiveInputTokens > 200_000;
+    const baseInputRate = isLongContext ? 6 / 1e6 : 3 / 1e6;
+    const outputRate = isLongContext ? 22.5 / 1e6 : 15 / 1e6;
 
-    return inputCost * promptTokens + outputCost * completionTokens;
+    return (
+      calculateCacheInputCost(baseInputRate, promptTokens, cacheRead, cacheCreation) +
+      completionTokens * outputRate
+    );
+  }
+
+  // For non-tiered models, apply cache pricing only when cache tokens are present
+  if (cacheRead || cacheCreation) {
+    const modelInfo = ANTHROPIC_MODELS.find((m) => m.id === modelName);
+    if (modelInfo) {
+      return (
+        calculateCacheInputCost(modelInfo.cost.input, promptTokens, cacheRead, cacheCreation) +
+        completionTokens * modelInfo.cost.output
+      );
+    }
   }
 
   return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
@@ -287,15 +342,33 @@ export function calculateAnthropicCost(
 
 export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
-    const total_tokens = data.usage.input_tokens + data.usage.output_tokens;
+    // Anthropic: total input = input_tokens + cache_read_input_tokens + cache_creation_input_tokens
+    const cacheRead = data.usage.cache_read_input_tokens ?? 0;
+    const cacheCreation = data.usage.cache_creation_input_tokens ?? 0;
+    const allInputTokens = (data.usage.input_tokens ?? 0) + cacheRead + cacheCreation;
+    const total_tokens = allInputTokens + (data.usage.output_tokens ?? 0);
+
     if (cached) {
       return { cached: total_tokens, total: total_tokens };
     } else {
-      return {
+      const usage: Partial<TokenUsage> = {
         total: total_tokens,
-        prompt: data.usage.input_tokens || 0,
-        completion: data.usage.output_tokens || 0,
+        prompt: allInputTokens,
+        completion: data.usage.output_tokens ?? 0,
       };
+
+      // Track Anthropic prompt caching details (stored in completionDetails since there is no dedicated inputDetails field)
+      if (
+        data.usage.cache_read_input_tokens != null ||
+        data.usage.cache_creation_input_tokens != null
+      ) {
+        usage.completionDetails = {
+          cacheReadInputTokens: cacheRead,
+          cacheCreationInputTokens: cacheCreation,
+        };
+      }
+
+      return usage;
     }
   }
   return {};
@@ -308,27 +381,44 @@ export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConf
   processedTools: (
     | Anthropic.Tool
     | Anthropic.Beta.Messages.BetaWebFetchTool20250910
+    | Anthropic.Messages.WebFetchTool20260209
+    | Anthropic.Messages.WebFetchTool20260309
     | Anthropic.Beta.Messages.BetaWebSearchTool20250305
+    | Anthropic.Messages.WebSearchTool20260209
   )[];
   requiredBetaFeatures: string[];
 } {
   const processedTools: (
     | Anthropic.Tool
     | Anthropic.Beta.Messages.BetaWebFetchTool20250910
+    | Anthropic.Messages.WebFetchTool20260209
+    | Anthropic.Messages.WebFetchTool20260309
     | Anthropic.Beta.Messages.BetaWebSearchTool20250305
+    | Anthropic.Messages.WebSearchTool20260209
   )[] = [];
   const requiredBetaFeatures: string[] = [];
+
+  const addRequiredBetaFeature = (feature: string) => {
+    if (!requiredBetaFeatures.includes(feature)) {
+      requiredBetaFeatures.push(feature);
+    }
+  };
 
   for (const tool of tools) {
     if ('type' in tool) {
       // Handle our custom tool configs
       if (tool.type === 'web_fetch_20250910') {
         processedTools.push(transformWebFetchTool(tool as WebFetchToolConfig));
-        if (!requiredBetaFeatures.includes('web-fetch-2025-09-10')) {
-          requiredBetaFeatures.push('web-fetch-2025-09-10');
-        }
+        addRequiredBetaFeature('web-fetch-2025-09-10');
+      } else if (tool.type === 'web_fetch_20260209') {
+        processedTools.push(transformWebFetchTool20260209(tool as WebFetchToolConfig20260209));
+      } else if (tool.type === 'web_fetch_20260309') {
+        processedTools.push(transformWebFetchToolV2(tool as WebFetchToolConfigV2));
       } else if (tool.type === 'web_search_20250305') {
         processedTools.push(transformWebSearchTool(tool as WebSearchToolConfig));
+        // Web search doesn't need beta header in latest SDK
+      } else if (tool.type === 'web_search_20260209') {
+        processedTools.push(transformWebSearchTool20260209(tool as WebSearchToolConfig20260209));
         // Web search doesn't need beta header in latest SDK
       } else {
         // Pass through other tool types (standard Anthropic tools)
@@ -337,13 +427,11 @@ export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConf
     } else {
       // Standard Anthropic tool
       processedTools.push(tool as Anthropic.Tool);
+    }
 
-      // Check if tool uses strict mode (structured outputs for tools)
-      if ('strict' in tool && tool.strict === true) {
-        if (!requiredBetaFeatures.includes('structured-outputs-2025-11-13')) {
-          requiredBetaFeatures.push('structured-outputs-2025-11-13');
-        }
-      }
+    // Check if tool uses strict mode (structured outputs for tools)
+    if ('strict' in tool && tool.strict === true) {
+      addRequiredBetaFeature('structured-outputs-2025-11-13');
     }
   }
 
@@ -351,8 +439,44 @@ export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConf
 }
 
 /**
- * Transform web fetch tool config to Anthropic beta tool format
+ * Apply shared web fetch tool fields from config onto the SDK tool object.
  */
+function applyWebFetchFields(
+  tool:
+    | Anthropic.Beta.Messages.BetaWebFetchTool20250910
+    | Anthropic.Messages.WebFetchTool20260209
+    | Anthropic.Messages.WebFetchTool20260309,
+  config: WebFetchToolConfig | WebFetchToolConfig20260209 | WebFetchToolConfigV2,
+): void {
+  if (config.allowed_callers !== undefined) {
+    tool.allowed_callers = config.allowed_callers;
+  }
+  if (config.max_uses !== undefined) {
+    tool.max_uses = config.max_uses;
+  }
+  if (config.allowed_domains !== undefined) {
+    tool.allowed_domains = config.allowed_domains;
+  }
+  if (config.blocked_domains !== undefined) {
+    tool.blocked_domains = config.blocked_domains;
+  }
+  if (config.citations !== undefined) {
+    tool.citations = config.citations;
+  }
+  if (config.max_content_tokens !== undefined) {
+    tool.max_content_tokens = config.max_content_tokens;
+  }
+  if (config.cache_control !== undefined) {
+    tool.cache_control = config.cache_control;
+  }
+  if (config.defer_loading !== undefined) {
+    tool.defer_loading = config.defer_loading;
+  }
+  if (config.strict !== undefined) {
+    tool.strict = config.strict;
+  }
+}
+
 function transformWebFetchTool(
   config: WebFetchToolConfig,
 ): Anthropic.Beta.Messages.BetaWebFetchTool20250910 {
@@ -360,27 +484,65 @@ function transformWebFetchTool(
     type: 'web_fetch_20250910',
     name: 'web_fetch',
   };
+  applyWebFetchFields(tool, config);
+  return tool;
+}
 
+function transformWebFetchTool20260209(
+  config: WebFetchToolConfig20260209,
+): Anthropic.Messages.WebFetchTool20260209 {
+  const tool: Anthropic.Messages.WebFetchTool20260209 = {
+    type: 'web_fetch_20260209',
+    name: 'web_fetch',
+  };
+  applyWebFetchFields(tool, config);
+  return tool;
+}
+
+function transformWebFetchToolV2(
+  config: WebFetchToolConfigV2,
+): Anthropic.Messages.WebFetchTool20260309 {
+  const tool: Anthropic.Messages.WebFetchTool20260309 = {
+    type: 'web_fetch_20260309',
+    name: 'web_fetch',
+  };
+  applyWebFetchFields(tool, config);
+  if (config.use_cache !== undefined) {
+    tool.use_cache = config.use_cache;
+  }
+  return tool;
+}
+
+function applyWebSearchFields(
+  tool:
+    | Anthropic.Beta.Messages.BetaWebSearchTool20250305
+    | Anthropic.Messages.WebSearchTool20260209,
+  config: WebSearchToolConfig | WebSearchToolConfig20260209,
+): void {
+  if (config.allowed_callers !== undefined) {
+    tool.allowed_callers = config.allowed_callers;
+  }
+  if (config.allowed_domains !== undefined) {
+    tool.allowed_domains = config.allowed_domains;
+  }
+  if (config.blocked_domains !== undefined) {
+    tool.blocked_domains = config.blocked_domains;
+  }
+  if (config.cache_control !== undefined) {
+    tool.cache_control = config.cache_control;
+  }
+  if (config.defer_loading !== undefined) {
+    tool.defer_loading = config.defer_loading;
+  }
   if (config.max_uses !== undefined) {
     tool.max_uses = config.max_uses;
   }
-  if (config.allowed_domains) {
-    tool.allowed_domains = config.allowed_domains;
+  if (config.strict !== undefined) {
+    tool.strict = config.strict;
   }
-  if (config.blocked_domains) {
-    tool.blocked_domains = config.blocked_domains;
+  if (config.user_location !== undefined) {
+    tool.user_location = config.user_location;
   }
-  if (config.citations) {
-    tool.citations = config.citations;
-  }
-  if (config.max_content_tokens !== undefined) {
-    tool.max_content_tokens = config.max_content_tokens;
-  }
-  if (config.cache_control) {
-    tool.cache_control = config.cache_control;
-  }
-
-  return tool;
 }
 
 /**
@@ -393,13 +555,17 @@ function transformWebSearchTool(
     type: 'web_search_20250305',
     name: 'web_search',
   };
+  applyWebSearchFields(tool, config);
+  return tool;
+}
 
-  if (config.max_uses !== undefined) {
-    tool.max_uses = config.max_uses;
-  }
-  if (config.cache_control) {
-    tool.cache_control = config.cache_control;
-  }
-
+function transformWebSearchTool20260209(
+  config: WebSearchToolConfig20260209,
+): Anthropic.Messages.WebSearchTool20260209 {
+  const tool: Anthropic.Messages.WebSearchTool20260209 = {
+    type: 'web_search_20260209',
+    name: 'web_search',
+  };
+  applyWebSearchFields(tool, config);
   return tool;
 }

@@ -343,7 +343,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
       timeout: config?.timeout || 180000,
       cache: config?.cache,
       cacheTTL: config?.cacheTTL,
-      retries: config?.retries || 3,
+      retries: config?.retries ?? 3,
 
       // Agent-specific config
       agentId: config?.agentId,

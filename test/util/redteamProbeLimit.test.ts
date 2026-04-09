@@ -138,6 +138,7 @@ describe('redteamProbeLimit', () => {
   });
 
   afterEach(() => {
+    vi.runOnlyPendingTimers();
     vi.useRealTimers();
     vi.resetAllMocks();
   });
@@ -176,11 +177,8 @@ describe('redteamProbeLimit', () => {
     });
 
     it('should not count evals from previous months', () => {
-      const lastMonth = new Date();
-      lastMonth.setDate(1);
-      lastMonth.setMonth(lastMonth.getMonth() - 1);
       insertRedteamEval({
-        createdAt: lastMonth.getTime(),
+        createdAt: getMonthStartTimestamp() - 1,
         numResults: 5,
         numRequestsPerResult: 1,
       });

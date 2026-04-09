@@ -198,6 +198,25 @@ describe('JavaScript/TypeScript Provider Smoke Tests', () => {
       expect(parsed.results.results[0].success).toBe(true);
       expect(parsed.results.results[0].response.output).toContain('TypeScript Echo:');
     });
+
+    it('3.3.2 - TypeScript provider class with transitive TypeScript imports', () => {
+      const configPath = path.join(CONFIGS_DIR, 'provider-ts-transitive.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'ts-provider-transitive-output.json');
+
+      const { exitCode, stderr } = runCli(
+        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
+        {
+          cwd: CONFIGS_DIR,
+        },
+      );
+
+      expect(exitCode, stderr).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      expect(parsed.results.results[0].success).toBe(true);
+      expect(parsed.results.results[0].response.output).toContain('TypeScript Transitive Echo:');
+    });
   });
 });
 

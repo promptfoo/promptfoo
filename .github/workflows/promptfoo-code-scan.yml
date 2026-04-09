@@ -13,6 +13,8 @@ jobs:
   security-scan:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     permissions:
       contents: read
       pull-requests: write
@@ -24,8 +26,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Use Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+
       - name: Run Promptfoo Code Scan
         uses: promptfoo/code-scan-action@v0
+        env:
+          # promptfoo@0.121.3 is compatible, but newer @asamuzakjp/css-color releases
+          # currently break jsdom's CommonJS import path during the global CLI install.
+          NPM_CONFIG_BEFORE: '2026-03-29T00:00:00.000Z'
+          # Avoid combining the workflow's before pin with this repo's project .npmrc
+          # min-release-age setting when the published action invokes nested npx commands.
+          NPM_CONFIG_LOCATION: 'global'
         with:
           min-severity: medium
           enable-fork-prs: true
