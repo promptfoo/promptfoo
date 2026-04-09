@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DataTable } from './data-table';
@@ -42,6 +42,14 @@ const headerFilterRows: HeaderFilterRow[] = [
   { id: '3', name: 'Row Three', status: 'gamma' },
   { id: '4', name: 'Row Four', status: 'alpha' },
 ];
+
+const openHeaderFilterPopover = async (columnHeader: string) => {
+  fireEvent.click(screen.getByRole('button', { name: `Filter ${columnHeader}` }));
+  const heading = await screen.findByText(`Filter ${columnHeader}`);
+  const popover = heading.closest('[data-radix-popper-content-wrapper]');
+  expect(popover).toBeInTheDocument();
+  return popover as HTMLElement;
+};
 
 describe('DataTable', () => {
   const columns: ColumnDef<TestRow>[] = [
@@ -125,6 +133,28 @@ describe('DataTable', () => {
     expect(screen.getByText('Name')).toBeInTheDocument();
   });
 
+  it('should sort rows when a sortable column header is clicked', async () => {
+    const sortableRows: TestRow[] = [
+      { id: '1', name: 'Charlie' },
+      { id: '2', name: 'Alpha' },
+      { id: '3', name: 'Bravo' },
+    ];
+
+    render(<DataTable columns={columns} data={sortableRows} />);
+
+    const nameHeader = screen.getByText('Name').closest('th') as HTMLElement;
+    expect(nameHeader).toBeInTheDocument();
+
+    fireEvent.click(nameHeader);
+
+    await waitFor(() => {
+      const renderedRows = Array.from(document.querySelectorAll('tbody tr[data-rowindex]'));
+      expect(renderedRows[0]).toHaveTextContent('Alpha');
+      expect(renderedRows[1]).toHaveTextContent('Bravo');
+      expect(renderedRows[2]).toHaveTextContent('Charlie');
+    });
+  });
+
   it('should display loading state when isLoading is true', () => {
     render(<DataTable columns={columns} data={[]} isLoading />);
 
@@ -198,6 +228,27 @@ describe('DataTable', () => {
     expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
   });
 
+  it('should preserve column visibility state when reopening the column menu', async () => {
+    const user = userEvent.setup();
+    const data: TestRow[] = [
+      { id: '1', name: 'Item 1' },
+      { id: '2', name: 'Item 2' },
+    ];
+
+    render(<DataTable columns={columns} data={data} />);
+
+    await user.click(screen.getByRole('button', { name: /Columns/i }));
+    const idMenuItem = await screen.findByRole('menuitemcheckbox', { name: 'ID' });
+    expect(idMenuItem).toHaveAttribute('aria-checked', 'true');
+
+    await user.click(idMenuItem);
+    await waitFor(() => expect(screen.queryByRole('columnheader', { name: 'ID' })).toBeNull());
+
+    await user.click(screen.getByRole('button', { name: /Columns/i }));
+    const reopenedIdMenuItem = await screen.findByRole('menuitemcheckbox', { name: 'ID' });
+    expect(reopenedIdMenuItem).toHaveAttribute('aria-checked', 'false');
+  });
+
   it('should rehydrate toolbar filter rows from active column filters when reopened', async () => {
     const user = userEvent.setup();
     const data: TestRow[] = [
@@ -223,315 +274,111 @@ describe('DataTable', () => {
     expect(await screen.findByDisplayValue('Item 2')).toBeInTheDocument();
   });
 
-  describe('pagination', () => {
-    // Generate test data with enough rows to require pagination
+  describe('virtualized rows', () => {
     const generateData = (count: number): TestRow[] =>
       Array.from({ length: count }, (_, i) => ({
         id: `id-${i + 1}`,
         name: `Item ${i + 1}`,
       }));
 
-    it('should show pagination controls when data exceeds page size', () => {
-      const data = generateData(30);
-
-      render(<DataTable columns={columns} data={data} initialPageSize={10} />);
-
-      // Should show pagination controls
-      expect(screen.getByRole('button', { name: 'Next' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Previous' })).toBeInTheDocument();
-      expect(screen.getByText(/Showing 1 to 10 of 30 rows/)).toBeInTheDocument();
-    });
-
-    it('should navigate to next page when Next is clicked', async () => {
-      const user = userEvent.setup();
-      const data = generateData(15);
-
-      render(<DataTable columns={columns} data={data} initialPageSize={10} />);
-
-      // First page: items 1-10 visible
-      expect(screen.getByText('Item 1')).toBeInTheDocument();
-      expect(screen.getByText('Item 10')).toBeInTheDocument();
-      expect(screen.queryByText('Item 11')).not.toBeInTheDocument();
-
-      // Click Next
-      await user.click(screen.getByRole('button', { name: 'Next' }));
-
-      // Second page: items 11-15 visible, items 1-10 not visible
-      expect(screen.queryByText('Item 1')).not.toBeInTheDocument();
-      expect(screen.queryByText('Item 10')).not.toBeInTheDocument();
-      expect(screen.getByText('Item 11')).toBeInTheDocument();
-      expect(screen.getByText('Item 15')).toBeInTheDocument();
-      expect(screen.getByText(/Showing 11 to 15 of 15 rows/)).toBeInTheDocument();
-    });
-
-    it('should navigate back when Previous is clicked', async () => {
-      const user = userEvent.setup();
-      const data = generateData(15);
-
-      render(<DataTable columns={columns} data={data} initialPageSize={10} />);
-
-      // Go to page 2
-      await user.click(screen.getByRole('button', { name: 'Next' }));
-      expect(screen.getByText('Item 11')).toBeInTheDocument();
-
-      // Go back to page 1
-      await user.click(screen.getByRole('button', { name: 'Previous' }));
-      expect(screen.getByText('Item 1')).toBeInTheDocument();
-      expect(screen.queryByText('Item 11')).not.toBeInTheDocument();
-    });
-
-    it('should change page size when rows per page is changed', async () => {
-      const user = userEvent.setup();
-      const data = generateData(30);
-
-      render(<DataTable columns={columns} data={data} initialPageSize={10} />);
-
-      // Initially showing 10 rows
-      expect(screen.getByText(/Showing 1 to 10 of 30 rows/)).toBeInTheDocument();
-
-      // Change to 25 rows per page
-      const pageSizeSelect = screen.getByRole('combobox');
-      await user.click(pageSizeSelect);
-      await user.click(screen.getByRole('option', { name: '25' }));
-
-      // Now showing 25 rows
-      expect(screen.getByText(/Showing 1 to 25 of 30 rows/)).toBeInTheDocument();
-      expect(screen.getByText('Item 1')).toBeInTheDocument();
-      expect(screen.getByText('Item 25')).toBeInTheDocument();
-    });
-
-    it('should reset to first page when page size is changed', async () => {
-      const user = userEvent.setup();
-      const data = generateData(30);
-
-      render(<DataTable columns={columns} data={data} initialPageSize={10} />);
-
-      // Go to page 2
-      await user.click(screen.getByRole('button', { name: 'Next' }));
-      expect(screen.getByText(/Showing 11 to 20 of 30 rows/)).toBeInTheDocument();
-      expect(screen.getByText('Item 11')).toBeInTheDocument();
-
-      // Change page size
-      const pageSizeSelect = screen.getByRole('combobox');
-      await user.click(pageSizeSelect);
-      await user.click(screen.getByRole('option', { name: '25' }));
-
-      // Should be back to first page showing items 1-25
-      expect(screen.getByText(/Showing 1 to 25 of 30 rows/)).toBeInTheDocument();
-      expect(screen.getByText('Item 1')).toBeInTheDocument();
-      expect(screen.getByText('Item 25')).toBeInTheDocument();
-    });
-
-    it('should call external onPaginationChange when Next is clicked in manual pagination mode', async () => {
-      const user = userEvent.setup();
-      const data = generateData(10);
-      const onPaginationChange = vi.fn();
-      const onPageSizeChange = vi.fn();
-
-      render(
+    it('should virtualize client-side rows by default without mounting the full dataset', () => {
+      const data = generateData(1000);
+      const { container } = render(
         <DataTable
           columns={columns}
           data={data}
-          manualPagination
-          pageIndex={0}
-          pageSize={10}
-          pageCount={5}
-          onPaginationChange={onPaginationChange}
-          onPageSizeChange={onPageSizeChange}
-          rowCount={50}
+          maxHeight="400px"
+          virtualRowEstimate={40}
+          virtualOverscan={2}
         />,
       );
 
-      await user.click(screen.getByRole('button', { name: 'Next' }));
-
-      expect(onPaginationChange).toHaveBeenCalledTimes(1);
-      expect(onPaginationChange).toHaveBeenCalledWith({ pageIndex: 1, pageSize: 10 });
+      const renderedRows = container.querySelectorAll('tbody tr[data-rowindex]');
+      expect(renderedRows.length).toBeGreaterThan(0);
+      expect(renderedRows.length).toBeLessThan(100);
+      expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
     });
 
-    it('should call external onPageSizeChange (not onPaginationChange) when page size changes in manual pagination mode', async () => {
-      const user = userEvent.setup();
-      const data = generateData(10);
-      const onPaginationChange = vi.fn();
-      const onPageSizeChange = vi.fn();
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      render(
+    it('should keep client-side row DOM bounded after a long scroll', () => {
+      const data = generateData(1000);
+      const { container } = render(
         <DataTable
           columns={columns}
           data={data}
-          manualPagination
-          pageIndex={3}
-          pageSize={10}
-          pageCount={10}
-          onPaginationChange={onPaginationChange}
-          onPageSizeChange={onPageSizeChange}
-          rowCount={100}
+          maxHeight="400px"
+          virtualRowEstimate={40}
+          virtualOverscan={2}
         />,
       );
 
-      const pageSizeSelect = screen.getByRole('combobox');
-      await user.click(pageSizeSelect);
-      await user.click(screen.getByRole('option', { name: '25' }));
+      const scrollContainer = container.querySelector('.overflow-auto');
+      expect(scrollContainer).not.toBeNull();
+      if (scrollContainer) {
+        fireEvent.scroll(scrollContainer, { target: { scrollTop: 20_000 } });
+      }
 
-      expect(onPageSizeChange).toHaveBeenCalledTimes(1);
-      expect(onPageSizeChange).toHaveBeenCalledWith(25);
-      expect(onPaginationChange).not.toHaveBeenCalled();
-      expect(warnSpy).not.toHaveBeenCalled();
-      warnSpy.mockRestore();
+      const renderedRows = container.querySelectorAll('tbody tr[data-rowindex]');
+      expect(renderedRows.length).toBeGreaterThan(0);
+      expect(renderedRows.length).toBeLessThan(100);
     });
 
-    it('should support page-size changes through onPageSizeChange in a controlled manual-pagination wrapper', async () => {
-      const user = userEvent.setup();
-      const data = generateData(50);
-      const totalRows = 50;
-      const onPaginationChange = vi.fn();
-      const onPageSizeChange = vi.fn();
-
-      const ControlledPaginationWrapper = () => {
-        const [pagination, setPagination] = React.useState({
-          pageIndex: 2,
-          pageSize: 5,
-        });
-
-        return (
-          <DataTable
-            columns={columns}
-            data={data.slice(
-              pagination.pageIndex * pagination.pageSize,
-              (pagination.pageIndex + 1) * pagination.pageSize,
-            )}
-            manualPagination
-            rowCount={totalRows}
-            pageCount={Math.ceil(totalRows / pagination.pageSize)}
-            pageIndex={pagination.pageIndex}
-            pageSize={pagination.pageSize}
-            onPaginationChange={(nextPagination) => {
-              onPaginationChange(nextPagination);
-              setPagination(nextPagination);
-            }}
-            onPageSizeChange={(pageSize) => {
-              onPageSizeChange(pageSize);
-              setPagination((prev) => ({ ...prev, pageSize, pageIndex: 0 }));
-            }}
-          />
-        );
-      };
-
-      render(<ControlledPaginationWrapper />);
-
-      const pageSizeSelect = screen.getByRole('combobox');
-      await user.click(pageSizeSelect);
-      await user.click(screen.getByRole('option', { name: '25' }));
-
-      expect(onPageSizeChange).toHaveBeenCalledTimes(1);
-      expect(onPageSizeChange).toHaveBeenCalledWith(25);
-      expect(onPaginationChange).not.toHaveBeenCalled();
-      expect(screen.getByText('Item 1')).toBeInTheDocument();
-      expect(screen.getByText('Item 25')).toBeInTheDocument();
-    });
-
-    it('should use rowCount and avoid client-side row slicing in manual pagination mode', () => {
-      const data = generateData(15);
-      const onPaginationChange = vi.fn();
-      const onPageSizeChange = vi.fn();
-
-      render(
+    it('should virtualize server-side rows and request the visible range', async () => {
+      const loadedRows = new Map<number, TestRow>([[0, { id: 'id-1', name: 'Loaded row' }]]);
+      const loadRows = vi.fn();
+      const { container } = render(
         <DataTable
           columns={columns}
-          data={data}
-          manualPagination
-          pageIndex={0}
-          pageSize={10}
-          pageCount={8}
-          onPaginationChange={onPaginationChange}
-          onPageSizeChange={onPageSizeChange}
-          rowCount={73}
+          data={[]}
+          rowDisplayMode="server-virtualized"
+          maxHeight="400px"
+          virtualRowEstimate={40}
+          virtualOverscan={2}
+          serverVirtualization={{
+            rowCount: 1000,
+            pageSize: 25,
+            getRow: (index) => loadedRows.get(index),
+            loadRows,
+            isRowLoading: (index) => !loadedRows.has(index),
+          }}
         />,
       );
 
-      // Manual pagination should render all provided rows for the current page payload.
-      expect(screen.getByText('Item 15')).toBeInTheDocument();
-      expect(screen.getByText(/Showing 1 to 10 of 73 rows/)).toBeInTheDocument();
+      await waitFor(() => expect(loadRows).toHaveBeenCalled());
+      expect(loadRows.mock.calls[0][0]).toEqual(
+        expect.objectContaining({ startIndex: 0, endIndex: expect.any(Number) }),
+      );
+      expect(screen.getByText('Loaded row')).toBeInTheDocument();
+      expect(container.querySelectorAll('tbody tr[data-rowindex]').length).toBeLessThan(100);
+      expect(container.querySelector('tbody tr[aria-busy="true"]')).toBeInTheDocument();
     });
 
-    it('should paginate and filter client-side when manual pagination is disabled', async () => {
-      const user = userEvent.setup();
-      const data: TestRow[] = Array.from({ length: 12 }, (_, i) => ({
-        id: `${i + 1}`,
-        name: i < 10 ? `Target-${i + 1}` : `Other-${i + 1}`,
-      }));
+    it('should abort server-side virtual row loads on cleanup', async () => {
+      let capturedSignal: AbortSignal | undefined;
+      const { unmount } = render(
+        <DataTable
+          columns={columns}
+          data={[]}
+          rowDisplayMode="server-virtualized"
+          maxHeight="400px"
+          serverVirtualization={{
+            rowCount: 100,
+            pageSize: 25,
+            getRow: () => undefined,
+            loadRows: ({ signal }) => {
+              capturedSignal = signal;
+            },
+          }}
+        />,
+      );
 
-      render(<DataTable columns={columns} data={data} initialPageSize={5} />);
-
-      expect(screen.getByText(/Showing 1 to 5 of 12 rows/)).toBeInTheDocument();
-      expect(screen.getByText('Target-5')).toBeInTheDocument();
-      expect(screen.queryByText('Target-6')).not.toBeInTheDocument();
-
-      const searchInput = screen.getByPlaceholderText('Search...');
-      await user.click(searchInput);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('Target');
-
-      expect(screen.getByText(/Showing 1 to 5 of 10 rows/)).toBeInTheDocument();
-      expect(screen.getByText('Target-5')).toBeInTheDocument();
-      expect(screen.queryByText('Other-11')).not.toBeInTheDocument();
-
-      await user.click(screen.getByRole('button', { name: 'Next' }));
-      expect(screen.getByText(/Showing 6 to 10 of 10 rows/)).toBeInTheDocument();
-      expect(screen.getByText('Target-10')).toBeInTheDocument();
-    });
-
-    it('should delegate manual pagination to external state callbacks', async () => {
-      const user = userEvent.setup();
-      const data = generateData(20);
-      const onPaginationChange = vi.fn();
-      const onPageSizeChange = vi.fn();
-
-      const ControlledPaginationWrapper = () => {
-        const [pagination, setPagination] = React.useState({
-          pageIndex: 0,
-          pageSize: 5,
-        });
-
-        return (
-          <DataTable
-            columns={columns}
-            data={data.slice(
-              pagination.pageIndex * pagination.pageSize,
-              (pagination.pageIndex + 1) * pagination.pageSize,
-            )}
-            manualPagination
-            rowCount={20}
-            pageCount={4}
-            pageIndex={pagination.pageIndex}
-            pageSize={pagination.pageSize}
-            onPaginationChange={(nextPagination) => {
-              onPaginationChange(nextPagination);
-              setPagination(nextPagination);
-            }}
-            onPageSizeChange={(pageSize) => {
-              onPageSizeChange(pageSize);
-              setPagination((prev) => ({ ...prev, pageSize, pageIndex: 0 }));
-            }}
-          />
-        );
-      };
-
-      render(<ControlledPaginationWrapper />);
-
-      await user.click(screen.getByRole('button', { name: 'Next' }));
-
-      expect(onPaginationChange).toHaveBeenCalledTimes(1);
-      expect(onPaginationChange).toHaveBeenCalledWith({ pageIndex: 1, pageSize: 5 });
-      expect(onPageSizeChange).not.toHaveBeenCalled();
-      expect(screen.getByText('Item 6')).toBeInTheDocument();
-      expect(screen.getByText(/Showing 6 to 10 of 20 rows/)).toBeInTheDocument();
+      await waitFor(() => expect(capturedSignal).toBeDefined());
+      unmount();
+      expect(capturedSignal?.aborted).toBe(true);
     });
   });
 
   describe('manual filtering', () => {
     it('should call onColumnFiltersChange instead of filtering internally when manualFiltering is enabled', async () => {
-      const user = userEvent.setup();
       const onColumnFiltersChange = vi.fn();
 
       render(
@@ -541,16 +388,15 @@ describe('DataTable', () => {
           manualFiltering
           columnFilters={[]}
           onColumnFiltersChange={onColumnFiltersChange}
-          showPagination={false}
         />,
       );
 
-      await user.click(screen.getByRole('button', { name: 'Filter Name' }));
-      await user.click(screen.getByPlaceholderText('Value...'));
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('test');
+      const popover = await openHeaderFilterPopover('Name');
+      fireEvent.change(within(popover).getByPlaceholderText('Value...'), {
+        target: { value: 'test' },
+      });
 
-      expect(onColumnFiltersChange).toHaveBeenCalled();
+      await waitFor(() => expect(onColumnFiltersChange).toHaveBeenCalled());
       const lastCall =
         onColumnFiltersChange.mock.calls[onColumnFiltersChange.mock.calls.length - 1][0];
       expect(lastCall).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'name' })]));
@@ -564,7 +410,6 @@ describe('DataTable', () => {
           manualFiltering
           columnFilters={[{ id: 'status', value: { operator: 'equals', value: 'alpha' } }]}
           onColumnFiltersChange={vi.fn()}
-          showPagination={false}
         />,
       );
 
@@ -583,7 +428,6 @@ describe('DataTable', () => {
           manualFiltering
           columnFilters={[]}
           onColumnFiltersChange={vi.fn()}
-          showPagination={false}
         />,
       );
 
@@ -599,7 +443,6 @@ describe('DataTable', () => {
           manualFiltering
           columnFilters={[{ id: 'status', value: { operator: 'equals', value: 'beta' } }]}
           onColumnFiltersChange={vi.fn()}
-          showPagination={false}
         />,
       );
 
@@ -611,42 +454,37 @@ describe('DataTable', () => {
 
   describe('column header filters', () => {
     it('should filter rows using the text input in a header popover', async () => {
-      const user = userEvent.setup();
       const data: HeaderFilterRow[] = [
         ...headerFilterRows,
         { id: '5', name: 'Alpha Row', status: 'gamma' },
       ];
 
-      render(<DataTable columns={headerFilterColumns} data={data} showPagination={false} />);
+      render(<DataTable columns={headerFilterColumns} data={data} />);
 
-      await user.click(screen.getByRole('button', { name: 'Filter Name' }));
-      await user.click(screen.getByPlaceholderText('Value...'));
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('Alpha');
+      const popover = await openHeaderFilterPopover('Name');
+      fireEvent.change(within(popover).getByPlaceholderText('Value...'), {
+        target: { value: 'Alpha' },
+      });
 
+      await waitFor(() => expect(screen.queryByText('Row Two')).not.toBeInTheDocument());
       expect(screen.getByText('Alpha Row')).toBeInTheDocument();
-      expect(screen.queryByText('Row Two')).not.toBeInTheDocument();
       expect(screen.queryByText('Row Three')).not.toBeInTheDocument();
     });
 
     it('should filter rows using the select input in a header popover', async () => {
       const user = userEvent.setup();
 
-      render(
-        <DataTable columns={headerFilterColumns} data={headerFilterRows} showPagination={false} />,
-      );
+      render(<DataTable columns={headerFilterColumns} data={headerFilterRows} />);
 
-      await user.click(screen.getByRole('button', { name: 'Filter Status' }));
-      const popover = screen.getByRole('dialog');
+      const popover = await openHeaderFilterPopover('Status');
       const comboboxes = within(popover).getAllByRole('combobox');
       const valueSelect = comboboxes[1];
 
       await user.click(valueSelect);
-      const option = screen.getByRole('option', { name: 'Beta', hidden: true });
-      await user.click(option);
+      await user.click(await screen.findByRole('option', { name: 'Beta' }));
 
+      await waitFor(() => expect(screen.queryByText('Row One')).not.toBeInTheDocument());
       expect(screen.getByText('Row Two')).toBeInTheDocument();
-      expect(screen.queryByText('Row One')).not.toBeInTheDocument();
       expect(screen.queryByText('Row Three')).not.toBeInTheDocument();
       expect(screen.queryByText('Row Four')).not.toBeInTheDocument();
     });
@@ -654,48 +492,37 @@ describe('DataTable', () => {
     it('should support multi-select filtering from header popovers', async () => {
       const user = userEvent.setup();
 
-      render(
-        <DataTable columns={headerFilterColumns} data={headerFilterRows} showPagination={false} />,
-      );
+      render(<DataTable columns={headerFilterColumns} data={headerFilterRows} />);
 
-      await user.click(screen.getByRole('button', { name: 'Filter Status' }));
-      const popover = screen.getByRole('dialog');
+      const popover = await openHeaderFilterPopover('Status');
 
       const operatorSelect = within(popover).getAllByRole('combobox')[0];
       await user.click(operatorSelect);
-      const isAnyOption = await screen.findByRole('option', { name: /^is any of$/, hidden: true });
-      await user.click(isAnyOption);
+      await user.click(await screen.findByRole('option', { name: 'is any of' }));
 
-      const multiSelectButton = await within(popover).findByText('Select values...');
-      await user.click(multiSelectButton);
+      await user.click(within(popover).getByRole('button', { name: 'Select values...' }));
       await user.click(within(popover).getByText('Alpha'));
       await user.click(within(popover).getByText('Beta'));
 
+      await waitFor(() => expect(screen.queryByText('Row Three')).not.toBeInTheDocument());
       expect(screen.getByText('Row One')).toBeInTheDocument();
       expect(screen.getByText('Row Two')).toBeInTheDocument();
       expect(screen.getByText('Row Four')).toBeInTheDocument();
-      expect(screen.queryByText('Row Three')).not.toBeInTheDocument();
     });
 
     it('should open header filter popovers with an active interactive row by default', async () => {
-      const user = userEvent.setup();
+      render(<DataTable columns={headerFilterColumns} data={headerFilterRows} />);
 
-      render(
-        <DataTable columns={headerFilterColumns} data={headerFilterRows} showPagination={false} />,
-      );
-
-      await user.click(screen.getByRole('button', { name: 'Filter Name' }));
-      const operatorSelect = screen.getByRole('combobox');
-      const valueInput = screen.getByPlaceholderText('Value...');
+      const popover = await openHeaderFilterPopover('Name');
+      const operatorSelect = within(popover).getByRole('combobox');
+      const valueInput = within(popover).getByPlaceholderText('Value...');
 
       expect(operatorSelect).toBeInTheDocument();
       expect(valueInput).toBeInTheDocument();
       expect(valueInput).toBeEnabled();
 
-      await user.click(valueInput);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('Row');
-      expect(screen.getByText('Row One')).toBeInTheDocument();
+      fireEvent.change(valueInput, { target: { value: 'Row' } });
+      await waitFor(() => expect(screen.getByText('Row One')).toBeInTheDocument());
     });
 
     it('should include header popover filters in the filter toolbar panel', async () => {
@@ -703,21 +530,24 @@ describe('DataTable', () => {
 
       render(<DataTable columns={headerFilterColumns} data={headerFilterRows} />);
 
-      await user.click(screen.getByRole('button', { name: 'Filter Status' }));
-      const popover = screen.getByRole('dialog');
+      const popover = await openHeaderFilterPopover('Status');
       const comboboxes = within(popover).getAllByRole('combobox');
       const valueSelect = comboboxes[1];
       await user.click(valueSelect);
-      const betaOption = screen.getByRole('option', { name: 'Beta', hidden: true });
-      await user.click(betaOption);
+      await user.click(await screen.findByRole('option', { name: 'Beta' }));
+      await waitFor(() => expect(screen.queryByText('Row One')).not.toBeInTheDocument());
 
       await user.click(screen.getByRole('button', { name: /Filters/ }));
-      const toolbarDialog = screen
-        .getAllByRole('dialog')
-        .find((node) => within(node).queryByRole('heading', { name: 'Filters' }));
+      const toolbarDialog = await waitFor(() => {
+        const dialog = screen
+          .getAllByRole('dialog')
+          .find((node) => within(node).queryByRole('heading', { name: 'Filters' }));
+        expect(dialog).toBeDefined();
+        return dialog as HTMLElement;
+      });
       expect(toolbarDialog).toBeDefined();
-      expect(await within(toolbarDialog as HTMLElement).findByText('Status')).toBeInTheDocument();
-      expect(await within(toolbarDialog as HTMLElement).findByText(/beta/i)).toBeInTheDocument();
+      expect(await within(toolbarDialog).findByText('Status')).toBeInTheDocument();
+      expect(await within(toolbarDialog).findByText(/beta/i)).toBeInTheDocument();
     });
   });
 

@@ -15,6 +15,8 @@ import type { DataTableToolbarProps } from './types';
 export function DataTableToolbar<TData>({
   table,
   columnFilters,
+  columnVisibility,
+  setColumnVisibility,
   globalFilter,
   setGlobalFilter,
   showColumnToggle = true,
@@ -27,7 +29,13 @@ export function DataTableToolbar<TData>({
   return (
     <div className="flex items-center justify-between gap-2 p-2 border-b border-border">
       <div className="flex items-center gap-2">
-        {showColumnToggle && <DataTableColumnToggle table={table} />}
+        {showColumnToggle && (
+          <DataTableColumnToggle
+            table={table}
+            columnVisibility={columnVisibility}
+            setColumnVisibility={setColumnVisibility}
+          />
+        )}
 
         {showFilter && <DataTableFilter table={table} columnFilters={columnFilters} />}
 

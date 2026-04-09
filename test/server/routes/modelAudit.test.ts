@@ -555,6 +555,56 @@ describe('Model Audit Routes - DB-backed', () => {
       expect(response.body.scans[1].name).toBe('Zebra');
     });
 
+    it('should sort by id ascending', async () => {
+      await createTestAudit({ name: 'Second scan' });
+      await createTestAudit({ name: 'First scan' });
+
+      const response = await request(app).get('/api/model-audit/scans?sort=id&order=asc');
+
+      expect(response.status).toBe(200);
+      expect(response.body.scans).toHaveLength(2);
+      expect(response.body.scans.map((scan: { id: string }) => scan.id)).toEqual(
+        [...response.body.scans.map((scan: { id: string }) => scan.id)].sort(),
+      );
+    });
+
+    it('should sort by status and check counts', async () => {
+      await createTestAudit({
+        name: 'Clean scan',
+        results: {
+          total_checks: 10,
+          passed_checks: 10,
+          failed_checks: 0,
+          has_errors: false,
+          issues: [],
+          checks: [],
+        },
+      });
+      await createTestAudit({
+        name: 'Issues scan',
+        results: {
+          total_checks: 3,
+          passed_checks: 1,
+          failed_checks: 2,
+          has_errors: true,
+          issues: [{ severity: 'error', message: 'Issue found' }],
+          checks: [],
+        },
+      });
+
+      const statusResponse = await request(app).get(
+        '/api/model-audit/scans?sort=hasErrors&order=desc',
+      );
+      const checksResponse = await request(app).get(
+        '/api/model-audit/scans?sort=totalChecks&order=asc',
+      );
+
+      expect(statusResponse.status).toBe(200);
+      expect(statusResponse.body.scans[0].name).toBe('Issues scan');
+      expect(checksResponse.status).toBe(200);
+      expect(checksResponse.body.scans[0].name).toBe('Issues scan');
+    });
+
     it('should return 400 for invalid sort field', async () => {
       const response = await request(app).get('/api/model-audit/scans?sort=hackerField');
 
