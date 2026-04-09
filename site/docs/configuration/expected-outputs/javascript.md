@@ -169,6 +169,32 @@ tests:
         value: 'output.length >= context.vars.min_length'
 ```
 
+## Passing assertion-specific parameters
+
+If you want to reuse the same JavaScript assertion with different parameters in a single test case, prefer assertion-level `config` over test `vars`. Test vars are shared across all assertions and appear as report columns, while `config` stays attached to one assertion and is available as `context.config`.
+
+```yaml
+tests:
+  - description: 'Reuse one assertion script with two thresholds'
+    vars:
+      topic: 'bananas'
+    assert:
+      - type: javascript
+        value: file://assertions/min-length.js
+        config:
+          minLength: 5
+      - type: javascript
+        value: file://assertions/min-length.js
+        config:
+          minLength: 20
+```
+
+```js
+module.exports = (output, context) => {
+  return output.length >= context.config.minLength;
+};
+```
+
 ## External script
 
 To reference an external file, use the `file://` prefix:

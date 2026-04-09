@@ -68,6 +68,9 @@ import { InsurancePhiDisclosurePluginGrader } from './plugins/insurance/phiDiscl
 import { IntentGrader } from './plugins/intent';
 import { MCPPluginGrader } from './plugins/mcp';
 import { MedicalAnchoringBiasPluginGrader } from './plugins/medical/medicalAnchoringBias';
+import { MedicalFdaAiDisclosurePluginGrader } from './plugins/medical/medicalFdaAiDisclosure';
+import { MedicalFdaCyberAccessControlPluginGrader } from './plugins/medical/medicalFdaCyberAccessControl';
+import { MedicalFdaCyberAuditTamperingPluginGrader } from './plugins/medical/medicalFdaCyberAuditTampering';
 import { MedicalHallucinationPluginGrader } from './plugins/medical/medicalHallucination';
 import { MedicalIncorrectKnowledgePluginGrader } from './plugins/medical/medicalIncorrectKnowledge';
 import { MedicalOffLabelUsePluginGrader } from './plugins/medical/medicalOffLabelUse';
@@ -100,6 +103,10 @@ import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
+import { TeenSafetyAgeRestrictedGoodsAndServicesPluginGrader } from './plugins/teenSafety/ageRestrictedGoodsAndServices';
+import { TeenSafetyDangerousContentPluginGrader } from './plugins/teenSafety/dangerousContent';
+import { TeenSafetyDangerousRoleplayPluginGrader } from './plugins/teenSafety/dangerousRoleplay';
+import { TeenSafetyHarmfulBodyIdealsPluginGrader } from './plugins/teenSafety/harmfulBodyIdeals';
 import { TelecomAccessibilityViolationPluginGrader } from './plugins/telecom/accessibilityViolation';
 import { TelecomAccountTakeoverPluginGrader } from './plugins/telecom/accountTakeover';
 import { TelecomBillingMisinformationPluginGrader } from './plugins/telecom/billingMisinformation';
@@ -208,6 +215,11 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:mcp': new MCPPluginGrader(),
   'promptfoo:redteam:model-identification': new ModelIdentificationGrader(),
   'promptfoo:redteam:medical:anchoring-bias': new MedicalAnchoringBiasPluginGrader(),
+  'promptfoo:redteam:medical:fda:ai-disclosure': new MedicalFdaAiDisclosurePluginGrader(),
+  'promptfoo:redteam:medical:fda:cyber-access-control':
+    new MedicalFdaCyberAccessControlPluginGrader(),
+  'promptfoo:redteam:medical:fda:cyber-audit-tampering':
+    new MedicalFdaCyberAuditTamperingPluginGrader(),
   'promptfoo:redteam:medical:hallucination': new MedicalHallucinationPluginGrader(),
   'promptfoo:redteam:medical:incorrect-knowledge': new MedicalIncorrectKnowledgePluginGrader(),
   'promptfoo:redteam:medical:off-label-use': new MedicalOffLabelUsePluginGrader(),
@@ -235,6 +247,12 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
     new TelecomLawEnforcementRequestHandlingPluginGrader(),
   'promptfoo:redteam:telecom:accessibility-violation':
     new TelecomAccessibilityViolationPluginGrader(),
+  'promptfoo:redteam:teen-safety:harmful-body-ideals':
+    new TeenSafetyHarmfulBodyIdealsPluginGrader(),
+  'promptfoo:redteam:teen-safety:dangerous-content': new TeenSafetyDangerousContentPluginGrader(),
+  'promptfoo:redteam:teen-safety:dangerous-roleplay': new TeenSafetyDangerousRoleplayPluginGrader(),
+  'promptfoo:redteam:teen-safety:age-restricted-goods-and-services':
+    new TeenSafetyAgeRestrictedGoodsAndServicesPluginGrader(),
   'promptfoo:redteam:realestate:fair-housing-discrimination':
     new RealEstateFairHousingDiscriminationPluginGrader(),
   'promptfoo:redteam:realestate:steering': new RealEstateSteeringPluginGrader(),

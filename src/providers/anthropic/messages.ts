@@ -37,6 +37,17 @@ function parseEnvFloat(value: string | undefined): number | undefined {
   return Number.isNaN(parsed) ? undefined : parsed;
 }
 
+function resolveThinkingConfig(
+  configThinking: Anthropic.Messages.ThinkingConfigParam | undefined,
+  promptThinking: Anthropic.Messages.ThinkingConfigParam | undefined,
+): Anthropic.Messages.ThinkingConfigParam | undefined {
+  return configThinking ?? promptThinking;
+}
+
+function isThinkingEnabled(thinking: Anthropic.Messages.ThinkingConfigParam | undefined): boolean {
+  return thinking?.type === 'enabled' || thinking?.type === 'adaptive';
+}
+
 export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;
   private mcpClient: MCPClient | null = null;
@@ -127,6 +138,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           completion: response.tokenUsage.completion,
           total: response.tokenUsage.total,
           cached: response.tokenUsage.cached,
+          completionDetails: response.tokenUsage.completionDetails,
         };
       }
 
@@ -190,31 +202,84 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       context?.vars,
     );
 
+    const resolvedThinking = resolveThinkingConfig(config.thinking, thinking);
+    const thinkingEnabled = isThinkingEnabled(resolvedThinking);
+
+    // Validate and warn about thinking-incompatible params
+    if (thinkingEnabled) {
+      if (config.top_k != null) {
+        logger.warn(
+          'top_k is incompatible with extended thinking and will be omitted. Remove top_k from your config or disable thinking.',
+        );
+      }
+      if (config.temperature != null) {
+        logger.warn(
+          'temperature is incompatible with extended thinking and will be omitted. Remove temperature from your config or disable thinking.',
+        );
+      }
+      if (config.top_p != null && (config.top_p < 0.95 || config.top_p > 1.0)) {
+        logger.warn(
+          `top_p must be between 0.95 and 1.0 with extended thinking (got ${config.top_p}). Clamping to valid range.`,
+        );
+      }
+    }
+
+    // Resolve tool_choice, suppressing forced tool use when thinking is enabled
+    let resolvedToolChoice: Anthropic.Messages.ToolChoice | undefined;
+    if (config.tool_choice) {
+      const transformed = transformToolChoice(
+        config.tool_choice,
+        'anthropic',
+      ) as Anthropic.Messages.ToolChoice;
+      if (thinkingEnabled && (transformed.type === 'any' || transformed.type === 'tool')) {
+        logger.warn(
+          `tool_choice type '${transformed.type}' (forced tool use) is incompatible with extended thinking and will be omitted. Use 'auto' or remove tool_choice.`,
+        );
+      } else {
+        resolvedToolChoice = transformed;
+      }
+    }
+
+    // Resolve top_p: clamp to [0.95, 1.0] when thinking is enabled
+    let resolvedTopP: number | undefined;
+    if (config.top_p != null) {
+      resolvedTopP = thinkingEnabled ? Math.max(0.95, Math.min(1.0, config.top_p)) : config.top_p;
+    }
+
+    // Warn when temperature is silently omitted due to top_p (even without thinking)
+    if (config.temperature != null && resolvedTopP != null && !thinkingEnabled) {
+      logger.warn(
+        'temperature is incompatible with top_p on Anthropic and will be omitted. Remove one of these parameters.',
+      );
+    }
+
     const shouldStream = config.stream ?? false;
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
       ...(system ? { system } : {}),
       max_tokens:
-        config?.max_tokens ||
-        getEnvInt('ANTHROPIC_MAX_TOKENS', config.thinking || thinking ? 2048 : 1024),
+        config.max_tokens ?? getEnvInt('ANTHROPIC_MAX_TOKENS', thinkingEnabled ? 2048 : 1024),
       messages: extractedMessages,
       stream: shouldStream,
-      temperature:
-        config.thinking || thinking
-          ? config.temperature
-          : (config.temperature ??
-            parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) ??
-            getEnvFloat('ANTHROPIC_TEMPERATURE', 0)),
+      // Anthropic: temperature is incompatible with both top_p and extended thinking
+      ...(resolvedTopP != null || thinkingEnabled
+        ? {}
+        : {
+            temperature:
+              config.temperature ??
+              parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) ??
+              getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
+          }),
+      ...(resolvedTopP == null ? {} : { top_p: resolvedTopP }),
+      // Anthropic docs: top_k is incompatible with extended thinking
+      ...(config.top_k == null || thinkingEnabled ? {} : { top_k: config.top_k }),
+      ...(config.cache_control ? { cache_control: config.cache_control } : {}),
+      ...(config.service_tier ? { service_tier: config.service_tier } : {}),
+      ...(config.stop_sequences?.length ? { stop_sequences: config.stop_sequences } : {}),
+      ...(config.metadata ? { metadata: config.metadata } : {}),
       ...(allTools.length > 0 ? { tools: allTools as any } : {}),
-      ...(config.tool_choice
-        ? {
-            tool_choice: transformToolChoice(
-              config.tool_choice,
-              'anthropic',
-            ) as Anthropic.Messages.ToolChoice,
-          }
-        : {}),
-      ...(config.thinking || thinking ? { thinking: config.thinking || thinking } : {}),
+      ...(resolvedToolChoice ? { tool_choice: resolvedToolChoice } : {}),
+      ...(resolvedThinking ? { thinking: resolvedThinking } : {}),
       ...(processedOutputFormat || config.effort
         ? {
             output_config: {
@@ -248,7 +313,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     }
 
     const cache = await getCache();
-    const cacheKey = `anthropic:${JSON.stringify(params)}`;
+    const { metadata: _metadata, ...cacheKeyParams } = params;
+    const cacheKey = `anthropic:${JSON.stringify(cacheKeyParams)}`;
 
     if (isCacheEnabled()) {
       // Try to get the cached response
@@ -278,6 +344,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
               config,
               parsedCachedResponse.usage?.input_tokens,
               parsedCachedResponse.usage?.output_tokens,
+              parsedCachedResponse.usage?.cache_read_input_tokens ?? undefined,
+              parsedCachedResponse.usage?.cache_creation_input_tokens ?? undefined,
             ),
             cached: true,
           };
@@ -331,6 +399,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
             config,
             finalMessage.usage?.input_tokens,
             finalMessage.usage?.output_tokens,
+            finalMessage.usage?.cache_read_input_tokens ?? undefined,
+            finalMessage.usage?.cache_creation_input_tokens ?? undefined,
           ),
         };
       } else {
@@ -369,6 +439,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
             config,
             response.usage?.input_tokens,
             response.usage?.output_tokens,
+            response.usage?.cache_read_input_tokens ?? undefined,
+            response.usage?.cache_creation_input_tokens ?? undefined,
           ),
         };
       }

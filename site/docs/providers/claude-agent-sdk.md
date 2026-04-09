@@ -144,7 +144,8 @@ prompts:
 | `max_turns`                          | number       | Maximum conversation turns                                                                                   | Claude Agent SDK default |
 | `max_thinking_tokens`                | number       | Maximum tokens for thinking                                                                                  | Claude Agent SDK default |
 | `max_budget_usd`                     | number       | Maximum cost budget in USD for the agent execution                                                           | None                     |
-| `permission_mode`                    | string       | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk`                            | `default`                |
+| `task_budget`                        | object       | Token budget for pacing tool use: `{total: N}`                                                               | None                     |
+| `permission_mode`                    | string       | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk`, `auto`                    | `default`                |
 | `allow_dangerously_skip_permissions` | boolean      | Required safety flag when using `bypassPermissions` mode                                                     | false                    |
 | `thinking`                           | object       | Thinking config: `{type: 'adaptive'}`, `{type: 'enabled', budgetTokens: N}`, or `{type: 'disabled'}`         | Model default            |
 | `effort`                             | string       | Response effort level: `low`, `medium`, `high`, `max`                                                        | `high`                   |
@@ -545,6 +546,20 @@ providers:
 
 The agent will stop execution if the cost exceeds the specified budget.
 
+## Task Budget
+
+Control how the model paces its tool use within a token budget using `task_budget`:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      task_budget:
+        total: 50000
+```
+
+The `total` field sets the token budget for the task. The model uses this to pace its tool use—for example, being more selective about which tools to invoke as the budget is consumed.
+
 ## Additional Directories
 
 Grant the agent access to directories beyond the working directory:
@@ -675,6 +690,7 @@ Available sandbox options:
 | `allowUnsandboxedCommands`    | boolean  | Allow commands that can't be sandboxed               |
 | `enableWeakerNestedSandbox`   | boolean  | Enable weaker sandbox for nested environments        |
 | `excludedCommands`            | string[] | Commands to exclude from sandboxing                  |
+| `failIfUnavailable`           | boolean  | Fail closed when sandbox dependencies are missing    |
 | `ignoreViolations`            | object   | Map of command patterns to violation types to ignore |
 | `network.allowedDomains`      | string[] | Domains allowed for network access                   |
 | `network.allowLocalBinding`   | boolean  | Allow binding to localhost                           |
@@ -684,6 +700,8 @@ Available sandbox options:
 | `network.socksProxyPort`      | number   | SOCKS proxy port for network access                  |
 | `ripgrep.command`             | string   | Path to custom ripgrep executable                    |
 | `ripgrep.args`                | string[] | Additional arguments for ripgrep                     |
+
+When `sandbox.enabled` is `true`, Claude Agent SDK defaults `failIfUnavailable` to `true`; set it to `false` only if you want the SDK to degrade gracefully when sandbox dependencies or platform support are missing.
 
 See the [Claude Code sandbox documentation](https://docs.anthropic.com/en/docs/claude-code/settings#sandbox-settings) for more details.
 

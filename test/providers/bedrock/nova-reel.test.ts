@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import { NovaReelVideoProvider } from '../../../src/providers/bedrock/nova-reel';
+import { sleep } from '../../../src/util/time';
 
 import type { NovaReelVideoOptions } from '../../../src/providers/bedrock';
 
@@ -109,6 +110,7 @@ describe('NovaReelVideoProvider', () => {
     vi.clearAllMocks();
     mockBedrockSend.mockReset();
     mockS3Send.mockReset();
+    vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
     disableCache();
   });
 
@@ -460,27 +462,38 @@ describe('NovaReelVideoProvider', () => {
     });
 
     it('should handle polling timeout', async () => {
-      mockBedrockSend
-        .mockResolvedValueOnce({
-          invocationArn: 'arn:aws:bedrock:us-east-1:123456789:async-invoke/abc123',
-        })
-        // Always return InProgress to trigger timeout
-        .mockResolvedValue({
-          status: 'InProgress',
-          invocationArn: 'arn:aws:bedrock:us-east-1:123456789:async-invoke/abc123',
+      vi.useFakeTimers();
+      try {
+        vi.mocked(sleep).mockImplementation(
+          (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
+        );
+
+        mockBedrockSend
+          .mockResolvedValueOnce({
+            invocationArn: 'arn:aws:bedrock:us-east-1:123456789:async-invoke/abc123',
+          })
+          // Always return InProgress to trigger timeout
+          .mockResolvedValue({
+            status: 'InProgress',
+            invocationArn: 'arn:aws:bedrock:us-east-1:123456789:async-invoke/abc123',
+          });
+
+        const provider = new NovaReelVideoProvider('amazon.nova-reel-v1:1', {
+          config: {
+            s3OutputUri: 's3://bucket/prefix',
+            pollIntervalMs: 100,
+            maxPollTimeMs: 500, // Short timeout for test
+          } as NovaReelVideoOptions,
         });
 
-      const provider = new NovaReelVideoProvider('amazon.nova-reel-v1:1', {
-        config: {
-          s3OutputUri: 's3://bucket/prefix',
-          pollIntervalMs: 100,
-          maxPollTimeMs: 500, // Short timeout for test
-        } as NovaReelVideoOptions,
-      });
+        const resultPromise = provider.callApi('Generate a video');
+        await vi.runAllTimersAsync();
+        const result = await resultPromise;
 
-      const result = await provider.callApi('Generate a video');
-
-      expect(result.error).toContain('timed out');
+        expect(result.error).toContain('timed out');
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });
