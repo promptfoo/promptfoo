@@ -246,7 +246,7 @@ export async function executeScanRequestWithRetry(
 
   const attemptsByPolicy = new Map<string, number>();
 
-  for (let attempt = 0; attempt < MAX_CAPACITY_ATTEMPTS; attempt++) {
+  while (true) {
     try {
       return await executeScanRequest(client, request, options);
     } catch (error) {
@@ -284,8 +284,4 @@ export async function executeScanRequestWithRetry(
       }
     }
   }
-
-  // Safety fallback: reached if mixed error types exhaust the outer loop
-  // without any single policy exceeding its budget.
-  throw new Error('Scan failed: exceeded maximum retries');
 }

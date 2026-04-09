@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { executeScanRequestWithRetry } from '../../../src/codeScan/scanner/request';
 import { sleepWithAbort } from '../../../src/util/time';
 
@@ -82,7 +82,12 @@ function createExecutionOptions() {
 
 describe('executeScanRequestWithRetry', () => {
   beforeEach(() => {
-    vi.mocked(sleepWithAbort).mockClear();
+    vi.mocked(sleepWithAbort).mockReset();
+    vi.mocked(sleepWithAbort).mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.mocked(sleepWithAbort).mockReset();
   });
 
   it('retries once when the remote scanner times out waiting for MCP repository access', async () => {
@@ -173,6 +178,26 @@ describe('executeScanRequestWithRetry', () => {
 
     expect(client.start).toHaveBeenCalledTimes(3);
     expect(sleepWithAbort).toHaveBeenCalledTimes(2);
+  });
+
+  it('can succeed after mixed transient failures exceed one policy total', async () => {
+    const { client } = createMockAgentClient([
+      { type: 'error', message: 'Internal server error: MCP error -32001: Request timed out' },
+      { type: 'error', message: 'Server at capacity. Please retry.' },
+      { type: 'error', message: 'Server at capacity. Please retry.' },
+      { type: 'error', message: 'Server at capacity. Please retry.' },
+      { type: 'error', message: 'Server at capacity. Please retry.' },
+      { type: 'error', message: 'Server at capacity. Please retry.' },
+      { type: 'error', message: 'Server at capacity. Please retry.' },
+      { type: 'complete', response: scanResponse },
+    ]);
+
+    await expect(
+      executeScanRequestWithRetry(client, scanRequest, createExecutionOptions()),
+    ).resolves.toEqual(scanResponse);
+
+    expect(client.start).toHaveBeenCalledTimes(8);
+    expect(sleepWithAbort).toHaveBeenCalledTimes(7);
   });
 
   it('does not retry non-transient scanner errors', async () => {
