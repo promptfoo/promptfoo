@@ -1880,16 +1880,19 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         config: sharedConfig,
       });
       const providerB = new OpenAiChatCompletionProvider('gpt-5.4-mini', {
-        config: { temperature: 0 },
+        config: sharedConfig,
       });
 
       // Configs should be independent
+      expect(providerA.config).not.toBe(sharedConfig);
+      expect(providerB.config).not.toBe(sharedConfig);
+      expect(providerA.config).not.toBe(providerB.config);
       expect(providerA.config.max_tokens).toBe(16000);
-      expect(providerB.config.max_tokens).toBeUndefined();
+      expect(providerB.config.max_tokens).toBe(16000);
 
       // Mutating one should not affect the other
       (providerA.config as any).max_tokens = 999;
-      expect(providerB.config.max_tokens).toBeUndefined();
+      expect(providerB.config.max_tokens).toBe(16000);
 
       // Original object should not be mutated
       expect(sharedConfig.max_tokens).toBe(16000);
