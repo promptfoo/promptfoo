@@ -185,6 +185,7 @@ describe('HttpProvider structured multipart requests', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-'));
     tempDirs.push(tempDir);
     const reportPath = path.join(tempDir, 'report-a.txt');
+    const standardFileUrl = new URL(`file://${reportPath}`).toString();
     fs.writeFileSync(reportPath, 'report-a contents');
 
     const mockServer = await createMultipartDocumentSummarizerServer();
@@ -199,7 +200,7 @@ describe('HttpProvider structured multipart requests', () => {
               name: 'files',
               source: {
                 type: 'path',
-                path: '{{documentPath}}',
+                path: 'file://{{documentPath}}',
               },
             },
             {
@@ -225,9 +226,21 @@ describe('HttpProvider structured multipart requests', () => {
       files: [
         expect.objectContaining({
           filename: 'report-a.txt',
+          contentType: 'text/plain',
           sizeBytes: Buffer.byteLength('report-a contents'),
         }),
       ],
+    });
+
+    await provider.callApi('Summarize local fixture', {
+      prompt: { raw: 'Summarize local fixture', label: 'query' },
+      vars: {
+        documentPath: standardFileUrl.slice('file://'.length),
+      },
+    });
+    expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
+      filename: 'report-a.txt',
+      contentType: 'text/plain',
     });
   });
 

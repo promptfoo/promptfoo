@@ -1,6 +1,6 @@
-import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 import { z } from 'zod';
 import cliState from '../cliState';
@@ -44,7 +44,6 @@ export interface MultipartFileDescriptor {
   filename: string;
   contentType: string;
   sizeBytes: number;
-  sha256: string;
   source: 'generated' | 'path';
 }
 
@@ -155,14 +154,52 @@ function createGeneratedFile(
   };
 }
 
+function normalizeFilePath(filePath: string): string {
+  if (!filePath.startsWith('file://')) {
+    return filePath;
+  }
+
+  try {
+    return fileURLToPath(filePath);
+  } catch {
+    // Preserve promptfoo's long-standing shorthand: file://relative/path.ext
+    return filePath.slice('file://'.length);
+  }
+}
+
 function resolvePath(filePath: string): string {
-  const withoutFileScheme = filePath.startsWith('file://')
-    ? filePath.slice('file://'.length)
-    : filePath;
+  const withoutFileScheme = normalizeFilePath(filePath);
   if (path.isAbsolute(withoutFileScheme)) {
     return withoutFileScheme;
   }
   return path.resolve(cliState.basePath || process.cwd(), withoutFileScheme);
+}
+
+function getContentTypeFromFilename(filename: string): string {
+  switch (path.extname(filename).toLowerCase()) {
+    case '.pdf':
+      return 'application/pdf';
+    case '.png':
+      return 'image/png';
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.gif':
+      return 'image/gif';
+    case '.bmp':
+      return 'image/bmp';
+    case '.tif':
+    case '.tiff':
+      return 'image/tiff';
+    case '.webp':
+      return 'image/webp';
+    case '.txt':
+      return 'text/plain';
+    case '.json':
+      return 'application/json';
+    default:
+      return 'application/octet-stream';
+  }
 }
 
 async function loadFilePart(
@@ -175,12 +212,8 @@ async function loadFilePart(
   return {
     buffer,
     filename: path.basename(resolvedPath),
-    contentType: 'application/octet-stream',
+    contentType: getContentTypeFromFilename(resolvedPath),
   };
-}
-
-function hash(buffer: Buffer): string {
-  return crypto.createHash('sha256').update(buffer).digest('hex');
 }
 
 export async function renderHttpMultipartBody(
@@ -227,7 +260,6 @@ export async function renderHttpMultipartBody(
       filename,
       contentType,
       sizeBytes: loaded.buffer.length,
-      sha256: hash(loaded.buffer),
       source: part.source.type,
     });
   }

@@ -109,7 +109,7 @@ providers:
 ```
 
 The `generated` source creates a deterministic document suitable for transport
-tests. Supported formats are `pdf`, `png`, and `jpeg`.
+tests. Supported formats are `pdf`, `png`, `jpeg`, and `jpg` (alias for `jpeg`).
 
 ### Uploading local files
 

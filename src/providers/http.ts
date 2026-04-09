@@ -945,8 +945,7 @@ function sanitizeMultipartFields(fields: RenderedHttpMultipartBody['fields']) {
 function sanitizeMultipartFiles(files: RenderedHttpMultipartBody['files']) {
   return files.map((file) => ({
     field: isSecretField(file.field) ? REDACTED : file.field,
-    filename:
-      isSecretField(file.filename) || looksLikeSecret(file.filename) ? REDACTED : file.filename,
+    filename: looksLikeSecret(file.filename) ? REDACTED : file.filename,
     contentType: file.contentType,
     sizeBytes: file.sizeBytes,
     source: file.source,
