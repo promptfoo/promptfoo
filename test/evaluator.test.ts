@@ -28,6 +28,104 @@ import { processConfigFileReferences } from '../src/util/fileReference';
 import { sleep } from '../src/util/time';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
 
+const exactTransformHandlers = new Map<string, (input: any) => any>([
+  ['output + " postprocessed"', (input) => input + ' postprocessed'],
+  ['JSON.parse(output).value', parseJsonValueTransform],
+  ['`Transformed: ${output}`', (input) => `Transformed: ${input}`],
+  ['`ProviderTransformed: ${output}`', (input) => `ProviderTransformed: ${input}`],
+  ['`Provider: ${output}`', (input) => `Provider: ${input}`],
+  ['`Test: ${output}`', (input) => `Test: ${input}`],
+  ['"testTransformed " + output', (input) => 'testTransformed ' + input],
+  ['"defaultTestTransformed " + output', (input) => 'defaultTestTransformed ' + input],
+  ['"Test: " + output', (input) => 'Test: ' + input],
+  ['"Provider: " + output', (input) => 'Provider: ' + input],
+  ['"Transform: " + output', (input) => 'Transform: ' + input],
+  ['output + "-provider-test"', (input) => input + '-provider-test'],
+  ['output + "-provider"', (input) => input + '-provider'],
+  ['output + "-test"', (input) => input + '-test'],
+  ['`Transform: ${output}`', (input) => `Transform: ${input}`],
+  ['`Postprocess: ${output}`', (input) => `Postprocess: ${input}`],
+]);
+
+function parseJsonValueTransform(input: any) {
+  try {
+    return JSON.parse(input).value;
+  } catch {
+    return input;
+  }
+}
+
+function mockTransformVars(code: string, input: any, context?: any) {
+  if (code.includes('vars.transformed = true')) {
+    return { ...input, transformed: true };
+  }
+  if (code.includes('vars.defaultTransform = true')) {
+    return { ...input, defaultTransform: true };
+  }
+  if (code.includes('{ ...vars') && code.includes('toUpperCase()')) {
+    return { ...input, name: input.name.toUpperCase() };
+  }
+  if (code.includes('{ ...vars') && code.includes('vars.age + 5')) {
+    return { ...input, age: input.age + 5 };
+  }
+  if (code.includes('return {') && code.includes('context.uuid')) {
+    return {
+      ...input,
+      id: context?.uuid || 'mock-uuid',
+      hasPrompt: Boolean(context?.prompt),
+    };
+  }
+  if (code.includes('test2UpperCase: vars.test2.toUpperCase()')) {
+    return { ...input, test2UpperCase: input.test2.toUpperCase() };
+  }
+}
+
+function mockMetadataTransform(code: string, input: any, context?: any) {
+  if (!code.includes('context?.metadata')) {
+    return undefined;
+  }
+  if (code.includes('Output:') && context?.metadata) {
+    return `Output: ${input}, Metadata: ${JSON.stringify(context.metadata)}`;
+  }
+  if (code.includes('Has metadata') && context?.metadata) {
+    return `Has metadata: ${input}`;
+  }
+  if (code.includes('No metadata') && !context?.metadata) {
+    return `No metadata: ${input}`;
+  }
+  if (
+    code.includes('Empty metadata') &&
+    context?.metadata &&
+    Object.keys(context.metadata).length === 0
+  ) {
+    return `Empty metadata: ${input}`;
+  }
+  if (code.includes('All context') && context?.vars && context?.prompt && context?.metadata) {
+    return `All context: ${input}`;
+  }
+  if (
+    code.includes('Missing context') &&
+    !(context?.vars && context?.prompt && context?.metadata)
+  ) {
+    return `Missing context: ${input}`;
+  }
+}
+
+async function mockTransform(code: unknown, input: any, context?: any) {
+  if (typeof code !== 'string') {
+    return input;
+  }
+
+  const exactHandler = exactTransformHandlers.get(code);
+  if (exactHandler) {
+    return exactHandler(input);
+  }
+
+  return (
+    mockTransformVars(code, input, context) ?? mockMetadataTransform(code, input, context) ?? input
+  );
+}
+
 vi.mock('../src/util/transform', () => ({
   TransformInputType: {
     OUTPUT: 'output',
@@ -35,125 +133,7 @@ vi.mock('../src/util/transform', () => ({
   },
   // Provide a process shim for ESM compatibility in inline JavaScript code
   getProcessShim: vi.fn().mockReturnValue(process),
-  transform: vi.fn().mockImplementation(async (code, input, context, _skipWrap, _inputType) => {
-    if (typeof code === 'string' && code.includes('vars.transformed = true')) {
-      return { ...input, transformed: true };
-    }
-    if (typeof code === 'string' && code.includes('vars.defaultTransform = true')) {
-      return { ...input, defaultTransform: true };
-    }
-    // Handle the test transform cases
-    if (typeof code === 'string') {
-      // Handle simple concatenation transforms
-      if (code === 'output + " postprocessed"') {
-        return input + ' postprocessed';
-      }
-      // Handle JSON parsing transforms
-      if (code === 'JSON.parse(output).value') {
-        try {
-          return JSON.parse(input).value;
-        } catch {
-          return input;
-        }
-      }
-      // Handle template literal transforms
-      if (code === '`Transformed: ${output}`') {
-        return `Transformed: ${input}`;
-      }
-      if (code === '`ProviderTransformed: ${output}`') {
-        return `ProviderTransformed: ${input}`;
-      }
-      if (code === '`Provider: ${output}`') {
-        return `Provider: ${input}`;
-      }
-      if (code === '`Test: ${output}`') {
-        return `Test: ${input}`;
-      }
-      if (code === '"testTransformed " + output') {
-        return 'testTransformed ' + input;
-      }
-      if (code === '"defaultTestTransformed " + output') {
-        return 'defaultTestTransformed ' + input;
-      }
-      // Handle transformVars cases
-      if (code.includes('{ ...vars')) {
-        if (code.includes('toUpperCase()')) {
-          return { ...input, name: input.name.toUpperCase() };
-        }
-        if (code.includes('vars.age + 5')) {
-          return { ...input, age: input.age + 5 };
-        }
-      }
-      // Handle transformVars with return statement and context
-      if (code.includes('return {') && code.includes('context.uuid')) {
-        return {
-          ...input,
-          id: context?.uuid || 'mock-uuid',
-          hasPrompt: Boolean(context?.prompt),
-        };
-      }
-      // Handle transform with "Test: " prefix
-      if (code === '"Test: " + output') {
-        return 'Test: ' + input;
-      }
-      if (code === '"Provider: " + output') {
-        return 'Provider: ' + input;
-      }
-      if (code === '"Transform: " + output') {
-        return 'Transform: ' + input;
-      }
-      // Handle multiple transforms concatenation
-      if (code === 'output + "-provider-test"') {
-        return input + '-provider-test';
-      }
-      if (code === 'output + "-provider"') {
-        return input + '-provider';
-      }
-      if (code === 'output + "-test"') {
-        return input + '-test';
-      }
-      // Handle template literal transforms with backticks
-      if (code === '`Transform: ${output}`') {
-        return `Transform: ${input}`;
-      }
-      if (code === '`Postprocess: ${output}`') {
-        return `Postprocess: ${input}`;
-      }
-      // Handle transformVars with test2UpperCase
-      if (code.includes('test2UpperCase: vars.test2.toUpperCase()')) {
-        return { ...input, test2UpperCase: input.test2.toUpperCase() };
-      }
-      // Handle metadata transforms
-      if (code.includes('context?.metadata')) {
-        if (code.includes('Output:') && context?.metadata) {
-          return `Output: ${input}, Metadata: ${JSON.stringify(context.metadata)}`;
-        }
-        if (code.includes('Has metadata') && context?.metadata) {
-          return `Has metadata: ${input}`;
-        }
-        if (code.includes('No metadata') && !context?.metadata) {
-          return `No metadata: ${input}`;
-        }
-        if (
-          code.includes('Empty metadata') &&
-          context?.metadata &&
-          Object.keys(context.metadata).length === 0
-        ) {
-          return `Empty metadata: ${input}`;
-        }
-        if (code.includes('All context') && context?.vars && context?.prompt && context?.metadata) {
-          return `All context: ${input}`;
-        }
-        if (
-          code.includes('Missing context') &&
-          !(context?.vars && context?.prompt && context?.metadata)
-        ) {
-          return `Missing context: ${input}`;
-        }
-      }
-    }
-    return input;
-  }),
+  transform: vi.fn().mockImplementation(mockTransform),
 }));
 
 vi.mock('../src/util/fileReference', async () => {
