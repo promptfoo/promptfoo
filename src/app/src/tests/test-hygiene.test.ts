@@ -92,12 +92,12 @@ const directBrowserMockPatterns = [
 const directCallApiMockPatterns = [
   {
     pattern:
-      /\bvi\.mocked\(\s*(?:api\.)?callApi\s*\)\.mock(?:ResolvedValue|RejectedValue|Implementation|ReturnValue)/,
+      /\bvi\.mocked\(\s*(?:api\.)?callApi\s*\)\s*\.\s*mock(?:ResolvedValue|RejectedValue|Implementation|ReturnValue)/,
     message: 'mock callApi with @app/tests/apiMocks helpers',
   },
   {
     pattern:
-      /\(\s*callApi\s+as\s+Mock\s*\)\.mock(?:ResolvedValue|RejectedValue|Implementation|ReturnValue)/,
+      /\(\s*callApi\s+as\s+Mock\s*\)\s*\.\s*mock(?:ResolvedValue|RejectedValue|Implementation|ReturnValue)/,
     message: 'mock callApi with @app/tests/apiMocks helpers instead of casting callApi',
   },
 ];
@@ -130,19 +130,42 @@ function findTestFiles(dir: string): string[] {
   });
 }
 
+function toPosixPath(filePath: string) {
+  return filePath.replace(/\\/g, '/');
+}
+
+function toPosixRelativePath(file: string) {
+  return toPosixPath(path.relative(srcDir, file));
+}
+
+function findPatternViolationsInSource(
+  source: string,
+  relativePath: string,
+  patterns: { pattern: RegExp; message: string }[],
+): string[] {
+  return patterns.flatMap(({ pattern, message }) => {
+    const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+    const globalPattern = new RegExp(pattern.source, flags);
+
+    return Array.from(source.matchAll(globalPattern), (match) => {
+      const index = match.index ?? 0;
+      const lineNumber = source.slice(0, index).split('\n').length;
+      const sourceSnippet = match[0].replace(/\s+/g, ' ').trim();
+
+      return `${relativePath}:${lineNumber}: ${message}: ${sourceSnippet}`;
+    });
+  });
+}
+
 function findPatternViolations(
   file: string,
   patterns: { pattern: RegExp; message: string }[],
 ): string[] {
-  return readFileSync(file, 'utf8')
-    .split('\n')
-    .flatMap((line, index) =>
-      patterns.flatMap(({ pattern, message }) =>
-        pattern.test(line)
-          ? [`${path.relative(srcDir, file)}:${index + 1}: ${message}: ${line.trim()}`]
-          : [],
-      ),
-    );
+  return findPatternViolationsInSource(
+    readFileSync(file, 'utf8'),
+    toPosixRelativePath(file),
+    patterns,
+  );
 }
 
 describe('test hygiene', () => {
@@ -177,7 +200,7 @@ describe('test hygiene', () => {
         .split('\n')
         .flatMap((line, index) =>
           focusedOrSkippedTestPattern.test(line)
-            ? [`${path.relative(srcDir, file)}:${index + 1}: ${line.trim()}`]
+            ? [`${toPosixRelativePath(file)}:${index + 1}: ${line.trim()}`]
             : [],
         );
     });
@@ -196,7 +219,7 @@ describe('test hygiene', () => {
         .flatMap((line, index) =>
           directBrowserMockPatterns.flatMap(({ pattern, message }) =>
             pattern.test(line)
-              ? [`${path.relative(srcDir, file)}:${index + 1}: ${message}: ${line.trim()}`]
+              ? [`${toPosixRelativePath(file)}:${index + 1}: ${message}: ${line.trim()}`]
               : [],
           ),
         );
@@ -232,6 +255,8 @@ describe('test hygiene', () => {
     'vi.mocked(api.callApi).mockRejectedValue(error)',
     '(callApi as Mock).mockImplementation(() => response)',
     '(callApi as Mock).mockReturnValue(response)',
+    'vi.mocked(callApi)\n  .mockResolvedValue(response)',
+    '(callApi as Mock)\n  .mockReturnValue(response)',
   ])('detects direct callApi mock source in %s', (source) => {
     const matches = directCallApiMockPatterns.filter(({ pattern }) => pattern.test(source));
 
@@ -249,13 +274,36 @@ describe('test hygiene', () => {
     expect(matches).toEqual([]);
   });
 
+  it('detects multiline direct callApi mock violations in source files', () => {
+    const violations = findPatternViolationsInSource(
+      [
+        'import { callApi } from "@app/utils/api";',
+        'vi.mocked(callApi)',
+        '  .mockResolvedValue(response);',
+        '(callApi as Mock)',
+        '  .mockReturnValue(response);',
+      ].join('\n'),
+      'hooks/example.test.ts',
+      directCallApiMockPatterns,
+    );
+
+    expect(violations).toEqual([
+      'hooks/example.test.ts:2: mock callApi with @app/tests/apiMocks helpers: vi.mocked(callApi) .mockResolvedValue',
+      'hooks/example.test.ts:4: mock callApi with @app/tests/apiMocks helpers instead of casting callApi: (callApi as Mock) .mockReturnValue',
+    ]);
+  });
+
+  it('normalizes Windows path separators before comparing allowlist entries', () => {
+    expect(toPosixPath('pages\\media\\Media.test.tsx')).toBe('pages/media/Media.test.tsx');
+  });
+
   it('keeps new frontend tests on strict callApi mock helpers', () => {
     const violations = findTestFiles(srcDir).flatMap((file) => {
       if (file === thisFile) {
         return [];
       }
 
-      const relativePath = path.relative(srcDir, file);
+      const relativePath = toPosixRelativePath(file);
       if (legacyDirectCallApiMockFiles.has(relativePath)) {
         return [];
       }
@@ -267,7 +315,7 @@ describe('test hygiene', () => {
   });
 
   it('keeps the legacy direct callApi mock allowlist scoped to active violations', () => {
-    const testFiles = new Set(findTestFiles(srcDir).map((file) => path.relative(srcDir, file)));
+    const testFiles = new Set(findTestFiles(srcDir).map((file) => toPosixRelativePath(file)));
     const missingAllowlistFiles = Array.from(legacyDirectCallApiMockFiles).filter(
       (file) => !testFiles.has(file),
     );

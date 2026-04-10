@@ -32,6 +32,24 @@ function getRequestMethod(options: RequestInit | undefined) {
   return (options?.method ?? 'GET').toUpperCase();
 }
 
+function assertCallApiMock(): CallApiMock {
+  if (!vi.isMockFunction(callApi)) {
+    throw new Error(
+      'callApi must be mocked with vi.fn() before using apiMocks helpers. Use vi.mock("@app/utils/api", () => ({ callApi: vi.fn() })) in the test file.',
+    );
+  }
+
+  return vi.mocked(callApi);
+}
+
+function ensureDefaultUnhandledCallApi(mockCallApi: CallApiMock) {
+  if (!mockCallApi.getMockImplementation()) {
+    mockCallApi.mockImplementation(defaultUnhandledCallApi);
+  }
+
+  return mockCallApi;
+}
+
 function matchesRoute(route: MockApiRoute, path: string, options: RequestInit | undefined) {
   if ((route.method ?? 'GET').toUpperCase() !== getRequestMethod(options)) {
     return false;
@@ -81,13 +99,7 @@ export function createMockResponse(body: unknown, init: MockApiResponseInit = {}
 }
 
 export function resetCallApiMock() {
-  if (!vi.isMockFunction(callApi)) {
-    throw new Error(
-      'callApi must be mocked with vi.fn() before using apiMocks helpers. Use vi.mock("@app/utils/api", () => ({ callApi: vi.fn() })) in the test file.',
-    );
-  }
-
-  const mockCallApi = vi.mocked(callApi);
+  const mockCallApi = assertCallApiMock();
   mockCallApi.mockReset();
   mockCallApi.mockImplementation(defaultUnhandledCallApi);
   return mockCallApi;
@@ -164,5 +176,5 @@ export function mockCallApiRoutes(routes: MockApiRoute[]) {
 }
 
 export function getCallApiMock(): CallApiMock {
-  return vi.mocked(callApi);
+  return ensureDefaultUnhandledCallApi(assertCallApiMock());
 }
