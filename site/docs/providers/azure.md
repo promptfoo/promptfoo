@@ -87,15 +87,19 @@ providers:
 
 ## Provider Types
 
-- `azure:chat:<deployment name>` - For chat endpoints (e.g., gpt-5.1, gpt-5.1-mini, gpt-5.1-nano, gpt-5, gpt-4o)
+- `azure:chat:<deployment name>` - For chat endpoints (e.g., gpt-5.4, gpt-5.4-mini, gpt-5.4-nano, gpt-5, gpt-4o)
 - `azure:completion:<deployment name>` - For completion endpoints (e.g., gpt-35-turbo-instruct)
 - `azure:embedding:<deployment name>` - For embedding models (e.g., text-embedding-3-small, text-embedding-3-large)
 - `azure:responses:<deployment name>` - For the Responses API (e.g., gpt-4.1, gpt-5.1)
 - `azure:assistant:<assistant id>` - For Azure OpenAI Assistants (using Azure OpenAI API)
-- `azure:foundry-agent:<assistant id>` - For Azure AI Foundry Agents (using Azure AI Projects SDK)
+- `azure:foundry-agent:<agent name or id>` - For Azure AI Foundry Agents (using Azure AI Projects SDK)
 - `azure:video:<deployment name>` - For video generation (Sora)
 
-Vision-capable models (GPT-5.1, GPT-4o, GPT-4.1) use the standard `azure:chat:` provider type.
+Vision-capable GPT-5, GPT-4o, and GPT-4.1 deployments use the standard `azure:chat:` provider type.
+
+Azure deployment availability changes frequently and varies by region. Check the
+[Azure OpenAI model availability page](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure)
+for the current list of supported models and regions before creating new deployments.
 
 ## Available Models
 
@@ -103,15 +107,15 @@ Azure provides access to OpenAI models as well as third-party models through Azu
 
 ### OpenAI Models
 
-| Category             | Models                                                                         |
-| -------------------- | ------------------------------------------------------------------------------ |
-| **GPT-5 Series**     | `gpt-5.1`, `gpt-5.1-mini`, `gpt-5.1-nano`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano` |
-| **GPT-4.1 Series**   | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`                                      |
-| **GPT-4o Series**    | `gpt-4o`, `gpt-4o-mini`, `gpt-4o-realtime`                                     |
-| **Reasoning Models** | `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`                |
-| **Specialized**      | `computer-use-preview`, `gpt-image-1`, `codex-mini-latest`                     |
-| **Deep Research**    | `o3-deep-research`, `o4-mini-deep-research`                                    |
-| **Embeddings**       | `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`   |
+| Category             | Models                                                                                                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **GPT-5 Series**     | `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5`, `gpt-5-pro`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`, `gpt-5.1-chat`, `gpt-5.1-codex` |
+| **GPT-4.1 Series**   | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`                                                                                                              |
+| **GPT-4o Series**    | `gpt-4o`, `gpt-4o-mini`, `gpt-4o-realtime`                                                                                                             |
+| **Reasoning Models** | `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`                                                                                        |
+| **Specialized**      | `computer-use-preview`, `gpt-image-1`, `codex-mini-latest`                                                                                             |
+| **Deep Research**    | `o3-deep-research`, `o4-mini-deep-research`                                                                                                            |
+| **Embeddings**       | `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`                                                                           |
 
 ### Third-Party Models (Azure AI Foundry)
 
@@ -163,13 +167,15 @@ providers:
 
 ### Supported Responses Models
 
-The Responses API supports all Azure OpenAI models:
+The Responses API supports Azure deployments backed by current Azure OpenAI responses-capable models. Common examples include:
 
-- **GPT-5 Series**: `gpt-5.1`, `gpt-5.1-mini`, `gpt-5.1-nano`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano`
+- **GPT-5 Series**: `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`
 - **GPT-4 Series**: `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`
 - **Reasoning Models**: `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`
 - **Specialized Models**: `computer-use-preview`, `gpt-image-1`, `codex-mini-latest`
 - **Deep Research Models**: `o3-deep-research`, `o4-mini-deep-research`
+
+Use your Azure deployment name in promptfoo, even if it differs from the underlying model ID.
 
 ### Responses API Features
 
@@ -691,23 +697,24 @@ These properties can be set under the provider `config` key:
 
 ### OpenAI Configuration
 
-| Name                  | Description                                                                                                                 |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                   |
-| isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o1, o3, o3-mini, o4-mini). **Required for reasoning models** |
-| max_completion_tokens | Maximum tokens to generate for reasoning models. Only used when `isReasoningModel` is `true`                                |
-| reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Only used when `isReasoningModel` is `true`                           |
-| temperature           | Controls randomness (0-2). Not supported for reasoning models                                                               |
-| max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                              |
-| top_p                 | Controls nucleus sampling (0-1)                                                                                             |
-| frequency_penalty     | Penalizes repeated tokens (-2 to 2)                                                                                         |
-| presence_penalty      | Penalizes new tokens based on presence (-2 to 2)                                                                            |
-| best_of               | Generates multiple outputs and returns the best                                                                             |
-| functions             | Array of functions available for the model to call                                                                          |
-| function_call         | Controls how the model calls functions                                                                                      |
-| response_format       | Specifies output format (e.g., `{ type: "json_object" }`)                                                                   |
-| stop                  | Array of sequences where the model will stop generating                                                                     |
-| passthrough           | Additional parameters to send with the request                                                                              |
+| Name                  | Description                                                                                                                                     |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                                       |
+| isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o1, o3, o3-mini, o4-mini). **Required for reasoning models**                     |
+| max_completion_tokens | Maximum tokens to generate for reasoning models. Only used when `isReasoningModel` is `true`                                                    |
+| reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Only used when `isReasoningModel` is `true`                                               |
+| temperature           | Controls randomness (0-2). Not supported for reasoning models                                                                                   |
+| max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                                                  |
+| top_p                 | Controls nucleus sampling (0-1)                                                                                                                 |
+| frequency_penalty     | Penalizes repeated tokens (-2 to 2)                                                                                                             |
+| presence_penalty      | Penalizes new tokens based on presence (-2 to 2)                                                                                                |
+| omitDefaults          | Omits hardcoded defaults unless values are explicitly set via config or environment variables. Supported by `azure:chat` and `azure:responses`. |
+| best_of               | Generates multiple outputs and returns the best                                                                                                 |
+| functions             | Array of functions available for the model to call                                                                                              |
+| function_call         | Controls how the model calls functions                                                                                                          |
+| response_format       | Specifies output format (e.g., `{ type: "json_object" }`)                                                                                       |
+| stop                  | Array of sequences where the model will stop generating                                                                                         |
+| passthrough           | Additional parameters to send with the request                                                                                                  |
 
 ## Using Reasoning Models (o1, o3, o3-mini, o4-mini)
 
@@ -729,7 +736,7 @@ providers:
       isReasoningModel: true
       # Use max_completion_tokens instead of max_tokens
       max_completion_tokens: 25000
-      # Optional: Set reasoning effort (default is 'medium')
+      # Optional: Set reasoning effort (default is 'medium' unless omitDefaults is true)
       reasoning_effort: 'medium'
 
 # For completion endpoints
@@ -1058,16 +1065,17 @@ See the guide on [How to evaluate OpenAI assistants](/docs/guides/evaluate-opena
 
 ## Azure AI Foundry Agents
 
-Azure AI Foundry Agents provide an alternative way to use Azure OpenAI Assistants through the Azure AI Projects SDK (`@azure/ai-projects`). This provider uses native Azure SDK authentication and is designed for use with Azure AI Foundry projects.
+Azure AI Foundry Agents let promptfoo run an existing Foundry agent through the Azure AI Projects SDK (`@azure/ai-projects`) and the v2 agent runtime. Promptfoo resolves the agent from your Azure AI Foundry project, then calls the Responses API with an `agent_reference`.
 
 ### Key Differences from Standard Azure Assistants
 
-| Feature             | Azure Assistant                              | Azure Foundry Agent                                                           |
-| ------------------- | -------------------------------------------- | ----------------------------------------------------------------------------- |
-| **API Type**        | Direct HTTP calls to Azure OpenAI API        | Azure AI Projects SDK (`@azure/ai-projects`)                                  |
-| **Authentication**  | API key or Azure credentials                 | `DefaultAzureCredential` (Azure CLI, environment variables, managed identity) |
-| **Endpoint**        | Azure OpenAI endpoint (`*.openai.azure.com`) | Azure AI Project URL (`*.services.ai.azure.com/api/projects/*`)               |
-| **Provider Format** | `azure:assistant:<assistant_id>`             | `azure:foundry-agent:<assistant_id>`                                          |
+| Feature             | Azure Assistant                              | Azure Foundry Agent                                                             |
+| ------------------- | -------------------------------------------- | ------------------------------------------------------------------------------- |
+| **API Type**        | Direct HTTP calls to Azure OpenAI API        | Azure AI Projects SDK (`@azure/ai-projects`) + Responses API agent runtime      |
+| **Authentication**  | API key or Azure credentials                 | `DefaultAzureCredential` (Azure CLI, environment variables, managed identity)   |
+| **Endpoint**        | Azure OpenAI endpoint (`*.openai.azure.com`) | Azure AI Project URL (`*.services.ai.azure.com/api/projects/*`)                 |
+| **Provider Format** | `azure:assistant:<assistant_id>`             | `azure:foundry-agent:<agent-name-or-id>`                                        |
+| **Execution Model** | Threads/messages/runs                        | `responses.create(..., { body: { agent: { name, type: "agent_reference" } } })` |
 
 ### Setup
 
@@ -1093,11 +1101,11 @@ Alternatively, you can provide the `projectUrl` in your configuration file.
 
 ### Basic Configuration
 
-The provider uses the `azure:foundry-agent:<assistant_id>` format:
+The provider uses the `azure:foundry-agent:<agent-name-or-id>` format. Agent names are preferred. Legacy IDs still work as a fallback lookup if the agent exists in the project.
 
 ```yaml
 providers:
-  - id: azure:foundry-agent:asst_E4GyOBYKlnAzMi19SZF2Sn8I
+  - id: azure:foundry-agent:my-foundry-agent
     config:
       projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
       temperature: 0.7
@@ -1107,46 +1115,62 @@ providers:
 
 ### Configuration Options
 
-The Azure Foundry Agent provider supports all the same configuration options as the standard Azure Assistant provider:
+This provider references an existing Foundry agent. Some settings can still be sent per request through the Responses API, while agent-definition settings need to be configured on the agent itself.
 
-| Parameter               | Description                                                                  |
-| ----------------------- | ---------------------------------------------------------------------------- |
-| `projectUrl`            | Azure AI Project URL (required, can also use `AZURE_AI_PROJECT_URL` env var) |
-| `temperature`           | Controls randomness (0.0 to 2.0)                                             |
-| `max_tokens`            | Maximum tokens in response                                                   |
-| `top_p`                 | Nucleus sampling parameter                                                   |
-| `tools`                 | Function tools configuration (see below)                                     |
-| `tool_choice`           | Tool selection strategy (`auto`, `none`, or specific tool)                   |
-| `tool_resources`        | Resource configuration (file search, code interpreter, etc.)                 |
-| `instructions`          | Override system instructions for the assistant                               |
-| `functionToolCallbacks` | Custom function callbacks for tool execution                                 |
-| `modelName`             | Model name to override assistant's default model                             |
-| `maxPollTimeMs`         | Maximum time to poll for completion (default: 300000ms / 5 minutes)          |
-| `response_format`       | Response format specification                                                |
+Supported per-request settings:
+
+| Parameter               | Description                                                                         |
+| ----------------------- | ----------------------------------------------------------------------------------- |
+| `projectUrl`            | Azure AI Project URL (required, can also use `AZURE_AI_PROJECT_URL` env var)        |
+| `instructions`          | Additional per-request instructions                                                 |
+| `temperature`           | Controls randomness                                                                 |
+| `top_p`                 | Nucleus sampling parameter                                                          |
+| `max_tokens`            | Mapped to `max_output_tokens` for the Responses API                                 |
+| `max_completion_tokens` | Also mapped to `max_output_tokens`                                                  |
+| `response_format`       | Output format (`json_object` or `json_schema`)                                      |
+| `tools`                 | Tool definitions loaded into the request                                            |
+| `tool_choice`           | Tool selection strategy                                                             |
+| `functionToolCallbacks` | Callback implementations for `function_call` outputs                                |
+| `modelName`             | Optional per-request model override                                                 |
+| `reasoning_effort`      | Sent as `reasoning.effort`                                                          |
+| `verbosity`             | Passed through to the Responses text config                                         |
+| `metadata`              | Request metadata                                                                    |
+| `passthrough`           | Additional raw Responses API fields                                                 |
+| `maxPollTimeMs`         | Maximum time to keep resolving callback loops before timing out (default: `300000`) |
+
+Ignored per-request settings:
+
+- `tool_resources`
+- `frequency_penalty`
+- `presence_penalty`
+- `seed`
+- `stop`
+- `timeoutMs`
+- `retryOptions`
+
+Configure those on the Foundry agent definition itself instead of on the eval request.
 
 ### Function Tools with Azure Foundry Agents
 
-Function tools work the same way as with standard Azure Assistants. You can define functions and provide callback implementations:
+Promptfoo can handle Responses API `function_call` outputs for Foundry agents. If every requested function has a configured callback, promptfoo executes the callbacks locally and sends `function_call_output` items back with `previous_response_id`.
+
+You can define callbacks at the provider level or override them per prompt:
 
 ```yaml
 providers:
-  - id: azure:foundry-agent:your_assistant_id
+  - id: azure:foundry-agent:my-foundry-agent
     config:
       projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
-      # Load function tool definitions
       tools: file://tools/weather-function.json
-      # Define function callbacks
       functionToolCallbacks:
-        # Use an external file
         get_current_weather: file://callbacks/weather.js:getCurrentWeather
-        # Or use an inline function
         get_forecast: |
           async function(args) {
             try {
               const parsedArgs = JSON.parse(args);
               const location = parsedArgs.location;
               const days = parsedArgs.days || 7;
-              
+
               // Your implementation here
               return JSON.stringify({
                 location,
@@ -1163,30 +1187,27 @@ providers:
 
 The function callbacks receive two parameters:
 
-- `args`: String containing JSON-encoded function arguments
-- `context`: Object with `{ threadId, runId, assistantId, provider }` for advanced use cases
+- `args`: JSON-encoded function arguments
+- `context`: `{ threadId, runId, assistantId, provider }`
 
-### Using Vector Stores with Azure Foundry Agents
+If a callback is missing, promptfoo returns the unresolved function call in the model output instead of trying to fake a tool result.
 
-Vector stores work the same way as with standard Azure Assistants:
+### Agent-Defined Tools and Resources
+
+Foundry agent tools such as file search and vector stores should be configured on the agent in Azure AI Foundry. The v2 runtime does not apply `tool_resources` from the eval request.
 
 ```yaml
 providers:
-  - id: azure:foundry-agent:your_assistant_id
+  - id: azure:foundry-agent:my-foundry-agent
     config:
       projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
-      # Add tools for file search
       tools:
         - type: file_search
-      # Configure vector store IDs
-      tool_resources:
-        file_search:
-          vector_store_ids:
-            - 'your_vector_store_id'
-      # Optional parameters
       temperature: 1
       top_p: 1
 ```
+
+In that example, the request tells the runtime that file search is available, but the actual vector store bindings still need to live on the Foundry agent definition.
 
 ### Environment Variables
 
@@ -1205,7 +1226,7 @@ Here's a complete example configuration:
 description: 'Azure Foundry Agent evaluation'
 
 providers:
-  - id: azure:foundry-agent:asst_uRGMedGFDehLkjJJaq51J9GY
+  - id: azure:foundry-agent:my-foundry-agent
     config:
       projectUrl: 'https://my-project.services.ai.azure.com/api/projects/my-project-id'
       temperature: 0.7
@@ -1244,7 +1265,7 @@ The Azure Foundry Agent provider includes comprehensive error handling:
 
 The provider supports caching to improve performance and reduce API calls. Results are cached based on:
 
-- Assistant configuration (instructions, model, temperature, etc.)
+- Request configuration (instructions, model override, temperature, etc.)
 - Tool definitions
 - Input prompt
 
@@ -1255,7 +1276,7 @@ evaluateOptions:
   cache: true
 
 providers:
-  - id: azure:foundry-agent:your_assistant_id
+  - id: azure:foundry-agent:my-foundry-agent
     config:
       projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
 ```

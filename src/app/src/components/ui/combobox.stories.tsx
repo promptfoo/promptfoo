@@ -209,6 +209,25 @@ export const WithLabel: Story = {
   },
 };
 
+// Inline label — renders stacked inside the trigger like a Select with a label
+export const InlineLabel: Story = {
+  render: function InlineLabelCombobox() {
+    const [value, setValue] = useState('');
+    return (
+      <div className="w-[350px]">
+        <Combobox
+          label="AI Model"
+          labelPosition="inline"
+          options={modelOptions}
+          value={value}
+          onChange={setValue}
+          placeholder="Select a model..."
+        />
+      </div>
+    );
+  },
+};
+
 // Not clearable
 export const NotClearable: Story = {
   render: function NotClearableCombobox() {

@@ -123,6 +123,34 @@ describe('Advanced Features Smoke Tests', () => {
     });
   });
 
+  describe('2.5.2 Conversation Relevance Config Loading', () => {
+    it('2.5.2 - preserves template syntax in static _conversation vars', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/conversation-relevance-ssti.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'conversation-relevance-ssti-output.json');
+      const capturePath = path.join(OUTPUT_DIR, 'conversation-relevance-ssti-prompt.txt');
+
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        env: {
+          OPENAI_API_KEY: 'SHOULD_NOT_RENDER',
+          PROMPTFOO_CAPTURE_PATH: capturePath,
+        },
+      });
+
+      expect(exitCode).toBe(0);
+
+      const prompt = fs.readFileSync(capturePath, 'utf-8');
+      expect(prompt).toContain('What is the capital of {{country}}?');
+      expect(prompt).toContain('{{capital}}');
+      expect(prompt).toContain('{{ env.OPENAI_API_KEY }}');
+      expect(prompt).toContain('{% for x in range(3) %}{{x}}{% endfor %}');
+      expect(prompt).not.toContain('SHOULD_NOT_RENDER');
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      expect(parsed.results.results[0].success).toBe(true);
+    });
+  });
+
   describe('1.10.1 Delay Between Tests', () => {
     it('1.10.1 - --delay adds delay between tests', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/delay-test.yaml');
@@ -291,6 +319,33 @@ describe('Advanced Features Smoke Tests', () => {
       expect(parsed.results.results[0].success).toBe(true);
       // The weighted assertions should both pass
       expect(parsed.results.results[0].gradingResult.componentResults.length).toBe(2);
+    });
+
+    it('5.3.2 - weighted named metrics preserve prompt totals and denominators', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/weighted-named-metric.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'weighted-named-metric-output.json');
+
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
+
+      expect(exitCode).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+
+      expect(parsed.results.results[0].success).toBe(true);
+      expect(parsed.results.results[0].score).toBeCloseTo(0.75, 10);
+      expect(parsed.results.results[0].gradingResult.namedScores.weightedMetric).toBeCloseTo(
+        0.75,
+        10,
+      );
+      expect(parsed.results.results[0].gradingResult.namedScoreWeights.weightedMetric).toBe(4);
+      expect(parsed.results.prompts[0].metrics.namedScores.weightedMetric).toBeCloseTo(3, 10);
+      expect(parsed.results.prompts[0].metrics.namedScoresCount.weightedMetric).toBe(2);
+      expect(parsed.results.prompts[0].metrics.namedScoreWeights.weightedMetric).toBe(4);
+      expect(
+        parsed.results.prompts[0].metrics.namedScores.weightedMetric /
+          parsed.results.prompts[0].metrics.namedScoreWeights.weightedMetric,
+      ).toBeCloseTo(0.75, 10);
     });
   });
 

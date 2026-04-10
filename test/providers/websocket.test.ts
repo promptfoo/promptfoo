@@ -188,8 +188,19 @@ describe('WebSocketProvider', () => {
       },
     });
 
-    await expect(provider.callApi('test prompt')).rejects.toThrow('WebSocket request timed out');
-    expect(mockWs.close).toHaveBeenCalled();
+    vi.useFakeTimers();
+    try {
+      const responsePromise = expect(provider.callApi('test prompt')).rejects.toThrow(
+        'WebSocket request timed out',
+      );
+
+      await vi.runAllTimersAsync();
+
+      await responsePromise;
+      expect(mockWs.close).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should handle non-JSON response', async () => {

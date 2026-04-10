@@ -3,6 +3,7 @@ import fs from 'fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiTranscriptionProvider } from '../../../src/providers/openai/transcription';
+import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -233,10 +234,36 @@ describe('OpenAiTranscriptionProvider', () => {
         const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe');
 
         await expect(provider.callApi('/path/to/audio.mp3')).rejects.toThrow(
-          'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+          getOpenAiMissingApiKeyMessage(),
         );
       } finally {
-        process.env.OPENAI_API_KEY = originalEnv;
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+      }
+    });
+
+    it('should use custom apiKeyEnvar in missing API key errors', async () => {
+      const originalEnv = process.env.OPENAI_API_KEY;
+      const originalCustomEnv = process.env.CUSTOM_TRANSCRIPTION_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.CUSTOM_TRANSCRIPTION_API_KEY;
+
+      try {
+        const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+          config: {
+            apiKeyEnvar: 'CUSTOM_TRANSCRIPTION_API_KEY',
+          },
+          env: {
+            OPENAI_API_KEY: undefined,
+            CUSTOM_TRANSCRIPTION_API_KEY: undefined,
+          },
+        });
+
+        await expect(provider.callApi('/path/to/audio.mp3')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage('CUSTOM_TRANSCRIPTION_API_KEY'),
+        );
+      } finally {
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+        restoreEnvVar('CUSTOM_TRANSCRIPTION_API_KEY', originalCustomEnv);
       }
     });
   });

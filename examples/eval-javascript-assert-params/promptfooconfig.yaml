@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: JavaScript assertion params via config
+
+prompts:
+  - '{{reply}}'
+
+providers:
+  - echo
+
+tests:
+  - description: Same script, two assertion-local parameter sets
+    vars:
+      reply: hello world from promptfoo
+    assert:
+      - type: javascript
+        value: file://assert-length.js
+        config:
+          minLength: 5
+      - type: javascript
+        value: file://assert-length.js
+        config:
+          minLength: 20

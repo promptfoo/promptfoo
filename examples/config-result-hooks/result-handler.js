@@ -42,6 +42,7 @@ module.exports = {
     console.log('       EVALUATION RESULTS SUMMARY       ');
     console.log('========================================');
     console.log(`Eval ID:      ${evalId}`);
+    console.log(`Prompts:      ${prompts.length}`);
     console.log(`Total Tests:  ${total}`);
     console.log(`Passed:       ${passed}`);
     console.log(`Failed:       ${failed}`);

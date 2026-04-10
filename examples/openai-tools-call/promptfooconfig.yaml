@@ -5,11 +5,9 @@ prompts:
   - 'What is the weather like in {{city}}?'
 
 providers:
-  - id: openai:chat:gpt-5-mini
+  - id: openai:chat:gpt-5.4-mini
     config:
       verbosity: high
-      reasoning_effort: minimal
-      temperature: 0
       tools:
         [
           {

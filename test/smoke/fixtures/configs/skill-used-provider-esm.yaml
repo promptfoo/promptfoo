@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - skill-used assertion with local ESM provider'
+
+providers:
+  - file://../providers/skill-metadata-esm.mjs
+
+prompts:
+  - 'Invoke a local skill'
+
+tests:
+  - assert:
+      - type: contains
+        value: 'Skill smoke:'
+      - type: skill-used
+        value: smoke-skill
+      - type: not-skill-used
+        value:
+          pattern: 'missing-*'

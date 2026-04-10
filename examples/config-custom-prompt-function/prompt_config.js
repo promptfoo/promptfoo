@@ -1,19 +1,9 @@
 // A prompt function that returns both prompt content and configuration
 module.exports.promptWithConfig = async function ({ vars, provider }) {
   // Dynamic configuration based on the topic
-  let temperature = 0.7;
-  let maxTokens = 100;
-
-  // Example of adjusting config based on topic complexity
-  if (vars.topic === 'the Roman Empire' || vars.topic === 'bob dylan') {
-    // More complex topics get more freedom in generation
-    temperature = 0.9;
-    maxTokens = 150;
-  } else {
-    // Simpler topics get more constrained generation
-    temperature = 0.5;
-    maxTokens = 75;
-  }
+  const isComplexTopic = vars.topic === 'the Roman Empire' || vars.topic === 'bob dylan';
+  const temperature = isComplexTopic ? 0.9 : 0.5;
+  const maxTokens = isComplexTopic ? 150 : 75;
 
   // Return both prompt and config
   return {

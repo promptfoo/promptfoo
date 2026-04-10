@@ -8,6 +8,8 @@ export function createEmptyCompletionDetails(): Required<CompletionTokenDetails>
     reasoning: 0,
     acceptedPrediction: 0,
     rejectedPrediction: 0,
+    cacheReadInputTokens: 0,
+    cacheCreationInputTokens: 0,
   };
 }
 
@@ -62,6 +64,11 @@ function accumulateCompletionDetails(
     reasoning: addNumbers(target?.reasoning, update.reasoning),
     acceptedPrediction: addNumbers(target?.acceptedPrediction, update.acceptedPrediction),
     rejectedPrediction: addNumbers(target?.rejectedPrediction, update.rejectedPrediction),
+    cacheReadInputTokens: addNumbers(target?.cacheReadInputTokens, update.cacheReadInputTokens),
+    cacheCreationInputTokens: addNumbers(
+      target?.cacheCreationInputTokens,
+      update.cacheCreationInputTokens,
+    ),
   };
 }
 

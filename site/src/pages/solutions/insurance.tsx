@@ -59,13 +59,13 @@ export default function Insurance() {
   return (
     <Layout
       title="AI Security for Insurance"
-      description="Red team AI systems for HIPAA compliance, PHI protection, network accuracy, and coverage discrimination. Built for health insurers and payers."
+      description="Red team AI systems for PHI protection, network accuracy, coverage discrimination, and health insurance risk testing. Built for health insurers and payers."
     >
       <Head>
         <meta property="og:title" content="AI Security for Insurance | Promptfoo" />
         <meta
           property="og:description"
-          content="Red team AI for HIPAA compliance, PHI protection, and coverage discrimination testing."
+          content="Red team AI for PHI protection, network accuracy, and coverage discrimination testing."
         />
         <meta property="og:image" content={ogImageUrl} />
         <meta property="og:image:width" content="1200" />
@@ -76,7 +76,7 @@ export default function Insurance() {
         <meta name="twitter:title" content="AI Security for Insurance | Promptfoo" />
         <meta
           name="twitter:description"
-          content="Red team AI for HIPAA compliance, PHI protection, and coverage discrimination testing."
+          content="Red team AI for PHI protection, network accuracy, and coverage discrimination testing."
         />
         <meta name="twitter:image" content={ogImageUrl} />
         <link rel="canonical" href={canonicalUrl} />
@@ -111,7 +111,7 @@ export default function Insurance() {
         <section className={styles.vulnerabilitySection}>
           <div className="container">
             <p className={styles.vulnEyebrow}>Risk Coverage</p>
-            <h2 className={styles.vulnTitle}>Insurance-specific compliance testing</h2>
+            <h2 className={styles.vulnTitle}>Insurance-specific risk testing</h2>
             <p className={styles.vulnSubtitle}>
               Purpose-built test scenarios for the unique risks facing AI in health insurance,
               claims processing, and member services
@@ -165,23 +165,23 @@ export default function Insurance() {
             <div className={styles.complianceGridTwo}>
               <ComplianceCard
                 icon={<LockIcon />}
-                title="HIPAA Requirements"
+                title="Patient Privacy Safeguards"
                 items={[
                   {
-                    name: 'Privacy Rule',
+                    name: 'Disclosure Controls',
                     description:
                       'Cross-member data leakage, social engineering, disclosure controls',
                   },
                   {
-                    name: 'Security Rule',
+                    name: 'Access Controls',
                     description: 'Auth bypass, session hijacking, access control failures',
                   },
                   {
-                    name: 'Breach Notification',
+                    name: 'Incident Detection',
                     description: 'Detect exposures before they require member notification',
                   },
                   {
-                    name: 'Business Associates',
+                    name: 'Vendor Sharing',
                     description: 'Inappropriate vendor disclosure, third-party leakage',
                   },
                 ]}
@@ -271,8 +271,8 @@ export default function Insurance() {
                 <h3>Comprehensive PHI protection testing</h3>
                 <p>
                   Insurance AI systems handle sensitive member data across millions of interactions.
-                  Our specialized testing identifies PHI exposure risks before they become HIPAA
-                  violations.
+                  Our specialized testing identifies PHI exposure risks before they become privacy
+                  incidents.
                 </p>
                 <ul style={{ marginTop: '1.5rem', paddingLeft: '1.25rem' }}>
                   <li>Cross-member PHI leakage detection</li>
@@ -354,11 +354,11 @@ export default function Insurance() {
               <div className={styles.benefitItem}>
                 <LockIcon className={styles.benefitIcon} />
                 <div className={styles.benefitContent}>
-                  <h3>HIPAA-compliant deployment</h3>
+                  <h3>Private deployment options</h3>
                   <p>
                     Run entirely within your infrastructure with no member PHI leaving your
-                    environment. Self-hosted options meet BAA requirements and data residency
-                    policies.
+                    environment. Self-hosted options support internal privacy controls and data
+                    residency policies.
                   </p>
                 </div>
               </div>
@@ -377,7 +377,7 @@ export default function Insurance() {
                 <div className={styles.benefitContent}>
                   <h3>Audit-ready documentation</h3>
                   <p>
-                    Generate structured reports for HIPAA audits, CMS reviews, and state
+                    Generate structured reports for privacy reviews, CMS reviews, and state
                     examinations. Demonstrate due diligence with reproducible test results.
                   </p>
                 </div>

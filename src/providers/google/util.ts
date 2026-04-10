@@ -212,11 +212,6 @@ export function maybeCoerceToGeminiFormat(
     let systemInst = undefined;
     if (typeof contents === 'object' && 'system_instruction' in contents) {
       systemInst = contents.system_instruction;
-      // We need to modify the contents to remove system_instruction
-      // since it's already extracted to systemInst
-      if (typeof contents === 'object' && 'contents' in contents) {
-        contents = contents.contents;
-      }
       coerced = true;
     }
 
@@ -361,6 +356,8 @@ export function maybeCoerceToGeminiFormat(
 // These were previously implemented here but are now centralized in auth.ts
 export {
   clearCachedAuth,
+  determineGoogleVertexMode,
+  getGoogleApiKey,
   getGoogleClient,
   hasGoogleDefaultCredentials,
   loadCredentials,
@@ -766,7 +763,7 @@ function processImagesInContents(
  * @param contextVars - Variables for Nunjucks template rendering
  * @returns Processed Content object or undefined
  */
-function parseConfigSystemInstruction(
+export function parseConfigSystemInstruction(
   configSystemInstruction: Content | string | undefined,
   contextVars?: Record<string, VarValue>,
 ): Content | undefined {

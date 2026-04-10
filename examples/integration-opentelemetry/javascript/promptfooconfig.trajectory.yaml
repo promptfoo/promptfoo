@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Trajectory assertions with OpenTelemetry traces
+
+prompts:
+  - 'Explain how {{topic}} works in simple terms'
+
+providers:
+  - file://provider-simple-traced.js
+
+tests:
+  - vars:
+      topic: 'quantum computing'
+    metadata:
+      tracingEnabled: true
+      testCaseId: 'trajectory-test-case-1'
+    assert:
+      - type: trajectory:tool-used
+        value:
+          pattern: 'search_*'
+          min: 3
+          max: 3
+
+      - type: trajectory:tool-used
+        value: compose_answer
+
+      - type: trajectory:tool-args-match
+        value:
+          name: search_corpus
+          args:
+            query: quantum computing classical computing
+
+      - type: trajectory:tool-sequence
+        value:
+          mode: exact
+          steps:
+            - search_corpus
+            - search_corpus
+            - search_corpus
+            - compose_answer
+
+      - type: trajectory:step-count
+        value:
+          type: reasoning
+          min: 4
+          max: 4
+
+      - type: trajectory:step-count
+        value:
+          pattern: 'retrieve_document_*'
+          min: 3
+          max: 3
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      host: '0.0.0.0'
+      acceptFormats: ['json']

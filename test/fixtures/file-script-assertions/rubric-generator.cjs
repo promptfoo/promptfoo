@@ -58,3 +58,8 @@ module.exports.gradingFunction = (output, _context) => {
     reason: pass ? 'Output contains expected' : 'Output missing expected',
   };
 };
+
+// Returns trace-derived data for regression testing context.trace in non-trace assertion scripts
+module.exports.traceSpanName = (_output, context) => {
+  return context.trace?.spans?.[0]?.name || 'missing-trace';
+};

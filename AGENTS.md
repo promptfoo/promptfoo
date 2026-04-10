@@ -47,7 +47,8 @@ npm run f                  # Format only changed files
 npm run test:watch         # Run tests in watch mode
 npm run test:integration   # Run integration tests
 npm run test:redteam:integration  # Run red team integration tests
-npx vitest path/to/test    # Run a specific test file
+npm run test:app -- -- src/pages/path/to/test.test.tsx --run  # Run a specific frontend test file from repo root
+npx vitest path/to/test    # Run a specific backend test file
 
 # Development
 npm run dev                # Start both server and app
@@ -118,6 +119,28 @@ npm run local -- eval -c path/to/config.yaml -o output.json --no-cache
 Review the output file for `success`, `score`, and `error` fields.
 
 ## Debugging & Troubleshooting
+
+**Before running tests or review checks, align Node with the repo version first:**
+
+```bash
+nvm use
+```
+
+If you're using npm rather than pnpm/yarn, match the repo's npm major before treating install behavior as authoritative:
+
+```bash
+npm install -g npm@11
+```
+
+If Node-based tools fail with `ERR_MODULE_NOT_FOUND` or similar missing-package errors in a fresh worktree, run `npm ci` before treating the environment as blocked.
+
+If database-backed tests fail with a `better-sqlite3` ABI or `NODE_MODULE_VERSION` mismatch after switching Node versions, rebuild the native module for the active Node version before treating the test run as blocked:
+
+```bash
+npm rebuild better-sqlite3
+```
+
+This is an environment repair step, not a product bug. Agents should try `nvm use` first and `npm rebuild better-sqlite3` second before concluding that review-time tests are blocked by the local setup.
 
 **Verbose logging:**
 
@@ -237,7 +260,7 @@ See `test/AGENTS.md` for testing patterns.
 ## Project Conventions
 
 - **ESM modules** (type: "module" in package.json)
-- **Node.js ^20.20.0 || >=22.22.0** - Use `nvm use` to align with `.nvmrc`; `.npmrc` sets `engine-strict=true`
+- **Node.js ^20.20.0 || >=22.22.0** - Before `npm`/`vite`/`vitest`, run `source ~/.nvm/nvm.sh && nvm use` so `node -v` matches `.nvmrc`. If you're using npm, upgrade to `npm@11` so the repo's release-age policy is applied consistently. If native modules still mismatch before tests or review checks, run `npm rebuild better-sqlite3`. `.npmrc` sets `engine-strict=true`
 - **Alternative package managers** (pnpm, yarn) are supported
 - **File structure:** core logic in `src/`, tests in `test/`
 - **Examples** belong in `examples/` with clear README.md
@@ -253,6 +276,18 @@ See `test/AGENTS.md` for testing patterns.
 - **Reuse patterns** from similar files in the codebase
 - **Test both success and error cases** for all functionality
 - **Document provider configurations** following examples in existing code
+
+## Review Guidelines
+
+- Prioritize security regressions first, especially injection risks, unsafe handling of user-controlled or adversarial content, credential exposure, SSRF, path traversal, unsafe deserialization, and authorization mistakes.
+- Then prioritize correctness issues that can break behavior, public APIs, data integrity, concurrency, or error handling.
+- Treat missing or ineffective tests as a P1 issue when a change adds security-sensitive behavior, changes public behavior, or fixes a bug without meaningful coverage.
+- Focus on the code changed by the pull request. Do not flag pre-existing issues outside the touched diff unless the pull request materially worsens them.
+- Avoid repeating findings that were already raised in the current pull request unless the new diff reintroduces them or leaves the same risk in newly changed code.
+- Verify findings on the current branch tip after syncing with the latest `main`.
+- Treat existing PR comments and bot reviews as hints; confirm they still apply before reporting them. If CI is failing, inspect the failing job logs and separate unrelated base-branch failures from PR regressions.
+- Ignore formatting, import ordering, naming, and other style-only issues already enforced by CI or repository tooling.
+- If a pull request is primarily about redteam functionality, verify the title follows THE REDTEAM RULE in `docs/agents/pr-conventions.md` and uses `(redteam)` scope. Incidental `src/redteam/` touches in broad maintenance PRs do not require `(redteam)` scope.
 
 ## Documentation Testing
 

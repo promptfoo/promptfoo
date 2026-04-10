@@ -5,11 +5,11 @@ import { pathToFileURL } from 'node:url';
 
 import { Command } from 'commander';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { setLogLevel } from '../src/logger';
-import { addCommonOptionsRecursively, isMainModule, shutdownGracefully } from '../src/main';
-import { setupEnv } from '../src/util/index';
 
 // Hoisted mocks for shutdown tests
+const mockSetupEnv = vi.hoisted(() => vi.fn());
+const mockSetLogLevel = vi.hoisted(() => vi.fn());
+const mockTelemetryRecord = vi.hoisted(() => vi.fn());
 const mockTelemetryShutdown = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockCloseLogger = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockCloseDbIfOpen = vi.hoisted(() => vi.fn());
@@ -22,19 +22,19 @@ const actualUndici = vi.hoisted(() => vi.importActual<typeof import('undici')>('
 
 // Mock the dependencies
 vi.mock('../src/util', () => ({
-  setupEnv: vi.fn(),
+  setupEnv: mockSetupEnv,
 }));
 
 vi.mock('../src/logger', () => ({
   __esModule: true,
   default: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
-  setLogLevel: vi.fn(),
+  setLogLevel: mockSetLogLevel,
   closeLogger: mockCloseLogger,
 }));
 
 vi.mock('../src/telemetry', () => ({
   __esModule: true,
-  default: { record: vi.fn(), shutdown: mockTelemetryShutdown },
+  default: { record: mockTelemetryRecord, shutdown: mockTelemetryShutdown },
 }));
 
 vi.mock('../src/database/index', () => ({
@@ -51,6 +51,66 @@ vi.mock('../src/codeScan', () => ({
   codeScansCommand: vi.fn(),
 }));
 
+let addCommonOptionsRecursively: typeof import('../src/mainUtils').addCommonOptionsRecursively;
+let isMainModule: typeof import('../src/mainUtils').isMainModule;
+let setupEnvFilesFromArgv: typeof import('../src/mainUtils').setupEnvFilesFromArgv;
+let shutdownGracefully: typeof import('../src/mainUtils').shutdownGracefully;
+
+async function loadMainModule() {
+  vi.resetModules();
+  ({ addCommonOptionsRecursively, isMainModule, setupEnvFilesFromArgv, shutdownGracefully } =
+    await import('../src/mainUtils'));
+}
+
+describe('setupEnvFilesFromArgv', () => {
+  beforeEach(async () => {
+    await loadMainModule();
+    mockSetupEnv.mockReset();
+  });
+
+  it('should load env files before command actions run', () => {
+    setupEnvFilesFromArgv(['eval', '--env-file', '.env.local']);
+
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.local');
+  });
+
+  it('should support repeated and comma-separated env file args', () => {
+    setupEnvFilesFromArgv(['eval', '--env-file', '.env.one', '--env-path=.env.two,.env.three']);
+
+    expect(mockSetupEnv).toHaveBeenCalledWith(['.env.one', '.env.two', '.env.three']);
+  });
+
+  it('should ignore flags after --', () => {
+    setupEnvFilesFromArgv(['eval', '--', '--env-file', '.env.local']);
+
+    expect(mockSetupEnv).not.toHaveBeenCalled();
+  });
+
+  it('should recognize the --env-path alias', () => {
+    setupEnvFilesFromArgv(['eval', '--env-path', '.env.staging']);
+
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.staging');
+  });
+
+  it('should be a no-op when no env flags are present', () => {
+    setupEnvFilesFromArgv(['eval', '--verbose', '--no-cache']);
+
+    expect(mockSetupEnv).not.toHaveBeenCalled();
+  });
+
+  it('should ignore --env-file= with empty value', () => {
+    setupEnvFilesFromArgv(['eval', '--env-file=']);
+
+    expect(mockSetupEnv).not.toHaveBeenCalled();
+  });
+
+  it('should skip --env-file when next arg starts with -', () => {
+    setupEnvFilesFromArgv(['eval', '--env-file', '--verbose']);
+
+    expect(mockSetupEnv).not.toHaveBeenCalled();
+  });
+});
+
 describe('addCommonOptionsRecursively', () => {
   const originalExit = process.exit;
   let program: Command;
@@ -60,11 +120,13 @@ describe('addCommonOptionsRecursively', () => {
     process.exit = vi.fn() as any;
   });
 
-  beforeEach(() => {
-    program = new Command();
+  beforeEach(async () => {
+    await loadMainModule();
+    program = new Command('promptfoo');
     program.action(() => {});
     subCommand = program.command('subcommand');
     subCommand.action(() => {});
+    mockTelemetryRecord.mockReset();
     vi.clearAllMocks();
   });
 
@@ -201,16 +263,59 @@ describe('addCommonOptionsRecursively', () => {
 
     // Test verbose option
     preActionFn(createMockCommand({ verbose: true }));
-    expect(setLogLevel).toHaveBeenCalledWith('debug');
+    expect(mockSetLogLevel).toHaveBeenCalledWith('debug');
 
     // Test env-file option
     preActionFn(createMockCommand({ envFile: '.env.test' }));
-    expect(setupEnv).toHaveBeenCalledWith('.env.test');
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.test');
 
     // Test both options together
     preActionFn(createMockCommand({ verbose: true, envFile: '.env.combined' }));
-    expect(setLogLevel).toHaveBeenCalledWith('debug');
-    expect(setupEnv).toHaveBeenCalledWith('.env.combined');
+    expect(mockSetLogLevel).toHaveBeenCalledWith('debug');
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.combined');
+  });
+
+  it('should parse --env-file without consuming positional subcommand arguments', async () => {
+    const action = vi.fn();
+    const documentCommand = program.command('scan-model').argument('<model>').action(action);
+
+    addCommonOptionsRecursively(program);
+
+    await program.parseAsync(['scan-model', '--env-file', '.env.local', 'llama-3'], {
+      from: 'user',
+    });
+
+    expect(action).toHaveBeenCalledWith(
+      'llama-3',
+      expect.objectContaining({ verbose: false }),
+      documentCommand,
+    );
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.local');
+  });
+
+  it('should support repeated and comma-separated --env-file values', async () => {
+    addCommonOptionsRecursively(program);
+
+    await program.parseAsync(
+      ['subcommand', '--env-file', '.env.one', '--env-file', '.env.two,.env.three'],
+      { from: 'user' },
+    );
+
+    expect(mockSetupEnv).toHaveBeenCalledWith(['.env.one', '.env.two', '.env.three']);
+  });
+
+  it('should record telemetry once for nested subcommands', async () => {
+    const nestedParent = program.command('redteam');
+    const nestedAction = vi.fn();
+    nestedParent.command('run').action(nestedAction);
+
+    addCommonOptionsRecursively(program);
+
+    await program.parseAsync(['redteam', 'run'], { from: 'user' });
+
+    expect(nestedAction).toHaveBeenCalledTimes(1);
+    expect(mockTelemetryRecord).toHaveBeenCalledTimes(1);
+    expect(mockTelemetryRecord).toHaveBeenCalledWith('command_used', { name: 'redteam run' });
   });
 });
 
@@ -219,7 +324,8 @@ describe('isMainModule', () => {
   let realFilePath: string;
   let symlinkPath: string;
 
-  beforeAll(() => {
+  beforeAll(async () => {
+    await loadMainModule();
     // Create a temporary directory with a real file and a symlink
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'main-test-'));
     realFilePath = path.join(tempDir, 'real-file.js');
@@ -326,10 +432,13 @@ describe('isMainModule', () => {
 describe('shutdownGracefully', () => {
   const originalExit = process.exit;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await loadMainModule();
     vi.useFakeTimers();
     process.exit = vi.fn() as never;
     // Reset all mocks to default behavior
+    mockSetupEnv.mockReset();
+    mockSetLogLevel.mockReset();
     mockTelemetryShutdown.mockReset().mockResolvedValue(undefined);
     mockCloseLogger.mockReset().mockResolvedValue(undefined);
     mockCloseDbIfOpen.mockReset();

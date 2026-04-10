@@ -7,7 +7,7 @@ keywords:
   [
     EU AI Act,
     AI compliance,
-    GDPR for AI,
+    data protection for AI,
     AI regulation,
     AI red teaming,
     prohibited AI systems,

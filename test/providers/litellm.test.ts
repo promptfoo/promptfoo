@@ -35,10 +35,10 @@ describe('LiteLLM Provider', () => {
     vi.resetAllMocks();
     mockFetch.mockReset();
     vi.unstubAllEnvs();
-    if (originalOpenAiTemperature !== undefined) {
-      process.env.OPENAI_TEMPERATURE = originalOpenAiTemperature;
-    } else {
+    if (originalOpenAiTemperature === undefined) {
       delete process.env.OPENAI_TEMPERATURE;
+    } else {
+      process.env.OPENAI_TEMPERATURE = originalOpenAiTemperature;
     }
   });
   describe('createLiteLLMProvider', () => {
@@ -121,10 +121,10 @@ describe('LiteLLM Provider', () => {
         const wrappedProvider = (provider as any).provider;
         expect(wrappedProvider.getApiKey()).toBe('test-litellm-key');
       } finally {
-        if (originalEnv !== undefined) {
-          process.env.LITELLM_API_KEY = originalEnv;
-        } else {
+        if (originalEnv === undefined) {
           delete process.env.LITELLM_API_KEY;
+        } else {
+          process.env.LITELLM_API_KEY = originalEnv;
         }
       }
     });

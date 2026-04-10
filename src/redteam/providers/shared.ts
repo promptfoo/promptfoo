@@ -28,6 +28,7 @@ import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { type TransformContext, TransformInputType, transform } from '../../util/transform';
+import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
@@ -258,6 +259,24 @@ export function isConversationEndedResponse(
   return Boolean(response?.conversationEnded);
 }
 
+function getTargetPromptMaxCharsPerMessage(context?: CallApiContextParams): number | undefined {
+  const configuredLimit =
+    (context?.test?.metadata?.strategyConfig as { maxCharsPerMessage?: unknown } | undefined)
+      ?.maxCharsPerMessage ??
+    (context?.test?.metadata?.pluginConfig as { maxCharsPerMessage?: unknown } | undefined)
+      ?.maxCharsPerMessage;
+
+  if (
+    typeof configuredLimit !== 'number' ||
+    !Number.isInteger(configuredLimit) ||
+    configuredLimit <= 0
+  ) {
+    return undefined;
+  }
+
+  return configuredLimit;
+}
+
 /**
  * Gets the response from the target provider for a given prompt.
  * @param targetProvider - The API provider to get the response from.
@@ -273,13 +292,21 @@ export async function getTargetResponse(
   let targetRespRaw;
 
   try {
+    throwIfTargetPromptExceedsMaxChars(targetPrompt, getTargetPromptMaxCharsPerMessage(context));
     targetRespRaw = await targetProvider.callApi(targetPrompt, context, options);
   } catch (error) {
     // Re-throw abort errors to properly cancel the operation
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;
     }
-    return { output: '', error: (error as Error).message, tokenUsage: { numRequests: 1 } };
+    return {
+      output: '',
+      error: (error as Error).message,
+      tokenUsage: {
+        numRequests:
+          error instanceof Error && error.message.includes('maxCharsPerMessage=') ? 0 : 1,
+      },
+    };
   }
   if (!targetRespRaw.cached && targetProvider.delay && targetProvider.delay > 0) {
     logger.debug(`Sleeping for ${targetProvider.delay}ms`);
@@ -399,6 +426,18 @@ export const messagesToRedteamHistory = (
     return [];
   }
 };
+
+/**
+ * Formats redteam turn history as a readable transcript for context-aware graders.
+ * This keeps conversation context separate from the latest assistant output under test.
+ */
+export function formatRedteamHistoryAsTranscript(
+  history: Array<Pick<RedteamHistoryEntry, 'prompt' | 'output'>>,
+): string {
+  return history
+    .map((turn, index) => `Turn ${index + 1}:\nUser: ${turn.prompt}\nAssistant: ${turn.output}`)
+    .join('\n\n');
+}
 
 export function checkPenalizedPhrases(output: string): boolean {
   const partialMatchPhrases = ['in the face of impending doom', 'science fiction'];
@@ -541,13 +580,6 @@ export async function tryUnblocking({
   unblockingPrompt?: string;
 }> {
   try {
-    // Check if the server supports unblocking feature
-    const { checkServerFeatureSupport } = await import('../../util/server');
-    const supportsUnblocking = await checkServerFeatureSupport(
-      'blocking-question-analysis',
-      '2025-06-16T14:49:11-07:00',
-    );
-
     // Unblocking is disabled by default, enable via environment variable
     if (!getEnvBool('PROMPTFOO_ENABLE_UNBLOCKING')) {
       logger.debug(
@@ -558,6 +590,13 @@ export async function tryUnblocking({
         success: false,
       };
     }
+
+    // Check if the server supports unblocking feature
+    const { checkServerFeatureSupport } = await import('../../util/server');
+    const supportsUnblocking = await checkServerFeatureSupport(
+      'blocking-question-analysis',
+      '2025-06-16T14:49:11-07:00',
+    );
 
     if (!supportsUnblocking) {
       logger.debug('[Unblocking] Server does not support unblocking, skipping gracefully');

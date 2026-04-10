@@ -3,6 +3,7 @@ import { gatherFeedback, sendFeedback } from '../src/feedback';
 import logger from '../src/logger';
 import { fetchWithProxy } from '../src/util/fetch/index';
 import * as readlineUtils from '../src/util/readline';
+import { createMockResponse, mockConsole } from './util/utils';
 
 let actualFeedback: typeof import('../src/feedback');
 
@@ -35,39 +36,20 @@ vi.mock('../src/feedback', () => {
   };
 });
 
-const createMockResponse = (data: any): Response => {
-  return {
-    ok: data.ok,
-    status: data.status || 200,
-    statusText: data.statusText || '',
-    headers: new Headers(),
-    redirected: false,
-    type: 'basic',
-    url: '',
-    json: async () => data,
-    text: async () => '',
-    arrayBuffer: async () => new ArrayBuffer(0),
-    blob: async () => new Blob(),
-    formData: async () => new FormData(),
-    bodyUsed: false,
-    body: null,
-    clone: () => createMockResponse(data),
-  } as Response;
-};
-
 describe('Feedback Module', () => {
-  const originalConsoleLog = console.log;
+  let consoleLogSpy: ReturnType<typeof mockConsole>;
+
   beforeAll(async () => {
     actualFeedback = await vi.importActual('../src/feedback');
   });
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleLogSpy = mockConsole('log');
   });
 
   afterEach(() => {
-    console.log = originalConsoleLog;
+    consoleLogSpy.mockRestore();
   });
 
   describe('sendFeedback', () => {

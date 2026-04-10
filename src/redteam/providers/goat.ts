@@ -16,6 +16,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -79,6 +80,7 @@ export interface ExtractAttackFailureResponse {
 
 interface GoatConfig {
   injectVar: string;
+  maxCharsPerMessage?: number;
   maxTurns: number;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   stateful: boolean;
@@ -120,6 +122,7 @@ export default class GoatProvider implements ApiProvider {
   constructor(
     options: ProviderOptions & {
       maxTurns?: number;
+      maxCharsPerMessage?: number;
       injectVar?: string;
       stateful?: boolean;
       excludeTargetOutputFromAgenticAttackGeneration?: boolean;
@@ -133,13 +136,14 @@ export default class GoatProvider implements ApiProvider {
       throw new Error(`GOAT strategy requires remote grading to be enabled`);
     }
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
-    let maxTurns = options.maxTurns || 5;
+    let maxTurns = options.maxTurns ?? 5;
     // Cap turns for unauthenticated users
     if (!isLoggedIntoCloud()) {
       maxTurns = Math.min(maxTurns, 10);
     }
     this.config = {
       maxTurns,
+      ...(options.maxCharsPerMessage ? { maxCharsPerMessage: options.maxCharsPerMessage } : {}),
       injectVar: options.injectVar,
       stateful: options.stateful ?? false,
       excludeTargetOutputFromAgenticAttackGeneration:
@@ -154,6 +158,7 @@ export default class GoatProvider implements ApiProvider {
     logger.debug('[GOAT] Constructor options', {
       injectVar: options.injectVar,
       maxTurns: options.maxTurns,
+      maxCharsPerMessage: options.maxCharsPerMessage,
       stateful: options.stateful,
       continueAfterSuccess: options.continueAfterSuccess,
       perTurnLayers: this.perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
@@ -185,6 +190,12 @@ export default class GoatProvider implements ApiProvider {
 
     const targetProvider: ApiProvider | undefined = context?.originalProvider;
     invariant(targetProvider, 'Expected originalProvider to be set');
+    const maxCharsPerMessage =
+      this.config.maxCharsPerMessage ??
+      (context?.test?.metadata?.strategyConfig as { maxCharsPerMessage?: number } | undefined)
+        ?.maxCharsPerMessage ??
+      (context?.test?.metadata?.pluginConfig as { maxCharsPerMessage?: number } | undefined)
+        ?.maxCharsPerMessage;
 
     const messages: Message[] = [];
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
@@ -282,6 +293,7 @@ export default class GoatProvider implements ApiProvider {
               unblockingTargetPrompt = transformResult.prompt;
             }
 
+            throwIfTargetPromptExceedsMaxChars(unblockingTargetPrompt, maxCharsPerMessage);
             const unblockingResponse = await targetProvider.callApi(
               unblockingTargetPrompt,
               context,
@@ -522,6 +534,7 @@ export default class GoatProvider implements ApiProvider {
         }
 
         const iterationStart = Date.now();
+        throwIfTargetPromptExceedsMaxChars(targetPrompt, maxCharsPerMessage);
         const targetResponse = (await targetProvider.callApi(
           targetPrompt,
           context,
@@ -595,7 +608,6 @@ export default class GoatProvider implements ApiProvider {
                   : undefined,
               inputVars: currentInputVars,
             });
-            previousTargetOutput = endedOutput;
           }
 
           lastTargetResponse = targetResponse;
@@ -676,17 +688,7 @@ export default class GoatProvider implements ApiProvider {
             | undefined;
 
           // First try to get exfil data from provider response metadata (Playwright provider)
-          if (finalResponse.metadata?.wasExfiltrated !== undefined) {
-            logger.debug('[GOAT] Using exfil data from provider response metadata');
-            gradingContext = {
-              ...(tracingOptions.includeInGrading
-                ? { traceContext: targetResponse.traceContext, traceSummary: gradingTraceSummary }
-                : {}),
-              wasExfiltrated: Boolean(finalResponse.metadata.wasExfiltrated),
-              exfilCount: Number(finalResponse.metadata.exfilCount) || 0,
-              exfilRecords: [],
-            };
-          } else {
+          if (finalResponse.metadata?.wasExfiltrated === undefined) {
             // Try to fetch exfil tracking from server API via webPageUuid
             const webPageUuid = test.metadata?.webPageUuid as string | undefined;
             if (webPageUuid) {
@@ -711,6 +713,16 @@ export default class GoatProvider implements ApiProvider {
                 };
               }
             }
+          } else {
+            logger.debug('[GOAT] Using exfil data from provider response metadata');
+            gradingContext = {
+              ...(tracingOptions.includeInGrading
+                ? { traceContext: targetResponse.traceContext, traceSummary: gradingTraceSummary }
+                : {}),
+              wasExfiltrated: Boolean(finalResponse.metadata.wasExfiltrated),
+              exfilCount: Number(finalResponse.metadata.exfilCount) || 0,
+              exfilRecords: [],
+            };
           }
 
           // Fallback to just tracing context if no exfil data found

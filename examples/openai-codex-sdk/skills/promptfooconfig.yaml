@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Codex skill eval
+
+prompts:
+  - 'Use the token-skill skill. Return only the token.'
+
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: gpt-5.2
+      # Defaults assume you run this config from examples/openai-codex-sdk/skills.
+      # From the repo root, set CODEX_SKILLS_WORKING_DIR and CODEX_HOME_OVERRIDE.
+      # sample-codex-home has no auth state; use an API key or point CODEX_HOME_OVERRIDE at ~/.codex.
+      working_dir: '{{ env.CODEX_SKILLS_WORKING_DIR | default("./sample-project") }}'
+      skip_git_repo_check: true
+      enable_streaming: true
+      cli_env:
+        CODEX_HOME: '{{ env.CODEX_HOME_OVERRIDE | default("./sample-codex-home") }}'
+
+tests:
+  - assert:
+      - type: equals
+        value: 'CERULEAN-FALCON-SKILL'
+      - type: skill-used
+        value: token-skill

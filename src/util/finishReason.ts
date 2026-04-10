@@ -11,13 +11,14 @@
  *
  * **Provider Mappings:**
  * - OpenAI: `function_call` (legacy) → `tool_calls` (current)
- * - Anthropic: `end_turn` → `stop`, `stop_sequence` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`
+ * - Anthropic: `end_turn` → `stop`, `stop_sequence` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `refusal` → `content_filter`, `pause_turn` → `pause_turn`
  *
  * @example
  * ```typescript
  * normalizeFinishReason('end_turn')     // Returns: 'stop'
  * normalizeFinishReason('max_tokens')   // Returns: 'length'
  * normalizeFinishReason('tool_use')     // Returns: 'tool_calls'
+ * normalizeFinishReason('refusal')      // Returns: 'content_filter'
  * normalizeFinishReason('function_call') // Returns: 'tool_calls'
  * normalizeFinishReason('unknown')      // Returns: 'unknown' (passthrough)
  * ```
@@ -37,6 +38,8 @@ export const FINISH_REASON_MAP: Record<string, string> = {
   stop_sequence: 'stop', // Stop sequence matched
   max_tokens: 'length', // Token limit reached
   tool_use: 'tool_calls', // Tool/function was called
+  refusal: 'content_filter', // Content filtering / safety refusal
+  pause_turn: 'pause_turn', // Long-running turn paused, can be continued
 };
 
 /**

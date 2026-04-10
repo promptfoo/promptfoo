@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
-sidebar_label: Guide
-title: Configuration Guide - Getting Started with Promptfoo
+sidebar_label: Overview
+title: Configuration Overview - Getting Started with Promptfoo
 description: Complete guide to configuring promptfoo for LLM evaluation. Learn prompts, providers, test cases, assertions, and advanced features with examples.
 keywords:
   [
@@ -305,6 +305,25 @@ You can also use `defaultTest` to override the model used for each test. This ca
 defaultTest:
   options:
     provider: openai:gpt-5-mini-0613
+```
+
+Set `options.disableDefaultAsserts: true` on a test case when that test should define its own assertions without inheriting `defaultTest.assert`. Other `defaultTest` fields, such as `vars`, `metadata`, `threshold`, and `options`, still apply:
+
+```yaml
+defaultTest:
+  vars:
+    audience: developer
+  assert:
+    - type: contains
+      value: installation steps
+
+tests:
+  - vars:
+      topic: API setup
+    options:
+      disableDefaultAsserts: true
+    assert:
+      - type: contains-json
 ```
 
 ### Default variables

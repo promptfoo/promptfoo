@@ -1,3 +1,4 @@
+import { mockClipboard } from '@app/tests/browserMocks';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import SuggestionsDialog from './SuggestionsDialog';
@@ -115,12 +116,7 @@ describe('SuggestionsDialog', () => {
   it('should show copy button when suggestion is expanded', async () => {
     const mockWriteText = vi.fn().mockResolvedValue(undefined);
 
-    Object.defineProperty(global.navigator, 'clipboard', {
-      value: {
-        writeText: mockWriteText,
-      },
-      writable: true,
-    });
+    mockClipboard({ writeText: mockWriteText as Clipboard['writeText'] });
 
     const mockGradingResult: GradingResult = {
       score: 1,
@@ -160,12 +156,7 @@ describe('SuggestionsDialog', () => {
   it('should handle navigator.clipboard.writeText failure gracefully', async () => {
     const mockWriteText = vi.fn().mockRejectedValue(new Error('Clipboard write failed'));
 
-    Object.defineProperty(global.navigator, 'clipboard', {
-      value: {
-        writeText: mockWriteText,
-      },
-      writable: true,
-    });
+    mockClipboard({ writeText: mockWriteText as Clipboard['writeText'] });
 
     const gradingResult: GradingResult = {
       score: 0,

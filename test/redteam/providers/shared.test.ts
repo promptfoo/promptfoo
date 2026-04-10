@@ -6,6 +6,7 @@ import {
   TEMPERATURE,
 } from '../../../src/redteam/providers/constants';
 import {
+  formatRedteamHistoryAsTranscript,
   getTargetResponse,
   type Message,
   messagesToRedteamHistory,
@@ -24,6 +25,7 @@ import type {
 
 // Hoisted mocks for class constructor and loadApiProviders
 const mockLoadApiProviders = vi.hoisted(() => vi.fn());
+const mockCheckServerFeatureSupport = vi.hoisted(() => vi.fn());
 // Create a hoisted mock class that can be instantiated with `new`
 const mockOpenAiInstances: any[] = [];
 const MockOpenAiChatCompletionProvider = vi.hoisted(() => {
@@ -78,9 +80,13 @@ vi.mock('../../../src/providers/openai/chat', () => ({
 vi.mock('../../../src/providers/index', () => ({
   loadApiProviders: mockLoadApiProviders,
 }));
+vi.mock('../../../src/util/server', () => ({
+  checkServerFeatureSupport: mockCheckServerFeatureSupport,
+}));
 
 const mockedSleep = vi.mocked(sleep);
 const mockedLoadApiProviders = mockLoadApiProviders;
+const mockedCheckServerFeatureSupport = mockCheckServerFeatureSupport;
 const _mockedOpenAiProvider = MockOpenAiChatCompletionProvider;
 
 describe('shared redteam provider utilities', () => {
@@ -91,6 +97,7 @@ describe('shared redteam provider utilities', () => {
     // Reset specific mocks
     mockedSleep.mockReset();
     mockedLoadApiProviders.mockReset();
+    mockedCheckServerFeatureSupport.mockReset();
 
     // Clear the instances array
     mockOpenAiInstances.length = 0;
@@ -442,6 +449,163 @@ describe('shared redteam provider utilities', () => {
   });
 
   describe('getTargetResponse', () => {
+    it('returns an error before calling the target when the prompt exceeds maxCharsPerMessage', async () => {
+      cliState.config = {
+        redteam: {
+          maxCharsPerMessage: 5,
+        },
+      };
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'test response',
+          tokenUsage: { numRequests: 1 },
+        }),
+      };
+
+      const result = await getTargetResponse(mockProvider, 'too long');
+
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        output: '',
+        error: 'Target prompt message at prompt exceeds maxCharsPerMessage=5: 8 characters.',
+        tokenUsage: { numRequests: 0 },
+      });
+    });
+
+    it('only enforces maxCharsPerMessage for user messages in chat arrays', async () => {
+      cliState.config = {
+        redteam: {
+          maxCharsPerMessage: 5,
+        },
+      };
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'ok',
+          tokenUsage: { numRequests: 1 },
+        }),
+      };
+      const prompt = JSON.stringify([
+        { role: 'system', content: 'this system message is long' },
+        { role: 'user', content: 'short' },
+      ]);
+
+      const result = await getTargetResponse(mockProvider, prompt);
+
+      expect(mockProvider.callApi).toHaveBeenCalledWith(prompt, undefined, undefined);
+      expect(result.output).toBe('ok');
+    });
+
+    it('uses maxCharsPerMessage from test metadata when cliState is unset', async () => {
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'test response',
+          tokenUsage: { numRequests: 1 },
+        }),
+      };
+      const context = {
+        prompt: { raw: '', label: '' },
+        vars: {},
+        test: {
+          metadata: {
+            pluginConfig: {
+              maxCharsPerMessage: 5,
+            },
+          },
+        },
+      } as CallApiContextParams;
+
+      const result = await getTargetResponse(mockProvider, 'too long', context);
+
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+      expect(result.error).toBe(
+        'Target prompt message at prompt exceeds maxCharsPerMessage=5: 8 characters.',
+      );
+    });
+
+    it('checks GOAT audio/image hybrid payload transcript text without counting base64 blobs', async () => {
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'ok',
+          tokenUsage: { numRequests: 1 },
+        }),
+      };
+      const context = {
+        prompt: { raw: '', label: '' },
+        vars: {},
+        test: {
+          metadata: {
+            pluginConfig: {
+              maxCharsPerMessage: 5,
+            },
+          },
+        },
+      } as CallApiContextParams;
+      const prompt = JSON.stringify({
+        _promptfoo_audio_hybrid: true,
+        history: [
+          { role: 'user', content: 'tiny' },
+          { role: 'assistant', content: 'this assistant response is long and should be ignored' },
+        ],
+        currentTurn: {
+          role: 'user',
+          transcript: 'short',
+          image: {
+            data: 'a'.repeat(500),
+            format: 'png',
+          },
+        },
+      });
+
+      const result = await getTargetResponse(mockProvider, prompt, context);
+
+      expect(mockProvider.callApi).toHaveBeenCalledWith(prompt, context, undefined);
+      expect(result.output).toBe('ok');
+    });
+
+    it('rejects GOAT audio/image hybrid payloads when currentTurn transcript exceeds maxCharsPerMessage', async () => {
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'ok',
+          tokenUsage: { numRequests: 1 },
+        }),
+      };
+      const context = {
+        prompt: { raw: '', label: '' },
+        vars: {},
+        test: {
+          metadata: {
+            pluginConfig: {
+              maxCharsPerMessage: 5,
+            },
+          },
+        },
+      } as CallApiContextParams;
+      const prompt = JSON.stringify({
+        _promptfoo_audio_hybrid: true,
+        history: [],
+        currentTurn: {
+          role: 'user',
+          transcript: 'too long',
+          audio: {
+            data: 'a'.repeat(500),
+            format: 'mp3',
+          },
+        },
+      });
+
+      const result = await getTargetResponse(mockProvider, prompt, context);
+
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+      expect(result.error).toBe(
+        'Target prompt message at currentTurn.transcript exceeds maxCharsPerMessage=5: 8 characters.',
+      );
+    });
+
     it('returns successful response with string output', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
@@ -771,6 +935,23 @@ describe('shared redteam provider utilities', () => {
     });
   });
 
+  describe('formatRedteamHistoryAsTranscript', () => {
+    it('formats turn history as a readable transcript', () => {
+      const result = formatRedteamHistoryAsTranscript([
+        { prompt: 'first question', output: 'first response' },
+        { prompt: 'second question', output: 'second response' },
+      ]);
+
+      expect(result).toBe(
+        'Turn 1:\nUser: first question\nAssistant: first response\n\nTurn 2:\nUser: second question\nAssistant: second response',
+      );
+    });
+
+    it('returns an empty string for empty history', () => {
+      expect(formatRedteamHistoryAsTranscript([])).toBe('');
+    });
+  });
+
   // New tests for tryUnblocking env flag
   describe('tryUnblocking environment flag', () => {
     const originalEnv = process.env.PROMPTFOO_ENABLE_UNBLOCKING;
@@ -795,15 +976,12 @@ describe('shared redteam provider utilities', () => {
 
       expect(result.success).toBe(false);
       expect(result.unblockingPrompt).toBeUndefined();
+      expect(mockedCheckServerFeatureSupport).not.toHaveBeenCalled();
     });
 
-    // Skip: This test times out because tryUnblocking makes a real network call when env flag is set.
-    // The first test already verifies the short-circuit behavior when flag is not set.
-    it.skip('does not short-circuit when PROMPTFOO_ENABLE_UNBLOCKING=true', async () => {
+    it('checks server support when PROMPTFOO_ENABLE_UNBLOCKING=true', async () => {
       process.env.PROMPTFOO_ENABLE_UNBLOCKING = 'true';
-
-      // Spy on logger to verify we don't see the "disabled by default" message
-      const loggerSpy = vi.spyOn((await import('../../../src/logger')).default, 'debug');
+      mockedCheckServerFeatureSupport.mockResolvedValue(false);
 
       const result = await tryUnblocking({
         messages: [],
@@ -812,14 +990,11 @@ describe('shared redteam provider utilities', () => {
         purpose: 'test-purpose',
       });
 
-      // Verify we did NOT log the "disabled by default" message
-      expect(loggerSpy).not.toHaveBeenCalledWith(expect.stringContaining('Disabled by default'));
-
-      // The function should still return false (because server feature check will fail in test env)
-      // but for a different reason than the env var check
       expect(result.success).toBe(false);
-
-      loggerSpy.mockRestore();
+      expect(mockedCheckServerFeatureSupport).toHaveBeenCalledWith(
+        'blocking-question-analysis',
+        '2025-06-16T14:49:11-07:00',
+      );
     });
   });
 });

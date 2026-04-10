@@ -216,4 +216,14 @@ describe('TransformTestDialog', () => {
     expect(editor).toBeInTheDocument();
     expect(editor.textContent).toContain(expectedOutput.substring(0, 20));
   });
+
+  it('uses explicit button types for collapsible triggers to avoid submit defaults', () => {
+    renderWithTooltipProvider(<TransformTestDialog {...defaultProps} />);
+
+    const testInputTrigger = screen.getByRole('button', { name: /test input/i });
+    const documentationTrigger = screen.getByRole('button', { name: /documentation/i });
+
+    expect(testInputTrigger).toHaveAttribute('type', 'button');
+    expect(documentationTrigger).toHaveAttribute('type', 'button');
+  });
 });

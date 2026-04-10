@@ -226,7 +226,7 @@ Audit logs in promptfoo can help meet various compliance requirements:
 
 - **SOC 2**: Provides detailed access logs and administrative change tracking
 - **ISO 27001**: Supports access control monitoring and change management requirements
-- **GDPR**: Enables tracking of data access and user management activities
+- **Data protection reviews**: Helps track data access and user management activities
 - **HIPAA**: Provides audit trails for access to systems containing protected health information
 
 ## Troubleshooting

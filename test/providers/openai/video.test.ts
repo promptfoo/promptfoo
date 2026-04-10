@@ -9,6 +9,7 @@ import {
   validateVideoSize,
 } from '../../../src/providers/openai/video';
 import { checkVideoCache, generateVideoCacheKey } from '../../../src/providers/video';
+import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 // Hoist mock functions so they're available in vi.mock factories
 const {
@@ -95,8 +96,16 @@ describe('OpenAiVideoProvider', () => {
       expect(validateVideoSize('1280x720')).toEqual({ valid: true });
     });
 
+    it('should accept valid widescreen size', () => {
+      expect(validateVideoSize('1792x1024')).toEqual({ valid: true });
+    });
+
     it('should accept valid portrait size', () => {
       expect(validateVideoSize('720x1280')).toEqual({ valid: true });
+    });
+
+    it('should accept valid tall portrait size', () => {
+      expect(validateVideoSize('1024x1792')).toEqual({ valid: true });
     });
 
     it('should reject invalid size', () => {
@@ -348,29 +357,36 @@ describe('OpenAiVideoProvider', () => {
     });
 
     it('should handle polling timeout', async () => {
-      const provider = new OpenAiVideoProvider('sora-2', {
-        config: {
-          apiKey: 'test-key',
-          poll_interval_ms: 10,
-          max_poll_time_ms: 50,
-        },
-      });
+      vi.useFakeTimers();
+      try {
+        const provider = new OpenAiVideoProvider('sora-2', {
+          config: {
+            apiKey: 'test-key',
+            poll_interval_ms: 10,
+            max_poll_time_ms: 50,
+          },
+        });
 
-      // Mock job creation
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_123', status: 'queued' }),
-      });
+        // Mock job creation
+        mockFetchWithProxy.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_123', status: 'queued' }),
+        });
 
-      // Always return in_progress to trigger timeout
-      mockFetchWithProxy.mockResolvedValue({
-        ok: true,
-        json: async () => ({ id: 'video_123', status: 'in_progress', progress: 10 }),
-      });
+        // Always return in_progress to trigger timeout
+        mockFetchWithProxy.mockResolvedValue({
+          ok: true,
+          json: async () => ({ id: 'video_123', status: 'in_progress', progress: 10 }),
+        });
 
-      const result = await provider.callApi('test prompt');
+        const resultPromise = provider.callApi('test prompt');
+        await vi.runAllTimersAsync();
+        const result = await resultPromise;
 
-      expect(result.error).toContain('timed out');
+        expect(result.error).toContain('timed out');
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should throw error if API key is not set', async () => {
@@ -380,9 +396,37 @@ describe('OpenAiVideoProvider', () => {
       try {
         const provider = new OpenAiVideoProvider('sora-2');
 
-        await expect(provider.callApi('test prompt')).rejects.toThrow('OpenAI API key is not set');
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage(),
+        );
       } finally {
-        process.env.OPENAI_API_KEY = originalEnv;
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+      }
+    });
+
+    it('should use custom apiKeyEnvar in missing API key errors', async () => {
+      const originalEnv = process.env.OPENAI_API_KEY;
+      const originalCustomEnv = process.env.CUSTOM_VIDEO_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.CUSTOM_VIDEO_API_KEY;
+
+      try {
+        const provider = new OpenAiVideoProvider('sora-2', {
+          config: {
+            apiKeyEnvar: 'CUSTOM_VIDEO_API_KEY',
+          },
+          env: {
+            OPENAI_API_KEY: undefined,
+            CUSTOM_VIDEO_API_KEY: undefined,
+          },
+        });
+
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage('CUSTOM_VIDEO_API_KEY'),
+        );
+      } finally {
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+        restoreEnvVar('CUSTOM_VIDEO_API_KEY', originalCustomEnv);
       }
     });
 
@@ -436,7 +480,7 @@ describe('OpenAiVideoProvider', () => {
 
     it('should use specified size and seconds', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
-        config: { apiKey: 'test-key', size: '720x1280', seconds: 12 },
+        config: { apiKey: 'test-key', size: '1792x1024', seconds: 12 },
       });
 
       setupMocksForSuccess();
@@ -446,7 +490,7 @@ describe('OpenAiVideoProvider', () => {
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
         expect.stringContaining('/videos'),
         expect.objectContaining({
-          body: expect.stringContaining('"size":"720x1280"'),
+          body: expect.stringContaining('"size":"1792x1024"'),
         }),
       );
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
@@ -455,7 +499,7 @@ describe('OpenAiVideoProvider', () => {
           body: expect.stringContaining('"seconds":"12"'),
         }),
       );
-      expect(result.video?.size).toBe('720x1280');
+      expect(result.video?.size).toBe('1792x1024');
       expect(result.video?.duration).toBe(12);
     });
 

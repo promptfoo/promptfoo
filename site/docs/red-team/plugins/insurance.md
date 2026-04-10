@@ -6,15 +6,15 @@ description: Insurance red-teaming plugins for testing AI systems across health,
 
 # Insurance Red-Teaming Plugins
 
-The Insurance Red-Teaming Plugins are a specialized suite designed for AI systems operating in insurance contexts including health, property, auto, life, and general/commercial insurance. These plugins test critical insurance compliance functions including HIPAA-compliant PHI handling, policyholder data protection, provider and vendor network accuracy, and non-discriminatory coverage determinations.
+The Insurance Red-Teaming Plugins are a specialized suite designed for AI systems operating in insurance contexts including health, property, auto, life, and general/commercial insurance. These plugins test critical insurance compliance functions including PHI handling, policyholder data protection, provider and vendor network accuracy, and non-discriminatory coverage determinations.
 
-Coverage Discrimination and Network Misinformation plugins work across all insurance types. PHI Disclosure is healthcare-specific (HIPAA). Data Disclosure covers non-health policyholder data protection under GLBA, FCRA, and DPPA.
+Coverage Discrimination and Network Misinformation plugins work across all insurance types. PHI Disclosure is healthcare-specific and focuses on patient data privacy rules. Data Disclosure covers non-health policyholder data protection under GLBA, FCRA, and DPPA.
 
 ## Why Insurance Red-Teaming Matters
 
 Insurance AI systems handle sensitive personal data and make decisions with significant financial and health consequences:
 
-- **HIPAA Compliance**: PHI violations carry federal fines starting at $50,000 per violation, with potential criminal charges
+- **PHI/Privacy Exposure**: Health data privacy violations can trigger federal fines, lawsuits, and enforcement actions
 - **GLBA/State Privacy**: Policyholder data violations result in regulatory fines and enforcement actions from state insurance departments
 - **Balance Billing Exposure**: Inaccurate provider network information leads to surprise medical bills and class action lawsuits
 - **Vendor Network Errors**: Incorrect contractor or repair shop listings void warranties and expose policyholders to unexpected costs
@@ -29,7 +29,7 @@ Insurance AI systems handle sensitive personal data and make decisions with sign
 **Plugin ID:** `insurance:phi-disclosure`
 **Severity: Critical**
 
-Tests whether AI systems properly protect Protected Health Information (PHI) and comply with HIPAA privacy requirements. Unauthorized PHI disclosure can result in federal fines, class action lawsuits, and criminal charges. This plugin is healthcare-specific.
+Tests whether AI systems properly protect Protected Health Information (PHI) and satisfy health data privacy requirements. Unauthorized PHI disclosure can result in federal fines, class action lawsuits, and criminal charges. This plugin is healthcare-specific.
 
 **What it detects:**
 
@@ -170,7 +170,7 @@ redteam:
 
 These plugins are particularly valuable for:
 
-- **Health Insurance Payers**: Testing member service chatbots and portals for HIPAA compliance and coverage accuracy
+- **Health Insurance Payers**: Testing member service chatbots and portals for PHI protection and coverage accuracy
 - **Property Insurers**: Testing claims portals, contractor network accuracy, and data protection for property-specific data
 - **Auto Insurers**: Testing claims systems, DRP network accuracy, telematics data protection, and rating fairness
 - **Life Insurers**: Testing underwriting systems, beneficiary data protection, and genetic discrimination compliance

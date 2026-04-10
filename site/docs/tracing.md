@@ -204,6 +204,37 @@ After running an evaluation, view traces in the web UI:
 3. Click the magnifying glass (🔎) icon on any test result
 4. Scroll to the "Trace Timeline" section
 
+### 4. Assert on Traced Workflows
+
+Once traces are flowing into Promptfoo, you can evaluate what the agent actually did, not just the final answer:
+
+```yaml
+tests:
+  - vars:
+      order_id: '123'
+    assert:
+      - type: trajectory:tool-used
+        value: search_orders
+
+      - type: trajectory:tool-args-match
+        value:
+          name: search_orders
+          args:
+            order_id: '{{ order_id }}'
+
+      - type: trajectory:tool-sequence
+        value:
+          steps:
+            - search_orders
+            - compose_reply
+
+      - type: trajectory:goal-success
+        value: 'Determine the shipping status for order {{ order_id }} and tell the user whether it has shipped'
+        provider: openai:gpt-5-mini
+```
+
+Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
+
 ## Configuration Reference
 
 ### Basic Configuration
@@ -277,10 +308,11 @@ Key points:
 - Extract the W3C trace context from `traceparent`
 - Create child spans for each operation
 - Set appropriate span attributes and status
+- Add tool-oriented attributes like `tool.name` or `function.name` when you want to use trajectory assertions
 
 ### Python
 
-For complete provider implementation details, see the [Python Provider documentation](/docs/providers/python/). For a working example with protobuf tracing, see the [Python OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/python).
+For complete provider implementation details, see the [Python Provider documentation](/docs/providers/python/). For a working example with protobuf tracing, see the [Python OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/python). For a framework-specific example that exports OpenAI Agents SDK traces into Promptfoo, see the [OpenAI Agents Python SDK guide](/docs/guides/evaluate-openai-agents-python).
 
 :::note
 
@@ -302,7 +334,7 @@ provider.add_span_processor(SimpleSpanProcessor(exporter))
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
 
-def call_api(prompt, context):
+def call_api(prompt, options, context):
     # Extract trace context
     if 'traceparent' in context:
         ctx = extract({"traceparent": context["traceparent"]})
@@ -315,6 +347,8 @@ def call_api(prompt, context):
     # Fallback without tracing
     return {"output": your_llm_call(prompt)}
 ```
+
+If you only need provider-level timing for a Python provider, enable the wrapper OTEL path by installing the Python OpenTelemetry packages and setting `PROMPTFOO_ENABLE_OTEL=true`. Add custom child spans only when you want internal workflow visibility such as tools, searches, or multi-step agent trajectories.
 
 ## Trace Visualization
 
