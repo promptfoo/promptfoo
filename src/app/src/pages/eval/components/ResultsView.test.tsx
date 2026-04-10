@@ -175,6 +175,36 @@ const renderWithRouter = (component: React.ReactElement) => {
   return renderWithProviders(<MemoryRouter>{component}</MemoryRouter>);
 };
 
+function createCopyEvalResponse() {
+  return {
+    ok: true,
+    json: () => Promise.resolve({ id: 'new-eval-id', distinctTestCount: 1234 }),
+    status: 200,
+    statusText: 'OK',
+    headers: new Headers(),
+    redirected: false,
+    type: 'basic',
+    url: 'http://example.com',
+    bodyUsed: false,
+    arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    blob: () => Promise.resolve(new Blob()),
+    formData: () => Promise.resolve(new FormData()),
+    text: () => Promise.resolve(''),
+    body: null,
+    bytes: () => Promise.resolve(new Uint8Array()),
+    clone: () => createCopyEvalResponse(),
+  } as Response;
+}
+
+beforeEach(() => {
+  mockUseFilterMode.mockReturnValue({
+    filterMode: 'all',
+    setFilterMode: vi.fn(),
+  });
+  vi.mocked(callApi).mockReset();
+  vi.mocked(callApi).mockResolvedValue(createCopyEvalResponse());
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -327,41 +357,7 @@ describe('ResultsView Copy Eval', () => {
     mockWindowOpen = vi.spyOn(window, 'open');
     mockWindowOpen.mockImplementation(() => null);
 
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ id: 'new-eval-id', distinctTestCount: 1234 }),
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers(),
-      redirected: false,
-      type: 'basic',
-      url: 'http://example.com',
-      bodyUsed: false,
-      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
-      blob: () => Promise.resolve(new Blob()),
-      formData: () => Promise.resolve(new FormData()),
-      text: () => Promise.resolve(''),
-      body: null,
-      bytes: () => Promise.resolve(new Uint8Array()),
-      clone: () => ({
-        ok: true,
-        json: () => Promise.resolve({ id: 'new-eval-id', distinctTestCount: 1234 }),
-        status: 200,
-        statusText: 'OK',
-        headers: new Headers(),
-        redirected: false,
-        type: 'basic',
-        url: 'http://example.com',
-        bodyUsed: false,
-        arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
-        blob: () => Promise.resolve(new Blob()),
-        formData: () => Promise.resolve(new FormData()),
-        text: () => Promise.resolve(''),
-        body: null,
-        bytes: () => Promise.resolve(new Uint8Array()),
-        clone: () => ({ ...mockCallApi.mock.results[0].value }),
-      }),
-    });
+    mockCallApi.mockResolvedValue(createCopyEvalResponse());
 
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
@@ -544,6 +540,11 @@ describe('ResultsView', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
 
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),

@@ -160,7 +160,10 @@ describe('EvalOutputPromptDialog', () => {
     const mockClipboard = {
       writeText: vi.fn().mockResolvedValue(undefined),
     };
-    Object.assign(navigator, { clipboard: mockClipboard });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: mockClipboard,
+      configurable: true,
+    });
 
     renderWithProviders(<EvalOutputPromptDialog {...defaultProps} />);
 
@@ -188,7 +191,10 @@ describe('EvalOutputPromptDialog', () => {
     const mockClipboard = {
       writeText: vi.fn().mockResolvedValue(undefined),
     };
-    Object.assign(navigator, { clipboard: mockClipboard });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: mockClipboard,
+      configurable: true,
+    });
 
     renderWithProviders(<EvalOutputPromptDialog {...defaultProps} />);
 
