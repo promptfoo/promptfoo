@@ -1,0 +1,9 @@
+description: 'Smoke test - TypeScript provider with frontend project syntax'
+prompts:
+  - hello frontend
+providers:
+  - file://provider.ts
+tests:
+  - assert:
+      - type: contains
+        value: 'frontend enum: hello frontend'
