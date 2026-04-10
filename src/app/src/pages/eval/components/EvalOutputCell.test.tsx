@@ -1,3 +1,4 @@
+import { mockClipboard } from '@app/tests/browserMocks';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import {
   type AssertionType,
@@ -53,27 +54,13 @@ const resetMockStoreState = () => {
 };
 
 const mockClipboardWriteText = () => {
-  const originalClipboard = navigator.clipboard;
-  const mockClipboard = {
+  const clipboard = {
     writeText: vi.fn().mockResolvedValue(undefined),
   };
 
-  Object.defineProperty(navigator, 'clipboard', {
-    value: mockClipboard,
-    configurable: true,
-    writable: true,
-  });
+  mockClipboard({ writeText: clipboard.writeText as Clipboard['writeText'] });
 
-  return {
-    mockClipboard,
-    restore: () => {
-      Object.defineProperty(navigator, 'clipboard', {
-        value: originalClipboard,
-        configurable: true,
-        writable: true,
-      });
-    },
-  };
+  return clipboard;
 };
 
 vi.mock('./store', () => ({
@@ -700,29 +687,25 @@ describe('EvalOutputCell', () => {
   });
 
   it('allows copying row link to clipboard', async () => {
-    const { mockClipboard, restore } = mockClipboardWriteText();
+    const clipboard = mockClipboardWriteText();
     const expectedUrl = new URL(window.location.href);
     expectedUrl.searchParams.set('rowId', '1');
 
-    try {
-      renderWithProviders(<EvalOutputCell {...defaultProps} />);
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
-      const shareButton = screen.getByLabelText('Copy link to output');
-      expect(shareButton).toBeInTheDocument();
+    const shareButton = screen.getByLabelText('Copy link to output');
+    expect(shareButton).toBeInTheDocument();
 
-      fireEvent.click(shareButton);
+    fireEvent.click(shareButton);
 
-      await waitFor(() => {
-        expect(mockClipboard.writeText).toHaveBeenCalledWith(expectedUrl.toString());
-      });
-    } finally {
-      restore();
-    }
+    await waitFor(() => {
+      expect(clipboard.writeText).toHaveBeenCalledWith(expectedUrl.toString());
+    });
   });
 
   it('shows checkmark after copying link', async () => {
     vi.useFakeTimers();
-    const { mockClipboard, restore } = mockClipboardWriteText();
+    const clipboard = mockClipboardWriteText();
 
     try {
       renderWithProviders(<EvalOutputCell {...defaultProps} />);
@@ -732,10 +715,10 @@ describe('EvalOutputCell', () => {
 
       await act(async () => {
         fireEvent.click(shareButton);
-        await mockClipboard.writeText.mock.results[0]?.value;
+        await clipboard.writeText.mock.results[0]?.value;
       });
 
-      expect(mockClipboard.writeText).toHaveBeenCalled();
+      expect(clipboard.writeText).toHaveBeenCalled();
       expect(shareButton.querySelector('.lucide-check')).toBeInTheDocument();
 
       act(() => {
@@ -744,21 +727,20 @@ describe('EvalOutputCell', () => {
 
       expect(shareButton.querySelector('.lucide-link')).toBeInTheDocument();
     } finally {
-      restore();
       vi.useRealTimers();
     }
   });
 
   it('clears the link feedback timer on unmount after copying link', async () => {
     vi.useFakeTimers();
-    const { mockClipboard, restore } = mockClipboardWriteText();
+    const clipboard = mockClipboardWriteText();
 
     try {
       const { unmount } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /Copy link to output/i }));
-        await mockClipboard.writeText.mock.results[0]?.value;
+        await clipboard.writeText.mock.results[0]?.value;
       });
 
       expect(vi.getTimerCount()).toBe(1);
@@ -767,33 +749,27 @@ describe('EvalOutputCell', () => {
 
       expect(vi.getTimerCount()).toBe(0);
     } finally {
-      restore();
       vi.useRealTimers();
     }
   });
 
   it('does not schedule link feedback after unmount if clipboard resolves late', async () => {
     vi.useFakeTimers();
-    const originalClipboard = navigator.clipboard;
     let resolveClipboardWrite: () => void = () => {};
     const writeTextPromise = new Promise<void>((resolve) => {
       resolveClipboardWrite = resolve;
     });
-    const mockClipboard = {
+    const clipboard = {
       writeText: vi.fn().mockReturnValue(writeTextPromise),
     };
 
-    Object.defineProperty(navigator, 'clipboard', {
-      value: mockClipboard,
-      configurable: true,
-      writable: true,
-    });
+    mockClipboard({ writeText: clipboard.writeText as Clipboard['writeText'] });
 
     try {
       const { unmount } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
       fireEvent.click(screen.getByRole('button', { name: /Copy link to output/i }));
-      expect(mockClipboard.writeText).toHaveBeenCalled();
+      expect(clipboard.writeText).toHaveBeenCalled();
 
       unmount();
 
@@ -804,11 +780,6 @@ describe('EvalOutputCell', () => {
 
       expect(vi.getTimerCount()).toBe(0);
     } finally {
-      Object.defineProperty(navigator, 'clipboard', {
-        value: originalClipboard,
-        configurable: true,
-        writable: true,
-      });
       vi.useRealTimers();
     }
   });

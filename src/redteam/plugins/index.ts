@@ -8,6 +8,7 @@ import { checkRemoteHealth } from '../../util/apiHealth';
 import invariant from '../../util/invariant';
 import {
   BIAS_PLUGINS,
+  CANARY_BREAKING_STRATEGY_IDS,
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
   REMOTE_ONLY_PLUGIN_IDS,
@@ -109,6 +110,27 @@ function applyDefaultGraderExamples(
   return {
     ...config,
     graderExamples: [...defaultGraderExamples, ...(config?.graderExamples ?? [])],
+  };
+}
+
+function applyDefaultRemotePluginConfig(
+  key: string,
+  config: PluginConfig | undefined,
+): PluginConfig | undefined {
+  const configWithDefaultExamples = applyDefaultGraderExamples(key, config);
+
+  if (!key.startsWith('coding-agent:')) {
+    return configWithDefaultExamples;
+  }
+
+  return {
+    ...configWithDefaultExamples,
+    excludeStrategies: [
+      ...new Set([
+        ...CANARY_BREAKING_STRATEGY_IDS,
+        ...(configWithDefaultExamples?.excludeStrategies ?? []),
+      ]),
+    ],
   };
 }
 
@@ -390,7 +412,7 @@ function createRemotePlugin<T extends PluginConfig>(
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async ({ purpose, injectVar, n, config }: PluginActionParams) => {
-      const configWithDefaults = applyDefaultGraderExamples(key, config);
+      const configWithDefaults = applyDefaultRemotePluginConfig(key, config);
 
       if (neverGenerateRemote()) {
         logger.error(`${key} plugin requires remote generation to be enabled`);

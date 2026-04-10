@@ -1,3 +1,4 @@
+import { mockWindowOpen } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
 import { fireEvent, screen } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
@@ -81,8 +82,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    // Mock window.open
-    global.window.open = vi.fn();
+    mockWindowOpen();
   });
 
   it('should navigate to eval page when clicking View All Logs button', () => {

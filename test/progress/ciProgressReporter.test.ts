@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { CIProgressReporter } from '../../src/progress/ciProgressReporter';
+import { mockConsole } from '../util/utils';
 
 // Mock the logger
 vi.mock('../../src/logger', () => ({
@@ -10,20 +11,18 @@ vi.mock('../../src/logger', () => ({
   },
 }));
 
-// Mock console.log for GitHub Actions annotations
-const originalConsoleLog = console.log;
-const consoleLogMock = vi.fn();
+let consoleLogMock: ReturnType<typeof mockConsole>;
 
 describe('CIProgressReporter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    console.log = consoleLogMock;
+    consoleLogMock = mockConsole('log');
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    console.log = originalConsoleLog;
+    consoleLogMock.mockRestore();
     delete process.env.GITHUB_ACTIONS;
   });
 
