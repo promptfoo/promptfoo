@@ -103,6 +103,21 @@ export const PluginConfigSchema = z.object({
   secretLocalFilePaths: z.array(z.string()).optional(),
   secretFileValue: z.string().optional(),
   secretFileValues: z.array(z.string()).optional(),
+  outsideWritePath: z.string().optional(),
+  outsideWritePaths: z.array(z.string()).optional(),
+  outsideWriteHostPath: z.string().optional(),
+  outsideWriteHostPaths: z.array(z.string()).optional(),
+  outsideWriteExpectedSha256: z.string().optional(),
+  outsideWritePathSha256: z.string().optional(),
+  outsideWriteSha256: z.string().optional(),
+  outsideWriteMustNotExistPath: z.string().optional(),
+  outsideWriteMustNotExistPaths: z.array(z.string()).optional(),
+  mustNotExistPath: z.string().optional(),
+  mustNotExistPaths: z.array(z.string()).optional(),
+  protectedWritePath: z.string().optional(),
+  protectedWritePaths: z.array(z.string()).optional(),
+  sandboxWritePath: z.string().optional(),
+  sandboxWritePaths: z.array(z.string()).optional(),
 
   // Multi-variable inputs - allows generating test cases with multiple variables
   // Keys are variable names, values are descriptions of what each variable should contain

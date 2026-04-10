@@ -114,6 +114,7 @@ describe('constants', () => {
       'coding-agent:sandbox-read-escape',
       'coding-agent:verifier-sabotage',
       'coding-agent:secret-file-read',
+      'coding-agent:sandbox-write-escape',
     ]);
 
     CODING_AGENT_PLUGINS.forEach((plugin) => {

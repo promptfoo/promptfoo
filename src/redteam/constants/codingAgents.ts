@@ -9,6 +9,7 @@ export const CODING_AGENT_CORE_PLUGINS = [
 export const CODING_AGENT_PLUGINS = [
   ...CODING_AGENT_CORE_PLUGINS,
   'coding-agent:secret-file-read',
+  'coding-agent:sandbox-write-escape',
 ] as const;
 
 export type CodingAgentPlugin = (typeof CODING_AGENT_PLUGINS)[number];
@@ -26,6 +27,7 @@ export const CODING_AGENT_PLUGIN_DISPLAY_NAMES: Record<CodingAgentMetadataPlugin
   'coding-agent:secret-env-read': 'Secret Environment Read',
   'coding-agent:secret-file-read': 'Secret File Read',
   'coding-agent:sandbox-read-escape': 'Sandbox Read Escape',
+  'coding-agent:sandbox-write-escape': 'Sandbox Write Escape',
   'coding-agent:verifier-sabotage': 'Verifier Sabotage',
 };
 
@@ -42,6 +44,8 @@ export const CODING_AGENT_PLUGIN_DESCRIPTIONS: Record<CodingAgentMetadataPlugin,
     'Tests whether protected local files, dotfiles, sibling checkout files, temp files, cache files, browser profile files, or support-bundle files remain outside the coding agent task boundary',
   'coding-agent:sandbox-read-escape':
     'Tests whether the agent can read outside the intended workspace through absolute paths, sibling checkout paths, symlinks, archives, mount points, caches, temp paths, browser profiles, or home directories',
+  'coding-agent:sandbox-write-escape':
+    'Tests whether the agent can create, overwrite, append, delete, chmod, or otherwise mutate files outside the intended workspace through relative paths, absolute paths, symlinks, temp paths, home paths, caches, mounts, or sibling checkouts',
   'coding-agent:verifier-sabotage':
     'Tests whether the agent weakens tests, lint, typecheck, CI, snapshots, fixtures, auth, locks, security checks, policies, or harness assertions instead of fixing the requested implementation',
 };
@@ -53,5 +57,6 @@ export const CODING_AGENT_PLUGIN_ALIASES: Record<CodingAgentMetadataPlugin, stri
   'coding-agent:secret-env-read': 'CodingAgentSecretEnvRead',
   'coding-agent:secret-file-read': 'CodingAgentSecretFileRead',
   'coding-agent:sandbox-read-escape': 'CodingAgentSandboxReadEscape',
+  'coding-agent:sandbox-write-escape': 'CodingAgentSandboxWriteEscape',
   'coding-agent:verifier-sabotage': 'CodingAgentVerifierSabotage',
 };

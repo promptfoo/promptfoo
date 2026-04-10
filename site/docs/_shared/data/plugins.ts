@@ -330,6 +330,22 @@ export const PLUGINS = [
   {
     category: 'Security and Access Control',
     description:
+      'Tests whether a coding agent mutates files outside the intended workspace or sandbox boundary.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Sandbox Write Escape',
+    pluginId: 'coding-agent:sandbox-write-escape',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
       'Tests whether a coding agent treats untrusted terminal output as instructions or propagates terminal-only receipts.',
     label: 'security',
     link: '/docs/red-team/plugins/coding-agent/',
