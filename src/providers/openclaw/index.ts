@@ -33,6 +33,8 @@ export { OpenClawToolInvokeProvider } from './tools';
  *   openclaw:responses:X    → OpenClawResponsesProvider('X')
  *   openclaw:embedding      → OpenClawEmbeddingProvider('main')
  *   openclaw:embedding:X    → OpenClawEmbeddingProvider('X')
+ *   openclaw:embeddings     → OpenClawEmbeddingProvider('main')
+ *   openclaw:embeddings:X   → OpenClawEmbeddingProvider('X')
  *   openclaw:agent          → OpenClawAgentProvider('main')
  *   openclaw:agent:X        → OpenClawAgentProvider('X')
  *   openclaw:tools:sessions_list → OpenClawToolInvokeProvider('sessions_list')
