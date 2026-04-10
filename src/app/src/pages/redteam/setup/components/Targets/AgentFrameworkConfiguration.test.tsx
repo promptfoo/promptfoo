@@ -1,3 +1,4 @@
+import { mockClipboard } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -68,11 +69,7 @@ describe('AgentFrameworkConfiguration', () => {
     const agentType = 'langchain';
 
     const writeTextMock = vi.fn().mockRejectedValue(new Error('Clipboard API not available'));
-    Object.assign(navigator, {
-      clipboard: {
-        writeText: writeTextMock,
-      },
-    });
+    mockClipboard({ writeText: writeTextMock as Clipboard['writeText'] });
 
     renderWithProviders(
       <AgentFrameworkConfiguration

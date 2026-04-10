@@ -339,7 +339,9 @@ describe('handleRedteam', () => {
       undefined,
       undefined,
       undefined,
-      undefined,
+      {
+        providerResponse,
+      },
     );
     expect(grade.pass).toBe(false);
   });
@@ -413,7 +415,9 @@ describe('handleRedteam', () => {
       undefined,
       undefined,
       undefined,
-      undefined,
+      {
+        providerResponse,
+      },
     );
     expect(grade.pass).toBe(false);
   });

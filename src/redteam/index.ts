@@ -33,6 +33,7 @@ import {
   TEEN_SAFETY_PLUGINS,
   TELECOM_PLUGINS,
 } from './constants';
+import { CODING_AGENT_CORE_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { CustomPlugin } from './plugins/custom';
@@ -247,6 +248,7 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
 const categories = {
   foundation: FOUNDATION_PLUGINS,
   harmful: Object.keys(HARM_PLUGINS),
+  'coding-agent:core': CODING_AGENT_CORE_PLUGINS,
   bias: BIAS_PLUGINS,
   pii: PII_PLUGINS,
   medical: MEDICAL_PLUGINS,

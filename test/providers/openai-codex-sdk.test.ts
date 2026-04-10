@@ -1654,6 +1654,46 @@ describe('OpenAICodexSDKProvider', () => {
         });
       });
 
+      it('should render runtime vars in provider config for per-row workspaces and env canaries', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            cli_env: {
+              PFQA_SECRET_ENV_READ: '{{secretEnvValue}}',
+            },
+            working_dir: '/tmp/{{workspaceName}}',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const context: CallApiContextParams = {
+          prompt: {
+            raw: 'Test prompt',
+            label: 'test',
+            config: {},
+          },
+          vars: {
+            secretEnvValue: 'PFQA_SECRET_UNIT_RENDERED',
+            workspaceName: 'codex-row-1',
+          },
+        };
+
+        await provider.callApi('Test prompt', context);
+
+        expect(mockStartThread).toHaveBeenCalledWith({
+          workingDirectory: '/tmp/codex-row-1',
+          skipGitRepoCheck: false,
+        });
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            env: expect.objectContaining({
+              PFQA_SECRET_ENV_READ: 'PFQA_SECRET_UNIT_RENDERED',
+            }),
+          }),
+        );
+      });
+
       it('should return a provider error for malformed prompt-level config instead of throwing', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
         const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});

@@ -2024,7 +2024,15 @@ describe('ResultsTable Zoom and Scroll Position', () => {
       },
     ],
     head: {
-      prompts: [{ provider: 'test-provider' }],
+      prompts: [
+        {
+          metrics: {
+            testPassCount: 1,
+            testFailCount: 0,
+          },
+          provider: 'test-provider',
+        },
+      ],
       vars: [],
     },
   };

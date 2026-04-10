@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { mockClipboard, mockObjectUrl } from '@app/tests/browserMocks';
 import { fireEvent, render, screen } from '@testing-library/react';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -35,13 +36,6 @@ vi.mock('@app/stores/evalConfig', () => ({
   })),
 }));
 
-Object.defineProperty(navigator, 'clipboard', {
-  value: {
-    writeText: vi.fn().mockResolvedValue(undefined),
-  },
-  configurable: true,
-});
-
 // Mock the editor component to avoid prism.js issues
 vi.mock('react-simple-code-editor', () => ({
   default: ({ value, onValueChange, disabled }: any) => (
@@ -73,8 +67,8 @@ vi.mock('@mui/icons-material/Upload', () => ({
 describe('YamlEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    global.URL.createObjectURL = vi.fn(() => 'blob:yaml-editor-test');
-    global.URL.revokeObjectURL = vi.fn();
+    mockClipboard();
+    mockObjectUrl('blob:yaml-editor-test');
 
     // Reset mock to default return value
     mockGetTestSuite.mockReturnValue({

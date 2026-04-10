@@ -1557,6 +1557,7 @@ describe('useApplyFilterFromMetric', () => {
     mockedIsPolicyMetric.mockReset();
     mockedDeserializePolicyIdFromMetric.mockReset();
     mockedIsPolicyMetric.mockReturnValue(false);
+    mockedDeserializePolicyIdFromMetric.mockReturnValue('');
   });
 
   it('should not call addFilter if an identical filter is already present in filters.values', () => {

@@ -1,4 +1,5 @@
 import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
+import { mockMatchMedia as installMatchMedia, mockBrowserProperty } from '@app/tests/browserMocks';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -8,32 +9,13 @@ import type { DefinedUseQueryResult } from '@tanstack/react-query';
 import type { Mock } from 'vitest';
 
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
 
 const mockLocalStorage = {
   getItem: vi.fn(),
   setItem: vi.fn(),
 };
-Object.defineProperty(window, 'localStorage', {
-  value: mockLocalStorage,
-});
 
-const mockMatchMedia = vi.fn();
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: mockMatchMedia,
-});
-
-mockMatchMedia.mockImplementation((query) => ({
-  matches: false,
-  media: query,
-  onchange: null,
-  addListener: vi.fn(),
-  removeListener: vi.fn(),
-  addEventListener: vi.fn(),
-  removeEventListener: vi.fn(),
-  dispatchEvent: vi.fn(),
-}));
+let mockMatchMedia: ReturnType<typeof installMatchMedia>;
 
 const renderLauncher = () => {
   return render(
@@ -56,17 +38,9 @@ describe('LauncherPage', () => {
     mockFetch.mockReset();
     mockLocalStorage.getItem.mockReset();
     mockLocalStorage.setItem.mockReset();
-    mockMatchMedia.mockReset();
-    mockMatchMedia.mockImplementation((query) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    }));
+    mockBrowserProperty(globalThis, 'fetch', mockFetch as typeof fetch);
+    mockBrowserProperty(window, 'localStorage', mockLocalStorage as unknown as Storage);
+    mockMatchMedia = installMatchMedia();
   });
 
   afterEach(() => {

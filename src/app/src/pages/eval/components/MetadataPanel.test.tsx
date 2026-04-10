@@ -1,8 +1,8 @@
+import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { renderWithProviders } from '@app/utils/testutils';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HIDDEN_METADATA_KEYS } from '../../../constants';
 import { MetadataPanel } from './MetadataPanel';
 
 import type { ExpandedMetadataState } from './MetadataPanel';
@@ -23,6 +23,7 @@ describe('MetadataPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+
   it('should filter out metadata keys present in HIDDEN_METADATA_KEYS', () => {
     const hiddenMetadata = Object.fromEntries(
       HIDDEN_METADATA_KEYS.map((key) => [key, `${key} value`]),

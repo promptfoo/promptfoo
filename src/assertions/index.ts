@@ -163,6 +163,10 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
     return assertion.assert.some(assertionMayNeedTraceContext);
   }
 
+  if (assertion.type.startsWith('promptfoo:redteam:coding-agent:')) {
+    return true;
+  }
+
   return typeof assertion.value === 'string'
     ? assertion.value.startsWith('file://') || isPackagePath(assertion.value)
     : false;
