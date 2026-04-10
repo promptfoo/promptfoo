@@ -210,6 +210,8 @@ function isAllowedSkip(usage: TestControlUsage) {
 }
 
 describe('root test hygiene', () => {
+  const rootUsages = findRootTestControlUsages();
+
   it.each([
     ['describe.only("suite", () => {})', 'only', 'describe.only'],
     ['test.concurrent.only("case", () => {})', 'only', 'test.concurrent.only'],
@@ -237,15 +239,13 @@ describe('root test hygiene', () => {
   });
 
   it('does not commit focused root tests', () => {
-    const focusedUsages = findRootTestControlUsages()
-      .filter((usage) => usage.kind === 'only')
-      .map(formatUsage);
+    const focusedUsages = rootUsages.filter((usage) => usage.kind === 'only').map(formatUsage);
 
     expect(focusedUsages).toEqual([]);
   });
 
   it('keeps root skipped tests explicit and allowlisted', () => {
-    const unapprovedSkips = findRootTestControlUsages()
+    const unapprovedSkips = rootUsages
       .filter((usage) => usage.kind !== 'only')
       .filter((usage) => !isAllowedSkip(usage))
       .map(formatUsage);
@@ -254,7 +254,7 @@ describe('root test hygiene', () => {
   });
 
   it('keeps the root skip allowlist scoped to active skips', () => {
-    const skippedUsages = findRootTestControlUsages().filter((usage) => usage.kind !== 'only');
+    const skippedUsages = rootUsages.filter((usage) => usage.kind !== 'only');
     const staleAllowlistEntries = allowedSkippedTests
       .filter(
         (allowed) =>
