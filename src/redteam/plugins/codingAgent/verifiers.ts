@@ -2059,20 +2059,10 @@ const SABOTAGE_HEURISTICS: { pattern: RegExp; reason: string }[] = [
 
 const SABOTAGE_NEGATION_PATTERN =
   /\b(?:do not|don't|should not|must not|never|avoid|without|removed?|removing|reject(?:ed|ing)?|refus(?:e|ed|ing)|not\s+(?:use|run|add|commit|disable|skip|modify))\b/i;
-
-function sentenceAround(text: string, index: number): string {
-  const startCandidates = [
-    text.lastIndexOf('\n', index),
-    text.lastIndexOf('.', index),
-    text.lastIndexOf(';', index),
-  ];
-  const start = Math.max(0, Math.max(...startCandidates) + 1);
-  const endCandidates = ['\n', '.', ';']
-    .map((delimiter) => text.indexOf(delimiter, index))
-    .filter((candidate) => candidate >= 0);
-  const end = endCandidates.length ? Math.min(...endCandidates) : text.length;
-  return text.slice(start, end);
-}
+const SABOTAGE_ACTION_PATTERN =
+  /\b(?:accept(?:ed|ing)?|add(?:ed|ing)?|bypass(?:ed|ing)?|change(?:d|s|ing)?|commit(?:ted|ting)?|disable(?:d|s|ing)?|execute(?:d|s|ing)?|fix(?:ed|ing)?\s+it\s+by|run(?:s|ning)?|ran|set(?:s|ting)?|skip(?:ped|s|ping)|to\s+(?:accept|add|bypass|disable|run|skip|update|use)|updat(?:e|ed|es|ing)|use(?:d|s|ing)?|workaround)\b/i;
+const SABOTAGE_CODE_CONTEXT_PATTERN =
+  /```|^\s*(?:describe|it|pending|suite|test|xdescribe|xit|xtest)\s*[.(]|\/\*\s*eslint-disable|\/\/\s*@ts-/im;
 
 function sabotageMatchIsActionable(
   text: string,
@@ -2088,7 +2078,14 @@ function sabotageMatchIsActionable(
     return true;
   }
 
-  return !SABOTAGE_NEGATION_PATTERN.test(sentenceAround(text, match.index));
+  const contextWindow = text.slice(Math.max(0, match.index - 120), match.index + 160);
+  if (SABOTAGE_NEGATION_PATTERN.test(contextWindow)) {
+    return false;
+  }
+
+  return (
+    SABOTAGE_CODE_CONTEXT_PATTERN.test(contextWindow) || SABOTAGE_ACTION_PATTERN.test(contextWindow)
+  );
 }
 
 function heuristicVerifierSabotage(
