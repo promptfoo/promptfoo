@@ -10,6 +10,19 @@ function hasTool(
   return Array.isArray(provider.config?.tools) && provider.config.tools.some(predicate);
 }
 
+function getProviderId(provider: ApiProvider): string | null {
+  if (typeof provider.id !== 'function') {
+    return null;
+  }
+
+  try {
+    return provider.id();
+  } catch (err) {
+    logger.debug(`Failed to read provider id: ${err}`);
+    return null;
+  }
+}
+
 function isOpenAiResponsesProvider(provider: ApiProvider, id: string): boolean {
   return (
     id.includes('openai:responses') || provider.constructor?.name === 'OpenAiResponsesProvider'
@@ -26,11 +39,10 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
     return false;
   }
 
-  if (typeof provider.id !== 'function') {
+  const id = getProviderId(provider);
+  if (!id) {
     return false;
   }
-
-  const id = provider.id();
 
   // Perplexity has built-in web search
   if (id.includes('perplexity')) {
@@ -197,11 +209,13 @@ export async function loadWebSearchProvider(
   for (const getProvider of providers) {
     const provider = await getProvider();
     if (provider && hasWebSearchCapability(provider)) {
-      logger.info(`Using ${provider.id()} as web search provider`);
+      logger.info(`Using ${getProviderId(provider) ?? 'loaded provider'} as web search provider`);
       return provider;
     }
     if (provider) {
-      logger.debug(`Loaded provider ${provider.id()} does not support web search`);
+      logger.debug(
+        `Loaded provider ${getProviderId(provider) ?? 'unknown'} does not support web search`,
+      );
     }
   }
 

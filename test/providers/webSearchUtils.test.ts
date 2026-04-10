@@ -42,6 +42,19 @@ describe('webSearchUtils', () => {
       );
     });
 
+    it('should return false when a provider id function throws', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => {
+          throw new Error('bad provider id');
+        },
+        config: {
+          tools: [{ type: 'web_search_preview' }],
+        },
+      };
+
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
+    });
+
     it('should return true for Perplexity provider', () => {
       const provider: Partial<ApiProvider> = {
         id: () => 'perplexity:sonar-pro',
@@ -281,6 +294,24 @@ describe('webSearchUtils', () => {
       mockLoadApiProvider.mockRejectedValue(new Error('API key not found'));
 
       const result = await loadWebSearchProvider();
+
+      expect(result).toBeNull();
+    });
+
+    it('should skip loaded providers whose id function throws', async () => {
+      const malformedProvider: Partial<ApiProvider> = {
+        id: () => {
+          throw new Error('bad provider id');
+        },
+        config: {
+          tools: [{ type: 'web_search_preview' }],
+        },
+      };
+      mockLoadApiProvider
+        .mockResolvedValueOnce(malformedProvider as ApiProvider)
+        .mockRejectedValue(new Error('API key not found'));
+
+      const result = await loadWebSearchProvider(false);
 
       expect(result).toBeNull();
     });
