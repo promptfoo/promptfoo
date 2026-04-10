@@ -434,6 +434,16 @@ if (context.trace && maxDepth(context.trace.spans) > 5) {
 
 ES modules are supported, but must have a `.mjs` file extension. Alternatively, if you are transpiling Javascript or Typescript, we recommend pointing promptfoo to the transpiled plain Javascript output.
 
+## Negation
+
+Use `not-javascript` to invert the final pass/fail result while preserving the returned score. Numeric scores are still compared against `threshold` before the result is inverted:
+
+```yaml
+assert:
+  - type: not-javascript
+    value: output.includes('error')
+```
+
 ## Other assertion types
 
 For more info on assertions, see [Test assertions](/docs/configuration/expected-outputs).
