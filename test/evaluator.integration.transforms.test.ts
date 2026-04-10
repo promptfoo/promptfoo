@@ -38,6 +38,9 @@ vi.mock('../src/cache', () => ({
     set: vi.fn(),
     wrap: vi.fn((_key: any, fn: any) => fn()),
   })),
+  withCacheNamespace: vi.fn(async (_namespace: string | undefined, fn: () => Promise<unknown>) =>
+    fn(),
+  ),
 }));
 
 // Mock logger to prevent console output during tests

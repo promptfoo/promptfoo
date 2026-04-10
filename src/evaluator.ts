@@ -12,7 +12,7 @@ import {
   runCompareAssertion,
 } from './assertions/index';
 import { extractAndStoreBinaryData } from './blobs/extractor';
-import { getCache } from './cache';
+import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
@@ -364,6 +364,16 @@ function hasNestedRedteamAssertion(assertion: NestedAssertion): boolean {
     Array.isArray(assertion.assert) &&
     assertion.assert.some(hasNestedRedteamAssertion)
   );
+}
+
+function getRepeatCacheNamespace(
+  repeatIndex: number,
+  evaluateOptions?: EvaluateOptions,
+): string | undefined {
+  if (repeatIndex > 0 || (evaluateOptions?.repeat ?? 1) > 1) {
+    return `repeat:${repeatIndex}`;
+  }
+  return undefined;
 }
 
 function hasGeneratedRedteamMetadata(test: AtomicTestCase): boolean {
@@ -769,9 +779,6 @@ function buildCallApiContext({
     repeatIndex,
   };
 
-  if (repeatIndex > 0) {
-    callApiContext.bustCache = true;
-  }
   if (evalId) {
     callApiContext.evaluationId = evalId;
   }
@@ -1154,7 +1161,14 @@ function getTraceId(traceContext: Awaited<ReturnType<typeof generateTraceContext
  * }
  * @returns The result of the test case.
  */
-export async function runEval({
+export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]> {
+  return withCacheNamespace(
+    getRepeatCacheNamespace(options.repeatIndex, options.evaluateOptions),
+    () => runEvalInternal(options),
+  );
+}
+
+async function runEvalInternal({
   provider,
   prompt, // raw prompt
   test,
@@ -2344,6 +2358,19 @@ function markComparisonRows(
   }
 }
 
+type RepeatCacheContext = Pick<RunEvalOptions, 'evaluateOptions' | 'repeatIndex'>;
+
+function buildRepeatCacheContextByTestIdx(runEvalOptions: RunEvalOptions[]) {
+  const repeatCacheContextByTestIdx = new Map<number, RepeatCacheContext>();
+  for (const evalOption of runEvalOptions) {
+    repeatCacheContextByTestIdx.set(evalOption.testIdx, {
+      evaluateOptions: evalOption.evaluateOptions,
+      repeatIndex: evalOption.repeatIndex,
+    });
+  }
+  return repeatCacheContextByTestIdx;
+}
+
 async function filterCompletedResumeSteps(runEvalOptions: RunEvalOptions[], evalRecord: Eval) {
   if (!cliState.resume || !evalRecord.persisted) {
     return;
@@ -2851,7 +2878,10 @@ class Evaluator {
       await this.evalRecord.addResult(row);
     } catch (error) {
       const resultSummary = summarizeEvaluateResultForLogging(row);
-      logger.error(`Error saving result: ${error} ${safeJsonStringify(resultSummary)}`);
+      logger.error('[Evaluator] Error saving result', {
+        error,
+        resultSummary,
+      });
     }
 
     for (const writer of this.fileWriters) {
@@ -2913,19 +2943,24 @@ class Evaluator {
     }: ProcessEvalStepOptions,
     context: EvalProcessingContext,
   ) {
-    const rows =
-      precomputedRows ||
-      (await this.runEvalStepAfterBeforeEach(evalStep, {
-        deferGrading,
-        onRowsReady,
-        providerCallQueue,
-        testSuite: context.testSuite,
-      }));
+    return withCacheNamespace(
+      getRepeatCacheNamespace(evalStep.repeatIndex, evalStep.evaluateOptions),
+      async () => {
+        const rows =
+          precomputedRows ||
+          (await this.runEvalStepAfterBeforeEach(evalStep, {
+            deferGrading,
+            onRowsReady,
+            providerCallQueue,
+            testSuite: context.testSuite,
+          }));
 
-    if (!deferGrading) {
-      await this.processEvalRows(evalStep, index, rows, shouldSkipStaleRows, context);
-    }
-    return rows;
+        if (!deferGrading) {
+          await this.processEvalRows(evalStep, index, rows, shouldSkipStaleRows, context);
+        }
+        return rows;
+      },
+    );
   }
 
   private async runEvalStepAfterBeforeEach(
@@ -2947,7 +2982,7 @@ class Evaluator {
     });
     evalStep.test = beforeEachOut.test;
 
-    const rows = await runEval({
+    const rows = await runEvalInternal({
       ...evalStep,
       deferGrading,
       providerCallQueue: deferGrading ? providerCallQueue : undefined,
@@ -3451,6 +3486,7 @@ class Evaluator {
     progressBarManager,
     prompts,
     providerAbortSignal,
+    repeatCacheContextByTestIdx,
     rowsWithMaxScoreAssertion,
     rowsWithSelectBestAssertion,
     runEvalOptions,
@@ -3460,6 +3496,7 @@ class Evaluator {
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
     providerAbortSignal?: AbortSignal;
+    repeatCacheContextByTestIdx: Map<number, RepeatCacheContext>;
     rowsWithMaxScoreAssertion: Set<number>;
     rowsWithSelectBestAssertion: Set<number>;
     runEvalOptions: RunEvalOptions[];
@@ -3479,6 +3516,7 @@ class Evaluator {
       progressBarManager,
       prompts,
       providerAbortSignal,
+      repeatCacheContextByTestIdx,
       rowsWithSelectBestAssertion,
       runEvalOptions,
     });
@@ -3501,6 +3539,7 @@ class Evaluator {
     progressBarManager,
     prompts,
     providerAbortSignal,
+    repeatCacheContextByTestIdx,
     rowsWithSelectBestAssertion,
     runEvalOptions,
   }: {
@@ -3510,6 +3549,7 @@ class Evaluator {
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
     providerAbortSignal?: AbortSignal;
+    repeatCacheContextByTestIdx: Map<number, RepeatCacheContext>;
     rowsWithSelectBestAssertion: Set<number>;
     runEvalOptions: RunEvalOptions[];
   }) {
@@ -3524,6 +3564,7 @@ class Evaluator {
         progressBarManager,
         prompts,
         providerAbortSignal,
+        repeatCacheContextByTestIdx,
         runEvalOptions,
         testIdx,
       });
@@ -3539,6 +3580,7 @@ class Evaluator {
     progressBarManager,
     prompts,
     providerAbortSignal,
+    repeatCacheContextByTestIdx,
     runEvalOptions,
     testIdx,
   }: {
@@ -3549,6 +3591,7 @@ class Evaluator {
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
     providerAbortSignal?: AbortSignal;
+    repeatCacheContextByTestIdx: Map<number, RepeatCacheContext>;
     runEvalOptions: RunEvalOptions[];
     testIdx: number;
   }) {
@@ -3569,15 +3612,25 @@ class Evaluator {
       return;
     }
 
+    const repeatCacheContext = repeatCacheContextByTestIdx.get(testIdx);
     const outputs = resultsToCompare.map((r) => r.response?.output || '');
-    const gradingResults = await withProviderCallExecutionContext(
-      { abortSignal: providerAbortSignal, rateLimitRegistry: this.rateLimitRegistry },
+    const gradingResults = await withCacheNamespace(
+      repeatCacheContext
+        ? getRepeatCacheNamespace(
+            repeatCacheContext.repeatIndex,
+            repeatCacheContext.evaluateOptions,
+          )
+        : undefined,
       () =>
-        runCompareAssertion(
-          resultsToCompare[0].testCase,
-          compareAssertion,
-          outputs,
-          this.getComparisonCallApiContext(resultsToCompare[0]),
+        withProviderCallExecutionContext(
+          { abortSignal: providerAbortSignal, rateLimitRegistry: this.rateLimitRegistry },
+          () =>
+            runCompareAssertion(
+              resultsToCompare[0].testCase,
+              compareAssertion,
+              outputs,
+              this.getComparisonCallApiContext(resultsToCompare[0], repeatCacheContext),
+            ),
         ),
     );
 
@@ -3701,16 +3754,21 @@ class Evaluator {
       : this.evalRecord.results.filter((r) => r.testIdx === testIdx);
   }
 
-  private getComparisonCallApiContext(firstResult: EvalResult): CallApiContextParams | undefined {
+  private getComparisonCallApiContext(
+    firstResult: EvalResult,
+    repeatCacheContext?: RepeatCacheContext,
+  ): CallApiContextParams {
     const providerId = firstResult.provider.id;
     const originalProvider = this.testSuite.providers.find((p) => p.id() === providerId);
-    return originalProvider
-      ? {
-          originalProvider,
-          prompt: firstResult.prompt,
-          vars: firstResult.testCase.vars || {},
-        }
-      : undefined;
+    return {
+      getCache,
+      ...(originalProvider && { originalProvider }),
+      prompt: firstResult.prompt,
+      promptIdx: firstResult.promptIdx,
+      repeatIndex: repeatCacheContext?.repeatIndex,
+      testIdx: firstResult.testIdx,
+      vars: firstResult.testCase.vars || {},
+    };
   }
 
   private async applySelectBestGradingResult({
@@ -4054,6 +4112,7 @@ class Evaluator {
       tests,
     });
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
+    const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
     await filterCompletedResumeSteps(runEvalOptions, this.evalRecord);
 
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
@@ -4189,6 +4248,7 @@ class Evaluator {
       progressBarManager,
       prompts,
       providerAbortSignal,
+      repeatCacheContextByTestIdx,
       rowsWithMaxScoreAssertion,
       rowsWithSelectBestAssertion,
       runEvalOptions,
