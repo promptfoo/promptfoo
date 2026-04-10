@@ -1,3 +1,4 @@
+import { mockBrowserProperty } from '@app/tests/browserMocks';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CustomIntentPluginSection from './CustomIntentPluginSection';
@@ -17,10 +18,6 @@ vi.mock('../hooks/useRedTeamConfig', () => ({
 
 // Mock file reading
 const mockReadAsText = vi.fn();
-Object.defineProperty(global.File.prototype, 'text', {
-  value: mockReadAsText,
-  writable: true,
-});
 
 describe('CustomIntentPluginSection', () => {
   const defaultConfig = {
@@ -42,6 +39,7 @@ describe('CustomIntentPluginSection', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockBrowserProperty(global.File.prototype, 'text', mockReadAsText);
     mockUseRedTeamConfig.mockReturnValue({
       config: defaultConfig,
       updatePlugins: mockUpdatePlugins,

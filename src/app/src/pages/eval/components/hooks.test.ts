@@ -3,7 +3,7 @@ import {
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   useApplyFilterFromMetric,
   useMetricsGetter,
@@ -1546,6 +1546,12 @@ describe('useMetricsGetter', () => {
 });
 
 describe('useApplyFilterFromMetric', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockedIsPolicyMetric.mockReturnValue(false);
+    mockedDeserializePolicyIdFromMetric.mockReturnValue('');
+  });
+
   it('should not call addFilter if an identical filter is already present in filters.values', () => {
     const mockAddFilter = vi.fn();
     const metricName = 'latency';
