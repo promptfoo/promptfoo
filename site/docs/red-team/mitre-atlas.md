@@ -11,26 +11,26 @@ ATLAS organizes adversarial techniques into tactics that represent the adversary
 
 ## MITRE ATLAS Tactics
 
-ATLAS currently organizes adversarial ML techniques into these tactics. Promptfoo's `mitre:atlas` preset covers all current tactic aliases; tactics with no direct promptfoo plugin stay in the preset as explicit coverage gaps.
+ATLAS currently organizes adversarial ML techniques into these tactics. Promptfoo's `mitre:atlas` preset accepts all current tactic aliases; tactics with no direct promptfoo plugin stay in the preset as explicit coverage gaps.
 
-| ATLAS tactic                                                          | Promptfoo alias                    |
-| --------------------------------------------------------------------- | ---------------------------------- |
-| Reconnaissance                                                        | `mitre:atlas:reconnaissance`       |
-| Resource Development                                                  | `mitre:atlas:resource-development` |
-| Initial Access                                                        | `mitre:atlas:initial-access`       |
-| AI Model Access                                                       | `mitre:atlas:ai-model-access`      |
-| Execution                                                             | `mitre:atlas:execution`            |
-| Persistence                                                           | `mitre:atlas:persistence`          |
-| Privilege Escalation                                                  | `mitre:atlas:privilege-escalation` |
-| Defense Evasion                                                       | `mitre:atlas:defense-evasion`      |
-| Credential Access                                                     | `mitre:atlas:credential-access`    |
-| Discovery                                                             | `mitre:atlas:discovery`            |
-| Lateral Movement                                                      | `mitre:atlas:lateral-movement`     |
-| Collection                                                            | `mitre:atlas:collection`           |
-| [AI Attack Staging](#ml-attack-staging-mitre-atlas-ml-attack-staging) | `mitre:atlas:ai-attack-staging`    |
-| Command and Control                                                   | `mitre:atlas:command-and-control`  |
-| [Exfiltration](#exfiltration-mitre-atlas-exfiltration)                | `mitre:atlas:exfiltration`         |
-| [Impact](#impact-mitre-atlas-impact)                                  | `mitre:atlas:impact`               |
+| ATLAS tactic                                                          | Promptfoo alias                    | Coverage                       |
+| --------------------------------------------------------------------- | ---------------------------------- | ------------------------------ |
+| Reconnaissance                                                        | `mitre:atlas:reconnaissance`       | Mapped checks                  |
+| Resource Development                                                  | `mitre:atlas:resource-development` | Mapped checks                  |
+| Initial Access                                                        | `mitre:atlas:initial-access`       | Mapped checks                  |
+| AI Model Access                                                       | `mitre:atlas:ai-model-access`      | Coverage gap: no direct checks |
+| Execution                                                             | `mitre:atlas:execution`            | Mapped checks                  |
+| Persistence                                                           | `mitre:atlas:persistence`          | Mapped checks                  |
+| Privilege Escalation                                                  | `mitre:atlas:privilege-escalation` | Mapped checks                  |
+| Defense Evasion                                                       | `mitre:atlas:defense-evasion`      | Mapped checks                  |
+| Credential Access                                                     | `mitre:atlas:credential-access`    | Mapped checks                  |
+| Discovery                                                             | `mitre:atlas:discovery`            | Mapped checks                  |
+| Lateral Movement                                                      | `mitre:atlas:lateral-movement`     | Mapped checks                  |
+| Collection                                                            | `mitre:atlas:collection`           | Mapped checks                  |
+| [AI Attack Staging](#ml-attack-staging-mitre-atlas-ml-attack-staging) | `mitre:atlas:ai-attack-staging`    | Mapped checks                  |
+| Command and Control                                                   | `mitre:atlas:command-and-control`  | Mapped checks                  |
+| [Exfiltration](#exfiltration-mitre-atlas-exfiltration)                | `mitre:atlas:exfiltration`         | Mapped checks                  |
+| [Impact](#impact-mitre-atlas-impact)                                  | `mitre:atlas:impact`               | Mapped checks                  |
 
 :::note
 `mitre:atlas:ml-attack-staging` is still accepted for older configs. New configs should use `mitre:atlas:ai-attack-staging`.

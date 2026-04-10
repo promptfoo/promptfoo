@@ -508,6 +508,7 @@ const MITRE_ATLAS_AI_ATTACK_STAGING_MAPPING: FrameworkMapping = {
 
 export const MITRE_ATLAS_MAPPING: Record<string, FrameworkMapping> = {
   'mitre:atlas:ai-attack-staging': MITRE_ATLAS_AI_ATTACK_STAGING_MAPPING,
+  // No promptfoo plugin directly validates model access level yet; keep the alias for matrix completeness.
   'mitre:atlas:ai-model-access': {
     plugins: [],
     strategies: [],

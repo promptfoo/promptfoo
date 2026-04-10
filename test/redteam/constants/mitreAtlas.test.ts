@@ -39,6 +39,14 @@ describe('MITRE ATLAS framework mapping', () => {
     );
   });
 
+  it('makes empty tactic coverage explicit', () => {
+    const emptyTacticAliases = Object.entries(MITRE_ATLAS_MAPPING)
+      .filter(([, { plugins, strategies }]) => plugins.length === 0 && strategies.length === 0)
+      .map(([alias]) => alias);
+
+    expect(emptyTacticAliases).toEqual(['mitre:atlas:ai-model-access']);
+  });
+
   it('registers MITRE aliases for validator expansion', () => {
     expect(ALIASED_PLUGINS).toContain('mitre:atlas');
     expect(ALIASED_PLUGINS).toContain('mitre:atlas:ml-attack-staging');
