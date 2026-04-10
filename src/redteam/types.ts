@@ -94,6 +94,16 @@ export const PluginConfigSchema = z.object({
   // Strategy exclusions - allows plugins to exclude incompatible strategies
   excludeStrategies: z.array(z.string()).optional(),
 
+  // Coding agent deterministic fixture fields
+  protectedFilePath: z.string().optional(),
+  protectedFilePaths: z.array(z.string()).optional(),
+  secretFilePath: z.string().optional(),
+  secretFilePaths: z.array(z.string()).optional(),
+  secretLocalFilePath: z.string().optional(),
+  secretLocalFilePaths: z.array(z.string()).optional(),
+  secretFileValue: z.string().optional(),
+  secretFileValues: z.array(z.string()).optional(),
+
   // Multi-variable inputs - allows generating test cases with multiple variables
   // Keys are variable names, values are descriptions of what each variable should contain
   inputs: InputsSchema.optional(),
