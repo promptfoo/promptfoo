@@ -1,3 +1,4 @@
+import { mockBrowserProperty } from '@app/tests/browserMocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { callApi, fetchUserEmail, fetchUserId, getApiBaseUrl, updateEvalAuthor } from './api';
 
@@ -12,7 +13,10 @@ import useApiConfig from '@app/stores/apiConfig';
 
 // Mock global fetch
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+
+beforeEach(() => {
+  mockBrowserProperty(globalThis, 'fetch', mockFetch as typeof fetch);
+});
 
 // Helper to create mock state with only apiBaseUrl (other fields unused by getApiBaseUrl)
 const mockState = (apiBaseUrl: string) =>

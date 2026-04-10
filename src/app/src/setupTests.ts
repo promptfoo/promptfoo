@@ -4,6 +4,7 @@ import { webcrypto } from 'node:crypto';
 
 import * as matchers from '@testing-library/jest-dom/matchers';
 import { afterEach, expect, vi } from 'vitest';
+import { restoreBrowserMocks } from './tests/browserMocks';
 
 class MemoryStorage implements Storage {
   private store = new Map<string, string>();
@@ -105,6 +106,23 @@ if (typeof global.ResizeObserver === 'undefined') {
   };
 }
 
+// JSDOM does not implement media playback, but app code legitimately calls it.
+// Provide explicit test doubles so unsupported browser gaps do not leak noisy
+// "Not implemented" messages into otherwise clean test runs.
+if (typeof HTMLMediaElement !== 'undefined') {
+  Object.defineProperty(HTMLMediaElement.prototype, 'play', {
+    configurable: true,
+    writable: true,
+    value: vi.fn(() => Promise.resolve()),
+  });
+
+  Object.defineProperty(HTMLMediaElement.prototype, 'pause', {
+    configurable: true,
+    writable: true,
+    value: vi.fn(),
+  });
+}
+
 // We can mock the environment variables. For example:
 // process.env.PROMPTFOO_VERSION = '1.0.0';
 
@@ -196,6 +214,12 @@ afterEach(() => {
   // This is safe to call regardless of timer state
   vi.useRealTimers();
 
-  // Clear all mocks to prevent state leakage between tests
+  // Restore spies before browser property descriptors. If a spy wraps a
+  // mockBrowserProperty value, restoring spies first prevents them from
+  // re-applying the mocked value after descriptors are restored.
+  vi.restoreAllMocks();
+  restoreBrowserMocks();
+
+  // Clear all mocks to prevent call state leakage between tests.
   vi.clearAllMocks();
 });
