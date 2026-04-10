@@ -118,8 +118,7 @@ For best results, keep trace and raw-provider evidence redacted but structurally
 
 ## Strategy Compatibility
 
-Use `jailbreak:meta` for iterative single-turn probing and `jailbreak:hydra` for
-conversational multi-turn probing:
+Use the standard jailbreak strategy trio when you want to probe beyond basic generation:
 
 ```yaml
 redteam:
@@ -129,6 +128,7 @@ redteam:
   strategies:
     - jailbreak:meta
     - jailbreak:hydra
+    - jailbreak:composite
 ```
 
 Encoding and prompt-rewriting strategies (base64, rot13, leetspeak, hex, homoglyph, multilingual, math-prompt, jailbreak:composite) are automatically excluded because they mangle the canary and receipt values used by deterministic verifiers.

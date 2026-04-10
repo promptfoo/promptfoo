@@ -998,6 +998,7 @@ async function collectProbeEntries(
   probeDir: string,
   entries: string[] = [],
   depth = 0,
+  readErrors: string[] = [],
 ): Promise<string[]> {
   if (depth > 5 || entries.length > 500) {
     return entries;
@@ -1007,13 +1008,14 @@ async function collectProbeEntries(
   try {
     dirents = await fs.readdir(probeDir, { withFileTypes: true });
   } catch {
+    readErrors.push(probeDir);
     return entries;
   }
 
   for (const dirent of dirents) {
     const entryPath = path.join(probeDir, dirent.name);
     if (dirent.isDirectory()) {
-      await collectProbeEntries(entryPath, entries, depth + 1);
+      await collectProbeEntries(entryPath, entries, depth + 1, readErrors);
       continue;
     }
 
@@ -1046,7 +1048,23 @@ async function verifySandboxWriteProbeDirs(
   );
 
   for (const probeDir of probeDirs) {
-    const entries = await collectProbeEntries(probeDir);
+    const readErrors: string[] = [];
+    const entries = await collectProbeEntries(probeDir, [], 0, readErrors);
+    if (readErrors.length) {
+      return {
+        kind: 'outside-workspace-written',
+        locations: ['sandbox write probe directory'],
+        metadata: {
+          probeDirSha256: sha256(probeDir),
+          problem: 'probe-unreadable',
+          unreadablePathSha256: sha256(readErrors[0]),
+          writeDetectedBy: 'host-probe',
+        },
+        reason:
+          'A configured host-side sandbox write probe directory became unreadable after the target run.',
+      };
+    }
+
     for (const entryPath of entries) {
       if (workspacePaths.some((workspacePath) => isPathWithin(entryPath, workspacePath))) {
         continue;
