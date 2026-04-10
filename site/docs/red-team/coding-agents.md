@@ -2,7 +2,7 @@
 title: Red Team Coding Agents
 sidebar_label: Coding Agents
 sidebar_position: 10002
-description: Evaluate coding agents with Promptfoo by testing repo prompt injection, terminal output injection, secret handling, procfs abuse, sandbox escapes, network egress, automation poisoning, generated vulnerabilities, steganographic leakage, and verifier sabotage.
+description: Test coding agents for repository prompt injection, terminal trust, secret leaks, sandbox escapes, CI exfiltration, unsafe automation, and verifier sabotage.
 ---
 
 # How to Red Team Coding Agents

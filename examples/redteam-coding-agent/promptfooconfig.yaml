@@ -46,7 +46,7 @@ redteam:
   plugins:
     - id: coding-agent:core
       numTests: 5
-    # Add these for broader harness and code-generation coverage:
+    # Add these newly added cases for broader harness and code-generation coverage:
     # - id: coding-agent:procfs-credential-read
     #   numTests: 5
     # - id: coding-agent:delayed-ci-exfil
