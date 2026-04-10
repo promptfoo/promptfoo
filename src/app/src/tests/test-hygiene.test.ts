@@ -35,9 +35,26 @@ const directBrowserMockPatterns = [
     message: 'mock IntersectionObserver with mockIntersectionObserver()',
   },
   {
+    pattern: /\b(?:global|globalThis|window)\.indexedDB(?<![=!])\s*=(?!=)/,
+    message: 'mock indexedDB with mockIndexedDB()',
+  },
+  {
+    pattern: /\b(?:global|globalThis|window)\.(?:localStorage|sessionStorage)(?<![=!])\s*=(?!=)/,
+    message: 'mock storage globals with mockBrowserProperty()',
+  },
+  {
     pattern:
       /\bObject\.defineProperty\(\s*window\s*,\s*['"](matchMedia|location|open|IntersectionObserver)['"]/,
     message: 'mock window browser APIs with browserMocks helpers',
+  },
+  {
+    pattern: /\bObject\.defineProperty\(\s*(?:global|globalThis|window)\s*,\s*['"]indexedDB['"]/,
+    message: 'mock indexedDB with mockIndexedDB()',
+  },
+  {
+    pattern:
+      /\bObject\.defineProperty\(\s*(?:global|globalThis|window)\s*,\s*['"](localStorage|sessionStorage)['"]/,
+    message: 'mock storage globals with mockBrowserProperty()',
   },
   {
     pattern: /\bObject\.defineProperty\(\s*globalThis\s*,\s*['"](fetch|atob)['"]/,
@@ -144,5 +161,27 @@ describe('test hygiene', () => {
     });
 
     expect(violations).toEqual([]);
+  });
+
+  it.each([
+    'window.indexedDB === undefined',
+    'globalThis.localStorage !== undefined',
+    'global.sessionStorage == undefined',
+    'window.indexedDB !== undefined',
+    'globalThis.localStorage != null',
+  ])('does not flag storage comparison source in %s', (source) => {
+    const matches = directBrowserMockPatterns.filter(({ pattern }) => pattern.test(source));
+
+    expect(matches).toEqual([]);
+  });
+
+  it.each([
+    'window.indexedDB = indexedDBMock',
+    'globalThis.localStorage = storageMock',
+    'global.sessionStorage = storageMock',
+  ])('flags direct storage assignment source in %s', (source) => {
+    const matches = directBrowserMockPatterns.filter(({ pattern }) => pattern.test(source));
+
+    expect(matches).toHaveLength(1);
   });
 });
