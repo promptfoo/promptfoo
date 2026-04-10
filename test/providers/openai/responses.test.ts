@@ -667,6 +667,21 @@ describe('OpenAiResponsesProvider', () => {
     expect('max_output_tokens' in body).toBe(true);
   });
 
+  it('should strip max_tokens from passthrough for the responses API', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+        max_output_tokens: 512,
+        passthrough: { max_tokens: 16000 },
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body).not.toHaveProperty('max_tokens');
+    expect(body.max_output_tokens).toBe(512);
+  });
+
   it('should handle store parameter correctly', async () => {
     const mockApiResponse = {
       id: 'resp_abc123',
