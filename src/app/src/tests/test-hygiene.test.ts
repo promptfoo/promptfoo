@@ -19,16 +19,29 @@ const directBrowserMockPatterns = [
     message: 'mock fetch with mockBrowserProperty(globalThis, "fetch", ...)',
   },
   {
-    pattern: /\bglobal\.window\.open\s*=/,
+    pattern: /\bglobalThis\.atob\s*=/,
+    message: 'mock atob with mockBrowserProperty(globalThis, "atob", ...)',
+  },
+  {
+    pattern: /\b(?:global\.)?window\.open\s*=/,
     message: 'mock window.open with mockWindowOpen()',
+  },
+  {
+    pattern: /\bwindow\.matchMedia\s*=/,
+    message: 'mock matchMedia with mockMatchMedia() or mockBrowserProperty()',
   },
   {
     pattern: /\bwindow\.IntersectionObserver\s*=/,
     message: 'mock IntersectionObserver with mockIntersectionObserver()',
   },
   {
-    pattern: /\bObject\.defineProperty\(\s*window\s*,\s*['"](matchMedia|location)['"]/,
+    pattern:
+      /\bObject\.defineProperty\(\s*window\s*,\s*['"](matchMedia|location|open|IntersectionObserver)['"]/,
     message: 'mock window browser APIs with browserMocks helpers',
+  },
+  {
+    pattern: /\bObject\.defineProperty\(\s*globalThis\s*,\s*['"](fetch|atob)['"]/,
+    message: 'mock global browser APIs with mockBrowserProperty()',
   },
   {
     pattern: /\bObject\.defineProperty\(\s*(?:global\.)?navigator\s*,\s*['"]clipboard['"]/,
@@ -39,11 +52,23 @@ const directBrowserMockPatterns = [
     message: 'mock clipboard with mockClipboard()',
   },
   {
-    pattern: /\bglobal\.URL\.(createObjectURL|revokeObjectURL)\s*=/,
+    pattern: /\b(?:global|globalThis)\.URL\.(createObjectURL|revokeObjectURL)\s*=/,
+    message: 'mock object URLs with mockObjectUrl() or mockBrowserProperty()',
+  },
+  {
+    pattern: /\bURL\.(createObjectURL|revokeObjectURL)\s*=/,
+    message: 'mock object URLs with mockObjectUrl() or mockBrowserProperty()',
+  },
+  {
+    pattern: /\bObject\.defineProperty\(\s*URL\s*,\s*['"](createObjectURL|revokeObjectURL)['"]/,
     message: 'mock object URLs with mockObjectUrl() or mockBrowserProperty()',
   },
   {
     pattern: /\bdocument\.execCommand\s*=/,
+    message: 'mock document.execCommand with mockDocumentExecCommand()',
+  },
+  {
+    pattern: /\bObject\.defineProperty\(\s*document\s*,\s*['"]execCommand['"]/,
     message: 'mock document.execCommand with mockDocumentExecCommand()',
   },
 ];
