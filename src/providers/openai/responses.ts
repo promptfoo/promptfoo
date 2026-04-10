@@ -169,21 +169,32 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return !this.isReasoningModel();
   }
 
-  private isAzureOpenAiHost(value: string | undefined): boolean {
-    return typeof value === 'string' && value.includes('openai.azure.com');
+  private isAzureOpenAiEndpoint(value: string | undefined): boolean {
+    if (!value) {
+      return false;
+    }
+
+    const endpoint = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`;
+    try {
+      const hostname = new URL(endpoint).hostname.toLowerCase();
+      return hostname === 'openai.azure.com' || hostname.endsWith('.openai.azure.com');
+    } catch {
+      return value.toLowerCase().includes('openai.azure.com');
+    }
   }
 
   private getDeploymentCapabilities(config: OpenAiCompletionOptions) {
-    const hasAzureCustomDeploymentHost =
-      this.isAzureOpenAiHost(config.apiHost) || this.isAzureOpenAiHost(config.apiBaseUrl);
+    const hasAzureCustomDeploymentHost = [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some(
+      (endpoint) => this.isAzureOpenAiEndpoint(endpoint),
+    );
     const isAzureResponsesDeploymentWithReasoningConfig =
       hasAzureCustomDeploymentHost &&
       (config.reasoning !== undefined || config.reasoning_effort !== undefined);
     const isAzureResponsesDeploymentWithVerbosityConfig =
       hasAzureCustomDeploymentHost && config.verbosity !== undefined;
-    // Verbosity is a GPT-5 feature orthogonal to reasoning — only reasoning
-    // config should promote a custom deployment to "reasoning model" status,
-    // otherwise max_output_tokens defaults change unexpectedly.
+    // Verbosity is a GPT-5 feature separate from reasoning; only reasoning config
+    // should promote a custom deployment to "reasoning model" status, otherwise
+    // max_output_tokens defaults change unexpectedly.
     const isReasoningModel =
       this.isReasoningModel() || isAzureResponsesDeploymentWithReasoningConfig;
     const isGPT5Model = this.isGPT5Model() || isAzureResponsesDeploymentWithVerbosityConfig;

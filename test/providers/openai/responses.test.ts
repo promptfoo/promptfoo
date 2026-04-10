@@ -34,6 +34,9 @@ const ENV_KEYS_TO_RESTORE = [
   'OPENAI_TEMPERATURE',
   'OPENAI_MAX_TOKENS',
   'OPENAI_MAX_COMPLETION_TOKENS',
+  'OPENAI_API_BASE_URL',
+  'OPENAI_BASE_URL',
+  'OPENAI_API_HOST',
 ] as const;
 
 const savedEnv = Object.fromEntries(ENV_KEYS_TO_RESTORE.map((key) => [key, process.env[key]]));
@@ -2284,11 +2287,62 @@ describe('OpenAiResponsesProvider', () => {
       expect(body.temperature).toBeUndefined();
     });
 
+    it('should detect Azure deployment via OpenAI endpoint environment variables', async () => {
+      process.env.OPENAI_API_BASE_URL = AZURE_BASE_URL;
+
+      const provider = new OpenAiResponsesProvider(AZURE_MODEL, {
+        config: {
+          apiKey: 'test-key',
+          reasoning_effort: 'medium',
+          temperature: 0.7,
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.reasoning).toEqual({ effort: 'medium' });
+      expect(body.temperature).toBeUndefined();
+    });
+
+    it('should detect Azure deployment via provider env overrides', async () => {
+      const provider = new OpenAiResponsesProvider(AZURE_MODEL, {
+        config: {
+          apiKey: 'test-key',
+          reasoning_effort: 'medium',
+          temperature: 0.7,
+        },
+        env: {
+          OPENAI_API_HOST: 'my-resource.openai.azure.com',
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.reasoning).toEqual({ effort: 'medium' });
+      expect(body.temperature).toBeUndefined();
+    });
+
     it('should not trigger Azure reasoning detection for non-Azure hosts', async () => {
       const provider = new OpenAiResponsesProvider('custom-model', {
         config: {
           apiKey: 'test-key',
           apiBaseUrl: 'https://api.example.com/v1',
+          reasoning_effort: 'medium',
+          temperature: 0.5,
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.reasoning).toBeUndefined();
+      expect(body.temperature).toBe(0.5);
+    });
+
+    it('should not trigger Azure reasoning detection when openai.azure.com appears outside the host', async () => {
+      const provider = new OpenAiResponsesProvider('custom-model', {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: 'https://api.example.com/proxy/openai.azure.com/v1',
           reasoning_effort: 'medium',
           temperature: 0.5,
         },

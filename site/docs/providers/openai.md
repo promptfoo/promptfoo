@@ -2266,7 +2266,7 @@ providers:
       response_format: file://./response-schema.json
 ```
 
-Legacy `apiHost` and newer `apiBaseUrl` Azure configurations both support the same Responses reasoning and verbosity options.
+Legacy `apiHost`, newer `apiBaseUrl`, and OpenAI endpoint environment variable Azure configurations all support the same Responses reasoning and verbosity options.
 
 For comprehensive Azure Responses API documentation, see the [Azure provider documentation](/docs/providers/azure#azure-responses-api).
 
