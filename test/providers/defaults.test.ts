@@ -27,9 +27,9 @@ import {
 } from '../../src/providers/openai/codexDefaults';
 import {
   DefaultModerationProvider,
-  DefaultGradingJsonProvider as OpenAiDefaultGradingJsonProvider,
-  DefaultGradingProvider as OpenAiDefaultGradingProvider,
-  DefaultSuggestionsProvider as OpenAiDefaultSuggestionsProvider,
+  DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
+  DefaultGradingProvider as OpenAiGradingProvider,
+  DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
 } from '../../src/providers/openai/defaults';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 
@@ -221,10 +221,10 @@ describe('Provider override tests', () => {
 
     const providers = await getDefaultProviders();
 
-    expect(providers.gradingJsonProvider).toBe(OpenAiDefaultGradingJsonProvider);
-    expect(providers.gradingProvider).toBe(OpenAiDefaultGradingProvider);
-    expect(providers.suggestionsProvider).toBe(OpenAiDefaultSuggestionsProvider);
-    expect(providers.synthesizeProvider).toBe(OpenAiDefaultGradingJsonProvider);
+    expect(providers.gradingJsonProvider).toBe(OpenAiGradingJsonProvider);
+    expect(providers.gradingProvider).toBe(OpenAiGradingProvider);
+    expect(providers.suggestionsProvider).toBe(OpenAiSuggestionsProvider);
+    expect(providers.synthesizeProvider).toBe(OpenAiGradingJsonProvider);
   });
 
   it('should prefer Mistral defaults over Codex SDK defaults when MISTRAL_API_KEY exists', async () => {
