@@ -3,7 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildOpenClawDeviceAuthPayloadV3,
   buildSignedOpenClawDevice,
@@ -16,6 +16,7 @@ describe('OpenClaw device auth', () => {
   const tempDirs: string[] = [];
 
   afterEach(() => {
+    vi.resetAllMocks();
     for (const tempDir of tempDirs) {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }

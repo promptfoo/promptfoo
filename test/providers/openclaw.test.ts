@@ -79,6 +79,11 @@ describe('OpenClaw Provider', () => {
     mockFetchWithProxy.mockReset();
     mockFetchWithCache.mockReset();
     resetConfigCache();
+    deviceAuthMocks.buildSignedOpenClawDevice.mockReset();
+    deviceAuthMocks.clearOpenClawDeviceAuthToken.mockReset();
+    deviceAuthMocks.loadOpenClawDeviceAuthToken.mockReset();
+    deviceAuthMocks.loadOrCreateOpenClawDeviceIdentity.mockReset();
+    deviceAuthMocks.storeOpenClawDeviceAuthToken.mockReset();
     deviceAuthMocks.loadOrCreateOpenClawDeviceIdentity.mockReturnValue({
       deviceId: 'device-1',
       publicKeyPem: 'public-key-pem',
@@ -2077,8 +2082,12 @@ describe('OpenClaw Provider', () => {
         ),
       );
 
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.waitFor(
+        () => {
+          expect(wsInstances).toHaveLength(2);
+        },
+        { timeout: 1000 },
+      );
 
       const secondOnMessage = wsInstances[1].handlers.get('message')!;
       secondOnMessage(
