@@ -114,6 +114,10 @@ jobs:
       - name: Test
         run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard && ' -- --coverage' || '' }}
 
+      - name: Check Backend Coverage Ratchets
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
+        run: npm run test:coverage:ratchet -- --report backend
+
       - name: Upload Backend Coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
         uses: codecov/codecov-action@v6
@@ -407,6 +411,9 @@ jobs:
 
       - name: Run App Tests with Coverage
         run: npm run test:coverage --prefix src/app
+
+      - name: Check Frontend Coverage Ratchets
+        run: npm run test:coverage:ratchet -- --report frontend
 
       - name: Upload Frontend Coverage to Codecov
         uses: codecov/codecov-action@v6
