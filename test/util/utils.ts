@@ -1,3 +1,7 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
 import { vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 
@@ -79,4 +83,15 @@ export function mockConsole(
   implementation: (...args: unknown[]) => void = () => {},
 ): MockInstance {
   return vi.spyOn(console, method).mockImplementation(implementation);
+}
+
+export function createTempDir(prefix = 'promptfoo-test-'): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+export function removeTempDir(tempDir: string | undefined): void {
+  if (!tempDir) {
+    return;
+  }
+  fs.rmSync(tempDir, { recursive: true, force: true });
 }
