@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StrategySection } from './StrategySection';
 
@@ -124,7 +125,7 @@ describe('StrategySection', () => {
         />,
       );
 
-      expect(screen.getByText('Reset')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /reset/i })).toBeInTheDocument();
     });
 
     it('disables Reset button when no strategies are selected', () => {
@@ -141,7 +142,7 @@ describe('StrategySection', () => {
         />,
       );
 
-      const resetButton = screen.getByText('Reset');
+      const resetButton = screen.getByRole('button', { name: /reset/i });
       expect(resetButton).toBeDisabled();
     });
 
@@ -159,11 +160,13 @@ describe('StrategySection', () => {
         />,
       );
 
-      const resetButton = screen.getByText('Reset');
+      const resetButton = screen.getByRole('button', { name: /reset/i });
       expect(resetButton).not.toBeDisabled();
     });
 
-    it('calls onSelectNone with selected strategy IDs when Reset is clicked', () => {
+    it('calls onSelectNone with selected strategy IDs when Reset is clicked', async () => {
+      const user = userEvent.setup();
+
       render(
         <StrategySection
           isStrategyDisabled={() => false}
@@ -177,13 +180,15 @@ describe('StrategySection', () => {
         />,
       );
 
-      const resetButton = screen.getByText('Reset');
-      fireEvent.click(resetButton);
+      const resetButton = screen.getByRole('button', { name: /reset/i });
+      await user.click(resetButton);
 
       expect(mockOnSelectNone).toHaveBeenCalledWith(['basic', 'multilingual']);
     });
 
-    it('falls back to calling onToggle for each selected strategy when onSelectNone is not provided', () => {
+    it('falls back to calling onToggle for each selected strategy when onSelectNone is not provided', async () => {
+      const user = userEvent.setup();
+
       render(
         <StrategySection
           isStrategyDisabled={() => false}
@@ -196,15 +201,17 @@ describe('StrategySection', () => {
         />,
       );
 
-      const resetButton = screen.getByText('Reset');
-      fireEvent.click(resetButton);
+      const resetButton = screen.getByRole('button', { name: /reset/i });
+      await user.click(resetButton);
 
       expect(mockOnToggle).toHaveBeenCalledTimes(2);
       expect(mockOnToggle).toHaveBeenCalledWith('basic');
       expect(mockOnToggle).toHaveBeenCalledWith('multilingual');
     });
 
-    it('calls onSelectNone with only valid strategy IDs when Reset is clicked and selectedIds contains non-existent IDs', () => {
+    it('calls onSelectNone with only valid strategy IDs when Reset is clicked and selectedIds contains non-existent IDs', async () => {
+      const user = userEvent.setup();
+
       render(
         <StrategySection
           isStrategyDisabled={() => false}
@@ -218,8 +225,8 @@ describe('StrategySection', () => {
         />,
       );
 
-      const resetButton = screen.getByText('Reset');
-      fireEvent.click(resetButton);
+      const resetButton = screen.getByRole('button', { name: /reset/i });
+      await user.click(resetButton);
 
       expect(mockOnSelectNone).toHaveBeenCalledWith(['basic', 'multilingual']);
     });
@@ -238,7 +245,7 @@ describe('StrategySection', () => {
         />,
       );
 
-      const resetButton = screen.queryByText('Reset');
+      const resetButton = screen.queryByRole('button', { name: /reset/i });
 
       expect(resetButton).toBeNull();
       expect(mockOnSelectNone).not.toHaveBeenCalled();
@@ -346,7 +353,7 @@ describe('StrategySection', () => {
         />,
       );
 
-      const configButton = screen.getByLabelText('settings');
+      const configButton = screen.getByRole('button', { name: /settings/i });
       expect(configButton).toBeInTheDocument();
     });
   });
