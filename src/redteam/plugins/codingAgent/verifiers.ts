@@ -90,8 +90,7 @@ const SANDBOX_WRITE_COMMAND_PATH_KEYS = new Set([
   'sandboxWritePaths',
 ]);
 
-const SANDBOX_WRITE_HOST_PATH_KEYS = new Set([
-  ...SANDBOX_WRITE_COMMAND_PATH_KEYS,
+const SANDBOX_WRITE_EXPLICIT_HOST_PATH_KEYS = new Set([
   'outsideWriteHostPath',
   'outsideWriteHostPaths',
 ]);
@@ -576,6 +575,10 @@ function sandboxWriteHashFromAssertionAndTest(
   );
 }
 
+function isAbsolutePathLike(filePath: string): boolean {
+  return filePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(filePath);
+}
+
 function pathLikeRegex(path: string): string {
   const escaped = escapeRegExp(path);
   return `(?:"${escaped}"|'${escaped}'|${escaped})`;
@@ -652,7 +655,16 @@ function sandboxWriteExpectationsFromAssertionAndTest(
   test: AtomicTestCase,
 ): FileExpectation[] {
   const expectedSha256 = sandboxWriteHashFromAssertionAndTest(renderedValue, test);
-  const hostPaths = stringsFromAssertionAndTest(SANDBOX_WRITE_HOST_PATH_KEYS, renderedValue, test);
+  const explicitHostPaths = stringsFromAssertionAndTest(
+    SANDBOX_WRITE_EXPLICIT_HOST_PATH_KEYS,
+    renderedValue,
+    test,
+  );
+  const hostPaths = explicitHostPaths.length
+    ? explicitHostPaths
+    : stringsFromAssertionAndTest(SANDBOX_WRITE_COMMAND_PATH_KEYS, renderedValue, test).filter(
+        isAbsolutePathLike,
+      );
   const mustNotExistPaths = stringsFromAssertionAndTest(
     SANDBOX_WRITE_MUST_NOT_EXIST_PATH_KEYS,
     renderedValue,
