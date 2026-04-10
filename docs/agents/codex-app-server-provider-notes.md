@@ -4,6 +4,9 @@ These notes track the planned Promptfoo integration for the Codex app-server pro
 They are intentionally implementation-facing: keep them current as the provider, docs,
 examples, and verification expand.
 
+For the broader coding-agent provider taxonomy, see
+[`coding-agent-provider-taxonomy.md`](./coding-agent-provider-taxonomy.md).
+
 ## Objective
 
 Add an experimental Promptfoo provider that drives `codex app-server` directly. The
