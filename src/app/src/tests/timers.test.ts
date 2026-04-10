@@ -26,6 +26,17 @@ describe('test timers', () => {
     expect(callback).toHaveBeenCalledTimes(1);
   });
 
+  it('preserves errors thrown while flushing pending timers', () => {
+    const timers = useTestTimers();
+
+    setTimeout(() => {
+      throw new Error('pending timer failure');
+    }, 10_000);
+
+    expect(() => timers.restore({ runPending: true })).toThrow('pending timer failure');
+    expect(() => restoreTestTimers()).not.toThrow();
+  });
+
   it('can be restored even when a test already switched back to real timers', () => {
     const timers = useTestTimers();
 

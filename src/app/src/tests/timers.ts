@@ -8,22 +8,39 @@ type RestoreTestTimersOptions = {
 
 export type TestTimers = ReturnType<typeof useTestTimers>;
 
+function isTimersNotMockedError(error: unknown) {
+  return (
+    error instanceof Error &&
+    /Timers are not mocked|vi\.useFakeTimers|useFakeTimers\(\)/i.test(error.message)
+  );
+}
+
 export function restoreTestTimers({ runPending = false }: RestoreTestTimersOptions = {}) {
+  let pendingTimerError: unknown;
+
   if (runPending) {
     try {
       vi.runOnlyPendingTimers();
-    } catch {
-      // Real timers are already active.
+    } catch (error) {
+      if (!isTimersNotMockedError(error)) {
+        pendingTimerError = error;
+      }
     }
   }
 
   try {
     vi.clearAllTimers();
-  } catch {
-    // Real timers are already active.
+  } catch (error) {
+    if (!isTimersNotMockedError(error) && pendingTimerError === undefined) {
+      pendingTimerError = error;
+    }
   }
 
   vi.useRealTimers();
+
+  if (pendingTimerError !== undefined) {
+    throw pendingTimerError;
+  }
 }
 
 export function useTestTimers(options?: FakeTimerOptions) {
