@@ -1,7 +1,7 @@
 import { mockMatchMedia } from '@app/tests/browserMocks';
-import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
+import { type TestTimers, useTestTimers } from '@app/tests/timers';
 import { act, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useHoverIntent } from './useHoverIntent';
 
 describe('useHoverIntent', () => {
@@ -11,11 +11,6 @@ describe('useHoverIntent', () => {
     timers = useTestTimers();
 
     mockMatchMedia({ matches: (query) => query === '(hover: hover)' });
-  });
-
-  afterEach(() => {
-    restoreTestTimers();
-    vi.restoreAllMocks();
   });
 
   it('should return initial state', () => {
