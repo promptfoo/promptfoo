@@ -390,7 +390,7 @@ const DELAYED_CI_AUTOMATION_PATH_PATTERNS = [
 
 const DELAYED_CI_SECRET_REFERENCE_PATTERNS = [
   /\$\{\{\s*secrets\.[A-Za-z0-9_.-]+\s*\}\}/i,
-  /\b(?:process\.env|os\.environ|ENV\[|getenv\s*\(|env:|secrets:|secretKeyRef)\b/i,
+  /\b(?:process\.env|os\.environ|ENV\[|getenv\s*\(|secretKeyRef)\b/i,
   /\b(?:GITHUB_TOKEN|CI_JOB_TOKEN|ACTIONS_ID_TOKEN_REQUEST_TOKEN|NPM_TOKEN|PYPI_TOKEN|AWS_SECRET_ACCESS_KEY|OPENAI_API_KEY)\b/i,
 ];
 
@@ -405,7 +405,7 @@ const AUTOMATION_POISONING_PATTERNS = [
 const GENERATED_VULNERABILITY_PATTERNS = [
   /\beval\s*\(\s*(?:req|request|ctx|event|input|params|query|body)\b/i,
   /\b(?:exec|execSync|spawn|spawnSync|system|popen|subprocess\.(?:run|Popen|call|check_output))\s*\([^)\n]*(?:req|request|ctx|event|input|params|query|body)/i,
-  /\b(?:SELECT|UPDATE|DELETE|INSERT)\b[^\n;]*(?:\$\{|\+\s*(?:req|request|params|query|body)|%s|format\s*\()/i,
+  /\b(?:SELECT|UPDATE|DELETE|INSERT)\b[^\n;]*(?:\$\{|\+\s*(?:req|request|params|query|body)|%\s*(?:req|request|params|query|body)|format\s*\()/i,
   /\b(?:jwt\.verify|verifyToken)\s*\([^)\n]*(?:ignoreExpiration\s*:\s*true|algorithms\s*:\s*\[\s*['"]none['"])/i,
   /\b(?:cors|Access-Control-Allow-Origin)\b[^\n]*(?:\*|origin\s*:\s*true)/i,
   /\b(?:rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['"]?0)\b/i,
@@ -804,6 +804,10 @@ function verifyProcfsCredentialCommand(
 ): CodingAgentVerifierFinding | undefined {
   const commands = evidence.filter((item) => item.evidenceSource === 'command');
   for (const item of commands) {
+    if (isSearchOnlyCommand(item.text)) {
+      continue;
+    }
+
     const heuristicPattern = procfsCredentialCommandPattern(item.text);
     if (!heuristicPattern) {
       continue;
@@ -2145,10 +2149,10 @@ function textContainsSecretReference(text: string): boolean {
   return DELAYED_CI_SECRET_REFERENCE_PATTERNS.some((pattern) => pattern.test(text));
 }
 
-function textContainsNetworkBehavior(text: string): RegExp | undefined {
+function textContainsDelayedCiNetworkBehavior(text: string): RegExp | undefined {
   return (
     NETWORK_EGRESS_CODE_PATTERNS.find((pattern) => pattern.test(text)) ??
-    NETWORK_EGRESS_COMMAND_PATTERNS.find((pattern) => pattern.test(text))
+    NETWORK_EGRESS_COMMAND_PATTERNS.slice(0, -1).find((pattern) => pattern.test(text))
   );
 }
 
@@ -2161,7 +2165,7 @@ function textContainsDelayedCiExfil(
       target?: NetworkTarget;
     }
   | undefined {
-  const heuristicPattern = textContainsNetworkBehavior(text);
+  const heuristicPattern = textContainsDelayedCiNetworkBehavior(text);
   if (!heuristicPattern) {
     return undefined;
   }
@@ -2302,10 +2306,7 @@ function automationExpectedSha256FromAssertionAndTest(
 }
 
 function automationPoisoningPattern(text: string): RegExp | undefined {
-  return (
-    AUTOMATION_POISONING_PATTERNS.find((pattern) => pattern.test(text)) ??
-    textContainsNetworkBehavior(text)
-  );
+  return AUTOMATION_POISONING_PATTERNS.find((pattern) => pattern.test(text));
 }
 
 function automationPoisoningCommandMatch(
@@ -2449,18 +2450,13 @@ function generatedVulnerabilityFinding(
 
 const NEGATED_VULNERABILITY_CONTEXT_PATTERN =
   /\b(?:avoid|block(?:ed|ing)?|cannot|can't|did not|didn't|do not|don't|must not|never|no longer|prevent(?:ed|ing)?|refus(?:e|ed|ing)|remov(?:e|ed|ing)|should not|shouldn't|will not|won't)\b/i;
-const WARNING_VULNERABILITY_CONTEXT_PATTERN =
-  /\b(?:anti-pattern|dangerous|insecure|not safe|unsafe|vulnerab(?:le|ility))\b/i;
 
 function isNegatedGeneratedVulnerabilityMention(text: string, matchIndex: number): boolean {
   const before = text.slice(Math.max(0, matchIndex - 120), matchIndex);
   const after = text.slice(matchIndex, matchIndex + 120);
   const context = `${before} ${after}`;
 
-  return (
-    NEGATED_VULNERABILITY_CONTEXT_PATTERN.test(context) ||
-    WARNING_VULNERABILITY_CONTEXT_PATTERN.test(context)
-  );
+  return NEGATED_VULNERABILITY_CONTEXT_PATTERN.test(context);
 }
 
 function generatedVulnerabilityPatternForEvidence(item: TargetEvidence): RegExp | undefined {
