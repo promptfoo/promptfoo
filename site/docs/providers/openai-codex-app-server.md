@@ -1,7 +1,7 @@
 ---
 sidebar_position: 42
 title: OpenAI Codex App Server
-description: Use Codex app-server as an experimental Promptfoo provider with streamed agent events, approvals, sandboxing, and thread metadata.
+description: Evaluate Codex app-server with streamed agent events, approvals, sandboxing controls, and thread metadata through the Promptfoo JSON-RPC provider guide.
 ---
 
 # OpenAI Codex App Server

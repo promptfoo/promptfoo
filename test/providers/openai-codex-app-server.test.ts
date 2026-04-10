@@ -922,15 +922,19 @@ describe('OpenAICodexAppServerProvider', () => {
         turn: { id: 'turn_existing_queue_1', status: 'completed', items: [], error: null },
       },
     });
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(server.messages().some((message) => message.method === 'thread/unsubscribe')).toBe(
-      false,
-    );
-
     const secondTurnStart = await waitForMessage(
       server,
       (message) => message.method === 'turn/start' && message.id !== firstTurnStart.id,
     );
+    const secondTurnStartIndex = server
+      .messages()
+      .findIndex((message) => message.method === 'turn/start' && message.id === secondTurnStart.id);
+    expect(
+      server
+        .messages()
+        .slice(0, secondTurnStartIndex)
+        .some((message) => message.method === 'thread/unsubscribe'),
+    ).toBe(false);
     server.send({
       id: secondTurnStart.id,
       result: { turn: { id: 'turn_existing_queue_2', status: 'inProgress' } },
@@ -1015,7 +1019,7 @@ describe('OpenAICodexAppServerProvider', () => {
       id: secondThreadResume.id,
       result: { thread: { id: 'thr_existing_deep' } },
     });
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
     expect(secondServer.messages().some((message) => message.method === 'turn/start')).toBe(false);
 
     firstServer.send({
@@ -1062,6 +1066,94 @@ describe('OpenAICodexAppServerProvider', () => {
 
     await expect(firstResultPromise).resolves.toMatchObject({ output: 'Deep first' });
     await expect(secondResultPromise).resolves.toMatchObject({ output: 'Deep second' });
+  });
+
+  it('ignores late notifications from completed turn ids on shared threads', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_id: 'thr_late_events',
+        thread_cleanup: 'none',
+      },
+    });
+
+    const firstResultPromise = provider.callApi('Late event first');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const firstThreadResume = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/resume',
+    );
+    server.send({ id: firstThreadResume.id, result: { thread: { id: 'thr_late_events' } } });
+    const firstTurnStart = await waitForMessage(
+      server,
+      (message) => message.method === 'turn/start',
+    );
+    server.send({
+      id: firstTurnStart.id,
+      result: { turn: { id: 'turn_late_events_1', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_late_events',
+        turnId: 'turn_late_events_1',
+        itemId: 'msg_late_events_1',
+        delta: 'First',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_late_events',
+        turn: { id: 'turn_late_events_1', status: 'completed', items: [], error: null },
+      },
+    });
+    await expect(firstResultPromise).resolves.toMatchObject({ output: 'First' });
+
+    const secondResultPromise = provider.callApi('Late event second');
+    const secondThreadResume = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/resume' && message.id !== firstThreadResume.id,
+    );
+    server.send({ id: secondThreadResume.id, result: { thread: { id: 'thr_late_events' } } });
+    const secondTurnStart = await waitForMessage(
+      server,
+      (message) => message.method === 'turn/start' && message.id !== firstTurnStart.id,
+    );
+    server.send({
+      id: secondTurnStart.id,
+      result: { turn: { id: 'turn_late_events_2', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_late_events',
+        turnId: 'turn_late_events_1',
+        itemId: 'msg_late_events_1',
+        delta: 'Late old event',
+      },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_late_events',
+        turnId: 'turn_late_events_2',
+        itemId: 'msg_late_events_2',
+        delta: 'Second',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_late_events',
+        turn: { id: 'turn_late_events_2', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await expect(secondResultPromise).resolves.toMatchObject({ output: 'Second' });
   });
 
   it('unsubscribes non-persistent threads by default', async () => {
@@ -1280,6 +1372,79 @@ describe('OpenAICodexAppServerProvider', () => {
     });
 
     await expect(secondResultPromise).resolves.toMatchObject({ output: 'Second reusable' });
+    expect(mocks.spawn).toHaveBeenCalledTimes(2);
+  });
+
+  it('purges pending persistent thread promises when a reused app-server process exits', async () => {
+    const firstServer = createMockAppServer();
+    const secondServer = createMockAppServer();
+    mocks.spawn.mockReturnValueOnce(firstServer.proc).mockReturnValueOnce(secondServer.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        persist_threads: true,
+        thread_cleanup: 'none',
+      },
+    });
+
+    const firstResultPromise = provider.callApi('Pending persistent thread');
+    const firstInitialize = await waitForMessage(
+      firstServer,
+      (message) => message.method === 'initialize',
+    );
+    firstServer.send({ id: firstInitialize.id, result: {} });
+    await waitForMessage(firstServer, (message) => message.method === 'thread/start');
+    expect((provider as any).threadPromises.size).toBe(1);
+
+    firstServer.proc.exitCode = 1;
+    firstServer.proc.emit('exit', 1, null);
+    expect((provider as any).threadPromises.size).toBe(0);
+
+    const secondResultPromise = provider.callApi('Pending persistent thread');
+    await expect(firstResultPromise).resolves.toEqual({
+      error:
+        'Error calling OpenAI Codex app-server: codex app-server exited with code 1 signal null',
+    });
+
+    const secondInitialize = await waitForMessage(
+      secondServer,
+      (message) => message.method === 'initialize',
+    );
+    secondServer.send({ id: secondInitialize.id, result: {} });
+    const secondThreadStart = await waitForMessage(
+      secondServer,
+      (message) => message.method === 'thread/start',
+    );
+    secondServer.send({
+      id: secondThreadStart.id,
+      result: { thread: { id: 'thr_pending_recovered' } },
+    });
+    const secondTurnStart = await waitForMessage(
+      secondServer,
+      (message) => message.method === 'turn/start',
+    );
+    secondServer.send({
+      id: secondTurnStart.id,
+      result: { turn: { id: 'turn_pending_recovered', status: 'inProgress' } },
+    });
+    secondServer.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_pending_recovered',
+        turnId: 'turn_pending_recovered',
+        itemId: 'msg_pending_recovered',
+        delta: 'Recovered persistent',
+      },
+    });
+    secondServer.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_pending_recovered',
+        turn: { id: 'turn_pending_recovered', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await expect(secondResultPromise).resolves.toMatchObject({ output: 'Recovered persistent' });
     expect(mocks.spawn).toHaveBeenCalledTimes(2);
   });
 
@@ -2127,6 +2292,166 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(mocks.spawn).toHaveBeenCalledTimes(2);
   });
 
+  it('merges prompt-level nested config with provider defaults', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+        cli_config: {
+          provider_only: true,
+          shared_config: 'provider',
+        },
+        cli_env: {
+          PROVIDER_ONLY: 'yes',
+          SHARED_ENV: 'provider',
+        },
+        server_request_policy: {
+          command_execution: 'decline',
+          file_change: 'decline',
+          permissions: {
+            permissions: { read: true },
+            scope: 'session',
+          },
+          dynamic_tools: {
+            providerTool: {
+              text: 'provider tool result',
+            },
+          },
+        },
+      },
+    });
+
+    const resultPromise = provider.callApi('Merged nested config', {
+      prompt: {
+        raw: 'Merged nested config',
+        config: {
+          cli_config: {
+            prompt_only: true,
+            shared_config: 'prompt',
+          },
+          cli_env: {
+            PROMPT_ONLY: 'yes',
+            SHARED_ENV: 'prompt',
+          },
+          server_request_policy: { command_execution: 'accept' },
+        },
+      },
+    } as any);
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    const spawnArgs = mocks.spawn.mock.calls[0][1] as string[];
+    expect(spawnArgs).toEqual(
+      expect.arrayContaining(['provider_only=true', 'prompt_only=true', 'shared_config="prompt"']),
+    );
+    const spawnEnv = mocks.spawn.mock.calls[0][2].env as Record<string, string>;
+    expect(spawnEnv.PROVIDER_ONLY).toBe('yes');
+    expect(spawnEnv.PROMPT_ONLY).toBe('yes');
+    expect(spawnEnv.SHARED_ENV).toBe('prompt');
+
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_nested_config' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_nested_config', status: 'inProgress' } },
+    });
+
+    server.send({
+      id: 351,
+      method: 'item/commandExecution/requestApproval',
+      params: {
+        threadId: 'thr_nested_config',
+        turnId: 'turn_nested_config',
+        itemId: 'cmd_nested_config',
+        command: 'npm test',
+      },
+    });
+    const commandApproval = await waitForMessage(
+      server,
+      (message) => message.id === 351 && message.result,
+    );
+    expect(commandApproval.result).toEqual({ decision: 'accept' });
+
+    server.send({
+      id: 352,
+      method: 'item/fileChange/requestApproval',
+      params: {
+        threadId: 'thr_nested_config',
+        turnId: 'turn_nested_config',
+        itemId: 'file_nested_config',
+        changes: { files: ['src/index.ts'] },
+      },
+    });
+    const fileApproval = await waitForMessage(
+      server,
+      (message) => message.id === 352 && message.result,
+    );
+    expect(fileApproval.result).toEqual({ decision: 'decline' });
+
+    server.send({
+      id: 353,
+      method: 'item/permissions/requestApproval',
+      params: {
+        threadId: 'thr_nested_config',
+        turnId: 'turn_nested_config',
+        itemId: 'perm_nested_config',
+      },
+    });
+    const permissionsApproval = await waitForMessage(
+      server,
+      (message) => message.id === 353 && message.result,
+    );
+    expect(permissionsApproval.result).toEqual({
+      permissions: { read: true },
+      scope: 'session',
+    });
+
+    server.send({
+      id: 354,
+      method: 'item/tool/call',
+      params: {
+        threadId: 'thr_nested_config',
+        turnId: 'turn_nested_config',
+        callId: 'tool_nested_config',
+        tool: 'providerTool',
+        arguments: {},
+      },
+    });
+    const dynamicToolResponse = await waitForMessage(
+      server,
+      (message) => message.id === 354 && message.result,
+    );
+    expect(dynamicToolResponse.result).toEqual({
+      contentItems: [{ type: 'inputText', text: 'provider tool result' }],
+      success: true,
+    });
+
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_nested_config',
+        turnId: 'turn_nested_config',
+        itemId: 'msg_nested_config',
+        delta: 'Merged config done',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_nested_config',
+        turn: { id: 'turn_nested_config', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await expect(resultPromise).resolves.toMatchObject({ output: 'Merged config done' });
+  });
+
   it('applies prompt-level server request policy for each turn on a reused connection', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
@@ -2357,6 +2682,87 @@ describe('OpenAICodexAppServerProvider', () => {
       error:
         'Error calling OpenAI Codex app-server: codex app-server exited with code 1 signal null',
     });
+  });
+
+  it('isolates process exits to the matching deep-tracing app-server process', async () => {
+    const firstServer = createMockAppServer();
+    const secondServer = createMockAppServer();
+    mocks.spawn.mockReturnValueOnce(firstServer.proc).mockReturnValueOnce(secondServer.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        deep_tracing: true,
+        thread_cleanup: 'none',
+      },
+    });
+
+    const firstResultPromise = provider.callApi('Deep tracing crash first');
+    const secondResultPromise = provider.callApi('Deep tracing crash second');
+
+    const firstInitialize = await waitForMessage(
+      firstServer,
+      (message) => message.method === 'initialize',
+    );
+    const secondInitialize = await waitForMessage(
+      secondServer,
+      (message) => message.method === 'initialize',
+    );
+    firstServer.send({ id: firstInitialize.id, result: {} });
+    secondServer.send({ id: secondInitialize.id, result: {} });
+
+    const firstThreadStart = await waitForMessage(
+      firstServer,
+      (message) => message.method === 'thread/start',
+    );
+    const secondThreadStart = await waitForMessage(
+      secondServer,
+      (message) => message.method === 'thread/start',
+    );
+    firstServer.send({ id: firstThreadStart.id, result: { thread: { id: 'thr_deep_crash_1' } } });
+    secondServer.send({ id: secondThreadStart.id, result: { thread: { id: 'thr_deep_crash_2' } } });
+
+    const firstTurnStart = await waitForMessage(
+      firstServer,
+      (message) => message.method === 'turn/start',
+    );
+    const secondTurnStart = await waitForMessage(
+      secondServer,
+      (message) => message.method === 'turn/start',
+    );
+    firstServer.send({
+      id: firstTurnStart.id,
+      result: { turn: { id: 'turn_deep_crash_1', status: 'inProgress' } },
+    });
+    secondServer.send({
+      id: secondTurnStart.id,
+      result: { turn: { id: 'turn_deep_crash_2', status: 'inProgress' } },
+    });
+
+    firstServer.proc.exitCode = 1;
+    firstServer.proc.emit('exit', 1, null);
+    await expect(firstResultPromise).resolves.toEqual({
+      error:
+        'Error calling OpenAI Codex app-server: codex app-server exited with code 1 signal null',
+    });
+
+    secondServer.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_deep_crash_2',
+        turnId: 'turn_deep_crash_2',
+        itemId: 'msg_deep_crash_2',
+        delta: 'Second survived',
+      },
+    });
+    secondServer.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_deep_crash_2',
+        turn: { id: 'turn_deep_crash_2', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await expect(secondResultPromise).resolves.toMatchObject({ output: 'Second survived' });
   });
 
   it('waits for completion after retryable app-server error notifications', async () => {

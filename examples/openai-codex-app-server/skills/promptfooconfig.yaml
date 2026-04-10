@@ -2,18 +2,7 @@
 description: Codex app-server skill input
 
 prompts:
-  - |
-    [
-      {
-        "type": "text",
-        "text": "$skill-creator Draft a checklist for verifying a new promptfoo provider."
-      },
-      {
-        "type": "skill",
-        "name": "skill-creator",
-        "path": "{{env.CODEX_SKILL_CREATOR_PATH}}"
-      }
-    ]
+  - file://skill-input.json
 
 providers:
   - id: openai:codex-app-server:gpt-5.4
@@ -22,11 +11,13 @@ providers:
       approval_policy: never
       skip_git_repo_check: true
 
+defaultTest:
+  assert:
+    - type: contains-any
+      value:
+        - test
+        - verify
+        - checklist
+
 tests:
   - vars: {}
-    assert:
-      - type: contains-any
-        value:
-          - test
-          - verify
-          - checklist

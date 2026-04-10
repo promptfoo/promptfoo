@@ -15,10 +15,13 @@ providers:
         file_change: decline
         mcp_elicitation: decline
 
+defaultTest:
+  assert:
+    - type: contains-any
+      value:
+        - ls
+        - find
+        - directory
+
 tests:
-  - assert:
-      - type: contains-any
-        value:
-          - ls
-          - find
-          - directory
+  - vars: {}

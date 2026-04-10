@@ -1181,6 +1181,33 @@ describe('loadApiProvider', () => {
     expect(checkProviderApiKeys([provider]).size).toBe(0);
   });
 
+  it('merges context env into OpenAI Codex app-server providers', async () => {
+    const contextOnlyProvider = (await loadApiProvider('openai:codex-app-server', {
+      env: {
+        OPENAI_API_KEY: 'context-key',
+      },
+      options: {},
+    })) as OpenAICodexAppServerProvider;
+
+    expect(contextOnlyProvider.getApiKey()).toBe('context-key');
+
+    const mergedProvider = (await loadApiProvider('openai:codex-app-server', {
+      env: {
+        CODEX_API_KEY: 'context-codex-key',
+        OPENAI_API_KEY: 'context-openai-key',
+      },
+      options: {
+        env: {
+          OPENAI_API_KEY: 'options-openai-key',
+        },
+      },
+    })) as OpenAICodexAppServerProvider;
+
+    expect(mergedProvider.env?.CODEX_API_KEY).toBe('context-codex-key');
+    expect(mergedProvider.env?.OPENAI_API_KEY).toBe('options-openai-key');
+    expect(mergedProvider.getApiKey()).toBe('options-openai-key');
+  });
+
   it('loads OpenAI Codex desktop alias providers', async () => {
     const provider = (await loadApiProvider('openai:codex-desktop:gpt-5.4', {
       options: {},

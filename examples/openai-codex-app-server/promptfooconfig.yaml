@@ -22,10 +22,13 @@ providers:
         required: [summary, risks]
         additionalProperties: false
 
+defaultTest:
+  assert:
+    - type: is-json
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return typeof parsed.summary === 'string' && Array.isArray(parsed.risks);
+
 tests:
-  - assert:
-      - type: is-json
-      - type: javascript
-        value: |
-          const parsed = JSON.parse(output);
-          return typeof parsed.summary === 'string' && Array.isArray(parsed.risks);
+  - vars: {}

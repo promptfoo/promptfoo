@@ -46,6 +46,9 @@ providers:
         required: [comments, summary]
         additionalProperties: false
 
+defaultTest:
+  assert:
+    - type: is-json
+
 tests:
-  - assert:
-      - type: is-json
+  - vars: {}

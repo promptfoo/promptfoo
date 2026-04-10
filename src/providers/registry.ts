@@ -909,7 +909,10 @@ export const providerMap: ProviderFactory[] = [
                 model: codexModel,
               }
             : providerOptions.config,
-          env: providerOptions.env,
+          env: {
+            ...context.env,
+            ...providerOptions.env,
+          },
         });
       }
 

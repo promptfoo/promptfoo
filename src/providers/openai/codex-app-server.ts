@@ -244,9 +244,11 @@ interface PendingRequest {
   timeout?: NodeJS.Timeout;
   abortListener?: () => void;
   abortSignal?: AbortSignal;
+  onResponse?: (result: unknown) => void;
 }
 
 interface AppServerConnectionOptions {
+  connectionInstanceId: string;
   command: string;
   args: string[];
   env: Record<string, string>;
@@ -273,6 +275,7 @@ interface ServerRequestRecord {
 
 interface CodexAppServerTurnState {
   connectionKey: string;
+  connectionInstanceId: string;
   threadId: string;
   turnId?: string;
   config: CodexAppServerConfig;
@@ -557,6 +560,68 @@ function parseCodexAppServerConfig(
   }
 }
 
+function mergeOptionalRecord<T extends Record<string, unknown>>(
+  base: T | undefined,
+  override: T | undefined,
+): T | undefined {
+  if (!base && !override) {
+    return undefined;
+  }
+  return {
+    ...(base ?? {}),
+    ...(override ?? {}),
+  } as T;
+}
+
+function mergeServerRequestPolicy(
+  base: CodexAppServerRequestPolicy | undefined,
+  override: CodexAppServerRequestPolicy | undefined,
+): CodexAppServerRequestPolicy | undefined {
+  if (!base && !override) {
+    return undefined;
+  }
+
+  const merged: CodexAppServerRequestPolicy = {
+    ...(base ?? {}),
+    ...(override ?? {}),
+  };
+  const permissions = mergeOptionalRecord(base?.permissions, override?.permissions);
+  const dynamicTools = mergeOptionalRecord(base?.dynamic_tools, override?.dynamic_tools);
+
+  if (permissions) {
+    merged.permissions = permissions;
+  } else {
+    delete merged.permissions;
+  }
+  if (dynamicTools) {
+    merged.dynamic_tools = dynamicTools;
+  } else {
+    delete merged.dynamic_tools;
+  }
+
+  return merged;
+}
+
+function mergeCodexAppServerConfig(
+  base: CodexAppServerConfig,
+  override: CodexAppServerConfig | undefined,
+): CodexAppServerConfig {
+  if (!override) {
+    return { ...base };
+  }
+
+  return {
+    ...base,
+    ...override,
+    cli_config: mergeOptionalRecord(base.cli_config, override.cli_config),
+    cli_env: mergeOptionalRecord(base.cli_env, override.cli_env),
+    server_request_policy: mergeServerRequestPolicy(
+      base.server_request_policy,
+      override.server_request_policy,
+    ),
+  };
+}
+
 function getMinimalProcessEnv(): Record<string, string> {
   const env: Record<string, string> = {};
   for (const key of MINIMAL_CLI_ENV_KEYS) {
@@ -620,6 +685,8 @@ function createAbortError(message: string): Error {
 }
 
 class CodexAppServerConnection {
+  readonly instanceId: string;
+
   private process: ChildProcessWithoutNullStreams;
   private lineInterface: readline.Interface;
   private nextRequestId = 1;
@@ -630,6 +697,7 @@ class CodexAppServerConnection {
   private closePromise: Promise<void> | null = null;
 
   constructor(private readonly options: AppServerConnectionOptions) {
+    this.instanceId = options.connectionInstanceId;
     this.process = spawn(options.command, options.args, {
       env: options.env,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -673,7 +741,11 @@ class CodexAppServerConnection {
   request(
     method: string,
     params?: unknown,
-    options: { timeoutMs?: number; abortSignal?: AbortSignal } = {},
+    options: {
+      timeoutMs?: number;
+      abortSignal?: AbortSignal;
+      onResponse?: (result: unknown) => void;
+    } = {},
   ): Promise<any> {
     if (this.closed) {
       return Promise.reject(new Error('codex app-server connection is closed'));
@@ -695,6 +767,7 @@ class CodexAppServerConnection {
         resolve,
         reject,
         abortSignal: options.abortSignal,
+        onResponse: options.onResponse,
       };
 
       pendingRequest.timeout = setTimeout(() => {
@@ -857,6 +930,12 @@ class CodexAppServerConnection {
       pendingRequest.reject(new Error(getJsonRpcErrorMessage(message)));
       return;
     }
+    try {
+      pendingRequest.onResponse?.(message.result);
+    } catch (error) {
+      pendingRequest.reject(error instanceof Error ? error : new Error(String(error)));
+      return;
+    }
     pendingRequest.resolve(message.result);
   }
 
@@ -964,6 +1043,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   private initializingConnections = new Set<CodexAppServerConnection>();
   private threads = new Map<string, ThreadHandle>();
   private threadPromises = new Map<string, Promise<ThreadHandle>>();
+  private threadPromiseConnectionInstances = new Map<string, string>();
   private protectedThreadCounts = new Map<string, number>();
   private threadRunQueues = new Map<string, Promise<void>>();
   private activeTurnsByThread = new Map<string, CodexAppServerTurnState>();
@@ -1012,6 +1092,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     this.resolveActiveTurns(new Error('codex app-server provider cleanup interrupted active turn'));
     this.threads.clear();
     this.threadPromises.clear();
+    this.threadPromiseConnectionInstances.clear();
     this.threadRunQueues.clear();
     this.activeTurnsByThread.clear();
     this.activeTurnsByTurn.clear();
@@ -1046,10 +1127,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const config: CodexAppServerConfig = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
+    const config = mergeCodexAppServerConfig(
+      this.config,
+      context?.prompt?.config as CodexAppServerConfig | undefined,
+    );
     const requestedModel =
       typeof config.model === 'string' && config.model ? config.model : undefined;
 
@@ -1184,6 +1265,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         return await this.runSerializedThreadTurn(queueKey, callOptions?.abortSignal, async () => {
           const state = this.createTurnState(
             connectionKey,
+            connection.instanceId,
             threadHandle.threadId,
             promptInput,
             resolvedConfig,
@@ -1197,6 +1279,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
               {
                 abortSignal: callOptions?.abortSignal,
                 timeoutMs: this.getRequestTimeoutMs(resolvedConfig),
+                onResponse: (response) => {
+                  const turnId = (response as any)?.turn?.id;
+                  if (typeof turnId === 'string') {
+                    this.updateTurnStateId(state, turnId);
+                  }
+                },
               },
             );
 
@@ -1406,7 +1494,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     env: Record<string, string>,
     config: CodexAppServerConfig,
   ): Promise<CodexAppServerConnection> {
+    const connectionInstanceId = `${connectionKey}:${crypto.randomUUID()}`;
     const connection = new CodexAppServerConnection({
+      connectionInstanceId,
       command: config.codex_path_override ?? 'codex',
       args: this.buildAppServerArgs(config),
       env,
@@ -1414,7 +1504,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       startupTimeoutMs: config.startup_timeout_ms ?? DEFAULT_STARTUP_TIMEOUT_MS,
       onNotification: (message) => this.handleNotification(message),
       onServerRequest: (message) => this.handleServerRequest(message, config),
-      onClose: (error) => this.handleConnectionClose(connectionKey, error),
+      onClose: (error) => this.handleConnectionClose(connectionKey, connectionInstanceId, error),
     });
 
     this.initializingConnections.add(connection);
@@ -1433,21 +1523,29 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     }
   }
 
-  private handleConnectionClose(connectionKey: string, error: Error): void {
-    this.connections.delete(connectionKey);
-    this.connectionPromises.delete(connectionKey);
-    for (const [threadCacheKey, handle] of this.threads) {
-      if (handle.connectionKey === connectionKey) {
-        this.threads.delete(threadCacheKey);
+  private handleConnectionClose(
+    connectionKey: string,
+    connectionInstanceId: string,
+    error: Error,
+  ): void {
+    const cachedConnection = this.connections.get(connectionKey);
+    if (cachedConnection?.instanceId === connectionInstanceId) {
+      this.connections.delete(connectionKey);
+      this.connectionPromises.delete(connectionKey);
+      for (const [threadCacheKey, handle] of this.threads) {
+        if (handle.connectionKey === connectionKey) {
+          this.threads.delete(threadCacheKey);
+        }
       }
-    }
-    for (const [threadCacheKey] of this.threadPromises) {
-      if (threadCacheKey.startsWith(`${connectionKey}:`)) {
-        this.threadPromises.delete(threadCacheKey);
+      for (const [threadCacheKey] of this.threadPromises) {
+        if (this.threadPromiseConnectionInstances.get(threadCacheKey) === connectionInstanceId) {
+          this.threadPromises.delete(threadCacheKey);
+          this.threadPromiseConnectionInstances.delete(threadCacheKey);
+        }
       }
     }
 
-    this.resolveActiveTurns(error, (state) => state.connectionKey === connectionKey);
+    this.resolveActiveTurns(error, (state) => state.connectionInstanceId === connectionInstanceId);
   }
 
   private resolveActiveTurns(
@@ -1529,7 +1627,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         return cachedOrPending;
       }
 
-      return this.cacheThreadPromise(cacheKey, async () => {
+      return this.cacheThreadPromise(cacheKey, connection.instanceId, async () => {
         const response = await connection.request(
           'thread/resume',
           this.buildThreadResumeParams(config.thread_id as string, config),
@@ -1560,7 +1658,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       return cachedOrPending;
     }
 
-    return this.cacheThreadPromise(cacheKey, async () => {
+    return this.cacheThreadPromise(cacheKey, connection.instanceId, async () => {
       const poolSize = config.thread_pool_size ?? 1;
       if (cacheKey && this.threads.size >= poolSize) {
         await this.evictOldestInactiveCachedThread(
@@ -1608,16 +1706,22 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
   private cacheThreadPromise(
     cacheKey: string | undefined,
+    connectionInstanceId: string,
     createThread: () => Promise<ThreadHandle>,
   ): Promise<ThreadHandle> {
     if (!cacheKey) {
       return createThread();
     }
 
-    const threadPromise = createThread().finally(() => {
-      this.threadPromises.delete(cacheKey);
+    let threadPromise: Promise<ThreadHandle>;
+    threadPromise = createThread().finally(() => {
+      if (this.threadPromises.get(cacheKey) === threadPromise) {
+        this.threadPromises.delete(cacheKey);
+        this.threadPromiseConnectionInstances.delete(cacheKey);
+      }
     });
     this.threadPromises.set(cacheKey, threadPromise);
+    this.threadPromiseConnectionInstances.set(cacheKey, connectionInstanceId);
     return threadPromise;
   }
 
@@ -1891,6 +1995,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
   private createTurnState(
     connectionKey: string,
+    connectionInstanceId: string,
     threadId: string,
     promptInput: CodexAppServerUserInput[],
     config: CodexAppServerConfig,
@@ -1898,6 +2003,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   ): CodexAppServerTurnState {
     return {
       connectionKey,
+      connectionInstanceId,
       threadId,
       config,
       appServerEnv,
@@ -1924,6 +2030,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   private updateTurnStateId(state: CodexAppServerTurnState, turnId: string): void {
+    if (state.turnId && state.turnId !== turnId) {
+      this.activeTurnsByTurn.delete(state.turnId);
+    }
     state.turnId = turnId;
     this.activeTurnsByTurn.set(turnId, state);
   }
@@ -1960,10 +2069,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     turnId?: string | null,
   ): CodexAppServerTurnState | undefined {
     if (turnId) {
-      const byTurn = this.activeTurnsByTurn.get(turnId);
-      if (byTurn) {
-        return byTurn;
-      }
+      return this.activeTurnsByTurn.get(turnId);
     }
     if (threadId) {
       return this.activeTurnsByThread.get(threadId);
