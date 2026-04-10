@@ -216,10 +216,10 @@ describe('Provider override tests', () => {
 
     const providers = await getDefaultProviders();
 
-    expect(providers.gradingJsonProvider.id()).toBe('openai:gpt-5-2025-08-07');
-    expect(providers.gradingProvider.id()).toBe('openai:gpt-5-2025-08-07');
-    expect(providers.suggestionsProvider.id()).toBe('openai:gpt-5-2025-08-07');
-    expect(providers.synthesizeProvider.id()).toBe('openai:gpt-5-2025-08-07');
+    expect(providers.gradingJsonProvider.id()).toBe('openai:gpt-5.4-2026-03-05');
+    expect(providers.gradingProvider.id()).toBe('openai:gpt-5.4-2026-03-05');
+    expect(providers.suggestionsProvider.id()).toBe('openai:gpt-5.4-2026-03-05');
+    expect(providers.synthesizeProvider.id()).toBe('openai:gpt-5.4-2026-03-05');
   });
 
   it('should prefer Mistral defaults over Codex SDK defaults when MISTRAL_API_KEY exists', async () => {
