@@ -1,16 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-// Helper to create mock Response
-function createMockResponse(data: unknown, ok = true, status = 200): Response {
-  return {
-    ok,
-    status,
-    statusText: ok ? 'OK' : 'Error',
-    json: () => Promise.resolve(data),
-    text: () => Promise.resolve(JSON.stringify(data)),
-    headers: new Headers(),
-  } as Response;
-}
+import { createMockResponse } from '../../util/utils';
 
 describe('redteamTestCaseGenerationService', () => {
   beforeEach(() => {
@@ -36,8 +25,10 @@ describe('redteamTestCaseGenerationService', () => {
       }));
 
       const mockResponse = createMockResponse({
-        message: { content: 'test prompt' },
-        tokenUsage: { total: 100 },
+        body: {
+          message: { content: 'test prompt' },
+          tokenUsage: { total: 100 },
+        },
       });
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
@@ -85,10 +76,12 @@ describe('redteamTestCaseGenerationService', () => {
       }));
 
       const mockResponse = createMockResponse({
-        result: {
-          generatedQuestion: 'test question',
-          lastResponseSummary: 'summary',
-          rationaleBehindJailbreak: 'rationale',
+        body: {
+          result: {
+            generatedQuestion: 'test question',
+            lastResponseSummary: 'summary',
+            rationaleBehindJailbreak: 'rationale',
+          },
         },
       });
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
@@ -137,7 +130,9 @@ describe('redteamTestCaseGenerationService', () => {
       }));
 
       const mockResponse = createMockResponse({
-        result: { prompt: 'test prompt' },
+        body: {
+          result: { prompt: 'test prompt' },
+        },
       });
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
@@ -185,7 +180,9 @@ describe('redteamTestCaseGenerationService', () => {
       }));
 
       const mockResponse = createMockResponse({
-        result: 'test prompt',
+        body: {
+          result: 'test prompt',
+        },
       });
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
