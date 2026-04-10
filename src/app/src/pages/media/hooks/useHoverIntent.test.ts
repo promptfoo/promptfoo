@@ -1,3 +1,4 @@
+import { mockMatchMedia } from '@app/tests/browserMocks';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useHoverIntent } from './useHoverIntent';
@@ -6,20 +7,7 @@ describe('useHoverIntent', () => {
   beforeEach(() => {
     vi.useFakeTimers();
 
-    // Mock matchMedia for hover capability detection
-    Object.defineProperty(window, 'matchMedia', {
-      writable: true,
-      value: vi.fn().mockImplementation((query: string) => ({
-        matches: query === '(hover: hover)',
-        media: query,
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      })),
-    });
+    mockMatchMedia({ matches: (query) => query === '(hover: hover)' });
   });
 
   afterEach(() => {
@@ -177,19 +165,9 @@ describe('useHoverIntent', () => {
 
   describe('prefers-reduced-motion', () => {
     it('should not activate when user prefers reduced motion and respectReducedMotion is true', () => {
-      // Mock reduced motion preference
-      Object.defineProperty(window, 'matchMedia', {
-        writable: true,
-        value: vi.fn().mockImplementation((query: string) => ({
-          matches: query === '(prefers-reduced-motion: reduce)' || query === '(hover: hover)',
-          media: query,
-          onchange: null,
-          addListener: vi.fn(),
-          removeListener: vi.fn(),
-          addEventListener: vi.fn(),
-          removeEventListener: vi.fn(),
-          dispatchEvent: vi.fn(),
-        })),
+      mockMatchMedia({
+        matches: (query) =>
+          query === '(prefers-reduced-motion: reduce)' || query === '(hover: hover)',
       });
 
       const { result } = renderHook(() => useHoverIntent({ respectReducedMotion: true }));
@@ -203,19 +181,9 @@ describe('useHoverIntent', () => {
     });
 
     it('should activate when respectReducedMotion is false even with reduced motion preference', () => {
-      // Mock reduced motion preference
-      Object.defineProperty(window, 'matchMedia', {
-        writable: true,
-        value: vi.fn().mockImplementation((query: string) => ({
-          matches: query === '(prefers-reduced-motion: reduce)' || query === '(hover: hover)',
-          media: query,
-          onchange: null,
-          addListener: vi.fn(),
-          removeListener: vi.fn(),
-          addEventListener: vi.fn(),
-          removeEventListener: vi.fn(),
-          dispatchEvent: vi.fn(),
-        })),
+      mockMatchMedia({
+        matches: (query) =>
+          query === '(prefers-reduced-motion: reduce)' || query === '(hover: hover)',
       });
 
       const { result } = renderHook(() => useHoverIntent({ respectReducedMotion: false }));
@@ -231,20 +199,7 @@ describe('useHoverIntent', () => {
 
   describe('touch devices', () => {
     it('should not activate on touch-only devices', () => {
-      // Mock no hover capability (touch device)
-      Object.defineProperty(window, 'matchMedia', {
-        writable: true,
-        value: vi.fn().mockImplementation((query: string) => ({
-          matches: false, // No hover capability
-          media: query,
-          onchange: null,
-          addListener: vi.fn(),
-          removeListener: vi.fn(),
-          addEventListener: vi.fn(),
-          removeEventListener: vi.fn(),
-          dispatchEvent: vi.fn(),
-        })),
-      });
+      mockMatchMedia();
 
       const { result } = renderHook(() => useHoverIntent());
 

@@ -23,6 +23,7 @@ describe('MetadataPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+
   it('should filter out metadata keys present in HIDDEN_METADATA_KEYS', () => {
     const hiddenMetadata = Object.fromEntries(
       HIDDEN_METADATA_KEYS.map((key) => [key, `${key} value`]),

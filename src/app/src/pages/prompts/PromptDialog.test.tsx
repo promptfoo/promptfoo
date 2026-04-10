@@ -1,3 +1,4 @@
+import { mockClipboard } from '@app/tests/browserMocks';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -192,11 +193,7 @@ describe('PromptDialog', () => {
   it('should copy the prompt text to clipboard and show the Snackbar when the copy button is clicked', async () => {
     const handleClose = vi.fn();
     const writeTextMock = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, {
-      clipboard: {
-        writeText: writeTextMock,
-      },
-    });
+    mockClipboard({ writeText: writeTextMock as Clipboard['writeText'] });
 
     render(
       <MemoryRouter>
@@ -460,7 +457,7 @@ describe('PromptDialog', () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const mockWriteText = vi.fn().mockRejectedValue(new Error('Failed to copy'));
-    Object.assign(navigator, { clipboard: { writeText: mockWriteText } });
+    mockClipboard({ writeText: mockWriteText as Clipboard['writeText'] });
 
     render(
       <MemoryRouter>
