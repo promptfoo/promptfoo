@@ -1,9 +1,10 @@
 import { rm } from 'fs/promises';
 
 import yaml from 'js-yaml';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDummyFiles, reportProviderAPIKeyWarnings } from '../src/onboarding';
 import { TestSuiteConfigSchema } from '../src/types/index';
+import { mockProcessEnv } from './util/utils';
 
 // Create hoisted mocks for inquirer modules
 const mockSelect = vi.hoisted(() => vi.fn());
@@ -72,17 +73,19 @@ vi.mock('../src/envars', () => ({
 describe('reportProviderAPIKeyWarnings', () => {
   const openaiID = 'openai:gpt-4o';
   const anthropicID = 'anthropic:messages:claude-3-5-sonnet-20241022';
-  let oldEnv: any = {};
-  beforeAll(() => {
-    oldEnv = { ...process.env };
-  });
+  let restoreEnv: () => void;
+
   beforeEach(() => {
-    process.env.OPENAI_API_KEY = '';
-    process.env.ANTHROPIC_API_KEY = '';
+    restoreEnv = mockProcessEnv({
+      ANTHROPIC_API_KEY: '',
+      OPENAI_API_KEY: '',
+    });
   });
-  afterAll(() => {
-    process.env = { ...oldEnv };
+
+  afterEach(() => {
+    restoreEnv();
   });
+
   it('should produce a warning for openai if env key is not set', () => {
     expect(reportProviderAPIKeyWarnings([openaiID])).toEqual(
       expect.arrayContaining([
