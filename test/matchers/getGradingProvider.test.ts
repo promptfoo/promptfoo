@@ -42,6 +42,13 @@ describe('getGradingProvider', () => {
       expect(loadApiProvider).not.toHaveBeenCalled();
     });
 
+    it('should treat null provider as unspecified', async () => {
+      const result = await getGradingProvider('text', null as any, mockProvider);
+
+      expect(result).toBe(mockProvider);
+      expect(loadApiProvider).not.toHaveBeenCalled();
+    });
+
     it('should use provider when specified as ProviderOptions', async () => {
       const providerOptions = {
         id: 'openai:gpt-4',

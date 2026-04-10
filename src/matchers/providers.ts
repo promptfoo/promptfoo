@@ -88,10 +88,14 @@ export async function getGradingProvider(
   if (typeof provider === 'string') {
     // Defined as a string
     finalProvider = await loadApiProvider(provider, { basePath: cliState.basePath });
-  } else if (typeof provider === 'object' && typeof (provider as ApiProvider).id === 'function') {
+  } else if (
+    provider != null &&
+    typeof provider === 'object' &&
+    typeof (provider as ApiProvider).id === 'function'
+  ) {
     // Defined as an ApiProvider interface
     finalProvider = provider as ApiProvider;
-  } else if (typeof provider === 'object') {
+  } else if (provider != null && typeof provider === 'object') {
     const typeValue = (provider as ProviderTypeMap)[type];
     if (typeValue) {
       // Defined as embedding, classification, or text record

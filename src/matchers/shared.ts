@@ -32,6 +32,9 @@ export function cosineSimilarity(vecA: number[], vecB: number[]): number {
   const dotProduct = vecA.reduce((acc, val, idx) => acc + val * vecB[idx], 0);
   const vecAMagnitude = Math.sqrt(vecA.reduce((acc, val) => acc + val * val, 0));
   const vecBMagnitude = Math.sqrt(vecB.reduce((acc, val) => acc + val * val, 0));
+  if (vecAMagnitude === 0 || vecBMagnitude === 0) {
+    return 0;
+  }
   return dotProduct / (vecAMagnitude * vecBMagnitude);
 }
 

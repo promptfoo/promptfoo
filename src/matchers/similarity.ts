@@ -150,14 +150,7 @@ async function calculateProviderSimilarity(
   metric: SimilarityMetric,
   tokensUsed: Partial<TokenUsage>,
 ): Promise<number | Omit<GradingResult, 'assertion'>> {
-  if ('callSimilarityApi' in finalProvider) {
-    if (metric !== 'cosine') {
-      return fail(
-        `Provider ${finalProvider.id()} only supports cosine similarity via callSimilarityApi`,
-        tokensUsed,
-      );
-    }
-
+  if (metric === 'cosine' && 'callSimilarityApi' in finalProvider) {
     const similarityResp = await finalProvider.callSimilarityApi(expected, output);
     assignProviderTokenUsage(tokensUsed, similarityResp.tokenUsage);
     if (similarityResp.error) {
@@ -166,15 +159,26 @@ async function calculateProviderSimilarity(
     if (similarityResp.similarity == null) {
       return fail('Unknown error fetching similarity', tokensUsed);
     }
+    if (!Number.isFinite(similarityResp.similarity)) {
+      return fail(`Invalid similarity score: ${similarityResp.similarity}`, tokensUsed);
+    }
     return similarityResp.similarity;
   }
 
-  if (!('callEmbeddingApi' in finalProvider)) {
+  const callEmbeddingApi =
+    'callEmbeddingApi' in finalProvider ? finalProvider.callEmbeddingApi : undefined;
+  if (typeof callEmbeddingApi !== 'function') {
+    if ('callSimilarityApi' in finalProvider) {
+      return fail(
+        `Provider ${finalProvider.id()} only supports cosine similarity via callSimilarityApi`,
+        tokensUsed,
+      );
+    }
     throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
   }
 
-  const expectedEmbedding = await finalProvider.callEmbeddingApi(expected);
-  const outputEmbedding = await finalProvider.callEmbeddingApi(output);
+  const expectedEmbedding = await callEmbeddingApi.call(finalProvider, expected);
+  const outputEmbedding = await callEmbeddingApi.call(finalProvider, output);
   assignProviderTokenUsage(
     tokensUsed,
     mergeEmbeddingTokenUsage(expectedEmbedding.tokenUsage, outputEmbedding.tokenUsage),
@@ -207,9 +211,13 @@ export async function matchesSimilarity(
   grading?: GradingConfig,
   metric: SimilarityMetric = 'cosine',
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  if (cliState.config?.redteam && shouldGenerateRemote({ requireEmbeddingProvider: true })) {
+  if (
+    metric === 'cosine' &&
+    cliState.config?.redteam &&
+    shouldGenerateRemote({ requireEmbeddingProvider: true })
+  ) {
     try {
-      return doRemoteGrading({
+      return await doRemoteGrading({
         task: 'similar',
         expected,
         output,

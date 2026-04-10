@@ -80,6 +80,38 @@ describe('matchesClassification', () => {
     });
   });
 
+  it('should fail with a maximum-score reason when expected is undefined', async () => {
+    const output = 'Sample output';
+    const threshold = 0.9;
+
+    const grader = new TestGrader();
+    const grading: GradingConfig = {
+      provider: grader,
+    };
+
+    await expect(matchesClassification(undefined, output, threshold, grading)).resolves.toEqual({
+      pass: false,
+      reason: `Maximum classification score 0.60 < ${threshold}`,
+      score: 0.6,
+    });
+  });
+
+  it('should fail cleanly when expected is undefined and no scores are returned', async () => {
+    const grading: GradingConfig = {
+      provider: {
+        id: () => 'empty-classification-provider',
+        callApi: vi.fn(),
+        callClassificationApi: vi.fn().mockResolvedValue({ classification: {} }),
+      },
+    };
+
+    await expect(matchesClassification(undefined, 'Sample output', 0.5, grading)).resolves.toEqual({
+      pass: false,
+      reason: 'No classification scores returned',
+      score: 0,
+    });
+  });
+
   it('should use the overridden classification grading config', async () => {
     const expected = 'classA';
     const output = 'Sample output';

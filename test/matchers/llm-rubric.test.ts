@@ -131,6 +131,32 @@ describe('matchesLlmRubric', () => {
     );
   });
 
+  it('should preserve provider completion details when grader JSON omits them', async () => {
+    const completionDetails = {
+      reasoning: 3,
+      acceptedPrediction: 2,
+      rejectedPrediction: 1,
+    };
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
+          tokenUsage: {
+            total: 10,
+            prompt: 5,
+            completion: 5,
+            completionDetails,
+          },
+        }),
+      },
+    });
+
+    expect(result.tokensUsed?.completionDetails).toEqual(completionDetails);
+  });
+
   it('should merge provider metadata into the grading result metadata', async () => {
     const result = await matchesLlmRubric('Expected output', 'Sample output', {
       rubricPrompt: 'Grading prompt',
@@ -1248,6 +1274,30 @@ Evaluate the response
         }),
       }),
     );
+  });
+
+  it('should not call remote when a grading provider is configured, even if redteam is enabled', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      provider: {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Local provider used' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    (cliState as any).config = { redteam: {} };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    expect(remoteGrading.doRemoteGrading).not.toHaveBeenCalled();
+    expect(grading.provider.callApi).toHaveBeenCalled();
+    expect(result.reason).toBe('Local provider used');
   });
 
   it('should call remote when redteam is enabled and rubric prompt is not overridden and no provider is configured', async () => {

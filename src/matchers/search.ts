@@ -1,4 +1,5 @@
 import { DEFAULT_WEB_SEARCH_PROMPT } from '../prompts/grading';
+import { DEFAULT_ANTHROPIC_MODEL } from '../providers/anthropic/defaults';
 import { getDefaultProviders } from '../providers/defaults';
 import { hasWebSearchCapability, loadWebSearchProvider } from '../providers/webSearchUtils';
 import { extractFirstJsonObject } from '../util/json';
@@ -54,7 +55,7 @@ export async function matchesSearchRubric(
   if (!searchProvider || !hasWebSearchCapability(searchProvider)) {
     throw new Error(
       'search-rubric assertion requires a grading provider with web search capabilities. ' +
-        'Use --grader with a web search provider (e.g., anthropic:messages:claude-sonnet-4, openai:responses:o4-mini with tools configured, perplexity:sonar) or configure one in defaultTest.options.provider',
+        `Use --grader with a web search provider (e.g., anthropic:messages:${DEFAULT_ANTHROPIC_MODEL}, openai:responses:o4-mini with tools configured, perplexity:sonar) or configure one in defaultTest.options.provider`,
     );
   }
 

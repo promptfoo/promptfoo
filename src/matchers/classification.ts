@@ -29,9 +29,17 @@ export async function matchesClassification(
   if (!resp.classification) {
     return fail(resp.error || 'Unknown error fetching classification');
   }
-  let score;
+  let score: number;
   if (expected === undefined) {
-    score = Math.max(...Object.values(resp.classification));
+    const scores = Object.values(resp.classification);
+    if (scores.length === 0) {
+      return {
+        pass: false,
+        score: 0,
+        reason: 'No classification scores returned',
+      };
+    }
+    score = Math.max(...scores);
   } else {
     score = resp.classification[expected] || 0;
   }
@@ -50,6 +58,9 @@ export async function matchesClassification(
   return {
     pass: false,
     score,
-    reason: `Classification ${expected} has score ${score.toFixed(2)} < ${threshold}`,
+    reason:
+      expected === undefined
+        ? `Maximum classification score ${score.toFixed(2)} < ${threshold}`
+        : `Classification ${expected} has score ${score.toFixed(2)} < ${threshold}`,
   };
 }

@@ -50,16 +50,20 @@ export async function matchesSelectBest(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return new Array(outputs.length).fill(fail(resp.error || 'No output', resp.tokenUsage));
+    return Array.from({ length: outputs.length }, () =>
+      fail(resp.error || 'No output', resp.tokenUsage),
+    );
   }
 
   invariant(typeof resp.output === 'string', 'select-best produced malformed response');
 
-  const firstDigitMatch = resp.output.trim().match(/\d/);
-  const verdict = firstDigitMatch ? Number.parseInt(firstDigitMatch[0], 10) : Number.NaN;
+  const firstIntegerMatch = resp.output.trim().match(/\d+/);
+  const verdict = firstIntegerMatch ? Number.parseInt(firstIntegerMatch[0], 10) : Number.NaN;
 
   if (Number.isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
-    return new Array(outputs.length).fill(fail(`Invalid select-best verdict: ${verdict}`));
+    return Array.from({ length: outputs.length }, () =>
+      fail(`Invalid select-best verdict: ${verdict}`, resp.tokenUsage),
+    );
   }
 
   const tokensUsed = {

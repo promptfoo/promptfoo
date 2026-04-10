@@ -38,7 +38,7 @@ export async function loadRubricPrompt(
 ): Promise<string> {
   if (
     !rubricPrompt ||
-    (typeof rubricPrompt === 'object' && Object.keys(rubricPrompt ?? {}).length === 0)
+    (typeof rubricPrompt === 'object' && Object.keys(rubricPrompt).length === 0)
   ) {
     return defaultPrompt;
   }
@@ -262,11 +262,12 @@ export async function runJsonGradingPrompt({
       completion: resp.tokenUsage?.completion || 0,
       cached: resp.tokenUsage?.cached || 0,
       numRequests: resp.tokenUsage?.numRequests || 0,
-      completionDetails: parsed.tokensUsed?.completionDetails || {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
+      completionDetails: resp.tokenUsage?.completionDetails ||
+        parsed.tokensUsed?.completionDetails || {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
     },
     metadata: {
       ...responseMetadata,

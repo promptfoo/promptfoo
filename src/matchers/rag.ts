@@ -84,7 +84,7 @@ export async function matchesAnswerRelevance(
 
   invariant(
     typeof embeddingProvider.callEmbeddingApi === 'function',
-    `Provider ${embeddingProvider.id} must implement callEmbeddingApi for similarity check`,
+    `Provider ${embeddingProvider.id()} must implement callEmbeddingApi for similarity check`,
   );
 
   const inputEmbeddingResp = await embeddingProvider.callEmbeddingApi(input);
