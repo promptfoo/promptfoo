@@ -1279,6 +1279,9 @@ Evaluate the response
       output: llmOutput,
       vars: {},
     });
+    expect(remoteGeneration.shouldGenerateRemote).toHaveBeenCalledWith({
+      canUseCodexDefaultProvider: true,
+    });
   });
 
   it('should use local provider when redteam.provider is configured even if remote generation is available', async () => {

@@ -2805,7 +2805,7 @@ var __defProp = Object.defineProperty,
       ? (o.subject &&
           (function (e, t) {
             const n = We(t.subject),
-              i = t.axis || t.axis;
+              i = t.axis;
             function r(e, r) {
               let o = null;
               for (const [s, a] of e)

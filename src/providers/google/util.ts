@@ -763,7 +763,7 @@ function processImagesInContents(
  * @param contextVars - Variables for Nunjucks template rendering
  * @returns Processed Content object or undefined
  */
-function parseConfigSystemInstruction(
+export function parseConfigSystemInstruction(
   configSystemInstruction: Content | string | undefined,
   contextVars?: Record<string, VarValue>,
 ): Content | undefined {

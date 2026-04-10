@@ -1,3 +1,5 @@
+import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -95,9 +97,39 @@ describe('ESM utilities', () => {
         defaultProp: 'ts default property',
       });
       expect(result.testFunction()).toBe('ts default test result');
-      expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('TypeScript/ESM module detected'),
+    });
+
+    it('imports TypeScript modules with transitive TypeScript dependencies', async () => {
+      const modulePath = path.resolve(testDir, '__fixtures__/testModuleWithTransitiveTsImport.ts');
+
+      const result = await importModule(modulePath);
+
+      expect(result.testFunction).toEqual(expect.any(Function));
+      expect(result.testFunction()).toBe('transitive TypeScript helper result');
+    });
+
+    it('imports package-less TypeScript modules with extensionless transitive imports', async () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-esm-test-'));
+      const helperPath = path.join(tempDir, 'helper.ts');
+      const modulePath = path.join(tempDir, 'provider.ts');
+
+      fs.writeFileSync(
+        helperPath,
+        'export function formatValue(value: string): string {\n  return `package-less ${value}`;\n}\n',
       );
+      fs.writeFileSync(
+        modulePath,
+        "import { formatValue } from './helper';\n\nexport const testFunction = () => formatValue('result');\n",
+      );
+
+      try {
+        const result = await importModule(modulePath);
+
+        expect(result.testFunction).toEqual(expect.any(Function));
+        expect(result.testFunction()).toBe('package-less result');
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
     });
 
     it('imports CommonJS modules', async () => {
