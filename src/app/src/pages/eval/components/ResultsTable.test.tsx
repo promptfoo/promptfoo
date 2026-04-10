@@ -2005,6 +2005,26 @@ describe('ResultsTable Non-Numeric Input Handling', () => {
 });
 
 describe('ResultsTable Zoom and Scroll Position', () => {
+  const mockTable = {
+    body: [
+      {
+        outputs: [
+          {
+            pass: true,
+            score: 1,
+            text: 'test output',
+          },
+        ],
+        test: {},
+        vars: [],
+      },
+    ],
+    head: {
+      prompts: [{ provider: 'test-provider' }],
+      vars: [],
+    },
+  };
+
   const defaultProps = {
     columnVisibility: {},
     failureFilter: {},
@@ -2020,6 +2040,32 @@ describe('ResultsTable Zoom and Scroll Position', () => {
     onResultsContainerScroll: vi.fn(),
     atInitialVerticalScrollPosition: true,
   };
+
+  beforeEach(() => {
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+    }));
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      filteredResultsCount: 1,
+      isFetching: false,
+      totalResultsCount: 1,
+    }));
+  });
 
   it('should maintain scroll position and focused element when zoom changes', () => {
     const { container, rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);

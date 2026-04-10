@@ -1553,6 +1553,12 @@ describe('useMetricsGetter', () => {
 });
 
 describe('useApplyFilterFromMetric', () => {
+  beforeEach(() => {
+    mockedIsPolicyMetric.mockReset();
+    mockedDeserializePolicyIdFromMetric.mockReset();
+    mockedIsPolicyMetric.mockReturnValue(false);
+  });
+
   it('should not call addFilter if an identical filter is already present in filters.values', () => {
     const mockAddFilter = vi.fn();
     const metricName = 'latency';
