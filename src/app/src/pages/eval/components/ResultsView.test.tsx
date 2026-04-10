@@ -175,7 +175,7 @@ const renderWithRouter = (component: React.ReactElement) => {
   return renderWithProviders(<MemoryRouter>{component}</MemoryRouter>);
 };
 
-function createCopyEvalResponse() {
+function createCopyEvalResponse(): Response {
   return {
     ok: true,
     json: () => Promise.resolve({ id: 'new-eval-id', distinctTestCount: 1234 }),
@@ -193,7 +193,7 @@ function createCopyEvalResponse() {
     body: null,
     bytes: () => Promise.resolve(new Uint8Array()),
     clone: () => createCopyEvalResponse(),
-  } as Response;
+  };
 }
 
 beforeEach(() => {
@@ -348,7 +348,6 @@ describe('ResultsView Share Button', () => {
 });
 describe('ResultsView Copy Eval', () => {
   const mockOnRecentEvalSelected = vi.fn();
-  const mockCallApi = vi.mocked(callApi);
   let mockWindowOpen: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
@@ -356,8 +355,6 @@ describe('ResultsView Copy Eval', () => {
 
     mockWindowOpen = vi.spyOn(window, 'open');
     mockWindowOpen.mockImplementation(() => null);
-
-    mockCallApi.mockResolvedValue(createCopyEvalResponse());
 
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
