@@ -109,12 +109,15 @@ if (typeof global.ResizeObserver === 'undefined') {
 // process.env.PROMPTFOO_VERSION = '1.0.0';
 
 // Global fetch mock for all tests
-// This provides a default mock that tests can override if needed
+// This provides default responses for app bootstrap endpoints. Tests should mock
+// any other network calls explicitly so missing mocks fail fast.
 vi.stubGlobal(
   'fetch',
-  vi.fn((url: string | URL) => {
+  vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     // Default responses for common API endpoints
-    const urlString = typeof url === 'string' ? url : url.toString();
+    const urlString =
+      typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
+    const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
 
     if (urlString.includes('/api/providers/config-status') || urlString.includes('config-status')) {
       return Promise.resolve({
@@ -146,14 +149,11 @@ vi.stubGlobal(
       } as Response);
     }
 
-    // Default fallback for any other fetch calls
-    return Promise.resolve({
-      ok: true,
-      json: async () => ({}),
-      text: async () => '',
-      status: 200,
-      statusText: 'OK',
-    } as Response);
+    return Promise.reject(
+      new Error(
+        `Unhandled ${method} fetch request in frontend test setup: ${urlString}. Mock this request in the test.`,
+      ),
+    );
   }),
 );
 
