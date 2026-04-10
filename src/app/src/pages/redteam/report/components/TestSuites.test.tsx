@@ -14,6 +14,11 @@ vi.mock('@app/hooks/useTelemetry', () => ({
   }),
 }));
 
+function mockCsvDownloadApis() {
+  global.URL.createObjectURL = vi.fn(() => 'blob:test');
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+}
+
 describe('TestSuites Component', () => {
   const mockNavigate = vi.fn();
 
@@ -364,8 +369,7 @@ describe('TestSuites Component CSV Export', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    // Mock URL.createObjectURL globally
-    global.URL.createObjectURL = vi.fn(() => 'blob:test');
+    mockCsvDownloadApis();
   });
 
   afterEach(() => {
@@ -439,7 +443,7 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    global.URL.createObjectURL = vi.fn(() => 'blob:test');
+    mockCsvDownloadApis();
   });
 
   afterEach(() => {

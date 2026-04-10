@@ -105,6 +105,31 @@ if (typeof global.ResizeObserver === 'undefined') {
   };
 }
 
+// JSDOM does not implement these browser APIs, but app code legitimately uses
+// them. Provide explicit test doubles so unsupported browser gaps do not leak
+// noisy "Not implemented" messages into otherwise clean test runs.
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, 'open', {
+    configurable: true,
+    writable: true,
+    value: vi.fn(() => null),
+  });
+}
+
+if (typeof HTMLMediaElement !== 'undefined') {
+  Object.defineProperty(HTMLMediaElement.prototype, 'play', {
+    configurable: true,
+    writable: true,
+    value: vi.fn(() => Promise.resolve()),
+  });
+
+  Object.defineProperty(HTMLMediaElement.prototype, 'pause', {
+    configurable: true,
+    writable: true,
+    value: vi.fn(),
+  });
+}
+
 // We can mock the environment variables. For example:
 // process.env.PROMPTFOO_VERSION = '1.0.0';
 
