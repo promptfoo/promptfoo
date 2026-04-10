@@ -99,9 +99,21 @@ export function rejectCallApi(error: unknown) {
   return mockCallApi;
 }
 
+export function rejectCallApiOnce(error: unknown) {
+  const mockCallApi = getCallApiMock();
+  mockCallApi.mockRejectedValueOnce(error);
+  return mockCallApi;
+}
+
 export function mockCallApiResponse(body: unknown, init: MockApiResponseInit = {}) {
   const mockCallApi = resetCallApiMock();
   mockCallApi.mockResolvedValue(createMockResponse(body, init));
+  return mockCallApi;
+}
+
+export function mockCallApiResponseOnce(body: unknown, init: MockApiResponseInit = {}) {
+  const mockCallApi = getCallApiMock();
+  mockCallApi.mockResolvedValueOnce(createMockResponse(body, init));
   return mockCallApi;
 }
 

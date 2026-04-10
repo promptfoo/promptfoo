@@ -89,6 +89,33 @@ const directBrowserMockPatterns = [
     message: 'mock document.execCommand with mockDocumentExecCommand()',
   },
 ];
+const directCallApiMockPatterns = [
+  {
+    pattern:
+      /\bvi\.mocked\(\s*(?:api\.)?callApi\s*\)\.mock(?:ResolvedValue|RejectedValue|Implementation|ReturnValue)/,
+    message: 'mock callApi with @app/tests/apiMocks helpers',
+  },
+  {
+    pattern:
+      /\(\s*callApi\s+as\s+Mock\s*\)\.mock(?:ResolvedValue|RejectedValue|Implementation|ReturnValue)/,
+    message: 'mock callApi with @app/tests/apiMocks helpers instead of casting callApi',
+  },
+];
+const legacyDirectCallApiMockFiles = new Set([
+  'hooks/useEvalOperations.test.ts',
+  'pages/eval/components/Eval.test.tsx',
+  'pages/eval/components/ResultsView.delete.test.tsx',
+  'pages/eval/components/ResultsView.test.tsx',
+  'pages/eval/components/store.test.ts',
+  'pages/eval-creator/components/EvaluateTestSuiteCreator.test.tsx',
+  'pages/evals/components/EvalsTable.test.tsx',
+  'pages/media/Media.test.tsx',
+  'pages/media/hooks/useMediaItems.test.ts',
+  'pages/redteam/setup/components/Purpose.test.tsx',
+  'pages/redteam/setup/components/Review.test.tsx',
+  'pages/redteam/setup/components/Targets/tabs/SessionsTab.test.tsx',
+  'utils/api/downloads.test.ts',
+]);
 
 function findTestFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -101,6 +128,21 @@ function findTestFiles(dir: string): string[] {
 
     return testFilePattern.test(fullPath) ? [fullPath] : [];
   });
+}
+
+function findPatternViolations(
+  file: string,
+  patterns: { pattern: RegExp; message: string }[],
+): string[] {
+  return readFileSync(file, 'utf8')
+    .split('\n')
+    .flatMap((line, index) =>
+      patterns.flatMap(({ pattern, message }) =>
+        pattern.test(line)
+          ? [`${path.relative(srcDir, file)}:${index + 1}: ${message}: ${line.trim()}`]
+          : [],
+      ),
+    );
 }
 
 describe('test hygiene', () => {
@@ -183,5 +225,62 @@ describe('test hygiene', () => {
     const matches = directBrowserMockPatterns.filter(({ pattern }) => pattern.test(source));
 
     expect(matches).toHaveLength(1);
+  });
+
+  it.each([
+    'vi.mocked(callApi).mockResolvedValue(response)',
+    'vi.mocked(api.callApi).mockRejectedValue(error)',
+    '(callApi as Mock).mockImplementation(() => response)',
+    '(callApi as Mock).mockReturnValue(response)',
+  ])('detects direct callApi mock source in %s', (source) => {
+    const matches = directCallApiMockPatterns.filter(({ pattern }) => pattern.test(source));
+
+    expect(matches).toHaveLength(1);
+  });
+
+  it.each([
+    'mockCallApiResponse({ ok: true })',
+    'mockCallApiResponseOnce({ step: 1 })',
+    'rejectCallApi(new Error("network"))',
+    'expect(callApi).toHaveBeenCalledTimes(1)',
+  ])('ignores strict callApi helper source in %s', (source) => {
+    const matches = directCallApiMockPatterns.filter(({ pattern }) => pattern.test(source));
+
+    expect(matches).toEqual([]);
+  });
+
+  it('keeps new frontend tests on strict callApi mock helpers', () => {
+    const violations = findTestFiles(srcDir).flatMap((file) => {
+      if (file === thisFile) {
+        return [];
+      }
+
+      const relativePath = path.relative(srcDir, file);
+      if (legacyDirectCallApiMockFiles.has(relativePath)) {
+        return [];
+      }
+
+      return findPatternViolations(file, directCallApiMockPatterns);
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps the legacy direct callApi mock allowlist scoped to active violations', () => {
+    const testFiles = new Set(findTestFiles(srcDir).map((file) => path.relative(srcDir, file)));
+    const missingAllowlistFiles = Array.from(legacyDirectCallApiMockFiles).filter(
+      (file) => !testFiles.has(file),
+    );
+    const staleAllowlistFiles = Array.from(legacyDirectCallApiMockFiles).filter((file) => {
+      if (!testFiles.has(file)) {
+        return false;
+      }
+
+      const violations = findPatternViolations(path.join(srcDir, file), directCallApiMockPatterns);
+      return violations.length === 0;
+    });
+
+    expect(missingAllowlistFiles).toEqual([]);
+    expect(staleAllowlistFiles).toEqual([]);
   });
 });
