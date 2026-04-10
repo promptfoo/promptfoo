@@ -85,6 +85,54 @@ export function mockConsole(
   return vi.spyOn(console, method).mockImplementation(implementation);
 }
 
+function replaceProcessEnv(nextEnv: Record<string, string | undefined>): void {
+  for (const key of Object.keys(process.env)) {
+    delete process.env[key];
+  }
+  Object.assign(process.env, nextEnv);
+}
+
+export function mockProcessEnv(
+  overrides: Record<string, string | undefined> = {},
+  options: { clear?: boolean } = {},
+): () => void {
+  const originalEnv = { ...process.env };
+
+  if (options.clear) {
+    replaceProcessEnv({});
+  }
+
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+
+  return () => {
+    replaceProcessEnv(originalEnv);
+  };
+}
+
+export function mockGlobal<T>(name: string, value: T): () => void {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
+
+  Object.defineProperty(globalThis, name, {
+    configurable: true,
+    value,
+    writable: true,
+  });
+
+  return () => {
+    if (descriptor) {
+      Object.defineProperty(globalThis, name, descriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, name);
+    }
+  };
+}
+
 export function createTempDir(prefix = 'promptfoo-test-'): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
