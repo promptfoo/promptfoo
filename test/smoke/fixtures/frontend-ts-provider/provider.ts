@@ -1,6 +1,18 @@
 // @ts-expect-error The fixture tsconfig supplies this alias at smoke-test runtime.
 import { formatOutput } from '@/utils';
-import type { ApiProvider, ProviderOptions, ProviderResponse } from 'promptfoo';
+
+interface ProviderOptions {
+  id?: string;
+}
+
+interface ProviderResponse {
+  output: string;
+}
+
+interface ApiProvider {
+  id(): string;
+  callApi(prompt: string): Promise<ProviderResponse>;
+}
 
 // biome-ignore lint/style/noEnum: This fixture verifies TypeScript enums load in custom providers.
 enum Mode {
