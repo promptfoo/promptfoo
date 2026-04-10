@@ -359,6 +359,7 @@ providers:
 ```
 
 See [Sandboxed code evals](/docs/guides/sandboxed-code-evals) for container-based approaches.
+For adversarial coverage of prompt injection, terminal output injection, secret handling, sandbox escapes, network egress, and verifier sabotage, see [Red Team Coding Agents](/docs/red-team/coding-agents/).
 
 ## QA checklist
 
@@ -399,5 +400,6 @@ npm run local -- eval -c examples/openai-codex-app-server/promptfooconfig.yaml -
 - [OpenCode SDK provider](/docs/providers/opencode-sdk)
 - [Codex app-server examples](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-app-server)
 - [Agentic SDK comparison example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-agentic-sdks)
+- [Red Team Coding Agents](/docs/red-team/coding-agents/)
 - [Sandboxed code evals](/docs/guides/sandboxed-code-evals)
 - [Tracing](/docs/tracing/)
