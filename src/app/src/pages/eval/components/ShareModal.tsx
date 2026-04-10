@@ -40,7 +40,7 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
 
   useEffect(() => {
     const handleShare = async () => {
-      if (!open || !evalId || shareUrl) {
+      if (!open || !evalId || shareUrl || error) {
         return;
       }
 
@@ -59,18 +59,15 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
             return;
           }
 
-          // If it's not a public domain or we already have a URL, no need to generate
-          if (!shareUrl && !error) {
-            setIsLoading(true);
-            try {
-              const url = await onShare(evalId);
-              setShareUrl(url);
-            } catch (error) {
-              console.error('Failed to generate share URL:', error);
-              setError('Failed to generate share URL');
-            } finally {
-              setIsLoading(false);
-            }
+          setIsLoading(true);
+          try {
+            const url = await onShare(evalId);
+            setShareUrl(url);
+          } catch (error) {
+            console.error('Failed to generate share URL:', error);
+            setError('Failed to generate share URL');
+          } finally {
+            setIsLoading(false);
           }
         } else {
           setError(data.error || 'Failed to check share domain');

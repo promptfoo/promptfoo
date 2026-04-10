@@ -869,15 +869,11 @@ module.exports = { validateUser, validatePasswordStrength };`;
               <div className={styles.editorHeader}>
                 <span className={styles.tabTitle}>{selectedFile.name}</span>
               </div>
-              <pre
-                className={`${styles.codeArea} ${isEditing && selectedFile ? styles.editing : ''}`}
-              >
+              <pre className={`${styles.codeArea} ${isEditing ? styles.editing : ''}`}>
                 <code
-                  dangerouslySetInnerHTML={
-                    selectedFile
-                      ? formatCodeWithHighlightedInstructions(selectedFile.content)
-                      : { __html: '' }
-                  }
+                  dangerouslySetInnerHTML={formatCodeWithHighlightedInstructions(
+                    selectedFile.content,
+                  )}
                 />
               </pre>
               {useHiddenChars && selectedFile?.isMalicious && showMaliciousCode && (

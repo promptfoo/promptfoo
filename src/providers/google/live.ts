@@ -650,7 +650,7 @@ export class GoogleLiveProvider implements ApiProvider {
                 'Unknown message with transcription enabled - marking audio as complete',
               );
               hasAudioStreamEnded = true;
-              if (hasTextStreamEnded && hasAudioStreamEnded) {
+              if (hasTextStreamEnded) {
                 try {
                   await finalizeResponse();
                 } catch (err) {

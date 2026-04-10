@@ -553,7 +553,7 @@ export async function runRedteamConversation({
           targetResponse.output,
           iterationTest,
           gradingProvider,
-          assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+          'value' in assertToUse ? assertToUse.value : undefined,
           additionalRubric,
           undefined,
           gradingContext,

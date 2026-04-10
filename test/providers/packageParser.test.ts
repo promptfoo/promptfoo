@@ -62,6 +62,14 @@ describe('loadFromPackage', () => {
     expect(importModule).toHaveBeenCalledWith(mockPackagePath);
   });
 
+  it('should distinguish missing exports from falsy exported values', async () => {
+    const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
+    vi.mocked(resolvePackageEntryPoint).mockReturnValue(mockPackagePath);
+    vi.mocked(importModule).mockResolvedValue({ getVariable: false });
+
+    await expect(loadFromPackage(mockProviderPath, mockBasePath)).resolves.toBe(false);
+  });
+
   it('should throw an error for invalid provider format', async () => {
     await expect(loadFromPackage('invalid:format', mockBasePath)).rejects.toThrow(
       'Invalid package format: invalid:format. Expected format: package:packageName:exportedClassOrFunction',

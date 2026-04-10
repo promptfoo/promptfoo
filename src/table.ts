@@ -31,7 +31,7 @@ export function generateTable(
         text = ellipsize(text, tableCellMaxLength);
         if (pass) {
           return chalk.green('[PASS] ') + text;
-        } else if (!pass) {
+        } else {
           // color everything red up until '---'
           return (
             chalk.red(failureType === ResultFailureReason.ASSERT ? '[FAIL] ' : '[ERROR] ') +
@@ -41,7 +41,6 @@ export function generateTable(
               .join('---')
           );
         }
-        return text;
       }),
     ]);
   }

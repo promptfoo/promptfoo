@@ -40,6 +40,7 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from './prompts';
 import {
+  buildGraderResultAssertion,
   checkPenalizedPhrases,
   createIterationContext,
   externalizeResponseForRedteamHistory,
@@ -778,12 +779,10 @@ async function runRedteamConversation({
           const grader = getGraderById(assertToUse.type);
           if (grader) {
             // Create test object with iteration-specific vars
-            const iterationTest = test
-              ? {
-                  ...test,
-                  vars: iterationVars,
-                }
-              : { vars: iterationVars };
+            const iterationTest = {
+              ...test,
+              vars: iterationVars,
+            };
 
             // Build grading context with exfil tracking data
             let gradingContext:
@@ -850,18 +849,14 @@ async function runRedteamConversation({
               targetResponse.output,
               iterationTest,
               gradingProvider,
-              assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+              'value' in assertToUse ? assertToUse.value : undefined,
               additionalRubric,
               undefined, // skipRefusalCheck
               gradingContext,
             );
             storedGraderResult = {
               ...grade,
-              assertion: grade.assertion
-                ? { ...grade.assertion, value: rubric }
-                : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
-                  ? { ...assertToUse, value: rubric }
-                  : undefined,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
             };
             graderPassed = grade.pass;
           }

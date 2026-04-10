@@ -38,9 +38,9 @@ export async function loadFromPackage(packageInstancePath: string, basePath: str
     throw new Error(`Failed to import module: ${packageName}. Error: ${error}`);
   }
 
-  const entity = getValue(module, entityName ?? 'default');
+  const entity = getValue(module, entityName);
 
-  if (!entity) {
+  if (entity === undefined) {
     throw new Error(
       `Could not find entity: ${entityName} in module: ${filePath}. ` +
         `Make sure the entity is exported from the package.`,
