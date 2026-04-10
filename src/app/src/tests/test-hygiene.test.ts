@@ -89,6 +89,33 @@ const directBrowserMockPatterns = [
     message: 'mock document.execCommand with mockDocumentExecCommand()',
   },
 ];
+const directCallApiMockPatterns = [
+  {
+    pattern:
+      /\bvi\.mocked\(\s*(?:api\.)?callApi\s*\)\s*\.\s*mock(?:ResolvedValue|RejectedValue|Implementation|ReturnValue)/,
+    message: 'mock callApi with @app/tests/apiMocks helpers',
+  },
+  {
+    pattern:
+      /\(\s*callApi\s+as\s+Mock\s*\)\s*\.\s*mock(?:ResolvedValue|RejectedValue|Implementation|ReturnValue)/,
+    message: 'mock callApi with @app/tests/apiMocks helpers instead of casting callApi',
+  },
+];
+const legacyDirectCallApiMockFiles = new Set([
+  'hooks/useEvalOperations.test.ts',
+  'pages/eval/components/Eval.test.tsx',
+  'pages/eval/components/ResultsView.delete.test.tsx',
+  'pages/eval/components/ResultsView.test.tsx',
+  'pages/eval/components/store.test.ts',
+  'pages/eval-creator/components/EvaluateTestSuiteCreator.test.tsx',
+  'pages/evals/components/EvalsTable.test.tsx',
+  'pages/media/Media.test.tsx',
+  'pages/media/hooks/useMediaItems.test.ts',
+  'pages/redteam/setup/components/Purpose.test.tsx',
+  'pages/redteam/setup/components/Review.test.tsx',
+  'pages/redteam/setup/components/Targets/tabs/SessionsTab.test.tsx',
+  'utils/api/downloads.test.ts',
+]);
 
 function findTestFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -101,6 +128,44 @@ function findTestFiles(dir: string): string[] {
 
     return testFilePattern.test(fullPath) ? [fullPath] : [];
   });
+}
+
+function toPosixPath(filePath: string) {
+  return filePath.replace(/\\/g, '/');
+}
+
+function toPosixRelativePath(file: string) {
+  return toPosixPath(path.relative(srcDir, file));
+}
+
+function findPatternViolationsInSource(
+  source: string,
+  relativePath: string,
+  patterns: { pattern: RegExp; message: string }[],
+): string[] {
+  return patterns.flatMap(({ pattern, message }) => {
+    const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+    const globalPattern = new RegExp(pattern.source, flags);
+
+    return Array.from(source.matchAll(globalPattern), (match) => {
+      const index = match.index ?? 0;
+      const lineNumber = source.slice(0, index).split('\n').length;
+      const sourceSnippet = match[0].replace(/\s+/g, ' ').trim();
+
+      return `${relativePath}:${lineNumber}: ${message}: ${sourceSnippet}`;
+    });
+  });
+}
+
+function findPatternViolations(
+  file: string,
+  patterns: { pattern: RegExp; message: string }[],
+): string[] {
+  return findPatternViolationsInSource(
+    readFileSync(file, 'utf8'),
+    toPosixRelativePath(file),
+    patterns,
+  );
 }
 
 describe('test hygiene', () => {
@@ -135,7 +200,7 @@ describe('test hygiene', () => {
         .split('\n')
         .flatMap((line, index) =>
           focusedOrSkippedTestPattern.test(line)
-            ? [`${path.relative(srcDir, file)}:${index + 1}: ${line.trim()}`]
+            ? [`${toPosixRelativePath(file)}:${index + 1}: ${line.trim()}`]
             : [],
         );
     });
@@ -154,7 +219,7 @@ describe('test hygiene', () => {
         .flatMap((line, index) =>
           directBrowserMockPatterns.flatMap(({ pattern, message }) =>
             pattern.test(line)
-              ? [`${path.relative(srcDir, file)}:${index + 1}: ${message}: ${line.trim()}`]
+              ? [`${toPosixRelativePath(file)}:${index + 1}: ${message}: ${line.trim()}`]
               : [],
           ),
         );
@@ -183,5 +248,87 @@ describe('test hygiene', () => {
     const matches = directBrowserMockPatterns.filter(({ pattern }) => pattern.test(source));
 
     expect(matches).toHaveLength(1);
+  });
+
+  it.each([
+    'vi.mocked(callApi).mockResolvedValue(response)',
+    'vi.mocked(api.callApi).mockRejectedValue(error)',
+    '(callApi as Mock).mockImplementation(() => response)',
+    '(callApi as Mock).mockReturnValue(response)',
+    'vi.mocked(callApi)\n  .mockResolvedValue(response)',
+    '(callApi as Mock)\n  .mockReturnValue(response)',
+  ])('detects direct callApi mock source in %s', (source) => {
+    const matches = directCallApiMockPatterns.filter(({ pattern }) => pattern.test(source));
+
+    expect(matches).toHaveLength(1);
+  });
+
+  it.each([
+    'mockCallApiResponse({ ok: true })',
+    'mockCallApiResponseOnce({ step: 1 })',
+    'rejectCallApi(new Error("network"))',
+    'expect(callApi).toHaveBeenCalledTimes(1)',
+  ])('ignores strict callApi helper source in %s', (source) => {
+    const matches = directCallApiMockPatterns.filter(({ pattern }) => pattern.test(source));
+
+    expect(matches).toEqual([]);
+  });
+
+  it('detects multiline direct callApi mock violations in source files', () => {
+    const violations = findPatternViolationsInSource(
+      [
+        'import { callApi } from "@app/utils/api";',
+        'vi.mocked(callApi)',
+        '  .mockResolvedValue(response);',
+        '(callApi as Mock)',
+        '  .mockReturnValue(response);',
+      ].join('\n'),
+      'hooks/example.test.ts',
+      directCallApiMockPatterns,
+    );
+
+    expect(violations).toEqual([
+      'hooks/example.test.ts:2: mock callApi with @app/tests/apiMocks helpers: vi.mocked(callApi) .mockResolvedValue',
+      'hooks/example.test.ts:4: mock callApi with @app/tests/apiMocks helpers instead of casting callApi: (callApi as Mock) .mockReturnValue',
+    ]);
+  });
+
+  it('normalizes Windows path separators before comparing allowlist entries', () => {
+    expect(toPosixPath('pages\\media\\Media.test.tsx')).toBe('pages/media/Media.test.tsx');
+  });
+
+  it('keeps new frontend tests on strict callApi mock helpers', () => {
+    const violations = findTestFiles(srcDir).flatMap((file) => {
+      if (file === thisFile) {
+        return [];
+      }
+
+      const relativePath = toPosixRelativePath(file);
+      if (legacyDirectCallApiMockFiles.has(relativePath)) {
+        return [];
+      }
+
+      return findPatternViolations(file, directCallApiMockPatterns);
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps the legacy direct callApi mock allowlist scoped to active violations', () => {
+    const testFiles = new Set(findTestFiles(srcDir).map((file) => toPosixRelativePath(file)));
+    const missingAllowlistFiles = Array.from(legacyDirectCallApiMockFiles).filter(
+      (file) => !testFiles.has(file),
+    );
+    const staleAllowlistFiles = Array.from(legacyDirectCallApiMockFiles).filter((file) => {
+      if (!testFiles.has(file)) {
+        return false;
+      }
+
+      const violations = findPatternViolations(path.join(srcDir, file), directCallApiMockPatterns);
+      return violations.length === 0;
+    });
+
+    expect(missingAllowlistFiles).toEqual([]);
+    expect(staleAllowlistFiles).toEqual([]);
   });
 });
