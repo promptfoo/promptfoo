@@ -120,6 +120,7 @@ describe('redteamGenerateOptionsSchema', () => {
       plugins: [{ id: 'pii:direct', numTests: 5 }],
       strategies: ['basic'],
       maxConcurrency: 5,
+      maxCharsPerMessage: 125,
       delay: 1000,
     };
 
@@ -139,6 +140,16 @@ describe('redteamGenerateOptionsSchema', () => {
     const input = {
       numTests: -5,
       plugins: ['harmful:hate'],
+    };
+    expect(RedteamGenerateOptionsSchema.safeParse(input).success).toBe(false);
+  });
+
+  it('should require maxCharsPerMessage to be a positive integer', () => {
+    const input = {
+      cache: true,
+      defaultConfig: {},
+      write: true,
+      maxCharsPerMessage: 0,
     };
     expect(RedteamGenerateOptionsSchema.safeParse(input).success).toBe(false);
   });
@@ -227,6 +238,7 @@ describe('redteamConfigSchema', () => {
     const input = {
       purpose: 'You are a travel agent',
       numTests: 3,
+      maxCharsPerMessage: 125,
       plugins: [
         { id: 'harmful:non-violent-crime', numTests: 5 },
         { id: 'hijacking', numTests: 3 },
@@ -238,6 +250,7 @@ describe('redteamConfigSchema', () => {
       data: {
         purpose: 'You are a travel agent',
         numTests: 3,
+        maxCharsPerMessage: 125,
         plugins: [
           { id: 'harmful:non-violent-crime', numTests: 5 },
           { id: 'hijacking', numTests: 3 },
@@ -322,6 +335,13 @@ describe('redteamConfigSchema', () => {
   it('should reject negative numTests', () => {
     const input = {
       numTests: -1,
+    };
+    expect(RedteamConfigSchema.safeParse(input).success).toBe(false);
+  });
+
+  it('should reject invalid maxCharsPerMessage values', () => {
+    const input = {
+      maxCharsPerMessage: 0,
     };
     expect(RedteamConfigSchema.safeParse(input).success).toBe(false);
   });

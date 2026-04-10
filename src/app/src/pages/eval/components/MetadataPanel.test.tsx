@@ -1,8 +1,8 @@
+import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { renderWithProviders } from '@app/utils/testutils';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HIDDEN_METADATA_KEYS } from '../../../constants';
 import { MetadataPanel } from './MetadataPanel';
 
 import type { ExpandedMetadataState } from './MetadataPanel';

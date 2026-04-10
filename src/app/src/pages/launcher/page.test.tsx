@@ -1,5 +1,6 @@
 import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import { mockMatchMedia as installMatchMedia, mockBrowserProperty } from '@app/tests/browserMocks';
+import { useTestTimers } from '@app/tests/timers';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -147,7 +148,7 @@ describe('LauncherPage', () => {
   });
 
   it('should call checkHealth every 2 seconds after the initial 3-second delay', async () => {
-    vi.useFakeTimers();
+    const timers = useTestTimers();
 
     const checkHealthMock = vi.fn();
     (useApiHealth as Mock).mockReturnValue({
@@ -158,15 +159,13 @@ describe('LauncherPage', () => {
 
     renderLauncher();
 
-    vi.advanceTimersByTime(3000);
+    timers.advanceBy(3000);
     expect(checkHealthMock).toHaveBeenCalledTimes(1);
 
-    vi.advanceTimersByTime(2000);
+    timers.advanceBy(2000);
     expect(checkHealthMock).toHaveBeenCalledTimes(2);
 
-    vi.advanceTimersByTime(2000);
+    timers.advanceBy(2000);
     expect(checkHealthMock).toHaveBeenCalledTimes(3);
-
-    vi.useRealTimers();
   });
 });

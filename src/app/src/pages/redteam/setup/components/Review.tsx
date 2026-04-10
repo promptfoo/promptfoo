@@ -1051,6 +1051,7 @@ export default function Review({
               <div className="p-4 pt-0">
                 <RunOptionsContent
                   numTests={config.numTests}
+                  maxCharsPerMessage={config.maxCharsPerMessage}
                   runOptions={{
                     maxConcurrency: config.maxConcurrency,
                     delay: config.target.config.delay,

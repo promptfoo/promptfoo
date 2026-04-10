@@ -1,9 +1,10 @@
 import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { useStore } from '@app/stores/evalConfig';
-import { callApi } from '@app/utils/api';
+import { mockCallApiRoutes, rejectCallApi, resetCallApiMock } from '@app/tests/apiMocks';
+import { type TestTimers, useTestTimers } from '@app/tests/timers';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RunTestSuiteButton from './RunTestSuiteButton';
 
 const renderWithProvider = (ui: React.ReactElement) => {
@@ -27,15 +28,13 @@ vi.mock('@app/hooks/useToast', () => ({
 }));
 
 describe('RunTestSuiteButton', () => {
+  let timers: TestTimers;
+
   beforeEach(() => {
     useStore.getState().reset();
-    vi.clearAllMocks();
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.runOnlyPendingTimers();
-    vi.useRealTimers();
+    resetCallApiMock();
+    mockShowToast.mockReset();
+    timers = useTestTimers();
   });
 
   it('should be disabled when there are no prompts or tests', () => {
@@ -71,15 +70,15 @@ describe('RunTestSuiteButton', () => {
 
   it('should handle progress API failure after job creation', async () => {
     const mockJobId = '123';
-    const mockCallApi = vi.mocked(callApi);
-
-    mockCallApi
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockJobId }) } as any)
-      .mockResolvedValueOnce({
+    mockCallApiRoutes([
+      { method: 'POST', path: '/eval/job', response: { id: mockJobId } },
+      {
+        path: `/eval/job/${mockJobId}/`,
         ok: false,
         status: 500,
-        json: async () => ({ message: 'Progress API failed' }),
-      } as any);
+        response: { message: 'Progress API failed' },
+      },
+    ]);
 
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],
@@ -98,7 +97,7 @@ describe('RunTestSuiteButton', () => {
 
     // Advance timers to trigger the polling interval (1000ms in the component)
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
+      await timers.advanceByAsync(1500);
     });
 
     expect(mockShowToast).toHaveBeenCalledWith(
@@ -112,7 +111,7 @@ describe('RunTestSuiteButton', () => {
     const errorMessage = 'Failed to submit test suite';
 
     // Mock callApi to reject with an error
-    vi.mocked(callApi).mockRejectedValue(new Error(errorMessage));
+    rejectCallApi(new Error(errorMessage));
 
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],
@@ -124,7 +123,7 @@ describe('RunTestSuiteButton', () => {
     const button = screen.getByRole('button', { name: 'Run Eval' });
 
     // Use real timers for the click and wait for async operations
-    vi.useRealTimers();
+    timers.useRealTimers();
     await userEvent.click(button);
 
     // Wait for toast + inline error to update
@@ -134,7 +133,5 @@ describe('RunTestSuiteButton', () => {
     });
 
     expect(screen.getByRole('button', { name: 'Run Eval' })).toBeInTheDocument();
-
-    vi.useFakeTimers();
   });
 });

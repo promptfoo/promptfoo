@@ -46,6 +46,7 @@ redteam:
   plugins: Array<string | { id: string, numTests?: number, config?: Record<string, any> }>
   strategies: Array<string | { id: string }>
   numTests: number
+  maxCharsPerMessage: number
   injectVar: string
   provider: string | ProviderOptions
   purpose: string
@@ -63,6 +64,7 @@ redteam:
 | ---------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | `injectVar`                  | `string`                  | Variable to inject adversarial inputs into                                                              | Inferred from prompts                            |
 | `numTests`                   | `number`                  | Default number of tests to generate per plugin                                                          | 5                                                |
+| `maxCharsPerMessage`         | `number`                  | Maximum characters allowed in each generated user message                                               | None                                             |
 | `plugins`                    | `Array<string\|object>`   | Plugins to use for red team generation                                                                  | `default`                                        |
 | `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs                                         | `openai:gpt-5`                                   |
 | `purpose`                    | `string`                  | Description of prompt templates' purpose to guide adversarial generation                                | Inferred from prompts                            |
@@ -114,6 +116,7 @@ plugins:
     config:
       examples: Array<string> # Custom examples to guide test generation
       language: string # Language for generated tests (overrides global setting)
+      maxCharsPerMessage: number # Per-plugin user message length cap when no global cap is set
       modifiers: Record<string, string> # Additional requirements for test generation
       graderGuidance: string # Custom grading instructions (prioritized in conflicts)
       graderExamples: Array<object> # Example outputs with pass/fail scores
@@ -304,6 +307,22 @@ testGenerationInstructions: |
   Use realistic employee scenarios and corporate terminology.
   Focus on role-based access control bypasses and information disclosure.
 ```
+
+### Message Length Limits
+
+Use `redteam.maxCharsPerMessage` to cap each generated user message before it is sent to your target. Promptfoo adds this limit to generation prompts, retries plugin outputs that exceed it, drops oversized strategy outputs, and fails a red team eval before calling the target if the rendered user message is still too long.
+
+```yaml
+redteam:
+  maxCharsPerMessage: 280
+  plugins:
+    - harmful:hate
+    - id: 'contracts'
+      config:
+        maxCharsPerMessage: 180
+```
+
+If `redteam.maxCharsPerMessage` is set, it applies to every plugin and strategy in the scan. Use `plugins[].config.maxCharsPerMessage` only when you want a plugin-specific cap and have not set a global limit.
 
 ## Core Concepts
 

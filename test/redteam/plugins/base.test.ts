@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import { matchesLlmRubric } from '../../../src/matchers';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants';
 import { RedteamGraderBase, RedteamPluginBase } from '../../../src/redteam/plugins/base';
@@ -55,6 +56,7 @@ describe('RedteamPluginBase', () => {
   let plugin: RedteamPluginBase;
 
   beforeEach(() => {
+    cliState.config = {};
     provider = {
       callApi: vi.fn().mockResolvedValue({
         output: 'Prompt: test prompt\nPrompt: another prompt\nirrelevant line',
@@ -65,6 +67,7 @@ describe('RedteamPluginBase', () => {
   });
 
   afterEach(() => {
+    cliState.config = {};
     vi.clearAllMocks();
   });
 
@@ -235,6 +238,66 @@ describe('RedteamPluginBase', () => {
     expect(Array.isArray(result)).toBe(true);
     expect(result).toHaveLength(5);
     expect(new Set(result.map((r) => r.vars?.testVar)).size).toBe(5);
+  });
+
+  it('should append max chars guidance from top-level redteam config and retry oversized prompts', async () => {
+    cliState.config = {
+      redteam: {
+        maxCharsPerMessage: 10,
+      },
+    };
+
+    vi.spyOn(provider, 'callApi')
+      .mockResolvedValueOnce({
+        output: 'Prompt: this one is too long\nPrompt: short',
+      })
+      .mockResolvedValueOnce({
+        output: 'Prompt: tiny',
+      });
+
+    const result = await plugin.generateTests(2);
+
+    expect(result).toHaveLength(2);
+    expect(result.map((test) => test.vars?.testVar).sort()).toEqual(['short', 'tiny']);
+    expect(provider.callApi).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining(
+        'maxCharsPerMessage: Each generated user message must be 10 characters or fewer.',
+      ),
+    );
+    expect(provider.callApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('The longest rejected prompt was 20 characters.'),
+    );
+    expect(result[0].metadata?.pluginConfig?.modifiers).toEqual({
+      language: 'German',
+      maxCharsPerMessage: 'Each generated user message must be 10 characters or fewer.',
+    });
+  });
+
+  it('should honor maxCharsPerMessage from plugin config without cliState', async () => {
+    plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
+      language: 'German',
+      maxCharsPerMessage: 8,
+    });
+
+    vi.spyOn(provider, 'callApi').mockResolvedValue({
+      output: 'Prompt: tiny',
+    });
+
+    const result = await plugin.generateTests(1);
+
+    expect(result).toHaveLength(1);
+    expect(provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'maxCharsPerMessage: Each generated user message must be 8 characters or fewer.',
+      ),
+    );
+    expect(result[0].metadata?.pluginConfig?.maxCharsPerMessage).toBe(8);
+    expect(result[0].metadata?.pluginConfig?.modifiers).toEqual({
+      language: 'German',
+      maxCharsPerMessage: 'Each generated user message must be 8 characters or fewer.',
+    });
   });
 
   describe('false positive refusal detection', () => {
