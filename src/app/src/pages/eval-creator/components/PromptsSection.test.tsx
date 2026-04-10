@@ -1,5 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { useStore } from '@app/stores/evalConfig';
+import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PromptsSection from './PromptsSection';
@@ -13,12 +14,11 @@ describe('PromptsSection', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
+    useTestTimers();
   });
 
   afterEach(() => {
-    vi.runOnlyPendingTimers();
-    vi.useRealTimers();
+    restoreTestTimers({ runPending: true });
   });
 
   const setupStore = (prompts: string[]) => {

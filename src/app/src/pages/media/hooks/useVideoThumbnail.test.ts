@@ -1,3 +1,4 @@
+import { useTestTimers } from '@app/tests/timers';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVideoThumbnail } from './useVideoThumbnail';
@@ -216,7 +217,7 @@ describe('useVideoThumbnail', () => {
   });
 
   it('times out after 10 seconds', async () => {
-    vi.useFakeTimers();
+    const timers = useTestTimers();
 
     const { result } = renderHook(() => useVideoThumbnail('/slow.mp4', 'hash-timeout'));
 
@@ -225,7 +226,7 @@ describe('useVideoThumbnail', () => {
     // 10s setTimeout is registered. Wrap in act so React processes
     // any state updates triggered during flushing.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(100);
+      await timers.advanceByAsync(100);
     });
 
     // Video element should now be created and waiting for events
@@ -233,13 +234,11 @@ describe('useVideoThumbnail', () => {
 
     // Advance past the 10s timeout without firing any video events
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(10_000);
+      await timers.advanceByAsync(10_000);
     });
 
     expect(result.current.error).toBe('Thumbnail generation timed out');
     expect(result.current.isLoading).toBe(false);
-
-    vi.useRealTimers();
   });
 
   it('does not generate when enabled is false', () => {

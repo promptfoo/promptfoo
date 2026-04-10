@@ -1,6 +1,7 @@
 import * as ReactDOM from 'react-dom/client';
 
 import { mockClipboard } from '@app/tests/browserMocks';
+import { useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -345,7 +346,7 @@ describe('EvalOutputPromptDialog', () => {
 
   it('handles unmounting during drawer transition', async () => {
     // This test needs fake timers to control transition timing
-    vi.useFakeTimers();
+    const timers = useTestTimers();
 
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -356,7 +357,7 @@ describe('EvalOutputPromptDialog', () => {
     root.render(<EvalOutputPromptDialog {...defaultProps} />);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(50);
+      await timers.advanceByAsync(50);
     });
 
     act(() => {
@@ -364,13 +365,12 @@ describe('EvalOutputPromptDialog', () => {
     });
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(transitionDuration.enter);
+      await timers.advanceByAsync(transitionDuration.enter);
     });
 
     expect(true).toBe(true);
 
     document.body.removeChild(container);
-    vi.useRealTimers();
   });
 
   it('passes the promptIndex prop to DebuggingPanel when provided', async () => {

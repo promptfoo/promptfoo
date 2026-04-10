@@ -1,4 +1,5 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import { useTestTimers } from '@app/tests/timers';
 import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import { act } from '@testing-library/react';
@@ -2580,7 +2581,7 @@ describe('useTableStore', () => {
     });
 
     it('should abort the request after 30 seconds if fetchMetadataKeys API call does not complete', async () => {
-      vi.useFakeTimers();
+      const timers = useTestTimers();
       const mockEvalId = 'test-eval-id';
 
       vi.mocked(callApi).mockImplementation((_url: string, options?: any) => {
@@ -2604,15 +2605,13 @@ describe('useTableStore', () => {
       expect(useTableStore.getState().metadataKeysLoading).toBe(true);
 
       await act(async () => {
-        await vi.runAllTimersAsync();
+        await timers.runAllAsync();
       });
 
       const state = useTableStore.getState();
       expect(state.metadataKeysLoading).toBe(false);
       expect(state.metadataKeysError).toBe(false);
       expect(state.currentMetadataKeysRequest).toBeNull();
-
-      vi.useRealTimers();
     });
   });
 });

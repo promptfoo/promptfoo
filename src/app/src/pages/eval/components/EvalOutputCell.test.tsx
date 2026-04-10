@@ -1,4 +1,5 @@
 import { mockClipboard } from '@app/tests/browserMocks';
+import { useTestTimers } from '@app/tests/timers';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import {
   type AssertionType,
@@ -704,57 +705,49 @@ describe('EvalOutputCell', () => {
   });
 
   it('shows checkmark after copying link', async () => {
-    vi.useFakeTimers();
+    const timers = useTestTimers();
     const clipboard = mockClipboardWriteText();
 
-    try {
-      renderWithProviders(<EvalOutputCell {...defaultProps} />);
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
-      const shareButton = screen.getByRole('button', { name: /Copy link to output/i });
-      expect(shareButton).toBeInTheDocument();
+    const shareButton = screen.getByRole('button', { name: /Copy link to output/i });
+    expect(shareButton).toBeInTheDocument();
 
-      await act(async () => {
-        fireEvent.click(shareButton);
-        await clipboard.writeText.mock.results[0]?.value;
-      });
+    await act(async () => {
+      fireEvent.click(shareButton);
+      await clipboard.writeText.mock.results[0]?.value;
+    });
 
-      expect(clipboard.writeText).toHaveBeenCalled();
-      expect(shareButton.querySelector('.lucide-check')).toBeInTheDocument();
+    expect(clipboard.writeText).toHaveBeenCalled();
+    expect(shareButton.querySelector('.lucide-check')).toBeInTheDocument();
 
-      act(() => {
-        vi.advanceTimersByTime(3000);
-      });
+    act(() => {
+      timers.advanceBy(3000);
+    });
 
-      expect(shareButton.querySelector('.lucide-link')).toBeInTheDocument();
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(shareButton.querySelector('.lucide-link')).toBeInTheDocument();
   });
 
   it('clears the link feedback timer on unmount after copying link', async () => {
-    vi.useFakeTimers();
+    const timers = useTestTimers();
     const clipboard = mockClipboardWriteText();
 
-    try {
-      const { unmount } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
+    const { unmount } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
-      await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: /Copy link to output/i }));
-        await clipboard.writeText.mock.results[0]?.value;
-      });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Copy link to output/i }));
+      await clipboard.writeText.mock.results[0]?.value;
+    });
 
-      expect(vi.getTimerCount()).toBe(1);
+    expect(timers.getTimerCount()).toBe(1);
 
-      unmount();
+    unmount();
 
-      expect(vi.getTimerCount()).toBe(0);
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(timers.getTimerCount()).toBe(0);
   });
 
   it('does not schedule link feedback after unmount if clipboard resolves late', async () => {
-    vi.useFakeTimers();
+    const timers = useTestTimers();
     let resolveClipboardWrite: () => void = () => {};
     const writeTextPromise = new Promise<void>((resolve) => {
       resolveClipboardWrite = resolve;
@@ -765,23 +758,19 @@ describe('EvalOutputCell', () => {
 
     mockClipboard({ writeText: clipboard.writeText as Clipboard['writeText'] });
 
-    try {
-      const { unmount } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
+    const { unmount } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
-      fireEvent.click(screen.getByRole('button', { name: /Copy link to output/i }));
-      expect(clipboard.writeText).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /Copy link to output/i }));
+    expect(clipboard.writeText).toHaveBeenCalled();
 
-      unmount();
+    unmount();
 
-      await act(async () => {
-        resolveClipboardWrite();
-        await writeTextPromise;
-      });
+    await act(async () => {
+      resolveClipboardWrite();
+      await writeTextPromise;
+    });
 
-      expect(vi.getTimerCount()).toBe(0);
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(timers.getTimerCount()).toBe(0);
   });
 
   it('displays the token usage tooltip with reasoning tokens', () => {

@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EstimatedProbesDisplay from './EstimatedProbesDisplay';
@@ -19,6 +20,7 @@ vi.mock('./strategies/utils', () => ({
 import { getEstimatedProbes } from './strategies/utils';
 
 const mockGetEstimatedProbes = vi.mocked(getEstimatedProbes);
+let timers: TestTimers;
 
 const mockConfig: Config = {
   description: 'Test Configuration',
@@ -40,14 +42,14 @@ const mockConfig: Config = {
 
 describe('EstimatedProbesDisplay', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    timers = useTestTimers();
     vi.clearAllMocks();
     // Default mock return value
     mockGetEstimatedProbes.mockReturnValue(150);
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    restoreTestTimers();
   });
 
   const showTooltip = () => {
@@ -56,7 +58,7 @@ describe('EstimatedProbesDisplay', () => {
 
     fireEvent.pointerMove(infoIcon!, { pointerType: 'mouse' });
     act(() => {
-      vi.advanceTimersByTime(700);
+      timers.advanceBy(700);
     });
 
     return screen.getByRole('tooltip');
