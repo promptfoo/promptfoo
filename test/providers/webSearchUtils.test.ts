@@ -135,6 +135,17 @@ describe('webSearchUtils', () => {
       expect(hasWebSearchCapability(provider)).toBe(true);
     });
 
+    it('should return false for a generic OpenAI provider whose id omits the responses prefix', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'openai:gpt-4.1',
+        config: {
+          tools: [{ type: 'web_search_preview' }],
+        },
+      };
+
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
+    });
+
     it('should return true for Codex SDK with live web search enabled', () => {
       const provider: Partial<ApiProvider> = {
         id: () => 'openai:codex-sdk',

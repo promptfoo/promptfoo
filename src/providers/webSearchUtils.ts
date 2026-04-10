@@ -12,18 +12,7 @@ function hasTool(
 
 function isOpenAiResponsesProvider(provider: ApiProvider, id: string): boolean {
   return (
-    id.includes('openai:responses') ||
-    provider.constructor?.name === 'OpenAiResponsesProvider' ||
-    (id.startsWith('openai:') &&
-      !id.startsWith('openai:chat:') &&
-      !id.startsWith('openai:completion:') &&
-      !id.startsWith('openai:assistant:') &&
-      !id.startsWith('openai:embedding:') &&
-      !id.startsWith('openai:image:') &&
-      !id.startsWith('openai:moderation:') &&
-      !id.startsWith('openai:realtime:') &&
-      !id.startsWith('openai:transcription:') &&
-      !id.startsWith('openai:video:'))
+    id.includes('openai:responses') || provider.constructor?.name === 'OpenAiResponsesProvider'
   );
 }
 
