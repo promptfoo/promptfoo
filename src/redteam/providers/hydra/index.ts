@@ -53,6 +53,7 @@ import type {
   TokenUsage,
   VarValue,
 } from '../../../types/index';
+import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
 
 const DEFAULT_MAX_TURNS = 10;
@@ -745,21 +746,13 @@ export class HydraProvider implements ApiProvider {
       if (test && assertToUse) {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
-          // Build grading context with tracing and exfil tracking data
-          let gradingContext:
-            | {
-                traceContext?: TraceContextData | null;
-                traceSummary?: string;
-                wasExfiltrated?: boolean;
-                exfilCount?: number;
-                exfilRecords?: Array<{
-                  timestamp: string;
-                  ip: string;
-                  userAgent: string;
-                  queryParams: Record<string, string>;
-                }>;
-              }
-            | undefined;
+          // Build grading context with provider raw output, tracing, and exfil tracking data.
+          const gradingContext: RedteamGradingContext = {
+            providerResponse: targetResponse,
+            ...(tracingOptions.includeInGrading
+              ? { traceContext, traceSummary: gradingTraceSummary }
+              : {}),
+          };
 
           // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
           // In layer mode (e.g., hydra → indirect-web-pwn), lastTransformResult.metadata is the
@@ -781,14 +774,11 @@ export class HydraProvider implements ApiProvider {
             try {
               const exfilData = await checkExfilTracking(webPageUuid, evalId);
               if (exfilData) {
-                gradingContext = {
-                  ...(tracingOptions.includeInGrading
-                    ? { traceContext, traceSummary: gradingTraceSummary }
-                    : {}),
+                Object.assign(gradingContext, {
                   wasExfiltrated: exfilData.wasExfiltrated,
                   exfilCount: exfilData.exfilCount,
                   exfilRecords: exfilData.exfilRecords,
-                };
+                });
               }
             } catch (error) {
               logger.warn('[Hydra] Failed to fetch exfil tracking from server', {
@@ -799,21 +789,16 @@ export class HydraProvider implements ApiProvider {
           }
 
           // Fall back to provider response metadata if server lookup didn't work (Playwright provider)
-          if (!gradingContext && targetResponse.metadata?.wasExfiltrated !== undefined) {
+          if (
+            gradingContext.wasExfiltrated === undefined &&
+            targetResponse.metadata?.wasExfiltrated !== undefined
+          ) {
             logger.debug('[Hydra] Using exfil data from provider response metadata (fallback)');
-            gradingContext = {
-              ...(tracingOptions.includeInGrading
-                ? { traceContext, traceSummary: gradingTraceSummary }
-                : {}),
+            Object.assign(gradingContext, {
               wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
               exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
               exfilRecords: [],
-            };
-          }
-
-          // Fallback to just tracing context if no exfil data found
-          if (!gradingContext && tracingOptions.includeInGrading) {
-            gradingContext = { traceContext, traceSummary: gradingTraceSummary };
+            });
           }
 
           const { grade, rubric } = await grader.getResult(

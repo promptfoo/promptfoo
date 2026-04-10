@@ -1,3 +1,4 @@
+import { mockWindowOpen } from '@app/tests/browserMocks';
 import { callApi } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
@@ -203,7 +204,7 @@ beforeEach(() => {
   });
   vi.mocked(callApi).mockReset();
   vi.mocked(callApi).mockResolvedValue(createCopyEvalResponse());
-  vi.spyOn(window, 'open').mockImplementation(() => null);
+  mockWindowOpen();
 });
 
 afterEach(() => {
@@ -349,13 +350,12 @@ describe('ResultsView Share Button', () => {
 });
 describe('ResultsView Copy Eval', () => {
   const mockOnRecentEvalSelected = vi.fn();
-  let mockWindowOpen: ReturnType<typeof vi.spyOn>;
+  let mockedWindowOpen: ReturnType<typeof mockWindowOpen>;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockWindowOpen = vi.spyOn(window, 'open');
-    mockWindowOpen.mockImplementation(() => null);
+    mockedWindowOpen = mockWindowOpen();
 
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
@@ -435,7 +435,7 @@ describe('ResultsView Copy Eval', () => {
     await userEvent.click(createCopyButton);
 
     await waitFor(() => {
-      expect(mockWindowOpen).toHaveBeenCalledWith(`/eval/${newEvalId}`, '_blank');
+      expect(mockedWindowOpen).toHaveBeenCalledWith(`/eval/${newEvalId}`, '_blank');
     });
 
     await waitFor(() => {

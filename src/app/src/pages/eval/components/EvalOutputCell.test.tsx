@@ -687,7 +687,7 @@ describe('EvalOutputCell', () => {
   });
 
   it('allows copying row link to clipboard', async () => {
-    const mockClipboard = mockClipboardWriteText();
+    const clipboard = mockClipboardWriteText();
     const expectedUrl = new URL(window.location.href);
     expectedUrl.searchParams.set('rowId', '1');
 
@@ -699,13 +699,13 @@ describe('EvalOutputCell', () => {
     fireEvent.click(shareButton);
 
     await waitFor(() => {
-      expect(mockClipboard.writeText).toHaveBeenCalledWith(expectedUrl.toString());
+      expect(clipboard.writeText).toHaveBeenCalledWith(expectedUrl.toString());
     });
   });
 
   it('shows checkmark after copying link', async () => {
     vi.useFakeTimers();
-    const mockClipboard = mockClipboardWriteText();
+    const clipboard = mockClipboardWriteText();
 
     try {
       renderWithProviders(<EvalOutputCell {...defaultProps} />);
@@ -715,10 +715,10 @@ describe('EvalOutputCell', () => {
 
       await act(async () => {
         fireEvent.click(shareButton);
-        await mockClipboard.writeText.mock.results[0]?.value;
+        await clipboard.writeText.mock.results[0]?.value;
       });
 
-      expect(mockClipboard.writeText).toHaveBeenCalled();
+      expect(clipboard.writeText).toHaveBeenCalled();
       expect(shareButton.querySelector('.lucide-check')).toBeInTheDocument();
 
       act(() => {
@@ -733,14 +733,14 @@ describe('EvalOutputCell', () => {
 
   it('clears the link feedback timer on unmount after copying link', async () => {
     vi.useFakeTimers();
-    const mockClipboard = mockClipboardWriteText();
+    const clipboard = mockClipboardWriteText();
 
     try {
       const { unmount } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: /Copy link to output/i }));
-        await mockClipboard.writeText.mock.results[0]?.value;
+        await clipboard.writeText.mock.results[0]?.value;
       });
 
       expect(vi.getTimerCount()).toBe(1);

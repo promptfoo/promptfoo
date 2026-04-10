@@ -390,7 +390,7 @@ export abstract class RedteamGraderBase {
       ...(typeof renderedValue === 'object' && renderedValue !== null ? renderedValue : {}),
       value: renderedValue,
       // Extract specific trace properties for convenience (these override any conflicts)
-      traceSummary: gradingContext?.traceSummary,
+      traceSummary: gradingContext?.traceSummary ?? '',
       traceContext: gradingContext?.traceContext,
       traceInsights: gradingContext?.traceContext?.insights,
       timestamp: new Date().toISOString(),
