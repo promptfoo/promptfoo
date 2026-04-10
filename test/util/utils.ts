@@ -1,3 +1,6 @@
+import { vi } from 'vitest';
+import type { MockInstance } from 'vitest';
+
 import type { ApiProvider, ProviderResponse } from '../../src/types/index';
 
 /**
@@ -67,4 +70,13 @@ export function createMockResponse(
 
 export function stripAnsi(value: string): string {
   return value.replace(/\u001b\[[0-9;]*m/g, '');
+}
+
+export type ConsoleMethod = 'debug' | 'error' | 'info' | 'log' | 'warn';
+
+export function mockConsole(
+  method: ConsoleMethod,
+  implementation: (...args: unknown[]) => void = () => {},
+): MockInstance {
+  return vi.spyOn(console, method).mockImplementation(implementation);
 }
