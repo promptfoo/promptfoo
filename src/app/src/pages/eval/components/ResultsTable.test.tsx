@@ -138,6 +138,10 @@ describe('ResultsTable Metrics Display', () => {
         },
       },
     }));
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+    }));
   });
 
   it('displays total cost with correct formatting', () => {
@@ -317,6 +321,10 @@ describe('ResultsTable Metrics Display', () => {
             metric: [],
           },
         },
+      }));
+      vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+        inComparisonMode: false,
+        renderMarkdown: true,
       }));
 
       renderWithProviders(<ResultsTable {...defaultProps} />);
