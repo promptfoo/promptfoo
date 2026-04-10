@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockResponse } from '../../util/utils';
 
+import type { MultiTurnPromptParams } from '../../../src/server/services/redteamTestCaseGenerationService';
+
 const REMOTE_GENERATION_URL = 'https://api.promptfoo.app/api/v1/task';
 const REQUEST_TIMEOUT_MS = 300000;
 const MOCKED_MODULES = [
@@ -34,7 +36,7 @@ function mockRemoteGeneration(responseBody: unknown) {
   return fetchWithRetries;
 }
 
-async function generatePromptForStrategy(strategyId: string) {
+async function generatePromptForStrategy(strategyId: MultiTurnPromptParams['strategyId']) {
   const { generateMultiTurnPrompt } = await import(
     '../../../src/server/services/redteamTestCaseGenerationService'
   );
