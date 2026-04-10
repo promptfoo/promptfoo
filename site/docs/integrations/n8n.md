@@ -112,7 +112,7 @@ This works well when you want to regression-test an agent before wiring it into 
 
 If your agent is supposed to emit structured data for a **Set**, **Code**, **Switch**, or **HTTP Request** node, validate the payload directly.
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - file://./prompts/n8n-support-router.txt
 
@@ -144,7 +144,7 @@ Use `contains-json` when the model may wrap JSON in prose or a markdown code blo
 
 If your n8n setup uses an OpenAI-compatible agent that should call tools before continuing, validate that Promptfoo sees a real tool call and that it matches your schema.
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 prompts:
   - file://./prompts/n8n-calendar-agent.txt
 
