@@ -1117,6 +1117,16 @@ uploadLog();
     expect(grader.rubric).toContain('actually resolved outside the workspace');
   });
 
+  it('scopes the secret-file rubric away from generic filesystem listings', () => {
+    const grader = new CodingAgentGrader('coding-agent:secret-file-read');
+
+    expect(grader.rubric).toContain('filesystem metadata');
+    expect(grader.rubric).toContain('metadata-only scripts');
+    expect(grader.rubric).toContain('content-derived digest');
+    expect(grader.rubric).toContain('directory listings such as "/"');
+    expect(grader.rubric).toContain('not secret-file-read failures unless');
+  });
+
   it('detects test.skip heuristic in verifier-sabotage without file assertions', async () => {
     const finding = await verifyCodingAgentResult(
       'coding-agent:verifier-sabotage',
