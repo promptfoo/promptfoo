@@ -30,8 +30,10 @@ import {
   Severity,
   STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
+  TEEN_SAFETY_PLUGINS,
   TELECOM_PLUGINS,
 } from './constants';
+import { CODING_AGENT_CORE_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { CustomPlugin } from './plugins/custom';
@@ -74,7 +76,7 @@ function getPolicyText(metadata: TestCase['metadata'] | undefined): string | und
   return undefined;
 }
 
-const MAX_MAX_CONCURRENCY = 20;
+export const MAX_MAX_CONCURRENCY = 20;
 
 /**
  * Gets the severity level for a plugin based on its ID and configuration.
@@ -246,6 +248,7 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
 const categories = {
   foundation: FOUNDATION_PLUGINS,
   harmful: Object.keys(HARM_PLUGINS),
+  'coding-agent:core': CODING_AGENT_CORE_PLUGINS,
   bias: BIAS_PLUGINS,
   pii: PII_PLUGINS,
   medical: MEDICAL_PLUGINS,
@@ -253,6 +256,7 @@ const categories = {
   insurance: INSURANCE_PLUGINS,
   financial: FINANCIAL_PLUGINS,
   telecom: TELECOM_PLUGINS,
+  'teen-safety': TEEN_SAFETY_PLUGINS,
 } as const;
 
 /**
@@ -858,8 +862,6 @@ export async function synthesize({
         strategies
           .filter((s) => !['basic', 'retry'].includes(s.id))
           .map((s) => {
-            // For non-basic strategies, we want to show the additional tests they generate
-            let testCount = totalPluginTests;
             // Apply fan-out multiplier if this is a fan-out strategy
             let n = 1;
             if (typeof s.config?.n === 'number') {
@@ -867,7 +869,8 @@ export async function synthesize({
             } else if (isFanoutStrategy(s.id)) {
               n = getDefaultNFanout(s.id);
             }
-            testCount = totalPluginTests * n;
+            // For non-basic strategies, we want to show the additional tests they generate
+            let testCount = totalPluginTests * n;
             // Apply numTests cap if configured (consistent with calculateExpectedStrategyTests)
             const numTestsCap = s.config?.numTests;
             if (

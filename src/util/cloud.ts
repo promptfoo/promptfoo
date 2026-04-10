@@ -177,9 +177,9 @@ function normalizeEvalConfig(config: Record<string, unknown>): UnifiedConfig {
 
   const commandLineOptions = {
     ...(isRecord(config.commandLineOptions) ? config.commandLineOptions : {}),
-    ...(config.maxConcurrency != null ? { maxConcurrency: config.maxConcurrency } : {}),
-    ...(config.delay != null ? { delay: config.delay } : {}),
-    ...(config.verbose != null ? { verbose: config.verbose } : {}),
+    ...(config.maxConcurrency == null ? {} : { maxConcurrency: config.maxConcurrency }),
+    ...(config.delay == null ? {} : { delay: config.delay }),
+    ...(config.verbose == null ? {} : { verbose: config.verbose }),
   };
 
   const normalizedConfig: Record<string, unknown> = {
@@ -356,7 +356,10 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
  * @returns Promise resolving to an array of team objects
  * @throws Error if the request fails
  */
-export async function getUserTeams(): Promise<
+export async function getUserTeams(
+  apiHost?: string,
+  apiKey?: string,
+): Promise<
   Array<{
     id: string;
     name: string;
@@ -366,7 +369,14 @@ export async function getUserTeams(): Promise<
     updatedAt: string;
   }>
 > {
-  const response = await makeRequest(`/users/me/teams`, 'GET');
+  const response =
+    apiHost && apiKey
+      ? await fetchWithProxy(`${apiHost}/api/v1/users/me/teams`, {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+        })
+      : await makeRequest(`/users/me/teams`, 'GET');
   if (!response.ok) {
     throw new Error(`Failed to get user teams: ${response.statusText}`);
   }

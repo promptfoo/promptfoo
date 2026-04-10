@@ -33,6 +33,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
+  SkillCallEntry,
 } from '../types/index';
 
 /**
@@ -46,6 +47,32 @@ export interface ToolCallEntry {
   output: unknown;
   is_error: boolean;
   parentToolUseId: string | null;
+}
+
+function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
+  return toolCalls
+    .filter((toolCall) => toolCall.name === 'Skill')
+    .flatMap((toolCall) => {
+      const skillName =
+        toolCall.input &&
+        typeof toolCall.input === 'object' &&
+        typeof (toolCall.input as Record<string, unknown>).skill === 'string'
+          ? ((toolCall.input as Record<string, unknown>).skill as string).trim()
+          : '';
+
+      if (!skillName) {
+        return [];
+      }
+
+      return [
+        {
+          name: skillName,
+          input: toolCall.input,
+          is_error: toolCall.is_error,
+          source: 'tool' as const,
+        },
+      ];
+    });
 }
 
 /**
@@ -111,7 +138,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
       dedent`Failed to load @anthropic-ai/claude-agent-sdk.
 
       The package was found but could not be loaded. This may be due to:
-      - Incompatible Node.js version (requires Node.js 20+)
+      - Incompatible Node.js version (requires Node.js 20.20+ or 22.22+)
       - Corrupted installation
 
       Try reinstalling:
@@ -124,6 +151,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
 
 export interface ClaudeCodeOptions {
   apiKey?: string;
+  apiKeyRequired?: boolean;
 
   /**
    * 'working_dir' allows user to point to a pre-prepared directory with desired files/directories in place
@@ -159,8 +187,9 @@ export interface ClaudeCodeOptions {
    * - 'acceptEdits' - Auto-accept file edit operations
    * - 'bypassPermissions' - Bypass all permission checks (requires allow_dangerously_skip_permissions)
    * - 'dontAsk' - Don't prompt for permissions, deny if not pre-approved
+   * - 'auto' - Use a model classifier to approve or deny permission prompts
    */
-  permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk';
+  permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk' | 'auto';
 
   /**
    * User can set a custom system prompt, or append to the default Claude Agent SDK system prompt
@@ -270,6 +299,20 @@ export interface ClaudeCodeOptions {
   thinking?: ThinkingConfig;
 
   /**
+   * Token budget for the task. The model will pace its tool use to stay within this budget.
+   * Useful for cost-conscious evaluations.
+   *
+   * @example
+   * ```yaml
+   * task_budget:
+   *   total: 50000
+   * ```
+   */
+  task_budget?: {
+    total: number;
+  };
+
+  /**
    * Controls how much effort Claude puts into its response.
    * Works with adaptive thinking to guide thinking depth.
    * - 'low' - Minimal thinking, fastest responses
@@ -318,6 +361,7 @@ export interface ClaudeCodeOptions {
    * - `allowUnsandboxedCommands` - Allow commands that can't be sandboxed
    * - `enableWeakerNestedSandbox` - Enable weaker sandbox for nested environments
    * - `excludedCommands` - Commands to exclude from sandboxing
+   * - `failIfUnavailable` - Fail closed when sandbox dependencies or platform support are missing
    * - `ignoreViolations` - Map of command patterns to violation types to ignore
    * - `network` - Network configuration:
    *   - `allowedDomains` - Domains the sandbox can access
@@ -665,7 +709,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     }
 
     // Could potentially do more to validate credentials for Bedrock/Vertex here, but Anthropic key is the main use case
-    if (!this.apiKey && !(env.CLAUDE_CODE_USE_BEDROCK || env.CLAUDE_CODE_USE_VERTEX)) {
+    if (
+      !this.apiKey &&
+      !(
+        config.apiKeyRequired === false ||
+        env.CLAUDE_CODE_USE_BEDROCK ||
+        env.CLAUDE_CODE_USE_VERTEX
+      )
+    ) {
       throw new Error(
         dedent`Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add "apiKey" to the provider config.
 
@@ -788,6 +839,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       tools: config.tools,
       enableFileCheckpointing: config.enable_file_checkpointing,
       persistSession: config.persist_session,
+      taskBudget: config.task_budget,
       env,
     };
 
@@ -928,12 +980,13 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const sessionId = msg.session_id;
 
           const toolCallsArray = Array.from(toolCallsMap.values());
+          const skillCalls = deriveSkillCalls(toolCallsArray);
 
           if (msg.subtype === 'success') {
             logger.debug(`Claude Agent SDK response: ${raw}`);
             // When structured output is enabled and available, use it as the output
             // Otherwise fall back to the text result
-            const output = msg.structured_output !== undefined ? msg.structured_output : msg.result;
+            const output = msg.structured_output === undefined ? msg.result : msg.structured_output;
             const response: ProviderResponse = {
               output,
               tokenUsage,
@@ -941,15 +994,19 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               raw,
               sessionId,
               metadata: {
+                skillCalls,
                 toolCalls: toolCallsArray,
                 numTurns: msg.num_turns,
                 durationMs: msg.duration_ms,
                 durationApiMs: msg.duration_api_ms,
                 modelUsage: msg.modelUsage,
                 permissionDenials: msg.permission_denials,
-                ...(msg.structured_output !== undefined
-                  ? { structuredOutput: msg.structured_output }
-                  : {}),
+                ...(msg.terminal_reason === undefined
+                  ? {}
+                  : { terminalReason: msg.terminal_reason }),
+                ...(msg.structured_output === undefined
+                  ? {}
+                  : { structuredOutput: msg.structured_output }),
               },
             };
 
@@ -964,12 +1021,16 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               raw,
               sessionId,
               metadata: {
+                skillCalls,
                 toolCalls: toolCallsArray,
                 numTurns: msg.num_turns,
                 durationMs: msg.duration_ms,
                 durationApiMs: msg.duration_api_ms,
                 modelUsage: msg.modelUsage,
                 permissionDenials: msg.permission_denials,
+                ...(msg.terminal_reason === undefined
+                  ? {}
+                  : { terminalReason: msg.terminal_reason }),
               },
             };
           }
@@ -1008,6 +1069,18 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
    * For normal Claude Agent SDK support, just use the Anthropic API key
    * Users can also use Bedrock (with CLAUDE_CODE_USE_BEDROCK env var) or Vertex (with CLAUDE_CODE_USE_VERTEX env var)
    */
+  requiresApiKey(): boolean {
+    if (this.config.apiKeyRequired === false) {
+      return false;
+    }
+    return !(
+      this.env?.CLAUDE_CODE_USE_BEDROCK ||
+      this.env?.CLAUDE_CODE_USE_VERTEX ||
+      getEnvString('CLAUDE_CODE_USE_BEDROCK') ||
+      getEnvString('CLAUDE_CODE_USE_VERTEX')
+    );
+  }
+
   getApiKey(): string | undefined {
     return this.config?.apiKey || this.env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
   }

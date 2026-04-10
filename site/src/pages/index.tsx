@@ -25,7 +25,6 @@ import StorefrontIcon from '@mui/icons-material/Storefront';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import CountUp from 'react-countup';
-import NewsletterForm from '../components/NewsletterForm';
 import { SITE_CONSTANTS } from '../constants';
 import styles from './index.module.css';
 
@@ -167,8 +166,8 @@ function HomepageWalkthrough() {
       id: 1,
       caption: 'Red Teaming',
       mobileCaption: 'Red Team',
-      image: '/img/redteam-dashboard@2x.jpg',
-      image2x: '/img/redteam-dashboard@2x.jpg',
+      image: '/img/redteam-vulnerability-report-hero.png',
+      image2x: '/img/redteam-vulnerability-report-hero@2x.png',
       description: (
         <>
           <p className={styles.walkthroughHeading}>Automated red teaming for agents & RAGs</p>
@@ -741,7 +740,9 @@ function AsSeenOnSection() {
 }
 
 function PersonaSection() {
-  const [activePersona, setActivePersona] = React.useState('director');
+  const [activePersona, setActivePersona] = React.useState<'ciso' | 'director' | 'developer'>(
+    'director',
+  );
 
   const personas = {
     ciso: {

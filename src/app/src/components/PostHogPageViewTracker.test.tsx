@@ -1,6 +1,7 @@
+import { mockWindowLocation } from '@app/tests/browserMocks';
 import { render } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePostHog } from './PostHogContext';
 import { PostHogPageViewTracker } from './PostHogPageViewTracker';
 
@@ -24,26 +25,13 @@ describe('PostHogPageViewTracker', () => {
     capture: vi.fn(),
   };
 
-  const originalWindowLocation = window.location;
-
   beforeEach(() => {
     vi.clearAllMocks();
-
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: { ...originalWindowLocation, href: '' },
-    });
+    mockWindowLocation({ href: '' });
 
     mockedUsePostHog.mockReturnValue({
       posthog: mockPostHog as any,
       isInitialized: true,
-    });
-  });
-
-  afterEach(() => {
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: originalWindowLocation,
     });
   });
 

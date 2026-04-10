@@ -31,13 +31,13 @@ The same underlying model behaves differently at each tier. A plain `claude-sonn
 
 Both agentic providers have similar capabilities. The differences are in defaults and ecosystem:
 
-| Aspect                  | Codex SDK                        | Claude Agent SDK                 |
-| ----------------------- | -------------------------------- | -------------------------------- |
-| **Default permissions** | Full access (Git repo required)  | Read-only until you opt-in       |
-| **Structured output**   | `output_schema`                  | `output_format.json_schema`      |
-| **State management**    | Thread-based (`persist_threads`) | Stateless (or `resume` sessions) |
-| **Safety**              | Git repo check                   | Tool allowlists                  |
-| **Ecosystem**           | OpenAI Responses API             | MCP servers, CLAUDE.md           |
+| Aspect                  | Codex SDK                                                                       | Claude Agent SDK                 |
+| ----------------------- | ------------------------------------------------------------------------------- | -------------------------------- |
+| **Default permissions** | `workspace-write` sandbox, Git repo required, network/search off unless enabled | Read-only until you opt-in       |
+| **Structured output**   | `output_schema`                                                                 | `output_format.json_schema`      |
+| **State management**    | Thread-based (`persist_threads`)                                                | Stateless (or `resume` sessions) |
+| **Safety**              | Filesystem sandbox, Git repo check, minimal CLI env by default                  | Tool allowlists                  |
+| **Ecosystem**           | OpenAI Responses API                                                            | MCP servers, CLAUDE.md           |
 
 ## Examples
 
@@ -162,6 +162,37 @@ tests:
 
 The agent's output is its final text response describing what it did, not the file contents. For file-level verification, read the files after the eval or enable [tracing](/docs/tracing/).
 
+When you need to verify behavior rather than the agent's self-report, tracing is the better fit. It lets you assert that the agent actually ran tests, executed commands, or took multiple reasoning steps:
+
+```yaml title="promptfooconfig.yaml"
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+
+providers:
+  - id: openai:codex-sdk
+    config:
+      working_dir: ./repo
+      enable_streaming: true
+
+tests:
+  - assert:
+      - type: trajectory:step-count
+        value:
+          type: command
+          pattern: 'pytest*'
+          min: 1
+
+      - type: trajectory:step-count
+        value:
+          type: reasoning
+          min: 1
+```
+
+If your agent emits tool-oriented spans, add [`trajectory:tool-used`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used) or [`trajectory:tool-sequence`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence) to verify the exact tool path.
+
 ### Multi-file feature implementation
 
 When tasks span multiple files, use `llm-rubric` to evaluate semantic completion rather than checking for specific strings.
@@ -270,6 +301,8 @@ Sandboxing options:
 - Read-only repo mounts with writes going to separate volumes
 - Dummy API keys and mock services
 - Tool restrictions via `disallowed_tools: ['Bash']`
+
+For Codex evals, prefer `sandbox_mode: read-only` when the task only needs code inspection, keep `network_access_enabled` and `web_search_mode` disabled unless the test explicitly requires them, and pass only the environment variables Codex needs through `cli_env`. The Codex provider now uses a minimal shell environment by default instead of inheriting the full parent process env.
 
 ```yaml
 providers:

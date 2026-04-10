@@ -1,3 +1,4 @@
+import { mockBrowserProperty, mockClipboard, mockObjectUrl } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
 import { screen } from '@testing-library/dom';
 import { waitFor } from '@testing-library/react';
@@ -15,13 +16,6 @@ function renderDownloadDialog() {
 
 // Get a reference to the mock
 const showToastMock = vi.fn();
-
-// Mock clipboard API
-Object.assign(navigator, {
-  clipboard: {
-    writeText: vi.fn().mockImplementation(() => Promise.resolve()),
-  },
-});
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(),
@@ -71,14 +65,6 @@ vi.mock('js-yaml', () => ({
   dump: yamlDumpMock,
 }));
 
-global.URL.createObjectURL = vi.fn(() => 'mocked-blob-url');
-global.URL.revokeObjectURL = vi.fn();
-
-Object.defineProperty(global.navigator, 'msSaveOrOpenBlob', {
-  value: vi.fn(),
-  writable: true,
-});
-
 describe('DownloadMenu', () => {
   const mockTable = {
     head: {
@@ -113,6 +99,9 @@ describe('DownloadMenu', () => {
     jsonIsLoading = false;
     csvHookOptions = undefined;
     jsonHookOptions = undefined;
+    mockClipboard();
+    mockObjectUrl('mocked-blob-url');
+    mockBrowserProperty(global.navigator, 'msSaveOrOpenBlob', vi.fn());
 
     yamlDumpMock.mockClear();
     yamlDumpMock.mockReturnValue('mocked yaml');

@@ -248,6 +248,150 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Security and Access Control',
+    description:
+      'Tests coding agents against repository prompt injection, terminal output injection, secret environment read, sandbox read escape, and verifier sabotage risks.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Core',
+    pluginId: 'coding-agent:core',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether a coding agent makes unauthorized outbound network requests or bypasses the intended network policy.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Network Egress Bypass',
+    pluginId: 'coding-agent:network-egress-bypass',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether a coding agent follows prompt-injected instructions hidden in untrusted repository content.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Repo Prompt Injection',
+    pluginId: 'coding-agent:repo-prompt-injection',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether a coding agent reads canaries outside the intended workspace or sandbox boundary.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Sandbox Read Escape',
+    pluginId: 'coding-agent:sandbox-read-escape',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether a coding agent mutates files outside the intended workspace or sandbox boundary.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Sandbox Write Escape',
+    pluginId: 'coding-agent:sandbox-write-escape',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether a coding agent reads or reveals launcher-only secrets from its environment.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Secret Env Read',
+    pluginId: 'coding-agent:secret-env-read',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether a coding agent reads or reveals protected local files outside the task boundary.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Secret File Read',
+    pluginId: 'coding-agent:secret-file-read',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether a coding agent treats untrusted terminal output as instructions or propagates terminal-only receipts.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Terminal Output Injection',
+    pluginId: 'coding-agent:terminal-output-injection',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether a coding agent weakens protected tests, verifier scripts, snapshots, policies, or lockfiles instead of fixing the requested code.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Verifier Sabotage',
+    pluginId: 'coding-agent:verifier-sabotage',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
     category: 'Brand',
     description: 'Competitor mentions and endorsements',
     label: 'technical',
@@ -609,6 +753,22 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/financial/#financial-impartiality',
     name: 'Financial Services Impartiality',
     pluginId: 'financial:impartiality',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      "Tests for unsuitable financial product recommendations or downplaying of risks under Japan's FIEA",
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#japan-fiea-suitability',
+    name: 'Japan FIEA Suitability',
+    pluginId: 'financial:japan-fiea-suitability',
     applicationTypes: {
       rag: true,
       agent: true,
@@ -1164,6 +1324,54 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/medical/#medical-anchoring-bias',
     name: 'Medical Anchoring Bias',
     pluginId: 'medical:anchoring-bias',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests whether medical AI systems conceal intended-use boundaries, low-confidence outputs, subgroup limitations, data drift, or silent model-version updates',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#fda-ai-disclosure',
+    name: 'FDA AI Disclosure',
+    pluginId: 'medical:fda:ai-disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether medical-device AI systems enforce authenticated, role-scoped, deny-by-default access before privileged commands, maintenance actions, or therapy changes',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#fda-cyber-access-control',
+    name: 'FDA Cyber Access Control',
+    pluginId: 'medical:fda:cyber-access-control',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether medical-device AI systems help suppress anomaly alerts, rewrite audit trails, hide SBOM/version evidence, or disable forensic logging',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#fda-cyber-audit-tampering',
+    name: 'FDA Cyber Audit Tampering',
+    pluginId: 'medical:fda:cyber-audit-tampering',
     applicationTypes: {
       rag: true,
       agent: true,
@@ -1795,6 +2003,66 @@ export const PLUGINS = [
     },
     vulnerabilityType: 'security',
     isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests for encouragement, sourcing, or circumvention tactics that help minors access age-restricted goods or services such as alcohol, vaping, gambling, weapons, or adult-only venues',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/teen-safety/#age-restricted-goods-and-services',
+    name: 'Age-Restricted Goods & Services',
+    pluginId: 'teen-safety:age-restricted-goods-and-services',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests for promotion, glorification, or facilitation of dangerous challenges, unsafe stunts, risky experimentation, and dangerous at-home procedures inappropriate for teens',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/teen-safety/#dangerous-content',
+    name: 'Dangerous Activities & Challenges',
+    pluginId: 'teen-safety:dangerous-content',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests for interactive roleplay involving minors that simulates romantic, sexual, or violent scenarios that could normalize exploitation or harm',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/teen-safety/#dangerous-roleplay',
+    name: 'Dangerous Roleplay',
+    pluginId: 'teen-safety:dangerous-roleplay',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests for harmful body-ideal promotion, body shaming, and facilitation of unsafe restriction, purging, over-exercise, or concealment behaviors that can harm teens',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/teen-safety/#harmful-body-ideals',
+    name: 'Harmful Body Ideals',
+    pluginId: 'teen-safety:harmful-body-ideals',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
   },
   {
     category: 'Compliance and Legal',

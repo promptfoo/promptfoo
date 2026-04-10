@@ -43,9 +43,9 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
     description:
       'Trading systems, risk assessment, credit scoring, and customer advisory platforms',
     longDescription:
-      'Comprehensive testing for financial services AI including trading systems, robo-advisors, risk assessment, credit scoring, and customer service. Tests cover calculation errors in option pricing and risk models, compliance violations (insider trading, market manipulation), confidential data disclosure (MNPI, proprietary strategies), hallucination of market data, counterfactual narratives, defamation of financial entities, and inappropriate financial advice.',
+      'Comprehensive testing for financial services AI including trading systems, robo-advisors, risk assessment, credit scoring, and customer service. Tests cover calculation errors in option pricing and risk models, compliance violations (insider trading, market manipulation), confidential data disclosure (MNPI, proprietary strategies), hallucination of market data, counterfactual narratives, defamation of financial entities, inappropriate financial advice, and Japan FIEA suitability failures such as recommending risky products to customers who are not suitable for them.',
     color: 'primary',
-    complianceFrameworks: ['SEC', 'FINRA', 'SOX'],
+    complianceFrameworks: ['SEC', 'FINRA', 'SOX', 'Japan FIEA'],
     requiresEnterprise: true,
     plugins: [
       'financial:calculation-error',
@@ -56,6 +56,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
       'financial:defamation',
       'financial:hallucination',
       'financial:impartiality',
+      'financial:japan-fiea-suitability',
       'financial:misconduct',
       'financial:sycophancy',
     ] as Plugin[],
@@ -78,6 +79,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
           'financial:compliance-violation',
           'financial:misconduct',
           'financial:impartiality',
+          'financial:japan-fiea-suitability',
         ] as Plugin[],
       },
       {
@@ -92,9 +94,14 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
     icon: <HeartPulse className="size-5" />,
     description: 'Clinical decision support, diagnosis assistance, and patient triage systems',
     longDescription:
-      'Specialized tests for medical AI systems including clinical decision support, diagnosis assistance, treatment recommendations, and patient triage. Tests cover hallucination of medical facts, clinical accuracy, anchoring bias, prioritization errors, off-label medication suggestions, and sycophantic behavior that prioritizes user satisfaction over medical accuracy.',
+      'Specialized tests for medical AI systems including clinical decision support, diagnosis assistance, treatment recommendations, patient triage, and connected medical-device workflows. Tests cover hallucination of medical facts, clinical accuracy, anchoring bias, prioritization errors, off-label medication suggestions, sycophantic behavior, FDA cybersecurity access-control and audit-log tampering attempts, and FDA AI transparency or intended-use disclosure failures.',
     color: 'primary', // Use theme primary color
-    complianceFrameworks: ['Patient Privacy', 'FDA 21 CFR Part 11'],
+    complianceFrameworks: [
+      'Patient Privacy',
+      'FDA 21 CFR Part 11',
+      'FDA Medical Device Cybersecurity Guidance',
+      'FDA AI-Enabled Device Guidance',
+    ],
     requiresEnterprise: true,
     plugins: [
       'medical:hallucination',
@@ -103,6 +110,9 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
       'medical:off-label-use',
       'medical:anchoring-bias',
       'medical:sycophancy',
+      'medical:fda:cyber-access-control',
+      'medical:fda:cyber-audit-tampering',
+      'medical:fda:ai-disclosure',
     ] as Plugin[],
     pluginGroups: [
       {
@@ -120,6 +130,17 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
       {
         name: 'Decision Quality',
         plugins: ['medical:sycophancy'] as Plugin[],
+      },
+      {
+        name: 'FDA Cybersecurity Controls',
+        plugins: [
+          'medical:fda:cyber-access-control',
+          'medical:fda:cyber-audit-tampering',
+        ] as Plugin[],
+      },
+      {
+        name: 'FDA AI Lifecycle Disclosure',
+        plugins: ['medical:fda:ai-disclosure'] as Plugin[],
       },
     ],
   },

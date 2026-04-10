@@ -14,6 +14,7 @@ import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureCompletionProvider } from '../../src/providers/azure/completion';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock/index';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
+import { GoogleVideoProvider } from '../../src/providers/google/video';
 import {
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceTextClassificationProvider,
@@ -48,6 +49,7 @@ import RedteamGoatProvider from '../../src/redteam/providers/goat';
 import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
+import { checkProviderApiKeys } from '../../src/util/provider';
 
 import type { ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
 
@@ -760,6 +762,12 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('vertex:vertex-chat-model');
   });
 
+  it('loadApiProvider with vertex:video:modelname', async () => {
+    const provider = await loadApiProvider('vertex:video:veo-3.1-generate-preview');
+    expect(provider).toBeInstanceOf(GoogleVideoProvider);
+    expect(provider.id()).toBe('vertex:video:veo-3.1-generate-preview');
+  });
+
   it('loadApiProvider with replicate:modelname', async () => {
     const provider = await loadApiProvider('replicate:meta/llama3');
     expect(provider).toBeInstanceOf(ReplicateProvider);
@@ -1123,6 +1131,21 @@ describe('loadApiProvider', () => {
     })) as OpenAiChatCompletionProvider;
 
     expect(provider.env?.OPENAI_API_KEY).toBe('override-key');
+  });
+
+  it('passes provider env overrides through the registry to Claude Agent SDK providers', async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.CLAUDE_CODE_USE_VERTEX;
+
+    const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
+      options: {
+        env: {
+          CLAUDE_CODE_USE_VERTEX: 'true',
+        },
+      },
+    });
+
+    expect(checkProviderApiKeys([provider]).size).toBe(0);
   });
 
   it('isolates env overrides between multiple provider loads', async () => {

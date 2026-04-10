@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Plugin-based skills testing with Claude Agent SDK
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./sample-project
+      plugins:
+        - type: local
+          path: ./sample-plugin
+      append_allowed_tools:
+        - Skill
+      persist_session: false
+
+tests:
+  - description: Should use the skill from the plugin and notice that the project lacks a README
+    vars:
+      prompt: Check this project for compliance with our standards
+    assert:
+      # The prompt should trigger agent to invoke the skill that was installed through the plugin
+      - type: skill-used
+        value: project-standards:standards-check
+      # The skill should ensure the agent notes the absence of a README file
+      - type: icontains
+        value: README

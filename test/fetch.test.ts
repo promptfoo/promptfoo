@@ -42,25 +42,21 @@ vi.mock('../src/globalConfig/cloud', () => ({
 }));
 
 vi.mock('undici', () => {
-  const mockProxyAgentInstance = {
-    options: null,
-    addRequest: vi.fn(),
-    destroy: vi.fn(),
-  };
-
-  const mockAgentInstance = {
-    addRequest: vi.fn(),
-    destroy: vi.fn(),
-  };
-
   // Use regular functions instead of arrow functions for constructors
   const ProxyAgent = vi.fn(function (this: any, options: any) {
-    mockProxyAgentInstance.options = options;
-    return mockProxyAgentInstance;
+    return {
+      options,
+      addRequest: vi.fn(),
+      destroy: vi.fn(),
+    };
   });
 
-  const Agent = vi.fn(function (this: any) {
-    return mockAgentInstance;
+  const Agent = vi.fn(function (this: any, options: any) {
+    return {
+      options,
+      addRequest: vi.fn(),
+      destroy: vi.fn(),
+    };
   });
 
   return {
@@ -133,6 +129,7 @@ vi.mock('node:fs/promises', () => ({
 vi.mock('../src/cliState', () => ({
   default: {
     basePath: undefined,
+    maxConcurrency: undefined,
   },
 }));
 
@@ -142,6 +139,7 @@ describe('fetchWithProxy', () => {
     clearAgentCache();
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
     vi.mocked(ProxyAgent).mockClear();
+    cliState.maxConcurrency = undefined;
 
     delete process.env.HTTPS_PROXY;
     delete process.env.https_proxy;
@@ -709,6 +707,70 @@ describe('fetchWithProxy', () => {
     }
   });
 
+  it('should reuse a dedicated Agent dispatcher per maxConcurrency value', async () => {
+    const dispatchers: unknown[] = [];
+    const mockFetch = vi.fn().mockImplementation((_url: string, opts: any) => {
+      dispatchers.push(opts?.dispatcher);
+      return Promise.resolve(new Response());
+    });
+    global.fetch = mockFetch;
+
+    cliState.maxConcurrency = 2;
+    await fetchWithProxy('https://example.com/api/low-1');
+
+    cliState.maxConcurrency = 5;
+    await fetchWithProxy('https://example.com/api/high');
+
+    cliState.maxConcurrency = 2;
+    await fetchWithProxy('https://example.com/api/low-2');
+
+    expect(Agent).toHaveBeenCalledTimes(2);
+    expect(Agent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        connections: 2,
+      }),
+    );
+    expect(Agent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        connections: 5,
+      }),
+    );
+    expect(dispatchers[0]).toBe(dispatchers[2]);
+    expect(dispatchers[1]).not.toBe(dispatchers[0]);
+  });
+
+  it('should create a dedicated ProxyAgent dispatcher per proxy URL and maxConcurrency value', async () => {
+    const mockProxyUrl = 'http://proxy.example.com';
+    process.env.HTTPS_PROXY = mockProxyUrl;
+
+    cliState.maxConcurrency = 2;
+    await fetchWithProxy('https://example.com/api/low');
+
+    cliState.maxConcurrency = 5;
+    await fetchWithProxy('https://example.com/api/high');
+
+    cliState.maxConcurrency = 2;
+    await fetchWithProxy('https://example.com/api/low-again');
+
+    expect(ProxyAgent).toHaveBeenCalledTimes(2);
+    expect(ProxyAgent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        uri: mockProxyUrl,
+        connections: 2,
+      }),
+    );
+    expect(ProxyAgent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        uri: mockProxyUrl,
+        connections: 5,
+      }),
+    );
+  });
+
   it('should preserve a caller-provided dispatcher instead of overwriting it', async () => {
     const customDispatcher = { custom: true };
     let receivedDispatcher: unknown;
@@ -871,7 +933,7 @@ describe('isRateLimited', () => {
 describe('handleRateLimit', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.mocked(sleep).mockClear();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -890,6 +952,30 @@ describe('handleRateLimit', () => {
     await promise;
 
     expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 5000ms before retry');
+  });
+
+  it('should handle OpenAI reset headers with millisecond durations', async () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'x-ratelimit-reset-requests': '500ms',
+      }),
+    });
+
+    await handleRateLimit(response);
+
+    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 500ms before retry');
+  });
+
+  it('should handle OpenAI reset headers with compound durations', async () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'x-ratelimit-reset-requests': '1m30s',
+      }),
+    });
+
+    await handleRateLimit(response);
+
+    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 90000ms before retry');
   });
 
   it('should handle standard rate limit reset headers', async () => {
@@ -920,6 +1006,31 @@ describe('handleRateLimit', () => {
     await promise;
 
     expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 5000ms before retry');
+  });
+
+  it('should handle Retry-After HTTP-date headers', async () => {
+    vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
+    const response = createMockResponse({
+      headers: new Headers({
+        'Retry-After': 'Mon, 01 Jan 2024 00:00:05 GMT',
+      }),
+    });
+
+    await handleRateLimit(response);
+
+    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 5000ms before retry');
+  });
+
+  it('should use default wait time for invalid Retry-After headers', async () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'Retry-After': 'invalid',
+      }),
+    });
+
+    await handleRateLimit(response);
+
+    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 60000ms before retry');
   });
 
   it('should use default wait time when no headers present', async () => {

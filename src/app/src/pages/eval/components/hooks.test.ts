@@ -3,7 +3,7 @@ import {
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   useApplyFilterFromMetric,
   useMetricsGetter,
@@ -26,6 +26,13 @@ vi.mock('@promptfoo/redteam/plugins/policy/utils', () => ({
 const mockedUseTableStore = vi.mocked(useTableStore);
 const mockedIsPolicyMetric = vi.mocked(isPolicyMetric);
 const mockedDeserializePolicyIdFromMetric = vi.mocked(deserializePolicyIdFromMetric);
+
+beforeEach(() => {
+  mockedUseTableStore.mockReset();
+  mockedIsPolicyMetric.mockReset();
+  mockedDeserializePolicyIdFromMetric.mockReset();
+  mockedIsPolicyMetric.mockReturnValue(false);
+});
 
 describe('usePassingTestCounts', () => {
   it('should return an array of passing test counts for each prompt when the table is defined and each prompt has a metrics.testPassCount value', () => {
@@ -1546,6 +1553,13 @@ describe('useMetricsGetter', () => {
 });
 
 describe('useApplyFilterFromMetric', () => {
+  beforeEach(() => {
+    mockedIsPolicyMetric.mockReset();
+    mockedDeserializePolicyIdFromMetric.mockReset();
+    mockedIsPolicyMetric.mockReturnValue(false);
+    mockedDeserializePolicyIdFromMetric.mockReturnValue('');
+  });
+
   it('should not call addFilter if an identical filter is already present in filters.values', () => {
     const mockAddFilter = vi.fn();
     const metricName = 'latency';

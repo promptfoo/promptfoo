@@ -1,0 +1,112 @@
+# Git-native author canonicalization for contributors with pre- and post-OpenAI identities.
+# Canonical identities use public GitHub usernames and their legacy/public commit emails.
+# Keep canonical names/emails first, followed by each historical author name/email alias.
+
+addelong <alan@promptfoo.dev> <alandelong@gmail.com>
+addelong <alan@promptfoo.dev> <alandelong@openai.com>
+addelong <alan@promptfoo.dev> <269034736+alandelong-oai@users.noreply.github.com>
+addelong <alan@promptfoo.dev> Alan DeLong <alan@promptfoo.dev>
+addelong <alan@promptfoo.dev> Alan DeLong <alandelong@gmail.com>
+addelong <alan@promptfoo.dev> Alan DeLong <alandelong@openai.com>
+addelong <alan@promptfoo.dev> alandelong-oai <alandelong@openai.com>
+
+danenania <dane@promptfoo.dev> <dane.schneider@gmail.com>
+danenania <dane@promptfoo.dev> <269480009+daneschneider-oai@users.noreply.github.com>
+danenania <dane@promptfoo.dev> Dane Schneider <dane@promptfoo.dev>
+danenania <dane@promptfoo.dev> Dane Schneider <dane.schneider@gmail.com>
+danenania <dane@promptfoo.dev> daneschneider-oai <dane@promptfoo.dev>
+
+faizanminhas <53799808+faizanminhas@users.noreply.github.com> <faizan1030@gmail.com>
+faizanminhas <53799808+faizanminhas@users.noreply.github.com> <faizan@openai.com>
+faizanminhas <53799808+faizanminhas@users.noreply.github.com> <269039902+faizan-oai@users.noreply.github.com>
+faizanminhas <53799808+faizanminhas@users.noreply.github.com> Faizan Minhas <faizan1030@gmail.com>
+faizanminhas <53799808+faizanminhas@users.noreply.github.com> Faizan Minhas <faizan@openai.com>
+faizanminhas <53799808+faizanminhas@users.noreply.github.com> Faizan Minhas <53799808+faizanminhas@users.noreply.github.com>
+faizanminhas <53799808+faizanminhas@users.noreply.github.com> faizan-oai <faizan@openai.com>
+
+MrFlounder <k.zanggs@gmail.com> Guangshuo Zang <k.zanggs@gmail.com>
+MrFlounder <k.zanggs@gmail.com> <269031202+zcrab-oai@users.noreply.github.com>
+MrFlounder <k.zanggs@gmail.com> <guangshuozang@Guangshuos-MacBook-Air.local>
+MrFlounder <k.zanggs@gmail.com> zcrab-oai <k.zanggs@gmail.com>
+
+ianw_github <ianw_github@ianww.com> <269041055+ianw-oai@users.noreply.github.com>
+ianw_github <ianw_github@ianww.com> <ian@Ians-MacBook-Air.local>
+ianw_github <ianw_github@ianww.com> <ian@promptfoo.dev>
+ianw_github <ianw_github@ianww.com> <ianw@openai.com>
+ianw_github <ianw_github@ianww.com> Ian <ian@Ians-MacBook-Pro.local>
+ianw_github <ianw_github@ianww.com> Ian Webster <ianw_github@ianww.com>
+ianw_github <ianw_github@ianww.com> Ian Webster <ian@Ians-MacBook-Air.local>
+ianw_github <ianw_github@ianww.com> Ian Webster <ian@promptfoo.dev>
+ianw_github <ianw_github@ianww.com> Ian Webster <ianw@openai.com>
+ianw_github <ianw_github@ianww.com> Ian Webster (aider) <ianw_github@ianww.com>
+ianw_github <ianw_github@ianww.com> ianw-oai <ianw@openai.com>
+
+jameshiester <55632569+jameshiester@users.noreply.github.com> <james@promptfoo.dev>
+jameshiester <55632569+jameshiester@users.noreply.github.com> <jameshiester@openai.com>
+jameshiester <55632569+jameshiester@users.noreply.github.com> <269035529+jameshiester-oai@users.noreply.github.com>
+jameshiester <55632569+jameshiester@users.noreply.github.com> James Hiester <james@promptfoo.dev>
+jameshiester <55632569+jameshiester@users.noreply.github.com> James Hiester <jameshiester@openai.com>
+jameshiester <55632569+jameshiester@users.noreply.github.com> jameshiester-oai <jameshiester@openai.com>
+
+jbeckwith <justin.beckwith@gmail.com> <jbeckwith@openai.com>
+jbeckwith <justin.beckwith@gmail.com> <269036200+jbeckwith-oai@users.noreply.github.com>
+jbeckwith <justin.beckwith@gmail.com> Justin Beckwith <jbeckwith@openai.com>
+jbeckwith <justin.beckwith@gmail.com> Justin Beckwith <justin.beckwith@gmail.com>
+jbeckwith <justin.beckwith@gmail.com> jbeckwith-oai <jbeckwith@openai.com>
+
+kkahadze <85003299+kkahadze@users.noreply.github.com> <269039836+kkahadze-oai@users.noreply.github.com>
+kkahadze <85003299+kkahadze@users.noreply.github.com> <kkahadze@openai.com>
+kkahadze <85003299+kkahadze@users.noreply.github.com> <konstantine@promptfoo.dev>
+kkahadze <85003299+kkahadze@users.noreply.github.com> <konstantinekahadze@gmail.com>
+kkahadze <85003299+kkahadze@users.noreply.github.com> Konstantine <85003299+kkahadze@users.noreply.github.com>
+kkahadze <85003299+kkahadze@users.noreply.github.com> Konstantine Kahadze <kkahadze@openai.com>
+kkahadze <85003299+kkahadze@users.noreply.github.com> Konstantine Kahadze <konstantine@promptfoo.dev>
+kkahadze <85003299+kkahadze@users.noreply.github.com> Konstantine Kahadze <konstantinekahadze@gmail.com>
+kkahadze <85003299+kkahadze@users.noreply.github.com> kkahadze-oai <kkahadze@openai.com>
+
+mldangelo <7235481+mldangelo@users.noreply.github.com> <269034524+mldangelo-oai@users.noreply.github.com>
+mldangelo <7235481+mldangelo@users.noreply.github.com> <mdangelo@openai.com>
+mldangelo <7235481+mldangelo@users.noreply.github.com> <michael@promptfoo.dev>
+mldangelo <7235481+mldangelo@users.noreply.github.com> <michael.l.dangelo@gmail.com>
+mldangelo <7235481+mldangelo@users.noreply.github.com> Michael <michael.l.dangelo@gmail.com>
+mldangelo <7235481+mldangelo@users.noreply.github.com> Michael <michael@promptfoo.dev>
+mldangelo <7235481+mldangelo@users.noreply.github.com> Michael D'Angelo <mdangelo@openai.com>
+mldangelo <7235481+mldangelo@users.noreply.github.com> Michael D'Angelo <michael.l.dangelo@gmail.com>
+mldangelo <7235481+mldangelo@users.noreply.github.com> mldangelo <michael.l.dangelo@gmail.com>
+mldangelo <7235481+mldangelo@users.noreply.github.com> mldangelo-oai <mdangelo@openai.com>
+
+minhle1291 <minhle1291@gmail.com> <269040970+mle-foo@users.noreply.github.com>
+minhle1291 <minhle1291@gmail.com> <minh-le@users.noreply.github.com>
+minhle1291 <minhle1291@gmail.com> Minh <minhle1291@gmail.com>
+minhle1291 <minhle1291@gmail.com> Minh Le <minh-le@users.noreply.github.com>
+minhle1291 <minhle1291@gmail.com> Minh Le <minhle1291@gmail.com>
+minhle1291 <minhle1291@gmail.com> mle-foo <minhle1291@gmail.com>
+
+sklein12 <steve@promptfoo.dev> <269034790+sklein-oai@users.noreply.github.com>
+sklein12 <steve@promptfoo.dev> <sklein12@gmail.com>
+sklein12 <steve@promptfoo.dev> Steven Klein <steve@promptfoo.dev>
+sklein12 <steve@promptfoo.dev> sklein12 <sklein12@gmail.com>
+sklein12 <steve@promptfoo.dev> sklein-oai <steve@promptfoo.dev>
+
+vsauter <47829996+vsauter@users.noreply.github.com> <vanessa@promptfoo.dev>
+vsauter <47829996+vsauter@users.noreply.github.com> <vsauter@openai.com>
+vsauter <47829996+vsauter@users.noreply.github.com> <269040191+vsauter-oai@users.noreply.github.com>
+vsauter <47829996+vsauter@users.noreply.github.com> Vanessa Sauter <vanessa@promptfoo.dev>
+vsauter <47829996+vsauter@users.noreply.github.com> Vanessa Sauter <vsauter@openai.com>
+vsauter <47829996+vsauter@users.noreply.github.com> Vanessa Sauter <47829996+vsauter@users.noreply.github.com>
+vsauter <47829996+vsauter@users.noreply.github.com> vsauter-oai <vsauter@openai.com>
+
+will-holley <8657791+will-holley@users.noreply.github.com> <will@promptfoo.dev>
+will-holley <8657791+will-holley@users.noreply.github.com> <wholley@openai.com>
+will-holley <8657791+will-holley@users.noreply.github.com> <269039715+wholley-oai@users.noreply.github.com>
+will-holley <8657791+will-holley@users.noreply.github.com> Will <8657791+will-holley@users.noreply.github.com>
+will-holley <8657791+will-holley@users.noreply.github.com> Will <will-holley@users.noreply.github.com>
+will-holley <8657791+will-holley@users.noreply.github.com> Will Holley <will@promptfoo.dev>
+will-holley <8657791+will-holley@users.noreply.github.com> Will Holley <wholley@openai.com>
+will-holley <8657791+will-holley@users.noreply.github.com> wholley-oai <wholley@openai.com>
+
+yash2998chhabria <yash2998chhabria@gmail.com> <269039772+ychhabria@users.noreply.github.com>
+yash2998chhabria <yash2998chhabria@gmail.com> Yash Chhabria <yash2998chhabria@gmail.com>
+yash2998chhabria <yash2998chhabria@gmail.com> Yash Rajesh Chhabria <yash2998chhabria@gmail.com>
+yash2998chhabria <yash2998chhabria@gmail.com> Yash Rajesh Chhabria <yashchhabria@yashs-mbp.lan>
+yash2998chhabria <yash2998chhabria@gmail.com> ychhabria <yash2998chhabria@gmail.com>

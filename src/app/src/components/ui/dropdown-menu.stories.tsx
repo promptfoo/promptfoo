@@ -3,7 +3,7 @@ import { useState } from 'react';
 import {
   Cloud,
   CreditCard,
-  Github,
+  GitBranch,
   Keyboard,
   LifeBuoy,
   LogOut,
@@ -112,7 +112,7 @@ export const WithIcons: Story = {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem>
-          <Github className="mr-2 size-4" />
+          <GitBranch className="mr-2 size-4" />
           <span>GitHub</span>
         </DropdownMenuItem>
         <DropdownMenuItem>

@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { getOpenAiMissingApiKeyMessage } from '../providers/openai/shared';
 
 // Path to the built CLI binary
 const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
@@ -143,6 +144,30 @@ describe('Provider Smoke Tests', () => {
       const specificOutput = JSON.parse(specificResult.response.output);
       expect(specificOutput.tool_choice.type).toBe('function');
       expect(specificOutput.tool_choice.function.name).toBe('get_weather');
+    });
+  });
+
+  describe('3.3 OpenAI Provider Errors', () => {
+    it('3.3.2 - surfaces custom apiKeyEnvar in missing API key errors', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/openai-custom-api-key-envar.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'openai-custom-api-key-envar-output.json');
+
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        env: {
+          OPENAI_API_KEY: '',
+          CUSTOM_ASSISTANT_KEY: '',
+        },
+      });
+
+      expect(exitCode).toBe(100);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      const result = parsed.results.results[0];
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain(getOpenAiMissingApiKeyMessage('CUSTOM_ASSISTANT_KEY'));
+      expect(result.error).not.toContain(getOpenAiMissingApiKeyMessage());
     });
   });
 

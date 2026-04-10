@@ -13,15 +13,15 @@ describe('processShim', () => {
     afterEach(() => {
       vi.resetAllMocks();
       // Restore original globals
-      if (originalWindow !== undefined) {
-        (globalThis as Record<string, unknown>).window = originalWindow;
-      } else {
+      if (originalWindow === undefined) {
         delete (globalThis as Record<string, unknown>).window;
-      }
-      if (originalSelf !== undefined) {
-        (globalThis as Record<string, unknown>).self = originalSelf;
       } else {
+        (globalThis as Record<string, unknown>).window = originalWindow;
+      }
+      if (originalSelf === undefined) {
         delete (globalThis as Record<string, unknown>).self;
+      } else {
+        (globalThis as Record<string, unknown>).self = originalSelf;
       }
     });
 
@@ -94,10 +94,10 @@ describe('processShim', () => {
     afterEach(() => {
       vi.resetAllMocks();
       // Restore original globals
-      if (originalWindow !== undefined) {
-        (globalThis as Record<string, unknown>).window = originalWindow;
-      } else {
+      if (originalWindow === undefined) {
         delete (globalThis as Record<string, unknown>).window;
+      } else {
+        (globalThis as Record<string, unknown>).window = originalWindow;
       }
     });
 

@@ -40,6 +40,16 @@ async function loadPluginsFromConstants(): Promise<Set<string>> {
     'BIAS_PLUGINS',
   ];
 
+  // Include remote-only plugin IDs (includes coding-agent plugins)
+  if (pluginsModule.REMOTE_ONLY_PLUGIN_IDS) {
+    (pluginsModule.REMOTE_ONLY_PLUGIN_IDS as string[]).forEach((p: string) => allPlugins.add(p));
+  }
+
+  // Include collection IDs so docs entries for collections (e.g., coding-agent:core) aren't flagged as orphaned
+  if (pluginsModule.COLLECTIONS) {
+    (pluginsModule.COLLECTIONS as string[]).forEach((c: string) => allPlugins.add(c));
+  }
+
   for (const arrayName of pluginArrays) {
     const array = pluginsModule[arrayName];
     if (Array.isArray(array)) {
@@ -113,8 +123,17 @@ describe('Plugin Documentation', () => {
       const constantsPlugins = await loadPluginsFromConstants();
       const docsPlugins = await loadPluginsFromDocs();
 
-      // Find plugins missing from docs
-      const missingFromDocs = [...constantsPlugins].filter((plugin) => !docsPlugins.has(plugin));
+      // Collections are shorthand aliases (e.g., 'default', 'foundation') that don't need
+      // individual docs entries — they expand to plugin IDs that have their own entries.
+      const pluginsModule = await import(
+        path.join(__dirname, '../../../src/redteam/constants/plugins.ts')
+      );
+      const collections = new Set(pluginsModule.COLLECTIONS as string[]);
+
+      // Find plugins missing from docs (excluding collection aliases)
+      const missingFromDocs = [...constantsPlugins].filter(
+        (plugin) => !docsPlugins.has(plugin) && !collections.has(plugin),
+      );
 
       if (missingFromDocs.length > 0) {
         console.log('\nPlugins missing from documentation data:');

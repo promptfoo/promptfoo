@@ -226,12 +226,11 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       _providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const { ClaudeCodeSDKProvider } = await import('./claude-agent-sdk');
       return new ClaudeCodeSDKProvider({
         ...providerOptions,
-        env: context.env,
       });
     },
   },
@@ -273,28 +272,34 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) =>
-      providerPath.startsWith('azure:') ||
-      providerPath.startsWith('azureopenai:') ||
-      providerPath === 'azure:moderation',
+      providerPath.startsWith('azure:') || providerPath.startsWith('azureopenai:'),
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      // Handle azure:moderation directly
-      if (providerPath === 'azure:moderation') {
-        const { deploymentName, modelName } = providerOptions.config || {};
-        return new AzureModerationProvider(
-          deploymentName || modelName || 'text-content-safety',
-          providerOptions,
-        );
-      }
-
-      // Handle other Azure providers
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const deploymentName = splits[2];
 
+      if (modelType === 'moderation') {
+        if (providerPath.startsWith('azureopenai:')) {
+          throw new Error(
+            'Azure OpenAI does not support moderation. Use azure:moderation instead, which routes to Azure Content Safety.',
+          );
+        }
+        const resolvedDeployment =
+          deploymentName ||
+          providerOptions.config?.deploymentName ||
+          providerOptions.config?.modelName ||
+          'text-content-safety';
+        if (!AzureModerationProvider.MODERATION_MODEL_IDS.includes(resolvedDeployment)) {
+          throw new Error(
+            `Unknown Azure moderation model: ${resolvedDeployment}. Supported models: ${AzureModerationProvider.MODERATION_MODEL_IDS.join(', ')}`,
+          );
+        }
+        return new AzureModerationProvider(resolvedDeployment, providerOptions);
+      }
       if (modelType === 'chat') {
         return new AzureChatCompletionProvider(deploymentName, providerOptions);
       }
@@ -893,8 +898,17 @@ export const providerMap: ProviderFactory[] = [
       // Codex SDK providers (openai:codex-sdk or openai:codex)
       if (modelType === 'codex-sdk' || modelType === 'codex') {
         const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
+        const codexModel = modelName || configuredModel;
+        const codexProviderId = providerOptions.id ?? providerPath;
         return new OpenAICodexSDKProvider({
           ...providerOptions,
+          id: codexProviderId,
+          config: codexModel
+            ? {
+                ...providerOptions.config,
+                model: codexModel,
+              }
+            : providerOptions.config,
           env: context.env,
         });
       }
@@ -1189,6 +1203,14 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const firstPart = splits[1];
+      if (firstPart === 'video') {
+        const modelName = splits.slice(2).join(':');
+        return new GoogleVideoProvider(modelName, {
+          ...providerOptions,
+          id: providerPath,
+          config: { ...providerOptions.config, vertexai: true },
+        });
+      }
       if (firstPart === 'chat') {
         return new VertexChatProvider(splits.slice(2).join(':'), providerOptions);
       }
@@ -1322,7 +1344,10 @@ export const providerMap: ProviderFactory[] = [
           return new GoogleImageProvider(modelName, providerOptions);
         } else if (serviceType === 'video') {
           // This is a Veo video generation request
-          return new GoogleVideoProvider(modelName, providerOptions);
+          return new GoogleVideoProvider(modelName, {
+            ...providerOptions,
+            id: providerPath,
+          });
         }
       }
 

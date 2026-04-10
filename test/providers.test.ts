@@ -8,6 +8,7 @@ import { CLOUD_PROVIDER_PREFIX } from '../src/constants';
 import { HttpProvider } from '../src/providers/http';
 import { loadApiProvider, loadApiProviders } from '../src/providers/index';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
+import { OpenAICodexSDKProvider } from '../src/providers/openai/codex-sdk';
 import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding';
 import { PythonProvider } from '../src/providers/pythonCompletion';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
@@ -469,6 +470,36 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
+  it('should load OpenAI Codex provider with model from provider path', async () => {
+    const provider = await loadApiProvider('openai:codex:gpt-5.4');
+
+    expect(provider).toBeInstanceOf(OpenAICodexSDKProvider);
+    expect(provider.id()).toBe('openai:codex:gpt-5.4');
+    expect((provider as OpenAICodexSDKProvider).config.model).toBe('gpt-5.4');
+  });
+
+  it('should load OpenAI Codex SDK provider with model from provider path', async () => {
+    const provider = await loadApiProvider('openai:codex-sdk:gpt-5.4-pro');
+
+    expect(provider).toBeInstanceOf(OpenAICodexSDKProvider);
+    expect(provider.id()).toBe('openai:codex-sdk:gpt-5.4-pro');
+    expect((provider as OpenAICodexSDKProvider).config.model).toBe('gpt-5.4-pro');
+  });
+
+  it('should load OpenAI Codex provider with model from config when ID has no model', async () => {
+    const provider = await loadApiProvider('openai:codex', {
+      options: {
+        config: {
+          model: 'gpt-5.4',
+        },
+      },
+    });
+
+    expect(provider).toBeInstanceOf(OpenAICodexSDKProvider);
+    expect(provider.id()).toBe('openai:codex');
+    expect((provider as OpenAICodexSDKProvider).config.model).toBe('gpt-5.4');
+  });
+
   it('should load OpenAI GPT-5 nano chat provider', async () => {
     const provider = await loadApiProvider('openai:chat:gpt-5-nano');
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5-nano', expect.any(Object));
@@ -478,6 +509,81 @@ describe('loadApiProvider', () => {
   it('should load OpenAI GPT-5 mini chat provider', async () => {
     const provider = await loadApiProvider('openai:chat:gpt-5-mini');
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5-mini', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it('should auto-route OpenAI GPT-5.4 mini shorthand to chat', async () => {
+    const originalModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
+    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = ['gpt-5.4-mini'];
+    try {
+      const provider = await loadApiProvider('openai:gpt-5.4-mini');
+      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5.4-mini', expect.any(Object));
+      expect(provider).toBeDefined();
+    } finally {
+      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalModelNames;
+    }
+  });
+
+  it('should auto-route OpenAI GPT-5.4 nano shorthand to chat', async () => {
+    const originalModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
+    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = ['gpt-5.4-nano'];
+    try {
+      const provider = await loadApiProvider('openai:gpt-5.4-nano');
+      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5.4-nano', expect.any(Object));
+      expect(provider).toBeDefined();
+    } finally {
+      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalModelNames;
+    }
+  });
+
+  it('should auto-route OpenAI GPT-5.4 mini dated snapshot shorthand to chat', async () => {
+    const originalModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
+    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = ['gpt-5.4-mini-2026-03-17'];
+    try {
+      const provider = await loadApiProvider('openai:gpt-5.4-mini-2026-03-17');
+      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+        'gpt-5.4-mini-2026-03-17',
+        expect.any(Object),
+      );
+      expect(provider).toBeDefined();
+    } finally {
+      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalModelNames;
+    }
+  });
+
+  it('should auto-route OpenAI GPT-5.4 nano dated snapshot shorthand to chat', async () => {
+    const originalModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
+    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = ['gpt-5.4-nano-2026-03-17'];
+    try {
+      const provider = await loadApiProvider('openai:gpt-5.4-nano-2026-03-17');
+      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+        'gpt-5.4-nano-2026-03-17',
+        expect.any(Object),
+      );
+      expect(provider).toBeDefined();
+    } finally {
+      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalModelNames;
+    }
+  });
+
+  it('should load OpenAI GPT-5.4 nano chat provider', async () => {
+    const provider = await loadApiProvider('openai:chat:gpt-5.4-nano');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5.4-nano', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it('should load OpenAI GPT-5.4 nano dated snapshot chat provider', async () => {
+    const provider = await loadApiProvider('openai:chat:gpt-5.4-nano-2026-03-17');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      'gpt-5.4-nano-2026-03-17',
+      expect.any(Object),
+    );
+    expect(provider).toBeDefined();
+  });
+
+  it('should load OpenAI GPT-5.4 mini chat provider', async () => {
+    const provider = await loadApiProvider('openai:chat:gpt-5.4-mini');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5.4-mini', expect.any(Object));
     expect(provider).toBeDefined();
   });
 

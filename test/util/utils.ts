@@ -1,4 +1,29 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+import { vi } from 'vitest';
+import type { MockInstance } from 'vitest';
+
 import type { ApiProvider, ProviderResponse } from '../../src/types/index';
+
+/**
+ * Creates a deferred promise that can be resolved or rejected externally.
+ * Useful for controlling async flow in tests.
+ */
+export function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
 
 export class TestGrader implements ApiProvider {
   async callApi(): Promise<ProviderResponse> {
@@ -49,4 +74,24 @@ export function createMockResponse(
 
 export function stripAnsi(value: string): string {
   return value.replace(/\u001b\[[0-9;]*m/g, '');
+}
+
+export type ConsoleMethod = 'debug' | 'error' | 'info' | 'log' | 'warn';
+
+export function mockConsole(
+  method: ConsoleMethod,
+  implementation: (...args: unknown[]) => void = () => {},
+): MockInstance {
+  return vi.spyOn(console, method).mockImplementation(implementation);
+}
+
+export function createTempDir(prefix = 'promptfoo-test-'): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+export function removeTempDir(tempDir: string | undefined): void {
+  if (!tempDir) {
+    return;
+  }
+  fs.rmSync(tempDir, { recursive: true, force: true });
 }

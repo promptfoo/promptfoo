@@ -402,7 +402,7 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
             <div className="space-y-2">
               <Label>Select a request to import:</Label>
               <Select
-                value={selectedRequestIndex !== null ? String(selectedRequestIndex) : ''}
+                value={selectedRequestIndex === null ? '' : String(selectedRequestIndex)}
                 onValueChange={(value) => setSelectedRequestIndex(Number(value))}
               >
                 <SelectTrigger>

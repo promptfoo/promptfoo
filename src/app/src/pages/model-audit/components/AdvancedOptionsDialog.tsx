@@ -149,7 +149,7 @@ export default function AdvancedOptionsDialog({
               onBlur={() => {
                 setLocalOptions(({ timeout, ...options }) => ({
                   ...options,
-                  timeout: timeout !== undefined ? timeout : 3600,
+                  timeout: timeout === undefined ? 3600 : timeout,
                 }));
               }}
               endAdornment={<span className="text-sm text-muted-foreground">seconds</span>}

@@ -22,6 +22,7 @@ import {
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
   SeveritySchema,
+  TEEN_SAFETY_PLUGINS,
 } from '../redteam/constants';
 import { isCustomStrategy } from '../redteam/constants/strategies';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -421,6 +422,8 @@ export const RedteamConfigSchema = z
         expandCollection([...INSURANCE_PLUGINS], config, numTests, severity);
       } else if (id === 'financial') {
         expandCollection([...FINANCIAL_PLUGINS], config, numTests, severity);
+      } else if (id === 'teen-safety') {
+        expandCollection([...TEEN_SAFETY_PLUGINS], config, numTests, severity);
       } else if (id === 'default') {
         expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests, severity);
       } else if (id === 'guardrails-eval') {

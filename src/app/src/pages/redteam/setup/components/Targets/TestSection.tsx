@@ -244,7 +244,13 @@ const TestSection: React.FC<TestSectionProps> = ({
                     <div className="flex min-w-0 flex-1 flex-col space-y-1.5">
                       <Label className="text-sm font-medium">Response</Label>
                       <div className="min-w-0 flex-1 space-y-2 rounded-md border border-border bg-muted/30 p-3">
-                        {testResult.providerResponse?.raw !== undefined ? (
+                        {testResult.providerResponse?.raw === undefined ? (
+                          <div className="rounded-md border border-destructive/50 bg-destructive/10 p-2">
+                            <p className="text-sm text-destructive">
+                              {testResult.providerResponse?.error || 'No response from provider'}
+                            </p>
+                          </div>
+                        ) : (
                           <>
                             {responseHeaders && Object.keys(responseHeaders).length > 0 && (
                               <CodeBlock label="Headers">
@@ -275,12 +281,6 @@ const TestSection: React.FC<TestSectionProps> = ({
                               </CodeBlock>
                             )}
                           </>
-                        ) : (
-                          <div className="rounded-md border border-destructive/50 bg-destructive/10 p-2">
-                            <p className="text-sm text-destructive">
-                              {testResult.providerResponse?.error || 'No response from provider'}
-                            </p>
-                          </div>
                         )}
                       </div>
                     </div>

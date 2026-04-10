@@ -376,7 +376,7 @@ export async function doEval(
       delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
     }
 
-    if (cache === false || repeat > 1) {
+    if (cache === false) {
       logger.info('Cache is disabled.');
       disableCache();
     }
@@ -466,11 +466,11 @@ export async function doEval(
       showProgressBar:
         getLogLevel() === 'debug'
           ? false
-          : cmdObj.progressBar !== undefined
-            ? cmdObj.progressBar !== false
-            : evaluateOptions.showProgressBar !== undefined
-              ? evaluateOptions.showProgressBar
-              : true,
+          : cmdObj.progressBar === undefined
+            ? evaluateOptions.showProgressBar === undefined
+              ? true
+              : evaluateOptions.showProgressBar
+            : cmdObj.progressBar !== false,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       maxConcurrency,

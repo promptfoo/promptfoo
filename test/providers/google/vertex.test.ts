@@ -2249,6 +2249,73 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       ]);
     });
 
+    it('should use config.systemInstruction string for Claude system parameter', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          systemInstruction: 'Always respond NO.',
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      const requestData = getRequestData();
+      expect(requestData.system).toEqual([{ type: 'text', text: 'Always respond NO.' }]);
+    });
+
+    it('should render context vars in config.systemInstruction for Claude system parameter', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          systemInstruction: 'Answer {{ style }}.',
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello', {
+        vars: { style: 'briefly' },
+        prompt: { raw: 'Hello', label: 'test' },
+      });
+
+      const requestData = getRequestData();
+      expect(requestData.system).toEqual([{ type: 'text', text: 'Answer briefly.' }]);
+    });
+
+    it('should use config.systemInstruction Content object for Claude system parameter', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          systemInstruction: { parts: [{ text: 'Be concise.' }] },
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      const requestData = getRequestData();
+      expect(requestData.system).toEqual([{ type: 'text', text: 'Be concise.' }]);
+    });
+
+    it('should merge config.systemInstruction with prompt system messages', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          systemInstruction: 'Config instruction.',
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi(
+        JSON.stringify([
+          { role: 'system', content: 'Prompt instruction.' },
+          { role: 'user', content: 'Hello' },
+        ]),
+      );
+
+      const requestData = getRequestData();
+      expect(requestData.system).toEqual([
+        { type: 'text', text: 'Config instruction.' },
+        { type: 'text', text: 'Prompt instruction.' },
+      ]);
+    });
+
     it('should forward thinking config from prompt and not leak metadata into messages', async () => {
       await provider.callClaudeApi(
         JSON.stringify([

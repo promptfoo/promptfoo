@@ -123,7 +123,7 @@ const DrawerContent = ({
         }
       }
     } catch {
-      console.debug('Failed to parse prompt as JSON, using raw string');
+      // Raw prompt strings are valid display input.
     }
     return prompt;
   };
@@ -216,7 +216,7 @@ const DrawerContent = ({
               )}
               %
             </p>
-            <p className="text-sm text-muted-foreground">Success Rate</p>
+            <p className="text-sm text-muted-foreground">Attack Success Rate</p>
           </div>
         </div>
       </div>

@@ -485,17 +485,17 @@ export default function ResultsView({
 
     allColumns.forEach((col) => {
       const varName = getVarNameFromColumnId(col);
-      if (varName !== null) {
-        const isHidden = hiddenVarNames.includes(varName);
-        columnVisibility[col] = !isHidden;
-        if (!isHidden) {
-          selectedColumns.push(col);
-        }
-      } else {
+      if (varName === null) {
         // Non-variable columns (description, prompts): use per-eval state, default to visible
         const isVisible = savedState?.columnVisibility[col] ?? true;
         columnVisibility[col] = isVisible;
         if (isVisible) {
+          selectedColumns.push(col);
+        }
+      } else {
+        const isHidden = hiddenVarNames.includes(varName);
+        columnVisibility[col] = !isHidden;
+        if (!isHidden) {
           selectedColumns.push(col);
         }
       }
@@ -929,7 +929,7 @@ export default function ResultsView({
                           </Badge>
                         </TooltipTrigger>
                         <TooltipContent>
-                          {userRatedResultsCount} output{userRatedResultsCount !== 1 ? 's' : ''}{' '}
+                          {userRatedResultsCount} output{userRatedResultsCount === 1 ? '' : 's'}{' '}
                           with user ratings. Click to filter.
                         </TooltipContent>
                       </Tooltip>
@@ -1040,11 +1040,11 @@ export default function ResultsView({
               <p className="font-medium">{config?.description || evalId || 'Unnamed eval'}</p>
               <div className="flex gap-2 mt-1 text-sm text-muted-foreground">
                 <span>
-                  {totalResultsCount.toLocaleString()} result{totalResultsCount !== 1 ? 's' : ''}
+                  {totalResultsCount.toLocaleString()} result{totalResultsCount === 1 ? '' : 's'}
                 </span>
                 <span>•</span>
                 <span>
-                  {head.prompts.length} prompt{head.prompts.length !== 1 ? 's' : ''}
+                  {head.prompts.length} prompt{head.prompts.length === 1 ? '' : 's'}
                 </span>
               </div>
             </div>
