@@ -1,3 +1,7 @@
+import { CODING_AGENT_COLLECTIONS, CODING_AGENT_PLUGINS } from './codingAgents';
+
+import type { CodingAgentPlugin } from './codingAgents';
+
 export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;
 
 // Inject variable name used in multi-input mode to prevent namespace collisions
@@ -10,7 +14,7 @@ export const REDTEAM_DEFAULTS = {
   NUM_TESTS: 10,
 } as const;
 
-export const REDTEAM_MODEL = 'openai:chat:gpt-5-2025-08-07';
+export const REDTEAM_MODEL = 'openai:chat:gpt-5.4-2026-03-05';
 
 // LlamaGuard 4 is the default on Replicate (supports S14: Code Interpreter Abuse)
 export const LLAMA_GUARD_REPLICATE_PROVIDER = 'replicate:moderation:meta/llama-guard-4-12b';
@@ -173,6 +177,7 @@ export const COLLECTIONS = [
   'teen-safety',
   'realestate',
   'guardrails-eval',
+  ...CODING_AGENT_COLLECTIONS,
 ] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
@@ -337,6 +342,7 @@ export const ADDITIONAL_PLUGINS = [
   'bfla',
   'bola',
   'cca',
+  ...CODING_AGENT_PLUGINS,
   'competitors',
   'coppa',
   'cross-session-leak',
@@ -444,6 +450,19 @@ export const AGENTIC_EXEMPT_PLUGINS = [
   'agentic:memory-poisoning',
 ] as const;
 
+// Encoding strategies that mangle prompt text and break deterministic canary/receipt matching.
+// Coding-agent plugins exclude these but allow multi-turn strategies (meta, hydra, goat, crescendo).
+export const CANARY_BREAKING_STRATEGY_IDS = [
+  'base64',
+  'hex',
+  'homoglyph',
+  'leetspeak',
+  'rot13',
+  'multilingual',
+  'math-prompt',
+  'jailbreak:composite',
+] as const;
+
 // Dataset plugins that don't use strategies (standalone dataset plugins)
 export const DATASET_EXEMPT_PLUGINS = [
   'aegis',
@@ -484,7 +503,8 @@ export type Plugin =
   | HarmPlugin
   | PIIPlugin
   | BiasPlugin
-  | AgenticPlugin;
+  | AgenticPlugin
+  | CodingAgentPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ...[
@@ -535,6 +555,8 @@ export const PLUGIN_CATEGORIES = {
 // These have no local implementation and always call the remote API
 export const REMOTE_ONLY_PLUGIN_IDS = [
   'agentic:memory-poisoning',
+  ...CODING_AGENT_COLLECTIONS,
+  ...CODING_AGENT_PLUGINS,
   'ascii-smuggling',
   'bfla',
   'bola',

@@ -5,6 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockProcessEnv } from '../util/utils';
 
 const mocks = vi.hoisted(() => {
   const core = {
@@ -204,15 +205,20 @@ function expectSanitizedExecEnv(options: PromptfooExecCall['options'] | NpmExecC
 }
 
 describe('code-scan-action main', () => {
+  let restoreEnv: () => void;
+
   beforeEach(() => {
     vi.resetAllMocks();
     vi.resetModules();
-    process.env = { ...originalEnv, GITHUB_WORKSPACE: '/test/workspace' };
+    restoreEnv = mockProcessEnv(
+      { ...originalEnv, GITHUB_WORKSPACE: '/test/workspace' },
+      { clear: true },
+    );
     setupMocks();
   });
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    restoreEnv();
     vi.clearAllMocks();
   });
 

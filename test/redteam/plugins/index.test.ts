@@ -5,6 +5,7 @@ import {
   ADDITIONAL_PLUGINS,
   ALL_PLUGINS,
   BASE_PLUGINS,
+  CANARY_BREAKING_STRATEGY_IDS,
   HARM_PLUGINS,
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
@@ -166,6 +167,101 @@ describe('Plugins', () => {
     });
   });
 
+  describe('max chars retries', () => {
+    it('should retry oversized local PII generations', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.spyOn(mockProvider, 'callApi')
+        .mockResolvedValueOnce({
+          output: 'Prompt: this prompt is too long\nPrompt: tiny',
+          error: undefined,
+        })
+        .mockResolvedValueOnce({
+          output: 'Prompt: short',
+          error: undefined,
+        });
+
+      const plugin = Plugins.find((p) => p.key === 'pii:direct');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 2,
+        config: { maxCharsPerMessage: 10 },
+        delayMs: 0,
+      });
+
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(mockProvider.callApi).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('Generate replacement prompts only'),
+      );
+      expect(result?.map((testCase) => testCase.vars?.testVar).sort()).toEqual(['short', 'tiny']);
+    });
+
+    it('should retry oversized remote generations and strip retry modifiers from metadata', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.mocked(fetchWithCache)
+        .mockResolvedValueOnce(
+          mockFetchResponse([
+            {
+              vars: { testVar: 'this prompt is too long' },
+            },
+          ]),
+        )
+        .mockResolvedValueOnce(
+          mockFetchResponse([
+            {
+              vars: { testVar: 'short' },
+            },
+          ]),
+        );
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {
+          modifiers: {
+            maxCharsPerMessage: 'Each generated user message must be 10 characters or fewer.',
+          },
+        },
+        delayMs: 0,
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledTimes(2);
+
+      const retryRequestBody = JSON.parse((vi.mocked(fetchWithCache).mock.calls[1][1] as any).body);
+      expect(retryRequestBody.config.modifiers.__maxCharsPerMessageRetry).toContain(
+        'Generate replacement prompts only',
+      );
+
+      expect(result).toEqual([
+        {
+          vars: { testVar: 'short' },
+          metadata: {
+            pluginId: 'ssrf',
+            pluginConfig: {
+              modifiers: {
+                maxCharsPerMessage: 'Each generated user message must be 10 characters or fewer.',
+              },
+            },
+          },
+        },
+      ]);
+    });
+  });
+
   describe('remote generation', () => {
     beforeEach(() => {
       vi.clearAllMocks();
@@ -270,6 +366,72 @@ describe('Plugins', () => {
       expect(result).toHaveLength(1);
       expect(result![0].metadata?.pluginConfig).toHaveProperty('graderExamples', graderExamples);
       expect(result![0].metadata?.pluginConfig).toHaveProperty('language', 'en');
+    });
+
+    it('should preserve coding-agent canary-breaking strategy exclusions in metadata', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const plugin = Plugins.find((p) => p.key === 'coding-agent:secret-env-read');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: { excludeStrategies: ['custom-strategy'] },
+        delayMs: 0,
+      });
+
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const requestBody = JSON.parse((callArgs[1] as any).body);
+      expect(requestBody.config.excludeStrategies).toEqual([
+        ...CANARY_BREAKING_STRATEGY_IDS,
+        'custom-strategy',
+      ]);
+      expect(result?.[0].metadata?.pluginConfig?.excludeStrategies).toEqual([
+        ...CANARY_BREAKING_STRATEGY_IDS,
+        'custom-strategy',
+      ]);
+    });
+
+    it('should preserve coding-agent collection canary-breaking strategy exclusions in metadata', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const plugin = Plugins.find((p) => p.key === 'coding-agent:core');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: { excludeStrategies: ['custom-strategy'] },
+        delayMs: 0,
+      });
+
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const requestBody = JSON.parse((callArgs[1] as any).body);
+      expect(requestBody.config.excludeStrategies).toEqual([
+        ...CANARY_BREAKING_STRATEGY_IDS,
+        'custom-strategy',
+      ]);
+      expect(result?.[0].metadata?.pluginConfig?.excludeStrategies).toEqual([
+        ...CANARY_BREAKING_STRATEGY_IDS,
+        'custom-strategy',
+      ]);
     });
 
     it('should handle remote generation errors', async () => {

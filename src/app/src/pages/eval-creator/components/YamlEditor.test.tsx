@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { mockClipboard, mockObjectUrl } from '@app/tests/browserMocks';
 import { fireEvent, render, screen } from '@testing-library/react';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -35,13 +36,6 @@ vi.mock('@app/stores/evalConfig', () => ({
   })),
 }));
 
-Object.defineProperty(navigator, 'clipboard', {
-  value: {
-    writeText: vi.fn().mockResolvedValue(undefined),
-  },
-  configurable: true,
-});
-
 // Mock the editor component to avoid prism.js issues
 vi.mock('react-simple-code-editor', () => ({
   default: ({ value, onValueChange, disabled }: any) => (
@@ -73,8 +67,8 @@ vi.mock('@mui/icons-material/Upload', () => ({
 describe('YamlEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    global.URL.createObjectURL = vi.fn(() => 'blob:yaml-editor-test');
-    global.URL.revokeObjectURL = vi.fn();
+    mockClipboard();
+    mockObjectUrl('blob:yaml-editor-test');
 
     // Reset mock to default return value
     mockGetTestSuite.mockReturnValue({
@@ -112,71 +106,6 @@ describe('YamlEditor', () => {
     expect(clickSpy).toHaveBeenCalled();
     expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:yaml-editor-test');
     expect(mockShowToast).toHaveBeenCalledWith('Downloaded promptfooconfig.yaml', 'success');
-  });
-
-  it.skip('switches to edit mode when Edit button is clicked', () => {
-    // This test is no longer applicable as the component always starts in editing mode
-    // and doesn't have an "Edit YAML" button
-  });
-
-  it.skip('handles file upload correctly', () => {
-    const setCodeSpy = vi.fn();
-    const parseAndUpdateStoreSpy = vi.fn().mockReturnValue(true);
-    // Mock isReadOnly to be false so the upload button will be rendered
-    vi.spyOn(React, 'useState').mockImplementationOnce(() => [false, vi.fn()]); // isReadOnly
-    vi.spyOn(React, 'useState').mockImplementationOnce(() => ['', setCodeSpy]); // code
-    vi.spyOn(React, 'useState').mockImplementationOnce(() => [null, vi.fn()]); // parseError
-    vi.spyOn(React, 'useState').mockImplementationOnce(() => [
-      { show: false, message: '' },
-      vi.fn(),
-    ]); // notification
-
-    // Create a mock component with our own handleFileUpload function that uses the spies
-    const MockYamlEditor = () => {
-      const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const content = e.target?.result as string;
-            setCodeSpy(content);
-            parseAndUpdateStoreSpy(content);
-          };
-          reader.readAsText(file);
-        }
-      };
-
-      return (
-        <div>
-          <input type="file" data-testid="file-input" onChange={handleFileUpload} />
-        </div>
-      );
-    };
-
-    const { getByTestId } = render(<MockYamlEditor />);
-
-    const mockFileContent = 'description: Uploaded content';
-    const mockFile = new File([mockFileContent], 'test.yaml', { type: 'application/yaml' });
-
-    const fileInput = getByTestId('file-input');
-    const originalFileReader = global.FileReader;
-    global.FileReader = vi.fn(() => ({
-      readAsText: vi.fn(),
-      onload: null,
-    })) as any;
-
-    Object.defineProperty(fileInput, 'files', {
-      value: [mockFile],
-    });
-
-    fireEvent.change(fileInput);
-
-    const reader = (FileReader as any).mock.instances[0];
-    reader.onload?.({ target: { result: mockFileContent } } as any);
-
-    expect(setCodeSpy).toHaveBeenCalled();
-
-    global.FileReader = originalFileReader;
   });
 
   it('initializes with initialConfig', () => {

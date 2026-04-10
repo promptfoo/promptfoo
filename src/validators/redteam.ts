@@ -228,6 +228,11 @@ export const RedteamGenerateOptionsSchema = z.object({
       'Subset of compliance frameworks to include when generating, reporting, and filtering results',
     ),
   maxConcurrency: z.int().positive().optional().describe('Maximum number of concurrent API calls'),
+  maxCharsPerMessage: z
+    .int()
+    .positive()
+    .optional()
+    .describe('Maximum number of characters allowed per generated user message'),
   numTests: z.int().positive().optional().describe('Number of tests to generate'),
   output: z.string().optional().describe('Output file path'),
   plugins: z.array(RedteamPluginObjectSchema).optional().describe('Plugins to use'),
@@ -303,6 +308,11 @@ export const RedteamConfigSchema = z
       .positive()
       .optional()
       .describe('Maximum number of concurrent API calls'),
+    maxCharsPerMessage: z
+      .int()
+      .positive()
+      .optional()
+      .describe('Maximum number of characters allowed per generated user message'),
     delay: z
       .int()
       .nonnegative()
@@ -544,6 +554,7 @@ export const RedteamConfigSchema = z
 
     return {
       numTests: data.numTests,
+      ...(data.maxCharsPerMessage ? { maxCharsPerMessage: data.maxCharsPerMessage } : {}),
       plugins: uniquePlugins,
       strategies,
       ...(frameworks ? { frameworks } : {}),

@@ -1,5 +1,12 @@
 import { z } from 'zod';
+import {
+  CODING_AGENT_PLUGIN_ALIASES,
+  CODING_AGENT_PLUGIN_DESCRIPTIONS,
+  CODING_AGENT_PLUGIN_DISPLAY_NAMES,
+  CODING_AGENT_PLUGINS,
+} from './codingAgents';
 
+import type { CodingAgentCollection, CodingAgentPlugin } from './codingAgents';
 import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
 
@@ -252,6 +259,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for discriminatory targeting and language in housing advertisements',
   'realestate:source-of-income':
     'Tests for Section 8 and housing voucher discrimination (state-specific protections)',
+  ...CODING_AGENT_PLUGIN_DESCRIPTIONS,
 };
 
 // These names are displayed in risk cards and in the table
@@ -447,6 +455,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   wordplay: 'Wordplay',
   xstest: 'XSTest Dataset',
   video: 'Video Content',
+  ...CODING_AGENT_PLUGIN_DISPLAY_NAMES,
 };
 
 export const Severity = {
@@ -476,6 +485,14 @@ export const severityRiskScores: Record<Severity, number> = {
   [Severity.Low]: 0.0,
   [Severity.Informational]: 0.0,
 };
+
+const codingAgentRiskCategorySeverityMap: Record<
+  CodingAgentCollection | CodingAgentPlugin,
+  Severity
+> = {
+  ...Object.fromEntries(CODING_AGENT_PLUGINS.map((pluginId) => [pluginId, Severity.High])),
+  'coding-agent:core': Severity.High,
+} as Record<CodingAgentCollection | CodingAgentPlugin, Severity>;
 
 /*
  * Default severity values for each plugin.
@@ -638,6 +655,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   vlsu: Severity.Medium,
   wordplay: Severity.Low,
   xstest: Severity.Low,
+  ...codingAgentRiskCategorySeverityMap,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -806,6 +824,8 @@ export const riskCategories: Record<string, Plugin[]> = {
     'vlsu',
     'xstest',
   ],
+
+  'Coding Agent Security': [...CODING_AGENT_PLUGINS],
 };
 
 export const categoryDescriptions = {
@@ -815,6 +835,8 @@ export const categoryDescriptions = {
   Brand: 'Output reliability, accuracy, and brand reputation risks.',
   Datasets: 'Pre-defined test cases from research datasets.',
   'Domain-Specific Risks': 'Specialized risks and failure modes.',
+  'Coding Agent Security':
+    'Repository prompt injection, terminal output injection, launcher environment disclosure, sandbox read escape, and verifier sabotage risks for coding agents.',
 };
 
 export type TopLevelCategory = keyof typeof riskCategories;
@@ -990,6 +1012,7 @@ export const categoryAliases: Record<Plugin, string> = {
   vlsu: 'VLSU',
   wordplay: 'Wordplay',
   xstest: 'XSTest',
+  ...CODING_AGENT_PLUGIN_ALIASES,
 };
 
 export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
@@ -1240,6 +1263,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
   'guardrails-eval': 'Evaluate guardrail effectiveness against common risks',
+  ...CODING_AGENT_PLUGIN_DESCRIPTIONS,
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {

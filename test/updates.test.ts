@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockConsole } from './util/utils';
 
 // Create mock for exec - using vi.hoisted to ensure it's available in vi.mock factory
 const { mockExecAsync } = vi.hoisted(() => {
@@ -70,16 +71,18 @@ describe('getLatestVersion', () => {
 });
 
 describe('checkForUpdates', () => {
+  let consoleLogSpy: ReturnType<typeof mockConsole>;
+
   beforeEach(() => {
     // Reset fetchWithTimeout to clear any queued mockResolvedValueOnce from other tests
     vi.mocked(fetchWithTimeout).mockReset();
     // Clear env var that other tests may have set
     delete process.env.PROMPTFOO_DISABLE_UPDATE;
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleLogSpy = mockConsole('log');
   });
 
   afterEach(() => {
-    vi.mocked(console.log).mockRestore();
+    consoleLogSpy.mockRestore();
   });
 
   it('should log an update message if a newer version is available - minor ver', async () => {
@@ -176,13 +179,15 @@ describe('getModelAuditCurrentVersion', () => {
 });
 
 describe('checkModelAuditUpdates', () => {
+  let consoleLogSpy: ReturnType<typeof mockConsole>;
+
   beforeEach(() => {
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleLogSpy = mockConsole('log');
     delete process.env.PROMPTFOO_DISABLE_UPDATE;
   });
 
   afterEach(() => {
-    vi.mocked(console.log).mockRestore();
+    consoleLogSpy.mockRestore();
   });
 
   it('should return true and log message when update is available', async () => {

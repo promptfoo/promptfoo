@@ -230,6 +230,7 @@ describe('Review Component', () => {
     strategies: [],
     purpose: 'Test purpose',
     numTests: 10,
+    maxCharsPerMessage: 250,
     maxConcurrency: 4,
     target: { id: 'test-target', config: {} },
     applicationDefinition: {},
@@ -313,6 +314,25 @@ describe('Review Component', () => {
       const descriptionField = screen.getByLabelText('Description');
       expect(descriptionField).toBeInTheDocument();
       expect(descriptionField).toHaveValue('Test Configuration');
+    });
+
+    it('renders the max chars per message field in Run Options and persists changes', () => {
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      const maxCharsPerMessageInput = screen.getByLabelText('Max chars per message');
+      expect(maxCharsPerMessageInput).toBeInTheDocument();
+      expect(maxCharsPerMessageInput).toHaveValue(250);
+
+      fireEvent.change(maxCharsPerMessageInput, { target: { value: '180' } });
+      fireEvent.blur(maxCharsPerMessageInput);
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('maxCharsPerMessage', 180);
     });
 
     it('renders DefaultTestVariables component inside CollapsibleContent when expanded', () => {

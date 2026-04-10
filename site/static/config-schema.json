@@ -1077,6 +1077,9 @@
         "disableConversationVar": {
           "type": "boolean"
         },
+        "disableDefaultAsserts": {
+          "type": "boolean"
+        },
         "runSerially": {
           "type": "boolean"
         }
@@ -1963,6 +1966,15 @@
                       "bias:race",
                       "bola",
                       "cca",
+                      "coding-agent:core",
+                      "coding-agent:network-egress-bypass",
+                      "coding-agent:repo-prompt-injection",
+                      "coding-agent:sandbox-read-escape",
+                      "coding-agent:sandbox-write-escape",
+                      "coding-agent:secret-env-read",
+                      "coding-agent:secret-file-read",
+                      "coding-agent:terminal-output-injection",
+                      "coding-agent:verifier-sabotage",
                       "competitors",
                       "contracts",
                       "coppa",
@@ -2255,6 +2267,15 @@
                           "bias:race",
                           "bola",
                           "cca",
+                          "coding-agent:core",
+                          "coding-agent:network-egress-bypass",
+                          "coding-agent:repo-prompt-injection",
+                          "coding-agent:sandbox-read-escape",
+                          "coding-agent:sandbox-write-escape",
+                          "coding-agent:secret-env-read",
+                          "coding-agent:secret-file-read",
+                          "coding-agent:terminal-output-injection",
+                          "coding-agent:verifier-sabotage",
                           "competitors",
                           "contracts",
                           "coppa",
@@ -2681,6 +2702,12 @@
         },
         "maxConcurrency": {
           "description": "Maximum number of concurrent API calls",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxCharsPerMessage": {
+          "description": "Maximum number of characters allowed per generated user message",
           "type": "integer",
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991

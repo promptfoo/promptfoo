@@ -1,3 +1,4 @@
+import { mockDocumentExecCommand, mockObjectUrl } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import yaml from 'js-yaml';
@@ -25,12 +26,8 @@ describe('ConfigModal', () => {
       config: sampleConfig,
     } as ReturnType<typeof useTableStore>);
 
-    // Mock document.execCommand
-    document.execCommand = vi.fn();
-
-    // Mock URL.createObjectURL and URL.revokeObjectURL
-    global.URL.createObjectURL = vi.fn(() => 'blob:mock-url');
-    global.URL.revokeObjectURL = vi.fn();
+    mockDocumentExecCommand();
+    mockObjectUrl('blob:mock-url');
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
   });
 

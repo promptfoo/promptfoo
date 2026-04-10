@@ -30,34 +30,30 @@ vi.mock('../../../src/python/pythonUtils', async (importOriginal) => {
   };
 });
 
-const originalOpenAiTemperature = process.env.OPENAI_TEMPERATURE;
-const originalOpenAiMaxTokens = process.env.OPENAI_MAX_TOKENS;
-const originalOpenAiMaxCompletionTokens = process.env.OPENAI_MAX_COMPLETION_TOKENS;
+const ENV_KEYS_TO_RESTORE = [
+  'OPENAI_TEMPERATURE',
+  'OPENAI_MAX_TOKENS',
+  'OPENAI_MAX_COMPLETION_TOKENS',
+] as const;
+
+const savedEnv = Object.fromEntries(ENV_KEYS_TO_RESTORE.map((key) => [key, process.env[key]]));
 
 describe('OpenAiResponsesProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.OPENAI_TEMPERATURE;
-    delete process.env.OPENAI_MAX_TOKENS;
-    delete process.env.OPENAI_MAX_COMPLETION_TOKENS;
+    for (const key of ENV_KEYS_TO_RESTORE) {
+      delete process.env[key];
+    }
   });
 
   afterEach(() => {
     vi.resetAllMocks();
-    if (originalOpenAiTemperature === undefined) {
-      delete process.env.OPENAI_TEMPERATURE;
-    } else {
-      process.env.OPENAI_TEMPERATURE = originalOpenAiTemperature;
-    }
-    if (originalOpenAiMaxTokens === undefined) {
-      delete process.env.OPENAI_MAX_TOKENS;
-    } else {
-      process.env.OPENAI_MAX_TOKENS = originalOpenAiMaxTokens;
-    }
-    if (originalOpenAiMaxCompletionTokens === undefined) {
-      delete process.env.OPENAI_MAX_COMPLETION_TOKENS;
-    } else {
-      process.env.OPENAI_MAX_COMPLETION_TOKENS = originalOpenAiMaxCompletionTokens;
+    for (const key of ENV_KEYS_TO_RESTORE) {
+      if (savedEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = savedEnv[key];
+      }
     }
   });
 
@@ -520,27 +516,6 @@ describe('OpenAiResponsesProvider', () => {
   });
 
   it('should omit default temperature and max_output_tokens when omitDefaults is true', async () => {
-    const mockApiResponse = {
-      id: 'resp_abc123',
-      status: 'completed',
-      model: 'gpt-4o',
-      output: [
-        {
-          type: 'message',
-          role: 'assistant',
-          content: [{ type: 'output_text', text: 'Response' }],
-        },
-      ],
-      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
-    };
-
-    vi.mocked(cache.fetchWithCache).mockResolvedValue({
-      data: mockApiResponse,
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
-
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
         apiKey: 'test-key',
@@ -548,11 +523,7 @@ describe('OpenAiResponsesProvider', () => {
       },
     });
 
-    await provider.callApi('Test prompt');
-
-    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
-    const reqOptions = mockCall[1] as { body: string };
-    const body = JSON.parse(reqOptions.body);
+    const { body } = await provider.getOpenAiBody('Test prompt');
 
     expect(body.temperature).toBeUndefined();
     expect('temperature' in body).toBe(false);
@@ -561,26 +532,6 @@ describe('OpenAiResponsesProvider', () => {
   });
 
   it('should use env defaults with omitDefaults when OPENAI env vars are set', async () => {
-    const mockApiResponse = {
-      id: 'resp_abc123',
-      status: 'completed',
-      model: 'gpt-4o',
-      output: [
-        {
-          type: 'message',
-          role: 'assistant',
-          content: [{ type: 'output_text', text: 'Response' }],
-        },
-      ],
-      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
-    };
-
-    vi.mocked(cache.fetchWithCache).mockResolvedValue({
-      data: mockApiResponse,
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
     process.env.OPENAI_TEMPERATURE = '0.5';
     process.env.OPENAI_MAX_TOKENS = '2048';
 
@@ -591,11 +542,7 @@ describe('OpenAiResponsesProvider', () => {
       },
     });
 
-    await provider.callApi('Test prompt');
-
-    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
-    const reqOptions = mockCall[1] as { body: string };
-    const body = JSON.parse(reqOptions.body);
+    const { body } = await provider.getOpenAiBody('Test prompt');
 
     expect(body.temperature).toBe(0.5);
     expect('temperature' in body).toBe(true);

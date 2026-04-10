@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 
-export function sha256(str: string) {
-  return createHash('sha256').update(str).digest('hex');
+export function sha256(value: string | Buffer) {
+  return createHash('sha256').update(value).digest('hex');
 }
 
 export function randomSequence(length: number = 3): string {

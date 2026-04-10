@@ -1,6 +1,11 @@
 import type { ReactNode } from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import {
+  mockBrowserProperty,
+  mockIntersectionObserver,
+  mockMatchMedia,
+} from '@app/tests/browserMocks';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,41 +28,9 @@ vi.mock('@app/utils/media', () => ({
   MEDIA_INFINITE_SCROLL_MARGIN: 100,
 }));
 
-// Mock matchMedia
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: vi.fn().mockImplementation((query: string) => ({
-    matches: query === '(hover: hover)',
-    media: query,
-    onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })),
-});
-
-// Mock IntersectionObserver
 const mockObserve = vi.fn();
 const mockDisconnect = vi.fn();
 let intersectionCallback: IntersectionObserverCallback | null = null;
-
-class MockIntersectionObserver {
-  constructor(callback: IntersectionObserverCallback) {
-    intersectionCallback = callback;
-  }
-  observe = mockObserve;
-  unobserve = vi.fn();
-  disconnect = mockDisconnect;
-}
-window.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver;
-
-// Mock window dimensions for getItemsPerRow
-Object.defineProperty(window, 'innerWidth', {
-  writable: true,
-  value: 1280, // xl breakpoint
-});
 
 // Wrapper component with providers
 const Wrapper = ({ children }: { children: ReactNode }) => (
@@ -98,6 +71,15 @@ describe('MediaGrid', () => {
     mockObserve.mockClear();
     mockDisconnect.mockClear();
     intersectionCallback = null;
+    mockMatchMedia({ matches: (query) => query === '(hover: hover)' });
+    mockIntersectionObserver({
+      observe: mockObserve,
+      disconnect: mockDisconnect,
+      onCreate: (callback) => {
+        intersectionCallback = callback;
+      },
+    });
+    mockBrowserProperty(window, 'innerWidth', 1280);
   });
 
   describe('rendering', () => {

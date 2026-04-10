@@ -1,5 +1,6 @@
 import * as ReactDOM from 'react-dom/client';
 
+import { mockClipboard } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -157,10 +158,10 @@ describe('EvalOutputPromptDialog', () => {
   });
 
   it('copies prompt to clipboard when copy button is clicked', async () => {
-    const mockClipboard = {
+    const clipboard = {
       writeText: vi.fn().mockResolvedValue(undefined),
     };
-    Object.assign(navigator, { clipboard: mockClipboard });
+    mockClipboard({ writeText: clipboard.writeText as Clipboard['writeText'] });
 
     renderWithProviders(<EvalOutputPromptDialog {...defaultProps} />);
 
@@ -177,7 +178,7 @@ describe('EvalOutputPromptDialog', () => {
     expect(copyButton).toBeInTheDocument();
     await userEvent.click(copyButton);
 
-    expect(mockClipboard.writeText).toHaveBeenCalledWith('Test prompt');
+    expect(clipboard.writeText).toHaveBeenCalledWith('Test prompt');
     // Wait for Check icon to appear after state update (use document.body because Sheet uses portals)
     await waitFor(() => {
       expect(document.body.querySelector('svg.lucide-check')).toBeInTheDocument();
@@ -185,10 +186,10 @@ describe('EvalOutputPromptDialog', () => {
   });
 
   it('copies assertion value to clipboard when copy button is clicked', async () => {
-    const mockClipboard = {
+    const clipboard = {
       writeText: vi.fn().mockResolvedValue(undefined),
     };
-    Object.assign(navigator, { clipboard: mockClipboard });
+    mockClipboard({ writeText: clipboard.writeText as Clipboard['writeText'] });
 
     renderWithProviders(<EvalOutputPromptDialog {...defaultProps} />);
 
@@ -206,7 +207,7 @@ describe('EvalOutputPromptDialog', () => {
     const copyButton = screen.getByLabelText('Copy assertion value 0');
     await userEvent.click(copyButton);
 
-    expect(mockClipboard.writeText).toHaveBeenCalledWith('expected value');
+    expect(clipboard.writeText).toHaveBeenCalledWith('expected value');
     // Wait for Check icon to appear after state update (use document.body because Sheet uses portals)
     await waitFor(() => {
       expect(document.body.querySelector('svg.lucide-check')).toBeInTheDocument();

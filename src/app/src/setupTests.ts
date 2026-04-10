@@ -4,6 +4,8 @@ import { webcrypto } from 'node:crypto';
 
 import * as matchers from '@testing-library/jest-dom/matchers';
 import { afterEach, expect, vi } from 'vitest';
+import { restoreBrowserMocks } from './tests/browserMocks';
+import { restoreTestTimers } from './tests/timers';
 
 class MemoryStorage implements Storage {
   private store = new Map<string, string>();
@@ -48,6 +50,14 @@ if (!globalThis.crypto?.subtle) {
 
 if (typeof globalThis.localStorage?.clear !== 'function') {
   Object.defineProperty(globalThis, 'localStorage', {
+    value: new MemoryStorage(),
+    writable: true,
+    configurable: true,
+  });
+}
+
+if (typeof globalThis.sessionStorage?.clear !== 'function') {
+  Object.defineProperty(globalThis, 'sessionStorage', {
     value: new MemoryStorage(),
     writable: true,
     configurable: true,
@@ -105,18 +115,47 @@ if (typeof global.ResizeObserver === 'undefined') {
   };
 }
 
+// JSDOM does not implement media playback, but app code legitimately calls it.
+// Provide explicit test doubles so unsupported browser gaps do not leak noisy
+// "Not implemented" messages into otherwise clean test runs.
+if (typeof HTMLMediaElement !== 'undefined') {
+  Object.defineProperty(HTMLMediaElement.prototype, 'play', {
+    configurable: true,
+    writable: true,
+    value: vi.fn(() => Promise.resolve()),
+  });
+
+  Object.defineProperty(HTMLMediaElement.prototype, 'pause', {
+    configurable: true,
+    writable: true,
+    value: vi.fn(),
+  });
+}
+
 // We can mock the environment variables. For example:
 // process.env.PROMPTFOO_VERSION = '1.0.0';
 
 // Global fetch mock for all tests
-// This provides a default mock that tests can override if needed
+// This provides default responses for app bootstrap endpoints. Tests should mock
+// any other network calls explicitly so missing mocks fail fast.
+function getFetchRequestDetails(input: RequestInfo | URL, init?: RequestInit) {
+  const urlString =
+    typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
+  const method = (
+    init?.method ??
+    (typeof Request !== 'undefined' && input instanceof Request ? input.method : 'GET')
+  ).toUpperCase();
+  const pathname = new URL(urlString, 'http://localhost').pathname.replace(/\/$/, '');
+
+  return { method, pathname, urlString };
+}
+
 vi.stubGlobal(
   'fetch',
-  vi.fn((url: string | URL) => {
-    // Default responses for common API endpoints
-    const urlString = typeof url === 'string' ? url : url.toString();
+  vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const { method, pathname, urlString } = getFetchRequestDetails(input, init);
 
-    if (urlString.includes('/api/providers/config-status') || urlString.includes('config-status')) {
+    if (method === 'GET' && pathname.endsWith('/api/providers/config-status')) {
       return Promise.resolve({
         ok: true,
         json: async () => ({
@@ -126,14 +165,14 @@ vi.stubGlobal(
       } as Response);
     }
 
-    if (urlString.includes('/api/user/cloud-config') || urlString.includes('cloud-config')) {
+    if (method === 'GET' && pathname.endsWith('/api/user/cloud-config')) {
       return Promise.resolve({
         ok: true,
         json: async () => ({}),
       } as Response);
     }
 
-    if (urlString.includes('/providers') || urlString.includes('/api/providers')) {
+    if (method === 'GET' && pathname.endsWith('/api/providers')) {
       return Promise.resolve({
         ok: true,
         json: async () => ({
@@ -146,67 +185,13 @@ vi.stubGlobal(
       } as Response);
     }
 
-    // Default fallback for any other fetch calls
-    return Promise.resolve({
-      ok: true,
-      json: async () => ({}),
-      text: async () => '',
-      status: 200,
-      statusText: 'OK',
-    } as Response);
+    return Promise.reject(
+      new Error(
+        `Unhandled ${method} fetch request in frontend test setup: ${urlString}. Mock this request in the test.`,
+      ),
+    );
   }),
 );
-
-/**
- * Global console.error suppression for known test noise patterns.
- * This filters out expected errors that flood the test output but preserves
- * actual unexpected errors that indicate real problems.
- *
- * Note: Warning suppressions are handled in vite.config.ts at the test runner level.
- */
-const originalConsoleError = console.error;
-
-const SUPPRESSED_ERROR_PATTERNS = [
-  // Expected parsing/configuration errors from test scenarios
-  /Failed to parse prompt as JSON/, // 49 occurrences
-  /Invalid JSON configuration:/, // 1 occurrence
-  /Error parsing file:/, // 2 occurrences
-
-  // Expected API/network errors from intentional test failures
-  /Error fetching cloud config:/, // 39 occurrences
-  /Failed to check share domain:/, // 6 occurrences
-  /Failed to generate share URL:/, // 1 occurrence
-  /Error during target purpose discovery:/, // 2 occurrences
-  /Error fetching user email:/, // 3 occurrences
-  /Error during logout:/, // 1 occurrence
-  /Logout failed/, // 1 occurrence
-
-  // Expected operation errors from intentional test failures
-  /Failed to submit test suite/, // 1 occurrence
-  /Failed to copy text:/, // 1 occurrence
-  /Failed to delete eval:/, // 2 occurrences
-  /Failed to fetch datasets:/, // From DatasetsPage test
-  /Error loading eval:/, // From Eval component test
-
-  // Expected context provider errors from tests (testing components outside providers)
-  /must be used within a.*Provider/, // 8 occurrences (ToastProvider, ShiftKeyProvider, etc.)
-  /Uncaught.*must be used within/, // Wrapped version of above
-
-  // Error boundary messages
-  /Consider adding an error boundary to your tree/, // React suggestion message
-];
-
-console.error = (...args: unknown[]) => {
-  const errorMessage = args.join(' ');
-
-  // Check if this error matches any suppressed patterns
-  const shouldSuppress = SUPPRESSED_ERROR_PATTERNS.some((pattern) => pattern.test(errorMessage));
-
-  // Only log if not suppressed
-  if (!shouldSuppress) {
-    originalConsoleError(...args);
-  }
-};
 
 /**
  * Global cleanup after each test to prevent memory leaks and hanging processes.
@@ -222,22 +207,27 @@ afterEach(() => {
   // Clean up React Testing Library - unmount all rendered components
   cleanup();
 
-  // Only run pending timers and clear timers if fake timers are active
-  // This prevents errors when tests switch between real and fake timers
+  let timerCleanupError: unknown;
   try {
-    // Check if fake timers are being used by trying to get pending timers
-    // vi.isFakeTimers() doesn't exist, so we use a try-catch approach
-    vi.runOnlyPendingTimers();
-    vi.clearAllTimers();
-  } catch {
-    // If timers are not mocked (real timers), these calls will throw
-    // This is expected - just skip timer cleanup in this case
+    restoreTestTimers({ runPending: true });
+  } catch (error) {
+    timerCleanupError = error;
   }
 
-  // Reset to real timers if any test used fake timers but didn't restore
-  // This is safe to call regardless of timer state
-  vi.useRealTimers();
+  // Restore spies before browser property descriptors. If a spy wraps a
+  // mockBrowserProperty value, restoring spies first prevents them from
+  // re-applying the mocked value after descriptors are restored.
+  vi.restoreAllMocks();
+  restoreBrowserMocks();
 
-  // Clear all mocks to prevent state leakage between tests
+  // Reset browser storage after restoring any per-test storage replacements.
+  globalThis.localStorage?.clear();
+  globalThis.sessionStorage?.clear();
+
+  // Clear all mocks to prevent call state leakage between tests.
   vi.clearAllMocks();
+
+  if (timerCleanupError !== undefined) {
+    throw timerCleanupError;
+  }
 });

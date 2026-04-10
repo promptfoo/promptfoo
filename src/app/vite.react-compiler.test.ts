@@ -52,6 +52,19 @@ describe('reactCompilerPlugin', () => {
     expect(transformAsync).not.toHaveBeenCalled();
   });
 
+  it('skips files with centralized React Compiler opt-outs', async () => {
+    const { reactCompilerPlugin } = await import('./vite.shared');
+    const { transformAsync } = await import('@babel/core');
+
+    const result = await reactCompilerPlugin().transform?.(
+      'function ResultsTable() { return <div>Hello</div>; }',
+      '/project/src/app/src/pages/eval/components/ResultsTable.tsx?query=1',
+    );
+
+    expect(result).toBeNull();
+    expect(transformAsync).not.toHaveBeenCalled();
+  });
+
   it('passes the expected Babel configuration for app source files', async () => {
     const { reactCompilerPlugin } = await import('./vite.shared');
     const { transformAsync } = await import('@babel/core');

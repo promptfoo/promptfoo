@@ -1,3 +1,10 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+import { vi } from 'vitest';
+import type { MockInstance } from 'vitest';
+
 import type { ApiProvider, ProviderResponse } from '../../src/types/index';
 
 /**
@@ -67,4 +74,72 @@ export function createMockResponse(
 
 export function stripAnsi(value: string): string {
   return value.replace(/\u001b\[[0-9;]*m/g, '');
+}
+
+export type ConsoleMethod = 'debug' | 'error' | 'info' | 'log' | 'warn';
+
+export function mockConsole(
+  method: ConsoleMethod,
+  implementation: (...args: unknown[]) => void = () => {},
+): MockInstance {
+  return vi.spyOn(console, method).mockImplementation(implementation);
+}
+
+function replaceProcessEnv(nextEnv: Record<string, string | undefined>): void {
+  for (const key of Object.keys(process.env)) {
+    delete process.env[key];
+  }
+  Object.assign(process.env, nextEnv);
+}
+
+export function mockProcessEnv(
+  overrides: Record<string, string | undefined> = {},
+  options: { clear?: boolean } = {},
+): () => void {
+  const originalEnv = { ...process.env };
+
+  if (options.clear) {
+    replaceProcessEnv({});
+  }
+
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+
+  return () => {
+    replaceProcessEnv(originalEnv);
+  };
+}
+
+export function mockGlobal<T>(name: string, value: T): () => void {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
+
+  Object.defineProperty(globalThis, name, {
+    configurable: true,
+    value,
+    writable: true,
+  });
+
+  return () => {
+    if (descriptor) {
+      Object.defineProperty(globalThis, name, descriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, name);
+    }
+  };
+}
+
+export function createTempDir(prefix = 'promptfoo-test-'): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+export function removeTempDir(tempDir: string | undefined): void {
+  if (!tempDir) {
+    return;
+  }
+  fs.rmSync(tempDir, { recursive: true, force: true });
 }

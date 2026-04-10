@@ -31,6 +31,8 @@ import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import { doRemoteScoringWithPi } from './remoteScoring';
+import { getProviderCallExecutionContext } from './scheduler/providerCallExecutionContext';
+import { createProviderRateLimitOptions, isRateLimitWrapped } from './scheduler/providerWrapper';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from './util/file';
 import { isJavascriptFile } from './util/fileExtensions';
 import { parseFileUrl } from './util/functions/loadFunction';
@@ -49,8 +51,10 @@ import type {
   CallApiContextParams,
   GradingConfig,
   GradingResult,
+  ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
+  ProviderSimilarityResponse,
   ProviderType,
   ProviderTypeMap,
   TestCase,
@@ -66,6 +70,14 @@ class LlmRubricProviderError extends Error {
 }
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
+
+const FACTUALITY_CATEGORY_DESCRIPTIONS: Record<string, string> = {
+  A: 'The submitted answer is a subset of the expert answer and is fully consistent with it.',
+  B: 'The submitted answer is a superset of the expert answer and is fully consistent with it.',
+  C: 'The submitted answer contains all the same details as the expert answer.',
+  D: 'There is a disagreement between the submitted answer and the expert answer.',
+  E: "The answers differ, but these differences don't matter from the perspective of factuality.",
+};
 
 function cosineSimilarity(vecA: number[], vecB: number[]): number {
   if (vecA.length !== vecB.length) {
@@ -110,14 +122,40 @@ export function callProviderWithContext(
   vars: Record<string, VarValue>,
   context?: CallApiContextParams,
 ): Promise<ProviderResponse> {
-  return provider.callApi(prompt, {
+  const callApiContext = {
     ...context,
     prompt: {
       raw: prompt,
       label,
     },
     vars,
-  });
+  };
+  const executionContext = getProviderCallExecutionContext();
+  const callApiOptions = executionContext?.abortSignal
+    ? { abortSignal: executionContext.abortSignal }
+    : undefined;
+  const callApi = () =>
+    callApiOptions
+      ? provider.callApi(prompt, callApiContext, callApiOptions)
+      : provider.callApi(prompt, callApiContext);
+
+  const executeCall = () => {
+    if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
+      return executionContext.rateLimitRegistry.execute(
+        provider,
+        callApi,
+        createProviderRateLimitOptions(),
+      );
+    }
+
+    return callApi();
+  };
+
+  if (executionContext?.providerCallQueue) {
+    return executionContext.providerCallQueue.enqueue(provider.id(), executeCall);
+  }
+
+  return executeCall();
 }
 
 async function loadFromProviderOptions(provider: ProviderOptions) {
@@ -293,42 +331,23 @@ export function fail(
   };
 }
 
-function accumulateTokens(target: TokenUsage, update?: Partial<TokenUsage>) {
-  accumulateTokenUsage(target, update);
+function normalizeTokenUsage(tokensUsed?: Partial<TokenUsage>): TokenUsage {
+  return {
+    total: tokensUsed?.total || 0,
+    prompt: tokensUsed?.prompt || 0,
+    completion: tokensUsed?.completion || 0,
+    cached: tokensUsed?.cached || 0,
+    numRequests: tokensUsed?.numRequests || 0,
+    completionDetails: tokensUsed?.completionDetails || {
+      reasoning: 0,
+      acceptedPrediction: 0,
+      rejectedPrediction: 0,
+    },
+  };
 }
 
-export async function matchesSimilarity(
-  expected: string,
-  output: string,
-  threshold: number,
-  inverse: boolean = false,
-  grading?: GradingConfig,
-  metric: 'cosine' | 'dot_product' | 'euclidean' = 'cosine',
-): Promise<Omit<GradingResult, 'assertion'>> {
-  if (cliState.config?.redteam && shouldGenerateRemote({ requireEmbeddingProvider: true })) {
-    try {
-      return doRemoteGrading({
-        task: 'similar',
-        expected,
-        output,
-        threshold,
-        inverse,
-      });
-    } catch (error) {
-      return fail(`Could not perform remote grading: ${error}`);
-    }
-  }
-
-  const defaults = await getDefaultProviders();
-  const finalProvider = (await getAndCheckProvider(
-    'embedding',
-    grading?.provider,
-    defaults.embeddingProvider,
-    'similarity check',
-  )) as ApiEmbeddingProvider | ApiSimilarityProvider;
-
-  let similarity: number;
-  const tokensUsed: Partial<TokenUsage> = {
+function createMatcherTokenUsage(): Partial<TokenUsage> {
+  return {
     total: 0,
     prompt: 0,
     completion: 0,
@@ -340,140 +359,260 @@ export async function matchesSimilarity(
       rejectedPrediction: 0,
     },
   };
+}
 
-  // For providers with native similarity API, only cosine is supported
-  if ('callSimilarityApi' in finalProvider) {
-    if (metric !== 'cosine') {
-      return fail(
-        `Provider ${finalProvider.id()} only supports cosine similarity via callSimilarityApi`,
-        tokensUsed,
-      );
-    }
-    const similarityResp = await finalProvider.callSimilarityApi(expected, output);
-    tokensUsed.total = similarityResp.tokenUsage?.total || 0;
-    tokensUsed.prompt = similarityResp.tokenUsage?.prompt || 0;
-    tokensUsed.completion = similarityResp.tokenUsage?.completion || 0;
-    tokensUsed.cached = similarityResp.tokenUsage?.cached || 0;
-    tokensUsed.numRequests = similarityResp.tokenUsage?.numRequests || 0;
-    tokensUsed.completionDetails = similarityResp.tokenUsage?.completionDetails;
-    if (similarityResp.error) {
-      return fail(similarityResp.error, tokensUsed);
-    }
-    if (similarityResp.similarity == null) {
-      return fail('Unknown error fetching similarity', tokensUsed);
-    }
-    similarity = similarityResp.similarity;
-  } else if ('callEmbeddingApi' in finalProvider) {
-    const expectedEmbedding = await finalProvider.callEmbeddingApi(expected);
-    const outputEmbedding = await finalProvider.callEmbeddingApi(output);
+function copySimilarityTokenUsage(
+  tokensUsed: Partial<TokenUsage>,
+  response: ProviderSimilarityResponse,
+) {
+  Object.assign(tokensUsed, normalizeTokenUsage(response.tokenUsage));
+}
 
-    tokensUsed.total =
-      (expectedEmbedding.tokenUsage?.total || 0) + (outputEmbedding.tokenUsage?.total || 0);
-    tokensUsed.prompt =
-      (expectedEmbedding.tokenUsage?.prompt || 0) + (outputEmbedding.tokenUsage?.prompt || 0);
-    tokensUsed.completion =
-      (expectedEmbedding.tokenUsage?.completion || 0) +
-      (outputEmbedding.tokenUsage?.completion || 0);
-    tokensUsed.cached =
-      (expectedEmbedding.tokenUsage?.cached || 0) + (outputEmbedding.tokenUsage?.cached || 0);
-    tokensUsed.numRequests =
-      (expectedEmbedding.tokenUsage?.numRequests || 0) +
-      (outputEmbedding.tokenUsage?.numRequests || 0);
-    tokensUsed.completionDetails = {
+function combineEmbeddingTokenUsage(
+  expectedEmbedding: ProviderEmbeddingResponse,
+  outputEmbedding: ProviderEmbeddingResponse,
+): Partial<TokenUsage> {
+  const expectedTokens = normalizeTokenUsage(expectedEmbedding.tokenUsage);
+  const outputTokens = normalizeTokenUsage(outputEmbedding.tokenUsage);
+
+  return {
+    total: (expectedTokens.total ?? 0) + (outputTokens.total ?? 0),
+    prompt: (expectedTokens.prompt ?? 0) + (outputTokens.prompt ?? 0),
+    completion: (expectedTokens.completion ?? 0) + (outputTokens.completion ?? 0),
+    cached: (expectedTokens.cached ?? 0) + (outputTokens.cached ?? 0),
+    numRequests: (expectedTokens.numRequests ?? 0) + (outputTokens.numRequests ?? 0),
+    completionDetails: {
       reasoning:
-        (expectedEmbedding.tokenUsage?.completionDetails?.reasoning || 0) +
-        (outputEmbedding.tokenUsage?.completionDetails?.reasoning || 0),
+        (expectedTokens.completionDetails?.reasoning || 0) +
+        (outputTokens.completionDetails?.reasoning || 0),
       acceptedPrediction:
-        (expectedEmbedding.tokenUsage?.completionDetails?.acceptedPrediction || 0) +
-        (outputEmbedding.tokenUsage?.completionDetails?.acceptedPrediction || 0),
+        (expectedTokens.completionDetails?.acceptedPrediction || 0) +
+        (outputTokens.completionDetails?.acceptedPrediction || 0),
       rejectedPrediction:
-        (expectedEmbedding.tokenUsage?.completionDetails?.rejectedPrediction || 0) +
-        (outputEmbedding.tokenUsage?.completionDetails?.rejectedPrediction || 0),
-    };
+        (expectedTokens.completionDetails?.rejectedPrediction || 0) +
+        (outputTokens.completionDetails?.rejectedPrediction || 0),
+    },
+  };
+}
 
-    if (expectedEmbedding.error || outputEmbedding.error) {
-      return fail(
-        expectedEmbedding.error || outputEmbedding.error || 'Unknown error fetching embeddings',
-        tokensUsed,
-      );
-    }
+function accumulateTokens(target: TokenUsage, update?: Partial<TokenUsage>) {
+  accumulateTokenUsage(target, update);
+}
 
-    if (!expectedEmbedding.embedding || !outputEmbedding.embedding) {
-      return fail('Embedding not found', tokensUsed);
-    }
+type SimilarityMetric = 'cosine' | 'dot_product' | 'euclidean';
 
-    // Compute metric based on the selected type
-    switch (metric) {
-      case 'cosine':
-        similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
-        break;
-      case 'dot_product':
-        similarity = dotProduct(expectedEmbedding.embedding, outputEmbedding.embedding);
-        break;
-      case 'euclidean':
-        // For euclidean distance, we store it in similarity variable but handle it differently below
-        similarity = euclideanDistance(expectedEmbedding.embedding, outputEmbedding.embedding);
-        break;
-      default:
-        return fail(`Unsupported metric: ${metric}`, tokensUsed);
-    }
-  } else {
-    throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
+type SimilarityComputation =
+  | { similarity: number; tokensUsed: Partial<TokenUsage> }
+  | { failure: Omit<GradingResult, 'assertion'> };
+
+async function maybeRemoteSimilarityGrading({
+  expected,
+  output,
+  threshold,
+  inverse,
+}: {
+  expected: string;
+  output: string;
+  threshold: number;
+  inverse: boolean;
+}) {
+  if (!cliState.config?.redteam || !shouldGenerateRemote({ requireEmbeddingProvider: true })) {
+    return undefined;
   }
 
-  // Handle different semantics for distance vs similarity metrics
-  const isDistanceMetric = metric === 'euclidean';
+  try {
+    return await doRemoteGrading({
+      task: 'similar',
+      expected,
+      output,
+      threshold,
+      inverse,
+    });
+  } catch (error) {
+    return fail(`Could not perform remote grading: ${error}`);
+  }
+}
 
-  let pass: boolean;
-  let score: number;
-  let reason: string;
+async function computeNativeSimilarity(
+  provider: ApiEmbeddingProvider | ApiSimilarityProvider,
+  expected: string,
+  output: string,
+  metric: SimilarityMetric,
+): Promise<SimilarityComputation> {
+  if ('callSimilarityApi' in provider) {
+    return computeSimilarityFromNativeProvider(provider, expected, output, metric);
+  }
 
-  if (isDistanceMetric) {
-    // For distance metrics: lower is better, threshold is maximum distance
-    const distance = similarity; // We stored distance in similarity variable
-    pass = inverse
-      ? distance >= threshold - Number.EPSILON
-      : distance <= threshold + Number.EPSILON;
+  if ('callEmbeddingApi' in provider) {
+    return computeSimilarityFromEmbeddings(provider, expected, output, metric);
+  }
 
-    // Convert distance to a 0-1 score where lower distance = higher score
-    // Using formula: score = 1 / (1 + distance)
-    const normalizedScore = 1 / (1 + distance);
-    score = inverse ? 1 - normalizedScore : normalizedScore;
+  throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
+}
 
-    const belowThresholdReason = `Distance ${distance.toFixed(2)} is less than or equal to threshold ${threshold}`;
-    const aboveThresholdReason = `Distance ${distance.toFixed(2)} is greater than threshold ${threshold}`;
-    reason = pass
-      ? inverse
-        ? aboveThresholdReason
-        : belowThresholdReason
-      : inverse
-        ? belowThresholdReason
-        : aboveThresholdReason;
-  } else {
-    // For similarity metrics: higher is better, threshold is minimum similarity
-    pass = inverse
-      ? similarity <= threshold + Number.EPSILON
-      : similarity >= threshold - Number.EPSILON;
+async function computeSimilarityFromNativeProvider(
+  provider: ApiSimilarityProvider,
+  expected: string,
+  output: string,
+  metric: SimilarityMetric,
+): Promise<SimilarityComputation> {
+  const tokensUsed = createMatcherTokenUsage();
 
-    score = inverse ? 1 - similarity : similarity;
+  if (metric !== 'cosine') {
+    return {
+      failure: fail(
+        `Provider ${provider.id()} only supports cosine similarity via callSimilarityApi`,
+        tokensUsed,
+      ),
+    };
+  }
 
-    const greaterThanReason = `Similarity ${similarity.toFixed(2)} is greater than or equal to threshold ${threshold}`;
-    const lessThanReason = `Similarity ${similarity.toFixed(2)} is less than threshold ${threshold}`;
-    reason = pass
-      ? inverse
-        ? lessThanReason
-        : greaterThanReason
-      : inverse
-        ? greaterThanReason
-        : lessThanReason;
+  const similarityResp = await provider.callSimilarityApi(expected, output);
+  copySimilarityTokenUsage(tokensUsed, similarityResp);
+
+  if (similarityResp.error) {
+    return { failure: fail(similarityResp.error, tokensUsed) };
+  }
+  if (similarityResp.similarity == null) {
+    return { failure: fail('Unknown error fetching similarity', tokensUsed) };
+  }
+
+  return { similarity: similarityResp.similarity, tokensUsed };
+}
+
+async function computeSimilarityFromEmbeddings(
+  provider: ApiEmbeddingProvider,
+  expected: string,
+  output: string,
+  metric: SimilarityMetric,
+): Promise<SimilarityComputation> {
+  const expectedEmbedding = await provider.callEmbeddingApi(expected);
+  const outputEmbedding = await provider.callEmbeddingApi(output);
+  const tokensUsed = combineEmbeddingTokenUsage(expectedEmbedding, outputEmbedding);
+
+  if (expectedEmbedding.error || outputEmbedding.error) {
+    return {
+      failure: fail(
+        expectedEmbedding.error || outputEmbedding.error || 'Unknown error fetching embeddings',
+        tokensUsed,
+      ),
+    };
+  }
+  if (!expectedEmbedding.embedding || !outputEmbedding.embedding) {
+    return { failure: fail('Embedding not found', tokensUsed) };
   }
 
   return {
-    pass,
-    score,
-    reason,
+    similarity: computeSimilarityMetric(
+      expectedEmbedding.embedding,
+      outputEmbedding.embedding,
+      metric,
+    ),
     tokensUsed,
   };
+}
+
+function computeSimilarityMetric(
+  expectedEmbedding: number[],
+  outputEmbedding: number[],
+  metric: SimilarityMetric,
+) {
+  switch (metric) {
+    case 'cosine':
+      return cosineSimilarity(expectedEmbedding, outputEmbedding);
+    case 'dot_product':
+      return dotProduct(expectedEmbedding, outputEmbedding);
+    case 'euclidean':
+      return euclideanDistance(expectedEmbedding, outputEmbedding);
+    default:
+      throw new Error(`Unsupported metric: ${metric}`);
+  }
+}
+
+function buildSimilarityResult(
+  similarity: number,
+  threshold: number,
+  inverse: boolean,
+  metric: SimilarityMetric,
+  tokensUsed: Partial<TokenUsage>,
+): Omit<GradingResult, 'assertion'> {
+  return metric === 'euclidean'
+    ? buildDistanceResult(similarity, threshold, inverse, tokensUsed)
+    : buildSimilarityScoreResult(similarity, threshold, inverse, tokensUsed);
+}
+
+function buildDistanceResult(
+  distance: number,
+  threshold: number,
+  inverse: boolean,
+  tokensUsed: Partial<TokenUsage>,
+): Omit<GradingResult, 'assertion'> {
+  const pass = inverse
+    ? distance >= threshold - Number.EPSILON
+    : distance <= threshold + Number.EPSILON;
+  const normalizedScore = 1 / (1 + distance);
+  const belowThresholdReason = `Distance ${distance.toFixed(2)} is less than or equal to threshold ${threshold}`;
+  const aboveThresholdReason = `Distance ${distance.toFixed(2)} is greater than threshold ${threshold}`;
+
+  return {
+    pass,
+    score: inverse ? 1 - normalizedScore : normalizedScore,
+    reason: pass === inverse ? aboveThresholdReason : belowThresholdReason,
+    tokensUsed,
+  };
+}
+
+function buildSimilarityScoreResult(
+  similarity: number,
+  threshold: number,
+  inverse: boolean,
+  tokensUsed: Partial<TokenUsage>,
+): Omit<GradingResult, 'assertion'> {
+  const pass = inverse
+    ? similarity <= threshold + Number.EPSILON
+    : similarity >= threshold - Number.EPSILON;
+  const greaterThanReason = `Similarity ${similarity.toFixed(2)} is greater than or equal to threshold ${threshold}`;
+  const lessThanReason = `Similarity ${similarity.toFixed(2)} is less than threshold ${threshold}`;
+
+  return {
+    pass,
+    score: inverse ? 1 - similarity : similarity,
+    reason: pass === inverse ? lessThanReason : greaterThanReason,
+    tokensUsed,
+  };
+}
+
+export async function matchesSimilarity(
+  expected: string,
+  output: string,
+  threshold: number,
+  inverse: boolean = false,
+  grading?: GradingConfig,
+  metric: SimilarityMetric = 'cosine',
+): Promise<Omit<GradingResult, 'assertion'>> {
+  const remoteResult = await maybeRemoteSimilarityGrading({ expected, output, threshold, inverse });
+  if (remoteResult) {
+    return remoteResult;
+  }
+
+  const defaults = await getDefaultProviders();
+  const finalProvider = (await getAndCheckProvider(
+    'embedding',
+    grading?.provider,
+    defaults.embeddingProvider,
+    'similarity check',
+  )) as ApiEmbeddingProvider | ApiSimilarityProvider;
+
+  const computation = await computeNativeSimilarity(finalProvider, expected, output, metric);
+  return 'failure' in computation
+    ? computation.failure
+    : buildSimilarityResult(
+        computation.similarity,
+        threshold,
+        inverse,
+        metric,
+        computation.tokensUsed,
+      );
 }
 
 /**
@@ -893,6 +1032,99 @@ export async function matchesPiScore(
   };
 }
 
+type FactualityCategory = 'A' | 'B' | 'C' | 'D' | 'E';
+
+function isFactualityCategory(category: string): category is FactualityCategory {
+  return /^[A-E]$/.test(category);
+}
+
+function getFactualityScoreLookup(grading: GradingConfig): Record<FactualityCategory, number> {
+  return {
+    A: grading.factuality?.subset ?? 1,
+    B: grading.factuality?.superset ?? 1,
+    C: grading.factuality?.agree ?? 1,
+    D: grading.factuality?.disagree ?? 0,
+    E: grading.factuality?.differButFactual ?? 1,
+  };
+}
+
+function buildFactualityCategoryResult(
+  category: string,
+  reason: string | undefined,
+  grading: GradingConfig,
+  tokensUsed?: Partial<TokenUsage>,
+): Omit<GradingResult, 'assertion'> {
+  const option = category.trim().toUpperCase();
+  if (!isFactualityCategory(option)) {
+    return fail(`Invalid category value: ${option}`, tokensUsed);
+  }
+
+  const scoreLookup = getFactualityScoreLookup(grading);
+  const score = scoreLookup[option];
+  const pass = score > 0;
+
+  return {
+    pass,
+    score,
+    reason: reason?.trim() || `Category ${option}: ${FACTUALITY_CATEGORY_DESCRIPTIONS[option]}`,
+    tokensUsed: normalizeTokenUsage(tokensUsed),
+  };
+}
+
+function parseJsonFactualityOutput(output: string): { category: string; reason?: string } | null {
+  try {
+    const jsonData = extractFirstJsonObject<{ category?: string; reason?: string }>(output);
+    return typeof jsonData?.category === 'string'
+      ? { category: jsonData.category, reason: jsonData.reason }
+      : null;
+  } catch (err) {
+    logger.debug(`JSON parsing failed: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+function parseLegacyFactualityOutput(
+  output: string,
+): { category: string; reason: string } | { failure: string } {
+  const answerMatch = output.match(/\s*\(?([a-eA-E])\)/);
+  if (!answerMatch) {
+    return { failure: `Factuality checker output did not match expected format: ${output}` };
+  }
+
+  const reasonMatch = output.match(/\)\s*(.*)/s);
+  return {
+    category: answerMatch[1],
+    reason: reasonMatch?.[1]?.trim() || output,
+  };
+}
+
+function gradeFactualityOutput(
+  output: string,
+  grading: GradingConfig,
+  tokensUsed?: Partial<TokenUsage>,
+): Omit<GradingResult, 'assertion'> {
+  const jsonResult = parseJsonFactualityOutput(output);
+  if (jsonResult) {
+    return buildFactualityCategoryResult(
+      jsonResult.category,
+      jsonResult.reason,
+      grading,
+      tokensUsed,
+    );
+  }
+
+  logger.info('Falling back to legacy pattern matching for factuality check');
+  const legacyResult = parseLegacyFactualityOutput(output);
+  return 'failure' in legacyResult
+    ? fail(legacyResult.failure, tokensUsed)
+    : buildFactualityCategoryResult(
+        legacyResult.category,
+        legacyResult.reason,
+        grading,
+        tokensUsed,
+      );
+}
+
 export async function matchesFactuality(
   input: string,
   expected: string,
@@ -941,122 +1173,7 @@ export async function matchesFactuality(
 
   invariant(typeof resp.output === 'string', 'factuality produced malformed response');
 
-  // Copied from standard factuality grading prompt
-  const categoryDescriptions: Record<string, string> = {
-    A: 'The submitted answer is a subset of the expert answer and is fully consistent with it.',
-    B: 'The submitted answer is a superset of the expert answer and is fully consistent with it.',
-    C: 'The submitted answer contains all the same details as the expert answer.',
-    D: 'There is a disagreement between the submitted answer and the expert answer.',
-    E: "The answers differ, but these differences don't matter from the perspective of factuality.",
-  };
-
-  // Try to parse as JSON first
-  let jsonData: { category?: string; reason?: string } | null = null;
-  let jsonError: Error | null = null;
-
-  try {
-    jsonData = extractFirstJsonObject<{ category?: string; reason?: string }>(resp.output);
-  } catch (err) {
-    jsonError = err as Error;
-    logger.debug(`JSON parsing failed: ${jsonError.message}`);
-  }
-
-  // If JSON parsing succeeded and provided a valid category
-  if (jsonData && jsonData.category && typeof jsonData.category === 'string') {
-    const option = jsonData.category.trim().toUpperCase();
-
-    if (!/^[A-E]$/.test(option)) {
-      return fail(`Invalid category value: ${option}`, resp.tokenUsage);
-    }
-
-    const scoreLookup: Record<string, number> = {
-      A: grading.factuality?.subset ?? 1,
-      B: grading.factuality?.superset ?? 1,
-      C: grading.factuality?.agree ?? 1,
-      D: grading.factuality?.disagree ?? 0,
-      E: grading.factuality?.differButFactual ?? 1,
-    };
-
-    // Determine if this option passes or fails
-    const passing = Object.keys(scoreLookup).filter((key) => scoreLookup[key] > 0);
-    const failing = Object.keys(scoreLookup).filter((key) => scoreLookup[key] === 0);
-    const pass = passing.includes(option) && !failing.includes(option);
-
-    // Use the model's reason if available, otherwise fall back to the category description
-    const modelReason = jsonData.reason?.trim();
-    const reason = modelReason || `Category ${option}: ${categoryDescriptions[option]}`;
-
-    const score = scoreLookup[option] ?? (pass ? 1 : 0);
-
-    return {
-      pass,
-      score,
-      reason,
-      tokensUsed: resp.tokenUsage || {
-        total: 0,
-        prompt: 0,
-        completion: 0,
-        cached: 0,
-        numRequests: 0,
-        completionDetails: {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
-      },
-    };
-  }
-
-  // Fallback to old pattern matching format
-  logger.info('Falling back to legacy pattern matching for factuality check');
-  const responseText = resp.output;
-  // The preferred output starts like "(A)...", but we also support leading whitespace, lowercase letters, and omitting the first parenthesis.
-  const answerMatch = responseText.match(/\s*\(?([a-eA-E])\)/);
-  if (!answerMatch) {
-    return fail(
-      `Factuality checker output did not match expected format: ${responseText}`,
-      resp.tokenUsage,
-    );
-  }
-
-  const option = answerMatch[1].toUpperCase();
-
-  let modelReason = responseText;
-  const reasonMatch = responseText.match(/\)\s*(.*)/s);
-  if (reasonMatch && reasonMatch[1]) {
-    modelReason = reasonMatch[1].trim();
-  }
-
-  const scoreLookup: Record<string, number> = {
-    A: grading.factuality?.subset ?? 1,
-    B: grading.factuality?.superset ?? 1,
-    C: grading.factuality?.agree ?? 1,
-    D: grading.factuality?.disagree ?? 0,
-    E: grading.factuality?.differButFactual ?? 1,
-  };
-
-  const passing = Object.keys(scoreLookup).filter((key) => scoreLookup[key] > 0);
-  const failing = Object.keys(scoreLookup).filter((key) => scoreLookup[key] === 0);
-  const pass = passing.includes(option) && !failing.includes(option);
-  const score = scoreLookup[option] ?? (pass ? 1 : 0);
-
-  return {
-    pass,
-    score,
-    reason: modelReason,
-    tokensUsed: {
-      total: resp.tokenUsage?.total || 0,
-      prompt: resp.tokenUsage?.prompt || 0,
-      completion: resp.tokenUsage?.completion || 0,
-      cached: resp.tokenUsage?.cached || 0,
-      numRequests: resp.tokenUsage?.numRequests || 0,
-      completionDetails: resp.tokenUsage?.completionDetails || {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
-    },
-  };
+  return gradeFactualityOutput(resp.output, grading, resp.tokenUsage);
 }
 
 export async function matchesClosedQa(
@@ -1901,13 +2018,28 @@ export async function matchesSearchRubric(
 
   // Search rubric assertion is like llm-rubric but with web search capabilities
   const defaultProviders = await getDefaultProviders();
+  const defaultSearchProviders = [
+    defaultProviders.webSearchProvider,
+    defaultProviders.llmRubricProvider,
+    defaultProviders.gradingProvider,
+  ];
+  const configuredProvider = grading.provider
+    ? await getGradingProvider('text', grading.provider, null)
+    : null;
 
   // Get a provider with web search capabilities
   let searchProvider =
-    grading.provider ||
-    defaultProviders.webSearchProvider ||
-    defaultProviders.llmRubricProvider ||
-    defaultProviders.gradingProvider;
+    configuredProvider || defaultSearchProviders.find((provider) => Boolean(provider));
+
+  // Prefer a known web-search default over a configured/default text grader that lacks search.
+  if (!hasWebSearchCapability(searchProvider)) {
+    const webSearchDefault = defaultSearchProviders.find((provider) =>
+      hasWebSearchCapability(provider),
+    );
+    if (webSearchDefault) {
+      searchProvider = webSearchDefault;
+    }
+  }
 
   // Check if current provider has web search, if not try to load one
   if (!hasWebSearchCapability(searchProvider)) {
