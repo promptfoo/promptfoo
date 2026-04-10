@@ -102,6 +102,7 @@ export function mockIntersectionObserver(options: IntersectionObserverMockOption
     return {
       root: null,
       rootMargin: '',
+      scrollMargin: '',
       thresholds: [],
       observe: options.observe ?? vi.fn(),
       unobserve: options.unobserve ?? vi.fn(),

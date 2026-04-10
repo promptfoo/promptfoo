@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { convertStringKeyToPem, validatePrivateKey } from './crypto';
 
 const mockAtob = vi.fn();
+const nativeAtob = globalThis.atob;
 
 describe('crypto utils', () => {
   beforeEach(() => {
