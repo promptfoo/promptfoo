@@ -35,9 +35,26 @@ const directBrowserMockPatterns = [
     message: 'mock IntersectionObserver with mockIntersectionObserver()',
   },
   {
+    pattern: /\b(?:global|globalThis|window)\.indexedDB\s*=/,
+    message: 'mock indexedDB with mockIndexedDB()',
+  },
+  {
+    pattern: /\b(?:global|globalThis|window)\.(?:localStorage|sessionStorage)\s*=/,
+    message: 'mock storage globals with mockBrowserProperty()',
+  },
+  {
     pattern:
       /\bObject\.defineProperty\(\s*window\s*,\s*['"](matchMedia|location|open|IntersectionObserver)['"]/,
     message: 'mock window browser APIs with browserMocks helpers',
+  },
+  {
+    pattern: /\bObject\.defineProperty\(\s*(?:global|globalThis|window)\s*,\s*['"]indexedDB['"]/,
+    message: 'mock indexedDB with mockIndexedDB()',
+  },
+  {
+    pattern:
+      /\bObject\.defineProperty\(\s*(?:global|globalThis|window)\s*,\s*['"](localStorage|sessionStorage)['"]/,
+    message: 'mock storage globals with mockBrowserProperty()',
   },
   {
     pattern: /\bObject\.defineProperty\(\s*globalThis\s*,\s*['"](fetch|atob)['"]/,
