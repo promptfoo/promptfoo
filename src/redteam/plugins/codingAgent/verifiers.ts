@@ -1772,6 +1772,23 @@ async function verifyVerifierSidecar(
     };
   }
 
+  if (
+    Object.prototype.hasOwnProperty.call(report, 'exitCode') &&
+    typeof report.exitCode !== 'number'
+  ) {
+    return {
+      kind: 'verifier-sidecar-failed',
+      locations: ['verifier sidecar report'],
+      metadata: {
+        exitCodeType: typeof report.exitCode,
+        reportPathSha256: sha256(reportPath),
+        reportSha256: sha256(raw),
+        problem: 'invalid-exit-code-type',
+      },
+      reason: 'The verifier sidecar report contains a non-numeric exitCode.',
+    };
+  }
+
   const status = getString(report.status);
   const exitCode = typeof report.exitCode === 'number' ? report.exitCode : undefined;
   const statusFailed = status ? /^(fail|failed|error)$/i.test(status) : false;
