@@ -369,6 +369,7 @@ type EnvVars = {
   // OpenClaw
   OPENCLAW_CONFIG_PATH?: string;
   OPENCLAW_GATEWAY_PASSWORD?: string;
+  OPENCLAW_GATEWAY_PORT?: number | string;
   OPENCLAW_GATEWAY_TOKEN?: string;
   OPENCLAW_GATEWAY_URL?: string;
 
