@@ -63,7 +63,7 @@ export class ElevenLabsClient {
 
     const { headers: optionsHeaders, allowRetriesForNonIdempotent, ...restOptions } = options || {};
     const headers = toPlainHeaders(optionsHeaders);
-    const hasIdempotencyKey = Object.hasOwn(headers, 'idempotency-key');
+    const hasIdempotencyKey = 'idempotency-key' in headers;
     const effectiveRetries = allowRetriesForNonIdempotent || hasIdempotencyKey ? this.retries : 0;
 
     for (let attempt = 0; attempt <= effectiveRetries; attempt++) {
