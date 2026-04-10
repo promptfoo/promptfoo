@@ -1,7 +1,7 @@
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { REQUEST_TIMEOUT_MS } from '../shared';
-import { resolveAuthToken, resolveGatewayUrl } from './shared';
+import { buildOpenClawContextHeaders, resolveAuthToken, resolveGatewayUrl } from './shared';
 
 import type { ApiProvider, ProviderOptions, ProviderResponse } from '../../types/providers';
 import type { OpenClawConfig } from './types';
@@ -64,6 +64,7 @@ export class OpenClawToolInvokeProvider implements ApiProvider {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(this.openclawConfig.headers || {}),
+      ...buildOpenClawContextHeaders(this.openclawConfig),
     };
     if (this.authToken) {
       headers['Authorization'] = `Bearer ${this.authToken}`;
@@ -98,14 +99,23 @@ export class OpenClawToolInvokeProvider implements ApiProvider {
         };
       }
 
-      const data = (await response.json()) as { ok: boolean; result?: unknown; error?: string };
+      const data = (await response.json()) as {
+        ok: boolean;
+        result?: unknown;
+        error?: string | { message?: string; type?: string; code?: string };
+      };
 
       if (data.ok) {
         const output = typeof data.result === 'string' ? data.result : JSON.stringify(data.result);
         return { output };
       }
 
-      return { error: data.error || 'Unknown tool error' };
+      if (typeof data.error === 'string') {
+        return { error: data.error };
+      }
+      return {
+        error: data.error?.message || data.error?.type || data.error?.code || 'Unknown tool error',
+      };
     } catch (err) {
       return {
         error: `OpenClaw tool invoke error: ${err instanceof Error ? err.message : String(err)}`,
