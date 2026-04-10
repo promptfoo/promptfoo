@@ -20,6 +20,8 @@ describe('eval routes', () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
+
     // More robust cleanup with proper error handling
     const cleanupPromises = Array.from(testEvalIds).map(async (evalId) => {
       try {
@@ -37,6 +39,22 @@ describe('eval routes', () => {
     await Promise.allSettled(cleanupPromises);
     testEvalIds.clear();
   });
+
+  function mockTablePayloadRangeError(shouldThrow: (attempt: number) => boolean) {
+    const originalStringify = JSON.stringify;
+    let tablePayloadAttempts = 0;
+
+    return vi.spyOn(JSON, 'stringify').mockImplementation((...args: unknown[]) => {
+      const value = args[0];
+      if (value && typeof value === 'object' && 'table' in value && 'totalCount' in value) {
+        tablePayloadAttempts += 1;
+        if (shouldThrow(tablePayloadAttempts)) {
+          throw new RangeError('Invalid string length');
+        }
+      }
+      return originalStringify.apply(JSON, args as Parameters<typeof JSON.stringify>);
+    });
+  }
 
   function createManualRatingPayload(originalResult: any, pass: boolean) {
     const payload = { ...originalResult.gradingResult };
@@ -254,6 +272,26 @@ describe('eval routes', () => {
   });
 
   describe('GET /:id/table - large payload handling', () => {
+    it('should preserve config tests returned from the table endpoint when saved back', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await request(app).get(`/api/eval/${eval_.id}/table`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.config.tests).toHaveLength(2);
+
+      const patchRes = await request(app)
+        .patch(`/api/eval/${eval_.id}`)
+        .send({ config: { ...res.body.config, description: 'renamed eval' } });
+
+      expect(patchRes.status).toBe(200);
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.config.tests).toHaveLength(2);
+    });
+
     it('should still return table data when payload triggers RangeError', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
@@ -262,31 +300,19 @@ describe('eval routes', () => {
       // max string length (e.g. base64 images in prompts). The first
       // stringify attempt on the table response will fail; the retry with
       // stripped per-cell prompts should succeed.
-      const originalStringify = JSON.stringify;
-      let firstTableAttempt = true;
-
-      const spy = vi.spyOn(JSON, 'stringify').mockImplementation((...args: unknown[]) => {
-        const value = args[0];
-        if (
-          firstTableAttempt &&
-          value &&
-          typeof value === 'object' &&
-          'table' in value &&
-          'totalCount' in value
-        ) {
-          firstTableAttempt = false;
-          throw new RangeError('Invalid string length');
+      const spy = mockTablePayloadRangeError((attempt) => attempt === 1);
+      const res = await (async () => {
+        try {
+          return await request(app).get(`/api/eval/${eval_.id}/table`);
+        } finally {
+          spy.mockRestore();
         }
-        return originalStringify.apply(JSON, args as Parameters<typeof JSON.stringify>);
-      });
-
-      const res = await request(app).get(`/api/eval/${eval_.id}/table`);
-
-      spy.mockRestore();
+      })();
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('table');
       expect(res.body.table.body.length).toBeGreaterThan(0);
+      expect(res.body.config.tests).toHaveLength(2);
 
       // Verify per-cell prompts were stripped in the fallback
       for (const row of res.body.table.body) {
@@ -296,6 +322,25 @@ describe('eval routes', () => {
           }
         }
       }
+    });
+
+    it('should return 413 when the table response is still too large after stripping prompts', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const spy = mockTablePayloadRangeError(() => true);
+      const res = await (async () => {
+        try {
+          return await request(app).get(`/api/eval/${eval_.id}/table`);
+        } finally {
+          spy.mockRestore();
+        }
+      })();
+
+      expect(res.status).toBe(413);
+      expect(res.body).toEqual({
+        error: 'Eval too large to display. Try reducing the page size.',
+      });
     });
   });
 });

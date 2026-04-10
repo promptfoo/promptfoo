@@ -324,16 +324,12 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     }
   }
 
-  // Default response for table view
-  // Strip config.tests to avoid RangeError from JSON.stringify on large evals.
-  // The frontend doesn't use config.tests from this endpoint.
-  const { tests: _tests, ...configWithoutTests } = eval_.config;
   const responsePayload = {
     table: returnTable,
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
     filteredMetrics,
-    config: configWithoutTests,
+    config: eval_.config,
     author: eval_.author || null,
     version: eval_.version(),
     id,
@@ -350,15 +346,20 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
       logger.warn('[GET /:id/table] Response too large, retrying without per-cell prompt content', {
         evalId: id,
       });
-      for (const row of responsePayload.table.body) {
-        for (const output of row.outputs) {
-          if (output) {
-            output.prompt = '[content too large]';
-          }
-        }
-      }
+      const responseWithoutCellPrompts = {
+        ...responsePayload,
+        table: {
+          ...responsePayload.table,
+          body: responsePayload.table.body.map((row) => ({
+            ...row,
+            outputs: row.outputs.map((output) =>
+              output ? { ...output, prompt: '[content too large]' } : output,
+            ),
+          })),
+        },
+      } as EvalTableDTO;
       try {
-        res.json(responsePayload);
+        res.json(responseWithoutCellPrompts);
       } catch {
         logger.error('[GET /:id/table] Response still too large after stripping prompts', {
           evalId: id,
