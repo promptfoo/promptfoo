@@ -11,6 +11,7 @@ import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
+import logger from '../../../../../logger';
 import { hasHumanRating } from './utils';
 import type { Policy, PolicyObject } from '@promptfoo/redteam/types';
 import type {
@@ -666,7 +667,7 @@ export const useTableStore = create<TableState>()(
       });
 
       try {
-        console.log(`Fetching data for eval ${id} with options:`, options);
+        logger.debug('[EvalStore] Fetching eval table data', { evalId: id, options });
 
         const url = new URL(
           `/eval/${id}/table`,

@@ -123,7 +123,7 @@ const DrawerContent = ({
         }
       }
     } catch {
-      console.debug('Failed to parse prompt as JSON, using raw string');
+      // Raw prompt strings are valid display input.
     }
     return prompt;
   };
