@@ -147,6 +147,7 @@ export const GradingConfigSchema = z.object({
       differButFactual: z.number().optional(),
     })
     .optional(),
+  temperature: z.number().optional(),
 });
 
 export type GradingConfig = z.infer<typeof GradingConfigSchema>;
@@ -653,6 +654,10 @@ export const AssertionSchema = z.object({
 
   // Override the grading rubric
   rubricPrompt: z.custom<GradingConfig['rubricPrompt']>().optional(),
+
+  // Override the temperature for LLM-based assertions (llm-rubric, g-eval, etc.)
+  // Defaults to 0 for deterministic grading when provider is a string or ProviderOptions
+  temperature: z.number().optional(),
 
   // Tag this assertion result as a named metric
   metric: z.string().optional(),

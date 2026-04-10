@@ -220,6 +220,85 @@ describe('getFinalTest', () => {
     expect(result.provider).toBe(directProvider);
     expect(result.options?.provider).toBe(assertionProvider);
   });
+
+  it('should convert string provider to ProviderOptions when temperature is set on assertion', () => {
+    const testCase: TestCase = { vars: {} };
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: 'some rubric',
+      provider: 'openai:gpt-4o-mini',
+      temperature: 0.5,
+    };
+
+    const result = getFinalTest(testCase, assertion);
+    const provider = result.options?.provider as { id: string; config: { temperature: number } };
+    expect(provider).toEqual({ id: 'openai:gpt-4o-mini', config: { temperature: 0.5 } });
+    expect(result.options?.temperature).toBe(0.5);
+  });
+
+  it('should merge assertion temperature into ProviderOptions without overriding explicit config.temperature', () => {
+    const testCase: TestCase = { vars: {} };
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: 'some rubric',
+      provider: { id: 'openai:gpt-4o-mini', config: { temperature: 0.9 } },
+      temperature: 0.1,
+    };
+
+    const result = getFinalTest(testCase, assertion);
+    const provider = result.options?.provider as { id: string; config: { temperature: number } };
+    // Explicit config.temperature (0.9) takes precedence over assertion.temperature (0.1)
+    expect(provider.config.temperature).toBe(0.9);
+    expect(result.options?.temperature).toBe(0.1);
+  });
+
+  it('should apply assertion temperature as default when ProviderOptions has no explicit temperature', () => {
+    const testCase: TestCase = { vars: {} };
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: 'some rubric',
+      provider: { id: 'openai:gpt-4o-mini', config: { max_tokens: 100 } },
+      temperature: 0,
+    };
+
+    const result = getFinalTest(testCase, assertion);
+    const provider = result.options?.provider as {
+      id: string;
+      config: { temperature: number; max_tokens: number };
+    };
+    expect(provider.config.temperature).toBe(0);
+    expect(provider.config.max_tokens).toBe(100);
+  });
+
+  it('should inherit temperature from test options when assertion does not specify one', () => {
+    const testCase: TestCase = {
+      vars: {},
+      options: { temperature: 0, provider: 'openai:gpt-4o-mini' },
+    };
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: 'some rubric',
+    };
+
+    const result = getFinalTest(testCase, assertion);
+    const provider = result.options?.provider as { id: string; config: { temperature: number } };
+    expect(provider.config.temperature).toBe(0);
+    expect(result.options?.temperature).toBe(0);
+  });
+
+  it('should not modify provider when temperature is undefined', () => {
+    const testCase: TestCase = { vars: {} };
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: 'some rubric',
+      provider: 'openai:gpt-4o-mini',
+    };
+
+    const result = getFinalTest(testCase, assertion);
+    // Without temperature, string provider stays as string
+    expect(result.options?.provider).toBe('openai:gpt-4o-mini');
+    expect(result.options?.temperature).toBeUndefined();
+  });
 });
 
 describe('loadFromJavaScriptFile', () => {

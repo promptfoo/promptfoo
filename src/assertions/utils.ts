@@ -5,7 +5,7 @@ import yaml from 'js-yaml';
 import Clone from 'rfdc';
 import cliState from '../cliState';
 import { importModule } from '../esm';
-import { type Assertion, type TestCase } from '../types/index';
+import { type Assertion, type ProviderOptions, type TestCase } from '../types/index';
 
 const clone = Clone();
 
@@ -31,7 +31,37 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
   if (test.provider) {
     ret.provider = test.provider;
   }
-  ret.options.provider = assertion.provider || test?.options?.provider;
+
+  const provider = assertion.provider || test?.options?.provider;
+  const temperature = assertion.temperature ?? test?.options?.temperature;
+
+  // If temperature is specified, inject it into the provider options
+  if (temperature !== undefined && provider !== undefined) {
+    if (typeof provider === 'string') {
+      // Convert string provider to ProviderOptions so temperature can be set
+      ret.options.provider = { id: provider, config: { temperature } } as ProviderOptions;
+    } else if (
+      typeof provider === 'object' &&
+      !Array.isArray(provider) &&
+      'id' in (provider as object)
+    ) {
+      // ProviderOptions — assertion temperature is the default; explicit config.temperature wins
+      const po = provider as ProviderOptions;
+      ret.options.provider = {
+        ...po,
+        config: { temperature, ...(po.config || {}) },
+      } as ProviderOptions;
+    } else {
+      ret.options.provider = provider;
+    }
+  } else {
+    ret.options.provider = provider;
+  }
+
+  if (temperature !== undefined) {
+    ret.options.temperature = temperature;
+  }
+
   ret.options.rubricPrompt = assertion.rubricPrompt || ret.options.rubricPrompt;
   return Object.freeze(ret);
 }
