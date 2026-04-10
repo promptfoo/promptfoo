@@ -1,12 +1,12 @@
+import { mockBrowserProperty } from '@app/tests/browserMocks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { convertStringKeyToPem, validatePrivateKey } from './crypto';
 
 const mockAtob = vi.fn();
-const nativeAtob = globalThis.atob;
 
 describe('crypto utils', () => {
   beforeEach(() => {
-    vi.stubGlobal('atob', mockAtob);
+    mockBrowserProperty(globalThis, 'atob', mockAtob as typeof atob);
     vi.clearAllMocks();
     // Default atob behavior: decode base64
     mockAtob.mockImplementation((str: string) => {
@@ -20,7 +20,7 @@ describe('crypto utils', () => {
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    vi.clearAllMocks();
   });
 
   describe('convertStringKeyToPem', () => {

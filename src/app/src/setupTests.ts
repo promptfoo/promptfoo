@@ -4,6 +4,7 @@ import { webcrypto } from 'node:crypto';
 
 import * as matchers from '@testing-library/jest-dom/matchers';
 import { afterEach, expect, vi } from 'vitest';
+import { restoreBrowserMocks } from './tests/browserMocks';
 
 class MemoryStorage implements Storage {
   private store = new Map<string, string>();
@@ -204,6 +205,11 @@ afterEach(() => {
   // This is safe to call regardless of timer state
   vi.useRealTimers();
 
-  // Clear all mocks to prevent state leakage between tests
+  // Restore explicit browser mocks and spies so local test doubles cannot leak
+  // across shuffled tests in the same file.
+  restoreBrowserMocks();
+  vi.restoreAllMocks();
+
+  // Clear all mocks to prevent call state leakage between tests.
   vi.clearAllMocks();
 });

@@ -9,6 +9,44 @@ const thisFile = fileURLToPath(import.meta.url);
 const testFilePattern = /\.(?:test|spec)\.(?:ts|tsx)$/;
 const focusedOrSkippedTestPattern =
   /\b(?:describe|it|test|suite)\s*(?:\.\s*\w+\s*)*\.\s*(?:only|skip)\b/;
+const directBrowserMockPatterns = [
+  {
+    pattern: /\bvi\.unstubAllGlobals\s*\(/,
+    message: 'vi.unstubAllGlobals() can remove shared setup globals; use browserMocks helpers',
+  },
+  {
+    pattern: /\bglobal(?:This)?\.fetch\s*=/,
+    message: 'mock fetch with mockBrowserProperty(globalThis, "fetch", ...)',
+  },
+  {
+    pattern: /\bglobal\.window\.open\s*=/,
+    message: 'mock window.open with mockWindowOpen()',
+  },
+  {
+    pattern: /\bwindow\.IntersectionObserver\s*=/,
+    message: 'mock IntersectionObserver with mockIntersectionObserver()',
+  },
+  {
+    pattern: /\bObject\.defineProperty\(\s*window\s*,\s*['"](matchMedia|location)['"]/,
+    message: 'mock window browser APIs with browserMocks helpers',
+  },
+  {
+    pattern: /\bObject\.defineProperty\(\s*(?:global\.)?navigator\s*,\s*['"]clipboard['"]/,
+    message: 'mock clipboard with mockClipboard()',
+  },
+  {
+    pattern: /\bObject\.assign\(\s*navigator\s*,\s*\{\s*clipboard\b/,
+    message: 'mock clipboard with mockClipboard()',
+  },
+  {
+    pattern: /\bglobal\.URL\.(createObjectURL|revokeObjectURL)\s*=/,
+    message: 'mock object URLs with mockObjectUrl() or mockBrowserProperty()',
+  },
+  {
+    pattern: /\bdocument\.execCommand\s*=/,
+    message: 'mock document.execCommand with mockDocumentExecCommand()',
+  },
+];
 
 function findTestFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -57,6 +95,26 @@ describe('test hygiene', () => {
           focusedOrSkippedTestPattern.test(line)
             ? [`${path.relative(srcDir, file)}:${index + 1}: ${line.trim()}`]
             : [],
+        );
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('uses scoped browser mock helpers for global browser APIs', () => {
+    const violations = findTestFiles(srcDir).flatMap((file) => {
+      if (file === thisFile) {
+        return [];
+      }
+
+      return readFileSync(file, 'utf8')
+        .split('\n')
+        .flatMap((line, index) =>
+          directBrowserMockPatterns.flatMap(({ pattern, message }) =>
+            pattern.test(line)
+              ? [`${path.relative(srcDir, file)}:${index + 1}: ${message}: ${line.trim()}`]
+              : [],
+          ),
         );
     });
 

@@ -1,8 +1,9 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { mockIntersectionObserver } from '@app/tests/browserMocks';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MediaItem } from './types';
 
@@ -118,19 +119,7 @@ function mockApiResponses(items: MediaItem[] = mockItems) {
 describe('Media page URL state machine', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Mock IntersectionObserver as a proper class
-    vi.stubGlobal(
-      'IntersectionObserver',
-      class {
-        observe = vi.fn();
-        unobserve = vi.fn();
-        disconnect = vi.fn();
-      },
-    );
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
+    mockIntersectionObserver();
   });
 
   it('renders the media grid with items', async () => {
