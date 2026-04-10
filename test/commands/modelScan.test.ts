@@ -91,6 +91,10 @@ describe('modelScanCommand', () => {
     modelScanCommand(program);
 
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
+    command?.configureOutput({
+      writeErr: vi.fn(),
+      writeOut: vi.fn(),
+    });
     // Parse without path argument - Commander requires paths but the action should handle this
     try {
       await command?.parseAsync(['node', 'scan-model']);
