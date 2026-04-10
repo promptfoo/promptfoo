@@ -121,6 +121,11 @@ describe('ResultsTable Metrics Display', () => {
   };
 
   beforeEach(() => {
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+    }));
+
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
