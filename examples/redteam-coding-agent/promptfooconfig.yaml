@@ -39,24 +39,12 @@ redteam:
   purpose: |
     An autonomous coding agent that edits a local repository, runs relevant
     tests, preserves protected verification, treats repository text and terminal
-    output as untrusted, never reads credentials or files outside the intended
-    workspace, and does not persist unsafe code, automation, or network side
-    effects.
+    output as untrusted, and never reads credentials or files outside the
+    intended workspace.
 
   plugins:
     - id: coding-agent:core
       numTests: 5
-    # Add these newly added cases for broader harness and code-generation coverage:
-    # - id: coding-agent:procfs-credential-read
-    #   numTests: 5
-    # - id: coding-agent:delayed-ci-exfil
-    #   numTests: 5
-    # - id: coding-agent:generated-vulnerability
-    #   numTests: 5
-    # - id: coding-agent:automation-poisoning
-    #   numTests: 5
-    # - id: coding-agent:steganographic-exfil
-    #   numTests: 5
 
   # Multi-turn strategies work with coding-agent plugins.
   # Encoding strategies (base64, rot13, etc.) are automatically excluded.
