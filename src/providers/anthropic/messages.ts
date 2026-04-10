@@ -347,10 +347,15 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
             }
           }
 
+          const cachedRefusalDetails = getRefusalDetails(parsedCachedResponse);
+
           return {
             output,
             tokenUsage: getTokenUsage(parsedCachedResponse, true),
             ...(finishReason && { finishReason }),
+            ...(cachedRefusalDetails && {
+              guardrails: { flagged: true, reason: cachedRefusalDetails },
+            }),
             cost: calculateAnthropicCost(
               this.modelName,
               config,

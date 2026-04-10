@@ -1938,6 +1938,41 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.guardrails).toBeUndefined();
     });
 
+    it('should include guardrails in cached response when stop_reason is refusal', async () => {
+      const provider = createProvider('claude-sonnet-4-6', { config: {} });
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [],
+      } as unknown as Anthropic.Messages.Message);
+
+      // Manually populate cache with a refusal response (like the existing legacy cache test pattern)
+      const refusalMessage = {
+        content: [{ type: 'text', text: '' }],
+        model: 'claude-sonnet-4-6',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'refusal',
+        stop_details: {
+          type: 'refusal',
+          category: 'cyber',
+          explanation: 'Prohibited content',
+        },
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 0 },
+      };
+      const cacheKey =
+        'anthropic:{"model":"claude-sonnet-4-6","max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"Hack something"}]}],"stream":false,"temperature":0}';
+      const cache = await getCache();
+      await cache.set(cacheKey, JSON.stringify(refusalMessage));
+
+      const result = await provider.callApi('Hack something');
+      expect(result.cached).toBe(true);
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        reason: expect.stringContaining('category: cyber'),
+      });
+    });
+
     it('should include guardrails in streaming response when stop_reason is refusal', async () => {
       const provider = createProvider('claude-sonnet-4-6', { config: { stream: true } });
       const refusalResponse = {
