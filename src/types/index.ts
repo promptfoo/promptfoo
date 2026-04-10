@@ -51,6 +51,13 @@ export interface RateLimitRegistryRef {
   dispose: () => void;
 }
 
+/**
+ * Minimal interface for deferred provider-call queues used by serial grading orchestration.
+ */
+export interface ProviderCallQueueRef {
+  enqueue: <T>(providerId: string, call: () => Promise<T>) => Promise<T>;
+}
+
 export * from '../redteam/types';
 export * from './agent';
 export * from './prompts';
@@ -209,6 +216,17 @@ export interface RunEvalOptions {
    * When provided, provider calls are wrapped with rate limiting and retry logic.
    */
   rateLimitRegistry?: RateLimitRegistryRef;
+
+  /**
+   * Defers assertion grading so the evaluator can group model-graded provider
+   * calls across rows. Intended for serial evaluation orchestration.
+   */
+  deferGrading?: boolean;
+
+  /**
+   * Queue used while deferred grading is active to group grader provider calls.
+   */
+  providerCallQueue?: ProviderCallQueueRef;
 }
 
 export const EvaluateOptionsSchema = z.object({

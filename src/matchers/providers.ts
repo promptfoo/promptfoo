@@ -1,6 +1,8 @@
 import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
+import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
+import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
 import invariant from '../util/invariant';
 
 import type {
@@ -18,6 +20,8 @@ import type {
 /**
  * Helper to call provider with consistent context propagation pattern.
  * Spreads the optional context and merges with prompt label and vars.
+ * Also reuses evaluator scheduler context for cancellation, rate limits,
+ * and grouped grading provider calls when present.
  *
  * IMPORTANT: Spread order matters - context is spread first, then prompt/vars
  * override. This ensures originalProvider from context is preserved while
@@ -30,14 +34,40 @@ export function callProviderWithContext(
   vars: Record<string, VarValue>,
   context?: CallApiContextParams,
 ): Promise<ProviderResponse> {
-  return provider.callApi(prompt, {
+  const callApiContext = {
     ...context,
     prompt: {
       raw: prompt,
       label,
     },
     vars,
-  });
+  };
+  const executionContext = getProviderCallExecutionContext();
+  const callApiOptions = executionContext?.abortSignal
+    ? { abortSignal: executionContext.abortSignal }
+    : undefined;
+  const callApi = () =>
+    callApiOptions
+      ? provider.callApi(prompt, callApiContext, callApiOptions)
+      : provider.callApi(prompt, callApiContext);
+
+  const executeCall = () => {
+    if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
+      return executionContext.rateLimitRegistry.execute(
+        provider,
+        callApi,
+        createProviderRateLimitOptions(),
+      );
+    }
+
+    return callApi();
+  };
+
+  if (executionContext?.providerCallQueue) {
+    return executionContext.providerCallQueue.enqueue(provider.id(), executeCall);
+  }
+
+  return executeCall();
 }
 
 async function loadFromProviderOptions(provider: ProviderOptions) {

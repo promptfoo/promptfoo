@@ -1,0 +1,73 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Repro for stateful Ollama-style judge model switches inside assert-set
+
+prompts:
+  - 'Answer this prompt: {{topic}}'
+
+providers:
+  - echo
+
+tests:
+  - vars:
+      topic: alpha
+    assert:
+      - type: assert-set
+        assert:
+          - type: llm-rubric
+            value: Judge alpha with model one
+            provider:
+              id: file://../providers/stateful-ollama-grader.cjs
+              config:
+                modelName: judge-one
+                logPath: '{{ env.PROMPTFOO_STATEFUL_GRADER_LOG_PATH | default("") }}'
+                reloadDelayMs: '{{ env.PROMPTFOO_STATEFUL_GRADER_RELOAD_DELAY_MS | default(0) }}'
+          - type: llm-rubric
+            value: Judge alpha with model two
+            provider:
+              id: file://../providers/stateful-ollama-grader.cjs
+              config:
+                modelName: judge-two
+                logPath: '{{ env.PROMPTFOO_STATEFUL_GRADER_LOG_PATH | default("") }}'
+                reloadDelayMs: '{{ env.PROMPTFOO_STATEFUL_GRADER_RELOAD_DELAY_MS | default(0) }}'
+  - vars:
+      topic: beta
+    assert:
+      - type: assert-set
+        assert:
+          - type: llm-rubric
+            value: Judge beta with model one
+            provider:
+              id: file://../providers/stateful-ollama-grader.cjs
+              config:
+                modelName: judge-one
+                logPath: '{{ env.PROMPTFOO_STATEFUL_GRADER_LOG_PATH | default("") }}'
+                reloadDelayMs: '{{ env.PROMPTFOO_STATEFUL_GRADER_RELOAD_DELAY_MS | default(0) }}'
+          - type: llm-rubric
+            value: Judge beta with model two
+            provider:
+              id: file://../providers/stateful-ollama-grader.cjs
+              config:
+                modelName: judge-two
+                logPath: '{{ env.PROMPTFOO_STATEFUL_GRADER_LOG_PATH | default("") }}'
+                reloadDelayMs: '{{ env.PROMPTFOO_STATEFUL_GRADER_RELOAD_DELAY_MS | default(0) }}'
+  - vars:
+      topic: gamma
+    assert:
+      - type: assert-set
+        assert:
+          - type: llm-rubric
+            value: Judge gamma with model one
+            provider:
+              id: file://../providers/stateful-ollama-grader.cjs
+              config:
+                modelName: judge-one
+                logPath: '{{ env.PROMPTFOO_STATEFUL_GRADER_LOG_PATH | default("") }}'
+                reloadDelayMs: '{{ env.PROMPTFOO_STATEFUL_GRADER_RELOAD_DELAY_MS | default(0) }}'
+          - type: llm-rubric
+            value: Judge gamma with model two
+            provider:
+              id: file://../providers/stateful-ollama-grader.cjs
+              config:
+                modelName: judge-two
+                logPath: '{{ env.PROMPTFOO_STATEFUL_GRADER_LOG_PATH | default("") }}'
+                reloadDelayMs: '{{ env.PROMPTFOO_STATEFUL_GRADER_RELOAD_DELAY_MS | default(0) }}'
