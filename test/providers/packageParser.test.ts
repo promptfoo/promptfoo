@@ -159,6 +159,16 @@ describe('parsePackageProvider', () => {
     );
   });
 
+  it('should throw a clear error if provider export is not constructable', async () => {
+    const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
+    vi.mocked(resolvePackageEntryPoint).mockReturnValue(mockPackagePath);
+    vi.mocked(importModule).mockResolvedValue({ Provider: false });
+
+    await expect(parsePackageProvider(mockProviderPath, mockBasePath, mockOptions)).rejects.toThrow(
+      `Provider malformed: ${mockProviderPath} must export a provider constructor. Received: boolean`,
+    );
+  });
+
   it('should handle nested provider names', async () => {
     const mockModule = {
       nested: {

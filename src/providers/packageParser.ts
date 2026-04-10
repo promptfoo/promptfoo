@@ -56,6 +56,11 @@ export async function parsePackageProvider(
   options: ProviderOptions,
 ): Promise<ApiProvider> {
   const Provider = await loadFromPackage(providerPath, basePath);
+  if (typeof Provider !== 'function') {
+    throw new Error(
+      `Provider malformed: ${providerPath} must export a provider constructor. Received: ${typeof Provider}`,
+    );
+  }
 
   return new Provider(options);
 }

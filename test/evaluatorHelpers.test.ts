@@ -333,6 +333,21 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1');
     });
 
+    it('should throw a clear error when a package variable does not export a function', async () => {
+      const prompt = toPrompt('Test prompt with {{ var1 }}');
+      const vars = {
+        var1: 'package:@promptfoo/fake:testFunction',
+      };
+
+      mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
+        testFunction: false,
+      });
+
+      await expect(renderPrompt(prompt, vars, {})).rejects.toThrow(
+        'Variable source malformed: package:@promptfoo/fake:testFunction must export a function. Received: boolean',
+      );
+    });
+
     it('should load external json files in renderPrompt and parse the JSON content', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }}');
       const vars = { var1: 'file:///path/to/testData.json' };
