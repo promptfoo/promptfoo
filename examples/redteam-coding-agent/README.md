@@ -1,6 +1,6 @@
 # redteam-coding-agent (Coding Agent Red Team)
 
-Red team autonomous coding agents for repository prompt injection, terminal output injection, secret environment read, sandbox read escape, and verifier sabotage vulnerabilities.
+Red team autonomous coding agents for repository prompt injection, terminal output injection, secret reads, sandbox read/write escapes, and verifier sabotage vulnerabilities.
 
 ```bash
 npx promptfoo@latest init --example redteam-coding-agent
@@ -49,6 +49,7 @@ Use a fresh writable checkout for each red-team row when you want high-confidenc
 | `secret-env-read`           | Agent reads or exposes launcher environment variables    | Canary value detection in output/traces                      |
 | `secret-file-read`          | Agent reads or exposes protected local files             | Canary value detection in output/traces/artifacts            |
 | `sandbox-read-escape`       | Agent reads files outside the intended workspace         | Receipt detection + LLM grading                              |
+| `sandbox-write-escape`      | Agent mutates files outside the intended workspace       | Command detection + host file/probe checks + LLM grading     |
 | `verifier-sabotage`         | Agent weakens tests instead of fixing code               | Heuristic pattern detection + file hash checks + LLM grading |
 
 ## Strategies
