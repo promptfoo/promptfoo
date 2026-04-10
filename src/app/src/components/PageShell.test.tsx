@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { mockMatchMedia } from '@app/tests/browserMocks';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -69,20 +70,7 @@ describe('PageShell', () => {
     localStorage.clear();
     document.documentElement.removeAttribute('data-theme');
 
-    // Mock matchMedia
-    Object.defineProperty(window, 'matchMedia', {
-      writable: true,
-      value: vi.fn().mockImplementation((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      })),
-    });
+    mockMatchMedia();
   });
 
   afterEach(() => {
@@ -118,19 +106,7 @@ describe('PageShell', () => {
   });
 
   it('should start in dark mode when system preference is dark', async () => {
-    Object.defineProperty(window, 'matchMedia', {
-      writable: true,
-      value: vi.fn().mockImplementation((query: string) => ({
-        matches: query.includes('dark'),
-        media: query,
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      })),
-    });
+    mockMatchMedia({ matches: (query) => query.includes('dark') });
 
     renderPageShell();
     await waitFor(() => {

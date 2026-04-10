@@ -1,3 +1,4 @@
+import { mockObjectUrl, mockWindowLocation } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
 import { fireEvent, screen } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
@@ -13,6 +14,11 @@ vi.mock('@app/hooks/useTelemetry', () => ({
     recordEvent: vi.fn(),
   }),
 }));
+
+function mockCsvDownloadApis() {
+  mockObjectUrl('blob:test');
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+}
 
 describe('TestSuites Component', () => {
   const mockNavigate = vi.fn();
@@ -38,10 +44,7 @@ describe('TestSuites Component', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: { search: '?evalId=test-eval-123' },
-    });
+    mockWindowLocation({ search: '?evalId=test-eval-123' });
   });
 
   it('should render empty state message when categoryStats is empty', () => {
@@ -157,10 +160,7 @@ describe('TestSuites Component Navigation', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: { search: '?evalId=test-eval-123' },
-    });
+    mockWindowLocation({ search: '?evalId=test-eval-123' });
   });
 
   it('should navigate to eval page with correct search params when clicking View logs', () => {
@@ -266,10 +266,7 @@ describe('TestSuites Component Navigation with Missing EvalId', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: { search: '' },
-    });
+    mockWindowLocation({ search: '' });
   });
 
   it('should navigate to eval page without evalId when evalId is missing from URL parameters', () => {
@@ -325,10 +322,7 @@ describe('TestSuites Component Filtering', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: { search: '?evalId=test-eval-123' },
-    });
+    mockWindowLocation({ search: '?evalId=test-eval-123' });
   });
 
   it('should filter out subcategories with zero total tests', () => {
@@ -364,8 +358,7 @@ describe('TestSuites Component CSV Export', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    // Mock URL.createObjectURL globally
-    global.URL.createObjectURL = vi.fn(() => 'blob:test');
+    mockCsvDownloadApis();
   });
 
   afterEach(() => {
@@ -411,10 +404,7 @@ describe('TestSuites Component - Zero Attack Success Rate', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: { search: '?evalId=test-eval-123' },
-    });
+    mockWindowLocation({ search: '?evalId=test-eval-123' });
   });
 
   it('should correctly display 0.00% attack success rate', () => {
@@ -439,7 +429,7 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    global.URL.createObjectURL = vi.fn(() => 'blob:test');
+    mockCsvDownloadApis();
   });
 
   afterEach(() => {
@@ -503,10 +493,7 @@ describe('TestSuites Component - Large Filter Object', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: { search: '?evalId=test-eval-123' },
-    });
+    mockWindowLocation({ search: '?evalId=test-eval-123' });
   });
 
   it('should navigate with a large filter object without exceeding URL length limits', () => {
@@ -582,10 +569,7 @@ describe('TestSuites Component Navigation with Special Characters in Plugin ID',
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: { search: '?evalId=test-eval-123' },
-    });
+    mockWindowLocation({ search: '?evalId=test-eval-123' });
   });
 
   it('should navigate to eval page with correctly encoded search params when pluginId contains special characters', () => {
@@ -637,10 +621,7 @@ describe('TestSuites Component - Zero Attack Success Rate Navigation', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: { search: '?evalId=test-eval-123' },
-    });
+    mockWindowLocation({ search: '?evalId=test-eval-123' });
   });
 
   it('should navigate to eval page with mode=passes when attackSuccessRate is 0', () => {
