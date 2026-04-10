@@ -5,7 +5,7 @@ import path from 'path';
 import { describe, expect, it } from 'vitest';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 
-describe.skip('Performance Benchmarks (manual)', () => {
+describe('Performance Benchmarks (manual)', () => {
   function writeTempPython(content: string): string {
     const tempFile = path.join(os.tmpdir(), `bench-${Date.now()}.py`);
     fs.writeFileSync(tempFile, content);
