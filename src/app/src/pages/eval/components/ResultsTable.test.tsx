@@ -2017,7 +2017,7 @@ describe('ResultsTable Zoom and Scroll Position', () => {
   };
 
   it('should maintain scroll position and focused element when zoom changes', () => {
-    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    const { container, rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
     const tableContainer = container.querySelector('#results-table-container') as HTMLDivElement;
     const initialScrollTop = 100;
     tableContainer.scrollTop = initialScrollTop;
@@ -2028,7 +2028,7 @@ describe('ResultsTable Zoom and Scroll Position', () => {
     }
 
     act(() => {
-      renderWithProviders(<ResultsTable {...defaultProps} zoom={1.5} />, { container });
+      rerender(<ResultsTable {...defaultProps} zoom={1.5} />);
     });
 
     expect(tableContainer.scrollTop).toBe(initialScrollTop);

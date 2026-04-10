@@ -95,6 +95,11 @@ export default {
     // Limit concurrent tests within each worker to prevent memory spikes
     maxConcurrency: 5,
 
+    // Run tests in random order to catch test isolation issues early.
+    sequence: {
+      shuffle: true,
+    },
+
     // Fail fast on first error in CI
     bail: process.env.CI ? 1 : 0,
 
@@ -108,6 +113,8 @@ export default {
         'src/**/*.d.ts',
         'src/**/*.test.ts',
         'src/**/*.test.tsx',
+        'src/**/*.spec.ts',
+        'src/**/*.spec.tsx',
         'src/setupTests.ts',
         'src/**/*.stories.tsx',
       ],

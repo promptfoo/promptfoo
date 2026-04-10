@@ -48,7 +48,7 @@ const createJsonResponse = <T,>(data: T): Response =>
 
 const FAKE_IMAGE_DATA_URL = `data:image/png;base64,${'a'.repeat(80)}`;
 
-callApiMock.mockImplementation((path, options) => {
+const defaultCallApiImplementation = (path: string, options?: RequestInit) => {
   if (path === '/redteam/generate-test') {
     const body = options?.body ? JSON.parse(options.body as string) : {};
     const strategyId = body.strategy?.id;
@@ -115,7 +115,7 @@ callApiMock.mockImplementation((path, options) => {
   }
 
   throw new Error(`Unhandled callApi path: ${path}`);
-});
+};
 
 // ===================================================================
 // Helpers
@@ -162,7 +162,8 @@ const TestConsumer = ({
 
 describe('TestCaseGenerationProvider', () => {
   beforeEach(() => {
-    callApiMock.mockClear();
+    callApiMock.mockReset();
+    callApiMock.mockImplementation(defaultCallApiImplementation);
   });
 
   it('should render', () => {
