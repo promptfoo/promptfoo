@@ -141,7 +141,11 @@ function resolveGatewayUrlFromConfig(
 
 function resolveGatewayPortOverride(env?: Record<string, string | undefined>): number | undefined {
   const rawPort = env?.OPENCLAW_GATEWAY_PORT || getEnvString('OPENCLAW_GATEWAY_PORT');
-  const parsedPort = rawPort ? Number.parseInt(rawPort.trim(), 10) : Number.NaN;
+  const trimmedPort = rawPort?.trim();
+  if (!trimmedPort || !/^\d+$/.test(trimmedPort)) {
+    return undefined;
+  }
+  const parsedPort = Number(trimmedPort);
   return Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535
     ? parsedPort
     : undefined;
@@ -327,13 +331,16 @@ export function buildOpenClawModelName(agentId: string): string {
     return 'openclaw/default';
   }
   if (trimmedAgentId.startsWith('openclaw/')) {
-    return trimmedAgentId;
+    const targetAgentId = trimmedAgentId.slice('openclaw/'.length).trim();
+    return targetAgentId ? `openclaw/${targetAgentId}` : 'openclaw/default';
   }
   if (trimmedAgentId.startsWith('openclaw:')) {
-    return `openclaw/${trimmedAgentId.slice('openclaw:'.length)}`;
+    const targetAgentId = trimmedAgentId.slice('openclaw:'.length).trim();
+    return targetAgentId ? `openclaw/${targetAgentId}` : 'openclaw/default';
   }
   if (trimmedAgentId.startsWith('agent:')) {
-    return `openclaw/${trimmedAgentId.slice('agent:'.length)}`;
+    const targetAgentId = trimmedAgentId.slice('agent:'.length).trim();
+    return targetAgentId ? `openclaw/${targetAgentId}` : 'openclaw/default';
   }
   return `openclaw/${trimmedAgentId}`;
 }

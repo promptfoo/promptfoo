@@ -451,6 +451,13 @@ describe('OpenClaw Provider', () => {
       expect(resolveGatewayUrl()).toBe('http://127.0.0.1:19999');
     });
 
+    it('should ignore malformed OPENCLAW_GATEWAY_PORT values', () => {
+      process.env.OPENCLAW_GATEWAY_PORT = '19999x';
+      vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+      expect(resolveGatewayUrl()).toBe('http://127.0.0.1:18789');
+    });
+
     it('should use https when local gateway TLS is enabled', () => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(true);
       vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10250 } as fs.Stats);
@@ -537,6 +544,11 @@ describe('OpenClaw Provider', () => {
       expect(buildOpenClawModelName('openclaw:beta')).toBe('openclaw/beta');
       expect(buildOpenClawModelName('agent:beta')).toBe('openclaw/beta');
       expect(buildOpenClawModelName('openclaw/beta')).toBe('openclaw/beta');
+      expect(buildOpenClawModelName('openclaw: beta ')).toBe('openclaw/beta');
+      expect(buildOpenClawModelName('agent: beta ')).toBe('openclaw/beta');
+      expect(buildOpenClawModelName('openclaw:')).toBe('openclaw/default');
+      expect(buildOpenClawModelName('openclaw/')).toBe('openclaw/default');
+      expect(buildOpenClawModelName('agent:')).toBe('openclaw/default');
     });
   });
 
@@ -1418,6 +1430,56 @@ describe('OpenClaw Provider', () => {
       );
 
       // Wait response
+      onMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+        ),
+      );
+
+      const result = await promise;
+      expect(result.output).toBe('Hello world!');
+    });
+
+    it('should accumulate assistant delta streaming events', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = messageHandlers.get('message')!;
+      const { waitReq } = simulateHandshake(onMessage);
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'agent',
+            payload: {
+              runId: 'run-1',
+              stream: 'assistant',
+              data: { delta: 'Hello' },
+              seq: 1,
+              ts: 1,
+            },
+          }),
+        ),
+      );
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'agent',
+            payload: {
+              runId: 'run-1',
+              stream: 'assistant',
+              data: { delta: ' world!' },
+              seq: 2,
+              ts: 2,
+            },
+          }),
+        ),
+      );
+
       onMessage(
         Buffer.from(
           JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),

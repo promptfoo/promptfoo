@@ -373,8 +373,15 @@ export class OpenClawAgentProvider implements ApiProvider {
     if (payload?.runId && state.runId && payload.runId !== state.runId) {
       return;
     }
-    if (payload?.stream === 'assistant' && payload?.data?.text) {
+    if (payload?.stream !== 'assistant') {
+      return;
+    }
+    if (typeof payload?.data?.text === 'string') {
       state.lastText = payload.data.text;
+      return;
+    }
+    if (typeof payload?.data?.delta === 'string') {
+      state.lastText += payload.data.delta;
     }
   }
 
