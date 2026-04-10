@@ -217,7 +217,7 @@ export function readOpenClawConfig(
     cachedConfigPath = configPath;
     return config;
   } catch (err) {
-    logger.debug(`Failed to read OpenClaw config at ${configPath}: ${err}`);
+    logger.warn(`Failed to read OpenClaw config at ${configPath}`, { err });
     return undefined;
   }
 }

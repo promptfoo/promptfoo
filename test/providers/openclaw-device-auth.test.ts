@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildOpenClawDeviceAuthPayloadV3,
   buildSignedOpenClawDevice,
+  clearOpenClawDeviceAuthToken,
   loadOpenClawDeviceAuthToken,
   loadOrCreateOpenClawDeviceIdentity,
   storeOpenClawDeviceAuthToken,
@@ -120,5 +121,82 @@ describe('OpenClaw device auth', () => {
       scopes: ['operator.read', 'operator.write'],
       updatedAtMs: expect.any(Number),
     });
+  });
+
+  it('should clear a stored device token while preserving other roles', () => {
+    const authPath = makeTempPath('device-auth.json');
+
+    storeOpenClawDeviceAuthToken({
+      deviceId: 'device-1',
+      role: 'operator',
+      token: 'op-token',
+      scopes: ['operator.read'],
+      filePath: authPath,
+    });
+    storeOpenClawDeviceAuthToken({
+      deviceId: 'device-1',
+      role: 'admin',
+      token: 'admin-token',
+      scopes: ['operator.admin'],
+      filePath: authPath,
+    });
+
+    clearOpenClawDeviceAuthToken({
+      deviceId: 'device-1',
+      role: 'operator',
+      filePath: authPath,
+    });
+
+    expect(
+      loadOpenClawDeviceAuthToken({ deviceId: 'device-1', role: 'operator', filePath: authPath }),
+    ).toBeUndefined();
+    expect(
+      loadOpenClawDeviceAuthToken({ deviceId: 'device-1', role: 'admin', filePath: authPath }),
+    ).toEqual(expect.objectContaining({ token: 'admin-token' }));
+  });
+
+  it('should no-op when clearing a token for a non-existent file', () => {
+    const authPath = makeTempPath('missing-auth.json');
+    expect(() => {
+      clearOpenClawDeviceAuthToken({ deviceId: 'device-1', role: 'operator', filePath: authPath });
+    }).not.toThrow();
+  });
+
+  it('should no-op when clearing a token for a different device ID', () => {
+    const authPath = makeTempPath('device-auth.json');
+    storeOpenClawDeviceAuthToken({
+      deviceId: 'device-1',
+      role: 'operator',
+      token: 'token-1',
+      filePath: authPath,
+    });
+
+    clearOpenClawDeviceAuthToken({
+      deviceId: 'device-2',
+      role: 'operator',
+      filePath: authPath,
+    });
+
+    expect(
+      loadOpenClawDeviceAuthToken({ deviceId: 'device-1', role: 'operator', filePath: authPath }),
+    ).toEqual(expect.objectContaining({ token: 'token-1' }));
+  });
+
+  it('should regenerate identity when existing file has invalid content', () => {
+    const identityPath = makeTempPath('device-identity.json');
+    fs.writeFileSync(identityPath, '{"deviceId":"bad","publicKeyPem":"x","privateKeyPem":"y"}');
+
+    const identity = loadOrCreateOpenClawDeviceIdentity(identityPath);
+    expect(identity.deviceId).toMatch(/^[0-9a-f]{64}$/);
+    expect(identity.publicKeyPem).toContain('BEGIN PUBLIC KEY');
+  });
+
+  it('should regenerate identity when existing file has malformed JSON', () => {
+    const identityPath = makeTempPath('device-identity.json');
+    fs.writeFileSync(identityPath, 'not valid json {{{');
+
+    const identity = loadOrCreateOpenClawDeviceIdentity(identityPath);
+    expect(identity.deviceId).toMatch(/^[0-9a-f]{64}$/);
+    expect(identity.publicKeyPem).toContain('BEGIN PUBLIC KEY');
   });
 });

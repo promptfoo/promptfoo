@@ -81,7 +81,12 @@ function parseJsonObject(raw: string): Record<string, unknown> | undefined {
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : undefined;
-  } catch {
+  } catch (err) {
+    logger.debug('[OpenClaw Device Auth] Failed to parse JSON', {
+      err,
+      rawLength: raw.length,
+      rawPreview: raw.slice(0, 100),
+    });
     return undefined;
   }
 }
@@ -174,14 +179,17 @@ export function loadOrCreateOpenClawDeviceIdentity(filePath?: string): OpenClawD
       }
     }
   } catch (err) {
-    logger.debug('[OpenClaw Device Auth] Failed to read device identity', { err, identityPath });
+    logger.warn('[OpenClaw Device Auth] Failed to read device identity; generating new identity', {
+      err,
+      identityPath,
+    });
   }
 
   const identity = createDeviceIdentity();
   try {
     writeJsonSecure(identityPath, identity);
   } catch (err) {
-    logger.debug('[OpenClaw Device Auth] Failed to persist device identity', { err, identityPath });
+    logger.warn('[OpenClaw Device Auth] Failed to persist device identity', { err, identityPath });
   }
   return identity;
 }
@@ -339,7 +347,7 @@ export function storeOpenClawDeviceAuthToken(params: {
   try {
     writeJsonSecure(authPath, store);
   } catch (err) {
-    logger.debug('[OpenClaw Device Auth] Failed to persist device auth token', { err, authPath });
+    logger.warn('[OpenClaw Device Auth] Failed to persist device auth token', { err, authPath });
   }
 }
 
@@ -357,6 +365,6 @@ export function clearOpenClawDeviceAuthToken(params: {
   try {
     writeJsonSecure(authPath, store);
   } catch (err) {
-    logger.debug('[OpenClaw Device Auth] Failed to clear device auth token', { err, authPath });
+    logger.warn('[OpenClaw Device Auth] Failed to clear device auth token', { err, authPath });
   }
 }

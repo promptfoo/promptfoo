@@ -126,9 +126,9 @@ function buildOpenClawAgentSessionKey(agentId: string, sessionKey: string): stri
  * Protocol flow:
  *   1. Open WS connection to gateway
  *   2. Receive connect.challenge event → send signed connect request
- *   3. Receive hello-ok response → persist device token and send agent request
+ *   3. Receive connect response → persist device token and send agent request
  *   4. Receive agent accepted response → send agent.wait
- *   5. Accumulate streaming "agent" events (stream: "assistant")
+ *   5. Accumulate streaming "agent" events (assistant text/delta, lifecycle errors, error streams)
  *   6. Resolve on agent.wait response
  *
  * Usage:
@@ -291,24 +291,30 @@ export class OpenClawAgentProvider implements ApiProvider {
   }
 
   private handleFrame(frame: OpenClawWsFrame, state: AgentConnectionState): void {
-    if (frame.type === 'event' && frame.event === 'connect.challenge') {
-      this.handleConnectChallenge(frame, state);
-      return;
-    }
-    if (frame.type === 'res' && !state.connected) {
-      this.handleConnectResponse(frame, state);
-      return;
-    }
-    if (frame.type === 'res' && frame.id === state.agentRequestId) {
-      this.handleAgentAccepted(frame, state);
-      return;
-    }
-    if (frame.type === 'event' && frame.event === 'agent') {
-      this.handleAgentEvent(frame, state);
-      return;
-    }
-    if (frame.type === 'res' && frame.id === state.waitRequestId) {
-      this.handleAgentWaitResponse(frame, state);
+    try {
+      if (frame.type === 'event' && frame.event === 'connect.challenge') {
+        this.handleConnectChallenge(frame, state);
+        return;
+      }
+      if (frame.type === 'res' && !state.connected) {
+        this.handleConnectResponse(frame, state);
+        return;
+      }
+      if (frame.type === 'res' && frame.id === state.agentRequestId) {
+        this.handleAgentAccepted(frame, state);
+        return;
+      }
+      if (frame.type === 'event' && frame.event === 'agent') {
+        this.handleAgentEvent(frame, state);
+        return;
+      }
+      if (frame.type === 'res' && frame.id === state.waitRequestId) {
+        this.handleAgentWaitResponse(frame, state);
+      }
+    } catch (err) {
+      state.finish({
+        error: `OpenClaw WebSocket error: ${err instanceof Error ? err.message : String(err)}`,
+      });
     }
   }
 
@@ -577,7 +583,12 @@ export class OpenClawAgentProvider implements ApiProvider {
         deviceFamily: this.openclawConfig.device_family,
       });
     } catch (err) {
-      logger.debug('[OpenClaw Agent] Failed to sign device identity', { err });
+      logger.warn(
+        '[OpenClaw Agent] Failed to sign device identity; connecting without device auth',
+        {
+          err,
+        },
+      );
       return undefined;
     }
   }
@@ -589,7 +600,7 @@ export class OpenClawAgentProvider implements ApiProvider {
     try {
       return loadOrCreateOpenClawDeviceIdentity(this.openclawConfig.device_identity_path);
     } catch (err) {
-      logger.debug('[OpenClaw Agent] Failed to load device identity', { err });
+      logger.warn('[OpenClaw Agent] Failed to load device identity', { err });
       return undefined;
     }
   }

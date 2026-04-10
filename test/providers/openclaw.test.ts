@@ -2401,6 +2401,69 @@ describe('OpenClaw Provider', () => {
       const result = await promise;
       expect(result.output).toBe('No output from agent');
     });
+
+    /** Helper: simulate challenge → connect mismatch error, return the resolved promise */
+    async function simulateDeviceTokenMismatch(provider: OpenClawAgentProvider) {
+      const promise = provider.callApi('Hello');
+      const onMessage = messageHandlers.get('message')!;
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'connect.challenge',
+            payload: { nonce: 'n', ts: 1 },
+          }),
+        ),
+      );
+
+      const connectReq = JSON.parse(mockWs.send.mock.calls[0][0]);
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'res',
+            id: connectReq.id,
+            ok: false,
+            error: {
+              code: 'AUTH_DEVICE_TOKEN_MISMATCH',
+              message: 'Device token mismatch',
+            },
+          }),
+        ),
+      );
+
+      return promise;
+    }
+
+    it('should clear stored device token on AUTH_DEVICE_TOKEN_MISMATCH', async () => {
+      deviceAuthMocks.loadOpenClawDeviceAuthToken.mockReturnValue({
+        token: 'stale-token',
+        role: 'operator',
+        scopes: ['operator.read'],
+        updatedAtMs: 1,
+      });
+
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      await simulateDeviceTokenMismatch(provider);
+      expect(deviceAuthMocks.clearOpenClawDeviceAuthToken).toHaveBeenCalledWith(
+        expect.objectContaining({ deviceId: 'device-1', role: 'operator' }),
+      );
+    });
+
+    it('should not clear config-provided device token on mismatch', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: {
+          gateway_url: 'http://test:18789',
+          device_token: 'config-device-token',
+        },
+      });
+
+      await simulateDeviceTokenMismatch(provider);
+      expect(deviceAuthMocks.clearOpenClawDeviceAuthToken).not.toHaveBeenCalled();
+    });
   });
 
   describe('createOpenClawProvider', () => {

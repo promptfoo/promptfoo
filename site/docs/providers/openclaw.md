@@ -107,8 +107,8 @@ target, and `config.backend_model` can override the backend embedding model with
 `x-openclaw-model` header.
 
 - `openclaw:embedding` - Default agent via Embeddings API
-- `openclaw:embedding:main` - Explicit agent ID
-- `openclaw:embeddings:<agent-id>` - Plural alias for custom agents
+- `openclaw:embedding:<agent-id>` - Custom agent by ID
+- `openclaw:embeddings:<agent-id>` - Plural alias (same behavior)
 
 ### WebSocket Agent
 
