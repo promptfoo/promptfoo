@@ -149,9 +149,9 @@ describe('Mistral', () => {
       });
     });
 
-    it('should preserve explicit zero for top_p and random_seed', async () => {
+    it('should preserve explicit zero for top_p, random_seed, and max_tokens', async () => {
       const zeroProvider = new MistralChatCompletionProvider('mistral-tiny', {
-        config: { top_p: 0, random_seed: 0 },
+        config: { top_p: 0, random_seed: 0, max_tokens: 0 },
       });
       vi.spyOn(zeroProvider, 'getApiKey').mockReturnValue('fake-api-key');
 
@@ -172,6 +172,7 @@ describe('Mistral', () => {
       const body = JSON.parse((callArgs[1] as RequestInit).body as string);
       expect(body.top_p).toBe(0);
       expect(body.random_seed).toBe(0);
+      expect(body.max_tokens).toBe(0);
     });
 
     it('should include tools configuration in the request body', async () => {

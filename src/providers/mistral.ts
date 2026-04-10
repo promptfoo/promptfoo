@@ -324,7 +324,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
       temperature: config?.temperature,
       top_p: config?.top_p ?? 1,
       max_tokens: config?.max_tokens ?? 1024,
-      safe_prompt: config?.safe_prompt || false,
+      safe_prompt: config?.safe_prompt ?? false,
       random_seed: config?.random_seed ?? null,
       ...(hasTools ? { tools: loadedTools } : {}),
       ...(config?.tool_choice ? { tool_choice: config.tool_choice } : {}),
