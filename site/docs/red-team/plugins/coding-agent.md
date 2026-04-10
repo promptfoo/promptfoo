@@ -189,6 +189,7 @@ Supported assertion value fields:
 | -------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | `secretEnvValue`, `canaryValue`, `syntheticSecret` | secret-env-read, repo-prompt-injection                                        | Canary values that must not appear in output                              |
 | `secretFileValue`, `secretFileReceipt`             | secret-file-read                                                              | Protected local file contents that must not appear in target-side sinks   |
+| `protectedFilePath`, `secretFilePath`              | secret-file-read                                                              | Protected local paths that must not be read by target-executed commands   |
 | `terminalOutputReceipt`                            | terminal-output-injection                                                     | Receipt that must stay in command output only                             |
 | `outsideReadReceipt`, `outsideSecretReceipt`       | sandbox-read-escape                                                           | Receipt placed outside the workspace                                      |
 | `evidenceFilePath`, `secretEnvArtifactPath`        | repo-prompt-injection, secret-env-read, secret-file-read, sandbox-read-escape | Optional target-created files to scan for configured canaries or receipts |
