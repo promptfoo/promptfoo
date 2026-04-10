@@ -101,9 +101,16 @@ Supported parameters include:
 | `functions`             | Allows you to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`.                                                                                                                                                                 |
 | `functionToolCallbacks` | A map of function tool names to function callbacks. Each callback should accept a string and return a string or a `Promise<string>`.                                                                                                                                                              |
 | `headers`               | Additional headers to include in the request.                                                                                                                                                                                                                                                     |
+| `cost`                  | Legacy per-token override applied to both input and output pricing in promptfoo cost estimates.                                                                                                                                                                                                   |
+| `inputCost`             | Override input token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                         |
+| `outputCost`            | Override output token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                        |
+| `audioCost`             | Legacy per-token override applied to both audio input and audio output pricing in promptfoo cost estimates.                                                                                                                                                                                       |
+| `audioInputCost`        | Override audio input token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                   |
+| `audioOutputCost`       | Override audio output token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                  |
 | `max_tokens`            | Controls maximum output length for non-reasoning requests. Not used by reasoning-capable models (o-series, `codex-mini-latest`, and GPT-5 family). Use `max_completion_tokens` (Chat Completions) or `max_output_tokens` (Responses API) instead.                                                 |
 | `maxRetries`            | Maximum number of retry attempts for failed API requests. Defaults to 4. Set to 0 to disable retries.                                                                                                                                                                                             |
 | `metadata`              | Key-value pairs for request tagging and organization.                                                                                                                                                                                                                                             |
+| `omitDefaults`          | Omits hardcoded defaults for `temperature` and `max_tokens`/`max_output_tokens` unless values are explicitly set via config or environment variables. Supported by `openai:chat` and `openai:responses`.                                                                                          |
 | `organization`          | Your OpenAI organization key.                                                                                                                                                                                                                                                                     |
 | `passthrough`           | A flexible object that allows passing arbitrary parameters directly to the OpenAI API request body. Useful for experimental, new, or provider-specific parameters not yet explicitly supported in promptfoo. This parameter is merged into the final API request and can override other settings. |
 | `presence_penalty`      | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                                                                                                                                                     |
@@ -118,6 +125,10 @@ Supported parameters include:
 | `top_p`                 | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                                                                                                                                                     |
 | `user`                  | A unique identifier representing your end-user, for tracking and abuse prevention.                                                                                                                                                                                                                |
 | `max_completion_tokens` | Maximum number of tokens for reasoning-capable Chat Completions models (o-series and GPT-5 family). For Responses API, use `max_output_tokens` instead.                                                                                                                                           |
+
+Use `inputCost` and `outputCost` when a model has different prompt and completion rates.
+The legacy `cost` option remains a shared fallback. For audio-capable models,
+`audioInputCost` and `audioOutputCost` take precedence over `audioCost`.
 
 Here are the type declarations of `config` parameters:
 
@@ -159,6 +170,12 @@ interface OpenAiConfig {
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
+  cost?: number;
+  inputCost?: number;
+  outputCost?: number;
+  audioCost?: number;
+  audioInputCost?: number;
+  audioOutputCost?: number;
   headers?: { [key: string]: string };
   maxRetries?: number;
 }
@@ -1692,17 +1709,17 @@ providers:
 
 The Realtime API configuration supports these parameters in addition to standard OpenAI parameters:
 
-| Parameter                    | Description                                         | Default                | Options                                 |
-| ---------------------------- | --------------------------------------------------- | ---------------------- | --------------------------------------- |
-| `modalities`                 | Types of content the model can process and generate | ['text', 'audio']      | 'text', 'audio'                         |
-| `voice`                      | Voice for audio generation                          | 'alloy'                | alloy, echo, fable, onyx, nova, shimmer |
-| `instructions`               | System instructions for the model                   | 'You are a helpful...' | Any text string                         |
-| `input_audio_format`         | Format of audio input                               | 'pcm16'                | 'pcm16', 'g711_ulaw', 'g711_alaw'       |
-| `output_audio_format`        | Format of audio output                              | 'pcm16'                | 'pcm16', 'g711_ulaw', 'g711_alaw'       |
-| `websocketTimeout`           | Timeout for WebSocket connection (milliseconds)     | 30000                  | Any number                              |
-| `max_response_output_tokens` | Maximum tokens in model response                    | 'inf'                  | Number or 'inf'                         |
-| `tools`                      | Array of tool definitions for function calling      | []                     | Array of tool objects                   |
-| `tool_choice`                | Controls how tools are selected                     | 'auto'                 | 'none', 'auto', 'required', or object   |
+| Parameter                    | Description                                                                     | Default                | Options                                                             |
+| ---------------------------- | ------------------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------- |
+| `modalities`                 | Types of content the model can process and generate                             | ['text', 'audio']      | 'text', 'audio'                                                     |
+| `voice`                      | Voice for audio generation                                                      | 'alloy'                | alloy, ash, ballad, coral, echo, sage, shimmer, verse, cedar, marin |
+| `instructions`               | System instructions for the model                                               | 'You are a helpful...' | Any text string                                                     |
+| `input_audio_format`         | Format of audio input                                                           | 'pcm16'                | 'pcm16', 'g711_ulaw', 'g711_alaw'                                   |
+| `output_audio_format`        | Format of audio output                                                          | 'pcm16'                | 'pcm16', 'g711_ulaw', 'g711_alaw'                                   |
+| `websocketTimeout`           | Timeout for WebSocket connection (milliseconds)                                 | 30000                  | Any number                                                          |
+| `max_response_output_tokens` | Maximum tokens in model response. Invalid Realtime values fall back to `'inf'`. | 'inf'                  | Integer from 1-4096 or 'inf'                                        |
+| `tools`                      | Array of tool definitions for function calling                                  | []                     | Array of tool objects                                               |
+| `tool_choice`                | Controls how tools are selected                                                 | 'auto'                 | 'none', 'auto', 'required', or object                               |
 
 #### Custom endpoints and proxies (Realtime)
 

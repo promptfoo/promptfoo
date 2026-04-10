@@ -287,7 +287,7 @@ See `test/AGENTS.md` for testing patterns.
 - Verify findings on the current branch tip after syncing with the latest `main`.
 - Treat existing PR comments and bot reviews as hints; confirm they still apply before reporting them. If CI is failing, inspect the failing job logs and separate unrelated base-branch failures from PR regressions.
 - Ignore formatting, import ordering, naming, and other style-only issues already enforced by CI or repository tooling.
-- If a pull request touches `src/redteam/`, verify the title follows THE REDTEAM RULE in `docs/agents/pr-conventions.md` and uses `(redteam)` scope. Treat a title violation as P1.
+- If a pull request is primarily about redteam functionality, verify the title follows THE REDTEAM RULE in `docs/agents/pr-conventions.md` and uses `(redteam)` scope. Incidental `src/redteam/` touches in broad maintenance PRs do not require `(redteam)` scope.
 
 ## Documentation Testing
 
