@@ -20,12 +20,111 @@ import {
   type ApiProvider,
   type Prompt,
   type ProviderResponse,
+  type RateLimitRegistryRef,
   ResultFailureReason,
   type TestSuite,
 } from '../src/types/index';
 import { processConfigFileReferences } from '../src/util/fileReference';
 import { sleep } from '../src/util/time';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
+
+const exactTransformHandlers = new Map<string, (input: any) => any>([
+  ['output + " postprocessed"', (input) => input + ' postprocessed'],
+  ['JSON.parse(output).value', parseJsonValueTransform],
+  ['`Transformed: ${output}`', (input) => `Transformed: ${input}`],
+  ['`ProviderTransformed: ${output}`', (input) => `ProviderTransformed: ${input}`],
+  ['`Provider: ${output}`', (input) => `Provider: ${input}`],
+  ['`Test: ${output}`', (input) => `Test: ${input}`],
+  ['"testTransformed " + output', (input) => 'testTransformed ' + input],
+  ['"defaultTestTransformed " + output', (input) => 'defaultTestTransformed ' + input],
+  ['"Test: " + output', (input) => 'Test: ' + input],
+  ['"Provider: " + output', (input) => 'Provider: ' + input],
+  ['"Transform: " + output', (input) => 'Transform: ' + input],
+  ['output + "-provider-test"', (input) => input + '-provider-test'],
+  ['output + "-provider"', (input) => input + '-provider'],
+  ['output + "-test"', (input) => input + '-test'],
+  ['`Transform: ${output}`', (input) => `Transform: ${input}`],
+  ['`Postprocess: ${output}`', (input) => `Postprocess: ${input}`],
+]);
+
+function parseJsonValueTransform(input: any) {
+  try {
+    return JSON.parse(input).value;
+  } catch {
+    return input;
+  }
+}
+
+function mockTransformVars(code: string, input: any, context?: any) {
+  if (code.includes('vars.transformed = true')) {
+    return { ...input, transformed: true };
+  }
+  if (code.includes('vars.defaultTransform = true')) {
+    return { ...input, defaultTransform: true };
+  }
+  if (code.includes('{ ...vars') && code.includes('toUpperCase()')) {
+    return { ...input, name: input.name.toUpperCase() };
+  }
+  if (code.includes('{ ...vars') && code.includes('vars.age + 5')) {
+    return { ...input, age: input.age + 5 };
+  }
+  if (code.includes('return {') && code.includes('context.uuid')) {
+    return {
+      ...input,
+      id: context?.uuid || 'mock-uuid',
+      hasPrompt: Boolean(context?.prompt),
+    };
+  }
+  if (code.includes('test2UpperCase: vars.test2.toUpperCase()')) {
+    return { ...input, test2UpperCase: input.test2.toUpperCase() };
+  }
+}
+
+function mockMetadataTransform(code: string, input: any, context?: any) {
+  if (!code.includes('context?.metadata')) {
+    return undefined;
+  }
+  if (code.includes('Output:') && context?.metadata) {
+    return `Output: ${input}, Metadata: ${JSON.stringify(context.metadata)}`;
+  }
+  if (code.includes('Has metadata') && context?.metadata) {
+    return `Has metadata: ${input}`;
+  }
+  if (code.includes('No metadata') && !context?.metadata) {
+    return `No metadata: ${input}`;
+  }
+  if (
+    code.includes('Empty metadata') &&
+    context?.metadata &&
+    Object.keys(context.metadata).length === 0
+  ) {
+    return `Empty metadata: ${input}`;
+  }
+  if (code.includes('All context') && context?.vars && context?.prompt && context?.metadata) {
+    return `All context: ${input}`;
+  }
+  if (
+    code.includes('Missing context') &&
+    !(context?.vars && context?.prompt && context?.metadata)
+  ) {
+    return `Missing context: ${input}`;
+  }
+}
+
+async function mockTransform(code: unknown, input: any, context?: any) {
+  if (typeof code !== 'string') {
+    return input;
+  }
+
+  const exactHandler = exactTransformHandlers.get(code);
+  if (exactHandler) {
+    return exactHandler(input);
+  }
+
+  return (
+    mockTransformVars(code, input, context) ?? mockMetadataTransform(code, input, context) ?? input
+  );
+}
 
 vi.mock('../src/util/transform', () => ({
   TransformInputType: {
@@ -34,125 +133,7 @@ vi.mock('../src/util/transform', () => ({
   },
   // Provide a process shim for ESM compatibility in inline JavaScript code
   getProcessShim: vi.fn().mockReturnValue(process),
-  transform: vi.fn().mockImplementation(async (code, input, context, _skipWrap, _inputType) => {
-    if (typeof code === 'string' && code.includes('vars.transformed = true')) {
-      return { ...input, transformed: true };
-    }
-    if (typeof code === 'string' && code.includes('vars.defaultTransform = true')) {
-      return { ...input, defaultTransform: true };
-    }
-    // Handle the test transform cases
-    if (typeof code === 'string') {
-      // Handle simple concatenation transforms
-      if (code === 'output + " postprocessed"') {
-        return input + ' postprocessed';
-      }
-      // Handle JSON parsing transforms
-      if (code === 'JSON.parse(output).value') {
-        try {
-          return JSON.parse(input).value;
-        } catch {
-          return input;
-        }
-      }
-      // Handle template literal transforms
-      if (code === '`Transformed: ${output}`') {
-        return `Transformed: ${input}`;
-      }
-      if (code === '`ProviderTransformed: ${output}`') {
-        return `ProviderTransformed: ${input}`;
-      }
-      if (code === '`Provider: ${output}`') {
-        return `Provider: ${input}`;
-      }
-      if (code === '`Test: ${output}`') {
-        return `Test: ${input}`;
-      }
-      if (code === '"testTransformed " + output') {
-        return 'testTransformed ' + input;
-      }
-      if (code === '"defaultTestTransformed " + output') {
-        return 'defaultTestTransformed ' + input;
-      }
-      // Handle transformVars cases
-      if (code.includes('{ ...vars')) {
-        if (code.includes('toUpperCase()')) {
-          return { ...input, name: input.name.toUpperCase() };
-        }
-        if (code.includes('vars.age + 5')) {
-          return { ...input, age: input.age + 5 };
-        }
-      }
-      // Handle transformVars with return statement and context
-      if (code.includes('return {') && code.includes('context.uuid')) {
-        return {
-          ...input,
-          id: context?.uuid || 'mock-uuid',
-          hasPrompt: Boolean(context?.prompt),
-        };
-      }
-      // Handle transform with "Test: " prefix
-      if (code === '"Test: " + output') {
-        return 'Test: ' + input;
-      }
-      if (code === '"Provider: " + output') {
-        return 'Provider: ' + input;
-      }
-      if (code === '"Transform: " + output') {
-        return 'Transform: ' + input;
-      }
-      // Handle multiple transforms concatenation
-      if (code === 'output + "-provider-test"') {
-        return input + '-provider-test';
-      }
-      if (code === 'output + "-provider"') {
-        return input + '-provider';
-      }
-      if (code === 'output + "-test"') {
-        return input + '-test';
-      }
-      // Handle template literal transforms with backticks
-      if (code === '`Transform: ${output}`') {
-        return `Transform: ${input}`;
-      }
-      if (code === '`Postprocess: ${output}`') {
-        return `Postprocess: ${input}`;
-      }
-      // Handle transformVars with test2UpperCase
-      if (code.includes('test2UpperCase: vars.test2.toUpperCase()')) {
-        return { ...input, test2UpperCase: input.test2.toUpperCase() };
-      }
-      // Handle metadata transforms
-      if (code.includes('context?.metadata')) {
-        if (code.includes('Output:') && context?.metadata) {
-          return `Output: ${input}, Metadata: ${JSON.stringify(context.metadata)}`;
-        }
-        if (code.includes('Has metadata') && context?.metadata) {
-          return `Has metadata: ${input}`;
-        }
-        if (code.includes('No metadata') && !context?.metadata) {
-          return `No metadata: ${input}`;
-        }
-        if (
-          code.includes('Empty metadata') &&
-          context?.metadata &&
-          Object.keys(context.metadata).length === 0
-        ) {
-          return `Empty metadata: ${input}`;
-        }
-        if (code.includes('All context') && context?.vars && context?.prompt && context?.metadata) {
-          return `All context: ${input}`;
-        }
-        if (
-          code.includes('Missing context') &&
-          !(context?.vars && context?.prompt && context?.metadata)
-        ) {
-          return `Missing context: ${input}`;
-        }
-      }
-    }
-    return input;
-  }),
+  transform: vi.fn().mockImplementation(mockTransform),
 }));
 
 vi.mock('../src/util/fileReference', async () => {
@@ -4006,6 +3987,491 @@ describe('evaluator', () => {
         },
       },
     });
+  });
+
+  it('schedules model-graded assertion provider calls through the rate limit registry', async () => {
+    const abortController = new AbortController();
+    const execute = vi.fn(async (_provider: ApiProvider, callFn: () => Promise<unknown>) =>
+      callFn(),
+    );
+    const rateLimitRegistry = {
+      execute,
+      dispose: vi.fn(),
+    } as RateLimitRegistryRef;
+    const targetProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test response',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const gradingProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('grading-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({ pass: true, reason: 'Scheduled grading passed' }),
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+
+    const results = await runEval({
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: false,
+      provider: targetProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        assert: [
+          {
+            type: 'llm-rubric',
+            value: 'Output should be valid',
+            provider: gradingProvider,
+          },
+        ],
+      },
+      conversations: {},
+      registers: {},
+      abortSignal: abortController.signal,
+      rateLimitRegistry,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute.mock.calls.map(([provider]) => provider.id())).toEqual([
+      'target-provider',
+      'grading-provider',
+    ]);
+    expect(gradingProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Output should be valid'),
+      expect.objectContaining({
+        prompt: { raw: expect.any(String), label: 'llm-rubric' },
+        vars: expect.objectContaining({
+          output: 'Test response',
+          rubric: 'Output should be valid',
+        }),
+      }),
+      { abortSignal: abortController.signal },
+    );
+  });
+
+  it('groups model-graded assertion calls by provider id when maxConcurrency is 1', async () => {
+    const callOrder: string[] = [];
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: `Target output for ${prompt}`,
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const judgeOne: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge-one'),
+      callApi: vi.fn(async () => {
+        callOrder.push('judge-one');
+        return {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'judge one passed' }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const judgeTwo: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge-two'),
+      callApi: vi.fn(async () => {
+        callOrder.push('judge-two');
+        return {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'judge two passed' }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: [
+        {
+          vars: { topic: 'alpha' },
+          assert: [
+            { type: 'llm-rubric', value: 'Judge alpha one', provider: judgeOne },
+            { type: 'llm-rubric', value: 'Judge alpha two', provider: judgeTwo },
+          ],
+        },
+        {
+          vars: { topic: 'beta' },
+          assert: [
+            { type: 'llm-rubric', value: 'Judge beta one', provider: judgeOne },
+            { type: 'llm-rubric', value: 'Judge beta two', provider: judgeTwo },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(2);
+    expect(callOrder).toEqual(['judge-one', 'judge-one', 'judge-two', 'judge-two']);
+  });
+
+  it('keeps model-graded assertions row-first when prompts use _conversation', async () => {
+    const callOrder: string[] = [];
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string) => {
+        const topic = prompt.endsWith('Current: alpha') ? 'alpha' : 'beta';
+        callOrder.push(`target:${topic}`);
+        return {
+          output: `Target output for ${topic}`,
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const judge: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge'),
+      callApi: vi.fn(async () => {
+        callOrder.push('judge');
+        return {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'judge passed' }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [
+        toPrompt(
+          '{% for turn in _conversation %}{{ turn.input }} => {{ turn.output }}\n{% endfor %}Current: {{topic}}',
+        ),
+      ],
+      tests: [
+        {
+          vars: { topic: 'alpha' },
+          assert: [{ type: 'llm-rubric', value: 'Judge alpha', provider: judge }],
+        },
+        {
+          vars: { topic: 'beta' },
+          assert: [{ type: 'llm-rubric', value: 'Judge beta', provider: judge }],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(2);
+    expect(callOrder).toEqual(['target:alpha', 'judge', 'target:beta', 'judge']);
+  });
+
+  it('records deferred model-graded provider failures as row errors when maxConcurrency is 1', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: `Target output for ${prompt}`,
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const judge: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge'),
+      callApi: vi.fn(async (prompt: string) => {
+        if (prompt.includes('Judge alpha')) {
+          throw new Error('grader exploded');
+        }
+        return {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'judge passed' }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: [
+        {
+          vars: { topic: 'alpha' },
+          assert: [{ type: 'llm-rubric', value: 'Judge alpha', provider: judge }],
+        },
+        {
+          vars: { topic: 'beta' },
+          assert: [{ type: 'llm-rubric', value: 'Judge beta', provider: judge }],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    const failedResult = summary.results.find((result) => result.vars.topic === 'alpha');
+    expect(summary.stats.errors).toBe(1);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.results).toHaveLength(2);
+    expect(failedResult?.failureReason).toBe(ResultFailureReason.ERROR);
+    expect(failedResult?.error).toContain('grader exploded');
+  });
+
+  it('stops grouped serial evals after a non-transient target status', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: `Target output for ${prompt}`,
+        metadata: {
+          http: {
+            status: 403,
+            statusText: 'Forbidden',
+          },
+        },
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const judge: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge'),
+      callApi: vi.fn(async () => ({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'judge passed' }),
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: [
+        {
+          vars: { topic: 'alpha' },
+          assert: [{ type: 'llm-rubric', value: 'Judge alpha', provider: judge }],
+        },
+        {
+          vars: { topic: 'beta' },
+          assert: [{ type: 'llm-rubric', value: 'Judge beta', provider: judge }],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(provider.callApi).toHaveBeenCalledTimes(1);
+    expect(judge.callApi).toHaveBeenCalledTimes(1);
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].vars.topic).toBe('alpha');
+  });
+
+  it('flushes queued grouped grading before writing max-duration timeout rows', async () => {
+    vi.useFakeTimers();
+
+    const results: any[] = [];
+    const waitForTarget = (ms: number, signal?: AbortSignal) =>
+      new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(resolve, ms);
+        signal?.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timeout);
+            reject(new Error('target aborted'));
+          },
+          { once: true },
+        );
+      });
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string, _context, options) => {
+        await waitForTarget(40, options?.abortSignal);
+        return {
+          output: `Target output for ${prompt}`,
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const judge: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge'),
+      callApi: vi.fn(async () => ({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'judge passed' }),
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const evalRecord = {
+      id: 'grouped-timeout-eval',
+      results,
+      prompts: [],
+      persisted: false,
+      config: {},
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      addResult: vi.fn(async (result) => {
+        results.push(result);
+      }),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue(results),
+      save: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
+      setVars: vi.fn(),
+      toEvaluateSummary: vi.fn(),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: ['alpha', 'beta', 'gamma'].map((topic) => ({
+        vars: { topic },
+        assert: [{ type: 'llm-rubric', value: `Judge ${topic}`, provider: judge }],
+      })),
+    };
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord as unknown as Eval, {
+        maxConcurrency: 1,
+        maxEvalTimeMs: 55,
+      });
+      await vi.advanceTimersByTimeAsync(40);
+      await vi.advanceTimersByTimeAsync(15);
+      await evalPromise;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const resultByTopic = new Map(results.map((result) => [result.vars.topic, result]));
+
+    expect(judge.callApi).toHaveBeenCalledTimes(1);
+    expect(resultByTopic.get('alpha')).toEqual(
+      expect.objectContaining({
+        success: true,
+        response: expect.objectContaining({
+          output: 'Target output for Test prompt alpha',
+        }),
+      }),
+    );
+    expect(resultByTopic.get('alpha')?.error).toBeUndefined();
+    expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
+  });
+
+  it('groups model-graded assert-set children by provider id when maxConcurrency is 1', async () => {
+    const callOrder: string[] = [];
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: `Target output for ${prompt}`,
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const judgeOne: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge-one'),
+      callApi: vi.fn(async () => {
+        callOrder.push('judge-one');
+        return {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'judge one passed' }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const judgeTwo: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge-two'),
+      callApi: vi.fn(async () => {
+        callOrder.push('judge-two');
+        return {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'judge two passed' }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: [
+        {
+          vars: { topic: 'alpha' },
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                { type: 'llm-rubric', value: 'Judge alpha one', provider: judgeOne },
+                { type: 'llm-rubric', value: 'Judge alpha two', provider: judgeTwo },
+              ],
+            },
+          ],
+        },
+        {
+          vars: { topic: 'beta' },
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                { type: 'llm-rubric', value: 'Judge beta one', provider: judgeOne },
+                { type: 'llm-rubric', value: 'Judge beta two', provider: judgeTwo },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(2);
+    expect(callOrder).toEqual(['judge-one', 'judge-one', 'judge-two', 'judge-two']);
+  });
+
+  it('keeps multi-call model-graded assertions grouped by provider id when maxConcurrency is 1', async () => {
+    const callOrder: string[] = [];
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: `Target output for ${prompt}`,
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const createJudge = (id: string): ApiProvider => ({
+      id: vi.fn().mockReturnValue(id),
+      callApi: vi.fn(async (_prompt: string, context?: { prompt?: { label?: string } }) => {
+        const label = context?.prompt?.label ?? 'unknown';
+        callOrder.push(`${id}:${label}`);
+
+        return {
+          output:
+            label === 'g-eval-steps'
+              ? JSON.stringify({ steps: ['Check the answer'] })
+              : JSON.stringify({ score: 10, reason: 'passed' }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    });
+    const judgeOne = createJudge('judge-one');
+    const judgeTwo = createJudge('judge-two');
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: [
+        {
+          vars: { topic: 'alpha' },
+          assert: [
+            { type: 'g-eval', value: 'Judge alpha one', provider: judgeOne },
+            { type: 'g-eval', value: 'Judge alpha two', provider: judgeTwo },
+          ],
+        },
+        {
+          vars: { topic: 'beta' },
+          assert: [
+            { type: 'g-eval', value: 'Judge beta one', provider: judgeOne },
+            { type: 'g-eval', value: 'Judge beta two', provider: judgeTwo },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(2);
+    expect(callOrder).toEqual([
+      'judge-one:g-eval-steps',
+      'judge-one:g-eval-steps',
+      'judge-one:g-eval',
+      'judge-one:g-eval',
+      'judge-two:g-eval-steps',
+      'judge-two:g-eval-steps',
+      'judge-two:g-eval',
+      'judge-two:g-eval',
+    ]);
   });
 
   it('forces cache busting for repeat iterations', async () => {
