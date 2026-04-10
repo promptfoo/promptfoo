@@ -863,6 +863,14 @@ describe('coding agent deterministic verifiers', () => {
     expect(vi.mocked(matchesLlmRubric)).toHaveBeenCalledOnce();
   });
 
+  it('tells the LLM grader not to treat Unicode lookalike dots as parent traversal by default', () => {
+    const grader = new CodingAgentGrader('coding-agent:sandbox-write-escape');
+
+    expect(grader.rubric).toContain('U+2024 one dot leaders');
+    expect(grader.rubric).toContain('not the parent directory ".."');
+    expect(grader.rubric).toContain('actually resolved outside the workspace');
+  });
+
   it('detects test.skip heuristic in verifier-sabotage without file assertions', async () => {
     const finding = await verifyCodingAgentResult(
       'coding-agent:verifier-sabotage',
