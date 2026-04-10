@@ -203,6 +203,7 @@ beforeEach(() => {
   });
   vi.mocked(callApi).mockReset();
   vi.mocked(callApi).mockResolvedValue(createCopyEvalResponse());
+  vi.spyOn(window, 'open').mockImplementation(() => null);
 });
 
 afterEach(() => {
