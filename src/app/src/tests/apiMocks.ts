@@ -33,7 +33,7 @@ function getRequestMethod(options: RequestInit | undefined) {
 }
 
 function matchesRoute(route: MockApiRoute, path: string, options: RequestInit | undefined) {
-  if (route.method && route.method.toUpperCase() !== getRequestMethod(options)) {
+  if ((route.method ?? 'GET').toUpperCase() !== getRequestMethod(options)) {
     return false;
   }
 
@@ -42,16 +42,33 @@ function matchesRoute(route: MockApiRoute, path: string, options: RequestInit | 
   }
 
   if (route.path instanceof RegExp) {
-    return route.path.test(path);
+    const safeMatcher = new RegExp(route.path.source, route.path.flags.replace(/[gy]/g, ''));
+    return safeMatcher.test(path);
   }
 
   return route.path(path, options);
 }
 
+function describeRoute(route: MockApiRoute) {
+  const method = route.method?.toUpperCase() ?? 'GET';
+
+  if (typeof route.path === 'string') {
+    return `${method} ${route.path}`;
+  }
+
+  if (route.path instanceof RegExp) {
+    return `${method} ${route.path.toString()}`;
+  }
+
+  return `${method} custom matcher`;
+}
+
 export function createMockResponse(body: unknown, init: MockApiResponseInit = {}) {
   const status = init.status ?? (init.ok === false ? 500 : 200);
   const ok = init.ok ?? (status >= 200 && status < 300);
-  const text = init.text ?? (typeof body === 'string' ? body : JSON.stringify(body ?? ''));
+  const text =
+    init.text ??
+    (typeof body === 'string' ? body : body === null ? 'null' : JSON.stringify(body ?? ''));
 
   return {
     ok,
@@ -64,6 +81,12 @@ export function createMockResponse(body: unknown, init: MockApiResponseInit = {}
 }
 
 export function resetCallApiMock() {
+  if (!vi.isMockFunction(callApi)) {
+    throw new Error(
+      'callApi must be mocked with vi.fn() before using apiMocks helpers. Use vi.mock("@app/utils/api", () => ({ callApi: vi.fn() })) in the test file.',
+    );
+  }
+
   const mockCallApi = vi.mocked(callApi);
   mockCallApi.mockReset();
   mockCallApi.mockImplementation(defaultUnhandledCallApi);
@@ -87,15 +110,33 @@ export function mockCallApiRoutes(routes: MockApiRoute[]) {
   const remainingRoutes = routes.map((route) => ({ ...route }));
 
   mockCallApi.mockImplementation(async (path: string, options?: RequestInit) => {
-    const routeIndex = remainingRoutes.findIndex((route) => matchesRoute(route, path, options));
+    const expectedRoute = remainingRoutes[0];
+    const nextRoute =
+      expectedRoute?.repeat && remainingRoutes.length > 1 ? remainingRoutes[1] : undefined;
+    const routeIndex =
+      expectedRoute && matchesRoute(expectedRoute, path, options)
+        ? 0
+        : nextRoute && matchesRoute(nextRoute, path, options)
+          ? 1
+          : -1;
 
     if (routeIndex === -1) {
-      return defaultUnhandledCallApi(path, options);
+      if (!expectedRoute) {
+        return defaultUnhandledCallApi(path, options);
+      }
+
+      throw new Error(
+        `Unexpected ${getRequestMethod(options)} callApi request in test: ${path}. Expected next callApi route to match ${describeRoute(expectedRoute)}.`,
+      );
     }
 
     const route = remainingRoutes[routeIndex];
+    if (routeIndex > 0) {
+      remainingRoutes.splice(0, routeIndex);
+    }
+
     if (!route.repeat) {
-      remainingRoutes.splice(routeIndex, 1);
+      remainingRoutes.shift();
     }
 
     if ('rejectWith' in route) {
