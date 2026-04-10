@@ -1,6 +1,7 @@
 import { renderWithProviders } from '@app/utils/testutils';
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { HIDDEN_METADATA_KEYS } from '../../../constants';
 import { MetadataPanel } from './MetadataPanel';
 
 import type { ExpandedMetadataState } from './MetadataPanel';
@@ -18,19 +19,14 @@ describe('MetadataPanel', () => {
     onApplyFilter: mockOnApplyFilter,
   };
 
-  it('should filter out metadata keys present in HIDDEN_METADATA_KEYS, including newly added keys', () => {
+  it('should filter out metadata keys present in HIDDEN_METADATA_KEYS', () => {
+    const hiddenMetadata = Object.fromEntries(
+      HIDDEN_METADATA_KEYS.map((key) => [key, `${key} value`]),
+    );
     const mockMetadata = {
       stringKey: 'stringValue',
-      citations: [{ source: 'doc1', content: 'citation content' }],
-      _promptfooFileMetadata: { fileName: 'test.txt', size: 1024 },
-      newHiddenKey: 'hiddenValue',
+      ...hiddenMetadata,
     };
-
-    vi.mock('@app/constants', () => {
-      return {
-        HIDDEN_METADATA_KEYS: ['citations', '_promptfooFileMetadata', 'newHiddenKey'],
-      };
-    });
 
     renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
@@ -39,11 +35,9 @@ describe('MetadataPanel', () => {
     expect(screen.getByText('stringKey')).toBeInTheDocument();
     expect(screen.getByText('stringValue')).toBeInTheDocument();
 
-    expect(screen.queryByText('citations')).not.toBeInTheDocument();
-    expect(screen.queryByText('_promptfooFileMetadata')).not.toBeInTheDocument();
-    expect(screen.queryByText('newHiddenKey')).not.toBeInTheDocument();
-
-    vi.restoreAllMocks();
+    for (const hiddenKey of HIDDEN_METADATA_KEYS) {
+      expect(screen.queryByText(hiddenKey)).not.toBeInTheDocument();
+    }
   });
 
   it('should handle malformed URLs by rendering them as plain text instead of a link', () => {
