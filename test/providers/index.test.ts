@@ -34,6 +34,7 @@ import {
 } from '../../src/providers/ollama';
 import { OpenAiAssistantProvider } from '../../src/providers/openai/assistant';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
@@ -1146,6 +1147,48 @@ describe('loadApiProvider', () => {
     });
 
     expect(checkProviderApiKeys([provider]).size).toBe(0);
+  });
+
+  it('loads OpenAI Codex app-server providers with model-in-path config', async () => {
+    const provider = (await loadApiProvider('openai:codex-app-server:gpt-5.4', {
+      options: {
+        env: {
+          OPENAI_API_KEY: 'override-key',
+        },
+      },
+    })) as OpenAICodexAppServerProvider;
+
+    expect(provider).toBeInstanceOf(OpenAICodexAppServerProvider);
+    expect(provider.id()).toBe('openai:codex-app-server:gpt-5.4');
+    expect(provider.config.model).toBe('gpt-5.4');
+    expect(provider.getApiKey()).toBe('override-key');
+    expect(checkProviderApiKeys([provider]).size).toBe(0);
+  });
+
+  it('preserves OpenAI Codex app-server provider env overrides from object configs', async () => {
+    const [provider] = (await loadApiProviders([
+      {
+        id: 'openai:codex-app-server:gpt-5.4',
+        env: {
+          OPENAI_API_KEY: 'override-key',
+        },
+      },
+    ])) as OpenAICodexAppServerProvider[];
+
+    expect(provider).toBeInstanceOf(OpenAICodexAppServerProvider);
+    expect(provider.env?.OPENAI_API_KEY).toBe('override-key');
+    expect(provider.getApiKey()).toBe('override-key');
+    expect(checkProviderApiKeys([provider]).size).toBe(0);
+  });
+
+  it('loads OpenAI Codex desktop alias providers', async () => {
+    const provider = (await loadApiProvider('openai:codex-desktop:gpt-5.4', {
+      options: {},
+    })) as OpenAICodexAppServerProvider;
+
+    expect(provider).toBeInstanceOf(OpenAICodexAppServerProvider);
+    expect(provider.id()).toBe('openai:codex-desktop:gpt-5.4');
+    expect(provider.config.model).toBe('gpt-5.4');
   });
 
   it('isolates env overrides between multiple provider loads', async () => {
