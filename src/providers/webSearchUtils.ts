@@ -3,6 +3,30 @@ import { loadApiProvider } from '../providers/index';
 
 import type { ApiProvider } from '../types/index';
 
+function hasTool(
+  provider: ApiProvider,
+  predicate: (tool: Record<string, unknown>) => boolean,
+): boolean {
+  return Array.isArray(provider.config?.tools) && provider.config.tools.some(predicate);
+}
+
+function isOpenAiResponsesProvider(provider: ApiProvider, id: string): boolean {
+  return (
+    id.includes('openai:responses') ||
+    provider.constructor?.name === 'OpenAiResponsesProvider' ||
+    (id.startsWith('openai:') &&
+      !id.startsWith('openai:chat:') &&
+      !id.startsWith('openai:completion:') &&
+      !id.startsWith('openai:assistant:') &&
+      !id.startsWith('openai:embedding:') &&
+      !id.startsWith('openai:image:') &&
+      !id.startsWith('openai:moderation:') &&
+      !id.startsWith('openai:realtime:') &&
+      !id.startsWith('openai:transcription:') &&
+      !id.startsWith('openai:video:'))
+  );
+}
+
 /**
  * Check if a provider has web search capabilities
  * @param provider The provider to check
@@ -12,6 +36,11 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
   if (!provider) {
     return false;
   }
+
+  if (typeof provider.id !== 'function') {
+    return false;
+  }
+
   const id = provider.id();
 
   // Perplexity has built-in web search
@@ -22,7 +51,7 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
   // Check for Google/Gemini with search tools
   if (
     (id.includes('google') || id.includes('gemini') || id.includes('vertex')) &&
-    provider.config?.tools?.some((t: any) => t.googleSearch !== undefined)
+    hasTool(provider, (t) => t.googleSearch !== undefined)
   ) {
     return true;
   }
@@ -34,8 +63,8 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
 
   // Check for OpenAI responses API with web_search_preview tool
   if (
-    id.includes('openai:responses') &&
-    provider.config?.tools?.some((t: any) => t.type === 'web_search_preview')
+    isOpenAiResponsesProvider(provider, id) &&
+    hasTool(provider, (t) => t.type === 'web_search_preview')
   ) {
     return true;
   }
@@ -51,10 +80,7 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
   }
 
   // Check for Anthropic with web_search tool
-  if (
-    id.includes('anthropic') &&
-    provider.config?.tools?.some((t: any) => t.type === 'web_search_20250305')
-  ) {
+  if (id.includes('anthropic') && hasTool(provider, (t) => t.type === 'web_search_20250305')) {
     return true;
   }
 
@@ -181,9 +207,12 @@ export async function loadWebSearchProvider(
 
   for (const getProvider of providers) {
     const provider = await getProvider();
-    if (provider) {
+    if (provider && hasWebSearchCapability(provider)) {
       logger.info(`Using ${provider.id()} as web search provider`);
       return provider;
+    }
+    if (provider) {
+      logger.debug(`Loaded provider ${provider.id()} does not support web search`);
     }
   }
 

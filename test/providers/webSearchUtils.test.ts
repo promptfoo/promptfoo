@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers/index';
+import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { hasWebSearchCapability, loadWebSearchProvider } from '../../src/providers/webSearchUtils';
 
 import type { ApiProvider } from '../../src/types/index';
@@ -32,6 +33,13 @@ describe('webSearchUtils', () => {
 
     it('should return false for undefined provider', () => {
       expect(hasWebSearchCapability(undefined)).toBe(false);
+    });
+
+    it('should return false for provider-like values without an id function', () => {
+      expect(hasWebSearchCapability('openai:responses:gpt-5.4-2026-03-05' as any)).toBe(false);
+      expect(hasWebSearchCapability({ id: 'openai:responses:gpt-5.4-2026-03-05' } as any)).toBe(
+        false,
+      );
     });
 
     it('should return true for Perplexity provider', () => {
@@ -114,6 +122,17 @@ describe('webSearchUtils', () => {
         },
       };
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
+    });
+
+    it('should return true for a real OpenAI Responses provider whose id omits the responses prefix', () => {
+      const provider = new OpenAiResponsesProvider('gpt-5.4-2026-03-05', {
+        config: {
+          tools: [{ type: 'web_search_preview' }],
+        },
+      });
+
+      expect(provider.id()).toBe('openai:gpt-5.4-2026-03-05');
+      expect(hasWebSearchCapability(provider)).toBe(true);
     });
 
     it('should return true for Codex SDK with live web search enabled', () => {
@@ -232,6 +251,20 @@ describe('webSearchUtils', () => {
 
   describe('loadWebSearchProvider', () => {
     const mockLoadApiProvider = vi.mocked(loadApiProvider);
+    const mockAnthropicWebSearchProvider = (): Partial<ApiProvider> => ({
+      id: () => 'anthropic:messages:claude-opus-4-6',
+      config: {
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+      },
+    });
+    const mockOpenAiWebSearchProvider = (): Partial<ApiProvider> =>
+      ({
+        id: () => 'openai:gpt-5.4-2026-03-05',
+        constructor: { name: 'OpenAiResponsesProvider' },
+        config: {
+          tools: [{ type: 'web_search_preview' }],
+        },
+      }) as any;
 
     it('should return null when no providers can be loaded', async () => {
       mockLoadApiProvider.mockRejectedValue(new Error('API key not found'));
@@ -242,9 +275,7 @@ describe('webSearchUtils', () => {
     });
 
     it('should load Anthropic provider first when preferAnthropic is true', async () => {
-      const mockProvider: Partial<ApiProvider> = {
-        id: () => 'anthropic:messages:claude-opus-4-6',
-      };
+      const mockProvider = mockAnthropicWebSearchProvider();
       mockLoadApiProvider.mockResolvedValueOnce(mockProvider as ApiProvider);
 
       const result = await loadWebSearchProvider(true);
@@ -265,9 +296,7 @@ describe('webSearchUtils', () => {
     });
 
     it('should load OpenAI provider first when preferAnthropic is false', async () => {
-      const mockProvider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.4-2026-03-05',
-      };
+      const mockProvider = mockOpenAiWebSearchProvider();
       mockLoadApiProvider.mockResolvedValueOnce(mockProvider as ApiProvider);
 
       const result = await loadWebSearchProvider(false);
@@ -288,9 +317,7 @@ describe('webSearchUtils', () => {
     });
 
     it('should fallback to next provider when first fails', async () => {
-      const mockProvider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.4-2026-03-05',
-      };
+      const mockProvider = mockOpenAiWebSearchProvider();
       mockLoadApiProvider
         .mockRejectedValueOnce(new Error('Anthropic API key not found'))
         .mockResolvedValueOnce(mockProvider as ApiProvider);
@@ -381,9 +408,7 @@ describe('webSearchUtils', () => {
     });
 
     it('should use default value (false) for preferAnthropic parameter', async () => {
-      const mockProvider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.4-2026-03-05',
-      };
+      const mockProvider = mockOpenAiWebSearchProvider();
       mockLoadApiProvider.mockResolvedValueOnce(mockProvider as ApiProvider);
 
       await loadWebSearchProvider();
