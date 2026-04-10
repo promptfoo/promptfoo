@@ -6,15 +6,7 @@ import type { ApiProvider, TestSuite } from '../src/types/index';
 
 // Create hoisted mock for transform
 const mockTransform = vi.hoisted(() => vi.fn());
-const mockRunAssertions = vi.hoisted(() =>
-  vi.fn(() =>
-    Promise.resolve({
-      pass: true,
-      score: 1,
-      namedScores: {},
-    }),
-  ),
-);
+const mockRunAssertions = vi.hoisted(() => vi.fn());
 
 // Mock the transform function to track calls
 vi.mock('../src/util/transform', () => ({
@@ -85,7 +77,13 @@ vi.mock('../src/esm', () => ({}));
 describe('Transformation integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRunAssertions.mockClear();
+    mockTransform.mockReset();
+    mockRunAssertions.mockReset();
+    mockRunAssertions.mockResolvedValue({
+      pass: true,
+      score: 1,
+      namedScores: {},
+    });
   });
 
   afterEach(() => {
