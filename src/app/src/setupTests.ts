@@ -215,8 +215,8 @@ afterEach(() => {
   vi.useRealTimers();
 
   // Restore spies before browser property descriptors. If a spy wraps a
-  // mockBrowserProperty value, restoring descriptors first lets the spy put the
-  // mocked value back.
+  // mockBrowserProperty value, restoring spies first prevents them from
+  // re-applying the mocked value after descriptors are restored.
   vi.restoreAllMocks();
   restoreBrowserMocks();
 
