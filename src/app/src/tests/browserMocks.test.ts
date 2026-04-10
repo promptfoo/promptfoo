@@ -72,6 +72,12 @@ describe('browserMocks', () => {
     );
   });
 
+  it('rejects mixed href and location field overrides', () => {
+    expect(() => mockWindowLocation({ href: '/reports', search: '?evalId=test-eval-id' })).toThrow(
+      /mixing href with URL field overrides: search/,
+    );
+  });
+
   it('rejects unsupported location fields', () => {
     expect(() => mockWindowLocation({ assign: vi.fn() } as Partial<Location>)).toThrow(
       /unsupported fields: assign/,

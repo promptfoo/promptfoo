@@ -1,18 +1,7 @@
 import { vi } from 'vitest';
 
 type RestoreBrowserMock = () => void;
-type MockWindowLocationValue =
-  | string
-  | URL
-  | Partial<
-      Pick<
-        Location,
-        'hash' | 'host' | 'hostname' | 'href' | 'pathname' | 'port' | 'protocol' | 'search'
-      >
-    >;
-
-const restoreCallbacks: RestoreBrowserMock[] = [];
-const mockWindowLocationUrlKeys = new Set([
+const mockWindowLocationUrlKeys = [
   'hash',
   'host',
   'hostname',
@@ -21,7 +10,12 @@ const mockWindowLocationUrlKeys = new Set([
   'port',
   'protocol',
   'search',
-]);
+] as const;
+type MockWindowLocationUrlKey = (typeof mockWindowLocationUrlKeys)[number];
+type MockWindowLocationValue = string | URL | Partial<Pick<Location, MockWindowLocationUrlKey>>;
+
+const restoreCallbacks: RestoreBrowserMock[] = [];
+const mockWindowLocationUrlKeySet = new Set<MockWindowLocationUrlKey>(mockWindowLocationUrlKeys);
 
 export function restoreBrowserMocks() {
   while (restoreCallbacks.length > 0) {
@@ -156,16 +150,25 @@ function createMockWindowLocationUrl(value: MockWindowLocationValue) {
     return new URL(value.toString(), window.location.href);
   }
 
-  const unsupportedKeys = Object.keys(value).filter((key) => !mockWindowLocationUrlKeys.has(key));
+  const unsupportedKeys = Object.keys(value).filter(
+    (key) => !mockWindowLocationUrlKeySet.has(key as MockWindowLocationUrlKey),
+  );
   if (unsupportedKeys.length > 0) {
     throw new Error(
-      `mockWindowLocation only supports URL fields (${Array.from(mockWindowLocationUrlKeys).join(
-        ', ',
-      )}); unsupported fields: ${unsupportedKeys.join(', ')}`,
+      `mockWindowLocation only supports URL fields (${mockWindowLocationUrlKeys.join(', ')}); unsupported fields: ${unsupportedKeys.join(', ')}`,
     );
   }
 
   if (value.href !== undefined) {
+    const mixedOverrideKeys = mockWindowLocationUrlKeys.filter(
+      (key) => key !== 'href' && value[key] !== undefined,
+    );
+    if (mixedOverrideKeys.length > 0) {
+      throw new Error(
+        `mockWindowLocation does not support mixing href with URL field overrides: ${mixedOverrideKeys.join(', ')}`,
+      );
+    }
+
     return new URL(value.href, window.location.href);
   }
 
