@@ -396,6 +396,14 @@ function readCoverageMap(coverageFile: string): CoverageMap {
   return JSON.parse(fs.readFileSync(coverageFile, 'utf8')) as CoverageMap;
 }
 
+function readFlagValue(argv: string[], index: number, flag: string): string {
+  const value = argv[index + 1];
+  if (!value || value.startsWith('--')) {
+    throw new Error(`Missing value for ${flag}`);
+  }
+  return value;
+}
+
 function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = { reports: [] };
 
@@ -403,10 +411,10 @@ function parseArgs(argv: string[]): CliOptions {
     const arg = argv[i];
 
     if (arg === '--base') {
-      options.baseRef = argv[i + 1];
+      options.baseRef = readFlagValue(argv, i, arg);
       i += 1;
     } else if (arg === '--report') {
-      options.reports.push(argv[i + 1]);
+      options.reports.push(readFlagValue(argv, i, arg));
       i += 1;
     } else if (arg === '--help' || arg === '-h') {
       console.log(

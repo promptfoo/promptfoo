@@ -6,6 +6,7 @@ import {
   DEFAULT_COVERAGE_THRESHOLDS,
   evaluateCoverageRatchets,
   parseChangedFileList,
+  runCoverageRatchetCli,
   summarizeFileCoverage,
 } from '../../scripts/checkCoverageRatchets';
 
@@ -182,5 +183,12 @@ describe('coverage ratchets', () => {
         }),
       ).lines,
     ).toEqual({ covered: 2, total: 4, pct: 50 });
+  });
+
+  it('reports missing CLI flag values before reading git state', () => {
+    expect(() => runCoverageRatchetCli(['--report'])).toThrow('Missing value for --report');
+    expect(() => runCoverageRatchetCli(['--base', '--report', 'backend'])).toThrow(
+      'Missing value for --base',
+    );
   });
 });
