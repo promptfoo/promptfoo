@@ -81,6 +81,26 @@ async function waitForMessage(
   return found;
 }
 
+async function flushMicrotasks(): Promise<void> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await Promise.resolve();
+  }
+}
+
+async function waitForMessageWithoutTimers(
+  server: MockAppServer,
+  predicate: (message: any) => boolean,
+): Promise<any> {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const found = server.messages().find(predicate);
+    if (found) {
+      return found;
+    }
+    await flushMicrotasks();
+  }
+  throw new Error('Timed out waiting for mock app-server message');
+}
+
 describe('OpenAICodexAppServerProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -89,6 +109,7 @@ describe('OpenAICodexAppServerProvider', () => {
 
   afterEach(async () => {
     await providerRegistry.shutdownAll();
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
@@ -2263,6 +2284,7 @@ describe('OpenAICodexAppServerProvider', () => {
   });
 
   it('interrupts an active turn when the turn timeout fires', async () => {
+    vi.useFakeTimers();
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
@@ -2273,37 +2295,50 @@ describe('OpenAICodexAppServerProvider', () => {
       },
     });
 
-    const resultPromise = provider.callApi('This will time out');
+    try {
+      const resultPromise = provider.callApi('This will time out');
 
-    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
-    server.send({ id: initialize.id, result: {} });
-    const threadStart = await waitForMessage(
-      server,
-      (message) => message.method === 'thread/start',
-    );
-    server.send({ id: threadStart.id, result: { thread: { id: 'thr_timeout' } } });
-    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
-    server.send({
-      id: turnStart.id,
-      result: { turn: { id: 'turn_timeout', status: 'inProgress' } },
-    });
+      const initialize = await waitForMessageWithoutTimers(
+        server,
+        (message) => message.method === 'initialize',
+      );
+      server.send({ id: initialize.id, result: {} });
+      const threadStart = await waitForMessageWithoutTimers(
+        server,
+        (message) => message.method === 'thread/start',
+      );
+      server.send({ id: threadStart.id, result: { thread: { id: 'thr_timeout' } } });
+      const turnStart = await waitForMessageWithoutTimers(
+        server,
+        (message) => message.method === 'turn/start',
+      );
+      server.send({
+        id: turnStart.id,
+        result: { turn: { id: 'turn_timeout', status: 'inProgress' } },
+      });
+      await flushMicrotasks();
+      await vi.advanceTimersByTimeAsync(1);
 
-    const interrupt = await waitForMessage(
-      server,
-      (message) => message.method === 'turn/interrupt',
-    );
-    expect(interrupt.params).toEqual({
-      threadId: 'thr_timeout',
-      turnId: 'turn_timeout',
-    });
-    server.send({ id: interrupt.id, result: {} });
+      const interrupt = await waitForMessageWithoutTimers(
+        server,
+        (message) => message.method === 'turn/interrupt',
+      );
+      expect(interrupt.params).toEqual({
+        threadId: 'thr_timeout',
+        turnId: 'turn_timeout',
+      });
+      server.send({ id: interrupt.id, result: {} });
 
-    await expect(resultPromise).resolves.toEqual({
-      error: 'Error calling OpenAI Codex app-server: codex app-server turn timed out after 1ms',
-    });
+      await expect(resultPromise).resolves.toEqual({
+        error: 'Error calling OpenAI Codex app-server: codex app-server turn timed out after 1ms',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('removes abort listeners when a JSON-RPC request timeout fires', async () => {
+    vi.useFakeTimers();
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
     const abortController = new AbortController();
@@ -2316,23 +2351,32 @@ describe('OpenAICodexAppServerProvider', () => {
       },
     });
 
-    const resultPromise = provider.callApi('Timeout thread start', undefined, {
-      abortSignal: abortController.signal,
-    } as any);
+    try {
+      const resultPromise = provider.callApi('Timeout thread start', undefined, {
+        abortSignal: abortController.signal,
+      } as any);
 
-    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
-    server.send({ id: initialize.id, result: {} });
-    await waitForMessage(server, (message) => message.method === 'thread/start');
+      const initialize = await waitForMessageWithoutTimers(
+        server,
+        (message) => message.method === 'initialize',
+      );
+      server.send({ id: initialize.id, result: {} });
+      await waitForMessageWithoutTimers(server, (message) => message.method === 'thread/start');
+      await vi.advanceTimersByTimeAsync(1);
 
-    await expect(resultPromise).resolves.toEqual({
-      error:
-        'Error calling OpenAI Codex app-server: codex app-server request timed out: thread/start',
-    });
-    expect(removeAbortListener).toHaveBeenCalledWith('abort', expect.any(Function));
-    expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
+      await expect(resultPromise).resolves.toEqual({
+        error:
+          'Error calling OpenAI Codex app-server: codex app-server request timed out: thread/start',
+      });
+      expect(removeAbortListener).toHaveBeenCalledWith('abort', expect.any(Function));
+      expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('restarts a reused app-server process after a JSON-RPC request timeout', async () => {
+    vi.useFakeTimers();
     const firstServer = createMockAppServer();
     const secondServer = createMockAppServer();
     mocks.spawn.mockReturnValueOnce(firstServer.proc).mockReturnValueOnce(secondServer.proc);
@@ -2344,67 +2388,75 @@ describe('OpenAICodexAppServerProvider', () => {
       },
     });
 
-    const timedOutResultPromise = provider.callApi('Timeout before thread start completes');
-    const firstInitialize = await waitForMessage(
-      firstServer,
-      (message) => message.method === 'initialize',
-    );
-    firstServer.send({ id: firstInitialize.id, result: {} });
-    await waitForMessage(firstServer, (message) => message.method === 'thread/start');
+    try {
+      const timedOutResultPromise = provider.callApi('Timeout before thread start completes');
+      const firstInitialize = await waitForMessageWithoutTimers(
+        firstServer,
+        (message) => message.method === 'initialize',
+      );
+      firstServer.send({ id: firstInitialize.id, result: {} });
+      await waitForMessageWithoutTimers(
+        firstServer,
+        (message) => message.method === 'thread/start',
+      );
+      await vi.advanceTimersByTimeAsync(1);
 
-    await expect(timedOutResultPromise).resolves.toEqual({
-      error:
-        'Error calling OpenAI Codex app-server: codex app-server request timed out: thread/start',
-    });
-    expect(firstServer.proc.kill).toHaveBeenCalledWith('SIGTERM');
+      await expect(timedOutResultPromise).resolves.toEqual({
+        error:
+          'Error calling OpenAI Codex app-server: codex app-server request timed out: thread/start',
+      });
+      expect(firstServer.proc.kill).toHaveBeenCalledWith('SIGTERM');
 
-    const recoveredResultPromise = provider.callApi('Recover after request timeout', {
-      prompt: {
-        raw: 'Recover after request timeout',
-        config: {
-          request_timeout_ms: 1_000,
+      const recoveredResultPromise = provider.callApi('Recover after request timeout', {
+        prompt: {
+          raw: 'Recover after request timeout',
+          config: {
+            request_timeout_ms: 1_000,
+          },
         },
-      },
-    } as any);
-    const secondInitialize = await waitForMessage(
-      secondServer,
-      (message) => message.method === 'initialize',
-    );
-    secondServer.send({ id: secondInitialize.id, result: {} });
-    const threadStart = await waitForMessage(
-      secondServer,
-      (message) => message.method === 'thread/start',
-    );
-    secondServer.send({ id: threadStart.id, result: { thread: { id: 'thr_after_timeout' } } });
-    const turnStart = await waitForMessage(
-      secondServer,
-      (message) => message.method === 'turn/start',
-    );
-    secondServer.send({
-      id: turnStart.id,
-      result: { turn: { id: 'turn_after_timeout', status: 'inProgress' } },
-    });
-    secondServer.send({
-      method: 'item/agentMessage/delta',
-      params: {
-        threadId: 'thr_after_timeout',
-        turnId: 'turn_after_timeout',
-        itemId: 'msg_after_timeout',
-        delta: 'Recovered after timeout',
-      },
-    });
-    secondServer.send({
-      method: 'turn/completed',
-      params: {
-        threadId: 'thr_after_timeout',
-        turn: { id: 'turn_after_timeout', status: 'completed', items: [], error: null },
-      },
-    });
+      } as any);
+      const secondInitialize = await waitForMessageWithoutTimers(
+        secondServer,
+        (message) => message.method === 'initialize',
+      );
+      secondServer.send({ id: secondInitialize.id, result: {} });
+      const threadStart = await waitForMessageWithoutTimers(
+        secondServer,
+        (message) => message.method === 'thread/start',
+      );
+      secondServer.send({ id: threadStart.id, result: { thread: { id: 'thr_after_timeout' } } });
+      const turnStart = await waitForMessageWithoutTimers(
+        secondServer,
+        (message) => message.method === 'turn/start',
+      );
+      secondServer.send({
+        id: turnStart.id,
+        result: { turn: { id: 'turn_after_timeout', status: 'inProgress' } },
+      });
+      secondServer.send({
+        method: 'item/agentMessage/delta',
+        params: {
+          threadId: 'thr_after_timeout',
+          turnId: 'turn_after_timeout',
+          itemId: 'msg_after_timeout',
+          delta: 'Recovered after timeout',
+        },
+      });
+      secondServer.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_after_timeout',
+          turn: { id: 'turn_after_timeout', status: 'completed', items: [], error: null },
+        },
+      });
 
-    await expect(recoveredResultPromise).resolves.toMatchObject({
-      output: 'Recovered after timeout',
-    });
-    expect(mocks.spawn).toHaveBeenCalledTimes(2);
+      await expect(recoveredResultPromise).resolves.toMatchObject({
+        output: 'Recovered after timeout',
+      });
+      expect(mocks.spawn).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('does not fail an active turn when another reused JSON-RPC request aborts', async () => {
@@ -2546,6 +2598,7 @@ describe('OpenAICodexAppServerProvider', () => {
   });
 
   it('cleans up failed startup attempts and retries with a fresh app-server process', async () => {
+    vi.useFakeTimers();
     const firstServer = createMockAppServer();
     const secondServer = createMockAppServer();
     mocks.spawn.mockReturnValueOnce(firstServer.proc).mockReturnValueOnce(secondServer.proc);
@@ -2556,68 +2609,73 @@ describe('OpenAICodexAppServerProvider', () => {
       },
     });
 
-    const firstResultPromise = provider.callApi('First attempt', {
-      prompt: {
-        raw: 'First attempt',
-        config: {
-          startup_timeout_ms: 1,
+    try {
+      const firstResultPromise = provider.callApi('First attempt', {
+        prompt: {
+          raw: 'First attempt',
+          config: {
+            startup_timeout_ms: 1,
+          },
         },
-      },
-    } as any);
-    await waitForMessage(firstServer, (message) => message.method === 'initialize');
+      } as any);
+      await waitForMessageWithoutTimers(firstServer, (message) => message.method === 'initialize');
+      await vi.advanceTimersByTimeAsync(1);
 
-    await expect(firstResultPromise).resolves.toEqual({
-      error:
-        'Error calling OpenAI Codex app-server: codex app-server request timed out: initialize',
-    });
-    expect(firstServer.proc.kill).toHaveBeenCalledWith('SIGTERM');
+      await expect(firstResultPromise).resolves.toEqual({
+        error:
+          'Error calling OpenAI Codex app-server: codex app-server request timed out: initialize',
+      });
+      expect(firstServer.proc.kill).toHaveBeenCalledWith('SIGTERM');
 
-    const secondResultPromise = provider.callApi('Second attempt', {
-      prompt: {
-        raw: 'Second attempt',
-        config: {
-          startup_timeout_ms: 1_000,
+      const secondResultPromise = provider.callApi('Second attempt', {
+        prompt: {
+          raw: 'Second attempt',
+          config: {
+            startup_timeout_ms: 1_000,
+          },
         },
-      },
-    } as any);
-    const initialize = await waitForMessage(
-      secondServer,
-      (message) => message.method === 'initialize',
-    );
-    secondServer.send({ id: initialize.id, result: {} });
-    const threadStart = await waitForMessage(
-      secondServer,
-      (message) => message.method === 'thread/start',
-    );
-    secondServer.send({ id: threadStart.id, result: { thread: { id: 'thr_retry' } } });
-    const turnStart = await waitForMessage(
-      secondServer,
-      (message) => message.method === 'turn/start',
-    );
-    secondServer.send({
-      id: turnStart.id,
-      result: { turn: { id: 'turn_retry', status: 'inProgress' } },
-    });
-    secondServer.send({
-      method: 'item/agentMessage/delta',
-      params: {
-        threadId: 'thr_retry',
-        turnId: 'turn_retry',
-        itemId: 'msg_retry',
-        delta: 'Recovered',
-      },
-    });
-    secondServer.send({
-      method: 'turn/completed',
-      params: {
-        threadId: 'thr_retry',
-        turn: { id: 'turn_retry', status: 'completed', items: [], error: null },
-      },
-    });
+      } as any);
+      const initialize = await waitForMessageWithoutTimers(
+        secondServer,
+        (message) => message.method === 'initialize',
+      );
+      secondServer.send({ id: initialize.id, result: {} });
+      const threadStart = await waitForMessageWithoutTimers(
+        secondServer,
+        (message) => message.method === 'thread/start',
+      );
+      secondServer.send({ id: threadStart.id, result: { thread: { id: 'thr_retry' } } });
+      const turnStart = await waitForMessageWithoutTimers(
+        secondServer,
+        (message) => message.method === 'turn/start',
+      );
+      secondServer.send({
+        id: turnStart.id,
+        result: { turn: { id: 'turn_retry', status: 'inProgress' } },
+      });
+      secondServer.send({
+        method: 'item/agentMessage/delta',
+        params: {
+          threadId: 'thr_retry',
+          turnId: 'turn_retry',
+          itemId: 'msg_retry',
+          delta: 'Recovered',
+        },
+      });
+      secondServer.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_retry',
+          turn: { id: 'turn_retry', status: 'completed', items: [], error: null },
+        },
+      });
 
-    const result = await secondResultPromise;
-    expect(result.output).toBe('Recovered');
-    expect(mocks.spawn).toHaveBeenCalledTimes(2);
+      const result = await secondResultPromise;
+      expect(result.output).toBe('Recovered');
+      expect(mocks.spawn).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('merges prompt-level nested config with provider defaults', async () => {
@@ -2780,6 +2838,86 @@ describe('OpenAICodexAppServerProvider', () => {
     await expect(resultPromise).resolves.toMatchObject({ output: 'Merged config done' });
   });
 
+  it('renders prompt-level config templates with test vars before use', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Rendered config', {
+      vars: {
+        envValue: 'rendered-env',
+        modelName: 'gpt-5.4',
+        workspaceDir: process.cwd(),
+      },
+      prompt: {
+        raw: 'Rendered config',
+        config: {
+          working_dir: '{{ workspaceDir }}',
+          model: '{{ modelName }}',
+          cli_config: {
+            rendered_config: '{{ envValue }}',
+          },
+          cli_env: {
+            RENDERED_VALUE: '{{ envValue }}',
+          },
+        },
+      },
+    } as any);
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    const spawnArgs = mocks.spawn.mock.calls[0][1] as string[];
+    expect(spawnArgs).toEqual(expect.arrayContaining(['rendered_config="rendered-env"']));
+    const spawnEnv = mocks.spawn.mock.calls[0][2].env as Record<string, string>;
+    expect(spawnEnv.RENDERED_VALUE).toBe('rendered-env');
+
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    expect(threadStart.params).toMatchObject({
+      cwd: process.cwd(),
+      model: 'gpt-5.4',
+      config: {
+        rendered_config: 'rendered-env',
+      },
+    });
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_rendered_config' } } });
+
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    expect(turnStart.params).toMatchObject({
+      cwd: process.cwd(),
+      model: 'gpt-5.4',
+    });
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_rendered_config', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_rendered_config',
+        turnId: 'turn_rendered_config',
+        itemId: 'msg_rendered_config',
+        delta: 'Rendered config done',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_rendered_config',
+        turn: { id: 'turn_rendered_config', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await expect(resultPromise).resolves.toMatchObject({ output: 'Rendered config done' });
+  });
+
   it('applies prompt-level server request policy for each turn on a reused connection', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
@@ -2909,6 +3047,7 @@ describe('OpenAICodexAppServerProvider', () => {
   });
 
   it('uses prompt-level request timeouts for thread requests on reused connections', async () => {
+    vi.useFakeTimers();
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
     const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
@@ -2919,63 +3058,79 @@ describe('OpenAICodexAppServerProvider', () => {
       },
     });
 
-    const firstResultPromise = provider.callApi('Reusable timeout prompt one', {
-      prompt: {
-        raw: 'Reusable timeout prompt one',
-        config: { request_timeout_ms: 1_000 },
-      },
-    } as any);
-    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
-    server.send({ id: initialize.id, result: {} });
-    const firstThreadStart = await waitForMessage(
-      server,
-      (message) => message.method === 'thread/start',
-    );
-    server.send({ id: firstThreadStart.id, result: { thread: { id: 'thr_timeout_config_1' } } });
-    const firstTurnStart = await waitForMessage(
-      server,
-      (message) => message.method === 'turn/start',
-    );
-    server.send({
-      id: firstTurnStart.id,
-      result: { turn: { id: 'turn_timeout_config_1', status: 'inProgress' } },
-    });
-    server.send({
-      method: 'item/agentMessage/delta',
-      params: {
-        threadId: 'thr_timeout_config_1',
-        turnId: 'turn_timeout_config_1',
-        itemId: 'msg_timeout_config_1',
-        delta: 'First timeout config',
-      },
-    });
-    server.send({
-      method: 'turn/completed',
-      params: {
-        threadId: 'thr_timeout_config_1',
-        turn: { id: 'turn_timeout_config_1', status: 'completed', items: [], error: null },
-      },
-    });
-    await expect(firstResultPromise).resolves.toMatchObject({ output: 'First timeout config' });
+    try {
+      const firstResultPromise = provider.callApi('Reusable timeout prompt one', {
+        prompt: {
+          raw: 'Reusable timeout prompt one',
+          config: { request_timeout_ms: 1_000 },
+        },
+      } as any);
+      const initialize = await waitForMessageWithoutTimers(
+        server,
+        (message) => message.method === 'initialize',
+      );
+      server.send({ id: initialize.id, result: {} });
+      const firstThreadStart = await waitForMessageWithoutTimers(
+        server,
+        (message) => message.method === 'thread/start',
+      );
+      server.send({
+        id: firstThreadStart.id,
+        result: { thread: { id: 'thr_timeout_config_1' } },
+      });
+      const firstTurnStart = await waitForMessageWithoutTimers(
+        server,
+        (message) => message.method === 'turn/start',
+      );
+      server.send({
+        id: firstTurnStart.id,
+        result: { turn: { id: 'turn_timeout_config_1', status: 'inProgress' } },
+      });
+      server.send({
+        method: 'item/agentMessage/delta',
+        params: {
+          threadId: 'thr_timeout_config_1',
+          turnId: 'turn_timeout_config_1',
+          itemId: 'msg_timeout_config_1',
+          delta: 'First timeout config',
+        },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_timeout_config_1',
+          turn: { id: 'turn_timeout_config_1', status: 'completed', items: [], error: null },
+        },
+      });
+      await expect(firstResultPromise).resolves.toMatchObject({ output: 'First timeout config' });
 
-    const secondResultPromise = provider.callApi('Reusable timeout prompt two', {
-      prompt: {
-        raw: 'Reusable timeout prompt two',
-        config: { request_timeout_ms: 17 },
-      },
-    } as any);
-    await expect(secondResultPromise).resolves.toEqual({
-      error:
-        'Error calling OpenAI Codex app-server: codex app-server request timed out: thread/start',
-    });
-    expect(
-      server
-        .messages()
-        .filter(
-          (message) => message.method === 'thread/start' && message.id !== firstThreadStart.id,
-        ),
-    ).toHaveLength(1);
-    expect(setTimeoutSpy.mock.calls.some(([, timeoutMs]) => timeoutMs === 17)).toBe(true);
+      const secondResultPromise = provider.callApi('Reusable timeout prompt two', {
+        prompt: {
+          raw: 'Reusable timeout prompt two',
+          config: { request_timeout_ms: 17 },
+        },
+      } as any);
+      await waitForMessageWithoutTimers(
+        server,
+        (message) => message.method === 'thread/start' && message.id !== firstThreadStart.id,
+      );
+      expect(setTimeoutSpy.mock.calls.some(([, timeoutMs]) => timeoutMs === 17)).toBe(true);
+      await vi.advanceTimersByTimeAsync(17);
+
+      await expect(secondResultPromise).resolves.toEqual({
+        error:
+          'Error calling OpenAI Codex app-server: codex app-server request timed out: thread/start',
+      });
+      expect(
+        server
+          .messages()
+          .filter(
+            (message) => message.method === 'thread/start' && message.id !== firstThreadStart.id,
+          ),
+      ).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('fails an active turn when the app-server process exits before completion', async () => {
