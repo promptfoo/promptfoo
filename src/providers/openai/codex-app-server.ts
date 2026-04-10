@@ -1619,15 +1619,15 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         : undefined;
       const cachedOrPending = this.getCachedOrPendingThread(cacheKey);
       if (cachedOrPending !== undefined) {
-        return this.waitForSharedThreadHandle(cachedOrPending, callOptions?.abortSignal);
+        return this.waitForThreadHandle(cachedOrPending, callOptions?.abortSignal);
       }
 
+      this.throwIfThreadWaitAborted(callOptions?.abortSignal);
       const threadPromise = this.cacheThreadPromise(cacheKey, connection.instanceId, async () => {
         const response = await connection.request(
           'thread/resume',
           this.buildThreadResumeParams(config.thread_id as string, config),
           {
-            abortSignal: cacheKey ? undefined : callOptions?.abortSignal,
             timeoutMs: this.getRequestTimeoutMs(config),
           },
         );
@@ -1644,8 +1644,13 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         return handle;
       });
       return cacheKey
-        ? this.waitForSharedThreadHandle(threadPromise, callOptions?.abortSignal)
-        : threadPromise;
+        ? this.waitForThreadHandle(threadPromise, callOptions?.abortSignal)
+        : this.waitForThreadHandle(threadPromise, callOptions?.abortSignal, {
+            onAbortResolvedThread: (threadHandle) =>
+              this.cleanupThreadAfterTurn(connection, threadHandle, config, {
+                skipIfProtected: true,
+              }),
+          });
     }
 
     const cacheKey = canPersistThread
@@ -1653,9 +1658,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       : undefined;
     const cachedOrPending = this.getCachedOrPendingThread(cacheKey);
     if (cachedOrPending !== undefined) {
-      return this.waitForSharedThreadHandle(cachedOrPending, callOptions?.abortSignal);
+      return this.waitForThreadHandle(cachedOrPending, callOptions?.abortSignal);
     }
 
+    this.throwIfThreadWaitAborted(callOptions?.abortSignal);
     const threadPromise = this.cacheThreadPromise(cacheKey, connection.instanceId, async () => {
       const poolSize = config.thread_pool_size ?? 1;
       if (cacheKey && this.threads.size >= poolSize) {
@@ -1670,7 +1676,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         'thread/start',
         this.buildThreadStartParams(config),
         {
-          abortSignal: cacheKey ? undefined : callOptions?.abortSignal,
           timeoutMs: this.getRequestTimeoutMs(config),
         },
       );
@@ -1692,8 +1697,13 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       return handle;
     });
     return cacheKey
-      ? this.waitForSharedThreadHandle(threadPromise, callOptions?.abortSignal)
-      : threadPromise;
+      ? this.waitForThreadHandle(threadPromise, callOptions?.abortSignal)
+      : this.waitForThreadHandle(threadPromise, callOptions?.abortSignal, {
+          onAbortResolvedThread: (threadHandle) =>
+            this.cleanupThreadAfterTurn(connection, threadHandle, config, {
+              skipIfProtected: true,
+            }),
+        });
   }
 
   private getCachedOrPendingThread(
@@ -1726,27 +1736,63 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return threadPromise;
   }
 
-  private async waitForSharedThreadHandle(
+  private throwIfThreadWaitAborted(abortSignal: AbortSignal | undefined): void {
+    if (abortSignal?.aborted) {
+      throw createAbortError('Codex app-server thread wait aborted');
+    }
+  }
+
+  private async waitForThreadHandle(
     thread: ThreadHandle | Promise<ThreadHandle>,
     abortSignal: AbortSignal | undefined,
+    options: {
+      abortMessage?: string;
+      onAbortResolvedThread?: (threadHandle: ThreadHandle) => Promise<void>;
+    } = {},
   ): Promise<ThreadHandle> {
+    const threadPromise = Promise.resolve(thread);
     if (!abortSignal) {
-      return thread;
+      return threadPromise;
     }
+
+    let abortCleanupScheduled = false;
+    const scheduleAbortCleanup = () => {
+      if (abortCleanupScheduled) {
+        return;
+      }
+      abortCleanupScheduled = true;
+      void threadPromise
+        .then(async (threadHandle) => {
+          if (options.onAbortResolvedThread) {
+            await options.onAbortResolvedThread(threadHandle);
+          }
+        })
+        .catch((error) => {
+          logger.debug('[CodexAppServer] Thread request finished with error after abort', {
+            error,
+          });
+        });
+    };
+
+    const createThreadAbortError = () =>
+      createAbortError(options.abortMessage ?? 'Codex app-server thread wait aborted');
+
     if (abortSignal.aborted) {
-      throw createAbortError('Codex app-server shared thread wait aborted');
+      scheduleAbortCleanup();
+      throw createThreadAbortError();
     }
 
     let abortListener: (() => void) | undefined;
     const abortPromise = new Promise<ThreadHandle>((_, reject) => {
       abortListener = () => {
-        reject(createAbortError('Codex app-server shared thread wait aborted'));
+        scheduleAbortCleanup();
+        reject(createThreadAbortError());
       };
       abortSignal.addEventListener('abort', abortListener, { once: true });
     });
 
     try {
-      return await Promise.race([Promise.resolve(thread), abortPromise]);
+      return await Promise.race([threadPromise, abortPromise]);
     } finally {
       if (abortListener) {
         abortSignal.removeEventListener('abort', abortListener);
@@ -2423,9 +2469,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     connection: CodexAppServerConnection,
     threadHandle: ThreadHandle,
     config: CodexAppServerConfig,
-    options: { skipIfActiveTurn?: boolean } = {},
+    options: { skipIfActiveTurn?: boolean; skipIfProtected?: boolean } = {},
   ): Promise<void> {
     if (threadHandle.persistent || config.thread_cleanup === 'none') {
+      return;
+    }
+    if (options.skipIfProtected && this.isThreadProtected(threadHandle.threadId)) {
       return;
     }
     if (options.skipIfActiveTurn && this.activeTurnsByThread.has(threadHandle.threadId)) {

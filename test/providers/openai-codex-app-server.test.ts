@@ -2361,12 +2361,17 @@ describe('OpenAICodexAppServerProvider', () => {
         (message) => message.method === 'initialize',
       );
       server.send({ id: initialize.id, result: {} });
-      await waitForMessageWithoutTimers(server, (message) => message.method === 'thread/start');
+      const threadStart = await waitForMessageWithoutTimers(
+        server,
+        (message) => message.method === 'thread/start',
+      );
+      server.send({ id: threadStart.id, result: { thread: { id: 'thr_timeout_listener' } } });
+      await waitForMessageWithoutTimers(server, (message) => message.method === 'turn/start');
       await vi.advanceTimersByTimeAsync(1);
 
       await expect(resultPromise).resolves.toEqual({
         error:
-          'Error calling OpenAI Codex app-server: codex app-server request timed out: thread/start',
+          'Error calling OpenAI Codex app-server: codex app-server request timed out: turn/start',
       });
       expect(removeAbortListener).toHaveBeenCalledWith('abort', expect.any(Function));
       expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
@@ -2523,6 +2528,92 @@ describe('OpenAICodexAppServerProvider', () => {
       output: 'Active turn survived',
     });
     expect(mocks.spawn).toHaveBeenCalledTimes(1);
+    expect(server.proc.kill).not.toHaveBeenCalled();
+  });
+
+  it('cleans up a late non-persistent thread start response after caller aborts', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const abortController = new AbortController();
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        request_timeout_ms: 1_000,
+      },
+    });
+
+    const resultPromise = provider.callApi('Abort before thread start response', undefined, {
+      abortSignal: abortController.signal,
+    } as any);
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+
+    abortController.abort();
+    await expect(resultPromise).resolves.toEqual({
+      error: 'OpenAI Codex app-server call aborted',
+    });
+    expect(server.proc.kill).not.toHaveBeenCalled();
+
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_late_abort_start' } } });
+    const unsubscribe = await waitForMessage(
+      server,
+      (message) =>
+        message.method === 'thread/unsubscribe' &&
+        message.params?.threadId === 'thr_late_abort_start',
+    );
+    server.send({ id: unsubscribe.id, result: { status: 'unsubscribed' } });
+    await flushMicrotasks();
+
+    expect(server.messages().some((message) => message.method === 'turn/start')).toBe(false);
+    expect(server.proc.kill).not.toHaveBeenCalled();
+  });
+
+  it('cleans up a late non-persistent thread resume response after caller aborts', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const abortController = new AbortController();
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        request_timeout_ms: 1_000,
+        thread_id: 'thr_existing_late_abort_resume',
+      },
+    });
+
+    const resultPromise = provider.callApi('Abort before thread resume response', undefined, {
+      abortSignal: abortController.signal,
+    } as any);
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadResume = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/resume',
+    );
+
+    abortController.abort();
+    await expect(resultPromise).resolves.toEqual({
+      error: 'OpenAI Codex app-server call aborted',
+    });
+    expect(server.proc.kill).not.toHaveBeenCalled();
+
+    server.send({
+      id: threadResume.id,
+      result: { thread: { id: 'thr_existing_late_abort_resume' } },
+    });
+    const unsubscribe = await waitForMessage(
+      server,
+      (message) =>
+        message.method === 'thread/unsubscribe' &&
+        message.params?.threadId === 'thr_existing_late_abort_resume',
+    );
+    server.send({ id: unsubscribe.id, result: { status: 'unsubscribed' } });
+    await flushMicrotasks();
+
+    expect(server.messages().some((message) => message.method === 'turn/start')).toBe(false);
     expect(server.proc.kill).not.toHaveBeenCalled();
   });
 
