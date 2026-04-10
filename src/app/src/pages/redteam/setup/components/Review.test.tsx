@@ -3,6 +3,7 @@ import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
+import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { callApi } from '@app/utils/api';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -224,6 +225,8 @@ vi.mock('../hooks/useRedTeamConfig', () => ({
 }));
 
 describe('Review Component', () => {
+  let timers: TestTimers;
+
   const defaultConfig = {
     description: 'Test Configuration',
     plugins: [],
@@ -240,7 +243,7 @@ describe('Review Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
+    timers = useTestTimers();
 
     // Reset the mock to return a connected state by default
     vi.mocked(useApiHealth).mockReturnValue({
@@ -275,14 +278,7 @@ describe('Review Component', () => {
   });
 
   afterEach(() => {
-    // Only run pending timers if fake timers are active
-    // This prevents errors when child describe blocks use real timers
-    try {
-      vi.runOnlyPendingTimers();
-    } catch {
-      // Ignore error if timers are not mocked
-    }
-    vi.useRealTimers();
+    restoreTestTimers({ runPending: true });
   });
 
   describe('Component Integration', () => {
@@ -437,7 +433,7 @@ describe('Review Component', () => {
 
     // Advance timers for any animations/transitions
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(100);
+      await timers.advanceByAsync(100);
     });
 
     const defaultTestVariables = screen.getByTestId('default-test-variables');

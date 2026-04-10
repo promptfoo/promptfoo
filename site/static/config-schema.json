@@ -395,6 +395,9 @@
         "OPENCLAW_GATEWAY_PASSWORD": {
           "type": "string"
         },
+        "OPENCLAW_GATEWAY_PORT": {
+          "type": "string"
+        },
         "OPENCLAW_GATEWAY_TOKEN": {
           "type": "string"
         },
@@ -1714,6 +1717,9 @@
                       "type": "string"
                     },
                     "OPENCLAW_GATEWAY_PASSWORD": {
+                      "type": "string"
+                    },
+                    "OPENCLAW_GATEWAY_PORT": {
                       "type": "string"
                     },
                     "OPENCLAW_GATEWAY_TOKEN": {

@@ -41,7 +41,8 @@ npx promptfoo@latest eval
 
 The provider auto-detects the gateway URL and bearer auth secret from the active OpenClaw config
 (`OPENCLAW_CONFIG_PATH` when set, otherwise `~/.openclaw/openclaw.json`). This includes local
-bind/port, `gateway.tls.enabled`, and `gateway.mode=remote` with `gateway.remote.url`.
+bind/port, `OPENCLAW_GATEWAY_PORT` local port overrides, `gateway.tls.enabled`, and
+`gateway.mode=remote` with `gateway.remote.url`.
 
 ## Configuration
 
@@ -54,6 +55,8 @@ providers:
       gateway_url: http://127.0.0.1:18789
       auth_token: your-token-here
       # Use auth_password instead when gateway.auth.mode=password
+      # Optional backend model override, sent as x-openclaw-model:
+      backend_model: openai/gpt-5.4
 ```
 
 Or use environment variables:
@@ -61,6 +64,8 @@ Or use environment variables:
 ```bash
 export OPENCLAW_CONFIG_PATH=~/.openclaw/openclaw.json  # optional
 export OPENCLAW_GATEWAY_URL=http://127.0.0.1:18789
+# Or override only the local auto-detected port:
+# export OPENCLAW_GATEWAY_PORT=18789
 export OPENCLAW_GATEWAY_TOKEN=your-token-here
 # Or, if your gateway uses password auth:
 # export OPENCLAW_GATEWAY_PASSWORD=your-password-here
@@ -68,6 +73,10 @@ export OPENCLAW_GATEWAY_TOKEN=your-token-here
 
 For `openclaw:agent:*`, promptfoo generates an isolated session key per call by default so evals do
 not reuse your persistent OpenClaw `main` session. Set `session_key` explicitly if you want session
-continuity.
+continuity. The WS provider signs OpenClaw's `connect.challenge`, persists issued device tokens,
+and retries once with a cached device token when the gateway recommends it.
+
+Use `openclaw:embedding:main` or `openclaw:embeddings:<agent-id>` for `/v1/embeddings`. Set
+`backend_model` when you want a specific embedding model such as `openai/text-embedding-3-small`.
 
 For password-mode gateways, use `auth_password` or `OPENCLAW_GATEWAY_PASSWORD`.
