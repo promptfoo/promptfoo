@@ -967,6 +967,101 @@ describe('OpenAICodexAppServerProvider', () => {
     await expect(secondResultPromise).resolves.toMatchObject({ output: 'Queued second' });
   });
 
+  it('cleans up a resumed thread when a queued turn aborts before it starts', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const abortController = new AbortController();
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_id: 'thr_existing_abort_queue',
+      },
+    });
+    const originalCleanupThreadAfterTurn = (provider as any).cleanupThreadAfterTurn.bind(provider);
+    let cleanupAttemptCount = 0;
+    vi.spyOn(provider as any, 'cleanupThreadAfterTurn').mockImplementation(
+      async (...args: any[]) => {
+        const result = await originalCleanupThreadAfterTurn(...args);
+        cleanupAttemptCount += 1;
+        if (cleanupAttemptCount === 1) {
+          abortController.abort();
+        }
+        return result;
+      },
+    );
+
+    const firstResultPromise = provider.callApi('Shared thread first');
+    const secondResultPromise = provider.callApi('Shared thread second', undefined, {
+      abortSignal: abortController.signal,
+    } as any);
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const firstThreadResume = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/resume',
+    );
+    const secondThreadResume = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/resume' && message.id !== firstThreadResume.id,
+    );
+    server.send({
+      id: firstThreadResume.id,
+      result: { thread: { id: 'thr_existing_abort_queue' } },
+    });
+    server.send({
+      id: secondThreadResume.id,
+      result: { thread: { id: 'thr_existing_abort_queue' } },
+    });
+
+    const firstTurnStart = await waitForMessage(
+      server,
+      (message) => message.method === 'turn/start',
+    );
+    server.send({
+      id: firstTurnStart.id,
+      result: { turn: { id: 'turn_existing_abort_queue_1', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_existing_abort_queue',
+        turnId: 'turn_existing_abort_queue_1',
+        itemId: 'msg_existing_abort_queue_1',
+        delta: 'Queued cleanup first',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_existing_abort_queue',
+        turn: { id: 'turn_existing_abort_queue_1', status: 'completed', items: [], error: null },
+      },
+    });
+
+    const unsubscribe = await waitForMessage(
+      server,
+      (message) =>
+        message.method === 'thread/unsubscribe' &&
+        message.params?.threadId === 'thr_existing_abort_queue',
+    );
+    server.send({ id: unsubscribe.id, result: { status: 'unsubscribed' } });
+
+    await expect(firstResultPromise).resolves.toMatchObject({ output: 'Queued cleanup first' });
+    await expect(secondResultPromise).resolves.toEqual({
+      error: 'OpenAI Codex app-server call aborted',
+    });
+    expect(
+      server
+        .messages()
+        .filter(
+          (message) =>
+            message.method === 'thread/unsubscribe' &&
+            message.params?.threadId === 'thr_existing_abort_queue',
+        ),
+    ).toHaveLength(1);
+  });
+
   it('serializes deep-tracing turns that resume the same thread id', async () => {
     const firstServer = createMockAppServer();
     const secondServer = createMockAppServer();
@@ -2142,10 +2237,76 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(mocks.spawn).toHaveBeenCalledTimes(2);
   });
 
-  it('restarts a reused app-server process after a JSON-RPC request abort', async () => {
-    const firstServer = createMockAppServer();
-    const secondServer = createMockAppServer();
-    mocks.spawn.mockReturnValueOnce(firstServer.proc).mockReturnValueOnce(secondServer.proc);
+  it('does not fail an active turn when another reused JSON-RPC request aborts', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const abortController = new AbortController();
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        request_timeout_ms: 1_000,
+        thread_cleanup: 'none',
+      },
+    });
+
+    const activeResultPromise = provider.callApi('Active turn survives unrelated abort');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const activeThreadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: activeThreadStart.id, result: { thread: { id: 'thr_active_abort' } } });
+    const activeTurnStart = await waitForMessage(
+      server,
+      (message) => message.method === 'turn/start',
+    );
+    server.send({
+      id: activeTurnStart.id,
+      result: { turn: { id: 'turn_active_abort', status: 'inProgress' } },
+    });
+
+    const abortedResultPromise = provider.callApi('Abort unrelated request', undefined, {
+      abortSignal: abortController.signal,
+    } as any);
+    await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start' && message.id !== activeThreadStart.id,
+    );
+    abortController.abort();
+
+    await expect(abortedResultPromise).resolves.toEqual({
+      error: 'OpenAI Codex app-server call aborted',
+    });
+    expect(server.proc.kill).not.toHaveBeenCalled();
+
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_active_abort',
+        turnId: 'turn_active_abort',
+        itemId: 'msg_active_abort',
+        delta: 'Active turn survived',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_active_abort',
+        turn: { id: 'turn_active_abort', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await expect(activeResultPromise).resolves.toMatchObject({
+      output: 'Active turn survived',
+    });
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+    expect(server.proc.kill).not.toHaveBeenCalled();
+  });
+
+  it('keeps a reused app-server process after a JSON-RPC request abort', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
     const abortController = new AbortController();
 
     const provider = new OpenAICodexAppServerProvider({
@@ -2162,39 +2323,35 @@ describe('OpenAICodexAppServerProvider', () => {
         abortSignal: abortController.signal,
       } as any,
     );
-    const firstInitialize = await waitForMessage(
-      firstServer,
-      (message) => message.method === 'initialize',
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const abortedThreadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
     );
-    firstServer.send({ id: firstInitialize.id, result: {} });
-    await waitForMessage(firstServer, (message) => message.method === 'thread/start');
     abortController.abort();
 
     await expect(abortedResultPromise).resolves.toEqual({
       error: 'OpenAI Codex app-server call aborted',
     });
-    expect(firstServer.proc.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(server.proc.kill).not.toHaveBeenCalled();
+    server.send({
+      id: abortedThreadStart.id,
+      result: { thread: { id: 'thr_late_aborted_request' } },
+    });
 
     const recoveredResultPromise = provider.callApi('Recover after request abort');
-    const secondInitialize = await waitForMessage(
-      secondServer,
-      (message) => message.method === 'initialize',
-    );
-    secondServer.send({ id: secondInitialize.id, result: {} });
     const threadStart = await waitForMessage(
-      secondServer,
-      (message) => message.method === 'thread/start',
+      server,
+      (message) => message.method === 'thread/start' && message.id !== abortedThreadStart.id,
     );
-    secondServer.send({ id: threadStart.id, result: { thread: { id: 'thr_after_abort' } } });
-    const turnStart = await waitForMessage(
-      secondServer,
-      (message) => message.method === 'turn/start',
-    );
-    secondServer.send({
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_after_abort' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
       id: turnStart.id,
       result: { turn: { id: 'turn_after_abort', status: 'inProgress' } },
     });
-    secondServer.send({
+    server.send({
       method: 'item/agentMessage/delta',
       params: {
         threadId: 'thr_after_abort',
@@ -2203,7 +2360,7 @@ describe('OpenAICodexAppServerProvider', () => {
         delta: 'Recovered after abort',
       },
     });
-    secondServer.send({
+    server.send({
       method: 'turn/completed',
       params: {
         threadId: 'thr_after_abort',
@@ -2214,7 +2371,8 @@ describe('OpenAICodexAppServerProvider', () => {
     await expect(recoveredResultPromise).resolves.toMatchObject({
       output: 'Recovered after abort',
     });
-    expect(mocks.spawn).toHaveBeenCalledTimes(2);
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+    expect(server.proc.kill).not.toHaveBeenCalled();
   });
 
   it('cleans up failed startup attempts and retries with a fresh app-server process', async () => {

@@ -788,7 +788,10 @@ class CodexAppServerConnection {
             clearTimeout(pendingRequest.timeout);
           }
           reject(error);
-          this.closeAfterRequestAbort(method, error);
+          logger.debug('[CodexAppServer] JSON-RPC request aborted', {
+            error: error.message,
+            method,
+          });
         };
         options.abortSignal.addEventListener('abort', pendingRequest.abortListener, { once: true });
       }
@@ -989,23 +992,6 @@ class CodexAppServerConnection {
     this.options.onClose(error);
     void this.close().catch((closeError) => {
       logger.debug('[CodexAppServer] Error closing app-server after request timeout', {
-        error: closeError,
-      });
-    });
-  }
-
-  private closeAfterRequestAbort(method: string, error: Error): void {
-    if (this.closed) {
-      return;
-    }
-
-    logger.warn('[CodexAppServer] Closing app-server after JSON-RPC request abort', {
-      error: error.message,
-      method,
-    });
-    this.options.onClose(error);
-    void this.close().catch((closeError) => {
-      logger.debug('[CodexAppServer] Error closing app-server after request abort', {
         error: closeError,
       });
     });
@@ -1259,10 +1245,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         callOptions,
       );
       this.protectThread(threadHandle.threadId);
+      let turnStarted = false;
       try {
         const queueKey = this.getThreadRunQueueKey(resolvedConfig, threadHandle);
 
         return await this.runSerializedThreadTurn(queueKey, callOptions?.abortSignal, async () => {
+          turnStarted = true;
           const state = this.createTurnState(
             connectionKey,
             connection.instanceId,
@@ -1301,6 +1289,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         });
       } finally {
         this.unprotectThread(threadHandle.threadId);
+        if (!turnStarted) {
+          await this.cleanupThreadAfterTurn(connection, threadHandle, resolvedConfig, {
+            skipIfActiveTurn: true,
+          });
+        }
         this.scheduleThreadPoolEnforcement(connection, connectionKey, resolvedConfig);
       }
     } catch (error: unknown) {
@@ -2394,8 +2387,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     connection: CodexAppServerConnection,
     threadHandle: ThreadHandle,
     config: CodexAppServerConfig,
+    options: { skipIfActiveTurn?: boolean } = {},
   ): Promise<void> {
     if (threadHandle.persistent || config.thread_cleanup === 'none') {
+      return;
+    }
+    if (options.skipIfActiveTurn && this.activeTurnsByThread.has(threadHandle.threadId)) {
       return;
     }
     if (config.thread_id && (this.protectedThreadCounts.get(threadHandle.threadId) ?? 0) > 1) {
