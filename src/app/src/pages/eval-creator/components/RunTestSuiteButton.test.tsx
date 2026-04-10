@@ -1,6 +1,6 @@
 import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { useStore } from '@app/stores/evalConfig';
-import { callApi } from '@app/utils/api';
+import { mockCallApiRoutes, rejectCallApi, resetCallApiMock } from '@app/tests/apiMocks';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -29,7 +29,8 @@ vi.mock('@app/hooks/useToast', () => ({
 describe('RunTestSuiteButton', () => {
   beforeEach(() => {
     useStore.getState().reset();
-    vi.clearAllMocks();
+    resetCallApiMock();
+    mockShowToast.mockReset();
     vi.useFakeTimers();
   });
 
@@ -71,15 +72,15 @@ describe('RunTestSuiteButton', () => {
 
   it('should handle progress API failure after job creation', async () => {
     const mockJobId = '123';
-    const mockCallApi = vi.mocked(callApi);
-
-    mockCallApi
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockJobId }) } as any)
-      .mockResolvedValueOnce({
+    mockCallApiRoutes([
+      { method: 'POST', path: '/eval/job', response: { id: mockJobId } },
+      {
+        path: `/eval/job/${mockJobId}/`,
         ok: false,
         status: 500,
-        json: async () => ({ message: 'Progress API failed' }),
-      } as any);
+        response: { message: 'Progress API failed' },
+      },
+    ]);
 
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],
@@ -112,7 +113,7 @@ describe('RunTestSuiteButton', () => {
     const errorMessage = 'Failed to submit test suite';
 
     // Mock callApi to reject with an error
-    vi.mocked(callApi).mockRejectedValue(new Error(errorMessage));
+    rejectCallApi(new Error(errorMessage));
 
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],

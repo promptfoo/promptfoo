@@ -1,7 +1,8 @@
 import useApiConfig from '@app/stores/apiConfig';
+import { mockCallApiResponse, rejectCallApi, resetCallApiMock } from '@app/tests/apiMocks';
 import { callApi, fetchUserEmail } from '@app/utils/api';
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useEmailVerification } from './useEmailVerification';
 
 vi.mock('@app/utils/api', () => ({
@@ -13,21 +14,11 @@ vi.mock('@app/utils/api', () => ({
 
 describe('useEmailVerification', () => {
   const setupApiMock = (response: any, isSuccess = true) => {
-    if (isSuccess) {
-      (callApi as Mock).mockResolvedValue({
-        ok: true,
-        json: vi.fn().mockResolvedValue(response),
-      });
-    } else {
-      (callApi as Mock).mockResolvedValue({
-        ok: false,
-        json: vi.fn().mockResolvedValue(response),
-      });
-    }
+    mockCallApiResponse(response, { ok: isSuccess });
   };
 
   const setupApiError = (error: Error) => {
-    (callApi as Mock).mockRejectedValue(error);
+    rejectCallApi(error);
   };
 
   const callCheckEmailStatus = async (hook: any) => {
@@ -55,7 +46,7 @@ describe('useEmailVerification', () => {
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    resetCallApiMock();
   });
 
   describe('checkEmailStatus', () => {
@@ -285,11 +276,11 @@ describe('useEmailVerification', () => {
 
 describe('fetchUserEmail', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.mocked(fetchUserEmail).mockClear();
   });
 
   it('should return null when apiBaseUrl is missing or invalid', async () => {
-    (fetchUserEmail as Mock).mockImplementationOnce(async () => null);
+    vi.mocked(fetchUserEmail).mockImplementationOnce(async () => null);
 
     const mockGetState = vi.fn(() => ({
       apiBaseUrl: undefined,
