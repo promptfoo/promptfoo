@@ -3,6 +3,10 @@ import appConfig from './vite.config';
 
 export default {
   ...appConfig,
+  server: {
+    ...appConfig.server,
+    port: 0,
+  },
   test: {
     globals: false,
     css: true,
