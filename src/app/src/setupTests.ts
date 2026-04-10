@@ -129,15 +129,24 @@ if (typeof HTMLMediaElement !== 'undefined') {
 // Global fetch mock for all tests
 // This provides default responses for app bootstrap endpoints. Tests should mock
 // any other network calls explicitly so missing mocks fail fast.
+function getFetchRequestDetails(input: RequestInfo | URL, init?: RequestInit) {
+  const urlString =
+    typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
+  const method = (
+    init?.method ??
+    (typeof Request !== 'undefined' && input instanceof Request ? input.method : 'GET')
+  ).toUpperCase();
+  const pathname = new URL(urlString, 'http://localhost').pathname.replace(/\/$/, '');
+
+  return { method, pathname, urlString };
+}
+
 vi.stubGlobal(
   'fetch',
   vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-    // Default responses for common API endpoints
-    const urlString =
-      typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
-    const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+    const { method, pathname, urlString } = getFetchRequestDetails(input, init);
 
-    if (urlString.includes('/api/providers/config-status') || urlString.includes('config-status')) {
+    if (method === 'GET' && pathname.endsWith('/api/providers/config-status')) {
       return Promise.resolve({
         ok: true,
         json: async () => ({
@@ -147,14 +156,14 @@ vi.stubGlobal(
       } as Response);
     }
 
-    if (urlString.includes('/api/user/cloud-config') || urlString.includes('cloud-config')) {
+    if (method === 'GET' && pathname.endsWith('/api/user/cloud-config')) {
       return Promise.resolve({
         ok: true,
         json: async () => ({}),
       } as Response);
     }
 
-    if (urlString.includes('/providers') || urlString.includes('/api/providers')) {
+    if (method === 'GET' && pathname.endsWith('/api/providers')) {
       return Promise.resolve({
         ok: true,
         json: async () => ({
