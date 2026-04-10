@@ -1897,6 +1897,176 @@ describe('OpenAICodexAppServerProvider', () => {
     );
   });
 
+  it('keeps shared persistent thread start alive when the first waiter aborts', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const abortController = new AbortController();
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        persist_threads: true,
+        thread_cleanup: 'none',
+      },
+    });
+
+    const firstResultPromise = provider.callApi('Shared aborted thread start', undefined, {
+      abortSignal: abortController.signal,
+    } as any);
+    const secondResultPromise = provider.callApi('Shared aborted thread start');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    expect(server.messages().filter((message) => message.method === 'thread/start')).toHaveLength(
+      1,
+    );
+
+    abortController.abort();
+    await expect(firstResultPromise).resolves.toEqual({
+      error: 'OpenAI Codex app-server call aborted',
+    });
+    expect(server.proc.kill).not.toHaveBeenCalled();
+
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_shared_abort_start' } } });
+    const secondTurnStart = await waitForMessage(
+      server,
+      (message) => message.method === 'turn/start',
+    );
+    expect(secondTurnStart.params.threadId).toBe('thr_shared_abort_start');
+    server.send({
+      id: secondTurnStart.id,
+      result: { turn: { id: 'turn_shared_abort_start_2', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_shared_abort_start',
+        turnId: 'turn_shared_abort_start_2',
+        itemId: 'msg_shared_abort_start_2',
+        delta: 'Second survived thread start abort',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_shared_abort_start',
+        turn: { id: 'turn_shared_abort_start_2', status: 'completed', items: [], error: null },
+      },
+    });
+    await expect(secondResultPromise).resolves.toMatchObject({
+      output: 'Second survived thread start abort',
+    });
+
+    const thirdResultPromise = provider.callApi('Shared aborted thread start');
+    const thirdTurnStart = await waitForMessage(
+      server,
+      (message) => message.method === 'turn/start' && message.id !== secondTurnStart.id,
+    );
+    expect(thirdTurnStart.params.threadId).toBe('thr_shared_abort_start');
+    expect(server.messages().filter((message) => message.method === 'thread/start')).toHaveLength(
+      1,
+    );
+    server.send({
+      id: thirdTurnStart.id,
+      result: { turn: { id: 'turn_shared_abort_start_3', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_shared_abort_start',
+        turnId: 'turn_shared_abort_start_3',
+        itemId: 'msg_shared_abort_start_3',
+        delta: 'Cached after abort',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_shared_abort_start',
+        turn: { id: 'turn_shared_abort_start_3', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await expect(thirdResultPromise).resolves.toMatchObject({ output: 'Cached after abort' });
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps shared persistent thread resume alive when the first waiter aborts', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const abortController = new AbortController();
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_id: 'thr_existing_shared_abort',
+        persist_threads: true,
+        thread_cleanup: 'none',
+      },
+    });
+
+    const firstResultPromise = provider.callApi('Shared aborted thread resume first', undefined, {
+      abortSignal: abortController.signal,
+    } as any);
+    const secondResultPromise = provider.callApi('Shared aborted thread resume second');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadResume = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/resume',
+    );
+    expect(server.messages().filter((message) => message.method === 'thread/resume')).toHaveLength(
+      1,
+    );
+
+    abortController.abort();
+    await expect(firstResultPromise).resolves.toEqual({
+      error: 'OpenAI Codex app-server call aborted',
+    });
+    expect(server.proc.kill).not.toHaveBeenCalled();
+
+    server.send({
+      id: threadResume.id,
+      result: { thread: { id: 'thr_existing_shared_abort' } },
+    });
+    const secondTurnStart = await waitForMessage(
+      server,
+      (message) => message.method === 'turn/start',
+    );
+    expect(secondTurnStart.params.threadId).toBe('thr_existing_shared_abort');
+    server.send({
+      id: secondTurnStart.id,
+      result: { turn: { id: 'turn_shared_abort_resume_2', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_existing_shared_abort',
+        turnId: 'turn_shared_abort_resume_2',
+        itemId: 'msg_shared_abort_resume_2',
+        delta: 'Second survived thread resume abort',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_existing_shared_abort',
+        turn: { id: 'turn_shared_abort_resume_2', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await expect(secondResultPromise).resolves.toMatchObject({
+      output: 'Second survived thread resume abort',
+    });
+    expect(server.messages().filter((message) => message.method === 'thread/resume')).toHaveLength(
+      1,
+    );
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+  });
+
   it('includes thread-start options in the persistent thread cache key', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);

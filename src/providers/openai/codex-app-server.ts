@@ -1617,15 +1617,15 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         : undefined;
       const cachedOrPending = this.getCachedOrPendingThread(cacheKey);
       if (cachedOrPending !== undefined) {
-        return cachedOrPending;
+        return this.waitForSharedThreadHandle(cachedOrPending, callOptions?.abortSignal);
       }
 
-      return this.cacheThreadPromise(cacheKey, connection.instanceId, async () => {
+      const threadPromise = this.cacheThreadPromise(cacheKey, connection.instanceId, async () => {
         const response = await connection.request(
           'thread/resume',
           this.buildThreadResumeParams(config.thread_id as string, config),
           {
-            abortSignal: callOptions?.abortSignal,
+            abortSignal: cacheKey ? undefined : callOptions?.abortSignal,
             timeoutMs: this.getRequestTimeoutMs(config),
           },
         );
@@ -1641,6 +1641,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         }
         return handle;
       });
+      return cacheKey
+        ? this.waitForSharedThreadHandle(threadPromise, callOptions?.abortSignal)
+        : threadPromise;
     }
 
     const cacheKey = canPersistThread
@@ -1648,10 +1651,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       : undefined;
     const cachedOrPending = this.getCachedOrPendingThread(cacheKey);
     if (cachedOrPending !== undefined) {
-      return cachedOrPending;
+      return this.waitForSharedThreadHandle(cachedOrPending, callOptions?.abortSignal);
     }
 
-    return this.cacheThreadPromise(cacheKey, connection.instanceId, async () => {
+    const threadPromise = this.cacheThreadPromise(cacheKey, connection.instanceId, async () => {
       const poolSize = config.thread_pool_size ?? 1;
       if (cacheKey && this.threads.size >= poolSize) {
         await this.evictOldestInactiveCachedThread(
@@ -1665,7 +1668,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         'thread/start',
         this.buildThreadStartParams(config),
         {
-          abortSignal: callOptions?.abortSignal,
+          abortSignal: cacheKey ? undefined : callOptions?.abortSignal,
           timeoutMs: this.getRequestTimeoutMs(config),
         },
       );
@@ -1686,6 +1689,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       }
       return handle;
     });
+    return cacheKey
+      ? this.waitForSharedThreadHandle(threadPromise, callOptions?.abortSignal)
+      : threadPromise;
   }
 
   private getCachedOrPendingThread(
@@ -1716,6 +1722,34 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     this.threadPromises.set(cacheKey, threadPromise);
     this.threadPromiseConnectionInstances.set(cacheKey, connectionInstanceId);
     return threadPromise;
+  }
+
+  private async waitForSharedThreadHandle(
+    thread: ThreadHandle | Promise<ThreadHandle>,
+    abortSignal: AbortSignal | undefined,
+  ): Promise<ThreadHandle> {
+    if (!abortSignal) {
+      return thread;
+    }
+    if (abortSignal.aborted) {
+      throw createAbortError('Codex app-server shared thread wait aborted');
+    }
+
+    let abortListener: (() => void) | undefined;
+    const abortPromise = new Promise<ThreadHandle>((_, reject) => {
+      abortListener = () => {
+        reject(createAbortError('Codex app-server shared thread wait aborted'));
+      };
+      abortSignal.addEventListener('abort', abortListener, { once: true });
+    });
+
+    try {
+      return await Promise.race([Promise.resolve(thread), abortPromise]);
+    } finally {
+      if (abortListener) {
+        abortSignal.removeEventListener('abort', abortListener);
+      }
+    }
   }
 
   private scheduleThreadPoolEnforcement(
