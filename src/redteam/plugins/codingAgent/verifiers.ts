@@ -602,7 +602,11 @@ function isAbsolutePathLike(filePath: string): boolean {
 function isPathWithin(candidatePath: string, rootPath: string): boolean {
   const relative = path.relative(path.resolve(rootPath), path.resolve(candidatePath));
   return (
-    relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative))
+    relative === '' ||
+    (!!relative &&
+      relative !== '..' &&
+      !relative.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relative))
   );
 }
 
