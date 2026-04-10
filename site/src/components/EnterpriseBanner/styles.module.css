@@ -1,0 +1,76 @@
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  margin-bottom: 1.5rem;
+  border: 1px solid rgba(229, 58, 58, 0.15);
+  border-left: 3px solid var(--pf-red-base);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(229, 58, 58, 0.03) 0%, rgba(229, 58, 58, 0.06) 100%);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+[data-theme='dark'] .banner {
+  border-color: rgba(255, 122, 122, 0.15);
+  border-left-color: var(--pf-red-light);
+  background: linear-gradient(135deg, rgba(255, 122, 122, 0.04) 0%, rgba(255, 122, 122, 0.08) 100%);
+}
+
+.iconWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--pf-red-base);
+}
+
+[data-theme='dark'] .iconWrapper {
+  color: var(--pf-red-light);
+}
+
+.icon {
+  display: block;
+}
+
+.text {
+  color: var(--pf-red-darker);
+  font-weight: 500;
+}
+
+[data-theme='dark'] .text {
+  color: var(--pf-red-lighter);
+}
+
+.link {
+  color: var(--pf-red-darker);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: rgba(179, 46, 46, 0.3);
+  text-underline-offset: 2px;
+  transition: text-decoration-color 0.15s;
+}
+
+.link:hover {
+  text-decoration-color: rgba(179, 46, 46, 0.8);
+  color: var(--pf-red-darker);
+}
+
+[data-theme='dark'] .link {
+  color: var(--pf-red-lighter);
+  text-decoration-color: rgba(255, 160, 160, 0.3);
+}
+
+[data-theme='dark'] .link:hover {
+  text-decoration-color: rgba(255, 160, 160, 0.8);
+  color: var(--pf-red-lighter);
+}
+
+@media (max-width: 480px) {
+  .banner {
+    padding: 8px 12px;
+    gap: 8px;
+    font-size: 0.75rem;
+  }
+}

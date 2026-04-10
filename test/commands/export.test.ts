@@ -234,7 +234,7 @@ describe('exportCommand', () => {
       await program.parseAsync(['node', 'test', 'export', 'logs']);
 
       expect(logger.error).toHaveBeenCalledWith(
-        'No log directory found. Logs have not been created yet.',
+        `No log directory found. Logs are created when running commands like "promptfoo eval".\nLog directory: ${mockLogDir}`,
       );
       expect(process.exitCode).toBe(1);
     });
@@ -247,7 +247,9 @@ describe('exportCommand', () => {
 
       await program.parseAsync(['node', 'test', 'export', 'logs']);
 
-      expect(logger.error).toHaveBeenCalledWith('No log files found in the logs directory.');
+      expect(logger.error).toHaveBeenCalledWith(
+        `No log files found in the logs directory. Logs are created when running commands like "promptfoo eval".\nLog directory: ${mockLogDir}`,
+      );
       expect(process.exitCode).toBe(1);
     });
 

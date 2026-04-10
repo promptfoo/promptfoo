@@ -1,4 +1,4 @@
-# comparison (Azure Model Comparison)
+# azure/comparison (Azure Model Comparison)
 
 This example demonstrates how to compare models from different providers on Azure AI Foundry, including OpenAI, Anthropic Claude, Meta Llama, and Mistral.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example azure/comparison
+cd azure/comparison
 ```
 
 ## Setup
@@ -23,7 +24,7 @@ export AZURE_API_KEY=your-api-key
 | Provider  | Model                                    | Label         |
 | --------- | ---------------------------------------- | ------------- |
 | OpenAI    | `gpt-5.1`                                | gpt-5.1       |
-| Anthropic | `claude-sonnet-4-5-20250929`             | claude-sonnet |
+| Anthropic | `claude-sonnet-4-6`                      | claude-sonnet |
 | Meta      | `Llama-4-Maverick-17B-128E-Instruct-FP8` | llama-4       |
 | Mistral   | `Mistral-Large-2411`                     | mistral-large |
 

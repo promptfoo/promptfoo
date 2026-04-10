@@ -38,7 +38,7 @@ In practice, AI regulation flows through a stack:
 
 <div style={{display: 'flex', gap: '2.5rem', alignItems: 'flex-start', flexWrap: 'wrap', margin: '1.5rem 0 2rem'}}>
   <div style={{flex: '1 1 300px', minWidth: '260px', maxWidth: '400px'}}>
-    <img src="/img/blog/ai-regulation-2025/compliance-stack.svg" alt="The compliance stack: Executive policy flows down through agency guidance, procurement requirements, and contract clauses, ultimately requiring evidence from vendors" style={{width: '100%'}} />
+    <img src="/img/blog/ai-regulation-2025/compliance-stack.svg" alt="The compliance stack: Executive policy flows down through agency guidance, procurement requirements, and contract clauses, ultimately requiring evidence from vendors" style={{width: '100%', backgroundColor: 'var(--ifm-background-surface-color)', padding: '0.5rem', borderRadius: '8px'}} />
   </div>
   <div style={{flex: '1 1 340px'}}>
     <p style={{marginTop: 0}}>This is why 2025 mattered: the stack filled in. Executive orders issued years ago became OMB memos, which became procurement language, which became contract requirements, which became requests for evidence that vendors need to produce.</p>
@@ -59,9 +59,9 @@ The implementation mechanism stayed the same: executive order sets direction, OM
 <div style={{
   margin: '1.5rem 0',
   padding: '1.25rem 1.5rem',
-  borderLeft: '4px solid #8b5cf6',
+  borderLeft: '4px solid var(--ifm-color-primary)',
   borderRadius: '0 8px 8px 0',
-  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.04) 100%)',
+  background: 'var(--ifm-background-surface-color)',
   fontSize: '0.9rem'
 }}>
   <div style={{
@@ -70,20 +70,20 @@ The implementation mechanism stayed the same: executive order sets direction, OM
     gap: '1rem'
   }}>
     <div style={{display: 'flex', flexDirection: 'column', gap: '0.25rem'}}>
-      <span style={{fontSize: '0.75rem', fontWeight: '600', color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Terminology</span>
-      <span><span style={{color: '#6b7280', textDecoration: 'line-through', textDecorationColor: '#d1d5db'}}>"Rights-impacting AI"</span> <span style={{color: '#8b5cf6', margin: '0 0.35rem'}}>→</span> <span style={{color: '#1f2937', fontWeight: '500'}}>"High-impact AI"</span></span>
+      <span style={{fontSize: '0.75rem', fontWeight: '600', color: 'var(--ifm-color-primary-dark)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Terminology</span>
+      <span><span style={{color: 'var(--ifm-color-emphasis-700)', textDecoration: 'line-through', textDecorationColor: 'var(--ifm-color-emphasis-400)'}}>"Rights-impacting AI"</span> <span style={{color: 'var(--ifm-color-primary)', margin: '0 0.35rem'}}>→</span> <span style={{color: 'var(--ifm-font-color-base)', fontWeight: '500'}}>"High-impact AI"</span></span>
     </div>
     <div style={{display: 'flex', flexDirection: 'column', gap: '0.25rem'}}>
-      <span style={{fontSize: '0.75rem', fontWeight: '600', color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Compliance timeline</span>
-      <span><span style={{color: '#6b7280', textDecoration: 'line-through', textDecorationColor: '#d1d5db'}}>Immediate</span> <span style={{color: '#8b5cf6', margin: '0 0.35rem'}}>→</span> <span style={{color: '#1f2937', fontWeight: '500'}}>365 days</span></span>
+      <span style={{fontSize: '0.75rem', fontWeight: '600', color: 'var(--ifm-color-primary-dark)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Compliance timeline</span>
+      <span><span style={{color: 'var(--ifm-color-emphasis-700)', textDecoration: 'line-through', textDecorationColor: 'var(--ifm-color-emphasis-400)'}}>Immediate</span> <span style={{color: 'var(--ifm-color-primary)', margin: '0 0.35rem'}}>→</span> <span style={{color: 'var(--ifm-font-color-base)', fontWeight: '500'}}>365 days</span></span>
     </div>
     <div style={{display: 'flex', flexDirection: 'column', gap: '0.25rem'}}>
-      <span style={{fontSize: '0.75rem', fontWeight: '600', color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Frontier model reporting</span>
-      <span><span style={{color: '#6b7280', textDecoration: 'line-through', textDecorationColor: '#d1d5db'}}>Required under DPA</span> <span style={{color: '#8b5cf6', margin: '0 0.35rem'}}>→</span> <span style={{color: '#1f2937', fontWeight: '500'}}>Removed</span></span>
+      <span style={{fontSize: '0.75rem', fontWeight: '600', color: 'var(--ifm-color-primary-dark)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Frontier model reporting</span>
+      <span><span style={{color: 'var(--ifm-color-emphasis-700)', textDecoration: 'line-through', textDecorationColor: 'var(--ifm-color-emphasis-400)'}}>Required under DPA</span> <span style={{color: 'var(--ifm-color-primary)', margin: '0 0.35rem'}}>→</span> <span style={{color: 'var(--ifm-font-color-base)', fontWeight: '500'}}>Removed</span></span>
     </div>
     <div style={{display: 'flex', flexDirection: 'column', gap: '0.25rem'}}>
-      <span style={{fontSize: '0.75rem', fontWeight: '600', color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Overall posture</span>
-      <span><span style={{color: '#6b7280', textDecoration: 'line-through', textDecorationColor: '#d1d5db'}}>Risk management</span> <span style={{color: '#8b5cf6', margin: '0 0.35rem'}}>→</span> <span style={{color: '#1f2937', fontWeight: '500'}}>Innovation promotion</span></span>
+      <span style={{fontSize: '0.75rem', fontWeight: '600', color: 'var(--ifm-color-primary-dark)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Overall posture</span>
+      <span><span style={{color: 'var(--ifm-color-emphasis-700)', textDecoration: 'line-through', textDecorationColor: 'var(--ifm-color-emphasis-400)'}}>Risk management</span> <span style={{color: 'var(--ifm-color-primary)', margin: '0 0.35rem'}}>→</span> <span style={{color: 'var(--ifm-font-color-base)', fontWeight: '500'}}>Innovation promotion</span></span>
     </div>
   </div>
 </div>
@@ -186,7 +186,7 @@ In September, [labeling requirements](https://www.cac.gov.cn/2025-03/14/c_174365
 In October, CAC also published [guidance for government deployments](https://www.cac.gov.cn/2025-10/10/c_1761819469929310.htm), pushing agencies toward filed models with stronger risk disclosures and hallucination risk management.
 
 <div style={{textAlign: 'center', margin: '2rem 0'}}>
-  <img src="/img/blog/ai-regulation-2025/us-china-comparison.svg" alt="US vs China governance approaches: The US requires documentation alongside the product, while China requires provenance embedded within the product" style={{maxWidth: '700px', width: '100%'}} />
+  <img src="/img/blog/ai-regulation-2025/us-china-comparison.svg" alt="US vs China governance approaches: The US requires documentation alongside the product, while China requires provenance embedded within the product" style={{maxWidth: '700px', width: '100%', backgroundColor: 'var(--ifm-background-surface-color)', padding: '0.5rem', borderRadius: '8px'}} />
 </div>
 
 Meanwhile, China's open-source AI reached the frontier. DeepSeek's V3 model matched or exceeded leading proprietary systems on major benchmarks ([technical report](https://arxiv.org/abs/2412.19437)) and is available as open weights with published licensing terms ([GitHub](https://github.com/deepseek-ai/DeepSeek-V3), [model license](https://github.com/deepseek-ai/DeepSeek-V3/blob/main/LICENSE-MODEL)). Qwen, Yi, and other Chinese labs released competitive open-weight models. The Chinese AI research community is producing frontier-class work under a regulatory regime that requires registration and provenance, a different set of constraints than disclosure and procurement.
@@ -222,7 +222,11 @@ The compliance implication: regulations written for text-in-text-out systems don
 
 ## 2026 Timeline
 
+<div style={{backgroundColor: 'var(--ifm-background-surface-color)', padding: '1rem', borderRadius: '8px'}}>
+
 ![Key AI regulation deadlines in 2026: Q1 brings federal task forces and state laws, Q2 brings FCC/FTC statements and Colorado compliance, Q3 brings EU AI Act enforcement](/img/blog/ai-regulation-2025/timeline-2026.svg)
+
+</div>
 
 | Date     | Event                                                                                                                                                                                                                                                     |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

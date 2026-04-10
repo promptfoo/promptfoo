@@ -22,6 +22,7 @@ import {
 import { Switch } from '@app/components/ui/switch';
 import { Textarea } from '@app/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import useCloudConfig from '@app/hooks/useCloudConfig';
 import { cn } from '@app/lib/utils';
 import {
   ADDITIONAL_STRATEGIES,
@@ -75,6 +76,21 @@ export default function StrategyConfigDialog({
   selectedPlugins = EMPTY_PLUGINS_ARRAY,
   allStrategies = EMPTY_STRATEGIES_ARRAY,
 }: StrategyConfigDialogProps) {
+  const { data: cloudConfig } = useCloudConfig();
+  const isCloudEnabled = cloudConfig?.isEnabled ?? false;
+
+  // Auth-aware max values for strategy parameters
+  const maxTurnsLimit = isCloudEnabled ? 20 : 10;
+  const maxIterationsLimit = isCloudEnabled ? 50 : 10;
+  const treeMaxDepthLimit = isCloudEnabled ? 50 : 5;
+  const treeMaxAttemptsLimit = isCloudEnabled ? 500 : 30;
+  const treeMaxWidthLimit = isCloudEnabled ? 20 : 3;
+  const treeBranchingLimit = isCloudEnabled ? 10 : 2;
+  const treeNoImprovementLimit = isCloudEnabled ? 50 : 10;
+
+  const clampValue = (value: number, min: number, max: number) =>
+    Math.min(Math.max(value, min), max);
+
   const [localConfig, setLocalConfig] = React.useState<Partial<StrategyConfig>>(config || {});
   const [enabled, setEnabled] = React.useState<boolean>(
     config.enabled === undefined ? true : config.enabled,
@@ -253,7 +269,7 @@ export default function StrategyConfigDialog({
 
     setLocalConfig({ ...nextConfig });
     setEnabled(nextConfig.enabled === undefined ? true : nextConfig.enabled);
-    setNumTests(nextConfig.numTests !== undefined ? String(nextConfig.numTests) : '10');
+    setNumTests(nextConfig.numTests === undefined ? '10' : String(nextConfig.numTests));
     setError('');
 
     if (strategy === 'layer') {
@@ -494,18 +510,22 @@ export default function StrategyConfigDialog({
               id="num-iterations"
               type="number"
               value={
-                localConfig.numIterations !== undefined ? Number(localConfig.numIterations) : 10
+                localConfig.numIterations === undefined ? 10 : Number(localConfig.numIterations)
               }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
-                setLocalConfig({ ...localConfig, numIterations: value });
+                setLocalConfig({
+                  ...localConfig,
+                  numIterations: clampValue(value, 3, maxIterationsLimit),
+                });
               }}
               placeholder="Number of iterations (default: 10)"
               min={3}
-              max={50}
+              max={maxIterationsLimit}
             />
             <p className="text-xs text-muted-foreground">
               Number of iterations to try (more iterations increase chance of success)
+              {!isCloudEnabled && ' — sign in for higher limits'}
             </p>
           </div>
         </div>
@@ -548,7 +568,7 @@ export default function StrategyConfigDialog({
               id="max-concurrency"
               type="number"
               value={
-                localConfig.maxConcurrency !== undefined ? Number(localConfig.maxConcurrency) : 3
+                localConfig.maxConcurrency === undefined ? 3 : Number(localConfig.maxConcurrency)
               }
               onChange={(e) =>
                 setLocalConfig({
@@ -569,7 +589,7 @@ export default function StrategyConfigDialog({
             <Input
               id="n-steps"
               type="number"
-              value={localConfig.nSteps !== undefined ? Number(localConfig.nSteps) : ''}
+              value={localConfig.nSteps === undefined ? '' : Number(localConfig.nSteps)}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
                 setLocalConfig({ ...localConfig, nSteps: value });
@@ -588,9 +608,9 @@ export default function StrategyConfigDialog({
               id="max-candidates"
               type="number"
               value={
-                localConfig.maxCandidatesPerStep !== undefined
-                  ? Number(localConfig.maxCandidatesPerStep)
-                  : ''
+                localConfig.maxCandidatesPerStep === undefined
+                  ? ''
+                  : Number(localConfig.maxCandidatesPerStep)
               }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
@@ -619,7 +639,7 @@ export default function StrategyConfigDialog({
             <Textarea
               id="strategy-text"
               rows={6}
-              value={localConfig.strategyText !== undefined ? String(localConfig.strategyText) : ''}
+              value={localConfig.strategyText === undefined ? '' : String(localConfig.strategyText)}
               onChange={(e) => {
                 setLocalConfig({ ...localConfig, strategyText: e.target.value });
               }}
@@ -643,17 +663,21 @@ export default function StrategyConfigDialog({
             <Input
               id="max-turns"
               type="number"
-              value={localConfig.maxTurns !== undefined ? Number(localConfig.maxTurns) : 10}
+              value={localConfig.maxTurns === undefined ? 10 : Number(localConfig.maxTurns)}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
-                setLocalConfig({ ...localConfig, maxTurns: value });
+                setLocalConfig({
+                  ...localConfig,
+                  maxTurns: clampValue(value, 1, maxTurnsLimit),
+                });
               }}
               placeholder="Maximum number of conversation turns (default: 10)"
               min={1}
-              max={20}
+              max={maxTurnsLimit}
             />
             <p className="text-xs text-muted-foreground">
               Maximum number of back-and-forth exchanges with the model
+              {!isCloudEnabled && ' — sign in for higher limits'}
             </p>
           </div>
 
@@ -664,14 +688,10 @@ export default function StrategyConfigDialog({
               onCheckedChange={(checked) => setLocalConfig({ ...localConfig, stateful: checked })}
               className="mt-0.5"
             />
-            <div className="space-y-0.5">
-              <Label htmlFor="custom-stateful" className="text-sm font-normal">
-                Stateful
-              </Label>
-              <span className="ml-1 text-sm text-muted-foreground">
-                - Enable to maintain conversation history (recommended)
-              </span>
-            </div>
+            <Label htmlFor="custom-stateful" className="text-sm font-normal">
+              When enabled, Promptfoo should only send the current request and assume your system
+              remembers interaction history
+            </Label>
           </div>
         </div>
       );
@@ -689,20 +709,23 @@ export default function StrategyConfigDialog({
             <Input
               id="hydra-max-turns"
               type="number"
-              value={localConfig.maxTurns !== undefined ? Number(localConfig.maxTurns) : 10}
+              value={localConfig.maxTurns === undefined ? 10 : Number(localConfig.maxTurns)}
               onChange={(e) => {
                 const parsedValue = Number.parseInt(e.target.value, 10);
                 setLocalConfig({
                   ...localConfig,
-                  maxTurns: Number.isNaN(parsedValue) ? undefined : parsedValue,
+                  maxTurns: Number.isNaN(parsedValue)
+                    ? undefined
+                    : clampValue(parsedValue, 1, maxTurnsLimit),
                 });
               }}
               placeholder="Maximum conversation turns (default: 10)"
               min={1}
-              max={30}
+              max={maxTurnsLimit}
             />
             <p className="text-xs text-muted-foreground">
               Maximum number of back-and-forth exchanges with the target model.
+              {!isCloudEnabled && ' — sign in for higher limits'}
             </p>
           </div>
 
@@ -713,15 +736,10 @@ export default function StrategyConfigDialog({
               onCheckedChange={(checked) => setLocalConfig({ ...localConfig, stateful: checked })}
               className="mt-0.5"
             />
-            <div className="space-y-0.5">
-              <Label htmlFor="hydra-stateful" className="text-sm font-normal">
-                Stateful
-              </Label>
-              <span className="ml-1 text-sm text-muted-foreground">
-                - Enable when your target maintains server-side sessions and expects a session ID
-                per turn.
-              </span>
-            </div>
+            <Label htmlFor="hydra-stateful" className="text-sm font-normal">
+              Enable when your target maintains server-side sessions and expects a session ID per
+              turn.
+            </Label>
           </div>
 
           <p className="text-xs text-muted-foreground">
@@ -741,22 +759,29 @@ export default function StrategyConfigDialog({
             <Input
               id="multi-turn-max-turns"
               type="number"
-              value={localConfig.maxTurns !== undefined ? Number(localConfig.maxTurns) : 5}
+              value={localConfig.maxTurns === undefined ? 5 : Number(localConfig.maxTurns)}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
-                setLocalConfig({ ...localConfig, maxTurns: value });
+                setLocalConfig({
+                  ...localConfig,
+                  maxTurns: value === undefined ? value : clampValue(value, 1, maxTurnsLimit),
+                });
               }}
               onBlur={(e) => {
-                if (!e.target.value || Number.parseInt(e.target.value, 10) < 1) {
+                const parsed = Number.parseInt(e.target.value, 10);
+                if (!e.target.value || Number.isNaN(parsed) || parsed < 1) {
                   setLocalConfig({ ...localConfig, maxTurns: 5 });
+                } else if (parsed > maxTurnsLimit) {
+                  setLocalConfig({ ...localConfig, maxTurns: maxTurnsLimit });
                 }
               }}
               placeholder="5"
               min={1}
-              max={20}
+              max={maxTurnsLimit}
             />
             <p className="text-xs text-muted-foreground">
               Maximum number of back-and-forth exchanges with the model (default: 5)
+              {!isCloudEnabled && ' — sign in for higher limits'}
             </p>
           </div>
 
@@ -767,14 +792,10 @@ export default function StrategyConfigDialog({
               onCheckedChange={(checked) => setLocalConfig({ ...localConfig, stateful: checked })}
               className="mt-0.5"
             />
-            <div className="space-y-0.5">
-              <Label htmlFor="multi-turn-stateful" className="text-sm font-normal">
-                Stateful
-              </Label>
-              <span className="ml-1 text-sm text-muted-foreground">
-                - Enable to maintain conversation history (recommended)
-              </span>
-            </div>
+            <Label htmlFor="multi-turn-stateful" className="text-sm font-normal">
+              When enabled, Promptfoo should only send the current request and assume your system
+              remembers interaction history
+            </Label>
           </div>
         </div>
       );
@@ -791,19 +812,23 @@ export default function StrategyConfigDialog({
               id="meta-num-iterations"
               type="number"
               value={
-                localConfig.numIterations !== undefined ? Number(localConfig.numIterations) : 10
+                localConfig.numIterations === undefined ? 10 : Number(localConfig.numIterations)
               }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
-                setLocalConfig({ ...localConfig, numIterations: value });
+                setLocalConfig({
+                  ...localConfig,
+                  numIterations: clampValue(value, 3, maxIterationsLimit),
+                });
               }}
               placeholder="Number of iterations (default: 10)"
               min={3}
-              max={50}
+              max={maxIterationsLimit}
             />
             <p className="text-xs text-muted-foreground">
               Number of iterations for the meta-agent to attempt. Agent builds attack taxonomy and
               makes strategic decisions.
+              {!isCloudEnabled && ' — sign in for higher limits'}
             </p>
           </div>
         </div>
@@ -820,16 +845,22 @@ export default function StrategyConfigDialog({
             <Input
               id="tree-max-depth"
               type="number"
-              value={localConfig.maxDepth !== undefined ? Number(localConfig.maxDepth) : 25}
+              value={localConfig.maxDepth === undefined ? 25 : Number(localConfig.maxDepth)}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 25;
-                setLocalConfig({ ...localConfig, maxDepth: value });
+                setLocalConfig({
+                  ...localConfig,
+                  maxDepth: clampValue(value, 3, treeMaxDepthLimit),
+                });
               }}
               placeholder="Maximum tree depth (default: 25)"
               min={3}
-              max={50}
+              max={treeMaxDepthLimit}
             />
-            <p className="text-xs text-muted-foreground">Maximum depth of the search tree</p>
+            <p className="text-xs text-muted-foreground">
+              Maximum depth of the search tree
+              {!isCloudEnabled && ' — sign in for higher limits'}
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -837,17 +868,21 @@ export default function StrategyConfigDialog({
             <Input
               id="tree-max-attempts"
               type="number"
-              value={localConfig.maxAttempts !== undefined ? Number(localConfig.maxAttempts) : 250}
+              value={localConfig.maxAttempts === undefined ? 250 : Number(localConfig.maxAttempts)}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 250;
-                setLocalConfig({ ...localConfig, maxAttempts: value });
+                setLocalConfig({
+                  ...localConfig,
+                  maxAttempts: clampValue(value, 10, treeMaxAttemptsLimit),
+                });
               }}
               placeholder="Maximum attempts (default: 250)"
-              min={50}
-              max={500}
+              min={10}
+              max={treeMaxAttemptsLimit}
             />
             <p className="text-xs text-muted-foreground">
               Maximum number of attempts to try (note: higher values are more expensive)
+              {!isCloudEnabled && ' — sign in for higher limits'}
             </p>
           </div>
 
@@ -856,14 +891,17 @@ export default function StrategyConfigDialog({
             <Input
               id="tree-max-width"
               type="number"
-              value={localConfig.maxWidth !== undefined ? Number(localConfig.maxWidth) : 10}
+              value={localConfig.maxWidth === undefined ? 10 : Number(localConfig.maxWidth)}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
-                setLocalConfig({ ...localConfig, maxWidth: value });
+                setLocalConfig({
+                  ...localConfig,
+                  maxWidth: clampValue(value, 2, treeMaxWidthLimit),
+                });
               }}
               placeholder="Maximum width (default: 10)"
-              min={3}
-              max={20}
+              min={2}
+              max={treeMaxWidthLimit}
             />
             <p className="text-xs text-muted-foreground">
               Number of top-scoring nodes to keep during tree pruning
@@ -876,15 +914,18 @@ export default function StrategyConfigDialog({
               id="tree-branching"
               type="number"
               value={
-                localConfig.branchingFactor !== undefined ? Number(localConfig.branchingFactor) : 4
+                localConfig.branchingFactor === undefined ? 4 : Number(localConfig.branchingFactor)
               }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 4;
-                setLocalConfig({ ...localConfig, branchingFactor: value });
+                setLocalConfig({
+                  ...localConfig,
+                  branchingFactor: clampValue(value, 2, treeBranchingLimit),
+                });
               }}
               placeholder="Branching factor (default: 4)"
               min={2}
-              max={10}
+              max={treeBranchingLimit}
             />
             <p className="text-xs text-muted-foreground">
               Number of child nodes to generate at each step
@@ -897,17 +938,20 @@ export default function StrategyConfigDialog({
               id="tree-no-improvement"
               type="number"
               value={
-                localConfig.maxNoImprovement !== undefined
-                  ? Number(localConfig.maxNoImprovement)
-                  : 25
+                localConfig.maxNoImprovement === undefined
+                  ? 25
+                  : Number(localConfig.maxNoImprovement)
               }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 25;
-                setLocalConfig({ ...localConfig, maxNoImprovement: value });
+                setLocalConfig({
+                  ...localConfig,
+                  maxNoImprovement: clampValue(value, 5, treeNoImprovementLimit),
+                });
               }}
               placeholder="Max consecutive iterations without improvement (default: 25)"
               min={5}
-              max={50}
+              max={treeNoImprovementLimit}
             />
             <p className="text-xs text-muted-foreground">
               Stop after this many consecutive iterations without score improvement
@@ -927,7 +971,7 @@ export default function StrategyConfigDialog({
             <Input
               id="gcg-n"
               type="number"
-              value={localConfig.n !== undefined ? Number(localConfig.n) : 5}
+              value={localConfig.n === undefined ? 5 : Number(localConfig.n)}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 5;
                 setLocalConfig({ ...localConfig, n: value });

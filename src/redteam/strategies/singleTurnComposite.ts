@@ -49,6 +49,19 @@ async function generateCompositePrompts(
         ...(config.n && { n: config.n }),
         ...(config.modelFamily && { modelFamily: config.modelFamily }),
         ...(inputs && { inputs }),
+        // Composite pipeline configuration
+        ...(config.techniques && { techniques: config.techniques }),
+        ...(config.evasions && { evasions: config.evasions }),
+        ...(config.alwaysIncludeTechniques && {
+          alwaysIncludeTechniques: config.alwaysIncludeTechniques,
+        }),
+        ...(config.compositionOrder && { compositionOrder: config.compositionOrder }),
+        ...(config.combinationMode && { combinationMode: config.combinationMode }),
+        ...(config.includeEvasionGuidance != null && {
+          includeEvasionGuidance: config.includeEvasionGuidance,
+        }),
+        ...(config.evasionGuidance && { evasionGuidance: config.evasionGuidance }),
+        ...(config.targetContext && { targetContext: config.targetContext }),
       };
 
       interface CompositeGenerationResponse {

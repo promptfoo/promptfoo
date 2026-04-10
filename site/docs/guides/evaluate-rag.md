@@ -27,7 +27,7 @@ There are several criteria used to evaluate RAG applications:
 
 This guide shows how to use promptfoo to evaluate your RAG app. If you're new to Promptfoo, head to [Getting Started](/docs/getting-started).
 
-You can also jump to the [full RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/rag-full) on GitHub.
+You can also jump to the [full RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-rag-full) on GitHub.
 
 ## Evaluating document retrieval
 
@@ -265,8 +265,8 @@ Imagine we're exploring budget and want to compare the performance of GPT-4 vs L
 providers:
   - openai:gpt-5-mini
   - openai:gpt-5
-  - anthropic:messages:claude-3-5-sonnet-20241022
-  - ollama:chat:llama3.3
+  - anthropic:claude-sonnet-4-6
+  - ollama:chat:llama4:scout
 ```
 
 Let's also add a heuristic that prefers shorter outputs. Using the `defaultTest` directive, we apply this to all RAG tests:
@@ -282,7 +282,7 @@ Here's the final config:
 
 ```yaml title="promptfooconfig.yaml"
 prompts: [file://prompt1.txt]
-providers: [openai:gpt-5-mini, openai:gpt-5 ollama:chat:llama3.3]
+providers: [openai:gpt-5-mini, openai:gpt-5, ollama:chat:llama4:scout]
 defaultTest:
   assert:
     - type: python
@@ -310,7 +310,7 @@ tests:
         value: eligible employees can take up to 4 months of leave
 ```
 
-The output shows that GPT-4 performs the best and Llama-2 performs the worst, based on the test cases that we set up:
+The output shows how each model performs on your test cases, making it easy to spot differences:
 
 ![rag eval compare models](/img/docs/rag-eval-compare-models.png)
 
@@ -337,7 +337,7 @@ tests:
 
 By following this approach and setting up tests on [assertions & metrics](/docs/configuration/expected-outputs), you can ensure that the quality of your RAG pipeline is improving, and prevent regressions.
 
-See the [RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/rag-full) on GitHub for a fully functioning end-to-end example.
+See the [RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-rag-full) on GitHub for a fully functioning end-to-end example.
 
 ### Context evaluation approaches
 

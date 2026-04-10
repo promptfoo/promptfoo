@@ -213,7 +213,7 @@ export default function ModelAuditSetupPage() {
 
             {/* Inline Results */}
             {scanResults && (
-              <div className="mt-10 pt-8 border-t">
+              <div className="mt-10 pt-8 border-t border-border">
                 <h2 className="text-2xl font-semibold tracking-tight mb-6">Scan Results</h2>
                 <ResultsTab
                   scanResults={scanResults}

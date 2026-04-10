@@ -12,7 +12,7 @@ function isValidProviderId(id: unknown): id is string {
  * Extracts the id and label from a raw provider config without instantiating it.
  * Handles all provider config formats: string, function, ProviderOptions, ProviderOptionsMap.
  */
-function getProviderIdAndLabel(
+export function getProviderIdAndLabel(
   provider: string | ProviderOptions | ProviderOptionsMap | ((...args: unknown[]) => unknown),
   index: number,
 ): { id: string; label?: string } {

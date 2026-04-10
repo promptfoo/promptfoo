@@ -619,11 +619,43 @@ export const PLUGINS = [
   },
   {
     category: 'Compliance and Legal',
+    description:
+      "Tests for unsuitable financial product recommendations or downplaying of risks under Japan's FIEA",
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#japan-fiea-suitability',
+    name: 'Japan FIEA Suitability',
+    pluginId: 'financial:japan-fiea-suitability',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
     description: 'Tests for facilitation of financial crimes or market manipulation',
     label: 'technical',
     link: '/docs/red-team/plugins/financial/#financial-misconduct',
     name: 'Financial Services Misconduct',
     pluginId: 'financial:misconduct',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for suggestions that violate Sarbanes-Oxley requirements including internal controls, financial reporting, and audit integrity',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-sox-compliance',
+    name: 'Financial SOX Compliance',
+    pluginId: 'financial:sox-compliance',
     applicationTypes: {
       rag: true,
       agent: true,
@@ -1158,6 +1190,54 @@ export const PLUGINS = [
   },
   {
     category: 'Trust and Safety',
+    description:
+      'Tests whether medical AI systems conceal intended-use boundaries, low-confidence outputs, subgroup limitations, data drift, or silent model-version updates',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#fda-ai-disclosure',
+    name: 'FDA AI Disclosure',
+    pluginId: 'medical:fda:ai-disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether medical-device AI systems enforce authenticated, role-scoped, deny-by-default access before privileged commands, maintenance actions, or therapy changes',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#fda-cyber-access-control',
+    name: 'FDA Cyber Access Control',
+    pluginId: 'medical:fda:cyber-access-control',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether medical-device AI systems help suppress anomaly alerts, rewrite audit trails, hide SBOM/version evidence, or disable forensic logging',
+    label: 'technical',
+    link: '/docs/red-team/plugins/medical/#fda-cyber-audit-tampering',
+    name: 'FDA Cyber Audit Tampering',
+    pluginId: 'medical:fda:cyber-audit-tampering',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'medical',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
     description: 'Tests for fabricated medical facts, studies, or drug interactions',
     label: 'technical',
     link: '/docs/red-team/plugins/medical/#medical-hallucination',
@@ -1297,6 +1377,22 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether AI systems properly protect non-health policyholder data under GLBA, FCRA, DPPA, and state insurance privacy laws',
+    label: 'technical',
+    link: '/docs/red-team/plugins/insurance/#data-disclosure',
+    name: 'Data Disclosure',
+    pluginId: 'insurance:data-disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'insurance',
+    isRemote: true,
+  },
+  {
     category: 'Compliance and Legal',
     description:
       'Tests accuracy of provider network information to prevent surprise medical bills and balance billing',
@@ -1315,7 +1411,7 @@ export const PLUGINS = [
   {
     category: 'Security and Access Control',
     description:
-      'Tests whether AI systems properly protect Protected Health Information (PHI) and comply with HIPAA privacy requirements',
+      'Tests whether AI systems properly protect Protected Health Information (PHI) and satisfy health data privacy requirements',
     label: 'technical',
     link: '/docs/red-team/plugins/insurance/#phi-disclosure',
     name: 'PHI Disclosure',
@@ -1765,6 +1861,66 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Trust and Safety',
+    description:
+      'Tests for encouragement, sourcing, or circumvention tactics that help minors access age-restricted goods or services such as alcohol, vaping, gambling, weapons, or adult-only venues',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/teen-safety/#age-restricted-goods-and-services',
+    name: 'Age-Restricted Goods & Services',
+    pluginId: 'teen-safety:age-restricted-goods-and-services',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests for promotion, glorification, or facilitation of dangerous challenges, unsafe stunts, risky experimentation, and dangerous at-home procedures inappropriate for teens',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/teen-safety/#dangerous-content',
+    name: 'Dangerous Activities & Challenges',
+    pluginId: 'teen-safety:dangerous-content',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests for interactive roleplay involving minors that simulates romantic, sexual, or violent scenarios that could normalize exploitation or harm',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/teen-safety/#dangerous-roleplay',
+    name: 'Dangerous Roleplay',
+    pluginId: 'teen-safety:dangerous-roleplay',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests for harmful body-ideal promotion, body shaming, and facilitation of unsafe restriction, purging, over-exercise, or concealment behaviors that can harm teens',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/teen-safety/#harmful-body-ideals',
+    name: 'Harmful Body Ideals',
+    pluginId: 'teen-safety:harmful-body-ideals',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
     category: 'Compliance and Legal',
     description:
       'Tests compliance with accessibility requirements under Section 255, ADA, and CVAA',
@@ -1953,6 +2109,22 @@ export const PLUGINS = [
     },
     vulnerabilityType: 'telecom',
     isRemote: true,
+  },
+  {
+    applicationTypes: {
+      agent: true,
+      chat: true,
+      rag: true,
+    },
+    category: 'Security and Access Control',
+    description:
+      'Tests whether an AI system can be tricked into revealing its underlying model identity, version, or creator',
+    label: 'technical',
+    link: '/docs/red-team/plugins/model-identification/',
+    name: 'Model Identification',
+    pluginId: 'model-identification',
+    isRemote: true,
+    vulnerabilityType: 'security',
   },
   {
     applicationTypes: {

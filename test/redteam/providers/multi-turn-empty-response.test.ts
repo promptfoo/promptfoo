@@ -15,6 +15,11 @@ import type {
 const mockGetProvider = vi.hoisted(() => vi.fn());
 const mockGetTargetResponse = vi.hoisted(() => vi.fn());
 
+vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
+}));
+
 vi.mock('../../../src/logger', () => ({
   default: {
     debug: vi.fn(),
@@ -78,48 +83,33 @@ describe('Multi-turn strategies empty response handling', () => {
     id: () => 'mock-redteam-provider',
     callApi: vi
       .fn<(prompt: string, context?: any) => Promise<ProviderResponse>>()
-      .mockImplementation(async (prompt: string) => {
-        // Parse the prompt to determine what type of response to return
-        try {
-          const input = JSON.parse(prompt);
-          if (Array.isArray(input)) {
-            const systemContent = input[0]?.content || '';
-            const userContent = input[input.length - 1]?.content || '';
+      .mockImplementation(async (_prompt: string, context?: any) => {
+        // Prefer prompt labels when available: they are explicit and avoid false matches
+        // against attack-generation system prompts that may also mention "conversation objective".
+        const label = context?.prompt?.label;
 
-            // Refusal scoring
-            if (
-              systemContent.includes('refusal') ||
-              userContent.includes('responseToEvaluateInput')
-            ) {
-              return {
-                output: JSON.stringify({
-                  value: false, // not a refusal
-                  metadata: 0,
-                  rationale: 'Mock: not a refusal',
-                }),
-              };
-            }
-
-            // Eval scoring
-            if (
-              systemContent.includes('evaluate') ||
-              systemContent.includes('conversation objective')
-            ) {
-              return {
-                output: JSON.stringify({
-                  value: false,
-                  metadata: 0,
-                  rationale: 'Mock: objective not met',
-                  description: 'Mock description',
-                }),
-              };
-            }
-          }
-        } catch {
-          // Not JSON, continue to default response
+        if (label === 'refusal') {
+          return {
+            output: JSON.stringify({
+              value: false, // not a refusal
+              metadata: 0,
+              rationale: 'Mock: not a refusal',
+            }),
+          };
         }
 
-        // Default: attack prompt generation
+        if (label === 'eval') {
+          return {
+            output: JSON.stringify({
+              value: false,
+              metadata: 0,
+              rationale: 'Mock: objective not met',
+              description: 'Mock description',
+            }),
+          };
+        }
+
+        // Default: attack prompt generation / history prompts.
         return {
           output: JSON.stringify({
             generatedQuestion: 'mocked question',
@@ -205,6 +195,29 @@ describe('Multi-turn strategies empty response handling', () => {
         expect(result.tokenUsage).toBeDefined();
       }
     });
+
+    it('stops early when target ends conversation', async () => {
+      mockGetTargetResponse.mockResolvedValue({
+        output: '',
+        conversationEnded: true,
+        conversationEndReason: 'thread_closed',
+        tokenUsage: { numRequests: 1 },
+      });
+
+      const mockTarget = createMockTargetProvider();
+      const strategy = new CrescendoProvider({
+        injectVar: 'prompt',
+        redteamProvider: 'openai:gpt-4',
+        maxTurns: 3,
+        maxBacktracks: 0,
+      });
+      const context = createTestContext(mockTarget);
+
+      const result = await strategy.callApi('test prompt', context);
+
+      expect(result.metadata?.stopReason).toBe('Target ended conversation');
+      expect(result.metadata?.crescendoRoundsCompleted).toBe(1);
+    });
   });
 
   describe('Custom strategy', () => {
@@ -231,6 +244,29 @@ describe('Multi-turn strategies empty response handling', () => {
       expect(result.output).toBeDefined();
       expect(result.metadata).toBeDefined();
       expect(result.tokenUsage).toBeDefined();
+    });
+
+    it('stops early when target ends conversation', async () => {
+      mockGetTargetResponse.mockResolvedValue({
+        output: '',
+        conversationEnded: true,
+        conversationEndReason: 'thread_closed',
+        tokenUsage: { numRequests: 1 },
+      });
+
+      const mockTarget = createMockTargetProvider();
+      const strategy = new CustomProvider({
+        injectVar: 'prompt',
+        redteamProvider: 'openai:gpt-4',
+        maxTurns: 3,
+        strategyText: 'Test strategy for target-ended conversations',
+      });
+      const context = createTestContext(mockTarget);
+
+      const result = await strategy.callApi('test prompt', context);
+
+      expect(result.metadata?.stopReason).toBe('Target ended conversation');
+      expect(result.metadata?.customRoundsCompleted).toBe(1);
     });
   });
 

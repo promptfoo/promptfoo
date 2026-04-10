@@ -2,6 +2,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import * as cache from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
+import { LONG_RUNNING_MODEL_TIMEOUT_MS } from '../../../src/providers/shared';
+import { getOpenAiMissingApiKeyMessage } from './shared';
 import type { Mock } from 'vitest';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
@@ -28,13 +30,31 @@ vi.mock('../../../src/python/pythonUtils', async (importOriginal) => {
   };
 });
 
+const ENV_KEYS_TO_RESTORE = [
+  'OPENAI_TEMPERATURE',
+  'OPENAI_MAX_TOKENS',
+  'OPENAI_MAX_COMPLETION_TOKENS',
+] as const;
+
+const savedEnv = Object.fromEntries(ENV_KEYS_TO_RESTORE.map((key) => [key, process.env[key]]));
+
 describe('OpenAiResponsesProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const key of ENV_KEYS_TO_RESTORE) {
+      delete process.env[key];
+    }
   });
 
   afterEach(() => {
     vi.resetAllMocks();
+    for (const key of ENV_KEYS_TO_RESTORE) {
+      if (savedEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = savedEnv[key];
+      }
+    }
   });
 
   it('should support various model names', async () => {
@@ -47,6 +67,22 @@ describe('OpenAiResponsesProvider', () => {
     // GPT-5 models
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5-chat-latest');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.2-chat-latest');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.3-chat-latest');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4-2026-03-05');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4-mini');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'gpt-5.4-mini-2026-03-17',
+    );
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4-nano');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'gpt-5.4-nano-2026-03-17',
+    );
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4-pro');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'gpt-5.4-pro-2026-03-05',
+    );
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5-nano');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5-mini');
     // GPT-4.5 models deprecated as of 2025-07-14, removed from API
@@ -477,6 +513,116 @@ describe('OpenAiResponsesProvider', () => {
     // temperature: 0 should be present in the request body
     expect(body.temperature).toBe(0);
     expect('temperature' in body).toBe(true);
+  });
+
+  it('should omit default temperature and max_output_tokens when omitDefaults is true', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+        omitDefaults: true,
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.temperature).toBeUndefined();
+    expect('temperature' in body).toBe(false);
+    expect(body.max_output_tokens).toBeUndefined();
+    expect('max_output_tokens' in body).toBe(false);
+  });
+
+  it('should use env defaults with omitDefaults when OPENAI env vars are set', async () => {
+    process.env.OPENAI_TEMPERATURE = '0.5';
+    process.env.OPENAI_MAX_TOKENS = '2048';
+
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+        omitDefaults: true,
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.temperature).toBe(0.5);
+    expect('temperature' in body).toBe(true);
+    expect(body.max_output_tokens).toBe(2048);
+    expect('max_output_tokens' in body).toBe(true);
+  });
+
+  it('should prefer OPENAI_MAX_COMPLETION_TOKENS over OPENAI_MAX_TOKENS for reasoning models', async () => {
+    process.env.OPENAI_MAX_COMPLETION_TOKENS = '4096';
+    process.env.OPENAI_MAX_TOKENS = '2048';
+
+    const provider = new OpenAiResponsesProvider('o1-preview', {
+      config: {
+        apiKey: 'test-key',
+        omitDefaults: true,
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.max_output_tokens).toBe(4096);
+    expect('max_output_tokens' in body).toBe(true);
+  });
+
+  it('should fall back to OPENAI_MAX_TOKENS for reasoning models when OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
+    process.env.OPENAI_MAX_TOKENS = '2048';
+
+    const provider = new OpenAiResponsesProvider('o1-preview', {
+      config: {
+        apiKey: 'test-key',
+        omitDefaults: true,
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.max_output_tokens).toBe(2048);
+    expect('max_output_tokens' in body).toBe(true);
+  });
+
+  it('should use OPENAI_MAX_TOKENS for reasoning models when omitDefaults is false and OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
+    process.env.OPENAI_MAX_TOKENS = '2048';
+
+    const provider = new OpenAiResponsesProvider('o1-preview', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.max_output_tokens).toBe(2048);
+    expect('max_output_tokens' in body).toBe(true);
+  });
+
+  it('should not apply a hardcoded max_output_tokens default for reasoning models when omitDefaults is false', async () => {
+    const provider = new OpenAiResponsesProvider('o1-preview', {
+      config: {
+        apiKey: 'test-key',
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.max_output_tokens).toBeUndefined();
+    expect('max_output_tokens' in body).toBe(false);
+  });
+
+  it('should omit default max_output_tokens when omitDefaults is true for reasoning models', async () => {
+    const provider = new OpenAiResponsesProvider('o1-preview', {
+      config: {
+        apiKey: 'test-key',
+        omitDefaults: true,
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.max_output_tokens).toBeUndefined();
+    expect('max_output_tokens' in body).toBe(false);
   });
 
   it('should correctly send max_output_tokens: 0 in the request body when explicitly set', async () => {
@@ -971,7 +1117,21 @@ describe('OpenAiResponsesProvider', () => {
 
     vi.spyOn(provider, 'getApiKey').mockReturnValue(undefined);
 
-    await expect(provider.callApi('Test prompt')).rejects.toThrow('OpenAI API key is not set');
+    await expect(provider.callApi('Test prompt')).rejects.toThrow(getOpenAiMissingApiKeyMessage());
+  });
+
+  it('should use custom apiKeyEnvar in missing API key errors', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKeyEnvar: 'CUSTOM_RESPONSES_API_KEY',
+      },
+    });
+
+    vi.spyOn(provider, 'getApiKey').mockReturnValue(undefined);
+
+    await expect(provider.callApi('Test prompt')).rejects.toThrow(
+      getOpenAiMissingApiKeyMessage('CUSTOM_RESPONSES_API_KEY'),
+    );
   });
 
   it('should handle error in API response data correctly', async () => {
@@ -2658,6 +2818,32 @@ describe('OpenAiResponsesProvider', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.1-mini');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.1-nano');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.1-codex');
+    // GPT-5.2 models
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.2-chat-latest');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.2-codex');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.2-pro');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'gpt-5.2-pro-2025-12-11',
+    );
+    // GPT-5.3 models
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.3-chat-latest');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.3-codex');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.3-codex-spark');
+    // GPT-5.4 models
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4-2026-03-05');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4-mini');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'gpt-5.4-mini-2026-03-17',
+    );
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4-nano');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'gpt-5.4-nano-2026-03-17',
+    );
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.4-pro');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
+      'gpt-5.4-pro-2026-03-05',
+    );
     // Deep research models
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-deep-research');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
@@ -2775,7 +2961,7 @@ describe('OpenAiResponsesProvider', () => {
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(Object),
-        600000, // 10 minutes
+        LONG_RUNNING_MODEL_TIMEOUT_MS,
         'json',
         undefined,
         undefined,
@@ -2813,7 +2999,81 @@ describe('OpenAiResponsesProvider', () => {
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(Object),
-        600000, // 10 minutes
+        LONG_RUNNING_MODEL_TIMEOUT_MS,
+        'json',
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should use longer timeout for gpt-5.2-pro models', async () => {
+      const mockData = {
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Response complete' }],
+          },
+        ],
+        usage: { input_tokens: 100, output_tokens: 200 },
+      };
+
+      (cache.fetchWithCache as Mock).mockResolvedValueOnce({
+        data: mockData,
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-5.2-pro', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        LONG_RUNNING_MODEL_TIMEOUT_MS,
+        'json',
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should use longer timeout for gpt-5.4-pro models', async () => {
+      const mockData = {
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Response complete' }],
+          },
+        ],
+        usage: { input_tokens: 100, output_tokens: 200 },
+      };
+
+      (cache.fetchWithCache as Mock).mockResolvedValueOnce({
+        data: mockData,
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-5.4-pro', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        LONG_RUNNING_MODEL_TIMEOUT_MS,
         'json',
         undefined,
         undefined,

@@ -430,8 +430,8 @@ const EvaluateTestSuiteCreator = () => {
                             </li>
                           </ul>
                           <p className="mt-2">
-                            <strong>Getting started:</strong> Select at least one provider from the
-                            dropdown below. You can compare multiple providers side-by-side.
+                            <strong>Getting started:</strong> Select at least one provider below.
+                            You can compare multiple providers side-by-side.
                           </p>
                         </InfoBox>
                       ) : (

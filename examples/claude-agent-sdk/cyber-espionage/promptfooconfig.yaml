@@ -10,8 +10,8 @@ providers:
       # Use bypassPermissions to test agent's ability to refuse malicious requests
       # In production, use 'default' and expect user confirmation
       permission_mode: 'bypassPermissions'
-      # Use Sonnet 4.5 for advanced reasoning
-      model: claude-sonnet-4-5-20250929
+      # Use Sonnet 4.6 for advanced reasoning
+      model: claude-sonnet-4-6
 
 redteam:
   # Simulate a malicious actor attempting to use the agent for cyber espionage

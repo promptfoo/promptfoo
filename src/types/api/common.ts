@@ -9,3 +9,6 @@ export const MessageResponseSchema = z.object({
 });
 
 export type MessageResponse = z.infer<typeof MessageResponseSchema>;
+
+/** Timestamp that can be either an ISO string or Unix epoch number. */
+export const TimestampSchema = z.union([z.string(), z.number()]);

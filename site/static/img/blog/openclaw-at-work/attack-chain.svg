@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 310" width="960" height="310" role="img" aria-label="Attack chain: untrusted web content enters the agent trust boundary and escalates through capability discovery, local access, and unauthorized outbound actions.">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="10" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 3.5 L0 7z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="10" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 3.5 L0 7z" fill="#f87171"/>
+    </marker>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <clipPath id="clip-p1"><rect x="254" y="56" width="186" height="30"/></clipPath>
+    <clipPath id="clip-p2"><rect x="492" y="56" width="186" height="30"/></clipPath>
+    <clipPath id="clip-p3"><rect x="730" y="56" width="186" height="30"/></clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="960" height="310" rx="12" fill="url(#bg)"/>
+
+  <!-- Trust boundary -->
+  <rect x="226" y="16" width="714" height="244" rx="8" fill="none" stroke="#334155" stroke-width="1.5" stroke-dasharray="8 4"/>
+  <text x="242" y="37" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#64748b" letter-spacing="0.08em">AGENT TRUST BOUNDARY</text>
+
+  <!-- ─── Attacker node ─── -->
+  <rect x="16" y="118" width="160" height="58" rx="6" fill="#1e293b" stroke="#f87171" stroke-width="1.5"/>
+  <text x="96" y="143" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" fill="#f87171" text-anchor="middle">Untrusted web page</text>
+  <text x="96" y="163" font-family="system-ui, -apple-system, sans-serif" font-size="10.5" fill="#94a3b8" text-anchor="middle">hidden instructions</text>
+
+  <!-- Arrow: attacker → boundary -->
+  <line x1="176" y1="147" x2="246" y2="152" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ─── Phase 1 ─── -->
+  <rect x="254" y="56" width="186" height="192" rx="6" fill="#1e293b" stroke="#475569" stroke-width="1"/>
+  <rect x="254" y="56" width="186" height="30" rx="6" fill="#334155" clip-path="url(#clip-p1)"/>
+  <text x="347" y="76" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#e2e8f0" text-anchor="middle" letter-spacing="0.04em">PHASE 1</text>
+  <text x="347" y="112" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" fill="#e2e8f0" text-anchor="middle">Capability</text>
+  <text x="347" y="130" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" fill="#e2e8f0" text-anchor="middle">discovery</text>
+  <text x="347" y="160" font-family="system-ui, -apple-system, sans-serif" font-size="10.5" fill="#94a3b8" text-anchor="middle">file ops · shell · session</text>
+  <text x="347" y="176" font-family="system-ui, -apple-system, sans-serif" font-size="10.5" fill="#94a3b8" text-anchor="middle">context · memory tools</text>
+  <rect x="278" y="198" width="138" height="22" rx="4" fill="#172554"/>
+  <text x="347" y="213" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#38bdf8" text-anchor="middle">Steers the agent</text>
+
+  <!-- Arrow: phase 1 → phase 2 -->
+  <line x1="440" y1="152" x2="484" y2="152" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ─── Phase 2 ─── -->
+  <rect x="492" y="56" width="186" height="192" rx="6" fill="#1e293b" stroke="#475569" stroke-width="1"/>
+  <rect x="492" y="56" width="186" height="30" rx="6" fill="#334155" clip-path="url(#clip-p2)"/>
+  <text x="585" y="76" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#e2e8f0" text-anchor="middle" letter-spacing="0.04em">PHASE 2</text>
+  <text x="585" y="112" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" fill="#e2e8f0" text-anchor="middle">Local access &amp;</text>
+  <text x="585" y="130" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" fill="#e2e8f0" text-anchor="middle">artifact creation</text>
+  <text x="585" y="160" font-family="system-ui, -apple-system, sans-serif" font-size="10.5" fill="#94a3b8" text-anchor="middle">reads internal docs</text>
+  <text x="585" y="176" font-family="system-ui, -apple-system, sans-serif" font-size="10.5" fill="#94a3b8" text-anchor="middle">writes attacker-useful files</text>
+  <rect x="516" y="198" width="138" height="22" rx="4" fill="#172554"/>
+  <text x="585" y="213" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#38bdf8" text-anchor="middle">Creates durable artifacts</text>
+
+  <!-- Arrow: phase 2 → phase 3 (red) -->
+  <line x1="678" y1="152" x2="722" y2="152" stroke="#f87171" stroke-width="2" marker-end="url(#arrow-red)"/>
+
+  <!-- ─── Phase 3 ─── -->
+  <rect x="730" y="56" width="186" height="192" rx="6" fill="#1e293b" stroke="#f87171" stroke-width="1.5"/>
+  <rect x="730" y="56" width="186" height="30" rx="6" fill="#451a1a" clip-path="url(#clip-p3)"/>
+  <text x="823" y="76" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#fca5a5" text-anchor="middle" letter-spacing="0.04em">PHASE 3</text>
+  <text x="823" y="112" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" fill="#e2e8f0" text-anchor="middle">Unauthorized</text>
+  <text x="823" y="130" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" fill="#e2e8f0" text-anchor="middle">outbound actions</text>
+  <rect x="744" y="156" width="46" height="22" rx="4" fill="#451a1a"/>
+  <text x="767" y="171" font-family="system-ui, -apple-system, sans-serif" font-size="10.5" font-weight="500" fill="#fca5a5" text-anchor="middle">SMS</text>
+  <rect x="796" y="156" width="50" height="22" rx="4" fill="#451a1a"/>
+  <text x="821" y="171" font-family="system-ui, -apple-system, sans-serif" font-size="10.5" font-weight="500" fill="#fca5a5" text-anchor="middle">Email</text>
+  <rect x="852" y="156" width="50" height="22" rx="4" fill="#451a1a"/>
+  <text x="877" y="171" font-family="system-ui, -apple-system, sans-serif" font-size="10.5" font-weight="500" fill="#fca5a5" text-anchor="middle">Social</text>
+  <rect x="754" y="198" width="138" height="22" rx="4" fill="#3b1111"/>
+  <text x="823" y="213" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#f87171" text-anchor="middle">Operational incident</text>
+
+  <!-- Caption (below boundary) -->
+  <text x="583" y="290" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Each phase uses the same agent context. No privilege boundary separates browsing from local access or outbound action.</text>
+</svg>

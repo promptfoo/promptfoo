@@ -6,6 +6,7 @@ import {
   checkCloudPermissions,
   getConfigFromCloud,
   getDefaultTeam,
+  getEvalConfigFromCloud,
   getPluginSeverityOverridesFromCloud,
   getPoliciesFromCloud,
   getProviderFromCloud,
@@ -14,6 +15,8 @@ import {
 } from '../../src/util/cloud';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { checkServerFeatureSupport } from '../../src/util/server';
+
+import type { UnifiedConfig } from '../../src/types';
 
 vi.mock('../../src/util/fetch/index.ts');
 vi.mock('../../src/globalConfig/cloud');
@@ -350,6 +353,95 @@ describe('cloud utils', () => {
 
       await expect(getConfigFromCloud('test-config')).rejects.toThrow(
         'Failed to fetch config from cloud: test-config.',
+      );
+    });
+  });
+
+  describe('getEvalConfigFromCloud', () => {
+    beforeEach(() => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+    });
+
+    it('should fetch and normalize eval config from cloud envelope', async () => {
+      const providerId = '12345678-1234-4234-8234-123456789abc';
+      const responseBody = {
+        config: {
+          id: 'config-id',
+          name: 'My Cloud Eval Config',
+          config: {
+            providerIds: [providerId],
+            prompts: [{ id: 'prompt-1', content: 'Hello {{name}}' }],
+            testCases: [{ vars: { name: 'World' } }],
+            delay: 250,
+            maxConcurrency: 2,
+            verbose: true,
+          },
+        },
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(responseBody),
+      } as Response);
+
+      const result = await getEvalConfigFromCloud('eval-config-id');
+
+      expect(result.description).toBe('My Cloud Eval Config');
+      expect(result.providers).toEqual([`promptfoo://provider/${providerId}`]);
+      expect(result.prompts).toEqual(['Hello {{name}}']);
+      expect(result.tests).toEqual([{ vars: { name: 'World' } }]);
+      expect(result.commandLineOptions).toEqual({
+        delay: 250,
+        maxConcurrency: 2,
+        verbose: true,
+      });
+      expect((result as any).providerIds).toBeUndefined();
+      expect((result as any).testCases).toBeUndefined();
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/configs/eval-config-id',
+        {
+          method: 'GET',
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+      );
+    });
+
+    it('should default tests to an empty array when absent', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            config: {
+              description: 'Cloud Eval',
+              providers: ['promptfoo://provider/12345678-1234-4234-8234-123456789abc'],
+              prompts: ['Say hello'],
+            },
+          }),
+      } as Response);
+
+      const result = await getEvalConfigFromCloud('eval-config-id');
+      expect(result.tests).toEqual([]);
+    });
+
+    it('should throw error when cloud config is not enabled', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+
+      await expect(getEvalConfigFromCloud('eval-config-id')).rejects.toThrow(
+        'Could not fetch Config eval-config-id from cloud. Cloud config is not enabled.',
+      );
+    });
+
+    it('should throw error when eval config fetch fails', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        text: () => Promise.resolve('Config not found'),
+      } as Response);
+
+      await expect(getEvalConfigFromCloud('eval-config-id')).rejects.toThrow(
+        'Failed to fetch config from cloud: Not Found',
       );
     });
   });
@@ -1258,14 +1350,69 @@ describe('cloud utils', () => {
 
       await expect(checkCloudPermissions(complexConfig)).resolves.toBeUndefined();
 
+      // Should strip tests and replace redteam with empty object
+      const expectedConfig = {
+        providers: ['provider1', 'provider2'],
+        prompts: ['prompt1'],
+        redteam: {},
+      };
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/permissions/check',
         {
           method: 'POST',
-          body: JSON.stringify({ config: complexConfig }),
+          body: JSON.stringify({ config: expectedConfig }),
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
       );
+    });
+
+    it('should strip heavy fields from config before sending', async () => {
+      const largeConfig: Partial<UnifiedConfig> = {
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        metadata: { configId: 'config-123', teamId: 'team-456' },
+        tests: Array.from({ length: 300 }, (_, i) => ({
+          vars: { input: `test-${i}` },
+          assert: [{ type: 'contains' as const, value: `expected-${i}` }],
+        })),
+        scenarios: [
+          {
+            config: [{ vars: { scenario: 'test' } }],
+            tests: [{ vars: { input: 'scenario-test' } }],
+          },
+        ],
+        defaultTest: { vars: { default: 'value' } },
+        evaluateOptions: { maxConcurrency: 5 },
+        redteam: {
+          plugins: [{ id: 'plugin1' as const }, { id: 'plugin2' as const }],
+          strategies: [{ id: 'strategy1' as const }],
+          purpose: 'A very long purpose string',
+        },
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ success: true }),
+      } as Response);
+
+      await expect(checkCloudPermissions(largeConfig)).resolves.toBeUndefined();
+
+      const sentBody = JSON.parse((mockFetchWithProxy.mock.calls[0] as any[])[1].body as string);
+      const sentConfig = sentBody.config;
+
+      // Should keep providers, prompts, and metadata
+      expect(sentConfig.providers).toEqual(['provider1']);
+      expect(sentConfig.prompts).toEqual(['prompt1']);
+      expect(sentConfig.metadata).toEqual({ configId: 'config-123', teamId: 'team-456' });
+
+      // Should strip heavy fields
+      expect(sentConfig.tests).toBeUndefined();
+      expect(sentConfig.scenarios).toBeUndefined();
+      expect(sentConfig.defaultTest).toBeUndefined();
+      expect(sentConfig.evaluateOptions).toBeUndefined();
+
+      // Should replace redteam with empty object (preserving truthiness)
+      expect(sentConfig.redteam).toEqual({});
     });
 
     it('should handle config with undefined providers', async () => {

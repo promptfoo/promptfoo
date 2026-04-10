@@ -121,3 +121,18 @@ export function extractBase64FromDataUrl(value: string): string {
   const parsed = parseDataUrl(value);
   return parsed ? parsed.base64Data : value;
 }
+
+/**
+ * Build a data URI from a MIME type and base64 data.
+ *
+ * @param mimeType MIME type (e.g. "image/png")
+ * @param base64Data Raw base64-encoded data
+ * @returns Data URI string
+ *
+ * @example
+ * toDataUri("image/png", "iVBORw0KGgo...")
+ * // "data:image/png;base64,iVBORw0KGgo..."
+ */
+export function toDataUri(mimeType: string, base64Data: string): string {
+  return `data:${mimeType};base64,${base64Data}`;
+}

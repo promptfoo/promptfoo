@@ -36,7 +36,7 @@ When using browser automation:
 
 ## Prerequisites
 
-The browser provider requires Playwright and related packages. These are optional dependencies, so you'll need to install them:
+The browser provider requires Playwright and the stealth plugin. Install these packages in the project where you run promptfoo:
 
 ```bash
 npm install playwright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth
@@ -669,4 +669,4 @@ providers:
 
 ---
 
-For more examples, check out the [headless-browser example](https://github.com/promptfoo/promptfoo/tree/main/examples/headless-browser) in our GitHub repository.
+For more examples, check out the [headless-browser example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-browser/headless) in our GitHub repository.

@@ -183,13 +183,6 @@ describe('HuggingfaceChatCompletionProvider', () => {
       const provider = new HuggingfaceChatCompletionProvider('test-model');
       expect(provider.getApiKey()).toBeUndefined();
     });
-
-    it('throws helpful error when API key is missing', async () => {
-      delete process.env.HF_TOKEN;
-      delete process.env.HF_API_TOKEN;
-      const provider = new HuggingfaceChatCompletionProvider('test-model');
-      await expect(provider.callApi('test')).rejects.toThrow('HF_TOKEN');
-    });
   });
 
   describe('URL handling', () => {

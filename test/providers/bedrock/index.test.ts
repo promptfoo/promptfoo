@@ -135,8 +135,16 @@ describe('AwsBedrockGenericProvider', () => {
   afterEach(() => {
     vi.clearAllMocks();
     delete process.env.AWS_BEARER_TOKEN_BEDROCK;
-    process.env.HTTP_PROXY = ORIGINAL_HTTP_PROXY;
-    process.env.HTTPS_PROXY = ORIGINAL_HTTPS_PROXY;
+    if (ORIGINAL_HTTP_PROXY === undefined) {
+      delete process.env.HTTP_PROXY;
+    } else {
+      process.env.HTTP_PROXY = ORIGINAL_HTTP_PROXY;
+    }
+    if (ORIGINAL_HTTPS_PROXY === undefined) {
+      delete process.env.HTTPS_PROXY;
+    } else {
+      process.env.HTTPS_PROXY = ORIGINAL_HTTPS_PROXY;
+    }
   });
 
   it('should create Bedrock instance without proxy settings', async () => {
@@ -147,10 +155,13 @@ describe('AwsBedrockGenericProvider', () => {
     })();
     await provider.getBedrockInstance();
 
+    expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
+      requestHandler,
     });
   });
 
@@ -168,10 +179,13 @@ describe('AwsBedrockGenericProvider', () => {
     })();
     await provider.getBedrockInstance();
 
+    expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
+      requestHandler,
       credentials: {
         accessKeyId: 'test-access-key',
         secretAccessKey: 'test-secret-key',
@@ -187,10 +201,13 @@ describe('AwsBedrockGenericProvider', () => {
     })();
     await provider.getBedrockInstance();
 
+    expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
+      requestHandler,
     });
     expect(BedrockRuntimeMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ credentials: expect.anything() }),
@@ -206,10 +223,13 @@ describe('AwsBedrockGenericProvider', () => {
     })();
     await provider.getBedrockInstance();
 
+    expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
+      requestHandler,
     });
   });
 
@@ -235,11 +255,12 @@ describe('AwsBedrockGenericProvider', () => {
     await provider.getBedrockInstance();
 
     expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
-      requestHandler: expect.any(Object),
+      requestHandler,
     });
   });
 
@@ -261,11 +282,12 @@ describe('AwsBedrockGenericProvider', () => {
     await provider.getBedrockInstance();
 
     expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
-      requestHandler: expect.any(Object),
+      requestHandler,
     });
 
     delete process.env.AWS_BEARER_TOKEN_BEDROCK;
@@ -2434,6 +2456,24 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
+    it('should prefer API-reported total_tokens when it differs from prompt + completion', async () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 25,
+          completion_tokens: 50,
+          total_tokens: 99,
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 25,
+        completion: 50,
+        total: 99,
+        numRequests: 1,
+      });
+    });
+
     it('should return undefined token counts when not provided by the API', async () => {
       const mockResponse = {
         outputs: [{ text: 'This is a generated response' }],
@@ -2490,6 +2530,24 @@ describe('BEDROCK_MODEL token counting functionality', () => {
         prompt: 30,
         completion: 45,
         total: 75, // 30 + 45 = 75, not "3045"
+        numRequests: 1,
+      });
+    });
+
+    it('should prefer API-reported total_tokens when chat completion totals differ', async () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 30,
+          completion_tokens: 45,
+          total_tokens: 101,
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 30,
+        completion: 45,
+        total: 101,
         numRequests: 1,
       });
     });

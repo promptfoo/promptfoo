@@ -798,16 +798,16 @@ For more information on the available models and API usage, refer to the [xAI do
 
 ## Examples
 
-For examples demonstrating text generation, image creation, and web search, see the [xai example](https://github.com/promptfoo/promptfoo/tree/main/examples/xai).
+For examples demonstrating text generation, image creation, and web search, see the [xai example](https://github.com/promptfoo/promptfoo/tree/main/examples/xai/chat).
 
 ```bash
-npx promptfoo@latest init --example xai
+npx promptfoo@latest init --example xai/chat
 ```
 
-For real-time voice conversations with Grok, see the [xai-voice example](https://github.com/promptfoo/promptfoo/tree/main/examples/xai-voice).
+For real-time voice conversations with Grok, see the [xai-voice example](https://github.com/promptfoo/promptfoo/tree/main/examples/xai/voice).
 
 ```bash
-npx promptfoo@latest init --example xai-voice
+npx promptfoo@latest init --example xai/voice
 ```
 
 ## See Also

@@ -157,6 +157,11 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    *
    * @returns The API key or undefined
    */
+  requiresApiKey(): boolean {
+    // Vertex AI supports OAuth/ADC authentication without an API key
+    return !this.isVertexMode;
+  }
+
   getApiKey(): string | undefined {
     const { apiKey } = GoogleAuthManager.getApiKey(this.config, this.env, this.isVertexMode);
     if (apiKey) {

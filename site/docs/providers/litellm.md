@@ -126,7 +126,8 @@ providers:
 
 The LiteLLM provider respects standard environment variables:
 
-- `LITELLM_API_KEY`
+- `LITELLM_API_KEY` - API key for the LiteLLM proxy server
+- `LITELLM_API_BASE` - Base URL for the LiteLLM proxy server (default: `http://0.0.0.0:4000`)
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
 - `AZURE_API_KEY`

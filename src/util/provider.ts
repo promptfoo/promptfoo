@@ -221,6 +221,75 @@ export function isAnthropicProvider(providerId: string): boolean {
   return false;
 }
 
+const KNOWN_ENV_VARS: Record<string, string> = {
+  openai: 'OPENAI_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+  google: 'GOOGLE_API_KEY',
+  mistral: 'MISTRAL_API_KEY',
+  cohere: 'COHERE_API_KEY',
+  replicate: 'REPLICATE_API_TOKEN',
+  voyage: 'VOYAGE_API_KEY',
+  ai21: 'AI21_API_KEY',
+  xai: 'XAI_API_KEY',
+  groq: 'GROQ_API_KEY',
+  deepseek: 'DEEPSEEK_API_KEY',
+  perplexity: 'PERPLEXITY_API_KEY',
+  hyperbolic: 'HYPERBOLIC_API_KEY',
+  cerebras: 'CEREBRAS_API_KEY',
+  togetherai: 'TOGETHER_API_KEY',
+  fal: 'FAL_KEY',
+  huggingface: 'HF_TOKEN',
+  'cloudflare-ai': 'CLOUDFLARE_API_KEY',
+};
+
+function getDefaultEnvVar(providerId: string): string {
+  const prefix = providerId.split(':')[0];
+  return KNOWN_ENV_VARS[prefix] || `${prefix.toUpperCase()}_API_KEY`;
+}
+
+/**
+ * Pre-checks providers for missing API keys before evaluation starts.
+ * Assumes getApiKey() is side-effect free (no network calls or token refresh).
+ */
+export function checkProviderApiKeys(providers: ApiProvider[]): Map<string, string[]> {
+  const missingApiKeys = new Map<string, string[]>();
+
+  for (const provider of providers) {
+    const p = provider as any;
+    if (typeof p.getApiKey !== 'function') {
+      continue;
+    }
+
+    // Azure providers support Azure AD token auth without an API key
+    if (provider.id().startsWith('azure:')) {
+      continue;
+    }
+
+    // Defaults to true — opt out via requiresApiKey() or config.apiKeyRequired = false
+    const requiresKey =
+      typeof p.requiresApiKey === 'function'
+        ? p.requiresApiKey()
+        : p.config?.apiKeyRequired !== false;
+
+    let apiKey: string | undefined;
+    try {
+      apiKey = p.getApiKey();
+    } catch {
+      apiKey = undefined;
+    }
+
+    if (requiresKey && !apiKey) {
+      const envVar = p.config?.apiKeyEnvar || getDefaultEnvVar(provider.id());
+      if (!missingApiKeys.has(envVar)) {
+        missingApiKeys.set(envVar, []);
+      }
+      missingApiKeys.get(envVar)!.push(provider.id());
+    }
+  }
+
+  return missingApiKeys;
+}
+
 /**
  * Detects if a provider uses Google models.
  * This includes direct Google/Vertex providers with Gemini and other Google models.

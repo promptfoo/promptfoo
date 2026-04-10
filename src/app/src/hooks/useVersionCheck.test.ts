@@ -109,8 +109,6 @@ describe('useVersionCheck', () => {
       json: () => Promise.resolve(mockVersionInfo),
     } as Response);
 
-    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
-
     const { result } = renderHook(() => useVersionCheck());
 
     await waitFor(() => {
@@ -121,8 +119,7 @@ describe('useVersionCheck', () => {
       result.current.dismiss();
     });
 
-    expect(setItemSpy).toHaveBeenCalledWith(
-      'promptfoo:update:dismissedVersion',
+    expect(localStorage.getItem('promptfoo:update:dismissedVersion')).toBe(
       mockVersionInfo.latestVersion,
     );
     expect(result.current.dismissed).toBe(true);

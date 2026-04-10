@@ -81,7 +81,7 @@ export function ConfigPreview() {
           </div>
         )}
 
-        <div className="pt-4 border-t flex justify-center">
+        <div className="pt-4 border-t border-border flex justify-center">
           <RunTestSuiteButton />
         </div>
       </CardContent>

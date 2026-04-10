@@ -174,23 +174,105 @@ describe('Azure Moderation', () => {
 
       const key = getModerationCacheKey(modelName, config, content);
 
-      expect(key).toBe('azure-moderation:test-model:"test content"');
+      expect(key).toBe(
+        'azure-moderation:test-model:{"blocklistNames":[],"haltOnBlocklistHit":false,"passthrough":{}}:"test content"',
+      );
     });
 
     it('should handle empty content', () => {
       const key = getModerationCacheKey('model', {}, '');
-      expect(key).toBe('azure-moderation:model:""');
+      expect(key).toBe(
+        'azure-moderation:model:{"blocklistNames":[],"haltOnBlocklistHit":false,"passthrough":{}}:""',
+      );
     });
 
-    it('should handle complex config object', () => {
-      const config = {
-        apiKey: 'key',
-        endpoint: 'https://test.com',
-        headers: { 'X-Test': 'value' },
-      };
+    it('should include request-shaping config in the cache key', () => {
+      const key = getModerationCacheKey(
+        'model',
+        {
+          blocklistNames: ['custom-list'],
+          haltOnBlocklistHit: true,
+          passthrough: { outputType: 'EightSeverityLevels' },
+        },
+        'content',
+      );
 
-      const key = getModerationCacheKey('model', config, 'content');
-      expect(key).toBe('azure-moderation:model:"content"');
+      expect(key).toBe(
+        'azure-moderation:model:{"blocklistNames":["custom-list"],"haltOnBlocklistHit":true,"passthrough":{"outputType":"EightSeverityLevels"}}:"content"',
+      );
+    });
+
+    it('should include endpoint and apiVersion in the cache key', () => {
+      const firstKey = getModerationCacheKey(
+        'model',
+        { endpoint: 'https://resource-a.cognitiveservices.azure.com/' },
+        'content',
+      );
+      const secondKey = getModerationCacheKey(
+        'model',
+        { endpoint: 'https://resource-b.cognitiveservices.azure.com/' },
+        'content',
+      );
+
+      expect(firstKey).not.toBe(secondKey);
+
+      const versionKey1 = getModerationCacheKey('model', { apiVersion: '2024-09-01' }, 'content');
+      const versionKey2 = getModerationCacheKey(
+        'model',
+        { apiVersion: '2024-09-15-preview' },
+        'content',
+      );
+
+      expect(versionKey1).not.toBe(versionKey2);
+    });
+
+    it('should ignore apiKey and apiKeyEnvar in the cache key', () => {
+      const firstKey = getModerationCacheKey(
+        'model',
+        { apiKey: 'key-1', apiKeyEnvar: 'MY_KEY_1', endpoint: 'https://test.com' },
+        'content',
+      );
+      const secondKey = getModerationCacheKey(
+        'model',
+        { apiKey: 'key-2', apiKeyEnvar: 'MY_KEY_2', endpoint: 'https://test.com' },
+        'content',
+      );
+
+      expect(firstKey).toBe(secondKey);
+    });
+
+    it('should differentiate by headers without leaking raw values', () => {
+      const firstKey = getModerationCacheKey(
+        'model',
+        { endpoint: 'https://test.com', headers: { Authorization: 'Bearer secret-token-1' } },
+        'content',
+      );
+      const secondKey = getModerationCacheKey(
+        'model',
+        { endpoint: 'https://test.com', headers: { Authorization: 'Bearer secret-token-2' } },
+        'content',
+      );
+
+      expect(firstKey).not.toBe(secondKey);
+      expect(firstKey).not.toContain('secret-token-1');
+      expect(secondKey).not.toContain('secret-token-2');
+      expect(firstKey).toContain('headersHash');
+    });
+
+    it('should treat empty headers the same as absent headers', () => {
+      const noHeaders = getModerationCacheKey('model', {}, 'content');
+      const emptyHeaders = getModerationCacheKey('model', { headers: {} }, 'content');
+      const undefinedHeaders = getModerationCacheKey('model', { headers: undefined }, 'content');
+
+      expect(noHeaders).toBe(emptyHeaders);
+      expect(noHeaders).toBe(undefinedHeaders);
+    });
+
+    it('should produce the same hash regardless of header key order', () => {
+      const key1 = getModerationCacheKey('model', { headers: { A: '1', B: '2' } }, 'content');
+      const key2 = getModerationCacheKey('model', { headers: { B: '2', A: '1' } }, 'content');
+
+      expect(key1).toBe(key2);
     });
   });
 
@@ -231,6 +313,36 @@ describe('Azure Moderation', () => {
       expect(result.cached).toBe(true);
       expect(result.flags).toEqual(mockCachedResponse.flags);
       expect(mockCache.get).toHaveBeenCalled();
+    });
+
+    it('should use resolved endpoint and apiVersion in cache key', async () => {
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      } as any;
+
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(mockCache);
+
+      const { fetchWithProxy } = await import('../../../src/util/fetch/index');
+      vi.mocked(fetchWithProxy).mockResolvedValue({
+        ok: true,
+        json: async () => ({ categoriesAnalysis: [] }),
+      } as any);
+
+      const provider = new AzureModerationProvider('text-content-safety', {
+        config: {
+          apiKey: 'test-key',
+          endpoint: 'https://resolved-endpoint.cognitiveservices.azure.com/',
+          apiVersion: '2024-09-15-preview',
+        },
+      });
+
+      await provider.callModerationApi('user prompt', 'test content');
+
+      const cacheKey = mockCache.get.mock.calls[0][0] as string;
+      expect(cacheKey).toContain('resolved-endpoint');
+      expect(cacheKey).toContain('2024-09-15-preview');
     });
   });
 });

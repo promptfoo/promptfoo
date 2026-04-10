@@ -11,7 +11,7 @@ import {
   resolveVideoSource,
 } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
-import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
+import { type EvaluateTableOutput, type ImageOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,
@@ -25,10 +25,12 @@ import {
   ThumbsUp,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import logger from '../../../../../logger';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
 import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
+import SetScoreDialog from './SetScoreDialog';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
@@ -38,12 +40,28 @@ type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
 };
 
-function scoreToString(score: number | null) {
-  if (score === null || score === 0 || score === 1) {
+function scoreToString(score: number | null | undefined) {
+  if (typeof score !== 'number' || score === 0 || score === 1) {
     // Don't show boolean scores.
     return '';
   }
   return `(${score.toFixed(2)})`;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function stringifyOutputText(text: unknown): string {
+  if (typeof text === 'string') {
+    return text;
+  }
+
+  if (text == null) {
+    return '';
+  }
+
+  return JSON.stringify(text) ?? String(text);
 }
 
 /**
@@ -86,6 +104,76 @@ export function isVideoProvider(provider: string | undefined): boolean {
   return provider.includes(':video:');
 }
 
+export function normalizeImageSrcForComparison(src: string): string {
+  const normalized = normalizeMediaText(src.trim());
+  return resolveImageSource(normalized) || normalized;
+}
+
+export function extractMarkdownImageSources(markdown: string): string[] {
+  const sources = new Set<string>();
+
+  const markdownImageRegex = /!\[[^\]]*]\((<[^>]+>|[^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
+  const htmlImageRegex = /<img[^>]*\ssrc=["']([^"']+)["'][^>]*>/gi;
+
+  for (const match of markdown.matchAll(markdownImageRegex)) {
+    const candidate = match[1]?.trim();
+    if (!candidate) {
+      continue;
+    }
+    const unwrapped =
+      candidate.startsWith('<') && candidate.endsWith('>') ? candidate.slice(1, -1) : candidate;
+    sources.add(normalizeImageSrcForComparison(unwrapped));
+  }
+
+  for (const match of markdown.matchAll(htmlImageRegex)) {
+    const candidate = match[1]?.trim();
+    if (!candidate) {
+      continue;
+    }
+    sources.add(normalizeImageSrcForComparison(candidate));
+  }
+
+  return [...sources];
+}
+
+export function resolveEvalImageOutputSource(image: ImageOutput): string | undefined {
+  if (typeof image.data === 'string' && /^https?:\/\//.test(image.data)) {
+    return image.data;
+  }
+
+  return resolveImageSource(image);
+}
+
+function isImageLikeDataUri(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('data:')) {
+    return false;
+  }
+
+  const mimeType = trimmed.slice('data:'.length).split(/[;,]/, 1)[0]?.toLowerCase();
+  return Boolean(
+    mimeType && (mimeType.startsWith('image/') || mimeType === 'application/octet-stream'),
+  );
+}
+
+function getPrimaryRenderedImageSrc(text: string, inlineImageSrc?: string): string | undefined {
+  const trimmed = text.trim();
+
+  if (trimmed.startsWith('<svg')) {
+    return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(text)))}`;
+  }
+
+  if (isImageLikeDataUri(text)) {
+    return inlineImageSrc || text;
+  }
+
+  if (inlineImageSrc && !trimmed.startsWith('data:')) {
+    return inlineImageSrc;
+  }
+
+  return undefined;
+}
+
 export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
   maxTextLength: number;
@@ -95,7 +183,6 @@ export interface EvalOutputCellProps {
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
   evaluationId?: string;
   testCaseId?: string;
-  isRedteam?: boolean;
 }
 
 /**
@@ -115,7 +202,6 @@ export interface EvalOutputCellProps {
  * @param evaluationId - Evaluation identifier passed to the prompt/details dialog.
  * @param testCaseId - Test case identifier passed to the prompt/details dialog (falls back to `output.id` when not provided).
  * @param onMetricFilter - Optional callback to filter by a custom metric (passed through to the CustomMetrics child).
- * @param isRedteam - When true, shows probe-specific stats (e.g., numRequests) in the stats panel.
  */
 function EvalOutputCell({
   output,
@@ -129,9 +215,8 @@ function EvalOutputCell({
   showStats,
   evaluationId,
   testCaseId,
-  isRedteam,
 }: EvalOutputCellProps & {
-  firstOutput: EvaluateTableOutput;
+  firstOutput?: EvaluateTableOutput | null;
   showDiffs: boolean;
   searchText?: string;
 }) {
@@ -227,11 +312,14 @@ function EvalOutputCell({
     setCommentText(newCommentText);
   };
 
-  const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+  const text = stringifyOutputText(output.text);
   const normalizedText = normalizeMediaText(text);
   const inlineImageSrc = resolveImageSource(text);
+  const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
+  const primaryRenderedAsImage = Boolean(primaryRenderedImageSrc);
   const outputAudioSource = resolveAudioSource(output.audio);
   let node: React.ReactNode | undefined;
+  let renderedMarkdownOutput = false;
   let failReasons: string[] = [];
   let passReasons: string[] = [];
 
@@ -263,8 +351,7 @@ function EvalOutputCell({
   }
 
   if (showDiffs && firstOutput) {
-    const firstOutputText =
-      typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
+    const firstOutputText = stringifyOutputText(firstOutput.text);
 
     let diffResult;
     try {
@@ -333,22 +420,13 @@ function EvalOutputCell({
     } catch (error) {
       console.error('Invalid regular expression:', (error as Error).message);
     }
-  } else if (
-    text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/) ||
-    inlineImageSrc ||
-    text?.trim().startsWith('<svg')
-  ) {
-    // Convert raw SVG to data URI if needed
-    let src = inlineImageSrc || text;
-    if (text?.trim().startsWith('<svg')) {
-      src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(text)))}`;
-    }
+  } else if (primaryRenderedImageSrc) {
     node = (
       <img
-        src={src}
+        src={primaryRenderedImageSrc}
         alt={output.prompt}
         style={{ width: '100%' }}
-        onClick={() => toggleLightbox(src)}
+        onClick={() => toggleLightbox(primaryRenderedImageSrc)}
       />
     );
   } else if (output.audio) {
@@ -419,6 +497,7 @@ function EvalOutputCell({
       }
     }
     if (!isJsonHandled && renderMarkdown) {
+      renderedMarkdownOutput = true;
       // Use stable constants and memoized components to prevent unnecessary
       // re-renders when parent re-renders due to layout changes.
       // @see https://github.com/promptfoo/promptfoo/issues/969
@@ -434,6 +513,54 @@ function EvalOutputCell({
     }
   }
 
+  if (output.images?.length) {
+    const renderedImageSrcs = new Set<string>();
+    if (primaryRenderedImageSrc) {
+      renderedImageSrcs.add(normalizeImageSrcForComparison(primaryRenderedImageSrc));
+    }
+    if (renderedMarkdownOutput) {
+      for (const source of extractMarkdownImageSources(normalizedText)) {
+        renderedImageSrcs.add(source);
+      }
+    }
+
+    // Keep the legacy "skip the first structured image" behavior when the primary
+    // output is already rendered as an image. Some providers repeat that same
+    // image first, but encode it differently enough that direct source comparison
+    // alone is not reliable after merging main.
+    const imagesToRender =
+      primaryRenderedAsImage && !renderedMarkdownOutput ? output.images.slice(1) : output.images;
+
+    const imageElements = imagesToRender
+      .map((img: ImageOutput, idx: number) => {
+        const src = resolveEvalImageOutputSource(img);
+        if (!src || renderedImageSrcs.has(normalizeImageSrcForComparison(src))) {
+          return null;
+        }
+        return (
+          <img
+            key={`img-${idx}`}
+            src={src}
+            alt={output.prompt || 'Generated image'}
+            loading="lazy"
+            style={{ display: 'block', width: '100%', cursor: 'pointer' }}
+            onClick={() => toggleLightbox(src)}
+          />
+        );
+      })
+      .filter((img): img is React.ReactElement => img !== null);
+    if (imageElements.length > 0) {
+      node = node ? (
+        <>
+          {node}
+          {imageElements}
+        </>
+      ) : (
+        imageElements
+      );
+    }
+  }
+
   const handleRating = (isPass: boolean) => {
     const newRating = activeRating === isPass ? null : isPass;
     setActiveRating(newRating);
@@ -443,19 +570,67 @@ function EvalOutputCell({
     });
   };
 
+  const [scoreDialogOpen, setScoreDialogOpen] = React.useState(false);
+
   const handleSetScore = () => {
-    const score = prompt('Set test score (0.0 - 1.0):', String(output.score));
-    if (score !== null) {
-      const parsedScore = Number.parseFloat(score);
-      if (!Number.isNaN(parsedScore) && parsedScore >= 0.0 && parsedScore <= 1.0) {
-        onRating(undefined, parsedScore, output.gradingResult?.comment);
-      } else {
-        alert('Invalid score. Please enter a value between 0.0 and 1.0.');
-      }
-    }
+    setScoreDialogOpen(true);
+  };
+
+  const handleScoreSave = (score: number) => {
+    onRating(undefined, score, output.gradingResult?.comment);
+    setScoreDialogOpen(false);
   };
 
   const [linked, setLinked] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+  const isMountedRef = React.useRef(true);
+  const linkedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  const copiedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+
+  const clearLinkedResetTimeout = useCallback(() => {
+    if (linkedResetTimeoutRef.current !== null) {
+      globalThis.clearTimeout(linkedResetTimeoutRef.current);
+      linkedResetTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearCopiedResetTimeout = useCallback(() => {
+    if (copiedResetTimeoutRef.current !== null) {
+      globalThis.clearTimeout(copiedResetTimeoutRef.current);
+      copiedResetTimeoutRef.current = null;
+    }
+  }, []);
+
+  React.useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      clearLinkedResetTimeout();
+      clearCopiedResetTimeout();
+    };
+  }, [clearLinkedResetTimeout, clearCopiedResetTimeout]);
+
+  const scheduleLinkedReset = useCallback(() => {
+    clearLinkedResetTimeout();
+    linkedResetTimeoutRef.current = globalThis.setTimeout(() => {
+      linkedResetTimeoutRef.current = null;
+      if (isMountedRef.current) {
+        setLinked(false);
+      }
+    }, 3000);
+  }, [clearLinkedResetTimeout]);
+
+  const scheduleCopiedReset = useCallback(() => {
+    clearCopiedResetTimeout();
+    copiedResetTimeoutRef.current = globalThis.setTimeout(() => {
+      copiedResetTimeoutRef.current = null;
+      if (isMountedRef.current) {
+        setCopied(false);
+      }
+    }, 3000);
+  }, [clearCopiedResetTimeout]);
+
   const handleRowShareLink = () => {
     const url = new URL(window.location.href);
     url.searchParams.set('rowId', String(rowIndex + 1));
@@ -463,24 +638,35 @@ function EvalOutputCell({
     navigator.clipboard
       .writeText(url.toString())
       .then(() => {
+        if (!isMountedRef.current) {
+          return;
+        }
         setLinked(true);
-        setTimeout(() => setLinked(false), 3000);
+        scheduleLinkedReset();
       })
       .catch((error) => {
-        console.error('Failed to copy link to clipboard:', error);
+        if (!isMountedRef.current) {
+          return;
+        }
+        logger.error('Failed to copy link to clipboard', { error: getErrorMessage(error) });
       });
   };
 
-  const [copied, setCopied] = React.useState(false);
   const handleCopy = () => {
     navigator.clipboard
       .writeText(text)
       .then(() => {
+        if (!isMountedRef.current) {
+          return;
+        }
         setCopied(true);
-        setTimeout(() => setCopied(false), 3000);
+        scheduleCopiedReset();
       })
       .catch((error) => {
-        console.error('Failed to copy output to clipboard:', error);
+        if (!isMountedRef.current) {
+          return;
+        }
+        logger.error('Failed to copy output to clipboard', { error: getErrorMessage(error) });
       });
   };
 
@@ -598,9 +784,9 @@ function EvalOutputCell({
       passCount = gradingResult.pass ? 1 : 0;
       failCount = gradingResult.pass ? 0 : 1;
     }
-  } else if (output.pass) {
+  } else if (output.pass === true) {
     passCount = 1;
-  } else if (!output.pass) {
+  } else if (output.pass === false) {
     failCount = 1;
   }
 
@@ -643,10 +829,11 @@ function EvalOutputCell({
   }
 
   const scoreString = scoreToString(output.score);
+  const statusClass = output.pass === true || (passCount > 0 && failCount === 0) ? 'pass' : 'fail';
 
   const getCombinedContextText = () => {
     if (!output.gradingResult?.componentResults) {
-      return output.text;
+      return text;
     }
 
     return output.gradingResult.componentResults
@@ -661,26 +848,24 @@ function EvalOutputCell({
   // Compute provider override badge for test case-level model overrides
   let providerOverride: React.ReactNode = null;
   const testCaseProvider = output.testCase?.provider;
-  if (testCaseProvider) {
-    const providerId: string | null =
-      typeof testCaseProvider === 'string'
-        ? testCaseProvider
-        : typeof testCaseProvider === 'object' &&
-            testCaseProvider !== null &&
-            'id' in testCaseProvider &&
-            typeof testCaseProvider.id === 'string'
-          ? testCaseProvider.id
-          : null;
-    if (providerId) {
-      providerOverride = (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="provider pill">{providerId}</span>
-          </TooltipTrigger>
-          <TooltipContent side="top">Model override for this test</TooltipContent>
-        </Tooltip>
-      );
-    }
+  const providerId: string | null =
+    typeof testCaseProvider === 'string'
+      ? testCaseProvider
+      : typeof testCaseProvider === 'object' &&
+          testCaseProvider !== null &&
+          'id' in testCaseProvider &&
+          typeof testCaseProvider.id === 'string'
+        ? testCaseProvider.id
+        : null;
+  if (providerId) {
+    providerOverride = (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="provider pill">{providerId}</span>
+        </TooltipTrigger>
+        <TooltipContent side="top">Model override for this test</TooltipContent>
+      </Tooltip>
+    );
   }
 
   const commentTextToDisplay = output.gradingResult?.comment?.startsWith('!highlight')
@@ -695,11 +880,6 @@ function EvalOutputCell({
 
   const detail = showStats ? (
     <div className="cell-detail">
-      {tokenUsage?.numRequests !== undefined && isRedteam && (
-        <div className="stat-item">
-          <strong>Probes:</strong> {tokenUsage.numRequests}
-        </div>
-      )}
       {tokenUsageDisplay && (
         <div className="stat-item">
           <strong>Tokens:</strong> {tokenUsageDisplay}
@@ -886,7 +1066,7 @@ function EvalOutputCell({
   return (
     <div id={`eval-output-cell-${outputCellId}`} className="cell" style={cellStyle}>
       {showPassFail && (
-        <div className={`status ${output.pass ? 'pass' : 'fail'}`}>
+        <div className={`status ${statusClass}`}>
           <div className="status-row">
             <div className="pill">
               {passFailText}
@@ -894,7 +1074,7 @@ function EvalOutputCell({
             </div>
             {providerOverride}
           </div>
-          <CustomMetrics lookup={output.namedScores} />
+          <CustomMetrics lookup={output.namedScores ?? {}} />
           {failReasons.length > 0 && (
             <span className="fail-reason">
               <FailReasonCarousel failReasons={failReasons} />
@@ -911,7 +1091,7 @@ function EvalOutputCell({
           )}
         </div>
       )}
-      {showPrompts && firstOutput.prompt && (
+      {showPrompts && firstOutput?.prompt && (
         <div className="prompt">
           <span className="pill">Prompt</span>
           {typeof output.prompt === 'string'
@@ -961,6 +1141,14 @@ function EvalOutputCell({
           onClose={handleCommentClose}
           onSave={handleCommentSave}
           onChange={setCommentText}
+        />
+      )}
+      {scoreDialogOpen && (
+        <SetScoreDialog
+          open={scoreDialogOpen}
+          currentScore={output.score}
+          onClose={() => setScoreDialogOpen(false)}
+          onSave={handleScoreSave}
         />
       )}
     </div>

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../src/util/dataUrl';
+import {
+  extractBase64FromDataUrl,
+  isDataUrl,
+  parseDataUrl,
+  toDataUri,
+} from '../../src/util/dataUrl';
 
 describe('dataUrl utilities', () => {
   describe('isDataUrl', () => {
@@ -293,6 +298,12 @@ describe('dataUrl utilities', () => {
 
       // Should pass through unchanged
       expect(extractBase64FromDataUrl(httpUrl)).toBe(httpUrl);
+    });
+  });
+
+  describe('toDataUri', () => {
+    it('should build a data URI from mime type and base64 data', () => {
+      expect(toDataUri('image/png', 'iVBORw0KGgo')).toBe('data:image/png;base64,iVBORw0KGgo');
     });
   });
 });

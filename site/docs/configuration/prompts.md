@@ -103,6 +103,17 @@ Keep explanations simple and clear.
 {% endif %}
 ```
 
+#### CSV Files (.csv)
+
+Define multiple prompts in a CSV file:
+
+```csv title="prompts.csv"
+prompt,label
+"Translate to French: {{text}}","French Translation"
+"Translate to Spanish: {{text}}","Spanish Translation"
+"Translate to German: {{text}}","German Translation"
+```
+
 ### Multiple Prompts in One File
 
 Separate multiple prompts with `---`:
@@ -346,22 +357,6 @@ providers:
 Prompt filters match labels exactly, support group prefixes (e.g. `group` matches `group:...`), and allow wildcard prefixes like `group:*`.
 
 The `prompts` field also works when providers are defined in external files (`file://provider.yaml`).
-
-## CSV Prompts
-
-Define multiple prompts in CSV format:
-
-```yaml title="promptfooconfig.yaml"
-prompts:
-  - file://prompts.csv
-```
-
-```csv title="prompts.csv"
-prompt,label
-"Translate to French: {{text}}","French Translation"
-"Translate to Spanish: {{text}}","Spanish Translation"
-"Translate to German: {{text}}","German Translation"
-```
 
 ## External Prompt Management Systems
 

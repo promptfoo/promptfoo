@@ -1,7 +1,8 @@
 import * as path from 'path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  checkProviderApiKeys,
   doesProviderRefMatch,
   getProviderDescription,
   getProviderIdentifier,
@@ -327,5 +328,93 @@ describe('isGoogleProvider', () => {
     expect(isGoogleProvider('openai:chat:gpt-4o')).toBe(false);
     expect(isGoogleProvider('anthropic:messages:claude-3-5-sonnet')).toBe(false);
     expect(isGoogleProvider('bedrock:anthropic.claude-3-5-sonnet')).toBe(false);
+  });
+});
+
+describe('checkProviderApiKeys', () => {
+  it('detects missing API key and maps to correct env var', () => {
+    const provider = {
+      id: () => 'openai:gpt-4',
+      callApi: vi.fn(),
+      config: {},
+      getApiKey: () => undefined,
+      requiresApiKey: () => true,
+    } as unknown as ApiProvider;
+
+    const result = checkProviderApiKeys([provider]);
+    expect(result.size).toBe(1);
+    expect(result.get('OPENAI_API_KEY')).toEqual(['openai:gpt-4']);
+  });
+
+  it('skips providers with valid key, no getApiKey method, or requiresApiKey false', () => {
+    const providers = [
+      {
+        id: () => 'openai:gpt-4',
+        callApi: vi.fn(),
+        config: {},
+        getApiKey: () => 'sk-1234',
+        requiresApiKey: () => true,
+      },
+      { id: () => 'http:custom', callApi: vi.fn() },
+      {
+        id: () => 'openai:gpt-4',
+        callApi: vi.fn(),
+        config: {},
+        getApiKey: () => undefined,
+        requiresApiKey: () => false,
+      },
+      {
+        id: () => 'litellm:gpt-4',
+        callApi: vi.fn(),
+        config: { apiKeyRequired: false },
+        getApiKey: () => undefined,
+      },
+    ] as unknown as ApiProvider[];
+
+    const result = checkProviderApiKeys(providers);
+    expect(result.size).toBe(0);
+  });
+
+  it('skips azure providers (Azure AD token auth)', () => {
+    const provider = {
+      id: () => 'azure:gpt-4',
+      callApi: vi.fn(),
+      config: {},
+      getApiKey: () => undefined,
+      requiresApiKey: () => true,
+    } as unknown as ApiProvider;
+
+    const result = checkProviderApiKeys([provider]);
+    expect(result.size).toBe(0);
+  });
+
+  it('deduplicates multiple providers sharing the same env var', () => {
+    const providers = [
+      {
+        id: () => 'openai:gpt-4',
+        callApi: vi.fn(),
+        config: {},
+        getApiKey: () => undefined,
+        requiresApiKey: () => true,
+      },
+      {
+        id: () => 'openai:gpt-5-mini',
+        callApi: vi.fn(),
+        config: {},
+        getApiKey: () => undefined,
+        requiresApiKey: () => true,
+      },
+      {
+        id: () => 'anthropic:claude-sonnet-4-5-20250514',
+        callApi: vi.fn(),
+        config: {},
+        getApiKey: () => undefined,
+      },
+    ] as unknown as ApiProvider[];
+
+    const result = checkProviderApiKeys(providers);
+    expect(result.size).toBe(2);
+    expect(result.get('OPENAI_API_KEY')).toEqual(['openai:gpt-4', 'openai:gpt-5-mini']);
+    expect(result.get('ANTHROPIC_API_KEY')).toEqual(['anthropic:claude-sonnet-4-5-20250514']);
   });
 });

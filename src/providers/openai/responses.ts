@@ -71,6 +71,23 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // GPT-5.2 models
     'gpt-5.2',
     'gpt-5.2-2025-12-11',
+    'gpt-5.2-chat-latest',
+    'gpt-5.2-codex',
+    'gpt-5.2-pro',
+    'gpt-5.2-pro-2025-12-11',
+    // GPT-5.3 models
+    'gpt-5.3-chat-latest',
+    'gpt-5.3-codex',
+    'gpt-5.3-codex-spark',
+    // GPT-5.4 models
+    'gpt-5.4',
+    'gpt-5.4-2026-03-05',
+    'gpt-5.4-mini',
+    'gpt-5.4-mini-2026-03-17',
+    'gpt-5.4-nano',
+    'gpt-5.4-nano-2026-03-17',
+    'gpt-5.4-pro',
+    'gpt-5.4-pro-2026-03-05',
     // Audio models
     'gpt-audio',
     'gpt-audio-2025-08-28',
@@ -115,7 +132,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     super(modelName, options);
-    this.config = options.config || {};
+    this.config = options.config ? { ...options.config } : {};
 
     // Initialize the shared response processor
     this.processor = new ResponsesProcessor({
@@ -175,14 +192,24 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     const isReasoningModel = this.isReasoningModel();
+    const maxOutputTokensDefault = config.omitDefaults
+      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
+        ? undefined
+        : getEnvInt('OPENAI_MAX_TOKENS')
+      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
+    const reasoningMaxOutputTokensDefault =
+      getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
     const maxOutputTokens =
       config.max_output_tokens ??
-      (isReasoningModel
-        ? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS')
-        : getEnvInt('OPENAI_MAX_TOKENS', 1024));
+      (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
 
+    const temperatureDefault = config.omitDefaults
+      ? getEnvString('OPENAI_TEMPERATURE') === undefined
+        ? undefined
+        : getEnvFloat('OPENAI_TEMPERATURE')
+      : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature = this.supportsTemperature()
-      ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
+      ? (config.temperature ?? temperatureDefault)
       : undefined;
     const reasoningEffort = isReasoningModel
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
@@ -241,11 +268,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const body = {
       model: this.modelName,
       input,
-      ...(maxOutputTokens !== undefined ? { max_output_tokens: maxOutputTokens } : {}),
+      ...(maxOutputTokens === undefined ? {} : { max_output_tokens: maxOutputTokens }),
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
-      ...(temperature !== undefined ? { temperature } : {}),
+      ...(temperature === undefined ? {} : { temperature }),
       ...(instructions ? { instructions } : {}),
-      ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
+      ...((!reasoningEffort || reasoningEffort === 'none') &&
+      (config.top_p !== undefined || getEnvString('OPENAI_TOP_P'))
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
       ...(loadedTools ? { tools: loadedTools } : {}),
@@ -272,6 +300,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       body.reasoning = config.reasoning;
     }
 
+    // Sanitize body: strip max_tokens if it leaked via passthrough or YAML anchors.
+    // The responses API uses max_output_tokens, never max_tokens.
+    if ('max_tokens' in body) {
+      delete body.max_tokens;
+    }
+
     return {
       body,
       config: {
@@ -287,10 +321,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (!this.getApiKey()) {
-      throw new Error(
-        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
+    if (this.requiresApiKey() && !this.getApiKey()) {
+      throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
@@ -318,9 +350,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
     }
 
-    // Calculate timeout for long-running models (deep research and gpt-5-pro)
+    // Calculate timeout for long-running models (deep research and GPT-5-pro variants)
     let timeout = REQUEST_TIMEOUT_MS;
-    const isLongRunningModel = isDeepResearchModel || this.modelName.includes('gpt-5-pro');
+    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(this.modelName);
+    const isLongRunningModel = isDeepResearchModel || isGpt5ProModel;
     if (isLongRunningModel) {
       const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
       timeout = evalTimeout > 0 ? evalTimeout : LONG_RUNNING_MODEL_TIMEOUT_MS;
@@ -373,7 +406,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
             ...config.headers,
           },

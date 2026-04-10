@@ -1,17 +1,12 @@
 # claude-thinking (Claude Thinking)
 
----
-
-## description: "Demonstrates Claude's thinking capability for complex problem solving"
-
-# Claude's Step-by-Step Thinking Demonstration
-
 This example demonstrates Claude's "thinking" capability, which allows you to see the model's step-by-step reasoning process before it provides a final answer. The example compares thinking outputs from Claude Sonnet 4 (Anthropic API) and Claude Haiku 4.5 (AWS Bedrock).
 
 You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example claude-thinking
+cd claude-thinking
 ```
 
 ## What This Example Demonstrates
@@ -68,7 +63,7 @@ max_tokens: 8192 # Must be greater than budget_tokens
 
 When enabled, Claude's response will include a "Thinking:" section that shows its reasoning process before the final answer:
 
-```
+```text
 Thinking: Let me solve this step by step...
 1. First, I'll divide the 8 balls into three groups...
 2. In the first weighing, I'll compare groups A and B...

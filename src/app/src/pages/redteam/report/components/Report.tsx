@@ -4,6 +4,14 @@ import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { DropdownMenuItem } from '@app/components/ui/dropdown-menu';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import {
@@ -32,7 +40,7 @@ import {
   type SharedResults,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
-import { AlertTriangle, Filter, ListOrdered, Printer, X } from 'lucide-react';
+import { AlertTriangle, Filter, ListOrdered, Printer, Settings, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import FrameworkCompliance from './FrameworkCompliance';
 import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
@@ -42,18 +50,30 @@ import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
+import { useReportStore } from './store';
 import TestSuites from './TestSuites';
 import ToolsDialog, { Tool } from './ToolsDialog';
 
-const App = () => {
+interface ReportProps {
+  /** When provided, uses this evalId instead of reading from URL search params. */
+  evalId?: string;
+  /** When true, skips rendering the report's own header (persistent scroll header, header card, enterprise banner). Used when embedded inside EvalHeader. */
+  embedded?: boolean;
+  /** Called with dropdown menu items for the eval actions dropdown when embedded. */
+  onActionsReady?: (actions: React.ReactNode) => void;
+}
+
+const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {}) => {
   const navigate = useNavigate();
-  const [evalId, setEvalId] = useState<string | null>(null);
+  const [evalId, setEvalId] = useState<string | null>(evalIdProp ?? null);
   const [evalData, setEvalData] = useState<ResultsFile | null>(null);
   const [selectedPromptIndex, setSelectedPromptIndex] = useState(0);
   const [isToolsDialogOpen, setIsToolsDialogOpen] = useState(false);
   const { recordEvent } = useTelemetry();
 
   const [isFiltersVisible, setIsFiltersVisible] = useState(false);
+  const [reportSettingsOpen, setReportSettingsOpen] = useState(false);
+  const { pluginPassRateThreshold, setPluginPassRateThreshold } = useReportStore();
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedStrategies, setSelectedStrategies] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<'all' | 'pass' | 'fail'>('all');
@@ -82,6 +102,13 @@ const App = () => {
         evalId: id,
       });
     };
+
+    // If evalId was provided as a prop, use it directly
+    if (evalIdProp) {
+      setEvalId(evalIdProp);
+      fetchEvalById(evalIdProp);
+      return;
+    }
 
     if (searchParams) {
       const evalId = searchParams.get('evalId');
@@ -113,7 +140,7 @@ const App = () => {
         fetchLatestEvalId();
       }
     }
-  }, [recordEvent]);
+  }, [evalIdProp, recordEvent]);
 
   // Track scroll position for persistent header visibility
   useEffect(() => {
@@ -587,6 +614,29 @@ const App = () => {
     [evalData, evalId, navigate, hasActiveFilters, isFiltersVisible],
   );
 
+  // Expose action menu items to parent when embedded
+  useEffect(() => {
+    if (!embedded || !onActionsReady || !evalData || !evalId) {
+      return;
+    }
+    onActionsReady(
+      <>
+        <DropdownMenuItem onClick={() => setIsFiltersVisible((v) => !v)}>
+          <Filter className="size-4 mr-2" />
+          {isFiltersVisible ? 'Hide filters' : 'Show filters'}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => window.print()}>
+          <Printer className="size-4 mr-2" />
+          Print / Save as PDF
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setReportSettingsOpen(true)}>
+          <Settings className="size-4 mr-2" />
+          Report settings
+        </DropdownMenuItem>
+      </>,
+    );
+  }, [embedded, onActionsReady, evalData, evalId, isFiltersVisible]);
+
   usePageMeta({
     title: `Report: ${evalData?.config.description || evalId || 'Red Team'}`,
     description: 'Red team evaluation report',
@@ -644,98 +694,108 @@ const App = () => {
 
   return (
     <>
-      {/* Persistent header on scroll */}
-      <div
-        className={cn(
-          'fixed inset-x-0 top-0 z-50 border-b border-border bg-card transition-transform duration-150 print:hidden',
-          isScrolled ? 'translate-y-0 shadow-md' : '-translate-y-full',
-        )}
-      >
-        <div className="mx-auto max-w-7xl px-4">
-          <div className="flex min-h-16 items-center justify-between py-2">
-            <h1 className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap pr-4 font-bold">
-              {evalData.config.description || 'Risk Assessment'}
-            </h1>
-            <div className="shrink-0">{actionButtons}</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="mx-auto max-w-7xl px-4 pb-8 pt-4">
-        <div className="flex flex-col gap-6">
-          {evalData.config.redteam && <EnterpriseBanner evalId={evalId || ''} />}
-
-          {/* Report Header Card */}
-          <Card className="relative rounded-xl p-6 pr-48 shadow-md dark:shadow-none print:pr-4">
-            <div className="absolute right-4 top-4 flex print:hidden">{actionButtons}</div>
-            <h1 className="text-2xl font-bold">
-              {evalData.config.description || 'Risk Assessment'}
-            </h1>
-            <p className="mb-4 text-muted-foreground">{formatDataGridDate(evalData.createdAt)}</p>
-            <div className="flex flex-wrap gap-3">
-              {selectedPrompt && prompts.length > 1 ? (
-                <Select
-                  value={String(selectedPromptIndex)}
-                  onValueChange={(value) => setSelectedPromptIndex(Number(value))}
-                >
-                  <SelectTrigger className="h-6 w-auto rounded-full border-none bg-muted px-3 text-xs">
-                    <SelectValue>
-                      <span className="text-xs">
-                        <strong>Target:</strong> {prompts[selectedPromptIndex].provider}
-                      </span>
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {prompts.map((prompt, idx) => (
-                      <SelectItem key={idx} value={String(idx)}>
-                        {prompt.provider}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : selectedPrompt ? (
-                <Badge variant="secondary">
-                  <strong>Target:</strong> {selectedPrompt.provider}
-                </Badge>
-              ) : null}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <Badge variant="secondary">
-                      <strong>Depth:</strong>{' '}
-                      {(
-                        selectedPrompt?.metrics?.tokenUsage?.numRequests || tableData.length
-                      ).toLocaleString()}{' '}
-                      probes
-                    </Badge>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {selectedPrompt?.metrics?.tokenUsage?.total
-                    ? `${selectedPrompt.metrics.tokenUsage.total.toLocaleString()} tokens`
-                    : ''}
-                </TooltipContent>
-              </Tooltip>
-              {selectedPrompt && selectedPrompt.raw !== '{{prompt}}' && (
-                <Badge variant="secondary">
-                  <strong>Prompt:</strong> &quot;
-                  {selectedPrompt.raw.length > 40
-                    ? `${selectedPrompt.raw.substring(0, 40)}...`
-                    : selectedPrompt.raw}
-                  &quot;
-                </Badge>
-              )}
-              {tools.length > 0 && (
-                <Badge
-                  variant="secondary"
-                  className="cursor-pointer"
-                  onClick={() => setIsToolsDialogOpen(true)}
-                >
-                  <strong>Tools:</strong> {tools.length} available
-                </Badge>
-              )}
+      {!embedded && (
+        <>
+          {/* Persistent header on scroll */}
+          <div
+            className={cn(
+              'fixed inset-x-0 top-0 z-50 border-b border-border bg-card transition-transform duration-150 print:hidden',
+              isScrolled ? 'translate-y-0 shadow-md' : '-translate-y-full',
+            )}
+          >
+            <div className="mx-auto max-w-7xl px-4">
+              <div className="flex min-h-16 items-center justify-between py-2">
+                <h1 className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap pr-4 font-bold">
+                  {evalData.config.description || 'Risk Assessment'}
+                </h1>
+                <div className="shrink-0">{actionButtons}</div>
+              </div>
             </div>
-          </Card>
+          </div>
+        </>
+      )}
+
+      <div className="mx-auto max-w-7xl px-4 pb-8 pt-4 print:max-w-none print:px-0 print:pt-0 print:pb-0">
+        <div className="flex flex-col gap-6">
+          {!embedded && evalData.config.redteam && <EnterpriseBanner evalId={evalId || ''} />}
+
+          {!embedded && (
+            <>
+              {/* Report Header Card */}
+              <Card className="relative rounded-xl p-6 pr-48 shadow-md dark:shadow-none print:pr-4">
+                <div className="absolute right-4 top-4 flex print:hidden">{actionButtons}</div>
+                <h1 className="text-2xl font-bold">
+                  {evalData.config.description || 'Risk Assessment'}
+                </h1>
+                <p className="mb-4 text-muted-foreground">
+                  {formatDataGridDate(evalData.createdAt)}
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  {selectedPrompt && prompts.length > 1 ? (
+                    <Select
+                      value={String(selectedPromptIndex)}
+                      onValueChange={(value) => setSelectedPromptIndex(Number(value))}
+                    >
+                      <SelectTrigger className="h-6 w-auto rounded-full border-none bg-muted px-3 text-xs">
+                        <SelectValue>
+                          <span className="text-xs">
+                            <strong>Target:</strong> {prompts[selectedPromptIndex].provider}
+                          </span>
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {prompts.map((prompt, idx) => (
+                          <SelectItem key={idx} value={String(idx)}>
+                            {prompt.provider}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : selectedPrompt ? (
+                    <Badge variant="secondary">
+                      <strong>Target:</strong> {selectedPrompt.provider}
+                    </Badge>
+                  ) : null}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Badge variant="secondary">
+                          <strong>Depth:</strong>{' '}
+                          {(
+                            selectedPrompt?.metrics?.tokenUsage?.numRequests || tableData.length
+                          ).toLocaleString()}{' '}
+                          probes
+                        </Badge>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {selectedPrompt?.metrics?.tokenUsage?.total
+                        ? `${selectedPrompt.metrics.tokenUsage.total.toLocaleString()} tokens`
+                        : ''}
+                    </TooltipContent>
+                  </Tooltip>
+                  {selectedPrompt && selectedPrompt.raw !== '{{prompt}}' && (
+                    <Badge variant="secondary">
+                      <strong>Prompt:</strong> &quot;
+                      {selectedPrompt.raw.length > 40
+                        ? `${selectedPrompt.raw.substring(0, 40)}...`
+                        : selectedPrompt.raw}
+                      &quot;
+                    </Badge>
+                  )}
+                  {tools.length > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="cursor-pointer"
+                      onClick={() => setIsToolsDialogOpen(true)}
+                    >
+                      <strong>Tools:</strong> {tools.length} available
+                    </Badge>
+                  )}
+                </div>
+              </Card>
+            </>
+          )}
 
           {/* Filters Card */}
           {isFiltersVisible && (
@@ -871,6 +931,55 @@ const App = () => {
           tools={tools}
         />
       </div>
+      {embedded && (
+        <Dialog
+          open={reportSettingsOpen}
+          onOpenChange={(isOpen) => !isOpen && setReportSettingsOpen(false)}
+        >
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Report Settings</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-6 py-4">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="plugin-pass-rate-embedded">Plugin Pass Rate Threshold</Label>
+                  <span className="text-sm font-medium text-muted-foreground">
+                    {Number.isNaN(pluginPassRateThreshold)
+                      ? 'NaN'
+                      : `${(Math.min(1, Math.max(0, pluginPassRateThreshold || 0)) * 100).toFixed(0)}%`}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Sets the threshold for considering a plugin as passed on the risk cards.
+                </p>
+                <input
+                  id="plugin-pass-rate-embedded"
+                  type="range"
+                  value={
+                    Number.isNaN(pluginPassRateThreshold)
+                      ? 0
+                      : Math.min(1, Math.max(0, pluginPassRateThreshold || 0))
+                  }
+                  onChange={(e) => setPluginPassRateThreshold(Number.parseFloat(e.target.value))}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-muted accent-primary"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>0%</span>
+                  <span>50%</span>
+                  <span>100%</span>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setReportSettingsOpen(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 };

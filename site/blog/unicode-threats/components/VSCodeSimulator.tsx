@@ -254,6 +254,7 @@ module.exports = router;`,
   };
 
   // Initialize with some starter files
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sampleFiles is a static object recreated each render
   useEffect(() => {
     setFiles(useHiddenChars ? sampleFiles.malicious : sampleFiles.normal);
   }, [useHiddenChars]);
@@ -803,8 +804,7 @@ module.exports = { validateUser, validatePasswordStrength };`;
   // Handle selecting a predefined prompt
   const handlePromptSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedValue = e.target.value;
-    const selectedPromptObj = prompts.find((p) => p.id === selectedValue);
-    if (selectedPromptObj) {
+    if (prompts.some((prompt) => prompt.id === selectedValue)) {
       setSelectedPrompt(selectedValue);
     } else {
       setSelectedPrompt('');

@@ -24,7 +24,6 @@ vi.mock('../../hooks/useRedTeamConfig', () => ({
 const mockValidate = vi.fn();
 vi.mock('./ProviderConfigEditor', () => ({
   default: (props: ProviderConfigEditorProps) => {
-    // biome-ignore lint/correctness/useExhaustiveDependencies: only need onValidationRequest, not entire props
     React.useEffect(() => {
       props.onValidationRequest?.(mockValidate);
     }, [props.onValidationRequest]);

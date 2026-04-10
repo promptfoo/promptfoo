@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-mcp-auth
+cd redteam-mcp-auth
 ```
 
 This example demonstrates how to configure authentication for red team evaluations against MCP (Model Context Protocol) servers. It shows OAuth 2.0 client credentials flow for authenticating with remote MCP servers.
@@ -25,13 +26,13 @@ targets:
     config:
       enabled: true
       server:
-        url: https://example-bot.promptfoo.app/mcp/minnow?auth_type=bearer
+        url: https://example-app.promptfoo.app/mcp/minnow?auth_type=bearer
         auth:
           type: oauth
           grantType: client_credentials
           clientId: '{{env.PROMPTFOO_TARGET_CLIENT_ID}}'
           clientSecret: '{{env.PROMPTFOO_TARGET_CLIENT_SECRET}}'
-          tokenUrl: https://example-bot.promptfoo.app/oauth/token
+          tokenUrl: https://example-app.promptfoo.app/oauth/token
           scopes: []
 ```
 

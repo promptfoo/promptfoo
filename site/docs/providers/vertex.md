@@ -16,6 +16,10 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 
 ### Gemini Models
 
+**Gemini 3.1 (Preview):**
+
+- `vertex:gemini-3.1-pro-preview` - Improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
+
 **Gemini 3.0 (Preview):**
 
 - `vertex:gemini-3-flash-preview` - Frontier intelligence with Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
@@ -44,6 +48,7 @@ Anthropic's Claude models are available with the following versions:
 
 **Claude 4.6:**
 
+- `vertex:claude-sonnet-4-6` - Claude 4.6 Sonnet balancing performance with speed
 - `vertex:claude-opus-4-6` - Claude 4.6 Opus for agentic coding, agents, and computer use
 
 **Claude 4.5:**
@@ -144,6 +149,27 @@ By default, Llama models use Llama Guard for content safety. You can disable it 
 :::note
 Imagen models are available through [Google AI Studio](/docs/providers/google#image-generation-models) using the `google:image:` prefix.
 :::
+
+### Video Generation Models
+
+Use the `vertex:video:` prefix for Veo on Vertex AI:
+
+- `vertex:video:veo-3.1-generate-preview`
+- `vertex:video:veo-3.1-fast-preview`
+- `vertex:video:veo-3-generate`
+- `vertex:video:veo-3-fast`
+- `vertex:video:veo-2-generate`
+
+```yaml
+providers:
+  - id: vertex:video:veo-3.1-generate-preview
+    config:
+      projectId: your-project-id
+      region: us-central1
+      aspectRatio: '16:9'
+      resolution: '1080p'
+      durationSeconds: 8
+```
 
 ## Model Capabilities
 
@@ -527,11 +553,13 @@ providers:
               enabled: true
               llama_guard_settings: {}
 
-  # For Claude models
+  # For Claude models (require specific regions like us-east5)
   - id: vertex:claude-3-5-sonnet-v2@20241022
     config:
+      region: us-east5
       anthropic_version: 'vertex-2023-10-16'
       max_tokens: 1024
+      systemInstruction: 'You are a helpful assistant'
 ```
 
 ### Safety Settings
@@ -600,28 +628,31 @@ defaultTest:
 
 ### Configuration Reference
 
-| Option                             | Description                                            | Default                              |
-| ---------------------------------- | ------------------------------------------------------ | ------------------------------------ |
-| `apiKey`                           | GCloud API token                                       | None                                 |
-| `apiHost`                          | API host override                                      | `{region}-aiplatform.googleapis.com` |
-| `apiVersion`                       | API version                                            | `v1`                                 |
-| `credentials`                      | Service account credentials (JSON or file path)        | None                                 |
-| `projectId`                        | GCloud project ID                                      | `GOOGLE_CLOUD_PROJECT` env var       |
-| `region`                           | GCloud region                                          | `us-central1`                        |
-| `publisher`                        | Model publisher                                        | `google`                             |
-| `context`                          | Model context                                          | None                                 |
-| `examples`                         | Few-shot examples                                      | None                                 |
-| `safetySettings`                   | Content filtering                                      | None                                 |
-| `generationConfig.temperature`     | Randomness control                                     | None                                 |
-| `generationConfig.maxOutputTokens` | Max tokens to generate                                 | None                                 |
-| `generationConfig.topP`            | Nucleus sampling                                       | None                                 |
-| `generationConfig.topK`            | Sampling diversity                                     | None                                 |
-| `generationConfig.stopSequences`   | Generation stop triggers                               | `[]`                                 |
-| `responseSchema`                   | JSON schema for structured output (supports `file://`) | None                                 |
-| `toolConfig`                       | Tool/function calling config                           | None                                 |
-| `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)       | None                                 |
-| `expressMode`                      | Set to `false` to force OAuth/ADC even with API key    | auto (API key → `true`)              |
-| `streaming`                        | Use streaming API (`streamGenerateContent`)            | `false`                              |
+| Option                             | Description                                                        | Default                              |
+| ---------------------------------- | ------------------------------------------------------------------ | ------------------------------------ |
+| `apiKey`                           | GCloud API token                                                   | None                                 |
+| `apiHost`                          | API host override                                                  | `{region}-aiplatform.googleapis.com` |
+| `apiVersion`                       | API version                                                        | `v1`                                 |
+| `credentials`                      | Service account credentials (JSON or file path)                    | None                                 |
+| `projectId`                        | GCloud project ID                                                  | `GOOGLE_CLOUD_PROJECT` env var       |
+| `region`                           | GCloud region                                                      | `us-central1`                        |
+| `publisher`                        | Model publisher                                                    | `google`                             |
+| `context`                          | Model context                                                      | None                                 |
+| `cost`                             | Legacy per-token override applied to both input and output pricing | None                                 |
+| `inputCost`                        | Override input token pricing in promptfoo cost estimates           | None                                 |
+| `outputCost`                       | Override output token pricing in promptfoo cost estimates          | None                                 |
+| `examples`                         | Few-shot examples                                                  | None                                 |
+| `safetySettings`                   | Content filtering                                                  | None                                 |
+| `generationConfig.temperature`     | Randomness control                                                 | None                                 |
+| `generationConfig.maxOutputTokens` | Max tokens to generate                                             | None                                 |
+| `generationConfig.topP`            | Nucleus sampling                                                   | None                                 |
+| `generationConfig.topK`            | Sampling diversity                                                 | None                                 |
+| `generationConfig.stopSequences`   | Generation stop triggers                                           | `[]`                                 |
+| `responseSchema`                   | JSON schema for structured output (supports `file://`)             | None                                 |
+| `toolConfig`                       | Tool/function calling config                                       | None                                 |
+| `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)                   | None                                 |
+| `expressMode`                      | Set to `false` to force OAuth/ADC even with API key                | auto (API key → `true`)              |
+| `streaming`                        | Use streaming API (`streamGenerateContent`)                        | `false`                              |
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
@@ -723,16 +754,28 @@ Configure system-level instructions for the model:
 
 ```yaml
 providers:
+  # Works with Gemini models
   - id: vertex:gemini-2.5-pro
     config:
-      # Direct text
       systemInstruction: 'You are a helpful assistant'
 
-      # Or load from file
+  # Also works with Claude models (require specific regions like us-east5)
+  - id: vertex:claude-sonnet-4-6
+    config:
+      region: us-east5
+      systemInstruction: 'You are a helpful assistant'
+```
+
+You can also load system instructions from a file:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-pro
+    config:
       systemInstruction: file://system-instruction.txt
 ```
 
-System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability.
+System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability. The `systemInstruction` config works across both Gemini and Claude models on Vertex AI.
 
 ### Generation Configuration
 
@@ -1066,6 +1109,7 @@ The Vertex AI provider supports core functionality for LLM evaluation:
 | Files API                | ❌        | Upload/manage files not supported      |
 | Caching API              | ❌        | Context caching not supported          |
 | Live/Realtime API        | ❌        | WebSocket-based live API not supported |
+| Video generation         | ✅        | Use `vertex:video:` provider           |
 | Image generation         | ⚠️        | Use `google:image:` provider instead   |
 
 For image generation, use the [Google AI Studio provider](/docs/providers/google#image-generation-models) with the `google:image:` prefix.

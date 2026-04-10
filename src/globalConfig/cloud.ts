@@ -6,6 +6,9 @@ export const CLOUD_API_HOST = 'https://api.promptfoo.app';
 
 export const API_HOST = getEnvString('API_HOST', CLOUD_API_HOST);
 
+// Free customers created before this date are grandfathered into auto-share.
+export const SHARING_CUTOFF_DATE = new Date('2026-03-09T00:00:00Z');
+
 interface CloudUser {
   id: string;
   name: string;
@@ -34,11 +37,19 @@ interface CloudApp {
   url: string;
 }
 
+interface CloudTokenValidation {
+  user: CloudUser;
+  organization: CloudOrganization;
+  app: CloudApp;
+  hasActiveLicense?: boolean;
+}
+
 export class CloudConfig {
   private config: {
     appUrl: string;
     apiHost?: string;
     apiKey?: string;
+    sharing?: boolean;
     currentOrganizationId?: string;
     currentTeamId?: string;
     teams?: {
@@ -60,6 +71,7 @@ export class CloudConfig {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
       apiHost: savedConfig.apiHost,
       apiKey: savedConfig.apiKey,
+      sharing: savedConfig.sharing,
       currentOrganizationId: savedConfig.currentOrganizationId,
       currentTeamId: savedConfig.currentTeamId,
       teams: savedConfig.teams,
@@ -114,8 +126,23 @@ export class CloudConfig {
     return this.config.appUrl;
   }
 
+  getSharing(): boolean | undefined {
+    return this.config.sharing;
+  }
+
+  /**
+   * Sets the sharing preference. Note: this value is only updated at authentication time
+   * (via `validateAndSetApiToken`) and may become stale if the user's license status
+   * changes between re-authentications.
+   */
+  setSharing(sharing: boolean): void {
+    this.config.sharing = sharing;
+    this.saveConfig();
+  }
+
   delete(): void {
     writeGlobalConfigPartial({ cloud: {} });
+    this.reload();
   }
 
   private saveConfig(): void {
@@ -129,16 +156,31 @@ export class CloudConfig {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
       apiHost: savedConfig.apiHost,
       apiKey: savedConfig.apiKey,
+      sharing: savedConfig.sharing,
       currentOrganizationId: savedConfig.currentOrganizationId,
       currentTeamId: savedConfig.currentTeamId,
       teams: savedConfig.teams,
     };
   }
 
-  async validateAndSetApiToken(
+  saveValidatedApiToken(
     token: string,
     apiHost: string,
-  ): Promise<{ user: CloudUser; organization: CloudOrganization; app: CloudApp }> {
+    user: CloudUser,
+    app: CloudApp,
+    hasActiveLicense?: boolean,
+  ): void {
+    this.setApiKey(token);
+    this.setApiHost(apiHost);
+    this.setAppUrl(app.url);
+    if (typeof hasActiveLicense === 'boolean') {
+      const createdAt = user?.createdAt ? new Date(user.createdAt) : null;
+      const isGrandfathered = createdAt != null && createdAt < SHARING_CUTOFF_DATE;
+      this.setSharing(hasActiveLicense || isGrandfathered);
+    }
+  }
+
+  async validateApiToken(token: string, apiHost: string): Promise<CloudTokenValidation> {
     try {
       const { fetchWithProxy } = await import('../util/fetch');
       const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
@@ -155,15 +197,13 @@ export class CloudConfig {
         throw new Error('Failed to validate API token: ' + response.statusText);
       }
 
-      const { user, organization, app } = await response.json();
-      this.setApiKey(token);
-      this.setApiHost(apiHost);
-      this.setAppUrl(app.url);
+      const { user, organization, app, hasActiveLicense } = await response.json();
 
       return {
         user,
         organization,
         app,
+        ...(typeof hasActiveLicense === 'boolean' ? { hasActiveLicense } : {}),
       };
     } catch (err) {
       const error = err as Error & { cause?: string };
@@ -174,6 +214,24 @@ export class CloudConfig {
       }
       throw error;
     }
+  }
+
+  async validateAndSetApiToken(
+    token: string,
+    apiHost: string,
+  ): Promise<CloudTokenValidation & { hasActiveLicense: boolean }> {
+    const { user, organization, app, hasActiveLicense } = await this.validateApiToken(
+      token,
+      apiHost,
+    );
+    this.saveValidatedApiToken(token, apiHost, user, app, hasActiveLicense);
+
+    return {
+      user,
+      organization,
+      app,
+      hasActiveLicense: typeof hasActiveLicense === 'boolean' ? hasActiveLicense : false,
+    };
   }
 
   getCurrentOrganizationId(): string | undefined {

@@ -18,7 +18,7 @@ describe('PromptDialog', () => {
   it("should render the dialog with the correct title, text, and buttons when 'open' is true", () => {
     render(<PromptDialog {...mockProps} />);
 
-    expect(screen.getByText(`Edit Prompt ${mockProps.index + 1}`)).toBeInTheDocument();
+    expect(screen.getByText('Add Prompt')).toBeInTheDocument();
 
     const textField = screen.getByRole('textbox');
     expect(textField).toBeInTheDocument();

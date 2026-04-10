@@ -3,7 +3,7 @@ providers:
   - id: file://./src/openai-agent-provider.js
     config:
       apiBaseUrl: 'https://api.openai.com/v1'
-      model: 'gpt-4o' # OpenAI model to use (e.g. gpt-4o, gpt-4o-mini, gpt-3.5-turbo)
+      model: 'gpt-4o' # OpenAI model to use (e.g. gpt-4o, gpt-4o-mini, gpt-4.1-mini)
       systemPrompt: |
         You are a helpful AI assistant with access to various tools. Use the ReAct pattern:
         1. Thought: Think about what you need to do

@@ -30,6 +30,7 @@ import {
   Severity,
   STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
+  TEEN_SAFETY_PLUGINS,
   TELECOM_PLUGINS,
 } from './constants';
 import { extractEntities } from './extraction/entities';
@@ -74,7 +75,7 @@ function getPolicyText(metadata: TestCase['metadata'] | undefined): string | und
   return undefined;
 }
 
-const MAX_MAX_CONCURRENCY = 20;
+export const MAX_MAX_CONCURRENCY = 20;
 
 /**
  * Gets the severity level for a plugin based on its ID and configuration.
@@ -253,6 +254,7 @@ const categories = {
   insurance: INSURANCE_PLUGINS,
   financial: FINANCIAL_PLUGINS,
   telecom: TELECOM_PLUGINS,
+  'teen-safety': TEEN_SAFETY_PLUGINS,
 } as const;
 
 /**
@@ -793,6 +795,11 @@ export async function synthesize({
     return true;
   });
 
+  // Only extract intent/goal when strategies that need it are selected
+  const needsGoalExtraction = strategies.some(
+    (s) => Strategies.find((def) => def.id === s.id)?.requiresGoalExtraction,
+  );
+
   await validateStrategies(strategies);
   await validateSharpDependency(strategies, plugins);
 
@@ -853,8 +860,6 @@ export async function synthesize({
         strategies
           .filter((s) => !['basic', 'retry'].includes(s.id))
           .map((s) => {
-            // For non-basic strategies, we want to show the additional tests they generate
-            let testCount = totalPluginTests;
             // Apply fan-out multiplier if this is a fan-out strategy
             let n = 1;
             if (typeof s.config?.n === 'number') {
@@ -862,7 +867,8 @@ export async function synthesize({
             } else if (isFanoutStrategy(s.id)) {
               n = getDefaultNFanout(s.id);
             }
-            testCount = totalPluginTests * n;
+            // For non-basic strategies, we want to show the additional tests they generate
+            let testCount = totalPluginTests * n;
             // Apply numTests cap if configured (consistent with calculateExpectedStrategyTests)
             const numTestsCap = s.config?.numTests;
             if (
@@ -1169,20 +1175,20 @@ export async function synthesize({
         // Metadata already added in promise resolution above (including pluginId)
         const testCasesWithMetadata = allPluginTests as TestCaseWithPlugin[];
 
-        // Extract goal for this plugin's tests
-        logger.debug(
-          `Extracting goal for ${testCasesWithMetadata.length} tests from ${plugin.id}...`,
-        );
-        for (const testCase of testCasesWithMetadata) {
-          // Get the prompt from the specific inject variable
-          const promptVar = testCase.vars?.[injectVar];
-          const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
+        // Extract goal for this plugin's tests (only needed for agentic strategies)
+        if (needsGoalExtraction) {
+          logger.debug(
+            `Extracting goal for ${testCasesWithMetadata.length} tests from ${plugin.id}...`,
+          );
+          for (const testCase of testCasesWithMetadata) {
+            const promptVar = testCase.vars?.[injectVar];
+            const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
-          // For policy plugin, pass the policy text to improve intent extraction
-          const policy = getPolicyText(testCase.metadata);
-          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
+            const policy = getPolicyText(testCase.metadata);
+            const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
 
-          (testCase.metadata as any).goal = extractedGoal;
+            (testCase.metadata as any).goal = extractedGoal;
+          }
         }
 
         // Add the results to main test cases array
@@ -1241,20 +1247,20 @@ export async function synthesize({
           },
         }));
 
-        // Extract goal for this plugin's tests
-        logger.debug(
-          `Extracting goal for ${testCasesWithMetadata.length} custom tests from ${plugin.id}...`,
-        );
-        for (const testCase of testCasesWithMetadata) {
-          // Get the prompt from the specific inject variable
-          const promptVar = testCase.vars?.[injectVar];
-          const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
+        // Extract goal for custom plugin's tests (only needed for agentic strategies)
+        if (needsGoalExtraction) {
+          logger.debug(
+            `Extracting goal for ${testCasesWithMetadata.length} custom tests from ${plugin.id}...`,
+          );
+          for (const testCase of testCasesWithMetadata) {
+            const promptVar = testCase.vars?.[injectVar];
+            const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
-          // For policy plugin, pass the policy text to improve intent extraction
-          const policy = getPolicyText(testCase.metadata);
-          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
+            const policy = getPolicyText(testCase.metadata);
+            const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
 
-          (testCase.metadata as any).goal = extractedGoal;
+            (testCase.metadata as any).goal = extractedGoal;
+          }
         }
 
         // Add the results to main test cases array

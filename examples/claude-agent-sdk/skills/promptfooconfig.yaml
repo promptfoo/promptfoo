@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Skills testing with Claude Agent SDK
+
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./sample-project
+      setting_sources: ['project']
+      append_allowed_tools: ['Skill', 'Read', 'Grep', 'Glob']
+
+prompts:
+  - 'Review the authentication module for security issues'
+
+tests:
+  - assert:
+      # Verify the code-review skill was invoked
+      - type: skill-used
+        value: code-review
+      # Verify security issues were identified (MD5 is insecure for passwords)
+      - type: icontains
+        value: 'md5'

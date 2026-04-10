@@ -125,6 +125,7 @@ describe('Plugins', () => {
         'religion',
         'ssrf',
         'indirect-prompt-injection',
+        'rag-poisoning',
       ];
 
       remotePluginKeys.forEach((key) => {
@@ -153,6 +154,14 @@ describe('Plugins', () => {
       const indirectPlugin = Plugins.find((p) => p.key === 'indirect-prompt-injection');
       expect(() => indirectPlugin?.validate?.({})).toThrow(
         'Indirect prompt injection plugin requires `config.indirectInjectionVar` to be set',
+      );
+    });
+
+    it('should validate rag-poisoning plugin config', async () => {
+      const ragPlugin = Plugins.find((p) => p.key === 'rag-poisoning');
+      expect(() => ragPlugin?.validate?.({})).toThrow('config.intendedResults');
+      expect(() => ragPlugin?.validate?.({ intendedResults: [] })).toThrow(
+        'config.intendedResults',
       );
     });
   });

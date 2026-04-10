@@ -11,6 +11,7 @@ import {
   PII_PLUGINS,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   Severity,
+  TEEN_SAFETY_PLUGINS,
 } from '../../src/redteam/constants';
 import {
   pluginOptions,
@@ -81,6 +82,17 @@ describe('RedteamConfigSchema', () => {
     const result = RedteamConfigSchema.parse(config);
     expect(result.plugins?.length).toBeGreaterThan(0);
     expect(result.plugins?.every((p: any) => Array.from(PII_PLUGINS).includes(p.id))).toBe(true);
+  });
+
+  it('should expand teen safety plugins', () => {
+    const config = {
+      plugins: ['teen-safety'],
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+    expect(result.plugins?.map((plugin) => plugin.id).sort()).toEqual(
+      [...TEEN_SAFETY_PLUGINS].sort(),
+    );
   });
 
   it('should handle plugin with config and severity', () => {

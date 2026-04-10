@@ -55,6 +55,11 @@ describe('PromptsSection', () => {
     fireEvent.click(addButtonInDialog);
   };
 
+  const savePromptDialog = () => {
+    const saveButton = screen.getByRole('button', { name: 'Save' });
+    fireEvent.click(saveButton);
+  };
+
   const createFileReaderMock = (fileContent: string) => {
     let onloadCallback: ((ev: ProgressEvent<FileReader>) => unknown) | null = null;
     const readAsTextMock = vi.fn();
@@ -115,7 +120,7 @@ describe('PromptsSection', () => {
     openPromptDialog();
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText('Edit Prompt 1')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Add Prompt' })).toBeInTheDocument();
 
     const newPromptText = 'Write a story about a robot who discovers music.';
     fillPromptText(newPromptText);
@@ -156,7 +161,7 @@ describe('PromptsSection', () => {
     const updatedPromptText = 'Write a short story about a dog.';
     fillPromptText(updatedPromptText);
 
-    submitPromptDialog();
+    savePromptDialog();
 
     expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
     expect(mockUpdateConfig).toHaveBeenCalledWith({

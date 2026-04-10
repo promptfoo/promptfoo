@@ -34,6 +34,7 @@ describe('FrameworkCard', () => {
     },
     pluginPassRateThreshold: 0.8,
     nonCompliantPlugins: [],
+    showUntestedPlugins: true,
     idx: 0,
   };
 
@@ -129,6 +130,24 @@ describe('FrameworkCard', () => {
     expect(screen.getAllByText('bola').length).toBeGreaterThan(0);
     expect(screen.getAllByText('bfla').length).toBeGreaterThan(0);
     expect(screen.getAllByText('rbac').length).toBeGreaterThan(0);
+  });
+
+  it('should render principle names for the DoD AI ethics framework', () => {
+    renderFrameworkCard({
+      framework: 'dod:ai:ethics',
+      isCompliant: false,
+      frameworkSeverity: Severity.High,
+      categoryStats: {
+        'excessive-agency': { pass: 0, total: 10, failCount: 10 },
+        'bias:race': { pass: 10, total: 10, failCount: 0 },
+      },
+      pluginPassRateThreshold: 0.8,
+      nonCompliantPlugins: ['excessive-agency'],
+    });
+
+    expect(screen.getByText('DoD AI Ethical Principles')).toBeInTheDocument();
+    expect(screen.getByText(/Responsible/)).toBeInTheDocument();
+    expect(screen.getByText(/Governable/)).toBeInTheDocument();
   });
 
   it('should display the correct pass rate percentage and tooltip for a plugin with test data', () => {
@@ -258,5 +277,39 @@ describe('FrameworkCard', () => {
     // Verify at least some plugins are displayed
     expect(screen.getByText('excessive-agency')).toBeInTheDocument();
     expect(screen.getByText('pii:direct')).toBeInTheDocument();
+  });
+
+  it('should hide untested plugin rows in OWASP framework view when showUntestedPlugins is false', () => {
+    renderFrameworkCard({
+      framework: 'owasp:api',
+      isCompliant: false,
+      frameworkSeverity: Severity.High,
+      categoryStats: {
+        bola: { pass: 10, total: 10, failCount: 0 },
+        bfla: { pass: 0, total: 10, failCount: 10 },
+      },
+      pluginPassRateThreshold: 0.8,
+      nonCompliantPlugins: ['bfla'],
+      showUntestedPlugins: false,
+    });
+
+    expect(screen.queryByText('Not Tested:')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Untested$/)).not.toBeInTheDocument();
+  });
+
+  it('should hide untested plugin rows in standard framework view when showUntestedPlugins is false', () => {
+    renderFrameworkCard({
+      framework: 'nist:ai:measure',
+      isCompliant: false,
+      frameworkSeverity: Severity.High,
+      categoryStats: {
+        'pii:direct': { pass: 0, total: 10, failCount: 10 },
+      },
+      pluginPassRateThreshold: 0.8,
+      nonCompliantPlugins: ['pii:direct'],
+      showUntestedPlugins: false,
+    });
+
+    expect(screen.queryByText('Not Tested')).not.toBeInTheDocument();
   });
 });

@@ -11,7 +11,7 @@ function Card({
     <div
       ref={ref}
       className={cn(
-        'rounded-lg border border-border/60 bg-card text-card-foreground shadow-sm',
+        'rounded-lg border border-border/60 bg-card text-card-foreground shadow-sm print:shadow-none',
         className,
       )}
       {...props}
@@ -65,4 +65,4 @@ function CardFooter({
   return <div ref={ref} className={cn('flex items-center p-6 pt-0', className)} {...props} />;
 }
 
-export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent };
+export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle };

@@ -10,17 +10,17 @@ keywords: [authentication, login, logout, promptfoo enterprise, promptfoo app, s
 
 ## Setting Up SSO
 
-Promptfoo supports both basic authentication and SSO through SAML 2.0 and OIDC. To configure SSO with Promptfoo Enterprise, reach out to the support team with your IdP information and the Promptfoo team will configure it. The authentication endpoint is `auth.promptfoo.app`.
+[Promptfoo Enterprise](/docs/enterprise/) supports both basic authentication and SSO through SAML 2.0 and OIDC. To configure SSO with Promptfoo Enterprise, reach out to the support team with your IdP information and the Promptfoo team will configure it. The authentication endpoint is `auth.promptfoo.app`.
 
 ## Basic Authentication
 
-Promptfoo supports basic authentication into the application through `auth.promptfoo.app`. When an organization is created, the global admin will receive an email from Promptfoo to log in. Users, teams, and roles will be created in the Organization Settings of the Promptfoo application, which is detailed further in the [Teams documentation](./teams.md).
+Promptfoo Enterprise supports basic authentication into the application through `auth.promptfoo.app`. When an organization is created, the global admin will receive an email from Promptfoo Enterprise to log in. Users, teams, and roles will be created in the Organization Settings of the Promptfoo Enterprise application, which is detailed further in the [Teams documentation](./teams.md).
 
 You can also authenticate into the application using a magic link. To do this, navigate to `auth.promptfoo.app` and click the "Login with a magic link" button. You will receive an email with a link to log in. If you do not receive an email, please be sure to check your spam folder.
 
 ## Authenticating Into the CLI
 
-You may wish to authenticate into the CLI when using Promptfoo. Follow these steps to connect Promptfoo Enterprise to the CLI.
+You may wish to authenticate into the CLI when using Promptfoo Enterprise. Follow these steps to connect Promptfoo Enterprise to the CLI.
 
 1. Install the Promptfoo CLI. Read [getting started](/docs/getting-started/) for help installing the CLI.
 

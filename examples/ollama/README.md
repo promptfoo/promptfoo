@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example ollama
+cd ollama
 ```
 
 ## Prerequisites
@@ -15,7 +16,7 @@ npx promptfoo@latest init --example ollama
 
 ```bash
 # For comparison example (default)
-ollama pull llama3.3
+ollama pull llama4:scout
 ollama pull llama2-uncensored
 
 # For function calling example
@@ -30,7 +31,7 @@ This directory contains two different Ollama examples:
 
 **Config**: `promptfooconfig.yaml`
 
-Compares different Ollama models (llama3.3, llama2-uncensored) with OpenAI models using various prompts and assertions.
+Compares different Ollama models (llama4:scout, llama2-uncensored) with OpenAI models using various prompts and assertions.
 
 **Running**:
 
@@ -51,7 +52,7 @@ npx promptfoo@latest eval -c promptfooconfig.yaml
 - Validates models don't refuse legitimate queries
 - Demonstrates prompt format differences (Llama vs OpenAI)
 
-**Tutorial**: See the accompanying guide at https://promptfoo.dev/docs/guides/llama2-uncensored-benchmark-ollama/
+**Tutorial**: See the accompanying guide at https://promptfoo.dev/docs/guides/censored-vs-uncensored-ollama/
 
 ### 2. Function Calling
 
@@ -74,7 +75,7 @@ npx promptfoo@latest eval -c promptfooconfig.function-calling.yaml
 
 **Expected output**:
 
-```
+```text
 ✔ Evaluation complete
 Pass Rate: 100.00%
 Successes: 3
@@ -117,7 +118,7 @@ Edit `promptfooconfig.function-calling.yaml` to:
 
 ## File Structure
 
-```
+```text
 examples/ollama/
 ├── README.md                              # This file
 ├── promptfooconfig.yaml                   # Model comparison (default)

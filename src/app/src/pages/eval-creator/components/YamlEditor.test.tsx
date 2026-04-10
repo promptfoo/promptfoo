@@ -73,6 +73,9 @@ vi.mock('@mui/icons-material/Upload', () => ({
 describe('YamlEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    global.URL.createObjectURL = vi.fn(() => 'blob:yaml-editor-test');
+    global.URL.revokeObjectURL = vi.fn();
+
     // Reset mock to default return value
     mockGetTestSuite.mockReturnValue({
       description: 'Test suite',
@@ -91,74 +94,24 @@ describe('YamlEditor', () => {
 
     expect(screen.getByRole('button', { name: /Save/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Discard Changes/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Download YAML/ })).toBeInTheDocument();
+    expect(screen.getByText('Run in CLI')).toBeInTheDocument();
+    expect(screen.getByText('promptfoo eval -c promptfooconfig.yaml')).toBeInTheDocument();
 
     const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
     expect(editor.disabled).toBe(false);
   });
 
-  it.skip('switches to edit mode when Edit button is clicked', () => {
-    // This test is no longer applicable as the component always starts in editing mode
-    // and doesn't have an "Edit YAML" button
-  });
+  it('downloads the current YAML when Download YAML is clicked', () => {
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    render(<YamlEditorComponent />);
 
-  it.skip('handles file upload correctly', () => {
-    const setCodeSpy = vi.fn();
-    const parseAndUpdateStoreSpy = vi.fn().mockReturnValue(true);
-    // Mock isReadOnly to be false so the upload button will be rendered
-    vi.spyOn(React, 'useState').mockImplementationOnce(() => [false, vi.fn()]); // isReadOnly
-    vi.spyOn(React, 'useState').mockImplementationOnce(() => ['', setCodeSpy]); // code
-    vi.spyOn(React, 'useState').mockImplementationOnce(() => [null, vi.fn()]); // parseError
-    vi.spyOn(React, 'useState').mockImplementationOnce(() => [
-      { show: false, message: '' },
-      vi.fn(),
-    ]); // notification
+    fireEvent.click(screen.getByRole('button', { name: /Download YAML/ }));
 
-    // Create a mock component with our own handleFileUpload function that uses the spies
-    const MockYamlEditor = () => {
-      const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const content = e.target?.result as string;
-            setCodeSpy(content);
-            parseAndUpdateStoreSpy(content);
-          };
-          reader.readAsText(file);
-        }
-      };
-
-      return (
-        <div>
-          <input type="file" data-testid="file-input" onChange={handleFileUpload} />
-        </div>
-      );
-    };
-
-    const { getByTestId } = render(<MockYamlEditor />);
-
-    const mockFileContent = 'description: Uploaded content';
-    const mockFile = new File([mockFileContent], 'test.yaml', { type: 'application/yaml' });
-
-    const fileInput = getByTestId('file-input');
-    const originalFileReader = global.FileReader;
-    global.FileReader = vi.fn(() => ({
-      readAsText: vi.fn(),
-      onload: null,
-    })) as any;
-
-    Object.defineProperty(fileInput, 'files', {
-      value: [mockFile],
-    });
-
-    fireEvent.change(fileInput);
-
-    const reader = (FileReader as any).mock.instances[0];
-    reader.onload?.({ target: { result: mockFileContent } } as any);
-
-    expect(setCodeSpy).toHaveBeenCalled();
-
-    global.FileReader = originalFileReader;
+    expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(clickSpy).toHaveBeenCalled();
+    expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:yaml-editor-test');
+    expect(mockShowToast).toHaveBeenCalledWith('Downloaded promptfooconfig.yaml', 'success');
   });
 
   it('initializes with initialConfig', () => {
@@ -243,6 +196,8 @@ describe('YamlEditor', () => {
     // Action bar should be hidden when readOnly is true
     expect(screen.queryByRole('button', { name: /Save/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Discard Changes/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Download YAML/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Run in CLI')).not.toBeInTheDocument();
 
     // Editor should still be rendered
     const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;

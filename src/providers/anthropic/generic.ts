@@ -53,6 +53,10 @@ export class AnthropicGenericProvider implements ApiProvider {
     return `[Anthropic Provider ${this.modelName}]`;
   }
 
+  requiresApiKey(): boolean {
+    return true;
+  }
+
   getApiKey(): string | undefined {
     return this.config?.apiKey || this.env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
   }

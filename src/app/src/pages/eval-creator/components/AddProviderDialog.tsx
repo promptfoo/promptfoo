@@ -1,8 +1,6 @@
 // Import Prism for syntax highlighting in provider configurations
+import '@app/lib/prism';
 import '@app/pages/redteam/setup/components/Targets/syntax-highlighting.css';
-import 'prismjs'; // Core Prism library must be imported first
-import 'prismjs/components/prism-clike';
-import 'prismjs/components/prism-javascript';
 
 import { useEffect, useState } from 'react';
 
@@ -143,6 +141,7 @@ export default function AddProviderDialog({
                   setError={setError}
                   validateAll={false}
                   providerType={providerType}
+                  mode="eval"
                 />
               )
             )}
@@ -175,7 +174,7 @@ export default function AddProviderDialog({
   );
 }
 
-function getProviderTypeFromId(id: string | undefined): string | undefined {
+export function getProviderTypeFromId(id: string | undefined): string | undefined {
   if (!id || typeof id !== 'string') {
     return undefined;
   }

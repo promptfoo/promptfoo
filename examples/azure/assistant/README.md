@@ -1,4 +1,4 @@
-# assistant (Azure OpenAI Assistants API with Tools)
+# azure/assistant (Azure OpenAI Assistants API with Tools)
 
 Evaluate Azure OpenAI Assistants with file search, function tools, and multi-tool interactions.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example azure/assistant
+cd azure/assistant
 ```
 
 ## Features

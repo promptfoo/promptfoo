@@ -23,27 +23,47 @@ export default function MCPProxyDiagram() {
         maxWidth: 900,
         mx: 'auto',
         p: 4,
-        bgcolor: '#fff',
+        bgcolor: 'var(--ifm-background-surface-color)',
+        border: '1px solid var(--ifm-color-emphasis-300)',
         borderRadius: 4,
         boxShadow: 3,
       }}
     >
-      <Grid container spacing={0} alignItems="center" justifyContent="center">
+      <Grid
+        container
+        spacing={0}
+        sx={{
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
         {/* Left column: Users & Apps */}
         <Grid size={{ xs: 12, sm: 3 }}>
           <Stack
             spacing={8}
-            justifyContent="center"
-            alignItems="center"
-            sx={{ height: PROXY_D + 100 }}
+            sx={{
+              justifyContent: 'center',
+              alignItems: 'center',
+              height: PROXY_D + 100,
+            }}
           >
-            <Stack alignItems="center" spacing={1}>
+            <Stack
+              spacing={1}
+              sx={{
+                alignItems: 'center',
+              }}
+            >
               <Avatar sx={{ bgcolor: '#1976d2', width: AV, height: AV }}>
                 <GroupIcon sx={{ fontSize: 36, color: '#fff' }} />
               </Avatar>
               <Typography variant="h6">Users</Typography>
             </Stack>
-            <Stack alignItems="center" spacing={1}>
+            <Stack
+              spacing={1}
+              sx={{
+                alignItems: 'center',
+              }}
+            >
               <Avatar sx={{ bgcolor: '#7b1fa2', width: AV, height: AV }}>
                 <AppsIcon sx={{ fontSize: 36, color: '#fff' }} />
               </Avatar>
@@ -54,7 +74,12 @@ export default function MCPProxyDiagram() {
 
         {/* Center column: Proxy */}
         <Grid size={{ xs: 12, sm: 6 }}>
-          <Stack spacing={2} alignItems="center">
+          <Stack
+            spacing={2}
+            sx={{
+              alignItems: 'center',
+            }}
+          >
             <Box
               sx={{
                 position: 'relative',
@@ -65,7 +90,7 @@ export default function MCPProxyDiagram() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                bgcolor: '#fff',
+                bgcolor: 'var(--ifm-background-color)',
               }}
             >
               <SecurityIcon sx={{ fontSize: 80, color: '#43a047' }} />
@@ -74,7 +99,8 @@ export default function MCPProxyDiagram() {
                   position: 'absolute',
                   top: 12,
                   right: 12,
-                  bgcolor: '#fff',
+                  bgcolor: 'var(--ifm-background-color)',
+                  border: '1px solid var(--ifm-color-emphasis-300)',
                   borderRadius: '50%',
                   p: 0.5,
                 }}
@@ -92,17 +118,29 @@ export default function MCPProxyDiagram() {
         <Grid size={{ xs: 12, sm: 3 }}>
           <Stack
             spacing={8}
-            justifyContent="center"
-            alignItems="center"
-            sx={{ height: PROXY_D + 100 }}
+            sx={{
+              justifyContent: 'center',
+              alignItems: 'center',
+              height: PROXY_D + 100,
+            }}
           >
-            <Stack alignItems="center" spacing={1}>
+            <Stack
+              spacing={1}
+              sx={{
+                alignItems: 'center',
+              }}
+            >
               <Avatar sx={{ bgcolor: '#43a047', width: AV, height: AV }}>
                 <CloudDoneIcon sx={{ fontSize: 36, color: '#fff' }} />
               </Avatar>
               <Typography variant="h6">Trusted MCP</Typography>
             </Stack>
-            <Stack alignItems="center" spacing={1}>
+            <Stack
+              spacing={1}
+              sx={{
+                alignItems: 'center',
+              }}
+            >
               <Avatar sx={{ bgcolor: '#f44336', width: AV, height: AV }}>
                 <CloudOffIcon sx={{ fontSize: 36, color: '#fff' }} />
               </Avatar>

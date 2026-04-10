@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config with multiple providers that have labels and config options.
+# Uses ProviderOptionsMap format with overridden IDs so that the bare
+# string 'echo' does NOT match any config provider by id/label/suffix,
+# enabling a true fallback-to-bare-token smoke test.
+description: 'Smoke test - providers flag preserves config'
+
+providers:
+  - echo:
+      id: 'alpha-echo'
+      label: 'provider-alpha'
+      config:
+        temperature: 0.1
+        custom_option: 'alpha-value'
+  - echo:
+      id: 'beta-echo'
+      label: 'provider-beta'
+      config:
+        temperature: 0.9
+        custom_option: 'beta-value'
+  - echo:
+      id: 'gamma-echo'
+      label: 'provider-gamma'
+      config:
+        temperature: 0.5
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: World
+    assert:
+      - type: contains
+        value: World

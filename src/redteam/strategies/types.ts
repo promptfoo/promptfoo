@@ -8,4 +8,6 @@ export interface Strategy {
     config: Record<string, any>,
     strategyId?: string,
   ) => Promise<TestCase[]>;
+  /** Whether this strategy requires pre-extracted intent/goal metadata on test cases. */
+  requiresGoalExtraction?: boolean;
 }

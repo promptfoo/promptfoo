@@ -1,21 +1,17 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import SecurityIcon from '@mui/icons-material/Security';
 import SpeedIcon from '@mui/icons-material/Speed';
+import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
 import styles from './blackhat-2026.module.css';
 
 export default function BlackHat2026(): React.ReactElement {
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', 'dark');
-    return () => {
-      document.documentElement.removeAttribute('data-theme');
-    };
-  }, []);
+  useForcedTheme('dark');
 
   const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
     e.preventDefault();

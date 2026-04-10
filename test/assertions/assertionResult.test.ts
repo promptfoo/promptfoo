@@ -4,10 +4,6 @@ import { AssertionsResult, GUARDRAIL_BLOCKED_REASON } from '../../src/assertions
 import type { AssertionSet, GradingResult } from '../../src/types/index';
 
 describe('AssertionsResult', () => {
-  beforeEach(() => {
-    delete process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES;
-  });
-
   const succeedingResult = {
     pass: true,
     score: 1,
@@ -31,6 +27,7 @@ describe('AssertionsResult', () => {
   let assertionsResult: AssertionsResult;
 
   beforeEach(() => {
+    delete process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES;
     assertionsResult = new AssertionsResult();
   });
 
@@ -80,6 +77,9 @@ describe('AssertionsResult', () => {
     await expect(assertionsResult.testResult()).resolves.toEqual({
       ...testResult,
       namedScores: {
+        [metric]: 1,
+      },
+      namedScoreWeights: {
         [metric]: 1,
       },
     });
@@ -154,6 +154,78 @@ describe('AssertionsResult', () => {
     assertionsResult = new AssertionsResult({ parentAssertionSet });
 
     expect(assertionsResult.parentAssertionSet).toBe(parentAssertionSet);
+  });
+
+  it('stores compact assertion set metadata without nested assertions or config', async () => {
+    assertionsResult = new AssertionsResult({
+      parentAssertionSet: {
+        index: 0,
+        assertionSet: {
+          type: 'assert-set',
+          metric: 'tool-calls',
+          threshold: 0.8,
+          weight: 2,
+          config: { secretValue: 'redacted' },
+          assert: [{ type: 'contains', value: 'google_docs/create_document' }],
+        },
+      },
+    });
+
+    assertionsResult.addResult({
+      index: 0,
+      result: succeedingResult,
+    });
+
+    const result = await assertionsResult.testResult();
+
+    expect(result.metadata?.assertionSet).toEqual({
+      type: 'assert-set',
+      metric: 'tool-calls',
+      threshold: 0.8,
+      weight: 2,
+      assertionCount: 1,
+    });
+  });
+
+  it('preserves assertion set metadata when a scoring function returns metadata', async () => {
+    assertionsResult = new AssertionsResult({
+      parentAssertionSet: {
+        index: 0,
+        assertionSet: {
+          type: 'assert-set',
+          metric: 'tool-calls',
+          assert: [{ type: 'contains', value: 'google_docs/create_document' }],
+        },
+      },
+    });
+
+    assertionsResult.addResult({
+      index: 0,
+      result: succeedingResult,
+    });
+
+    const result = await assertionsResult.testResult(() => ({
+      pass: true,
+      score: 0.9,
+      reason: 'Custom score',
+      metadata: {
+        pluginId: 'example-plugin',
+      },
+    }));
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 0.9,
+      reason: 'Custom score',
+      metadata: {
+        pluginId: 'example-plugin',
+        assertionSet: {
+          type: 'assert-set',
+          metric: 'tool-calls',
+          assertionCount: 1,
+        },
+      },
+    });
   });
 
   it('flattens nested componentResults', async () => {
@@ -259,6 +331,22 @@ describe('AssertionsResult', () => {
       'metric-2': 0.9,
       'metric-3': 1,
     });
+    expect(result.namedScoreWeights).toEqual({
+      'metric-1': 1,
+      'metric-2': 1,
+      'metric-3': 1,
+    });
+  });
+
+  it('omits empty namedScoreWeights from the final result', async () => {
+    assertionsResult.addResult({
+      index: 0,
+      result: succeedingResult,
+    });
+
+    const result = await assertionsResult.testResult();
+
+    expect(result).not.toHaveProperty('namedScoreWeights');
   });
 
   it('handles scoring function errors', async () => {

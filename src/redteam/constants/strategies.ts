@@ -8,6 +8,7 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
   'eu:ai-act',
   'iso:42001',
   'gdpr',
+  'dod:ai:ethics',
 ] as const;
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 
@@ -131,6 +132,7 @@ export const CONFIGURABLE_STRATEGIES = [
   'crescendo',
   'indirect-web-pwn',
   'jailbreak',
+  'jailbreak:composite',
   'jailbreak:hydra',
   'jailbreak:meta',
   'jailbreak:tree',

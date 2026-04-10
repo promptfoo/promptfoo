@@ -1,7 +1,7 @@
 import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
 import { fetchWithCache } from '../../cache';
-import { getUserEmail } from '../../globalConfig/accounts';
+import { getUserEmail, isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
@@ -122,6 +122,12 @@ export async function addGcgTestCases(
   injectVar: string,
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
+  if (!isLoggedIntoCloud()) {
+    throw new Error(
+      'The GCG strategy requires authentication. Run `promptfoo auth login` to use this strategy.',
+    );
+  }
+
   if (neverGenerateRemote()) {
     throw new Error('GCG strategy requires remote generation to be enabled');
   }

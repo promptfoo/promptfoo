@@ -90,53 +90,18 @@ describe('FilterChips', () => {
     expect(screen.getByText('(10/10)')).toBeInTheDocument();
   });
 
-  it('applies red styling for low pass rate (< 50%)', () => {
+  it('applies default styling for inactive chips', () => {
     renderWithTooltip(<FilterChips />);
 
-    // prompt-injection has 3/10 = 30% pass rate, should be red
+    // All inactive chips should have the default background style
     const promptInjectionChip = screen.getByText('prompt-injection').closest('button');
-    expect(promptInjectionChip).toHaveClass('bg-red-50');
-  });
+    expect(promptInjectionChip).toHaveClass('bg-background');
 
-  it('applies green styling for high pass rate (>= 80%)', () => {
-    renderWithTooltip(<FilterChips />);
-
-    // data-leakage has 10/10 = 100% pass rate, should be green
     const dataLeakageChip = screen.getByText('data-leakage').closest('button');
-    expect(dataLeakageChip).toHaveClass('bg-emerald-50');
+    expect(dataLeakageChip).toHaveClass('bg-background');
 
-    // harmful-content has 8/10 = 80% pass rate, should also be green (>=80%)
     const harmfulChip = screen.getByText('harmful-content').closest('button');
-    expect(harmfulChip).toHaveClass('bg-emerald-50');
-  });
-
-  it('applies amber styling for medium pass rate (50-79%)', () => {
-    vi.mocked(useTableStore).mockReturnValue(
-      createMockStore({
-        table: {
-          head: {
-            prompts: [
-              {
-                metrics: {
-                  namedScores: {
-                    'medium-metric': 6,
-                  },
-                  namedScoresCount: {
-                    'medium-metric': 10,
-                  },
-                },
-              },
-            ],
-          },
-        },
-      }) as any,
-    );
-
-    renderWithTooltip(<FilterChips />);
-
-    // 6/10 = 60% pass rate, should be amber
-    const chip = screen.getByText('medium-metric').closest('button');
-    expect(chip).toHaveClass('bg-amber-50');
+    expect(harmfulChip).toHaveClass('bg-background');
   });
 
   it('calls addFilter when clicking an inactive chip', async () => {

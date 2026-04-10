@@ -210,6 +210,15 @@ export function extractConfigBadges(
     });
   }
 
+  // Anthropic effort level
+  if (config.effort) {
+    badges.push({
+      label: 'effort',
+      value: String(config.effort),
+      tooltip: 'Output effort level for Anthropic models',
+    });
+  }
+
   // Google thinking config
   if (config.generationConfig?.thinkingConfig) {
     const thinkingConfig = config.generationConfig.thinkingConfig;
@@ -231,12 +240,16 @@ export function extractConfigBadges(
   }
 
   // Anthropic extended thinking
-  if (config.thinking?.type === 'enabled' || config.thinking?.budget_tokens) {
+  if (
+    config.thinking?.type === 'enabled' ||
+    config.thinking?.type === 'adaptive' ||
+    config.thinking?.budget_tokens
+  ) {
     badges.push({
       label: 'thinking',
       value: config.thinking.budget_tokens
         ? `${formatNumber(config.thinking.budget_tokens)} tokens`
-        : 'enabled',
+        : (config.thinking.type ?? 'enabled'),
       tooltip: 'Extended thinking for Claude models',
     });
   }

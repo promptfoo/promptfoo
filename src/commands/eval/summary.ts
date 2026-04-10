@@ -41,6 +41,8 @@ export interface EvalSummaryParams {
   maxConcurrency: number;
   /** Token usage tracker for provider-level breakdown */
   tracker: TokenUsageTracker;
+  /** HTTP status code if the scan was aborted due to a non-transient target error (401, 403, 404, 501) */
+  targetErrorStatus?: number;
 }
 
 /**
@@ -97,23 +99,47 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
     duration,
     maxConcurrency,
     tracker,
+    targetErrorStatus,
   } = params;
 
   const lines: string[] = [];
   const completionType = isRedteam ? 'Red team' : 'Eval';
+  const wasAborted = targetErrorStatus != null;
 
-  // Completion message
-  // When activelySharing, don't show eval ID since URL (which contains the ID) will appear right after
-  const completionMessage =
-    writeToDatabase && shareableUrl
-      ? `${chalk.green('✓')} ${completionType} complete: ${shareableUrl}`
-      : writeToDatabase && activelySharing
-        ? `${chalk.green('✓')} ${completionType} complete`
-        : writeToDatabase
-          ? `${chalk.green('✓')} ${completionType} complete (ID: ${chalk.cyan(evalId)})`
-          : `${chalk.green('✓')} ${completionType} complete`;
+  // Completion message - show aborted status if applicable
+  let completionMessage: string;
+  if (wasAborted) {
+    completionMessage = `${chalk.red('✗')} ${completionType} aborted`;
+    if (writeToDatabase) {
+      completionMessage += ` (ID: ${chalk.cyan(evalId)})`;
+    }
+  } else if (writeToDatabase && shareableUrl) {
+    completionMessage = `${chalk.green('✓')} ${completionType} complete: ${shareableUrl}`;
+  } else if (writeToDatabase && activelySharing) {
+    completionMessage = `${chalk.green('✓')} ${completionType} complete`;
+  } else if (writeToDatabase) {
+    completionMessage = `${chalk.green('✓')} ${completionType} complete (ID: ${chalk.cyan(evalId)})`;
+  } else {
+    completionMessage = `${chalk.green('✓')} ${completionType} complete`;
+  }
 
   lines.push(completionMessage);
+
+  // Show abort reason prominently if scan was aborted due to target error
+  if (wasAborted && targetErrorStatus != null) {
+    lines.push('');
+    lines.push(
+      chalk.red.bold('Scan stopped: Target is unavailable and will not recover on retry.'),
+    );
+    lines.push(chalk.red(`  Target returned HTTP ${targetErrorStatus}`));
+    lines.push('');
+    lines.push(chalk.yellow('Possible causes:'));
+    lines.push(chalk.yellow('  • Invalid API key or authentication (401/403)'));
+    lines.push(chalk.yellow('  • Target endpoint does not exist (404)'));
+    lines.push(chalk.yellow('  • Server does not support the request (501)'));
+    lines.push('');
+    lines.push(chalk.cyan('To fix: Check your target configuration and credentials.'));
+  }
 
   // Guidance section (only when writing to DB, no shareable URL, not wanting to share, and not actively sharing)
   // When wantsToShare is true, guidance is handled by notCloudEnabledShareInstructions() in eval.ts
@@ -277,45 +303,27 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
 
   // Results section
   const totalTests = successes + failures + errors;
-  const passRate = (successes / totalTests) * 100;
+  const formatResultPercentage = (count: number) => {
+    const percentage = totalTests === 0 ? 0 : (count / totalTests) * 100;
+    return percentage === 0 || percentage === 100
+      ? `${percentage.toFixed(0)}%`
+      : `${percentage.toFixed(2)}%`;
+  };
+  const formatResultLine = (
+    count: number,
+    label: string,
+    icon: string | undefined,
+    iconColor: (text: string) => string,
+  ) => {
+    const iconPart = icon ? `${iconColor(icon)} ` : '';
+    return `  ${iconPart}${chalk.white.bold(count.toLocaleString())} ${chalk.white(label)} ${chalk.gray(`(${formatResultPercentage(count)})`)}`;
+  };
 
-  // Determine pass rate color and precision
-  let passRateDisplay;
-  if (!Number.isNaN(passRate)) {
-    // Use smart precision: whole numbers for 0% and 100%, otherwise 2 decimals
-    const passRateFormatted =
-      passRate === 0 || passRate === 100 ? `${passRate.toFixed(0)}%` : `${passRate.toFixed(2)}%`;
-
-    if (passRate >= 100) {
-      passRateDisplay = chalk.green.bold(passRateFormatted);
-    } else if (passRate >= 80) {
-      passRateDisplay = chalk.yellow.bold(passRateFormatted);
-    } else {
-      passRateDisplay = chalk.red.bold(passRateFormatted);
-    }
-  }
-
-  // Results line - always show detailed breakdown with bold numbers
-  const passedPart =
-    successes > 0
-      ? `${chalk.green('✓')} ${chalk.green.bold(successes.toLocaleString())} passed`
-      : `${chalk.gray.bold(successes.toLocaleString())} passed`;
-  const failedPart =
-    failures > 0
-      ? `${chalk.red('✗')} ${chalk.red.bold(failures.toLocaleString())} failed`
-      : `${chalk.gray.bold(failures.toLocaleString())} failed`;
   const errorLabel = errors === 1 ? 'error' : 'errors';
-  const errorsPart =
-    errors > 0
-      ? `${chalk.red('✗')} ${chalk.red.bold(errors.toLocaleString())} ${errorLabel}`
-      : `${chalk.gray.bold(errors.toLocaleString())} ${errorLabel}`;
-
-  const resultsLine = `${passedPart}, ${failedPart}, ${errorsPart}`;
-  if (Number.isNaN(passRate)) {
-    lines.push(`${chalk.bold('Results:')} ${resultsLine}`);
-  } else {
-    lines.push(`${chalk.bold('Results:')} ${resultsLine} (${passRateDisplay})`);
-  }
+  lines.push(chalk.bold('Results:'));
+  lines.push(formatResultLine(successes, 'passed', successes > 0 ? '✓' : undefined, chalk.green));
+  lines.push(formatResultLine(failures, 'failed', failures > 0 ? '✗' : undefined, chalk.red));
+  lines.push(formatResultLine(errors, errorLabel, errors > 0 ? '✗' : undefined, chalk.red));
 
   const durationDisplay = formatDuration(duration);
   lines.push(chalk.gray(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));

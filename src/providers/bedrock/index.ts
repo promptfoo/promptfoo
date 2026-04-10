@@ -1850,15 +1850,16 @@ ${prompt}
         const promptTokens = coerceStrToNum(responseJson.prompt_tokens);
         const completionTokens = coerceStrToNum(responseJson.completion_tokens);
 
-        let totalTokens = responseJson.total_tokens;
-        if (!totalTokens && promptTokens !== undefined && completionTokens !== undefined) {
-          totalTokens = promptTokens + completionTokens;
-        }
+        const totalTokens =
+          coerceStrToNum(responseJson.total_tokens) ??
+          (promptTokens !== undefined && completionTokens !== undefined
+            ? promptTokens + completionTokens
+            : undefined);
 
         return {
           prompt: promptTokens,
           completion: completionTokens,
-          total: (promptTokens ?? 0) + (completionTokens ?? 0),
+          total: totalTokens,
           numRequests: 1,
         };
       }
@@ -1930,15 +1931,16 @@ ${prompt}
         const promptTokens = coerceStrToNum(responseJson.usage.prompt_tokens);
         const completionTokens = coerceStrToNum(responseJson.usage.completion_tokens);
 
-        let totalTokens = responseJson.usage.total_tokens;
-        if (!totalTokens && promptTokens !== undefined && completionTokens !== undefined) {
-          totalTokens = promptTokens + completionTokens;
-        }
+        const totalTokens =
+          coerceStrToNum(responseJson.usage.total_tokens) ??
+          (promptTokens !== undefined && completionTokens !== undefined
+            ? promptTokens + completionTokens
+            : undefined);
 
         return {
           prompt: promptTokens,
           completion: completionTokens,
-          total: (promptTokens ?? 0) + (completionTokens ?? 0),
+          total: totalTokens,
           numRequests: 1,
         };
       }
@@ -2179,6 +2181,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2218,6 +2221,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2236,6 +2240,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2265,6 +2270,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2520,16 +2526,18 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         const completionTokensNum = coerceStrToNum(completionTokens);
 
         // Get total tokens from API or calculate it
-        let totalTokens =
-          output.usage?.totalTokens ?? output.usage?.total_tokens ?? output.total_tokens;
-        if (!totalTokens && promptTokensNum !== undefined && completionTokensNum !== undefined) {
-          totalTokens = promptTokensNum + completionTokensNum;
-        }
+        const totalTokens =
+          coerceStrToNum(
+            output.usage?.totalTokens ?? output.usage?.total_tokens ?? output.total_tokens,
+          ) ??
+          (promptTokensNum !== undefined && completionTokensNum !== undefined
+            ? promptTokensNum + completionTokensNum
+            : undefined);
 
         tokenUsage = {
           prompt: promptTokensNum,
           completion: completionTokensNum,
-          total: (promptTokensNum ?? 0) + (completionTokensNum ?? 0),
+          total: totalTokens,
           numRequests: 1,
         };
 

@@ -1,19 +1,14 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
 import styles from './scaleup-ai-2025.module.css';
 
 export default function ScaleUpAI2025(): React.ReactElement {
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', 'dark');
-
-    return () => {
-      document.documentElement.removeAttribute('data-theme');
-    };
-  }, []);
+  useForcedTheme('dark');
 
   const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
     e.preventDefault();

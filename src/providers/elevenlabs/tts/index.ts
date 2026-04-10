@@ -349,7 +349,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       timeout: config?.timeout || 120000, // 2 minutes
       cache: config?.cache,
       cacheTTL: config?.cacheTTL,
-      retries: config?.retries || 3,
+      retries: config?.retries ?? 3,
 
       // TTS-specific config
       voiceId: config?.voiceId || voiceNameFromId || '21m00Tcm4TlvDq8ikWAM', // Rachel (default)

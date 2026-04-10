@@ -78,7 +78,7 @@ scenarios:
 
 This will generate a matrix of tests for each language and input phrase combination, running the same set of assertions on each.
 
-The full source behind this sample is in [`examples/multiple-translations`][1].
+The full source behind this sample is in [`examples/config-multiple-translations`][1].
 
 ## Configuration
 
@@ -137,4 +137,4 @@ scenarios:
 
 This functionality allows you to easily run a wide range of tests without having to manually create each one. It also keeps your configuration file cleaner and easier to read.
 
-[1]: https://github.com/promptfoo/promptfoo/tree/main/examples/multiple-translations
+[1]: https://github.com/promptfoo/promptfoo/tree/main/examples/config-multiple-translations

@@ -15,7 +15,6 @@ import {
 } from '../util';
 import { getPromptOutputFormatter } from './multiInputFormat';
 
-import type { TraceContextData } from '../../tracing/traceContext';
 import type {
   ApiProvider,
   Assertion,
@@ -26,6 +25,7 @@ import type {
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
+import type { RedteamGradingContext } from '../grading/types';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -130,6 +130,7 @@ export abstract class RedteamPluginBase {
         n: currentBatchSize,
         examples: this.config.examples,
         outputFormat: RedteamPluginBase.getOutputFormatInstruction(this.config),
+        hasCustomOutputFormat: !!this.config.inputs && Object.keys(this.config.inputs).length > 0,
       });
 
       const finalTemplate = RedteamPluginBase.appendModifiers(renderedTemplate, this.config);
@@ -303,15 +304,6 @@ export abstract class RedteamPluginBase {
  *
  * But if you'd like, you can override the `getResult` method to use a different grading method.
  */
-export interface RedteamGradingContext {
-  traceContext?: TraceContextData | null;
-  traceSummary?: string;
-  // Data exfiltration tracking (for data-exfil grader)
-  wasExfiltrated?: boolean;
-  exfilCount?: number;
-  exfilRecords?: Array<{ queryParams: Record<string, string> }>;
-}
-
 export abstract class RedteamGraderBase {
   abstract id: string;
   abstract rubric: string;
@@ -320,7 +312,11 @@ export abstract class RedteamGraderBase {
     const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
 
     try {
-      return nunjucks.renderString(this.rubric, vars);
+      return nunjucks.renderString(this.rubric, {
+        conversationHistory: [],
+        conversationTranscript: '',
+        ...vars,
+      });
     } catch (error) {
       const extractedVars = extractVariablesFromTemplate(this.rubric);
       const missingVars = extractedVars.filter((v) => !(v in vars));
@@ -418,9 +414,14 @@ export abstract class RedteamGraderBase {
     }
 
     // Grader examples are appended to all rubrics if present.
-    const graderExamples = test.metadata?.pluginConfig?.graderExamples;
+    // Merge global examples from redteam config (stored in test.options by evaluator)
+    // with plugin-specific examples from plugin config.
+    const globalGraderExamples = test.options?.redteamGraderExamples || [];
+    const pluginGraderExamples = test.metadata?.pluginConfig?.graderExamples || [];
+    const graderExamples = [...globalGraderExamples, ...pluginGraderExamples];
+
     let graderExamplesString = '';
-    if (graderExamples && graderExamples.length > 0) {
+    if (graderExamples.length > 0) {
       graderExamplesString =
         '\n\n' +
         'IMPORTANT: Follow the rubric above, but when the user-defined examples below conflict with the rubric, prioritize these examples. Use their exact reasoning patterns and scoring criteria:' +

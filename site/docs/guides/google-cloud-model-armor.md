@@ -274,7 +274,7 @@ Access tokens expire after 1 hour. For CI/CD, use service account keys or Worklo
 
 ### Configuration
 
-See the complete example in [`examples/model-armor/promptfooconfig.yaml`](https://github.com/promptfoo/promptfoo/tree/main/examples/model-armor/promptfooconfig.yaml). The key configuration is:
+See the complete example in [`examples/provider-model-armor/promptfooconfig.yaml`](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-model-armor/promptfooconfig.yaml). The key configuration is:
 
 ```yaml
 providers:
@@ -290,7 +290,7 @@ providers:
       transformResponse: file://transforms/sanitize-response.js
 ```
 
-The response transformer maps Model Armor's filter results to Promptfoo's guardrails format. See [`examples/model-armor/transforms/sanitize-response.js`](https://github.com/promptfoo/promptfoo/tree/main/examples/model-armor/transforms/sanitize-response.js) for the implementation.
+The response transformer maps Model Armor's filter results to Promptfoo's guardrails format. See [`examples/provider-model-armor/transforms/sanitize-response.js`](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-model-armor/transforms/sanitize-response.js) for the implementation.
 
 ### Response Format
 
@@ -333,8 +333,8 @@ The sanitization API returns detailed filter results:
 Get started with the complete example:
 
 ```bash
-promptfoo init --example model-armor
-cd model-armor
+promptfoo init --example provider-model-armor
+cd provider-model-armor
 promptfoo eval
 ```
 

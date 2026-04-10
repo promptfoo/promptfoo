@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
 import styles from './rsa-2026.module.css';
 
@@ -66,24 +67,7 @@ function CountdownTimer(): React.ReactElement {
 }
 
 export default function RSA2026(): React.ReactElement {
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', 'dark');
-
-    return () => {
-      document.documentElement.removeAttribute('data-theme');
-    };
-  }, []);
-
-  const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
-    e.preventDefault();
-    const element = document.querySelector(targetId);
-    if (element) {
-      const offset = 80;
-      const elementPosition = element.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + window.pageYOffset - offset;
-      window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
-    }
-  };
+  useForcedTheme('dark');
 
   return (
     <Layout
@@ -171,14 +155,9 @@ export default function RSA2026(): React.ReactElement {
 
             <div className={styles.heroCtas}>
               <p className={styles.ctaBlurb}>Book a time to talk to us</p>
-              <a
-                href="https://cal.com/team/promptfoo/intro2"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.primaryCta}
-              >
+              <Link to="/contact" className={styles.primaryCta}>
                 Schedule a Meeting
-              </a>
+              </Link>
             </div>
           </div>
         </section>
@@ -231,14 +210,9 @@ export default function RSA2026(): React.ReactElement {
                 <p className={styles.ctaCardText}>
                   Book a time to meet with our AI security and red teaming experts at the event.
                 </p>
-                <a
-                  href="https://cal.com/team/promptfoo/intro2"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={styles.primaryCta}
-                >
+                <Link to="/contact" className={styles.primaryCta}>
                   Schedule a Meeting
-                </a>
+                </Link>
               </div>
               <div className={styles.ctaCard}>
                 <h3 className={styles.ctaCardTitle}>Can't make it?</h3>

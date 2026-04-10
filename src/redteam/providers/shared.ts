@@ -252,6 +252,12 @@ export type TargetResponse = {
   };
 } & Omit<ProviderResponse, 'output'> & { output: string };
 
+export function isConversationEndedResponse(
+  response: Pick<ProviderResponse, 'conversationEnded'> | undefined,
+): boolean {
+  return Boolean(response?.conversationEnded);
+}
+
 /**
  * Gets the response from the target provider for a given prompt.
  * @param targetProvider - The API provider to get the response from.
@@ -315,6 +321,14 @@ export async function getTargetResponse(
       ...(targetRespRaw as ProviderResponse),
       output: '',
       error: targetRespRaw.error,
+      tokenUsage,
+    };
+  }
+
+  if (targetRespRaw?.conversationEnded) {
+    return {
+      ...(targetRespRaw as ProviderResponse),
+      output: '',
       tokenUsage,
     };
   }
@@ -385,6 +399,18 @@ export const messagesToRedteamHistory = (
     return [];
   }
 };
+
+/**
+ * Formats redteam turn history as a readable transcript for context-aware graders.
+ * This keeps conversation context separate from the latest assistant output under test.
+ */
+export function formatRedteamHistoryAsTranscript(
+  history: Array<Pick<RedteamHistoryEntry, 'prompt' | 'output'>>,
+): string {
+  return history
+    .map((turn, index) => `Turn ${index + 1}:\nUser: ${turn.prompt}\nAssistant: ${turn.output}`)
+    .join('\n\n');
+}
 
 export function checkPenalizedPhrases(output: string): boolean {
   const partialMatchPhrases = ['in the face of impending doom', 'science fiction'];
@@ -465,6 +491,14 @@ export async function createIterationContext({
   return iterationContext;
 }
 
+type SharedBacktrackingStopReason =
+  | 'Grader failed'
+  | 'Max backtracks reached'
+  | 'Target ended conversation';
+
+export type RoundBacktrackingStopReason = SharedBacktrackingStopReason | 'Max rounds reached';
+export type TurnBacktrackingStopReason = SharedBacktrackingStopReason | 'Max turns reached';
+
 /**
  * Base metadata interface shared by all redteam providers
  */
@@ -519,13 +553,6 @@ export async function tryUnblocking({
   unblockingPrompt?: string;
 }> {
   try {
-    // Check if the server supports unblocking feature
-    const { checkServerFeatureSupport } = await import('../../util/server');
-    const supportsUnblocking = await checkServerFeatureSupport(
-      'blocking-question-analysis',
-      '2025-06-16T14:49:11-07:00',
-    );
-
     // Unblocking is disabled by default, enable via environment variable
     if (!getEnvBool('PROMPTFOO_ENABLE_UNBLOCKING')) {
       logger.debug(
@@ -536,6 +563,13 @@ export async function tryUnblocking({
         success: false,
       };
     }
+
+    // Check if the server supports unblocking feature
+    const { checkServerFeatureSupport } = await import('../../util/server');
+    const supportsUnblocking = await checkServerFeatureSupport(
+      'blocking-question-analysis',
+      '2025-06-16T14:49:11-07:00',
+    );
 
     if (!supportsUnblocking) {
       logger.debug('[Unblocking] Server does not support unblocking, skipping gracefully');

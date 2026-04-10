@@ -221,6 +221,8 @@ export const blobAssetsTable = sqliteTable(
   (table) => ({
     providerIdx: index('blob_assets_provider_idx').on(table.provider),
     createdAtIdx: index('blob_assets_created_at_idx').on(table.createdAt),
+    // Index for media library type filtering (WHERE mime_type LIKE 'image/%')
+    mimeTypeIdx: index('blob_assets_mime_type_idx').on(table.mimeType),
   }),
 );
 
@@ -243,6 +245,11 @@ export const blobReferencesTable = sqliteTable(
   (table) => ({
     blobIdx: index('blob_references_blob_idx').on(table.blobHash),
     evalIdx: index('blob_references_eval_idx').on(table.evalId),
+    // Composite index for media library query: SELECT MAX(created_at) WHERE blob_hash = ?
+    blobCreatedAtIdx: index('blob_references_blob_created_at_idx').on(
+      table.blobHash,
+      table.createdAt,
+    ),
   }),
 );
 

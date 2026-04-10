@@ -1031,7 +1031,7 @@ describe('SessionsTab', () => {
       });
 
       // Change stateful setting
-      const statefulRadio = screen.getByRole('radio', { name: /no - my system is not stateful/i });
+      const statefulRadio = screen.getByLabelText(/No .+ Promptfoo should resend/);
       fireEvent.click(statefulRadio);
 
       // Test result should be cleared

@@ -23,6 +23,8 @@ describe('tokenUsageUtils', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
         assertions: {
           total: 0,
@@ -34,6 +36,8 @@ describe('tokenUsageUtils', () => {
             reasoning: 0,
             acceptedPrediction: 0,
             rejectedPrediction: 0,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0,
           },
         },
       });
@@ -121,7 +125,7 @@ describe('tokenUsageUtils', () => {
         },
       });
 
-      expect(target.completionDetails).toEqual({
+      expect(target.completionDetails).toMatchObject({
         reasoning: 5,
         acceptedPrediction: 3,
         rejectedPrediction: 2,
@@ -133,7 +137,7 @@ describe('tokenUsageUtils', () => {
         },
       });
 
-      expect(target.completionDetails).toEqual({
+      expect(target.completionDetails).toMatchObject({
         reasoning: 15,
         acceptedPrediction: 3,
         rejectedPrediction: 2,
@@ -248,6 +252,32 @@ describe('tokenUsageUtils', () => {
       expect(target.completion).toBe(30);
       expect(target.numRequests).toBe(2);
     });
+
+    it('should not increment numRequests when countAsRequest is false', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateResponseTokenUsage(
+        target,
+        {
+          tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+        },
+        { countAsRequest: false },
+      );
+
+      expect(target.total).toBe(50);
+      expect(target.prompt).toBe(30);
+      expect(target.completion).toBe(20);
+      expect(target.numRequests).toBe(0);
+    });
+
+    it('should not increment numRequests from response-only entries when countAsRequest is false', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateResponseTokenUsage(target, {}, { countAsRequest: false });
+
+      expect(target.total).toBe(0);
+      expect(target.numRequests).toBe(0);
+    });
   });
 
   describe('normalizeTokenUsage', () => {
@@ -264,6 +294,8 @@ describe('tokenUsageUtils', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
         assertions: {
           total: 0,
@@ -275,6 +307,8 @@ describe('tokenUsageUtils', () => {
             reasoning: 0,
             acceptedPrediction: 0,
             rejectedPrediction: 0,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0,
           },
         },
       });

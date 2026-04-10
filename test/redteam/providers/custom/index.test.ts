@@ -17,6 +17,11 @@ const mockApplyRuntimeTransforms = vi.hoisted(() =>
   })),
 );
 
+vi.mock('../../../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
+}));
+
 vi.mock('../../../../src/providers/promptfoo', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -220,6 +225,20 @@ describe('CustomProvider', () => {
     expect((provider as any).maxBacktracks).toBe(10); // DEFAULT_MAX_BACKTRACKS
     expect((provider as any).stateful).toBe(false); // Default false
     expect(provider.config.continueAfterSuccess).toBe(false); // Default false
+  });
+
+  it('should preserve explicit zero values for maxTurns and maxBacktracks', () => {
+    const provider = new CustomProvider({
+      injectVar: 'objective',
+      strategyText: 'Custom strategy',
+      maxTurns: 0,
+      maxBacktracks: 0,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+
+    expect((provider as any).maxTurns).toBe(0);
+    expect((provider as any).maxBacktracks).toBe(0);
   });
 
   it('should include sessionId from context vars when response is missing it', async () => {

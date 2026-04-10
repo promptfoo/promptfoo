@@ -56,7 +56,7 @@ export default function FrameworkPluginResult({
   return (
     <div
       className={cn(
-        'mb-0.5 flex items-center gap-2 rounded-r border-l-[3px] bg-black/[0.02] py-2 pl-2 pr-3 dark:bg-white/[0.02]',
+        'mb-0.5 flex items-center gap-2 rounded-r border-l-[3px] border-l-border bg-black/[0.02] py-2 pl-2 pr-3 dark:bg-white/[0.02]',
         severityBorderStyles[pluginSeverity],
         type === 'untested' && 'opacity-70',
       )}

@@ -1,0 +1,8 @@
+{
+  "name": "promptfoo-evals",
+  "description": "Teaches AI coding agents to create promptfoo eval suites with deterministic assertions, provider configs, and best practices",
+  "homepage": "https://www.promptfoo.dev/docs/integrations/agent-skill",
+  "repository": "https://github.com/promptfoo/promptfoo",
+  "license": "MIT",
+  "keywords": ["eval", "testing", "llm", "promptfoo"]
+}

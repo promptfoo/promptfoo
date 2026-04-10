@@ -12,7 +12,6 @@ import { useToast } from '@app/hooks/useToast';
 import {
   AGENTIC_STRATEGIES_SET,
   ALL_STRATEGIES,
-  DEFAULT_STRATEGIES_SET,
   MULTI_MODAL_STRATEGIES_SET,
   MULTI_TURN_STRATEGIES,
   MULTI_TURN_STRATEGY_SET,
@@ -42,6 +41,9 @@ import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 
 // Set of hero strategy IDs for filtering
 const HERO_STRATEGY_IDS_SET: ReadonlySet<string> = new Set(HERO_STRATEGY_IDS);
+
+/** Strategies gated to enterprise only (always disabled in OSS) */
+const STRATEGIES_ENTERPRISE_ONLY = new Set(['gcg']);
 
 // ------------------------------------------------------------------
 // Types & Interfaces
@@ -75,7 +77,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   const {
     data: { status: apiHealthStatus },
   } = useApiHealth();
-
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
 
   const [configDialog, setConfigDialog] = useState<ConfigDialogState>({
@@ -91,9 +92,21 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   const isStrategyDisabled = useCallback(
     (strategyId: string) => {
-      return isRemoteGenerationDisabled && STRATEGIES_REQUIRING_REMOTE_SET.has(strategyId);
+      if (STRATEGIES_ENTERPRISE_ONLY.has(strategyId)) {
+        return true;
+      }
+      if (isRemoteGenerationDisabled && STRATEGIES_REQUIRING_REMOTE_SET.has(strategyId)) {
+        return true;
+      }
+      return false;
     },
     [isRemoteGenerationDisabled],
+  );
+
+  /** Whether a strategy is disabled specifically because it's enterprise only */
+  const isStrategyAuthGated = useCallback(
+    (strategyId: string) => STRATEGIES_ENTERPRISE_ONLY.has(strategyId),
+    [],
   );
 
   const selectedStrategyIds = useMemo(() => {
@@ -131,7 +144,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     // Strategies not in any special category
     const other = nonHeroStrategies.filter(
       (s) =>
-        !DEFAULT_STRATEGIES_SET.has(s.id) &&
+        s.id !== 'basic' &&
         !AGENTIC_STRATEGIES_SET.has(s.id) &&
         !MULTI_MODAL_STRATEGIES_SET.has(s.id),
     );
@@ -146,16 +159,21 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleStrategyToggle = useCallback(
     (strategyId: string) => {
-      if (isStrategyDisabled(strategyId)) {
-        toast.showToast(
-          'This strategy requires remote generation to be enabled. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION.',
-          'error',
-        );
-        return;
-      }
-
       // Check if strategy is selected (for 'basic', only if enabled !== false)
       const isSelected = selectedStrategyIds.includes(strategyId);
+
+      // Allow deselection even when disabled, but block selection
+      if (isStrategyDisabled(strategyId) && !isSelected) {
+        if (STRATEGIES_ENTERPRISE_ONLY.has(strategyId)) {
+          toast.showToast('This strategy is available in Promptfoo Enterprise.', 'error');
+        } else {
+          toast.showToast(
+            'This strategy requires remote generation to be enabled. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION.',
+            'error',
+          );
+        }
+        return;
+      }
 
       if (!isSelected) {
         recordEvent('feature_used', {
@@ -491,6 +509,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                   onSelectNone={handleSelectNoneInSection}
                   isStrategyDisabled={isStrategyDisabled}
                   isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+                  isStrategyAuthGated={isStrategyAuthGated}
                   isStrategyConfigured={isStrategyConfiguredById}
                 />
               )}
@@ -507,6 +526,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                   onSelectNone={handleSelectNoneInSection}
                   isStrategyDisabled={isStrategyDisabled}
                   isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+                  isStrategyAuthGated={isStrategyAuthGated}
                   isStrategyConfigured={isStrategyConfiguredById}
                 />
               )}
@@ -523,6 +543,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
                   onSelectNone={handleSelectNoneInSection}
                   isStrategyDisabled={isStrategyDisabled}
                   isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+                  isStrategyAuthGated={isStrategyAuthGated}
                   isStrategyConfigured={isStrategyConfiguredById}
                 />
               )}

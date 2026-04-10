@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
-sidebar_label: Guide
-title: Configuration Guide - Getting Started with Promptfoo
+sidebar_label: Overview
+title: Configuration Overview - Getting Started with Promptfoo
 description: Complete guide to configuring promptfoo for LLM evaluation. Learn prompts, providers, test cases, assertions, and advanced features with examples.
 keywords:
   [
@@ -237,7 +237,7 @@ module.exports = async function (varName, prompt, otherVars, provider) {
 };
 ```
 
-See the [dynamic-var example](https://github.com/promptfoo/promptfoo/tree/main/examples/dynamic-var) for a complete working example.
+See the [dynamic-var example](https://github.com/promptfoo/promptfoo/tree/main/examples/config-dynamic-var) for a complete working example.
 
 ### Python variables
 
@@ -553,6 +553,14 @@ tests:
 
 Environment variables are resolved at config load time (not runtime) and can control file paths and API keys—only use them in trusted environments.
 
+:::warning
+
+Avoid copying secrets into `config.env` with templates like `ANTHROPIC_API_KEY: '{{ env.ANTHROPIC_API_KEY }}'`. This resolves the secret into the eval config object and may appear in exported results.
+
+If a secret is already present in your shell environment (or loaded via `--env-file`), prefer reading it directly from process env and keep `config.env` for non-sensitive flags.
+
+:::
+
 ## Tools and Functions
 
 promptfoo supports tool use and function calling with Google, OpenAI and Anthropic models, as well as other provider-specific configurations like temperature and number of tokens. For more information on defining functions and tools, see the [Google Vertex provider docs](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider docs](/docs/providers/google/#tool-calling), [Google Live provider docs](/docs/providers/google#function-calling-example), [OpenAI provider docs](/docs/providers/openai#using-tools) and the [Anthropic provider docs](/docs/providers/anthropic#tool-calling).
@@ -865,6 +873,6 @@ providers:
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 ```
 
-Here's a [full example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-sheets).
+Here's a [full example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-google-sheets).
 
 See [Google Sheets integration](/docs/integrations/google-sheets) for details on how to set up promptfoo to access a private spreadsheet.

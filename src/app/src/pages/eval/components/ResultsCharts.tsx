@@ -24,14 +24,12 @@ import {
   Tooltip,
   type TooltipItem,
 } from 'chart.js';
-import { X } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { usePassRates } from './hooks';
 import { useTableStore } from './store';
 import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 
 interface ResultsChartsProps {
-  handleHideCharts: () => void;
   scores: number[];
 }
 
@@ -658,7 +656,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
   return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
 }
 
-function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
+function ResultsCharts({ scores }: ResultsChartsProps) {
   const [
     showPerformanceOverTimeChart,
     //setShowPerformanceOverTimeChart
@@ -715,14 +713,6 @@ function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
   return (
     <ErrorBoundary fallback={null}>
       <div className="relative p-6 mt-2 bg-card rounded-lg border border-border shadow-sm">
-        <button
-          type="button"
-          className="absolute right-2 top-2 p-1 rounded hover:bg-muted transition-colors"
-          onClick={() => handleHideCharts()}
-          aria-label="Hide charts"
-        >
-          <X className="size-5" />
-        </button>
         <div className="flex justify-between w-full">
           <div style={{ width: chartWidth }}>
             <PassRateChart table={table!} />

@@ -1,13 +1,13 @@
 ---
 sidebar_label: Qwen vs Llama vs GPT
-description: Compare Qwen-2-72B vs GPT-4o vs Llama-3-70B performance on customer support tasks with custom benchmarks to optimize your chatbot's response quality
+description: Compare Qwen-2.5-72B vs GPT-5 vs Llama 4 Scout performance on customer support tasks with custom benchmarks to optimize your chatbot's response quality
 ---
 
 # Qwen vs Llama vs GPT: Run a Custom Benchmark
 
 As a product developer using LLMs, you are likely focused on a specific use case. Generic benchmarks are easily gamed and often not applicable to specific product needs. The best way to improve quality in your LLM app is to construct your own benchmark.
 
-In this guide, we'll walk through the steps to compare Qwen-2-72B, GPT-4o, and Llama-3-70B. The end result is a side-by-side comparison view that looks like this:
+In this guide, we'll walk through the steps to compare Qwen-2.5-72B, GPT-5, and Llama 4 Scout. The end result is a side-by-side comparison view that looks like this:
 
 ![qwen vs gpt vs llama](/img/docs/qwen-eval-webui.png)
 
@@ -21,25 +21,26 @@ The chatbot should provide accurate information, respond quickly, and handle com
 
 - Node.js 20+
 - Access to OpenRouter for Qwen and Llama (set environment variable `OPENROUTER_API_KEY`)
-- Access to OpenAI for GPT-4o (set environment variable `OPENAI_API_KEY`)
+- Access to OpenAI for GPT-5 (set environment variable `OPENAI_API_KEY`)
 
 ## Step 1: Initial Setup
 
-Create a new directory for your comparison project and initialize it with `promptfoo init`.
+Create a new directory for your comparison project:
 
 ```sh
-npx promptfoo@latest init --no-interactive qwen-benchmark
+mkdir qwen-benchmark
+cd qwen-benchmark
 ```
 
 ## Step 2: Configure the Models
 
-Inside of the `qwen-benchmark` directory, edit `promptfooconfig.yaml` to include the models you want to compare. Here's an example configuration with Qwen, GPT-4o, and Llama:
+Create a `promptfooconfig.yaml` with the models you want to compare. Here's an example configuration with Qwen, GPT-5, and Llama:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - 'openai:gpt-5
-  - 'openrouter:meta-llama/llama-3-70b-instruct'
-  - 'openrouter:qwen/qwen-2-72b-instruct'
+  - 'openai:gpt-5'
+  - 'openrouter:meta-llama/llama-4-scout-17b-16e-instruct'
+  - 'openrouter:qwen/qwen-2.5-72b-instruct'
 ```
 
 Set your API keys as environment variables:
@@ -51,19 +52,18 @@ export OPENAI_API_KEY=your_openai_api_key
 
 ### Optional: Configure Model Parameters
 
-Customize the behavior of each model by setting parameters such as `temperature` and `max_tokens` or `max_length`:
+Customize the behavior of each model by setting parameters such as `max_tokens` or `max_length`:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:gpt-5
     config:
-      temperature: 0.9
       max_tokens: 512
-  - id: openrouter:meta-llama/llama-3-70b-instruct
+  - id: openrouter:meta-llama/llama-4-scout-17b-16e-instruct
     config:
       temperature: 0.9
       max_tokens: 512
-  - id: openrouter:qwen/qwen-2-72b-instruct
+  - id: openrouter:qwen/qwen-2.5-72b-instruct
     config:
       temperature: 0.9
       max_tokens: 512
@@ -182,14 +182,6 @@ npx promptfoo@latest eval -o results.csv
 
 ## Conclusion
 
-The comparison will provide you with a side-by-side performance view of Qwen, GPT-4o, and Llama based on your customer support chatbot test cases. Use this data to make informed decisions about which LLM best suits your application.
+The comparison will provide you with a side-by-side performance view of Qwen, GPT-5, and Llama based on your customer support chatbot test cases. Use this data to make informed decisions about which LLM best suits your application.
 
-Contrast this with public benchmarks from the [Chatbot Arena](https://lmarena.ai/?leaderboard) leaderboard:
-
-| Model                | Arena rating |
-| -------------------- | ------------ |
-| gpt-5                | 1287         |
-| Qwen-2-72B-instruct  | 1187         |
-| llama-3-70b-instruct | 1208         |
-
-While public benchmarks tell you how these models perform on generic tasks, they are no substitute for running a benchmark on your own data and use cases. The best choice will depend largely on the specific requirements and constraints of your application.
+While public benchmarks like [Arena](https://lmarena.ai/?leaderboard) tell you how these models perform on generic tasks, they are no substitute for running a benchmark on your own data and use cases. The best choice will depend largely on the specific requirements and constraints of your application.

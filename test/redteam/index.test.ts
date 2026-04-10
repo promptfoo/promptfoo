@@ -2485,7 +2485,7 @@ describe('Language configuration', () => {
         numTests: 1,
         plugins: [{ id: 'policy', numTests: 1 }],
         prompts: ['Test prompt'],
-        strategies: [],
+        strategies: [{ id: 'goat' }],
         targetIds: ['test-provider'],
       });
 
@@ -2523,7 +2523,7 @@ describe('Language configuration', () => {
         numTests: 1,
         plugins: [{ id: 'other-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
-        strategies: [],
+        strategies: [{ id: 'jailbreak:hydra' }],
         targetIds: ['test-provider'],
       });
 
@@ -2584,7 +2584,7 @@ describe('Language configuration', () => {
           numTests: 1,
           plugins: [{ id: 'test-plugin', numTests: 1 }],
           prompts: ['Test prompt'],
-          strategies: [],
+          strategies: [{ id: 'jailbreak:meta' }],
           targetIds: ['test-provider'],
         });
 

@@ -22,11 +22,8 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
     await runDbMigrations();
   });
 
-  beforeEach(() => {
-    app = createApp();
-  });
-
   beforeEach(async () => {
+    app = createApp();
     const db = getDb();
     await db.run('DELETE FROM eval_results');
     await db.run('DELETE FROM evals_to_datasets');

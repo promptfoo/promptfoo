@@ -146,6 +146,11 @@ const resultsMenuItems: MenuItem[] = [
     label: 'Red Team Vulnerability Reports',
     description: 'View findings from red teams',
   },
+  {
+    href: '/media',
+    label: 'Media Library',
+    description: 'Browse generated images, videos, and audio',
+  },
 ];
 
 export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () => void }) {
@@ -177,7 +182,9 @@ export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () 
                   label="View Results"
                   items={resultsMenuItems}
                   isActiveCheck={(pathname) =>
-                    ['/eval', '/evals', '/reports'].some((route) => pathname.startsWith(route))
+                    ['/eval', '/evals', '/reports', '/media'].some((route) =>
+                      pathname.startsWith(route),
+                    )
                   }
                 />
               </NavigationMenuList>

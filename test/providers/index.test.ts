@@ -14,6 +14,7 @@ import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureCompletionProvider } from '../../src/providers/azure/completion';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock/index';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
+import { GoogleVideoProvider } from '../../src/providers/google/video';
 import {
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceTextClassificationProvider,
@@ -48,6 +49,7 @@ import RedteamGoatProvider from '../../src/redteam/providers/goat';
 import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
+import { checkProviderApiKeys } from '../../src/util/provider';
 
 import type { ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
 
@@ -130,6 +132,11 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
   };
 });
 vi.mock('../../src/providers/websocket');
+
+vi.mock('../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
+}));
 
 vi.mock('../../src/globalConfig/cloud', () => {
   return {
@@ -489,6 +496,29 @@ describe('loadApiProvider', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    // Clean up env vars set by #7079 regression tests (explicit list to avoid
+    // accidentally deleting pre-existing env vars with a broad pattern match)
+    const keysToClean = [
+      'TEST_TENANT_7079',
+      'TEST_APPLICATION_7079',
+      'TEST_BASE_URL_7079',
+      'TEST_SERVICE_7079',
+      'TEST_VERSION_7079',
+      'TEST_APP_7079_RESOLVED',
+      'TEST_URL_7079_RESOLVED',
+      'TEST_APP_7079_HTTP',
+      'TEST_BASE_7079_HTTP',
+      'TEST_SVC_7079_HTTP',
+      'TEST_VER_7079_HTTP',
+      'TEST_SESSION_7079_HTTP',
+      'TEST_MISSING_VAR_7079',
+    ];
+    for (const key of keysToClean) {
+      delete process.env[key];
+    }
+  });
+
   it('loadApiProvider with yaml filepath', async () => {
     const mockYamlContent = dedent`
     id: 'openai:gpt-5.1-mini'
@@ -732,6 +762,12 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('vertex:vertex-chat-model');
   });
 
+  it('loadApiProvider with vertex:video:modelname', async () => {
+    const provider = await loadApiProvider('vertex:video:veo-3.1-generate-preview');
+    expect(provider).toBeInstanceOf(GoogleVideoProvider);
+    expect(provider.id()).toBe('vertex:video:veo-3.1-generate-preview');
+  });
+
   it('loadApiProvider with replicate:modelname', async () => {
     const provider = await loadApiProvider('replicate:meta/llama3');
     expect(provider).toBeInstanceOf(ReplicateProvider);
@@ -766,6 +802,23 @@ describe('loadApiProvider', () => {
     const provider = await loadApiProvider('replicate:moderation:foo/bar:abc123');
     expect(provider).toBeInstanceOf(ReplicateModerationProvider);
     expect(provider.id()).toBe('replicate:foo/bar:abc123');
+  });
+
+  it('loadApiProvider with modelslab:image:modelName', async () => {
+    const provider = await loadApiProvider('modelslab:image:flux');
+    expect(provider.id()).toBe('modelslab:image:flux');
+  });
+
+  it('loadApiProvider with modelslab:image: throws for empty model name', async () => {
+    await expect(loadApiProvider('modelslab:image:')).rejects.toThrow(/Model name is required/);
+  });
+
+  it('loadApiProvider with modelslab:image prefers provider-level env over context env', async () => {
+    const provider = await loadApiProvider('modelslab:image:flux', {
+      options: { env: { MODELSLAB_API_KEY: 'provider-key' } },
+      env: { MODELSLAB_API_KEY: 'context-key' } as any,
+    });
+    expect((provider as any).apiKey).toBe('provider-key');
   });
 
   it('loadApiProvider with file://*.py', async () => {
@@ -955,6 +1008,101 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('https://api.example.com:8080/query');
   });
 
+  it('resolves env templates in provider IDs loaded from file references', async () => {
+    process.env.TEST_TENANT_7079 = 'tenant-a';
+    process.env.TEST_APPLICATION_7079 = 'myapp';
+    process.env.TEST_BASE_URL_7079 = 'example.com';
+    process.env.TEST_SERVICE_7079 = 'users';
+    process.env.TEST_VERSION_7079 = 'v3';
+
+    const mockYamlContent = dedent`
+      id: 'https://{{env.TEST_TENANT_7079}}-{{env.TEST_APPLICATION_7079}}.{{env.TEST_BASE_URL_7079}}/api/{{env.TEST_SERVICE_7079}}/{{env.TEST_VERSION_7079}}'
+      config:
+        method: 'GET'
+    `;
+    mockFsReadFileSync.mockReturnValue(mockYamlContent);
+
+    const providers = await loadApiProviders('file://path/to/provider.yaml');
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('https://tenant-a-myapp.example.com/api/users/v3');
+
+    delete process.env.TEST_TENANT_7079;
+    delete process.env.TEST_APPLICATION_7079;
+    delete process.env.TEST_BASE_URL_7079;
+    delete process.env.TEST_SERVICE_7079;
+    delete process.env.TEST_VERSION_7079;
+  });
+
+  it('preserves undefined env templates in provider IDs loaded from file references', async () => {
+    process.env.TEST_APPLICATION_7079 = 'myapp';
+    process.env.TEST_BASE_URL_7079 = 'example.com';
+
+    const mockYamlContent = dedent`
+      id: 'https://{{env.TEST_APPLICATION_7079}}-{{env.TEST_MISSING_VAR_7079}}.{{env.TEST_BASE_URL_7079}}/api'
+      config:
+        method: 'GET'
+    `;
+    mockFsReadFileSync.mockReturnValue(mockYamlContent);
+
+    const providers = await loadApiProviders('file://path/to/provider.yaml');
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('https://myapp-{{env.TEST_MISSING_VAR_7079}}.example.com/api');
+
+    delete process.env.TEST_APPLICATION_7079;
+    delete process.env.TEST_BASE_URL_7079;
+  });
+
+  it('resolves env templates when file:// providers are pre-resolved via resolveProviderConfigs', async () => {
+    process.env.TEST_APP_7079_RESOLVED = 'myapp';
+    process.env.TEST_URL_7079_RESOLVED = 'example.com';
+
+    const mockYamlContent = dedent`
+      id: 'https://{{env.TEST_APP_7079_RESOLVED}}.{{env.TEST_URL_7079_RESOLVED}}/api/v1'
+      config:
+        method: 'GET'
+    `;
+    mockFsReadFileSync.mockReturnValue(mockYamlContent);
+
+    // This is the production path: resolveProviderConfigs resolves file:// to raw ProviderOptions,
+    // then loadApiProviders processes the resolved ProviderOptions (not file:// strings)
+    const resolved = resolveProviderConfigs(['file://path/to/provider.yaml']);
+    expect(Array.isArray(resolved)).toBe(true);
+
+    const providers = await loadApiProviders(resolved);
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('https://myapp.example.com/api/v1');
+
+    delete process.env.TEST_APP_7079_RESOLVED;
+    delete process.env.TEST_URL_7079_RESOLVED;
+  });
+
+  it('resolves env templates in HTTP provider URL and config from file reference (#7079)', async () => {
+    process.env.TEST_APP_7079_HTTP = 'myapp';
+    process.env.TEST_BASE_7079_HTTP = 'example.com';
+    process.env.TEST_SVC_7079_HTTP = 'users';
+    process.env.TEST_VER_7079_HTTP = 'v3';
+    process.env.TEST_SESSION_7079_HTTP = 'abc123';
+
+    const mockYamlContent = dedent`
+      id: 'https://{{env.TEST_APP_7079_HTTP}}.{{env.TEST_BASE_7079_HTTP}}/api/{{env.TEST_SVC_7079_HTTP}}/{{env.TEST_VER_7079_HTTP}}'
+      config:
+        method: 'GET'
+        headers:
+          Cookie: 'SESSION={{env.TEST_SESSION_7079_HTTP}}'
+    `;
+    mockFsReadFileSync.mockReturnValue(mockYamlContent);
+
+    const provider = await loadApiProvider('file://path/to/provider.yaml');
+    expect(provider.id()).toBe('https://myapp.example.com/api/users/v3');
+    expect(provider.config.headers?.Cookie).toBe('SESSION=abc123');
+
+    delete process.env.TEST_APP_7079_HTTP;
+    delete process.env.TEST_BASE_7079_HTTP;
+    delete process.env.TEST_SVC_7079_HTTP;
+    delete process.env.TEST_VER_7079_HTTP;
+    delete process.env.TEST_SESSION_7079_HTTP;
+  });
+
   it('uses provider env overrides when rendering provider config', async () => {
     const provider = await loadApiProvider('echo', {
       options: {
@@ -983,6 +1131,21 @@ describe('loadApiProvider', () => {
     })) as OpenAiChatCompletionProvider;
 
     expect(provider.env?.OPENAI_API_KEY).toBe('override-key');
+  });
+
+  it('passes provider env overrides through the registry to Claude Agent SDK providers', async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.CLAUDE_CODE_USE_VERTEX;
+
+    const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
+      options: {
+        env: {
+          CLAUDE_CODE_USE_VERTEX: 'true',
+        },
+      },
+    });
+
+    expect(checkProviderApiKeys([provider]).size).toBe(0);
   });
 
   it('isolates env overrides between multiple provider loads', async () => {

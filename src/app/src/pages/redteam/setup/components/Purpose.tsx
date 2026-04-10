@@ -654,7 +654,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                           onChange={(e) =>
                             updateApplicationDefinition('securityRequirements', e.target.value)
                           }
-                          placeholder="e.g. HIPAA compliance, patient confidentiality, audit logging..."
+                          placeholder="e.g. patient privacy controls, confidentiality, audit logging..."
                           rows={2}
                           className="min-h-14 resize-y"
                         />

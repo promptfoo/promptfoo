@@ -11,6 +11,7 @@ export const TelemetryEventSchema = z.object({
   event: z.enum([
     'assertion_used',
     'command_used',
+    'eval setup',
     'eval_ran',
     'feature_used',
     'funnel',

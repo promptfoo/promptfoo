@@ -22,6 +22,7 @@ import {
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
   SeveritySchema,
+  TEEN_SAFETY_PLUGINS,
 } from '../redteam/constants';
 import { isCustomStrategy } from '../redteam/constants/strategies';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -314,6 +315,17 @@ export const RedteamConfigSchema = z
     tracing: TracingConfigSchema.optional().describe(
       'Tracing defaults applied to all strategies unless overridden',
     ),
+    graderExamples: z
+      .array(
+        z.object({
+          output: z.string(),
+          pass: z.boolean(),
+          score: z.number(),
+          reason: z.string(),
+        }),
+      )
+      .optional()
+      .describe('Global grading examples that apply to all plugins'),
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
@@ -410,6 +422,8 @@ export const RedteamConfigSchema = z
         expandCollection([...INSURANCE_PLUGINS], config, numTests, severity);
       } else if (id === 'financial') {
         expandCollection([...FINANCIAL_PLUGINS], config, numTests, severity);
+      } else if (id === 'teen-safety') {
+        expandCollection([...TEEN_SAFETY_PLUGINS], config, numTests, severity);
       } else if (id === 'default') {
         expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests, severity);
       } else if (id === 'guardrails-eval') {
@@ -547,6 +561,7 @@ export const RedteamConfigSchema = z
           }
         : {}),
       ...(data.tracing ? { tracing: data.tracing } : {}),
+      ...(data.graderExamples ? { graderExamples: data.graderExamples } : {}),
     };
   });
 

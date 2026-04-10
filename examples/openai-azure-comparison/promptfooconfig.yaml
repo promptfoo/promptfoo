@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI vs Azure OpenAI comparison
+
+prompts:
+  - 'Answer the following concisely: {{message}}'
+
+providers:
+  - id: openai:chat:gpt-5.4
+  - id: azure:chat:gpt-5.4
+    config:
+      apiHost: your-resource-name.openai.azure.com
+
+tests:
+  - vars:
+      message: "What's the weather like in Paris today?"
+  - vars:
+      message: 'Summarize the latest news on Mars exploration.'
+  - vars:
+      message: 'Write a poem about the sea.'

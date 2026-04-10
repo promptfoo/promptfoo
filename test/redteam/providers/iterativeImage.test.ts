@@ -151,6 +151,8 @@ describe('RedteamIterativeImageProvider', () => {
     expect(result.tokenUsage?.total).toBeGreaterThanOrEqual(200);
     expect(result.tokenUsage?.prompt).toBeGreaterThan(0);
     expect(result.tokenUsage?.completion).toBeGreaterThan(0);
+    // Probe counting should only include target calls.
+    expect(result.tokenUsage?.numRequests).toBe(1);
   });
 
   it('should track token usage from vision provider calls', async () => {
@@ -209,6 +211,8 @@ describe('RedteamIterativeImageProvider', () => {
     // Vision provider (300) + target (75) + redteam (15) + judge (30) = 420 total
     expect(result.tokenUsage).toBeDefined();
     expect(result.tokenUsage?.total).toBeGreaterThanOrEqual(300); // At least vision tokens
+    // Probe counting should only include target calls.
+    expect(result.tokenUsage?.numRequests).toBe(1);
   });
 
   it('should handle errors and still return accumulated token usage', async () => {
@@ -243,6 +247,7 @@ describe('RedteamIterativeImageProvider', () => {
 
     // Should still have some token usage from successful calls before error
     expect(result.tokenUsage).toBeDefined();
+    expect(result.tokenUsage?.numRequests).toBe(1);
   });
 
   it('should handle target provider errors', async () => {
@@ -276,6 +281,8 @@ describe('RedteamIterativeImageProvider', () => {
 
     expect(result.error).toBe('Target provider failed');
     expect(result.tokenUsage).toBeDefined();
+    // Target errors should still count as one target probe request.
+    expect(result.tokenUsage?.numRequests).toBe(1);
   });
 
   it('should include metadata with iteration results', async () => {

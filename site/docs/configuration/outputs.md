@@ -199,6 +199,12 @@ All formats include:
 | `results`   | Pass/fail for each assertion |
 | `stats`     | Summary statistics           |
 
+:::warning
+
+`json`, `yaml`, `yml`, `txt`, `html`, and `xml` outputs include the eval `config`. Sensitive fields are redacted using Promptfoo's sanitizer rules on a best-effort basis (not comprehensive). Non-sensitive `config.env` values may still appear in exports.
+
+:::
+
 ### Detailed Metrics
 
 When available, outputs include:

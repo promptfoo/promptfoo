@@ -1179,8 +1179,8 @@ var __defProp = Object.defineProperty,
         let i = Te.get(t);
         if (!i) {
           (i = { timelineRefs: new Set(), sourceMeasurements: Me(t) }), Te.set(t, i);
-          const e = new ResizeObserver((e) => {
-            for (const t of e) Ie(n.source);
+          const e = new ResizeObserver(() => {
+            Ie(n.source);
           });
           e.observe(t);
           for (const n of t.children) e.observe(n);
@@ -2390,10 +2390,10 @@ var __defProp = Object.defineProperty,
       if (!t) return e;
       const n = new URL(t).origin,
         i = t.lastIndexOf('/') > n.length ? t.substring(0, t.lastIndexOf('/')) : n;
-      return (e = (e = e.replace(
+      return e.replace(
         /url\((?:(['"])(?!https?:\/\/|data:|blob:|\/)|(?!['"]?(?:https?:\/\/|data:|blob:|\/)))(?:\.\/)?/gm,
         `url($1${i}/`,
-      )).replace(/url\((['"])?\//gm, `url($1${n}/`));
+      ).replace(/url\((['"])?\//gm, `url($1${n}/`);
     }
     getAnimationTimelineOptions(e, t) {
       for (let n = this.cssRulesWithTimelineName.length - 1; n >= 0; n--) {
@@ -2569,10 +2569,7 @@ var __defProp = Object.defineProperty,
     }
     hasDuration(e) {
       return (
-        e.split(' ').filter((e) => {
-          return (t = e), kt.TIME.exec(t);
-          var t;
-        }).length >= 1
+        e.split(' ').filter((e) => kt.TIME.exec(e)).length >= 1
       );
     }
     hasAutoDuration(e) {
@@ -2808,7 +2805,7 @@ var __defProp = Object.defineProperty,
       ? (o.subject &&
           (function (e, t) {
             const n = We(t.subject),
-              i = t.axis || t.axis;
+              i = t.axis;
             function r(e, r) {
               let o = null;
               for (const [s, a] of e)
@@ -2855,7 +2852,8 @@ var __defProp = Object.defineProperty,
             fetch(e.getAttribute('href')).then(async (t) => {
               const n = await t.text();
               let i = It.transpileStyleSheet(n, !0);
-              if (((i = It.transpileStyleSheet(n, !1, t.url)), i != n)) {
+              i = It.transpileStyleSheet(i, !1, t.url);
+              if (i !== n) {
                 const t = new Blob([i], { type: 'text/css' }),
                   n = URL.createObjectURL(t);
                 e.setAttribute('href', n);

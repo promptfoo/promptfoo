@@ -517,6 +517,66 @@ describe('runAssertion', () => {
     });
   });
 
+  it('should fail when the not-is-json assertion finds matching schema', async () => {
+    const output = '{"latitude": 80.123, "longitude": -1}';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-is-json',
+        value: isJsonAssertionWithSchema.value,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Output is JSON that conforms to the provided schema',
+    });
+  });
+
+  it('should pass when the not-is-json assertion finds non-matching schema', async () => {
+    const output = '{"latitude": "high", "longitude": [-1]}';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-is-json',
+        value: isJsonAssertionWithSchema.value,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should pass when the not-is-json assertion with schema receives non-JSON input', async () => {
+    const output = 'this is not json at all';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-is-json',
+        value: isJsonAssertionWithSchema.value,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
+    });
+  });
+
   it('should validate JSON with formats using ajv-formats', async () => {
     const output = '{"date": "2021-08-29"}';
     const schemaWithFormat = {
@@ -1155,6 +1215,66 @@ describe('runAssertion', () => {
           'JSON does not conform to the provided schema. Errors: data/latitude must be number',
       }),
     );
+  });
+
+  it('should fail when the not-contains-json assertion finds matching schema', async () => {
+    const output = 'here is the answer\n\n```{"latitude": 80.123, "longitude": -1}```';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-contains-json',
+        value: containsJsonAssertionWithSchema.value,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Output contains JSON conforming to the provided schema',
+    });
+  });
+
+  it('should pass when the not-contains-json assertion finds no matching schema', async () => {
+    const output = 'here is the answer\n\n```{"latitude": "not a number", "longitude": -1}```';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-contains-json',
+        value: containsJsonAssertionWithSchema.value,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should pass when the not-contains-json assertion with schema finds no JSON at all', async () => {
+    const output = 'here is the answer with no JSON whatsoever';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-contains-json',
+        value: containsJsonAssertionWithSchema.value,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should pass when the javascript assertion passes', async () => {

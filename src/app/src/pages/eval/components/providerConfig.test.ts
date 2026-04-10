@@ -447,6 +447,34 @@ describe('extractConfigBadges', () => {
       );
     });
 
+    it('extracts Anthropic effort badge', () => {
+      const config = { config: { effort: 'high' } };
+      const badges = extractConfigBadges('anthropic:claude-opus-4-6', config);
+      expect(badges).toContainEqual(expect.objectContaining({ label: 'effort', value: 'high' }));
+    });
+
+    it('extracts Anthropic effort badge for all levels', () => {
+      for (const effort of ['low', 'medium', 'high', 'max']) {
+        const config = { config: { effort } };
+        const badges = extractConfigBadges('anthropic:claude-opus-4-6', config);
+        expect(badges).toContainEqual(expect.objectContaining({ label: 'effort', value: effort }));
+      }
+    });
+
+    it('handles Anthropic adaptive thinking', () => {
+      const config = {
+        config: {
+          thinking: {
+            type: 'adaptive',
+          },
+        },
+      };
+      const badges = extractConfigBadges('anthropic:claude', config);
+      expect(badges).toContainEqual(
+        expect.objectContaining({ label: 'thinking', value: 'adaptive' }),
+      );
+    });
+
     it('does not extract stream when false', () => {
       const config = { config: { stream: false } };
       const badges = extractConfigBadges('openai:gpt-4o', config);

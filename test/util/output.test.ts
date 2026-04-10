@@ -1,6 +1,7 @@
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
+import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
@@ -141,6 +142,77 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
+  it('redacts env and secret config fields in JSON output', async () => {
+    const outputPath = 'output.json';
+    const eval_ = new Eval({
+      description: 'Test config',
+      env: {
+        AWS_BEARER_TOKEN_BEDROCK: 'bedrock-secret-token',
+        ANTHROPIC_API_KEY: 'anthropic-secret-token',
+        REGION: 'us-east-1',
+      },
+      providers: [
+        {
+          id: 'anthropic:claude-agent-sdk',
+          config: {
+            apiKey: 'sk-secret-value',
+            max_turns: 2,
+          },
+        },
+      ],
+    });
+
+    await writeOutput(outputPath, eval_, null);
+
+    expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
+    const outputJson = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = JSON.parse(outputJson);
+    expect(parsed.config.env.AWS_BEARER_TOKEN_BEDROCK).toBe('[REDACTED]');
+    expect(parsed.config.env.ANTHROPIC_API_KEY).toBe('[REDACTED]');
+    expect(parsed.config.env.REGION).toBe('us-east-1');
+    expect(parsed.config.providers[0].config.apiKey).toBe('[REDACTED]');
+    expect(parsed.config.providers[0].config.max_turns).toBe(2);
+    expect(parsed.config.description).toBe('Test config');
+  });
+
+  it('preserves deep non-secret config fields in JSON output', async () => {
+    const outputPath = 'output.json';
+    const eval_ = new Eval({
+      defaultTest: {
+        options: {
+          deepConfig: {
+            l1: {
+              l2: {
+                l3: {
+                  l4: {
+                    l5: {
+                      l6: {
+                        value: 'deep-public-value',
+                        apiKey: 'sk-secret-value',
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    await writeOutput(outputPath, eval_, null);
+
+    expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
+    const outputJson = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = JSON.parse(outputJson);
+    expect(parsed.config.defaultTest.options.deepConfig.l1.l2.l3.l4.l5.l6.value).toBe(
+      'deep-public-value',
+    );
+    expect(parsed.config.defaultTest.options.deepConfig.l1.l2.l3.l4.l5.l6.apiKey).toBe(
+      '[REDACTED]',
+    );
+  });
+
   it('writeOutput with YAML output', async () => {
     const outputPath = 'output.yaml';
     const eval_ = new Eval({});
@@ -149,12 +221,96 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
+  it('redacts env and secret config fields in YAML output', async () => {
+    const outputPath = 'output.yaml';
+    const eval_ = new Eval({
+      env: {
+        AWS_BEARER_TOKEN_BEDROCK: 'bedrock-token',
+        ANTHROPIC_API_KEY: 'anthropic-token',
+        AWS_REGION: 'us-east-1',
+      },
+      defaultTest: {
+        options: {
+          apiKey: 'another-secret',
+          temperature: 0.1,
+        },
+      },
+    });
+
+    await writeOutput(outputPath, eval_, null);
+
+    expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
+    const outputYaml = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = yaml.load(outputYaml) as Record<string, any>;
+    expect(parsed.config.env.AWS_BEARER_TOKEN_BEDROCK).toBe('[REDACTED]');
+    expect(parsed.config.env.ANTHROPIC_API_KEY).toBe('[REDACTED]');
+    expect(parsed.config.env.AWS_REGION).toBe('us-east-1');
+    expect(parsed.config.defaultTest.options.apiKey).toBe('[REDACTED]');
+    expect(parsed.config.defaultTest.options.temperature).toBe(0.1);
+  });
+
   it('writeOutput with XML output', async () => {
     const outputPath = 'output.xml';
     const eval_ = new Eval({});
     await writeOutput(outputPath, eval_, null);
 
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not sanitize config for CSV output', async () => {
+    const outputPath = 'output.csv';
+    // @ts-ignore
+    vi.mocked(getDb).mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
+        }),
+      }),
+      insert: vi.fn().mockReturnValue({
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([]),
+        }),
+      }),
+    });
+    const config: Record<string, unknown> = {};
+    Object.defineProperty(config, 'bad', {
+      enumerable: true,
+      get() {
+        throw new Error('getter boom');
+      },
+    });
+
+    const eval_ = new Eval(config);
+    await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
+    expect(fsPromises.open).toHaveBeenCalledWith(outputPath, 'w');
+  });
+
+  it('does not sanitize config for JSONL output', async () => {
+    const outputPath = 'output.jsonl';
+    // @ts-ignore
+    vi.mocked(getDb).mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
+        }),
+      }),
+      insert: vi.fn().mockReturnValue({
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([]),
+        }),
+      }),
+    });
+    const config: Record<string, unknown> = {};
+    Object.defineProperty(config, 'bad', {
+      enumerable: true,
+      get() {
+        throw new Error('getter boom');
+      },
+    });
+
+    const eval_ = new Eval(config);
+    await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
+    expect(fsPromises.writeFile).toHaveBeenCalledWith(outputPath, '');
   });
 
   it('writeOutput with json and txt output', async () => {

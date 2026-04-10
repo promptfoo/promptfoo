@@ -9,6 +9,7 @@ import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { parseRateLimitHeaders, parseRetryAfter } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sanitizeUrl } from '../sanitizer';
@@ -18,72 +19,92 @@ import type { SystemError } from './errors';
 import type { FetchOptions } from './types';
 
 // Cached agents to avoid recreating on every request.
+// Keep separate entries per resolved connection count so overlapping requests
+// with different request-scoped concurrency caps do not evict each other.
 // Without caching, concurrent requests race on setGlobalDispatcher(),
 // corrupting TLS session state and producing "bad record mac" errors.
 //
 // Note: TLS options (rejectUnauthorized, CA cert) are captured at agent
 // creation time. This is acceptable because these env vars don't change
 // mid-process. If that assumption changes, add cache-invalidation logic.
-let cachedAgent: Agent | null = null;
-let cachedAgentConcurrency: number | undefined;
-let cachedProxyAgents: Map<string, ProxyAgent> = new Map();
+const cachedAgents: Map<number, Agent> = new Map();
+const cachedProxyAgents: Map<string, ProxyAgent> = new Map();
+
+/**
+ * Get the connection pool size for HTTP agents.
+ * Priority: PROMPTFOO_FETCH_CONNECTIONS env var > CLI -j flag > DEFAULT_MAX_CONCURRENCY (4).
+ * Set PROMPTFOO_FETCH_CONNECTIONS to override independently of eval concurrency
+ * (e.g., server deployments that need more connections than the default 4).
+ */
+function getConnectionPoolSize(): number {
+  const envConnections = getEnvString('PROMPTFOO_FETCH_CONNECTIONS');
+  if (envConnections != null) {
+    const parsed = parseInt(envConnections, 10);
+    if (!isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return cliState.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
+}
 
 /**
  * Clear cached agents so the next request creates fresh ones.
  * Exported for testing only.
  */
 export function clearAgentCache(): void {
-  if (cachedAgent && typeof cachedAgent.close === 'function') {
-    cachedAgent.close();
+  for (const agent of cachedAgents.values()) {
+    if (typeof agent.close === 'function') {
+      agent.close();
+    }
   }
-  cachedAgent = null;
-  cachedAgentConcurrency = undefined;
+  cachedAgents.clear();
   for (const agent of cachedProxyAgents.values()) {
     if (typeof agent.close === 'function') {
       agent.close();
     }
   }
-  cachedProxyAgents = new Map();
+  cachedProxyAgents.clear();
 }
 
 function getOrCreateAgent(tlsOptions: ConnectionOptions): Agent {
-  const concurrency = cliState.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
-  // Recreate if concurrency changed (e.g., early fetch used default,
-  // then user set -j flag before eval starts).
-  if (cachedAgent && cachedAgentConcurrency !== concurrency) {
-    if (typeof cachedAgent.close === 'function') {
-      cachedAgent.close();
-    }
-    cachedAgent = null;
+  const concurrency = getConnectionPoolSize();
+  const existing = cachedAgents.get(concurrency);
+  if (existing) {
+    return existing;
   }
-  if (!cachedAgent) {
-    cachedAgent = new Agent({
-      headersTimeout: REQUEST_TIMEOUT_MS,
-      keepAliveTimeout: 30_000,
-      keepAliveMaxTimeout: 60_000,
-      connections: concurrency,
-      connect: tlsOptions,
-    });
-    cachedAgentConcurrency = concurrency;
-  }
-  return cachedAgent;
+  const agent = new Agent({
+    headersTimeout: REQUEST_TIMEOUT_MS,
+    keepAliveTimeout: 30_000,
+    keepAliveMaxTimeout: 60_000,
+    connections: concurrency,
+    connect: tlsOptions,
+  });
+  cachedAgents.set(concurrency, agent);
+  return agent;
+}
+
+function getProxyAgentCacheKey(proxyUrl: string, concurrency: number): string {
+  return `${proxyUrl}::${concurrency}`;
 }
 
 function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions): ProxyAgent {
-  if (!cachedProxyAgents.has(proxyUrl)) {
-    const concurrency = cliState.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
-    const agent = new ProxyAgent({
-      uri: proxyUrl,
-      proxyTls: tlsOptions,
-      requestTls: tlsOptions,
-      headersTimeout: REQUEST_TIMEOUT_MS,
-      keepAliveTimeout: 30_000,
-      keepAliveMaxTimeout: 60_000,
-      connections: concurrency,
-    });
-    cachedProxyAgents.set(proxyUrl, agent);
+  const concurrency = getConnectionPoolSize();
+  const cacheKey = getProxyAgentCacheKey(proxyUrl, concurrency);
+  const existing = cachedProxyAgents.get(cacheKey);
+  if (existing) {
+    return existing;
   }
-  return cachedProxyAgents.get(proxyUrl)!;
+  const agent = new ProxyAgent({
+    uri: proxyUrl,
+    proxyTls: tlsOptions,
+    requestTls: tlsOptions,
+    headersTimeout: REQUEST_TIMEOUT_MS,
+    keepAliveTimeout: 30_000,
+    keepAliveMaxTimeout: 60_000,
+    connections: concurrency,
+  });
+  cachedProxyAgents.set(cacheKey, agent);
+  return agent;
 }
 
 export async function fetchWithProxy(
@@ -173,11 +194,14 @@ export async function fetchWithProxy(
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
 
   // Bind the dispatcher per-request to avoid global state races under concurrency.
-  if (proxyUrl) {
-    logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
-    finalOptions.dispatcher = getOrCreateProxyAgent(proxyUrl, tlsOptions);
-  } else {
-    finalOptions.dispatcher = getOrCreateAgent(tlsOptions);
+  // Respect a caller-provided dispatcher (e.g. HTTP provider's custom TLS agent for mTLS).
+  if (!finalOptions.dispatcher) {
+    if (proxyUrl) {
+      logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
+      finalOptions.dispatcher = getOrCreateProxyAgent(proxyUrl, tlsOptions);
+    } else {
+      finalOptions.dispatcher = getOrCreateAgent(tlsOptions);
+    }
   }
 
   // Transient error retry logic (502/503/504/524 with matching status text)
@@ -271,13 +295,16 @@ export async function handleRateLimit(response: Response): Promise<void> {
   let waitTime = 60_000; // Default wait time of 60 seconds
 
   if (openaiReset) {
-    waitTime = Math.max(Number.parseInt(openaiReset) * 1000, 0);
+    const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
+    if (parsedHeaders.resetAt !== undefined) {
+      waitTime = Math.max(parsedHeaders.resetAt - Date.now(), 0);
+    }
   } else if (rateLimitReset) {
     const resetTime = new Date(Number.parseInt(rateLimitReset) * 1000);
     const now = new Date();
     waitTime = Math.max(resetTime.getTime() - now.getTime() + 1000, 0);
   } else if (retryAfter) {
-    waitTime = Number.parseInt(retryAfter) * 1000;
+    waitTime = parseRetryAfter(retryAfter) ?? waitTime;
   }
 
   logger.debug(`Rate limited, waiting ${waitTime}ms before retry`);

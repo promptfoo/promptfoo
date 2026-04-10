@@ -53,7 +53,9 @@ function SelectTrigger({ className, children, size, label, ref, ...props }: Sele
           </span>
         </div>
         <SelectPrimitive.Icon asChild>
-          <ChevronDown className="size-4 opacity-50 shrink-0 ml-2" />
+          <span className="p-1 rounded hover:bg-muted transition-colors shrink-0 ml-1">
+            <ChevronDown className="size-4 opacity-50 transition-transform duration-200 [[data-state=open]_&]:rotate-180" />
+          </span>
         </SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
     );
@@ -67,7 +69,9 @@ function SelectTrigger({ className, children, size, label, ref, ...props }: Sele
     >
       {children}
       <SelectPrimitive.Icon asChild>
-        <ChevronDown className="size-4 opacity-50" />
+        <span className="p-1 rounded hover:bg-muted transition-colors shrink-0">
+          <ChevronDown className="size-4 opacity-50 transition-transform duration-200 [[data-state=open]_&]:rotate-180" />
+        </span>
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   );
@@ -199,14 +203,14 @@ function SelectSeparator({
 
 export {
   Select,
-  SelectGroup,
-  SelectValue,
-  SelectTrigger,
-  selectTriggerVariants,
   SelectContent,
-  SelectLabel,
+  SelectGroup,
   SelectItem,
-  SelectSeparator,
-  SelectScrollUpButton,
+  SelectLabel,
   SelectScrollDownButton,
+  SelectScrollUpButton,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+  selectTriggerVariants,
 };

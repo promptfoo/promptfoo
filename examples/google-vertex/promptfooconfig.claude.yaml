@@ -9,8 +9,8 @@ providers:
     label: Claude 4.6 Opus
     config:
       region: us-east5
-  - id: vertex:claude-3-5-sonnet-v2@20241022
-    label: Claude 3.5 Sonnet v2
+  - id: vertex:claude-sonnet-4-6
+    label: Claude Sonnet 4.6
     config:
       region: us-east5
   - id: vertex:claude-haiku-4-5@20251001

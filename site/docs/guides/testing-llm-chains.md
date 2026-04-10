@@ -1,6 +1,6 @@
 ---
 sidebar_position: 0
-sidebar_label: Testing LLM chains
+sidebar_label: Testing LLM Chains
 slug: /configuration/testing-llm-chains
 description: Learn how to test complex LLM chains and RAG systems with unit tests and end-to-end validation to ensure reliable outputs and catch failures across multi-step prompts
 ---
@@ -21,7 +21,7 @@ This page explains how to test an LLM chain. At a high level, you have these opt
 
 As mentioned above, the easiest way to test is one prompt at a time. This can be done pretty easily with a basic promptfoo [configuration](/docs/configuration/guide).
 
-Run `npx promptfoo@latest init chain_step_X` to create the test harness for the first step of your chain. After configuring test cases for that step, create a new set of test cases for step 2 and so on.
+Create a `promptfooconfig.yaml` for the first step of your chain. After configuring test cases for that step, create a new set of test cases for step 2 and so on.
 
 ## End-to-end testing for LLM chains
 
@@ -37,18 +37,18 @@ In this example, we'll test LangChain's LLM Math plugin by creating a script tha
 import sys
 import os
 
-from langchain import OpenAI
-from langchain.chains import LLMMathChain
+from langchain_openai import OpenAI
+from langchain.chains.llm_math.base import LLMMathChain
 
 llm = OpenAI(
     temperature=0,
-    openai_api_key=os.getenv('OPENAI_API_KEY')
+    api_key=os.getenv('OPENAI_API_KEY')
 )
 
-llm_math = LLMMathChain(llm=llm, verbose=True)
+llm_math = LLMMathChain.from_llm(llm=llm)
 
 prompt = sys.argv[1]
-llm_math.run(prompt)
+print(llm_math.run(prompt))
 ```
 
 This script is set up so that we can run it like this:
@@ -84,13 +84,13 @@ tests:
 For an in-depth look at configuration, see the [guide](/docs/configuration/guide). Note the following:
 
 - **prompts**: `prompt.txt` is just a file that contains `{{question}}`, since we're passing the question directly through to the provider.
-- **providers**: We list GPT-4 in order to compare its outputs with LangChain's LLMMathChain. We also use the `exec` directive to make promptfoo run the Python script in its eval.
+- **providers**: We list GPT-5 in order to compare its outputs with LangChain's LLMMathChain. We also use the `exec` directive to make promptfoo run the Python script in its eval.
 
-In this example, the end result is a side-by-side comparison of GPT-4 vs. LangChain math performance:
+In this example, the end result is a side-by-side comparison of GPT-5 vs. LangChain math performance:
 
 ![langchain eval](/img/docs/langchain-eval.png)
 
-View the [full example on Github](https://github.com/promptfoo/promptfoo/tree/main/examples/langchain-python).
+View the [full example on Github](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-langchain).
 
 ### Using a custom provider
 

@@ -21,7 +21,7 @@ table.results-table,
 
 [data-theme='dark'] table.results-table,
 [data-theme='dark'] .divTable {
-  background-color: #1a1a1a;
+  background-color: rgb(24 24 27); /* zinc-900 */
 }
 
 .results-table ins {
@@ -156,7 +156,7 @@ table.results-table,
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 0.25rem;
+  gap: 0.5rem;
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;
@@ -508,7 +508,7 @@ table.results-table,
   top: var(--nav-height); /* Navigation height defined in index.css */
   z-index: 10;
   transition: transform 0.2s ease-out;
-  background: #fff;
+  background: rgb(250 250 249); /* zinc-50 */
   /* Scroll-driven animation to show/hide dismiss button */
   animation-name: collapseHeader;
   animation-timeline: scroll();
@@ -518,7 +518,7 @@ table.results-table,
 }
 
 [data-theme='dark'] .results-table-sticky {
-  background: #1a1a1a;
+  background: rgb(39 39 42); /* zinc-800 */
 }
 
 .header-dismiss {
@@ -600,13 +600,13 @@ thead {
 
 /* Ensure the header cells have a solid background */
 .results-table th {
-  background: #fff;
+  background: rgb(250 250 249); /* zinc-50 */
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 /* Add these additional styles */
 .results-table {
-  border-spacing: 0;
+  border-collapse: collapse;
 }
 
 .results-table thead th {
@@ -631,12 +631,12 @@ thead {
 
 /* Ensure the header cells have a solid background */
 .results-table th {
-  background: #fff;
+  background: rgb(250 250 249); /* zinc-50 */
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 [data-theme='dark'] .results-table th {
-  background: #1a1a1a;
+  background: rgb(39 39 42); /* zinc-800 */
 }
 
 .lightbox {

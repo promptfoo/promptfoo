@@ -4,6 +4,7 @@ The Claude Agent SDK provider (aka Claude Code provider) enables you to run agen
 
 ```bash
 npx promptfoo@latest init --example claude-agent-sdk
+cd claude-agent-sdk
 ```
 
 ## Setup
@@ -141,6 +142,40 @@ This example demonstrates handling the `AskUserQuestion` tool in automated evalu
 - **Convenience option**: Use `ask_user_question.behavior` for simple automated responses
 - **First option selection**: Automatically select the first available option
 - **Tool enablement**: Enable `AskUserQuestion` via `append_allowed_tools`
+
+### Skills Testing
+
+This example demonstrates testing [Agent Skills](https://platform.claude.com/docs/en/agent-sdk/skills) with the Claude Agent SDK. Skills are reusable capabilities defined as `SKILL.md` files that Claude automatically invokes when relevant.
+
+- **Skill discovery**: Uses `setting_sources: ['project']` to load skills from `.claude/skills/`
+- **Skill tool**: Enables the `Skill` tool via `append_allowed_tools`
+- **Skill assertions**: Verifies normalized `metadata.skillCalls` with the `skill-used` assertion
+- **Sample skill**: A code review skill that identifies bugs and security issues
+
+**Location**: `./skills/`
+
+**Usage**:
+
+```bash
+(cd skills && promptfoo eval)
+```
+
+### Plugins
+
+This example demonstrates loading skills from a [plugin](https://code.claude.com/docs/en/plugins) instead of from `setting_sources`. Plugins are self-contained directories that bundle skills, agents, hooks, and MCP servers together.
+
+- **Plugin loading**: Uses `plugins: [{type: local, path: ./sample-plugin}]` to load a local plugin
+- **Skill tool**: Enables the `Skill` tool via `append_allowed_tools`
+- **Skill assertions**: Verifies normalized `metadata.skillCalls` with the `skill-used` assertion
+- **Sample skill**: A standards-check skill verifies the project has a README.md
+
+**Location**: `./plugins/`
+
+**Usage**:
+
+```bash
+(cd plugins && promptfoo eval)
+```
 
 ### Cyber Espionage Red Team
 

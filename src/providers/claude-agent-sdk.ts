@@ -7,6 +7,7 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
+import { safeResolve } from '../util/pathUtils';
 import { cacheResponse, getCachedResponse, initializeAgenticCache } from './agentic-utils';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
@@ -23,6 +24,7 @@ import type {
   SettingSource,
   SpawnedProcess,
   SpawnOptions,
+  ThinkingConfig,
 } from '@anthropic-ai/claude-agent-sdk';
 
 import type { EnvOverrides } from '../types/env';
@@ -31,7 +33,47 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
+  SkillCallEntry,
 } from '../types/index';
+
+/**
+ * Represents a single tool call captured during a Claude Agent SDK session.
+ * Available in `response.metadata.toolCalls` after a session completes.
+ */
+export interface ToolCallEntry {
+  id: string;
+  name: string;
+  input: unknown;
+  output: unknown;
+  is_error: boolean;
+  parentToolUseId: string | null;
+}
+
+function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
+  return toolCalls
+    .filter((toolCall) => toolCall.name === 'Skill')
+    .flatMap((toolCall) => {
+      const skillName =
+        toolCall.input &&
+        typeof toolCall.input === 'object' &&
+        typeof (toolCall.input as Record<string, unknown>).skill === 'string'
+          ? ((toolCall.input as Record<string, unknown>).skill as string).trim()
+          : '';
+
+      if (!skillName) {
+        return [];
+      }
+
+      return [
+        {
+          name: skillName,
+          input: toolCall.input,
+          is_error: toolCall.is_error,
+          source: 'tool' as const,
+        },
+      ];
+    });
+}
 
 /**
  * Claude Agent SDK Provider
@@ -96,7 +138,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
       dedent`Failed to load @anthropic-ai/claude-agent-sdk.
 
       The package was found but could not be loaded. This may be due to:
-      - Incompatible Node.js version (requires Node.js 20+)
+      - Incompatible Node.js version (requires Node.js 20.20+ or 22.22+)
       - Corrupted installation
 
       Try reinstalling:
@@ -109,6 +151,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
 
 export interface ClaudeCodeOptions {
   apiKey?: string;
+  apiKeyRequired?: boolean;
 
   /**
    * 'working_dir' allows user to point to a pre-prepared directory with desired files/directories in place
@@ -144,15 +187,9 @@ export interface ClaudeCodeOptions {
    * - 'acceptEdits' - Auto-accept file edit operations
    * - 'bypassPermissions' - Bypass all permission checks (requires allow_dangerously_skip_permissions)
    * - 'dontAsk' - Don't prompt for permissions, deny if not pre-approved
-   * - 'delegate' - Delegate mode, restricts team leader to only Teammate and Task tools
+   * - 'auto' - Use a model classifier to approve or deny permission prompts
    */
-  permission_mode?:
-    | 'default'
-    | 'plan'
-    | 'acceptEdits'
-    | 'bypassPermissions'
-    | 'dontAsk'
-    | 'delegate';
+  permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk' | 'auto';
 
   /**
    * User can set a custom system prompt, or append to the default Claude Agent SDK system prompt
@@ -252,6 +289,68 @@ export interface ClaudeCodeOptions {
   betas?: 'context-1m-2025-08-07'[];
 
   /**
+   * Controls Claude's thinking/reasoning behavior. When set, takes precedence over max_thinking_tokens.
+   * - { type: 'adaptive' } - Claude decides when and how much to think (Opus 4.6+, default for supporting models)
+   * - { type: 'enabled', budgetTokens?: number } - Fixed thinking token budget (older models)
+   * - { type: 'disabled' } - No extended thinking
+   *
+   * @see https://docs.anthropic.com/en/docs/build-with-claude/adaptive-thinking
+   */
+  thinking?: ThinkingConfig;
+
+  /**
+   * Token budget for the task. The model will pace its tool use to stay within this budget.
+   * Useful for cost-conscious evaluations.
+   *
+   * @example
+   * ```yaml
+   * task_budget:
+   *   total: 50000
+   * ```
+   */
+  task_budget?: {
+    total: number;
+  };
+
+  /**
+   * Controls how much effort Claude puts into its response.
+   * Works with adaptive thinking to guide thinking depth.
+   * - 'low' - Minimal thinking, fastest responses
+   * - 'medium' - Moderate thinking
+   * - 'high' - Deep reasoning (default)
+   * - 'max' - Maximum effort (Opus 4.6 only)
+   *
+   * @see https://docs.anthropic.com/en/docs/build-with-claude/effort
+   */
+  effort?: 'low' | 'medium' | 'high' | 'max';
+
+  /**
+   * Agent name for the main thread. When specified, the agent's system prompt,
+   * tool restrictions, and model will be applied to the main conversation.
+   * The agent must be defined either in the 'agents' option or in settings.
+   */
+  agent?: string;
+
+  /**
+   * Use a specific session ID for the conversation instead of an auto-generated one.
+   * Must be a valid UUID. Cannot be used with 'continue' or 'resume' unless
+   * 'fork_session' is also set.
+   */
+  session_id?: string;
+
+  /**
+   * Enable debug mode for the Claude Code process.
+   * When true, enables verbose debug logging (equivalent to --debug CLI flag).
+   */
+  debug?: boolean;
+
+  /**
+   * Write debug logs to a specific file path.
+   * Implicitly enables debug mode.
+   */
+  debug_file?: string;
+
+  /**
    * Sandbox settings for command execution isolation.
    * When enabled, commands are executed in a sandboxed environment that restricts
    * filesystem and network access. This provides an additional security layer.
@@ -262,6 +361,7 @@ export interface ClaudeCodeOptions {
    * - `allowUnsandboxedCommands` - Allow commands that can't be sandboxed
    * - `enableWeakerNestedSandbox` - Enable weaker sandbox for nested environments
    * - `excludedCommands` - Commands to exclude from sandboxing
+   * - `failIfUnavailable` - Fail closed when sandbox dependencies or platform support are missing
    * - `ignoreViolations` - Map of command patterns to violation types to ignore
    * - `network` - Network configuration:
    *   - `allowedDomains` - Domains the sandbox can access
@@ -609,7 +709,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     }
 
     // Could potentially do more to validate credentials for Bedrock/Vertex here, but Anthropic key is the main use case
-    if (!this.apiKey && !(env.CLAUDE_CODE_USE_BEDROCK || env.CLAUDE_CODE_USE_VERTEX)) {
+    if (
+      !this.apiKey &&
+      !(
+        config.apiKeyRequired === false ||
+        env.CLAUDE_CODE_USE_BEDROCK ||
+        env.CLAUDE_CODE_USE_VERTEX
+      )
+    ) {
       throw new Error(
         dedent`Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add "apiKey" to the provider config.
 
@@ -657,11 +764,13 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       ? Array.from(new Set(config.disallowed_tools)).sort()
       : undefined;
 
+    const basePath = cliState.basePath ? path.resolve(cliState.basePath) : process.cwd();
+
     let isTempDir = false;
     let workingDir: string | undefined;
 
     if (config.working_dir) {
-      workingDir = config.working_dir;
+      workingDir = safeResolve(basePath, config.working_dir);
     } else {
       isTempDir = true;
     }
@@ -694,9 +803,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       maxThinkingTokens: config.max_thinking_tokens,
       allowedTools,
       disallowedTools,
-      plugins: config.plugins,
+      plugins: config.plugins?.map((plugin) => ({
+        ...plugin,
+        path: safeResolve(basePath, plugin.path),
+      })),
       maxBudgetUsd: config.max_budget_usd,
-      additionalDirectories: config.additional_directories,
+      additionalDirectories: config.additional_directories?.map((dir) =>
+        safeResolve(basePath, dir),
+      ),
       resume: config.resume,
       forkSession: config.fork_session,
       resumeSessionAt: config.resume_session_at,
@@ -706,18 +820,26 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       hooks: config.hooks,
       includePartialMessages: config.include_partial_messages,
       betas: config.betas,
-      // New options
+      thinking: config.thinking,
+      effort: config.effort,
+      agent: config.agent,
+      sessionId: config.session_id,
+      debug: config.debug,
+      debugFile: config.debug_file ? safeResolve(basePath, config.debug_file) : undefined,
       sandbox: config.sandbox,
       allowDangerouslySkipPermissions: config.allow_dangerously_skip_permissions,
       permissionPromptToolName: config.permission_prompt_tool_name,
       executable: config.executable,
       executableArgs: config.executable_args,
       extraArgs: config.extra_args,
-      pathToClaudeCodeExecutable: config.path_to_claude_code_executable,
+      pathToClaudeCodeExecutable: config.path_to_claude_code_executable
+        ? safeResolve(basePath, config.path_to_claude_code_executable)
+        : undefined,
       settingSources: config.setting_sources,
       tools: config.tools,
       enableFileCheckpointing: config.enable_file_checkpointing,
       persistSession: config.persist_session,
+      taskBudget: config.task_budget,
       env,
     };
 
@@ -725,7 +847,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     const cacheResult = await initializeAgenticCache(
       {
         cacheKeyPrefix: 'anthropic:claude-agent-sdk',
-        workingDir: config.working_dir,
+        workingDir,
         bustCache: context?.bustCache,
         mcp: config.mcp?.servers?.length ? config.mcp : undefined,
         cacheMcp: config.cache_mcp,
@@ -812,8 +934,39 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
       const res = await this.claudeCodeModule.query(queryParams);
 
+      // Collect tool calls and results from intermediate messages
+      const toolCallsMap = new Map<string, ToolCallEntry>();
+
       for await (const msg of res) {
-        if (msg.type == 'result') {
+        if (msg.type === 'assistant') {
+          // Extract tool_use content blocks from assistant messages
+          for (const block of msg.message.content) {
+            if (block.type === 'tool_use') {
+              toolCallsMap.set(block.id, {
+                id: block.id,
+                name: block.name,
+                input: block.input,
+                output: undefined,
+                is_error: false,
+                parentToolUseId: msg.parent_tool_use_id,
+              });
+            }
+          }
+        } else if (msg.type === 'user') {
+          // Extract tool_result content blocks and match to tool calls
+          const content = msg.message?.content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === 'tool_result') {
+                const entry = toolCallsMap.get(block.tool_use_id);
+                if (entry) {
+                  entry.output = block.content;
+                  entry.is_error = block.is_error ?? false;
+                }
+              }
+            }
+          }
+        } else if (msg.type === 'result') {
           const raw = JSON.stringify(msg);
           const tokenUsage: ProviderResponse['tokenUsage'] = {
             prompt: msg.usage?.input_tokens,
@@ -825,25 +978,37 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           };
           const cost = msg.total_cost_usd ?? 0;
           const sessionId = msg.session_id;
-          if (msg.subtype == 'success') {
+
+          const toolCallsArray = Array.from(toolCallsMap.values());
+          const skillCalls = deriveSkillCalls(toolCallsArray);
+
+          if (msg.subtype === 'success') {
             logger.debug(`Claude Agent SDK response: ${raw}`);
             // When structured output is enabled and available, use it as the output
             // Otherwise fall back to the text result
-            const output = msg.structured_output !== undefined ? msg.structured_output : msg.result;
+            const output = msg.structured_output === undefined ? msg.result : msg.structured_output;
             const response: ProviderResponse = {
               output,
               tokenUsage,
               cost,
               raw,
               sessionId,
+              metadata: {
+                skillCalls,
+                toolCalls: toolCallsArray,
+                numTurns: msg.num_turns,
+                durationMs: msg.duration_ms,
+                durationApiMs: msg.duration_api_ms,
+                modelUsage: msg.modelUsage,
+                permissionDenials: msg.permission_denials,
+                ...(msg.terminal_reason === undefined
+                  ? {}
+                  : { terminalReason: msg.terminal_reason }),
+                ...(msg.structured_output === undefined
+                  ? {}
+                  : { structuredOutput: msg.structured_output }),
+              },
             };
-            // Include structured output in metadata if available
-            if (msg.structured_output !== undefined) {
-              response.metadata = {
-                ...response.metadata,
-                structuredOutput: msg.structured_output,
-              };
-            }
 
             // Cache the response using shared utilities
             await cacheResponse(cacheResult, response, 'Claude Agent SDK');
@@ -855,6 +1020,18 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               cost,
               raw,
               sessionId,
+              metadata: {
+                skillCalls,
+                toolCalls: toolCallsArray,
+                numTurns: msg.num_turns,
+                durationMs: msg.duration_ms,
+                durationApiMs: msg.duration_api_ms,
+                modelUsage: msg.modelUsage,
+                permissionDenials: msg.permission_denials,
+                ...(msg.terminal_reason === undefined
+                  ? {}
+                  : { terminalReason: msg.terminal_reason }),
+              },
             };
           }
         }
@@ -892,6 +1069,18 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
    * For normal Claude Agent SDK support, just use the Anthropic API key
    * Users can also use Bedrock (with CLAUDE_CODE_USE_BEDROCK env var) or Vertex (with CLAUDE_CODE_USE_VERTEX env var)
    */
+  requiresApiKey(): boolean {
+    if (this.config.apiKeyRequired === false) {
+      return false;
+    }
+    return !(
+      this.env?.CLAUDE_CODE_USE_BEDROCK ||
+      this.env?.CLAUDE_CODE_USE_VERTEX ||
+      getEnvString('CLAUDE_CODE_USE_BEDROCK') ||
+      getEnvString('CLAUDE_CODE_USE_VERTEX')
+    );
+  }
+
   getApiKey(): string | undefined {
     return this.config?.apiKey || this.env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
   }

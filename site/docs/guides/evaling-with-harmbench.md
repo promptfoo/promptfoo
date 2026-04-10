@@ -18,7 +18,7 @@ To help define a systematic way to assess potential risks and vulnerabilities in
 
 This guide will show you how to use Promptfoo to run HarmBench evaluations against your own LLMs or GenAI applications. Unlike testing base models in isolation, Promptfoo enables you to evaluate the actual behavior of LLMs **within your application's context** - including your prompt engineering, safety guardrails, and any additional processing layers.
 
-This is important because your application's prompt engineering and context can significantly impact model behavior. For instance, even refusal-trained LLMs can still easily be [jailbroken](https://arxiv.org/abs/2410.13886) when operating as an agent in a web browser. Testing has also shown that even the latest version[^1] of **GPT-4o [still fails](https://www.promptfoo.app/eval/eval-hu9-2025-02-03T17:21:33) ~6% of HarmBench's attacks**.
+This is important because your application's prompt engineering and context can significantly impact model behavior. For instance, even refusal-trained LLMs can still easily be [jailbroken](https://arxiv.org/abs/2410.13886) when operating as an agent in a web browser.
 
 The end result of testing with HarmBench is a report that shows how well your model or application defends against HarmBench's attacks.
 ![harmbench evaluation results](/img/docs/harmbench-results.png)
@@ -29,10 +29,10 @@ Create a new configuration file `promptfooconfig.yaml`:
 
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: HarmBench evaluation of OpenAI GPT-4.1-mini
+description: HarmBench evaluation of OpenAI GPT-5-mini
 targets:
   - id: openai:gpt-5-mini
-    label: OpenAI GPT-4.1-mini
+    label: OpenAI GPT-5-mini
 redteam:
   plugins:
     - id: harmbench
@@ -66,14 +66,14 @@ Promptfoo has built-in support for a wide variety of models such as those from O
 First, start your Ollama server and pull the model you want to test:
 
 ```bash
-ollama pull llama3.3:8b
+ollama pull llama4:scout
 ```
 
 Then configure Promptfoo to use it:
 
 ```yaml
 targets:
-  - ollama:chat:llama3.3:8b
+  - ollama:chat:llama4:scout
 ```
 
 ### Your application
@@ -110,5 +110,3 @@ For more information, see:
 - [Promptfoo red teaming guide](/docs/red-team/quickstart)
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
 - [CybersecEval](/blog/cyberseceval)
-
-[^1]: `gpt-4o-2024-11-20` as of `2025-02-03`

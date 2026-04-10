@@ -162,6 +162,13 @@
       "when": 1765906817572,
       "tag": "0022_sleepy_ultimo",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1767985150681,
+      "tag": "0023_wooden_mandrill",
+      "breakpoints": true
     }
   ]
 }

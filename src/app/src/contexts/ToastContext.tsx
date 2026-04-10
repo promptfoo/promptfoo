@@ -45,7 +45,7 @@ const ToastNotification = React.memo(
       >
         <div
           className={cn(
-            'flex items-center gap-3 px-4 py-3 rounded-lg border shadow-lg max-w-xl',
+            'flex items-center gap-3 px-4 py-3 rounded-lg border border-border shadow-lg max-w-xl',
             bg,
           )}
         >

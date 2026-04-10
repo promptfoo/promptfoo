@@ -77,12 +77,20 @@ const defaultProps = {
 };
 
 describe('EvalOutputPromptDialog', () => {
+  let originalClipboardDescriptor: PropertyDescriptor | undefined;
+
   beforeEach(() => {
+    originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
     vi.clearAllMocks();
     // Note: Do NOT use vi.useFakeTimers() here - it breaks component rendering
   });
 
   afterEach(() => {
+    if (originalClipboardDescriptor) {
+      Object.defineProperty(navigator, 'clipboard', originalClipboardDescriptor);
+    } else {
+      Reflect.deleteProperty(navigator, 'clipboard');
+    }
     vi.clearAllMocks();
   });
 
@@ -160,7 +168,10 @@ describe('EvalOutputPromptDialog', () => {
     const mockClipboard = {
       writeText: vi.fn().mockResolvedValue(undefined),
     };
-    Object.assign(navigator, { clipboard: mockClipboard });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: mockClipboard,
+      configurable: true,
+    });
 
     renderWithProviders(<EvalOutputPromptDialog {...defaultProps} />);
 
@@ -188,7 +199,10 @@ describe('EvalOutputPromptDialog', () => {
     const mockClipboard = {
       writeText: vi.fn().mockResolvedValue(undefined),
     };
-    Object.assign(navigator, { clipboard: mockClipboard });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: mockClipboard,
+      configurable: true,
+    });
 
     renderWithProviders(<EvalOutputPromptDialog {...defaultProps} />);
 
@@ -608,6 +622,8 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
 
   it('maintains expanded state if second click is after threshold', async () => {
     const longValue = 'a'.repeat(400);
+    let now = 1_000;
+    const dateNowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
     const propsWithLongValue = {
       ...defaultProps,
       metadata: {
@@ -626,13 +642,14 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
 
     expect(screen.getByText(longValue)).toBeInTheDocument();
 
-    // Wait just over the double-click threshold (300ms) using real delay
-    await new Promise((resolve) => setTimeout(resolve, 310));
+    // Advance logical time beyond the double-click threshold without a real delay.
+    now += 310;
 
     // Second click should keep it expanded (not counted as double-click)
     await user.click(cell);
 
     expect(screen.getByText(longValue)).toBeInTheDocument();
+    dateNowSpy.mockRestore();
   });
 
   it('should reset filters, apply the selected metadata filter, and close the dialog when the filter button is clicked in the Metadata tab', async () => {

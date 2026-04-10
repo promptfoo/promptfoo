@@ -21,6 +21,11 @@ describe('normalizeFinishReason', () => {
       expect(normalizeFinishReason('stop_sequence')).toBe('stop');
       expect(normalizeFinishReason('max_tokens')).toBe('length');
       expect(normalizeFinishReason('tool_use')).toBe('tool_calls');
+      expect(normalizeFinishReason('refusal')).toBe('content_filter');
+    });
+
+    it('should preserve pause_turn as-is', () => {
+      expect(normalizeFinishReason('pause_turn')).toBe('pause_turn');
     });
   });
 

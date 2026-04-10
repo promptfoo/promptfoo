@@ -9,7 +9,7 @@ keywords:
 
 # Running Red Teams
 
-Promptfoo Enterprise allows you to configure targets, plugin collections, and scan configurations that can be shared among your team.
+[Promptfoo Enterprise](/docs/enterprise/) allows you to configure targets, plugin collections, and scan configurations that can be shared among your team.
 
 ## Connecting to Promptfoo
 

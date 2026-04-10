@@ -74,3 +74,28 @@ export function getPluginIdFromResult(result: EvaluateResult): string | null {
 
   return null;
 }
+
+export const getPassRateStyles = (passRate: number): { bg: string; text: string } => {
+  if (passRate >= 0.9) {
+    return {
+      bg: 'bg-emerald-500',
+      text: 'text-emerald-600 dark:text-emerald-400',
+    };
+  }
+  if (passRate >= 0.7) {
+    return {
+      bg: 'bg-amber-500',
+      text: 'text-amber-600 dark:text-amber-400',
+    };
+  }
+  if (passRate >= 0.5) {
+    return {
+      bg: 'bg-orange-500',
+      text: 'text-orange-600 dark:text-orange-400',
+    };
+  }
+  return {
+    bg: 'bg-red-500',
+    text: 'text-red-600 dark:text-red-400',
+  };
+};

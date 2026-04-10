@@ -6,7 +6,7 @@ import { isValidPolicyId } from './plugins/policy/validators';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 // Re-export Inputs from shared to maintain backwards compatibility
-export { InputsSchema, type Inputs };
+export { type Inputs, InputsSchema };
 
 // Modifiers are used to modify the behavior of the plugin.
 // They let the user specify additional instructions for the plugin,
@@ -84,7 +84,10 @@ export const PluginConfigSchema = z.object({
   // CyberSecEval
   multilingual: z.boolean().optional(),
 
+  // Indirect Prompt Injection
   indirectInjectionVar: z.string().optional(),
+  // RAG Poisoning
+  intendedResults: z.array(z.string()).optional(),
   intent: z.union([z.string(), z.array(z.union([z.string(), z.array(z.string())]))]).optional(),
   policy: z.union([z.string(), PolicyObjectSchema]).optional(),
   systemPrompt: z.string().optional(),
@@ -171,9 +174,6 @@ export interface RedteamContext {
 // Shared redteam options
 type CommonOptions = {
   injectVar?: string;
-  // Multi-variable inputs - when specified, generates test cases with multiple variables
-  // The first key becomes the primary injectVar for strategies
-  inputs?: Inputs;
   language?: string | string[];
   numTests?: number;
   plugins?: RedteamPluginObject[];
@@ -218,6 +218,7 @@ export interface RedteamFileConfig extends CommonOptions {
   entities?: string[];
   severity?: Record<Plugin, Severity>;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+  graderExamples?: Array<{ output: string; pass: boolean; score: number; reason: string }>;
 }
 
 export interface SynthesizeOptions extends CommonOptions {

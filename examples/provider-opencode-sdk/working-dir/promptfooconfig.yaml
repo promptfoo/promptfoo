@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenCode SDK working_dir with default read-only tools'
+
+prompts:
+  - 'Read the local promptfooconfig.yaml in the working directory and report the configured provider_id and model in one sentence.'
+
+providers:
+  - id: opencode:sdk
+    config:
+      provider_id: openai
+      model: gpt-4o-mini
+      working_dir: examples/provider-opencode-sdk/basic
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: openai
+      - type: contains
+        value: gpt-4o-mini

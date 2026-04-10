@@ -6,7 +6,7 @@ prompts:
     {{task}}
 
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-4-6
     config:
       temperature: 0
       max_tokens: 2500

@@ -7,12 +7,50 @@ export interface SystemError extends Error {
 }
 
 /**
+ * Non-transient HTTP status codes that indicate the target is unavailable or misconfigured.
+ * These errors will not resolve on retry and should abort the scan immediately.
+ *
+ * - 401: Unauthorized - authentication required or invalid credentials
+ * - 403: Forbidden - valid credentials but access denied
+ * - 404: Not Found - target endpoint doesn't exist
+ * - 501: Not Implemented - server doesn't support the request method
+ *
+ * Excluded: 500 (often transient — server crashes, DB timeouts, deployment rollouts,
+ * or input-dependent bugs where one prompt triggers it but the next doesn't),
+ * 502/503/504 (typically transient gateway issues).
+ */
+export const NON_TRANSIENT_HTTP_STATUSES = [401, 403, 404, 501] as const;
+
+export function isNonTransientHttpStatus(status: number): boolean {
+  return (NON_TRANSIENT_HTTP_STATUSES as readonly number[]).includes(status);
+}
+
+/**
  * Detect transient connection errors distinct from rate limits or permanent
  * certificate/config errors.  Only matches errors that are likely to succeed
  * on retry (stale connections, mid-stream resets).  Permanent failures like
  * "self signed certificate", "unable to verify", "unknown ca", or
  * "wrong version number" (HTTPS->HTTP mismatch) are intentionally excluded.
  */
+/**
+ * Find the first non-transient HTTP error status from evaluation results.
+ * Used to detect if a scan was aborted due to target unavailability.
+ *
+ * @param results - Array of evaluation results to scan
+ * @returns The HTTP status code if found, undefined otherwise
+ */
+export function findTargetErrorStatus(
+  results: Array<{ response?: { metadata?: { http?: { status?: number } } } }>,
+): number | undefined {
+  for (const result of results) {
+    const status = result.response?.metadata?.http?.status;
+    if (typeof status === 'number' && isNonTransientHttpStatus(status)) {
+      return status;
+    }
+  }
+  return undefined;
+}
+
 export function isTransientConnectionError(error: Error | undefined): boolean {
   if (!error) {
     return false;

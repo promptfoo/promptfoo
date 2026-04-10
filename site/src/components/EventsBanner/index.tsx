@@ -4,35 +4,47 @@ import Link from '@docusaurus/Link';
 import { useLocation } from '@docusaurus/router';
 import styles from './styles.module.css';
 
-export default function EventsBanner(): React.ReactElement | null {
-  // No events currently scheduled.
-  return null;
+type EventBannerItem = {
+  badge: string;
+  cta: string;
+  date: string;
+  href: string;
+  location: string;
+};
 
+const ACTIVE_EVENTS: EventBannerItem[] = [];
+
+function getActiveEvents(): EventBannerItem[] {
+  return ACTIVE_EVENTS;
+}
+
+export default function EventsBanner(): React.ReactElement | null {
   const [isVisible, setIsVisible] = useState(true);
   const location = useLocation();
+  const activeEvents = getActiveEvents();
+  const shouldShowBanner =
+    activeEvents.length > 0 &&
+    !activeEvents.some((event) => location.pathname.includes(event.href));
 
-  // Don't show banner on event pages themselves
-  if (
-    location.pathname.includes('/events/blackhat-2025') ||
-    location.pathname.includes('/events/defcon-2025')
-  ) {
-    return null;
-  }
-
-  // Check if user has dismissed the banner in this session
   useEffect(() => {
+    if (!shouldShowBanner) {
+      return;
+    }
+
     const dismissed = sessionStorage.getItem('eventsBannerDismissed');
     if (dismissed === 'true') {
       setIsVisible(false);
     }
-  }, []);
+  }, [shouldShowBanner]);
 
   const handleDismiss = () => {
     setIsVisible(false);
     sessionStorage.setItem('eventsBannerDismissed', 'true');
   };
 
-  if (!isVisible) return null;
+  if (!shouldShowBanner || !isVisible) {
+    return null;
+  }
 
   return (
     <div className={styles.banner}>
@@ -44,36 +56,35 @@ export default function EventsBanner(): React.ReactElement | null {
 
       <div className={styles.content}>
         <div className={styles.leftSection}>
-          <span className={styles.megaphone}>📢</span>
+          <span className={styles.megaphone} aria-hidden="true">
+            !
+          </span>
           <span className={styles.heading}>JOIN US AT</span>
         </div>
 
         <div className={styles.eventsContainer}>
-          <Link to="/events/blackhat-2025" className={styles.eventCard}>
-            <div className={styles.eventBadge}>BLACK HAT USA</div>
-            <div className={styles.eventDetails}>
-              <span className={styles.eventDate}>AUG 5-7</span>
-              <span className={styles.eventLocation}>BOOTH #4712</span>
-            </div>
-            <span className={styles.eventCta}>BOOK DEMO →</span>
-          </Link>
+          {activeEvents.map((event, index) => (
+            <React.Fragment key={event.href}>
+              {index > 0 && (
+                <div className={styles.divider}>
+                  <span className={styles.plus}>+</span>
+                </div>
+              )}
 
-          <div className={styles.divider}>
-            <span className={styles.plus}>+</span>
-          </div>
-
-          <Link to="/events/defcon-2025" className={styles.eventCard}>
-            <div className={styles.eventBadge}>DEFCON 33</div>
-            <div className={styles.eventDetails}>
-              <span className={styles.eventDate}>AUG 9</span>
-              <span className={styles.eventLocation}>PARTY</span>
-            </div>
-            <span className={styles.eventCta}>RSVP →</span>
-          </Link>
+              <Link to={event.href} className={styles.eventCard}>
+                <div className={styles.eventBadge}>{event.badge}</div>
+                <div className={styles.eventDetails}>
+                  <span className={styles.eventDate}>{event.date}</span>
+                  <span className={styles.eventLocation}>{event.location}</span>
+                </div>
+                <span className={styles.eventCta}>{event.cta}</span>
+              </Link>
+            </React.Fragment>
+          ))}
         </div>
 
         <button className={styles.closeButton} onClick={handleDismiss} aria-label="Dismiss banner">
-          ×
+          x
         </button>
       </div>
 

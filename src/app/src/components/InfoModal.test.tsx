@@ -34,7 +34,6 @@ describe('InfoModal', () => {
       'GitHub Repository',
       'File an Issue',
       'Join Our Discord Community',
-      'Book a Meeting',
     ];
     links.forEach((link) => {
       expect(screen.getByText(link)).toBeInTheDocument();
@@ -71,7 +70,6 @@ describe('InfoModal', () => {
       { text: 'GitHub Repository', href: 'https://github.com/promptfoo/promptfoo' },
       { text: 'File an Issue', href: 'https://github.com/promptfoo/promptfoo/issues' },
       { text: 'Join Our Discord Community', href: 'https://discord.gg/promptfoo' },
-      { text: 'Book a Meeting', href: 'https://cal.com/team/promptfoo/intro2' },
     ];
 
     links.forEach(({ text, href }) => {

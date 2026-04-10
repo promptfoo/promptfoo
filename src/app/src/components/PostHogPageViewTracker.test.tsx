@@ -54,6 +54,7 @@ describe('PostHogPageViewTracker', () => {
       hash: '#overview',
       state: null,
       key: 'initialKey',
+      unstable_mask: undefined,
     };
     mockedUseLocation.mockReturnValue(initialLocation);
     window.location.href = `http://localhost${initialLocation.pathname}${initialLocation.search}${initialLocation.hash}`;
@@ -74,6 +75,7 @@ describe('PostHogPageViewTracker', () => {
       hash: '',
       state: null,
       key: 'newKey',
+      unstable_mask: undefined,
     };
     mockedUseLocation.mockReturnValue(newLocation);
     window.location.href = `http://localhost${newLocation.pathname}`;

@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { generateEvalSummary } from '../../../src/commands/eval/summary';
 import { stripAnsi } from '../../util/utils';
@@ -422,7 +423,7 @@ describe('generateEvalSummary', () => {
   });
 
   describe('pass rate and results', () => {
-    it('should show 100% pass rate in green', () => {
+    it('should show percentages for each result line at 100% pass rate', () => {
       const params: EvalSummaryParams = {
         evalId: 'eval-100',
         isRedteam: false,
@@ -444,13 +445,12 @@ describe('generateEvalSummary', () => {
       const plainOutput = stripAnsi(lines.join('\n'));
 
       expect(plainOutput).toContain('Results:');
-      expect(plainOutput).toContain('10 passed');
-      expect(plainOutput).toContain('0 failed');
-      expect(plainOutput).toContain('0 errors');
-      expect(plainOutput).toContain('(100%)');
+      expect(plainOutput).toContain('10 passed (100%)');
+      expect(plainOutput).toContain('0 failed (0%)');
+      expect(plainOutput).toContain('0 errors (0%)');
     });
 
-    it('should show 80%+ pass rate in yellow', () => {
+    it('should show percentages for each result line when some tests fail', () => {
       const params: EvalSummaryParams = {
         evalId: 'eval-85',
         isRedteam: false,
@@ -472,12 +472,12 @@ describe('generateEvalSummary', () => {
       const plainOutput = stripAnsi(lines.join('\n'));
 
       expect(plainOutput).toContain('Results:');
-      expect(plainOutput).toContain('17 passed');
-      expect(plainOutput).toContain('3 failed');
-      expect(plainOutput).toContain('(85.00%)');
+      expect(plainOutput).toContain('17 passed (85.00%)');
+      expect(plainOutput).toContain('3 failed (15.00%)');
+      expect(plainOutput).toContain('0 errors (0%)');
     });
 
-    it('should show <80% pass rate in red', () => {
+    it('should show percentages for each result line when passed and failed are split evenly', () => {
       const params: EvalSummaryParams = {
         evalId: 'eval-50',
         isRedteam: false,
@@ -499,9 +499,9 @@ describe('generateEvalSummary', () => {
       const plainOutput = stripAnsi(lines.join('\n'));
 
       expect(plainOutput).toContain('Results:');
-      expect(plainOutput).toContain('5 passed');
-      expect(plainOutput).toContain('5 failed');
-      expect(plainOutput).toContain('(50.00%)');
+      expect(plainOutput).toContain('5 passed (50.00%)');
+      expect(plainOutput).toContain('5 failed (50.00%)');
+      expect(plainOutput).toContain('0 errors (0%)');
     });
 
     it('should include errors in results', () => {
@@ -524,13 +524,45 @@ describe('generateEvalSummary', () => {
 
       const lines = generateEvalSummary(params);
       const plainOutput = stripAnsi(lines.join('\n'));
+      const outputLines = plainOutput.split('\n');
+      const hasLineMatching = (pattern: RegExp) => outputLines.some((line) => pattern.test(line));
 
       expect(plainOutput).toContain('Results:');
-      expect(plainOutput).toContain('8 passed');
-      expect(plainOutput).toContain('1 failed');
-      expect(plainOutput).toContain('1 error');
+      expect(hasLineMatching(/^\s*(✓\s+)?8 passed \(80\.00%\)$/)).toBe(true);
+      expect(hasLineMatching(/^\s*(✗\s+)?1 failed \(10\.00%\)$/)).toBe(true);
+      expect(hasLineMatching(/^\s*(✗\s+)?1 error \(10\.00%\)$/)).toBe(true);
       expect(plainOutput).not.toContain('1 errors');
-      expect(plainOutput).toContain('(80.00%)');
+    });
+
+    it('should render colored icons with muted percentages', () => {
+      const params: EvalSummaryParams = {
+        evalId: 'eval-styling',
+        isRedteam: false,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: { total: 0 },
+        successes: 8,
+        failures: 1,
+        errors: 1,
+        duration: 5000,
+        maxConcurrency: 4,
+        tracker: mockTracker,
+      };
+
+      const lines = generateEvalSummary(params);
+
+      expect(lines).toContain(
+        `  ${chalk.green('✓')} ${chalk.white.bold('8')} ${chalk.white('passed')} ${chalk.gray('(80.00%)')}`,
+      );
+      expect(lines).toContain(
+        `  ${chalk.red('✗')} ${chalk.white.bold('1')} ${chalk.white('failed')} ${chalk.gray('(10.00%)')}`,
+      );
+      expect(lines).toContain(
+        `  ${chalk.red('✗')} ${chalk.white.bold('1')} ${chalk.white('error')} ${chalk.gray('(10.00%)')}`,
+      );
     });
   });
 

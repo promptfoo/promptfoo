@@ -11,7 +11,7 @@ When you run `red team generate`, the Promptfoo API will process the details pro
 
 When you execute `redteam run`, Promptfoo’s inference will run attacks against your target system and grade the results. These results can be viewed within your localhost UI.
 
-Since Promptfoo manages all inference by default, these services have usage limits to ensure fair access for all users. Promptfoo open-source enforces usage limits based on the number of probes run against your target system. A probe is defined as any request to a target in a red team. When you reach these limits, you'll see a warning message or, in some cases, an error that prevents further cloud-based inference.
+Since Promptfoo manages all inference by default, these services have usage limits to ensure fair access for all users. Promptfoo open-source enforces usage limits based on the number of probes run against your target system. A probe is counted when Promptfoo sends a request to your target during red team eval. Internal generation and grading calls do not count as probes. When you reach these limits, you'll see a warning message or, in some cases, an error that prevents further cloud-based inference.
 
 ## Managing Your Own Inference
 

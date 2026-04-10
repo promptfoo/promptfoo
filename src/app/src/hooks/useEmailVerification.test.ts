@@ -88,6 +88,19 @@ describe('useEmailVerification', () => {
         },
       },
       {
+        name: 'status: "email_verification_required"',
+        apiResponse: {
+          hasEmail: true,
+          status: 'email_verification_required' as const,
+          message: 'Please verify your email address and try again.',
+        },
+        expected: {
+          canProceed: false,
+          needsEmail: false,
+          error: 'Please verify your email address and try again.',
+        },
+      },
+      {
         name: 'hasEmail: false',
         apiResponse: {
           hasEmail: false,

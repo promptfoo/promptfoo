@@ -21,6 +21,7 @@ Latest releases:
 | [amazon/nova-lite-v1](https://openrouter.ai/amazon/nova-lite-v1)                                           | 300,000              |
 | [amazon/nova-micro-v1](https://openrouter.ai/amazon/nova-micro-v1)                                         | 128,000              |
 | [anthracite-org/magnum-v4-72b](https://openrouter.ai/anthracite-org/magnum-v4-72b)                         | 16,384               |
+| [anthropic/claude-sonnet-4.6](https://openrouter.ai/anthropic/claude-sonnet-4.6)                           | 200,000              |
 | [anthropic/claude-opus-4.6](https://openrouter.ai/anthropic/claude-opus-4.6)                               | 200,000              |
 | [anthropic/claude-opus-4.5](https://openrouter.ai/anthropic/claude-opus-4.5)                               | 200,000              |
 | [anthropic/claude-sonnet-4.5](https://openrouter.ai/anthropic/claude-sonnet-4.5)                           | 200,000              |

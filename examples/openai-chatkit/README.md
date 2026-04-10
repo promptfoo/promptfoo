@@ -6,6 +6,7 @@ Evaluate ChatKit workflows built with OpenAI's Agent Builder using browser autom
 
 ```bash
 npx promptfoo@latest init --example openai-chatkit
+cd openai-chatkit
 ```
 
 ## Prerequisites

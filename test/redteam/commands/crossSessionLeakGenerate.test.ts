@@ -42,6 +42,23 @@ vi.mock('../../../src/logger', () => ({
   __esModule: true,
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
+vi.mock('../../../src/util/redteamProbeLimit', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    checkRedteamProbeLimit: vi.fn().mockReturnValue({
+      withinLimit: true,
+      used: 0,
+      limit: 100_000,
+      remaining: 100_000,
+    }),
+  };
+});
+vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    neverGenerateRemote: vi.fn().mockReturnValue(true),
+  };
+});
 
 describe('cross-session-leak strategy exclusions', () => {
   beforeEach(() => {

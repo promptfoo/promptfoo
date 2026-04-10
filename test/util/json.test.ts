@@ -173,6 +173,13 @@ describe('json utilities', () => {
       expect(safeJsonStringify(obj)).toBe('{"a":{"b":{}}}');
     });
 
+    it('preserves shared non-circular references', () => {
+      const shared = { value: 'shared' };
+      expect(safeJsonStringify({ a: shared, b: shared, c: [shared] })).toBe(
+        '{"a":{"value":"shared"},"b":{"value":"shared"},"c":[{"value":"shared"}]}',
+      );
+    });
+
     it('preserves non-circular nested structures', () => {
       const nested = { a: { b: { c: 1 } }, d: [1, 2, { e: 3 }] };
       expect(JSON.parse(safeJsonStringify(nested) as string)).toEqual(nested);
