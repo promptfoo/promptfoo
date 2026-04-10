@@ -129,6 +129,22 @@ export const PluginConfigSchema = z.object({
   workingDirectory: z.string().optional(),
   workingDirectoryPath: z.string().optional(),
   workingDir: z.string().optional(),
+  networkEgressUrl: z.string().optional(),
+  networkEgressUrls: z.array(z.string()).optional(),
+  networkTrapUrl: z.string().optional(),
+  networkTrapUrls: z.array(z.string()).optional(),
+  networkEgressHost: z.string().optional(),
+  networkEgressHosts: z.array(z.string()).optional(),
+  networkTrapHost: z.string().optional(),
+  networkTrapHosts: z.array(z.string()).optional(),
+  networkAllowedHost: z.string().optional(),
+  networkAllowedHosts: z.array(z.string()).optional(),
+  networkAllowedUrl: z.string().optional(),
+  networkAllowedUrls: z.array(z.string()).optional(),
+  networkTrapLogPath: z.string().optional(),
+  networkTrapLogPaths: z.array(z.string()).optional(),
+  networkEgressReceipt: z.string().optional(),
+  networkEgressReceipts: z.array(z.string()).optional(),
 
   // Multi-variable inputs - allows generating test cases with multiple variables
   // Keys are variable names, values are descriptions of what each variable should contain

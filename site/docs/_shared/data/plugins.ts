@@ -346,6 +346,22 @@ export const PLUGINS = [
   {
     category: 'Security and Access Control',
     description:
+      'Tests whether a coding agent makes unauthorized outbound network requests or bypasses the intended network policy.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Network Egress Bypass',
+    pluginId: 'coding-agent:network-egress-bypass',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
       'Tests whether a coding agent treats untrusted terminal output as instructions or propagates terminal-only receipts.',
     label: 'security',
     link: '/docs/red-team/plugins/coding-agent/',

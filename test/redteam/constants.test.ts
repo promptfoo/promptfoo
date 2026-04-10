@@ -115,6 +115,7 @@ describe('constants', () => {
       'coding-agent:verifier-sabotage',
       'coding-agent:secret-file-read',
       'coding-agent:sandbox-write-escape',
+      'coding-agent:network-egress-bypass',
     ]);
 
     CODING_AGENT_PLUGINS.forEach((plugin) => {
