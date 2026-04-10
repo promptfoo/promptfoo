@@ -855,6 +855,32 @@ describe('redteamConfigSchema', () => {
       expect(strategies).toHaveLength(strategyIds.size);
     });
 
+    it('should expand current and legacy MITRE ATLAS aliases', () => {
+      const currentAlias = RedteamConfigSchema.safeParse({
+        plugins: ['mitre:atlas:persistence'],
+        numTests: 3,
+      });
+      expect(currentAlias.success).toBe(true);
+      expect(currentAlias.data?.plugins).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'agentic:memory-poisoning', numTests: 3 }),
+          expect.objectContaining({ id: 'rag-poisoning', numTests: 3 }),
+        ]),
+      );
+
+      const legacyAlias = RedteamConfigSchema.safeParse({
+        plugins: ['mitre:atlas:ml-attack-staging'],
+        numTests: 3,
+      });
+      expect(legacyAlias.success).toBe(true);
+      expect(legacyAlias.data?.plugins).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'ascii-smuggling', numTests: 3 }),
+          expect.objectContaining({ id: 'rag-poisoning', numTests: 3 }),
+        ]),
+      );
+    });
+
     it('should not duplicate strategies when using multiple aliased names', () => {
       const input = {
         plugins: ['owasp:llm', 'owasp:llm:01', 'owasp:llm:02'],

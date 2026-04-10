@@ -3,6 +3,8 @@ import { FOUNDATION_PLUGINS, PII_PLUGINS } from './plugins';
 import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
 
+type FrameworkMapping = { plugins: Plugin[]; strategies: Strategy[] };
+
 export const FRAMEWORK_NAMES: Record<string, string> = {
   'dod:ai:ethics': 'DoD AI Ethical Principles',
   'mitre:atlas': 'MITRE ATLAS',
@@ -492,10 +494,102 @@ export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies
   },
 };
 
-export const MITRE_ATLAS_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
+const MITRE_ATLAS_AI_ATTACK_STAGING_MAPPING: FrameworkMapping = {
+  plugins: [
+    'ascii-smuggling',
+    'excessive-agency',
+    'harmful:cybercrime:malicious-code',
+    'hallucination',
+    'indirect-prompt-injection',
+    'rag-poisoning',
+  ],
+  strategies: ['jailbreak', 'jailbreak:tree'],
+};
+
+export const MITRE_ATLAS_MAPPING: Record<string, FrameworkMapping> = {
+  'mitre:atlas:ai-attack-staging': MITRE_ATLAS_AI_ATTACK_STAGING_MAPPING,
+  // No promptfoo plugin directly validates model access level yet; keep the alias for matrix completeness.
+  'mitre:atlas:ai-model-access': {
+    plugins: [],
+    strategies: [],
+  },
+  'mitre:atlas:collection': {
+    plugins: [
+      'data-exfil',
+      'harmful:privacy',
+      'pii:api-db',
+      'pii:direct',
+      'pii:session',
+      'pii:social',
+      'prompt-extraction',
+      'rag-document-exfiltration',
+    ],
+    strategies: [],
+  },
+  'mitre:atlas:command-and-control': {
+    plugins: [
+      'excessive-agency',
+      'harmful:cybercrime',
+      'harmful:cybercrime:malicious-code',
+      'mcp',
+      'shell-injection',
+      'ssrf',
+    ],
+    strategies: ['crescendo'],
+  },
+  'mitre:atlas:credential-access': {
+    plugins: [
+      'data-exfil',
+      'harmful:privacy',
+      'pii:api-db',
+      'pii:direct',
+      'pii:session',
+      'pii:social',
+      'prompt-extraction',
+      'rag-document-exfiltration',
+      'tool-discovery',
+    ],
+    strategies: [],
+  },
+  'mitre:atlas:defense-evasion': {
+    plugins: [
+      'ascii-smuggling',
+      'hijacking',
+      'imitation',
+      'rag-source-attribution',
+      'special-token-injection',
+    ],
+    strategies: ['base64', 'jailbreak', 'jailbreak-templates', 'leetspeak', 'rot13'],
+  },
+  'mitre:atlas:discovery': {
+    plugins: [
+      'debug-access',
+      'model-identification',
+      'prompt-extraction',
+      'system-prompt-override',
+      'tool-discovery',
+    ],
+    strategies: [],
+  },
+  'mitre:atlas:execution': {
+    plugins: [
+      'excessive-agency',
+      'hijacking',
+      'indirect-prompt-injection',
+      'mcp',
+      'shell-injection',
+      'sql-injection',
+      'ssrf',
+      'system-prompt-override',
+      'tool-discovery',
+    ],
+    strategies: ['jailbreak', 'jailbreak-templates'],
+  },
   'mitre:atlas:exfiltration': {
     plugins: [
       'ascii-smuggling',
+      'cross-session-leak',
+      'data-exfil',
       'harmful:privacy',
       'indirect-prompt-injection',
       'pii:api-db',
@@ -503,29 +597,79 @@ export const MITRE_ATLAS_MAPPING: Record<string, { plugins: Plugin[]; strategies
       'pii:session',
       'pii:social',
       'prompt-extraction',
+      'rag-document-exfiltration',
     ],
     strategies: [],
   },
   'mitre:atlas:impact': {
-    plugins: ['excessive-agency', 'harmful', 'hijacking', 'imitation'],
+    plugins: [
+      'divergent-repetition',
+      'excessive-agency',
+      'harmful',
+      'hijacking',
+      'imitation',
+      'reasoning-dos',
+    ],
     strategies: ['crescendo'],
   },
   'mitre:atlas:initial-access': {
-    plugins: ['debug-access', 'harmful:cybercrime', 'shell-injection', 'sql-injection', 'ssrf'],
+    plugins: [
+      'debug-access',
+      'harmful:cybercrime',
+      'indirect-prompt-injection',
+      'mcp',
+      'shell-injection',
+      'sql-injection',
+      'ssrf',
+    ],
     strategies: ['base64', 'jailbreak', 'leetspeak', 'jailbreak-templates', 'rot13'],
   },
-  'mitre:atlas:ml-attack-staging': {
-    plugins: ['ascii-smuggling', 'excessive-agency', 'hallucination', 'indirect-prompt-injection'],
-    strategies: ['jailbreak', 'jailbreak:tree'],
+  'mitre:atlas:lateral-movement': {
+    plugins: ['bfla', 'bola', 'harmful:cybercrime', 'rbac'],
+    strategies: [],
+  },
+  'mitre:atlas:persistence': {
+    plugins: [
+      'agentic:memory-poisoning',
+      'cross-session-leak',
+      'indirect-prompt-injection',
+      'rag-poisoning',
+      'system-prompt-override',
+    ],
+    strategies: ['jailbreak'],
+  },
+  'mitre:atlas:privilege-escalation': {
+    plugins: [
+      'bfla',
+      'bola',
+      'debug-access',
+      'excessive-agency',
+      'mcp',
+      'rbac',
+      'shell-injection',
+      'system-prompt-override',
+    ],
+    strategies: ['jailbreak', 'jailbreak:tree', 'jailbreak-templates'],
   },
   'mitre:atlas:reconnaissance': {
-    plugins: ['competitors', 'policy', 'prompt-extraction', 'rbac'],
+    plugins: ['competitors', 'model-identification', 'policy', 'prompt-extraction', 'rbac'],
     strategies: [],
   },
   'mitre:atlas:resource-development': {
-    plugins: ['harmful:cybercrime', 'harmful:illegal-drugs', 'harmful:indiscriminate-weapons'],
+    plugins: [
+      'harmful:chemical-biological-weapons',
+      'harmful:cybercrime',
+      'harmful:cybercrime:malicious-code',
+      'harmful:illegal-drugs',
+      'harmful:indiscriminate-weapons',
+    ],
     strategies: [],
   },
+};
+
+export const MITRE_ATLAS_LEGACY_MAPPING: Record<string, FrameworkMapping> = {
+  // Kept for configs created before MITRE renamed this tactic to AI Attack Staging.
+  'mitre:atlas:ml-attack-staging': MITRE_ATLAS_AI_ATTACK_STAGING_MAPPING,
 };
 
 /**
@@ -865,6 +1009,7 @@ export const ALIASED_PLUGINS = [
   'iso:42001',
   'gdpr',
   ...Object.keys(MITRE_ATLAS_MAPPING),
+  ...Object.keys(MITRE_ATLAS_LEGACY_MAPPING),
   ...Object.keys(NIST_AI_RMF_MAPPING),
   ...Object.keys(OWASP_API_TOP_10_MAPPING),
   ...Object.keys(OWASP_LLM_TOP_10_MAPPING),
@@ -880,6 +1025,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   Record<string, { plugins: string[]; strategies: string[] }>
 > = {
   'dod:ai:ethics': DOD_AI_ETHICS_MAPPING,
+  'mitre:atlas:ml-attack-staging': MITRE_ATLAS_LEGACY_MAPPING,
   'mitre:atlas': MITRE_ATLAS_MAPPING,
   'nist:ai:measure': NIST_AI_RMF_MAPPING,
   'owasp:api': OWASP_API_TOP_10_MAPPING,
