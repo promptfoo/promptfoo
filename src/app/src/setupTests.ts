@@ -55,6 +55,14 @@ if (typeof globalThis.localStorage?.clear !== 'function') {
   });
 }
 
+if (typeof globalThis.sessionStorage?.clear !== 'function') {
+  Object.defineProperty(globalThis, 'sessionStorage', {
+    value: new MemoryStorage(),
+    writable: true,
+    configurable: true,
+  });
+}
+
 // Extend expect manually instead of importing '@testing-library/jest-dom/vitest'
 // so matchers bind to the workspace vitest instance (avoids version mismatch).
 expect.extend(matchers);
@@ -219,6 +227,10 @@ afterEach(() => {
   // re-applying the mocked value after descriptors are restored.
   vi.restoreAllMocks();
   restoreBrowserMocks();
+
+  // Reset browser storage after restoring any per-test storage replacements.
+  globalThis.localStorage?.clear();
+  globalThis.sessionStorage?.clear();
 
   // Clear all mocks to prevent call state leakage between tests.
   vi.clearAllMocks();

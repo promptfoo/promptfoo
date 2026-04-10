@@ -118,6 +118,10 @@ export function mockIntersectionObserver(options: IntersectionObserverMockOption
   );
 }
 
+export function mockIndexedDB(indexedDB: IDBFactory) {
+  return mockBrowserProperty(globalThis, 'indexedDB', indexedDB);
+}
+
 export function mockObjectUrl(url = 'blob:test') {
   const createObjectURL = vi.fn(() => url);
   const revokeObjectURL = vi.fn();
