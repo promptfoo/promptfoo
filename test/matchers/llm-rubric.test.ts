@@ -1300,6 +1300,42 @@ Evaluate the response
     expect(result.reason).toBe('Local provider used');
   });
 
+  it('should call remote when a caller prefers remote despite an injected default provider', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      provider: {
+        id: () => 'implicit-default-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Local provider used' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Remote grading passed',
+    });
+    (cliState as any).config = { redteam: {} };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading, undefined, undefined, {
+      preferRemote: true,
+    });
+
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
+      task: 'llm-rubric',
+      rubric,
+      output: llmOutput,
+      vars: {},
+    });
+    expect(grading.provider.callApi).not.toHaveBeenCalled();
+    expect(result.reason).toBe('Remote grading passed');
+  });
+
   it('should call remote when redteam is enabled and rubric prompt is not overridden and no provider is configured', async () => {
     const rubric = 'Test rubric';
     const llmOutput = 'Test output';

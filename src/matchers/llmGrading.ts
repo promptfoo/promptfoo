@@ -33,6 +33,10 @@ import type {
   VarValue,
 } from '../types/index';
 
+type LlmRubricGradingConfig = GradingConfig & {
+  __promptfooPreferRemote?: boolean;
+};
+
 const FACTUALITY_CATEGORY_DESCRIPTIONS: Record<string, string> = {
   A: 'The submitted answer is a subset of the expert answer and is fully consistent with it.',
   B: 'The submitted answer is a superset of the expert answer and is fully consistent with it.',
@@ -141,6 +145,7 @@ export async function matchesLlmRubric(
   assertion?: Assertion,
   options?: {
     throwOnError?: boolean;
+    preferRemote?: boolean;
   },
   providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
@@ -150,10 +155,15 @@ export async function matchesLlmRubric(
     );
   }
 
-  // Use remote grading only if no provider is explicitly configured and remote generation is enabled
+  // Use remote grading when no provider is explicitly configured, or when a
+  // caller injected an implicit default provider but still prefers remote.
+  const shouldPreferRemote =
+    options?.preferRemote ||
+    (grading as LlmRubricGradingConfig).__promptfooPreferRemote ||
+    !grading.provider;
   if (
     !grading.rubricPrompt &&
-    !grading.provider &&
+    shouldPreferRemote &&
     !cliState.config?.redteam?.provider &&
     cliState.config?.redteam &&
     shouldGenerateRemote({ canUseCodexDefaultProvider: true })

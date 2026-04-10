@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers/llmGrading';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
@@ -445,10 +446,26 @@ export abstract class RedteamGraderBase {
       };
     }
 
-    const grade = (await matchesLlmRubric(finalRubric, llmOutput, {
+    const defaultTest =
+      typeof cliState.config?.defaultTest === 'object'
+        ? (cliState.config.defaultTest as TestCase)
+        : undefined;
+    const hasConfiguredGradingProvider = Boolean(
+      test.options?.provider ||
+        cliState.config?.redteam?.provider ||
+        defaultTest?.provider ||
+        defaultTest?.options?.provider,
+    );
+    const grading = {
       ...test.options,
       provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
-    })) as GradingResult;
+    };
+    if (!hasConfiguredGradingProvider) {
+      Object.defineProperty(grading, '__promptfooPreferRemote', {
+        value: true,
+      });
+    }
+    const grade = (await matchesLlmRubric(finalRubric, llmOutput, grading)) as GradingResult;
 
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 
