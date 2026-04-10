@@ -1,6 +1,7 @@
 ---
 title: Coding Agent Plugins
 sidebar_label: Coding Agents
+sidebar_position: 60
 description: Red team autonomous coding agents for repository prompt injection, terminal output injection, secret reads, sandbox escapes, network egress, and verifier sabotage
 ---
 
