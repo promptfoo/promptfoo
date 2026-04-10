@@ -94,33 +94,12 @@ function createMockOutput(hasHumanRating: boolean): EvaluateTableOutput {
   return output;
 }
 
+const initialTableStoreState = useTableStore.getState();
+
 describe('useTableStore', () => {
   beforeEach(() => {
     act(() => {
-      const initialState = useTableStore.getState();
-      useTableStore.setState({
-        ...initialState,
-        table: null,
-        filters: {
-          values: {},
-          appliedCount: 0,
-          options: {
-            metric: [],
-            metadata: [],
-            plugin: [],
-            strategy: [],
-            severity: [],
-          },
-        },
-        shouldHighlightSearchText: false,
-        isStreaming: false,
-        filteredMetrics: null,
-        metadataKeys: [],
-        metadataKeysLoading: false,
-        metadataKeysError: false,
-        currentMetadataKeysRequest: null,
-        userRatedResultsCount: 0,
-      });
+      useTableStore.setState(initialTableStoreState, true);
     });
     vi.clearAllMocks();
   });

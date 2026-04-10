@@ -364,8 +364,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Connect to your REST API or HTTP endpoint')).toBeVisible();
   });
 
-  // Skip: Component uses providerType prop for initial value only, not for controlled updates
-  it.skip('should update the UI when the providerType prop changes after initial render', () => {
+  it('should update the selected provider when the providerType prop changes after initial render', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'http',
@@ -383,6 +382,9 @@ describe('ProviderTypeSelector', () => {
 
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
     expect(screen.getByText('Connect to your REST API or HTTP endpoint')).toBeVisible();
+    expect(screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]')).toHaveClass(
+      'border-primary',
+    );
 
     rerender(
       <TooltipProvider>
@@ -396,6 +398,10 @@ describe('ProviderTypeSelector', () => {
 
     expect(screen.getByText('Python')).toBeVisible();
     expect(screen.getByText('Custom Python script or integration')).toBeVisible();
+    expect(screen.getByText('Python').closest('[role="button"]')).toHaveClass('border-primary');
+    expect(screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]')).not.toHaveClass(
+      'border-primary',
+    );
   });
 
   it('should handle the case where providerType is set to a value that does not exist in allProviderOptions array without crashing, and default to http', () => {

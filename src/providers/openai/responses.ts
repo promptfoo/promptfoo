@@ -132,7 +132,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     super(modelName, options);
-    this.config = options.config || {};
+    this.config = options.config ? { ...options.config } : {};
 
     // Initialize the shared response processor
     this.processor = new ResponsesProcessor({
@@ -298,6 +298,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // Note: reasoning_effort is deprecated and has been moved to reasoning.effort
     if (config.reasoning && this.isReasoningModel()) {
       body.reasoning = config.reasoning;
+    }
+
+    // Sanitize body: strip max_tokens if it leaked via passthrough or YAML anchors.
+    // The responses API uses max_output_tokens, never max_tokens.
+    if ('max_tokens' in body) {
+      delete body.max_tokens;
     }
 
     return {
