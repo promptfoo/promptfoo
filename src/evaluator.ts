@@ -26,6 +26,7 @@ import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { redteamProviderManager } from './redteam/providers/shared';
+import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
 import {
   createProviderRateLimitOptions,
@@ -613,6 +614,9 @@ async function renderRunEvalPrompt({
     provider,
     skipRenderVars,
   );
+  if (isRedteam) {
+    throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
+  }
   const promptConfig = {
     ...(promptForRender.config ?? {}),
     ...(test.options ?? {}),
@@ -1973,7 +1977,11 @@ async function prepareTestCaseForEval(
     `testCase.assert is not an array in test case #${index + 1}`,
   );
 
-  testCase.assert = [...(defaultTest?.assert || []), ...(testCase.assert || [])];
+  const disableDefaultAsserts = testCase.options?.disableDefaultAsserts === true;
+  testCase.assert = [
+    ...(disableDefaultAsserts ? [] : defaultTest?.assert || []),
+    ...(testCase.assert || []),
+  ];
   testCase.threshold = testCase.threshold ?? defaultTest?.threshold;
   testCase.options = {
     ...(defaultTest?.options || {}),

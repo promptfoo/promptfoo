@@ -60,6 +60,11 @@ const reactCompilerConfig = reactCompilerPreset() as {
 const reactCompilerPlugins = reactCompilerConfig.preset().plugins;
 const reactCompilerCodeFilter = reactCompilerConfig.rolldown?.filter?.code;
 const reactCompilerFileFilter = /\.[jt]sx?$/;
+const reactCompilerFileExcludes = [
+  // Keep this table out of React Compiler centrally. Source-level compiler
+  // opt-out directives are flagged by GitHub code scanning as unknown JS directives.
+  /[\\/]src[\\/]app[\\/]src[\\/]pages[\\/]eval[\\/]components[\\/]ResultsTable\.tsx$/,
+];
 
 if (!reactCompilerPlugins?.length) {
   console.warn(
@@ -126,6 +131,7 @@ export function reactCompilerPlugin(): Plugin {
         !cleanId ||
         nodeModulesPathPattern.test(cleanId) ||
         !reactCompilerFileFilter.test(cleanId) ||
+        reactCompilerFileExcludes.some((pattern) => pattern.test(cleanId)) ||
         (reactCompilerCodeFilter && !reactCompilerCodeFilter.test(code))
       ) {
         return null;

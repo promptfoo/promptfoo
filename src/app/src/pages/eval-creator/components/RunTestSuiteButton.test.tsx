@@ -1,9 +1,10 @@
 import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { useStore } from '@app/stores/evalConfig';
 import { mockCallApiRoutes, rejectCallApi, resetCallApiMock } from '@app/tests/apiMocks';
+import { type TestTimers, useTestTimers } from '@app/tests/timers';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RunTestSuiteButton from './RunTestSuiteButton';
 
 const renderWithProvider = (ui: React.ReactElement) => {
@@ -27,16 +28,13 @@ vi.mock('@app/hooks/useToast', () => ({
 }));
 
 describe('RunTestSuiteButton', () => {
+  let timers: TestTimers;
+
   beforeEach(() => {
     useStore.getState().reset();
     resetCallApiMock();
     mockShowToast.mockReset();
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.runOnlyPendingTimers();
-    vi.useRealTimers();
+    timers = useTestTimers();
   });
 
   it('should be disabled when there are no prompts or tests', () => {
@@ -99,7 +97,7 @@ describe('RunTestSuiteButton', () => {
 
     // Advance timers to trigger the polling interval (1000ms in the component)
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
+      await timers.advanceByAsync(1500);
     });
 
     expect(mockShowToast).toHaveBeenCalledWith(
@@ -125,7 +123,7 @@ describe('RunTestSuiteButton', () => {
     const button = screen.getByRole('button', { name: 'Run Eval' });
 
     // Use real timers for the click and wait for async operations
-    vi.useRealTimers();
+    timers.useRealTimers();
     await userEvent.click(button);
 
     // Wait for toast + inline error to update
@@ -135,7 +133,5 @@ describe('RunTestSuiteButton', () => {
     });
 
     expect(screen.getByRole('button', { name: 'Run Eval' })).toBeInTheDocument();
-
-    vi.useFakeTimers();
   });
 });

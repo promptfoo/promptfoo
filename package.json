@@ -115,7 +115,7 @@
       "express": "^4.22.1"
     },
     "@anthropic-ai/claude-agent-sdk": {
-      "@anthropic-ai/sdk": "^0.85.0"
+      "@anthropic-ai/sdk": "^0.86.1"
     },
     "@isaacs/brace-expansion": ">=5.0.1",
     "fast-xml-parser": "$fast-xml-parser",
@@ -128,7 +128,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.96",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.97",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1018.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1018.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -165,7 +165,7 @@
     "depcheck": "^1.4.7",
     "drizzle-kit": "^0.31.10",
     "husky": "^9.1.7",
-    "ibm-cloud-sdk-core": "^5.4.9",
+    "ibm-cloud-sdk-core": "^5.4.11",
     "ink-testing-library": "^4.0.0",
     "knip": "^5.85.0",
     "langfuse": "^3.38.20",
@@ -187,7 +187,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.96",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.97",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1018.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1018.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -214,7 +214,7 @@
     "@swc/core-win32-x64-msvc": "^1.15.18",
     "google-auth-library": "^10.6.2",
     "hono": "^4.12.5",
-    "ibm-cloud-sdk-core": "^5.4.9",
+    "ibm-cloud-sdk-core": "^5.4.11",
     "langfuse": "^3.38.20",
     "natural": "^8.1.1",
     "node-sql-parser": "^5.4.0",

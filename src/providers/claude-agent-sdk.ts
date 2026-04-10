@@ -17,14 +17,17 @@ import type {
   CanUseTool,
   HookCallbackMatcher,
   HookEvent,
+  OnElicitation,
   OutputFormat,
   PermissionResult,
   Options as QueryOptions,
   SandboxSettings,
   SettingSource,
+  Settings,
   SpawnedProcess,
   SpawnOptions,
   ThinkingConfig,
+  ToolConfig,
 } from '@anthropic-ai/claude-agent-sdk';
 
 import type { EnvOverrides } from '../types/env';
@@ -279,6 +282,75 @@ export interface ClaudeCodeOptions {
    * Useful for debugging or when you need to see intermediate outputs.
    */
   include_partial_messages?: boolean;
+
+  /**
+   * When true, includes hook lifecycle events (hook_started, hook_progress, hook_response)
+   * in the output stream. SessionStart and Setup hook events are always emitted regardless.
+   *
+   * @default false
+   */
+  include_hook_events?: boolean;
+
+  /**
+   * Per-tool configuration for built-in tools.
+   *
+   * @example
+   * ```yaml
+   * tool_config:
+   *   askUserQuestion:
+   *     previewFormat: html
+   * ```
+   */
+  tool_config?: ToolConfig;
+
+  /**
+   * Enable AI-predicted next prompts. When true, the agent emits a prompt_suggestion
+   * message after each turn with a predicted next user prompt.
+   * Suggestions piggyback on the parent's prompt cache, making them nearly free.
+   *
+   * @default false
+   */
+  prompt_suggestions?: boolean;
+
+  /**
+   * Enable periodic AI-generated progress summaries for running subagents.
+   * When true, subagent conversations are forked every ~30s to produce a short
+   * present-tense description, emitted on task_progress events.
+   *
+   * @default false
+   */
+  agent_progress_summaries?: boolean;
+
+  /**
+   * Additional settings to apply. Accepts either a path to a settings JSON file
+   * or a Settings object. These are loaded into the "flag settings" layer,
+   * which has the highest priority among user-controlled settings.
+   *
+   * @example Path to settings file
+   * ```yaml
+   * settings: /path/to/settings.json
+   * ```
+   *
+   * @example Inline settings object
+   * ```yaml
+   * settings:
+   *   permissions:
+   *     allow:
+   *       - 'Bash(*)'
+   * ```
+   */
+  settings?: string | Settings;
+
+  /**
+   * Callback for handling MCP elicitation requests.
+   * Called when an MCP server requests user input (form fields, URL auth, etc.)
+   * and no hook handles the request first. If not provided, elicitation requests
+   * that aren't handled by hooks will be declined automatically.
+   *
+   * Note: This option is only available when using the provider programmatically,
+   * not via YAML config.
+   */
+  on_elicitation?: OnElicitation;
 
   /**
    * Enable beta features. Currently supports:
@@ -786,7 +858,13 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     // Lets us avoid unnecessary work and cleanup if there's a cache hit
     const cacheKeyQueryOptions: Omit<
       QueryOptions,
-      'abortController' | 'mcpServers' | 'cwd' | 'stderr' | 'spawnClaudeCodeProcess'
+      | 'abortController'
+      | 'canUseTool'
+      | 'cwd'
+      | 'mcpServers'
+      | 'onElicitation'
+      | 'spawnClaudeCodeProcess'
+      | 'stderr'
     > = {
       maxTurns: config.max_turns,
       model: config.model,
@@ -819,6 +897,11 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       outputFormat: config.output_format,
       hooks: config.hooks,
       includePartialMessages: config.include_partial_messages,
+      includeHookEvents: config.include_hook_events,
+      toolConfig: config.tool_config,
+      promptSuggestions: config.prompt_suggestions,
+      agentProgressSummaries: config.agent_progress_summaries,
+      settings: config.settings,
       betas: config.betas,
       thinking: config.thinking,
       effort: config.effort,
@@ -910,6 +993,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       stderr: config.stderr,
       spawnClaudeCodeProcess: config.spawn_claude_code_process,
       canUseTool,
+      onElicitation: config.on_elicitation,
     };
     const queryParams = { prompt, options };
 

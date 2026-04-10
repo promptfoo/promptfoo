@@ -241,7 +241,6 @@ function ResultsTableHeader({
   hasMinimalScrollRoom: boolean;
   zoom: number;
 }) {
-  'use no memo';
   return (
     <div
       data-testid="results-table-header"
@@ -315,7 +314,6 @@ function ResultsTable({
   onFailureFilterToggle,
   zoom,
 }: ResultsTableProps) {
-  'use no memo';
   const {
     evalId,
     table,

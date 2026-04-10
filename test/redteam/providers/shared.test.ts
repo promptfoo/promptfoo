@@ -449,6 +449,163 @@ describe('shared redteam provider utilities', () => {
   });
 
   describe('getTargetResponse', () => {
+    it('returns an error before calling the target when the prompt exceeds maxCharsPerMessage', async () => {
+      cliState.config = {
+        redteam: {
+          maxCharsPerMessage: 5,
+        },
+      };
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'test response',
+          tokenUsage: { numRequests: 1 },
+        }),
+      };
+
+      const result = await getTargetResponse(mockProvider, 'too long');
+
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        output: '',
+        error: 'Target prompt message at prompt exceeds maxCharsPerMessage=5: 8 characters.',
+        tokenUsage: { numRequests: 0 },
+      });
+    });
+
+    it('only enforces maxCharsPerMessage for user messages in chat arrays', async () => {
+      cliState.config = {
+        redteam: {
+          maxCharsPerMessage: 5,
+        },
+      };
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'ok',
+          tokenUsage: { numRequests: 1 },
+        }),
+      };
+      const prompt = JSON.stringify([
+        { role: 'system', content: 'this system message is long' },
+        { role: 'user', content: 'short' },
+      ]);
+
+      const result = await getTargetResponse(mockProvider, prompt);
+
+      expect(mockProvider.callApi).toHaveBeenCalledWith(prompt, undefined, undefined);
+      expect(result.output).toBe('ok');
+    });
+
+    it('uses maxCharsPerMessage from test metadata when cliState is unset', async () => {
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'test response',
+          tokenUsage: { numRequests: 1 },
+        }),
+      };
+      const context = {
+        prompt: { raw: '', label: '' },
+        vars: {},
+        test: {
+          metadata: {
+            pluginConfig: {
+              maxCharsPerMessage: 5,
+            },
+          },
+        },
+      } as CallApiContextParams;
+
+      const result = await getTargetResponse(mockProvider, 'too long', context);
+
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+      expect(result.error).toBe(
+        'Target prompt message at prompt exceeds maxCharsPerMessage=5: 8 characters.',
+      );
+    });
+
+    it('checks GOAT audio/image hybrid payload transcript text without counting base64 blobs', async () => {
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'ok',
+          tokenUsage: { numRequests: 1 },
+        }),
+      };
+      const context = {
+        prompt: { raw: '', label: '' },
+        vars: {},
+        test: {
+          metadata: {
+            pluginConfig: {
+              maxCharsPerMessage: 5,
+            },
+          },
+        },
+      } as CallApiContextParams;
+      const prompt = JSON.stringify({
+        _promptfoo_audio_hybrid: true,
+        history: [
+          { role: 'user', content: 'tiny' },
+          { role: 'assistant', content: 'this assistant response is long and should be ignored' },
+        ],
+        currentTurn: {
+          role: 'user',
+          transcript: 'short',
+          image: {
+            data: 'a'.repeat(500),
+            format: 'png',
+          },
+        },
+      });
+
+      const result = await getTargetResponse(mockProvider, prompt, context);
+
+      expect(mockProvider.callApi).toHaveBeenCalledWith(prompt, context, undefined);
+      expect(result.output).toBe('ok');
+    });
+
+    it('rejects GOAT audio/image hybrid payloads when currentTurn transcript exceeds maxCharsPerMessage', async () => {
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'ok',
+          tokenUsage: { numRequests: 1 },
+        }),
+      };
+      const context = {
+        prompt: { raw: '', label: '' },
+        vars: {},
+        test: {
+          metadata: {
+            pluginConfig: {
+              maxCharsPerMessage: 5,
+            },
+          },
+        },
+      } as CallApiContextParams;
+      const prompt = JSON.stringify({
+        _promptfoo_audio_hybrid: true,
+        history: [],
+        currentTurn: {
+          role: 'user',
+          transcript: 'too long',
+          audio: {
+            data: 'a'.repeat(500),
+            format: 'mp3',
+          },
+        },
+      });
+
+      const result = await getTargetResponse(mockProvider, prompt, context);
+
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+      expect(result.error).toBe(
+        'Target prompt message at currentTurn.transcript exceeds maxCharsPerMessage=5: 8 characters.',
+      );
+    });
+
     it('returns successful response with string output', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',

@@ -5985,6 +5985,65 @@ describe('runEval', () => {
     expect(results[0].prompt.raw).toContain('{{purpose | trim}}');
   });
 
+  it('should fail before calling the provider when redteam maxCharsPerMessage is exceeded', async () => {
+    const callApi = vi.fn().mockResolvedValue({ output: 'should not be called' });
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: {
+        id: () => 'test-provider',
+        callApi,
+      },
+      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+      test: {
+        vars: {
+          prompt: 'this is too long',
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: {
+          maxCharsPerMessage: 10,
+        },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(callApi).not.toHaveBeenCalled();
+    expect(results[0].error).toContain('maxCharsPerMessage=10');
+  });
+
+  it('should not enforce redteam maxCharsPerMessage for non-redteam evals', async () => {
+    const callApi = vi.fn().mockResolvedValue({ output: 'success' });
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: {
+        id: () => 'test-provider',
+        callApi,
+      },
+      prompt: { raw: 'this prompt is longer than ten chars', label: 'test-label' },
+      test: {},
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: {
+          maxCharsPerMessage: 10,
+        },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(results[0].success).toBe(true);
+    expect(results[0].response?.output).toBe('success');
+  });
+
   it('should use default injectVar "prompt" when not explicitly set in redteam config', async () => {
     // Tests the fallback to default 'prompt' injectVar when redteam config exists but injectVar is undefined
     const results = await runEval({
@@ -6632,6 +6691,46 @@ describe('Evaluator with external defaultTest', () => {
       { type: 'contains' as const, value: 'exp' },
     ]);
     expect(secondResult.testCase.threshold).toBe(0.9); // Override
+  });
+
+  it('should allow a test case to opt out of defaultTest assertions', async () => {
+    const defaultTest = {
+      assert: [{ type: 'equals' as const, value: 'expected' }],
+      vars: { defaultVar: 'defaultValue' },
+      options: { provider: 'default-provider' },
+      metadata: { suite: 'test-suite' },
+      threshold: 0.8,
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [
+        {
+          vars: { testVar: 'testValue' },
+          options: { disableDefaultAsserts: true },
+          assert: [{ type: 'contains' as const, value: 'exp' }],
+        },
+      ],
+      defaultTest,
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    const result = summary.results[0] as any;
+    expect(result.testCase.assert).toEqual([{ type: 'contains' as const, value: 'exp' }]);
+    expect(result.testCase.vars).toEqual({
+      defaultVar: 'defaultValue',
+      testVar: 'testValue',
+    });
+    expect(result.testCase.threshold).toBe(0.8);
+    expect(result.testCase.metadata).toEqual({ suite: 'test-suite' });
+    expect(result.testCase.options).toMatchObject({
+      provider: 'default-provider',
+      disableDefaultAsserts: true,
+    });
   });
 
   it('should handle invariant check for defaultTest.assert array', async () => {

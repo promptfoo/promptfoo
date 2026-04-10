@@ -1,8 +1,9 @@
 import fs from 'fs';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiTranscriptionProvider } from '../../../src/providers/openai/transcription';
+import { mockGlobal } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
@@ -21,17 +22,15 @@ vi.mock('../../../src/logger', () => ({
 }));
 vi.mock('fs');
 
-// Mock native File API
-global.File = class MockFile {
+class MockFile {
   constructor(
     public parts: any[],
     public name: string,
     public options?: FilePropertyBag,
   ) {}
-} as any;
+}
 
-// Mock native FormData
-global.FormData = class MockFormData {
+class MockFormData {
   private data: Map<string, any> = new Map();
 
   append(key: string, value: any) {
@@ -45,7 +44,15 @@ global.FormData = class MockFormData {
   has(key: string) {
     return this.data.has(key);
   }
-} as any;
+}
+
+const restoreFile = mockGlobal('File', MockFile as unknown as typeof File);
+const restoreFormData = mockGlobal('FormData', MockFormData as unknown as typeof FormData);
+
+afterAll(() => {
+  restoreFormData();
+  restoreFile();
+});
 
 describe('OpenAiTranscriptionProvider', () => {
   const mockTranscriptionResponse = {

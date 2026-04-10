@@ -167,6 +167,101 @@ describe('Plugins', () => {
     });
   });
 
+  describe('max chars retries', () => {
+    it('should retry oversized local PII generations', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.spyOn(mockProvider, 'callApi')
+        .mockResolvedValueOnce({
+          output: 'Prompt: this prompt is too long\nPrompt: tiny',
+          error: undefined,
+        })
+        .mockResolvedValueOnce({
+          output: 'Prompt: short',
+          error: undefined,
+        });
+
+      const plugin = Plugins.find((p) => p.key === 'pii:direct');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 2,
+        config: { maxCharsPerMessage: 10 },
+        delayMs: 0,
+      });
+
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(mockProvider.callApi).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('Generate replacement prompts only'),
+      );
+      expect(result?.map((testCase) => testCase.vars?.testVar).sort()).toEqual(['short', 'tiny']);
+    });
+
+    it('should retry oversized remote generations and strip retry modifiers from metadata', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.mocked(fetchWithCache)
+        .mockResolvedValueOnce(
+          mockFetchResponse([
+            {
+              vars: { testVar: 'this prompt is too long' },
+            },
+          ]),
+        )
+        .mockResolvedValueOnce(
+          mockFetchResponse([
+            {
+              vars: { testVar: 'short' },
+            },
+          ]),
+        );
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {
+          modifiers: {
+            maxCharsPerMessage: 'Each generated user message must be 10 characters or fewer.',
+          },
+        },
+        delayMs: 0,
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledTimes(2);
+
+      const retryRequestBody = JSON.parse((vi.mocked(fetchWithCache).mock.calls[1][1] as any).body);
+      expect(retryRequestBody.config.modifiers.__maxCharsPerMessageRetry).toContain(
+        'Generate replacement prompts only',
+      );
+
+      expect(result).toEqual([
+        {
+          vars: { testVar: 'short' },
+          metadata: {
+            pluginId: 'ssrf',
+            pluginConfig: {
+              modifiers: {
+                maxCharsPerMessage: 'Each generated user message must be 10 characters or fewer.',
+              },
+            },
+          },
+        },
+      ]);
+    });
+  });
+
   describe('remote generation', () => {
     beforeEach(() => {
       vi.clearAllMocks();

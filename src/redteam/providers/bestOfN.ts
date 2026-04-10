@@ -9,6 +9,7 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { getSessionId } from '../util';
 
 import type {
@@ -128,6 +129,9 @@ export default class BestOfNProvider implements ApiProvider {
           );
 
           try {
+            // TODO(ian): Pass the strategy/plugin metadata maxCharsPerMessage limit here so
+            // plugin-scoped caps are enforced even when no top-level redteam cap is configured.
+            throwIfTargetPromptExceedsMaxChars(renderedPrompt);
             const response = await targetProvider.callApi(renderedPrompt, context, options);
             const sessionId = getSessionId(response, context);
             if (sessionId) {
@@ -148,6 +152,7 @@ export default class BestOfNProvider implements ApiProvider {
             }
           } catch (err) {
             logger.debug(`[Best-of-N] Candidate failed: ${err}`);
+            lastResponse = { error: String(err) };
             currentStep++;
           }
         },

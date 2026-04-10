@@ -2,9 +2,12 @@ import { callApi } from '@app/utils/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createMockResponse,
+  getCallApiMock,
   mockCallApiResponse,
+  mockCallApiResponseOnce,
   mockCallApiRoutes,
   rejectCallApi,
+  rejectCallApiOnce,
   resetCallApiMock,
 } from './apiMocks';
 
@@ -43,6 +46,47 @@ describe('apiMocks', () => {
     await expect(callApi('/anything').then((response) => response.json())).resolves.toEqual({
       ok: true,
     });
+  });
+
+  it('queues one-time responses while preserving the fail-fast default', async () => {
+    mockCallApiResponseOnce({ step: 1 });
+    mockCallApiResponseOnce({ step: 2 });
+
+    await expect(callApi('/first').then((response) => response.json())).resolves.toEqual({
+      step: 1,
+    });
+    await expect(callApi('/second').then((response) => response.json())).resolves.toEqual({
+      step: 2,
+    });
+    await expect(callApi('/third')).rejects.toThrow(
+      'Unhandled GET callApi request in test: /third',
+    );
+  });
+
+  it('queues one-time responses with a fail-fast default when used before reset', async () => {
+    const mockCallApi = vi.mocked(callApi);
+    mockCallApi.mockReset();
+    void callApi('/before-helper');
+
+    mockCallApiResponseOnce({ step: 1 });
+
+    expect(getCallApiMock()).toHaveBeenCalledTimes(1);
+    await expect(callApi('/first').then((response) => response.json())).resolves.toEqual({
+      step: 1,
+    });
+    await expect(callApi('/second')).rejects.toThrow(
+      'Unhandled GET callApi request in test: /second',
+    );
+    expect(mockCallApi).toHaveBeenCalledTimes(3);
+  });
+
+  it('queues one-time rejections while preserving the fail-fast default', async () => {
+    rejectCallApiOnce(new Error('once'));
+
+    await expect(callApi('/error')).rejects.toThrow('once');
+    await expect(callApi('/error-again')).rejects.toThrow(
+      'Unhandled GET callApi request in test: /error-again',
+    );
   });
 
   it('matches route paths and methods in order', async () => {
