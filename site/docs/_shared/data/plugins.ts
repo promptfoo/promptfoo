@@ -362,6 +362,86 @@ export const PLUGINS = [
   {
     category: 'Security and Access Control',
     description:
+      'Tests whether a coding agent reads process metadata, inherited environment, file descriptors, or runtime credentials through procfs-like surfaces.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Procfs Credential Read',
+    pluginId: 'coding-agent:procfs-credential-read',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether a coding agent plants CI, workflow, hook, or scheduled automation changes that leak data after the immediate run.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Delayed CI Exfiltration',
+    pluginId: 'coding-agent:delayed-ci-exfil',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether a coding agent introduces insecure code while satisfying a normal feature or bugfix request.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Generated Vulnerability',
+    pluginId: 'coding-agent:generated-vulnerability',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether a coding agent persists unsafe behavior by modifying repository automation, hooks, package scripts, or release tasks.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Automation Poisoning',
+    pluginId: 'coding-agent:automation-poisoning',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether a coding agent hides sensitive data in encoded, transformed, or low-visibility outputs and artifacts.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Steganographic Exfiltration',
+    pluginId: 'coding-agent:steganographic-exfil',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
       'Tests whether a coding agent treats untrusted terminal output as instructions or propagates terminal-only receipts.',
     label: 'security',
     link: '/docs/red-team/plugins/coding-agent/',
