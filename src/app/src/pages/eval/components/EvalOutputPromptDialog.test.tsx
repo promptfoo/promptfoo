@@ -354,23 +354,34 @@ describe('EvalOutputPromptDialog', () => {
     const transitionDuration = { enter: 320, exit: 250 };
 
     const root = ReactDOM.createRoot(container);
-    root.render(<EvalOutputPromptDialog {...defaultProps} />);
+    let isUnmounted = false;
 
-    await act(async () => {
-      await timers.advanceByAsync(50);
-    });
+    try {
+      root.render(<EvalOutputPromptDialog {...defaultProps} />);
 
-    act(() => {
-      root.unmount();
-    });
+      await act(async () => {
+        await timers.advanceByAsync(50);
+      });
 
-    await act(async () => {
-      await timers.advanceByAsync(transitionDuration.enter);
-    });
+      act(() => {
+        root.unmount();
+        isUnmounted = true;
+      });
 
-    expect(true).toBe(true);
+      await act(async () => {
+        await timers.advanceByAsync(transitionDuration.enter);
+      });
 
-    document.body.removeChild(container);
+      expect(true).toBe(true);
+    } finally {
+      if (!isUnmounted) {
+        act(() => {
+          root.unmount();
+        });
+      }
+      container.remove();
+      timers.restore({ runPending: true });
+    }
   });
 
   it('passes the promptIndex prop to DebuggingPanel when provided', async () => {

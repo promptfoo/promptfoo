@@ -1,5 +1,5 @@
 import { mockClipboard } from '@app/tests/browserMocks';
-import { useTestTimers } from '@app/tests/timers';
+import { type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import {
   type AssertionType,
@@ -8,7 +8,7 @@ import {
 } from '@promptfoo/types';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCell';
 
@@ -81,6 +81,7 @@ interface MockEvalOutputCellProps extends EvalOutputCellProps {
 
 describe('EvalOutputCell', () => {
   const mockOnRating = vi.fn();
+  let timers: TestTimers | undefined;
 
   const defaultProps: MockEvalOutputCellProps = {
     firstOutput: {
@@ -150,6 +151,11 @@ describe('EvalOutputCell', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetMockStoreState();
+  });
+
+  afterEach(() => {
+    timers?.restore();
+    timers = undefined;
   });
 
   it('handles outputs without text without throwing', () => {
@@ -705,7 +711,7 @@ describe('EvalOutputCell', () => {
   });
 
   it('shows checkmark after copying link', async () => {
-    const timers = useTestTimers();
+    timers = useTestTimers();
     const clipboard = mockClipboardWriteText();
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
@@ -722,14 +728,14 @@ describe('EvalOutputCell', () => {
     expect(shareButton.querySelector('.lucide-check')).toBeInTheDocument();
 
     act(() => {
-      timers.advanceBy(3000);
+      timers?.advanceBy(3000);
     });
 
     expect(shareButton.querySelector('.lucide-link')).toBeInTheDocument();
   });
 
   it('clears the link feedback timer on unmount after copying link', async () => {
-    const timers = useTestTimers();
+    timers = useTestTimers();
     const clipboard = mockClipboardWriteText();
 
     const { unmount } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
@@ -747,7 +753,7 @@ describe('EvalOutputCell', () => {
   });
 
   it('does not schedule link feedback after unmount if clipboard resolves late', async () => {
-    const timers = useTestTimers();
+    timers = useTestTimers();
     let resolveClipboardWrite: () => void = () => {};
     const writeTextPromise = new Promise<void>((resolve) => {
       resolveClipboardWrite = resolve;

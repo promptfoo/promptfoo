@@ -1,8 +1,8 @@
-import { useTestTimers } from '@app/tests/timers';
+import { type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import EvalOutputCell from './EvalOutputCell';
 
@@ -50,6 +50,7 @@ interface MockEvalOutputCellProps extends EvalOutputCellProps {
  */
 describe('EvalOutputCell duplicate image prevention', () => {
   const mockOnRating = vi.fn();
+  let timers: TestTimers | undefined;
 
   const createBaseProps = (overrides?: Partial<EvaluateTableOutput>): MockEvalOutputCellProps => ({
     firstOutput: {
@@ -89,8 +90,13 @@ describe('EvalOutputCell duplicate image prevention', () => {
   });
 
   beforeEach(() => {
-    useTestTimers({ shouldAdvanceTime: true });
+    timers = useTestTimers({ shouldAdvanceTime: true });
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    timers?.restore();
+    timers = undefined;
   });
 
   describe('primaryRenderedAsImage detection', () => {

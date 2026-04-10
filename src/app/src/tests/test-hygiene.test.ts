@@ -107,7 +107,7 @@ const directTimerMockPatterns = [
     message: 'use @app/tests/timers useTestTimers()',
   },
   {
-    pattern: /\bDate\.now\s*=/,
+    pattern: /\bDate\.now\s*=(?!=)/,
     message: 'mock time with vi.setSystemTime() or @app/tests/timers helpers',
   },
 ];
@@ -310,6 +310,15 @@ describe('test hygiene', () => {
       source.trim().startsWith('//') || source.includes('useTestTimers')
         ? []
         : directTimerMockPatterns.filter(({ pattern }) => pattern.test(source));
+
+    expect(matches).toEqual([]);
+  });
+
+  it.each([
+    'Date.now === originalDateNow',
+    'Date.now == originalDateNow',
+  ])('does not flag Date.now comparison source in %s', (source) => {
+    const matches = directTimerMockPatterns.filter(({ pattern }) => pattern.test(source));
 
     expect(matches).toEqual([]);
   });

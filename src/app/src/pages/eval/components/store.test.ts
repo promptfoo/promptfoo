@@ -2582,36 +2582,40 @@ describe('useTableStore', () => {
 
     it('should abort the request after 30 seconds if fetchMetadataKeys API call does not complete', async () => {
       const timers = useTestTimers();
-      const mockEvalId = 'test-eval-id';
+      try {
+        const mockEvalId = 'test-eval-id';
 
-      vi.mocked(callApi).mockImplementation((_url: string, options?: any) => {
-        return new Promise((_resolve, reject) => {
-          options?.signal?.addEventListener('abort', () => {
-            const abortError = new Error('The operation was aborted');
-            abortError.name = 'AbortError';
-            reject(abortError);
+        vi.mocked(callApi).mockImplementation((_url: string, options?: any) => {
+          return new Promise((_resolve, reject) => {
+            options?.signal?.addEventListener('abort', () => {
+              const abortError = new Error('The operation was aborted');
+              abortError.name = 'AbortError';
+              reject(abortError);
+            });
           });
         });
-      });
 
-      act(() => {
-        useTableStore.setState({ currentMetadataKeysRequest: null });
-      });
+        act(() => {
+          useTableStore.setState({ currentMetadataKeysRequest: null });
+        });
 
-      act(() => {
-        useTableStore.getState().fetchMetadataKeys(mockEvalId);
-      });
+        act(() => {
+          useTableStore.getState().fetchMetadataKeys(mockEvalId);
+        });
 
-      expect(useTableStore.getState().metadataKeysLoading).toBe(true);
+        expect(useTableStore.getState().metadataKeysLoading).toBe(true);
 
-      await act(async () => {
-        await timers.runAllAsync();
-      });
+        await act(async () => {
+          await timers.runAllAsync();
+        });
 
-      const state = useTableStore.getState();
-      expect(state.metadataKeysLoading).toBe(false);
-      expect(state.metadataKeysError).toBe(false);
-      expect(state.currentMetadataKeysRequest).toBeNull();
+        const state = useTableStore.getState();
+        expect(state.metadataKeysLoading).toBe(false);
+        expect(state.metadataKeysError).toBe(false);
+        expect(state.currentMetadataKeysRequest).toBeNull();
+      } finally {
+        timers.restore({ runPending: true });
+      }
     });
   });
 });
