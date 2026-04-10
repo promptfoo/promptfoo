@@ -213,6 +213,45 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.queryByText('Avg Tokens:')).not.toBeInTheDocument();
   });
 
+  it('renders sparse prompt outputs as empty cells', () => {
+    const mockTableWithSparseOutput = {
+      body: [
+        {
+          outputs: [null, { pass: true, score: 1, text: 'test output' }],
+          test: {},
+          vars: [],
+        },
+      ],
+      head: {
+        prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
+        vars: [],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockTableWithSparseOutput,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByLabelText('No output for this prompt')).toBeInTheDocument();
+    expect(screen.getAllByTestId('eval-output-cell')).toHaveLength(1);
+  });
+
   it('displays tokens per second when both latency and completion tokens are available', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('Tokens/Sec:')).toBeInTheDocument();
@@ -1978,7 +2017,7 @@ describe('ResultsTable Zoom and Scroll Position', () => {
   };
 
   it('should maintain scroll position and focused element when zoom changes', () => {
-    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    const { container, rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
     const tableContainer = container.querySelector('#results-table-container') as HTMLDivElement;
     const initialScrollTop = 100;
     tableContainer.scrollTop = initialScrollTop;
@@ -1989,7 +2028,7 @@ describe('ResultsTable Zoom and Scroll Position', () => {
     }
 
     act(() => {
-      renderWithProviders(<ResultsTable {...defaultProps} zoom={1.5} />, { container });
+      rerender(<ResultsTable {...defaultProps} zoom={1.5} />);
     });
 
     expect(tableContainer.scrollTop).toBe(initialScrollTop);

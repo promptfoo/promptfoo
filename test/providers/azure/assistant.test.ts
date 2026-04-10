@@ -1130,6 +1130,42 @@ describe('Azure Assistant Provider', () => {
       );
     });
 
+    it('should preserve explicit zero for maxRetries and timeoutMs', async () => {
+      const zeroRetryProvider = new AzureAssistantProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          timeoutMs: 0,
+          retryOptions: { maxRetries: 0 },
+        },
+      });
+      (zeroRetryProvider as any).authHeaders = { 'api-key': 'test-key' };
+      (zeroRetryProvider as any).makeRequest = AzureAssistantProvider.prototype['makeRequest'];
+      vi.spyOn(zeroRetryProvider as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: { success: true },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      await (zeroRetryProvider as any).makeRequest('https://test.url', {
+        method: 'POST',
+      });
+
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      // fetchWithCache(url, options, timeoutMs, 'json', shouldBustCache, retries)
+      const timeoutMs = callArgs[2];
+      const retries = callArgs[5];
+      expect(timeoutMs).toBe(0);
+      expect(retries).toBe(0);
+    });
+
     it('should handle JSON parsing errors', async () => {
       vi.mocked(fetchWithCache).mockRejectedValueOnce(
         new Error('Failed to parse response as JSON: Invalid JSON'),
