@@ -1,5 +1,3 @@
-/// <reference types="@vitest/browser/providers/playwright" />
-
 import { playwright } from '@vitest/browser-playwright';
 import appConfig from './vite.config';
 
