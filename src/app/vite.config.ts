@@ -120,36 +120,6 @@ export default {
       ],
       all: true,
     },
-
-    // Suppress known test warnings that don't indicate real problems
-    onConsoleLog(log: string, type: 'stdout' | 'stderr'): false | undefined {
-      if (type === 'stderr') {
-        const suppressPatterns = [
-          // React act() warnings from library-level async updates
-          /An update to \w+ inside a test was not wrapped in act/,
-          /The current testing environment is not configured to support act/,
-
-          // DOM/React warnings (not fixable — library or jsdom issues)
-          /validateDOMNesting/,
-          /ReactDOM\.render is no longer supported/,
-          /unmountComponentAtNode is deprecated/,
-          /A component is changing an? (?:uncontrolled|controlled) input to be (?:controlled|uncontrolled)/,
-          /Function components cannot be given refs/,
-          /React does not recognize the `.*` prop on a DOM element/,
-          /No worst strategy found for plugin/,
-
-          // Test data issues
-          /Received NaN for the.*children/,
-          /Encountered two children with the same key/,
-        ];
-
-        if (suppressPatterns.some((pattern) => pattern.test(log))) {
-          return false;
-        }
-      }
-
-      return undefined;
-    },
   },
   define: {
     'import.meta.env.VITE_PROMPTFOO_VERSION': JSON.stringify(packageJson.version),

@@ -4,6 +4,19 @@ import { StrategySection } from './StrategySection';
 
 import type { StrategyCardData } from './types';
 
+vi.mock('./StrategyItem', () => ({
+  StrategyItem: vi.fn().mockImplementation(({ strategy, isSelected, onConfigClick }) => (
+    <div>
+      {isSelected && strategy.id === 'multilingual' && (
+        <button aria-label="settings" onClick={() => onConfigClick(strategy.id)}>
+          Settings
+        </button>
+      )}
+      {strategy.name}
+    </div>
+  )),
+}));
+
 describe('StrategySection', () => {
   const mockOnToggle = vi.fn();
   const mockOnConfigClick = vi.fn();
@@ -305,22 +318,6 @@ describe('StrategySection', () => {
   });
 
   describe('Configurable strategies', () => {
-    beforeEach(() => {
-      vi.mock('./StrategyItem', () => ({
-        StrategyItem: vi.fn().mockImplementation(({ strategy, isSelected, onConfigClick }) => (
-          <div>
-            {isSelected && strategy.id === 'multilingual' && (
-              <button aria-label="settings" onClick={() => onConfigClick(strategy.id)}>
-                Settings
-              </button>
-            )}
-            {strategy.name}
-          </div>
-        )),
-        CONFIGURABLE_STRATEGIES: ['multilingual'],
-      }));
-    });
-
     it('renders config button when strategy is selected and configurable', () => {
       const configurableStrategyId = 'multilingual';
       const configurableStrategy: StrategyCardData = {
