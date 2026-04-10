@@ -26,6 +26,10 @@ function toPlainHeaders(headers?: HeadersInit): Record<string, string> {
   ) as Record<string, string>;
 }
 
+interface ElevenLabsPostOptions extends RequestInit {
+  allowRetriesForNonIdempotent?: boolean;
+}
+
 /**
  * HTTP client for ElevenLabs API with automatic retries, rate limiting, and error handling
  */
@@ -45,7 +49,7 @@ export class ElevenLabsClient {
   /**
    * Make a POST request to the ElevenLabs API
    */
-  async post<T>(endpoint: string, body: any, options?: RequestInit): Promise<T> {
+  async post<T>(endpoint: string, body: any, options?: ElevenLabsPostOptions): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
 
     logger.debug('[ElevenLabs Client] POST request', {
@@ -57,10 +61,12 @@ export class ElevenLabsClient {
 
     let lastError: Error | null = null;
 
-    const { headers: optionsHeaders, ...restOptions } = options || {};
+    const { headers: optionsHeaders, allowRetriesForNonIdempotent, ...restOptions } = options || {};
     const headers = toPlainHeaders(optionsHeaders);
+    const hasIdempotencyKey = 'idempotency-key' in headers;
+    const effectiveRetries = allowRetriesForNonIdempotent || hasIdempotencyKey ? this.retries : 0;
 
-    for (let attempt = 0; attempt <= this.retries; attempt++) {
+    for (let attempt = 0; attempt <= effectiveRetries; attempt++) {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
@@ -87,7 +93,7 @@ export class ElevenLabsClient {
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-          await this.handleErrorResponse(response, attempt, this.retries);
+          await this.handleErrorResponse(response, attempt, effectiveRetries);
           continue;
         }
 
@@ -116,10 +122,10 @@ export class ElevenLabsClient {
           throw error;
         }
 
-        if (attempt < this.retries) {
+        if (attempt < effectiveRetries) {
           const backoffMs = Math.pow(2, attempt) * 1000;
           logger.debug(
-            `[ElevenLabs Client] Retry ${attempt + 1}/${this.retries} after ${backoffMs}ms`,
+            `[ElevenLabs Client] Retry ${attempt + 1}/${effectiveRetries} after ${backoffMs}ms`,
           );
           await new Promise((resolve) => setTimeout(resolve, backoffMs));
         }

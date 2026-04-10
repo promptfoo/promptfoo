@@ -25,6 +25,7 @@ import {
   ThumbsUp,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import logger from '../../../../../logger';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
@@ -45,6 +46,10 @@ function scoreToString(score: number | null | undefined) {
     return '';
   }
   return `(${score.toFixed(2)})`;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function stringifyOutputText(text: unknown): string {
@@ -577,6 +582,55 @@ function EvalOutputCell({
   };
 
   const [linked, setLinked] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+  const isMountedRef = React.useRef(true);
+  const linkedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  const copiedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+
+  const clearLinkedResetTimeout = useCallback(() => {
+    if (linkedResetTimeoutRef.current !== null) {
+      globalThis.clearTimeout(linkedResetTimeoutRef.current);
+      linkedResetTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearCopiedResetTimeout = useCallback(() => {
+    if (copiedResetTimeoutRef.current !== null) {
+      globalThis.clearTimeout(copiedResetTimeoutRef.current);
+      copiedResetTimeoutRef.current = null;
+    }
+  }, []);
+
+  React.useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      clearLinkedResetTimeout();
+      clearCopiedResetTimeout();
+    };
+  }, [clearLinkedResetTimeout, clearCopiedResetTimeout]);
+
+  const scheduleLinkedReset = useCallback(() => {
+    clearLinkedResetTimeout();
+    linkedResetTimeoutRef.current = globalThis.setTimeout(() => {
+      linkedResetTimeoutRef.current = null;
+      if (isMountedRef.current) {
+        setLinked(false);
+      }
+    }, 3000);
+  }, [clearLinkedResetTimeout]);
+
+  const scheduleCopiedReset = useCallback(() => {
+    clearCopiedResetTimeout();
+    copiedResetTimeoutRef.current = globalThis.setTimeout(() => {
+      copiedResetTimeoutRef.current = null;
+      if (isMountedRef.current) {
+        setCopied(false);
+      }
+    }, 3000);
+  }, [clearCopiedResetTimeout]);
+
   const handleRowShareLink = () => {
     const url = new URL(window.location.href);
     url.searchParams.set('rowId', String(rowIndex + 1));
@@ -584,24 +638,35 @@ function EvalOutputCell({
     navigator.clipboard
       .writeText(url.toString())
       .then(() => {
+        if (!isMountedRef.current) {
+          return;
+        }
         setLinked(true);
-        setTimeout(() => setLinked(false), 3000);
+        scheduleLinkedReset();
       })
       .catch((error) => {
-        console.error('Failed to copy link to clipboard:', error);
+        if (!isMountedRef.current) {
+          return;
+        }
+        logger.error('Failed to copy link to clipboard', { error: getErrorMessage(error) });
       });
   };
 
-  const [copied, setCopied] = React.useState(false);
   const handleCopy = () => {
     navigator.clipboard
       .writeText(text)
       .then(() => {
+        if (!isMountedRef.current) {
+          return;
+        }
         setCopied(true);
-        setTimeout(() => setCopied(false), 3000);
+        scheduleCopiedReset();
       })
       .catch((error) => {
-        console.error('Failed to copy output to clipboard:', error);
+        if (!isMountedRef.current) {
+          return;
+        }
+        logger.error('Failed to copy output to clipboard', { error: getErrorMessage(error) });
       });
   };
 
