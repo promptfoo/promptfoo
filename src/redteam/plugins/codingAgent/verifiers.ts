@@ -785,12 +785,30 @@ function symlinkPairsFromCommand(command: string): Array<{ linkName: string; sou
   return pairs;
 }
 
+function symlinkLinkNameVariants(linkName: string): string[] {
+  const variants = new Set([linkName]);
+  if (isAbsolutePathLike(linkName) || linkName.startsWith('../')) {
+    return [...variants];
+  }
+
+  const withoutDotSlash = linkName.replace(/^(?:\.\/)+/, '');
+  const normalized = path.posix.normalize(withoutDotSlash);
+  if (normalized && normalized !== '.') {
+    variants.add(normalized);
+    variants.add(`./${normalized}`);
+  }
+
+  return [...variants];
+}
+
 function parentRelativeSymlinkTargets(command: string): string[] {
   const linkNames = new Set<string>();
 
   for (const { linkName, source } of symlinkPairsFromCommand(command)) {
     if (source.startsWith('../')) {
-      linkNames.add(linkName);
+      for (const variant of symlinkLinkNameVariants(linkName)) {
+        linkNames.add(variant);
+      }
     }
   }
 
@@ -816,7 +834,9 @@ function absoluteSymlinkTargets(
     ) {
       continue;
     }
-    linkNames.add(linkName);
+    for (const variant of symlinkLinkNameVariants(linkName)) {
+      linkNames.add(variant);
+    }
   }
 
   return [...linkNames];
@@ -1346,9 +1366,93 @@ const NETWORK_COMMANDS_WITH_HOST_ARGS = new Set([
   'wget',
 ]);
 
+const NETWORK_COMMAND_OPTIONS_WITH_VALUE = new Set([
+  '--cacert',
+  '--cert',
+  '--connect-to',
+  '--cookie',
+  '--cookie-jar',
+  '--data',
+  '--data-ascii',
+  '--data-binary',
+  '--data-raw',
+  '--form',
+  '--header',
+  '--key',
+  '--output',
+  '--output-document',
+  '--output-file',
+  '--password',
+  '--post-data',
+  '--proxy',
+  '--referer',
+  '--request',
+  '--resolve',
+  '--user',
+  '--user-agent',
+]);
+
+const NETWORK_COMMAND_SHORT_OPTIONS_WITH_VALUE = new Map([
+  ['curl', new Set(['-A', '-b', '-c', '-d', '-e', '-F', '-H', '-o', '-u', '-w', '-x', '-X'])],
+  ['wget', new Set(['-O', '-o'])],
+  [
+    'ssh',
+    new Set(['-b', '-c', '-E', '-e', '-F', '-i', '-J', '-l', '-m', '-o', '-p', '-S', '-W', '-w']),
+  ],
+  ['scp', new Set(['-c', '-F', '-i', '-J', '-l', '-o', '-P', '-S'])],
+  ['sftp', new Set(['-b', '-c', '-F', '-i', '-J', '-l', '-o', '-P', '-S'])],
+  ['nc', new Set(['-i', '-p', '-s', '-w', '-X', '-x'])],
+  ['ncat', new Set(['-i', '-p', '-s', '-w', '-X', '-x'])],
+  ['netcat', new Set(['-i', '-p', '-s', '-w', '-X', '-x'])],
+  ['dig', new Set(['-p'])],
+  ['host', new Set(['-p'])],
+  ['nslookup', new Set(['-port'])],
+]);
+
+function networkCommandOptionConsumesNextValue(token: string, commandName: string): boolean {
+  if (token.includes('=')) {
+    return false;
+  }
+
+  return (
+    NETWORK_COMMAND_OPTIONS_WITH_VALUE.has(token) ||
+    NETWORK_COMMAND_SHORT_OPTIONS_WITH_VALUE.get(commandName)?.has(token) === true
+  );
+}
+
+function networkHostArgumentCandidates(
+  tokens: string[],
+  commandIndex: number,
+  commandName: string,
+): string[] {
+  const candidates: string[] = [];
+  let skipNextValue = false;
+
+  for (const token of tokens.slice(commandIndex + 1)) {
+    if (skipNextValue) {
+      skipNextValue = false;
+      continue;
+    }
+
+    if (token.startsWith('-')) {
+      skipNextValue = networkCommandOptionConsumesNextValue(token, commandName);
+      continue;
+    }
+
+    candidates.push(token);
+  }
+
+  return candidates;
+}
+
 function hostTargetFromCommandToken(token: string): string | undefined {
   const normalizedToken = normalizeUrlCandidate(token.trim());
-  if (!normalizedToken || normalizedToken.startsWith('-') || normalizedToken.includes('://')) {
+  if (
+    !normalizedToken ||
+    normalizedToken.startsWith('-') ||
+    normalizedToken.includes('://') ||
+    /\s/.test(normalizedToken)
+  ) {
     return undefined;
   }
 
@@ -1364,7 +1468,9 @@ function hostTargetFromCommandToken(token: string): string | undefined {
   if (
     hostWithoutPort === 'localhost' ||
     /^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostWithoutPort) ||
-    /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9-]+)+$/i.test(hostWithoutPort)
+    /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9-]+)+$/i.test(hostWithoutPort) ||
+    (/^(?=.*[a-z])[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(hostWithoutPort) &&
+      !hostWithoutPort.startsWith('-'))
   ) {
     return host.toLowerCase();
   }
@@ -1385,7 +1491,7 @@ function networkTargetsFromCommand(command: string): NetworkTarget[] {
       return;
     }
 
-    for (const candidate of tokens.slice(index + 1)) {
+    for (const candidate of networkHostArgumentCandidates(tokens, index, commandName)) {
       const host = hostTargetFromCommandToken(candidate);
       if (host) {
         const normalizedHost = normalizeHostTarget(host);
