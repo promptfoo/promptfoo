@@ -55,15 +55,16 @@ async function generatePromptForStrategy(strategyId: MultiTurnPromptParams['stra
 }
 
 function expectTaskRequest(fetchWithRetries: ReturnType<typeof vi.fn>, expectedTask: string) {
-  expect(fetchWithRetries).toHaveBeenCalledWith(
-    REMOTE_GENERATION_URL,
-    expect.objectContaining({
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: expect.stringContaining(`"task":"${expectedTask}"`),
-    }),
-    REQUEST_TIMEOUT_MS,
-  );
+  const [url, request, timeout] = fetchWithRetries.mock.calls[0];
+  const body = JSON.parse(String(request.body));
+
+  expect(url).toBe(REMOTE_GENERATION_URL);
+  expect(request).toMatchObject({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  expect(body.task).toBe(expectedTask);
+  expect(timeout).toBe(REQUEST_TIMEOUT_MS);
 }
 
 describe('redteamTestCaseGenerationService', () => {
