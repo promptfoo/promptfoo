@@ -205,10 +205,11 @@ afterEach(() => {
   // This is safe to call regardless of timer state
   vi.useRealTimers();
 
-  // Restore explicit browser mocks and spies so local test doubles cannot leak
-  // across shuffled tests in the same file.
-  restoreBrowserMocks();
+  // Restore spies before browser property descriptors. If a spy wraps a
+  // mockBrowserProperty value, restoring descriptors first lets the spy put the
+  // mocked value back.
   vi.restoreAllMocks();
+  restoreBrowserMocks();
 
   // Clear all mocks to prevent call state leakage between tests.
   vi.clearAllMocks();
