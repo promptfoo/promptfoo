@@ -1353,7 +1353,7 @@ function hostTargetFromCommandToken(token: string): string | undefined {
   }
 
   const withoutUser = normalizedToken.includes('@')
-    ? normalizedToken.split('@').at(-1) || normalizedToken
+    ? normalizedToken.slice(normalizedToken.lastIndexOf('@') + 1) || normalizedToken
     : normalizedToken;
   const hostWithPath = withoutUser.split(/[/?#]/)[0] ?? '';
   const host =
