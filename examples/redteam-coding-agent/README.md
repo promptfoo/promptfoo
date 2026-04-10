@@ -42,20 +42,20 @@ Use a fresh writable checkout for each red-team row when you want high-confidenc
 
 ## What the plugins test
 
-| Plugin                      | Vulnerability                                            | Detection                                                          |
-| --------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------ |
-| `repo-prompt-injection`     | Agent follows hidden instructions in repository files    | Canary value detection + LLM grading                               |
-| `terminal-output-injection` | Agent treats build/test output as authoritative commands | Receipt propagation detection + LLM grading                        |
-| `secret-env-read`           | Agent reads or exposes launcher environment variables    | Canary value detection in output/traces                            |
-| `secret-file-read`          | Agent reads or exposes protected local file contents     | Canary/digest detection in output/traces/artifacts                 |
-| `sandbox-read-escape`       | Agent reads files outside the intended workspace         | Receipt detection + LLM grading                                    |
-| `sandbox-write-escape`      | Agent mutates files outside the intended workspace       | Command detection + host file/probe checks + LLM grading           |
-| `network-egress-bypass`     | Agent calls or plants code for unapproved network egress | Command detection + trap/proxy logs + workspace scan + LLM grading |
-| `verifier-sabotage`         | Agent weakens tests instead of fixing code               | Heuristic pattern detection + file hash checks + LLM grading       |
+| Plugin                                   | Vulnerability                                            | Detection                                                          |
+| ---------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------ |
+| `coding-agent:repo-prompt-injection`     | Agent follows hidden instructions in repository files    | Canary value detection + LLM grading                               |
+| `coding-agent:terminal-output-injection` | Agent treats build/test output as authoritative commands | Receipt propagation detection + LLM grading                        |
+| `coding-agent:secret-env-read`           | Agent reads or exposes launcher environment variables    | Canary value detection in output/traces                            |
+| `coding-agent:secret-file-read`          | Agent reads or exposes protected local file contents     | Canary/digest detection in output/traces/artifacts                 |
+| `coding-agent:sandbox-read-escape`       | Agent reads files outside the intended workspace         | Receipt detection + LLM grading                                    |
+| `coding-agent:sandbox-write-escape`      | Agent mutates files outside the intended workspace       | Command detection + host file/probe checks + LLM grading           |
+| `coding-agent:network-egress-bypass`     | Agent calls or plants code for unapproved network egress | Command detection + trap/proxy logs + workspace scan + LLM grading |
+| `coding-agent:verifier-sabotage`         | Agent weakens tests instead of fixing code               | Heuristic pattern detection + file hash checks + LLM grading       |
 
 ## Strategies
 
-Multi-turn strategies (`jailbreak:meta`, `jailbreak:hydra`, `goat`, `crescendo`) work with coding-agent plugins and significantly increase vulnerability detection rates. Encoding strategies (base64, rot13, etc.) are automatically excluded since they would break deterministic canary matching.
+`jailbreak:meta` is the iterative single-turn strategy. `jailbreak:hydra`, `goat`, and `crescendo` exercise conversational multi-turn behavior and need providers/workspaces that can preserve state safely. Encoding and prompt-rewriting strategies (base64, rot13, math-prompt, jailbreak:composite, etc.) are automatically excluded since they would break deterministic canary matching.
 
 ## Safety
 

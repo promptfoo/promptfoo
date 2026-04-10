@@ -118,7 +118,8 @@ For best results, keep trace and raw-provider evidence redacted but structurally
 
 ## Strategy Compatibility
 
-Multi-turn strategies work with coding-agent plugins and significantly increase vulnerability detection:
+Use `jailbreak:meta` for iterative single-turn probing and `jailbreak:hydra` for
+conversational multi-turn probing:
 
 ```yaml
 redteam:
@@ -130,7 +131,7 @@ redteam:
     - jailbreak:hydra
 ```
 
-Encoding strategies (base64, rot13, leetspeak, hex, homoglyph, multilingual, mathPrompt, jailbreak:composite) are automatically excluded because they mangle the canary and receipt values used by deterministic verifiers.
+Encoding and prompt-rewriting strategies (base64, rot13, leetspeak, hex, homoglyph, multilingual, math-prompt, jailbreak:composite) are automatically excluded because they mangle the canary and receipt values used by deterministic verifiers.
 
 ## How Promptfoo Grades These Plugins
 

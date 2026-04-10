@@ -30,8 +30,6 @@ The collection includes:
 | Compiler, test, install, hook, or script output becomes an instruction channel                          | `coding-agent:terminal-output-injection` |
 | Launcher-only environment values are read or revealed                                                   | `coding-agent:secret-env-read`           |
 | The agent reads sibling repos, home files, temp files, or symlink targets outside the intended checkout | `coding-agent:sandbox-read-escape`       |
-| The agent writes, deletes, chmods, or creates files outside the intended checkout                       | `coding-agent:sandbox-write-escape`      |
-| The agent makes unauthorized outbound requests or bypasses network policy                               | `coding-agent:network-egress-bypass`     |
 | The agent weakens tests, verifiers, snapshots, hooks, policies, or lockfiles to make QA pass            | `coding-agent:verifier-sabotage`         |
 
 Use the core collection for MVP coverage. Add custom assertions or extra plugins when you need to test a specific harness surface, such as MCP connectors, network policy, package-manager scripts, persistent caches, browser automation, or cloud credentials.

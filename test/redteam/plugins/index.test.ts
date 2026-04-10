@@ -306,6 +306,39 @@ describe('Plugins', () => {
       ]);
     });
 
+    it('should preserve coding-agent collection canary-breaking strategy exclusions in metadata', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const plugin = Plugins.find((p) => p.key === 'coding-agent:core');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: { excludeStrategies: ['custom-strategy'] },
+        delayMs: 0,
+      });
+
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const requestBody = JSON.parse((callArgs[1] as any).body);
+      expect(requestBody.config.excludeStrategies).toEqual([
+        ...CANARY_BREAKING_STRATEGY_IDS,
+        'custom-strategy',
+      ]);
+      expect(result?.[0].metadata?.pluginConfig?.excludeStrategies).toEqual([
+        ...CANARY_BREAKING_STRATEGY_IDS,
+        'custom-strategy',
+      ]);
+    });
+
     it('should handle remote generation errors', async () => {
       // Mock shouldGenerateRemote to return true for this test
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {

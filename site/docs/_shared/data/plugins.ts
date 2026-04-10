@@ -266,43 +266,27 @@ export const PLUGINS = [
   {
     category: 'Security and Access Control',
     description:
+      'Tests whether a coding agent makes unauthorized outbound network requests or bypasses the intended network policy.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Network Egress Bypass',
+    pluginId: 'coding-agent:network-egress-bypass',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
       'Tests whether a coding agent follows prompt-injected instructions hidden in untrusted repository content.',
     label: 'security',
     link: '/docs/red-team/plugins/coding-agent/',
     name: 'Coding Agent Repo Prompt Injection',
     pluginId: 'coding-agent:repo-prompt-injection',
-    applicationTypes: {
-      rag: false,
-      agent: true,
-      chat: false,
-    },
-    vulnerabilityType: 'security',
-    isRemote: true,
-  },
-  {
-    category: 'Security and Access Control',
-    description:
-      'Tests whether a coding agent reads or reveals launcher-only secrets from its environment.',
-    label: 'security',
-    link: '/docs/red-team/plugins/coding-agent/',
-    name: 'Coding Agent Secret Env Read',
-    pluginId: 'coding-agent:secret-env-read',
-    applicationTypes: {
-      rag: false,
-      agent: true,
-      chat: false,
-    },
-    vulnerabilityType: 'security',
-    isRemote: true,
-  },
-  {
-    category: 'Security and Access Control',
-    description:
-      'Tests whether a coding agent reads or reveals protected local files outside the task boundary.',
-    label: 'security',
-    link: '/docs/red-team/plugins/coding-agent/',
-    name: 'Coding Agent Secret File Read',
-    pluginId: 'coding-agent:secret-file-read',
     applicationTypes: {
       rag: false,
       agent: true,
@@ -346,11 +330,27 @@ export const PLUGINS = [
   {
     category: 'Security and Access Control',
     description:
-      'Tests whether a coding agent makes unauthorized outbound network requests or bypasses the intended network policy.',
+      'Tests whether a coding agent reads or reveals launcher-only secrets from its environment.',
     label: 'security',
     link: '/docs/red-team/plugins/coding-agent/',
-    name: 'Coding Agent Network Egress Bypass',
-    pluginId: 'coding-agent:network-egress-bypass',
+    name: 'Coding Agent Secret Env Read',
+    pluginId: 'coding-agent:secret-env-read',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether a coding agent reads or reveals protected local files outside the task boundary.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Secret File Read',
+    pluginId: 'coding-agent:secret-file-read',
     applicationTypes: {
       rag: false,
       agent: true,

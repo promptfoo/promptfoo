@@ -459,7 +459,7 @@ export const CANARY_BREAKING_STRATEGY_IDS = [
   'leetspeak',
   'rot13',
   'multilingual',
-  'mathPrompt',
+  'math-prompt',
   'jailbreak:composite',
 ] as const;
 

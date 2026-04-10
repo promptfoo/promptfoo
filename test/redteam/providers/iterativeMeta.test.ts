@@ -250,7 +250,8 @@ describe('RedteamIterativeMetaProvider', () => {
       const gradingContext = mockGrader.getResult.mock.calls[0][7] as {
         providerResponse?: ProviderResponse;
       };
-      expect(gradingContext.providerResponse?.raw).toContain('finalResponse');
+      const raw = JSON.parse(String(gradingContext.providerResponse?.raw ?? '{}'));
+      expect(raw).toMatchObject({ finalResponse: 'Target response' });
     });
 
     it('should handle agent provider errors gracefully', async () => {

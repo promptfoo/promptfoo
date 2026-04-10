@@ -14,7 +14,6 @@ import {
   REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
-import { CODING_AGENT_PLUGINS } from '../constants/codingAgents';
 import {
   getRemoteGenerationUrl,
   getRemoteHealthUrl,
@@ -120,7 +119,7 @@ function applyDefaultRemotePluginConfig(
 ): PluginConfig | undefined {
   const configWithDefaultExamples = applyDefaultGraderExamples(key, config);
 
-  if (!(CODING_AGENT_PLUGINS as readonly string[]).includes(key)) {
+  if (!key.startsWith('coding-agent:')) {
     return configWithDefaultExamples;
   }
 
