@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mockGlobal, mockProcessEnv } from './utils';
 
 const envKeys = [
@@ -24,6 +24,7 @@ function restoreTestEnv(): void {
 afterEach(() => {
   restoreTestEnv();
   Reflect.deleteProperty(globalThis, testGlobalName);
+  vi.clearAllMocks();
 });
 
 describe('mockProcessEnv', () => {

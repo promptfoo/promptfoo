@@ -23,6 +23,7 @@ describe('constants', () => {
 
   afterEach(() => {
     restoreEnv();
+    vi.clearAllMocks();
   });
 
   it('should export VERSION from package.json', () => {
