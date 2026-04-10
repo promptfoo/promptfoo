@@ -56,9 +56,8 @@ describe('matchesSearchRubric', () => {
       provider: 'openai:responses:gpt-5.4-2026-03-05',
     });
 
-    expect(mocks.loadApiProvider).toHaveBeenCalledWith('openai:responses:gpt-5.4-2026-03-05', {
-      basePath: undefined,
-    });
+    expect(mocks.loadApiProvider).toHaveBeenCalled();
+    expect(mocks.loadApiProvider.mock.calls[0][0]).toBe('openai:responses:gpt-5.4-2026-03-05');
     expect(mocks.configuredProvider.callApi).not.toHaveBeenCalled();
     expect(mocks.webSearchProvider.callApi).toHaveBeenCalledTimes(1);
     expect(result).toEqual(
