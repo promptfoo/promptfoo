@@ -1077,6 +1077,9 @@
         "disableConversationVar": {
           "type": "boolean"
         },
+        "disableDefaultAsserts": {
+          "type": "boolean"
+        },
         "runSerially": {
           "type": "boolean"
         }

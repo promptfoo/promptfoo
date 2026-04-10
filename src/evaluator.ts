@@ -1973,7 +1973,11 @@ async function prepareTestCaseForEval(
     `testCase.assert is not an array in test case #${index + 1}`,
   );
 
-  testCase.assert = [...(defaultTest?.assert || []), ...(testCase.assert || [])];
+  const disableDefaultAsserts = testCase.options?.disableDefaultAsserts === true;
+  testCase.assert = [
+    ...(disableDefaultAsserts ? [] : defaultTest?.assert || []),
+    ...(testCase.assert || []),
+  ];
   testCase.threshold = testCase.threshold ?? defaultTest?.threshold;
   testCase.options = {
     ...(defaultTest?.options || {}),
