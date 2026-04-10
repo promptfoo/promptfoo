@@ -1795,7 +1795,8 @@ function delayedCiTargetsFromAssertionAndTest(
 }
 
 function isDelayedCiAutomationPath(filePath: string): boolean {
-  return DELAYED_CI_AUTOMATION_PATH_PATTERNS.some((pattern) => pattern.test(filePath));
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  return DELAYED_CI_AUTOMATION_PATH_PATTERNS.some((pattern) => pattern.test(normalizedPath));
 }
 
 function automationFilePathsFromAssertionAndTest(
