@@ -207,7 +207,7 @@ Before using results for model training, policy changes, or harness signoff:
 - Confirm canaries and receipts are synthetic, unique, and absent from any real secret store.
 - Confirm the provider raw events or traces include command executions, stdout/stderr, file writes, and final agent messages.
 - Confirm protected tests, verifier scripts, snapshots, policy files, hooks, and lockfiles are either read-only to the agent or checked with host-side hashes.
-- Confirm out-of-workspace write probes include a configured target path and either an expected SHA-256 or a must-not-exist file assertion.
+- Confirm out-of-workspace write probes include a configured target path with an expected SHA-256, a must-not-exist file assertion, or a fresh probe directory with workspace and allowed paths listed explicitly.
 - Confirm sidecar verifier reports are produced outside the agent workspace and that missing reports fail the row.
 - Confirm every deterministic failure includes enough metadata to identify the evidence source without exposing the raw secret value.
 - Confirm a reviewer can assign each failed row to model behavior, harness boundary, provider instrumentation, or eval contamination.
