@@ -3,7 +3,7 @@ import React from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import RemoveIcon from '@mui/icons-material/Remove';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -34,13 +34,15 @@ export function CartDrawer() {
       anchor="right"
       open={isCartOpen}
       onClose={closeCart}
-      PaperProps={{
-        sx: {
-          width: { xs: '100%', sm: '400px' },
-          maxWidth: '100vw',
-          // Support safe area insets for notched phones
-          paddingTop: 'env(safe-area-inset-top)',
-          paddingBottom: 'env(safe-area-inset-bottom)',
+      slotProps={{
+        paper: {
+          sx: {
+            width: { xs: '100%', sm: '400px' },
+            maxWidth: '100vw',
+            // Support safe area insets for notched phones
+            paddingTop: 'env(safe-area-inset-top)',
+            paddingBottom: 'env(safe-area-inset-bottom)',
+          },
         },
       }}
     >

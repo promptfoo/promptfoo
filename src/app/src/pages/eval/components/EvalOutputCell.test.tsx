@@ -155,6 +155,21 @@ describe('EvalOutputCell', () => {
     resetMockStoreState();
   });
 
+  it('handles outputs without text without throwing', () => {
+    const propsWithoutText: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        namedScores: undefined as unknown as Record<string, number>,
+        pass: undefined as unknown as boolean,
+        score: undefined as unknown as number,
+        text: undefined as unknown as string,
+      },
+    };
+
+    expect(() => renderWithProviders(<EvalOutputCell {...propsWithoutText} />)).not.toThrow();
+  });
+
   it('passes metadata correctly to the dialog', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
     fireEvent.click(screen.getByRole('button', { name: /view output and test details/i }));

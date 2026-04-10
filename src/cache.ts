@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'fs';
 import path from 'path';
 
@@ -14,6 +15,9 @@ import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
 
 let cacheInstance: Cache | undefined;
+const namespacedCacheInstances = new Map<string, Cache>();
+
+const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
 
 let enabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
 
@@ -32,6 +36,14 @@ function getCacheTtlMs(): number {
 }
 
 export function getCache() {
+  const namespace = cacheNamespaceStorage.getStore()?.namespace;
+  if (namespace) {
+    return getNamespacedCache(namespace);
+  }
+  return getCacheInstance();
+}
+
+function getCacheInstance() {
   if (!cacheInstance) {
     let cachePath = '';
     const stores = [];
@@ -75,6 +87,114 @@ export function getCache() {
     });
   }
   return cacheInstance;
+}
+
+function getNamespacedCache(namespace: string) {
+  const cachedNamespaceInstance = namespacedCacheInstances.get(namespace);
+  if (cachedNamespaceInstance) {
+    return cachedNamespaceInstance;
+  }
+
+  const cache = getCacheInstance();
+  const namespacedCache = {
+    ...cache,
+    get: (key: string) => cache.get(getScopedCacheKey(key, namespace)),
+    set: (key: string, value: unknown, ttl?: number) =>
+      cache.set(getScopedCacheKey(key, namespace), value, ttl),
+    del: (key: string) => cache.del(getScopedCacheKey(key, namespace)),
+    mget: <T>(keys: string[]) =>
+      cache.mget<T>(keys.map((key) => getScopedCacheKey(key, namespace))),
+    mset: async <T>(list: Array<{ key: string; value: T; ttl?: number }>) => {
+      const scopedList = list.map(({ key, value, ttl }) => ({
+        key: getScopedCacheKey(key, namespace),
+        value,
+        ttl,
+      }));
+      const savedList = await cache.mset<T>(scopedList);
+      return (savedList ?? scopedList).map(({ key, value, ttl }) => ({
+        key: getUnscopedCacheKey(key, namespace),
+        value,
+        ttl,
+      }));
+    },
+    mdel: (keys: string[]) => cache.mdel(keys.map((key) => getScopedCacheKey(key, namespace))),
+    ttl: (key: string) => cache.ttl(getScopedCacheKey(key, namespace)),
+    clear: () => clearNamespacedCache(cache, namespace),
+    wrap: (...args: Parameters<Cache['wrap']>) =>
+      cache.wrap(
+        getScopedCacheKey(args[0] as string, namespace),
+        ...(args.slice(1) as Parameters<Cache['wrap']> extends [string, ...infer Rest]
+          ? Rest
+          : never),
+      ),
+  } as Cache;
+
+  namespacedCacheInstances.set(namespace, namespacedCache);
+  return namespacedCache;
+}
+
+function getCurrentCacheNamespace() {
+  return cacheNamespaceStorage.getStore()?.namespace;
+}
+
+function getScopedCacheKey(cacheKey: string, namespace = getCurrentCacheNamespace()) {
+  return namespace ? `${namespace}:${cacheKey}` : cacheKey;
+}
+
+function getUnscopedCacheKey(cacheKey: string, namespace: string) {
+  const namespacePrefix = `${namespace}:`;
+  return cacheKey.startsWith(namespacePrefix) ? cacheKey.slice(namespacePrefix.length) : cacheKey;
+}
+
+async function clearNamespacedCache(cache: Cache, namespace: string) {
+  const namespacePrefix = `${namespace}:`;
+
+  for (const store of cache.stores) {
+    if (!store.iterator) {
+      throw new Error(
+        `[Cache] Cannot clear namespace ${namespace} because a cache store does not support key iteration.`,
+      );
+    }
+
+    const keysToDelete: string[] = [];
+    for await (const [key] of store.iterator(undefined)) {
+      if (typeof key === 'string' && key.startsWith(namespacePrefix)) {
+        keysToDelete.push(key);
+      }
+    }
+
+    if (keysToDelete.length === 0) {
+      continue;
+    }
+
+    try {
+      if (store.deleteMany) {
+        await store.deleteMany(keysToDelete);
+      } else {
+        await Promise.all(keysToDelete.map((key) => store.delete(key)));
+      }
+    } catch (err) {
+      throw new Error(
+        `[Cache] Failed to clear ${keysToDelete.length} keys for namespace "${namespace}": ${(err as Error).message}`,
+      );
+    }
+  }
+
+  return true;
+}
+
+export function withCacheNamespace<T>(namespace: string | undefined, fn: () => Promise<T>) {
+  if (!namespace) {
+    return fn();
+  }
+
+  const parentNamespace = getCurrentCacheNamespace();
+  if (parentNamespace === namespace) {
+    return fn();
+  }
+
+  const scopedNamespace = parentNamespace ? `${parentNamespace}:${namespace}` : namespace;
+  return cacheNamespaceStorage.run({ namespace: scopedNamespace }, fn);
 }
 
 export type FetchWithCacheResult<T> = {
@@ -274,8 +394,8 @@ export async function fetchWithCache<T = unknown>(
 
   const copy = Object.assign({}, options);
   delete copy.headers;
-  const cacheKey = `fetch:v2:${url}:${JSON.stringify(copy)}`;
-  const cache = await getCache();
+  const cacheKey = getScopedCacheKey(`fetch:v2:${url}:${JSON.stringify(copy)}`);
+  const cache = getCacheInstance();
 
   const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
   if (cachedResponse != null) {
@@ -318,7 +438,8 @@ export function disableCache() {
 
 export async function clearCache() {
   inflightFetchResponses.clear();
-  return getCache().clear();
+  namespacedCacheInstances.clear();
+  return getCacheInstance().clear();
 }
 
 export function isCacheEnabled() {

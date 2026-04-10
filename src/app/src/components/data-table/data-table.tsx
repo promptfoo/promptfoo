@@ -343,7 +343,7 @@ export function DataTable<TData, TValue = unknown>({
           aria-label="Select row"
         />
       ),
-      size: 20,
+      size: 40,
       enableSorting: false,
       enableHiding: false,
       enableResizing: false,

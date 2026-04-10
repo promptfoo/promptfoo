@@ -143,7 +143,7 @@ export class AI21ChatCompletionProvider implements ApiProvider {
       model: this.modelName,
       messages,
       temperature: config?.temperature ?? 0.1,
-      top_p: config?.top_p || 1,
+      top_p: config?.top_p ?? 1,
       max_tokens: config?.max_tokens ?? 1024,
       n: 1,
       stop: [],

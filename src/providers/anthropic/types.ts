@@ -7,7 +7,7 @@ type AnthropicServerToolCaller = 'direct' | 'code_execution_20250825' | 'code_ex
 
 interface BaseAnthropicServerToolConfig {
   allowed_callers?: AnthropicServerToolCaller[];
-  cache_control?: Anthropic.Beta.Messages.BetaCacheControlEphemeral;
+  cache_control?: Anthropic.Messages.CacheControlEphemeral;
   defer_loading?: boolean;
   max_uses?: number;
   strict?: boolean;

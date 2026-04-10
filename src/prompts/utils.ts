@@ -23,7 +23,9 @@ export function maybeFilePath(str: string): boolean {
     VALID_FILE_EXTENSIONS.some((ext) => {
       const tokens = str.split(':'); // str may be file.js:functionName
       // Checks if the second to last token or the last token ends with the extension
-      return tokens.pop()?.endsWith(ext) || tokens.pop()?.endsWith(ext);
+      const pathOrFunctionToken = tokens[tokens.length - 1];
+      const pathToken = tokens[tokens.length - 2];
+      return pathOrFunctionToken?.endsWith(ext) || pathToken?.endsWith(ext);
     }) ||
     str.charAt(str.length - 3) === '.' ||
     str.charAt(str.length - 4) === '.' ||
