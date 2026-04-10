@@ -707,6 +707,9 @@ class CodexAppServerConnection {
     this.lineInterface = readline.createInterface({ input: this.process.stdout });
     this.lineInterface.on('line', (line) => this.handleLine(line));
     this.process.stderr.on('data', (chunk: Buffer) => this.recordStderr(chunk));
+    this.process.stdin.on('error', (error) => {
+      logger.debug('[CodexAppServer] stdin error', { error: error.message });
+    });
     this.process.on('error', (error) => this.handleProcessFailure(error));
     this.process.on('exit', (code, signal) => {
       if (this.closed) {
@@ -826,8 +829,12 @@ class CodexAppServerConnection {
 
       const finish = () => resolve();
       const killTimer = setTimeout(() => {
-        if (!this.process.killed) {
-          this.process.kill('SIGKILL');
+        try {
+          if (!this.process.killed) {
+            this.process.kill('SIGKILL');
+          }
+        } catch {
+          // Process may have already exited (ESRCH)
         }
         finish();
       }, 1_000);
@@ -843,8 +850,14 @@ class CodexAppServerConnection {
         return;
       }
 
-      this.process.stdin.end();
-      this.process.kill('SIGTERM');
+      try {
+        this.process.stdin.end();
+        this.process.kill('SIGTERM');
+      } catch {
+        // Process may have already exited (ESRCH)
+        clearTimeout(killTimer);
+        finish();
+      }
     });
 
     return this.closePromise;
@@ -949,13 +962,21 @@ class CodexAppServerConnection {
       this.send({ id: message.id, result });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.send({
-        id: message.id,
-        error: {
-          code: -32_000,
-          message: errorMessage,
-        },
-      });
+      try {
+        this.send({
+          id: message.id,
+          error: {
+            code: -32_000,
+            message: errorMessage,
+          },
+        });
+      } catch (sendError) {
+        logger.debug('[CodexAppServer] Failed to send error response for server request', {
+          error: sendError,
+          originalError: errorMessage,
+          method: message.method,
+        });
+      }
     }
   }
 
@@ -1523,6 +1544,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     connectionInstanceId: string,
     error: Error,
   ): void {
+    logger.warn('[CodexAppServer] Connection closed', { connectionKey, error: error.message });
     const cachedConnection = this.connections.get(connectionKey);
     if (cachedConnection?.instanceId === connectionInstanceId) {
       this.connections.delete(connectionKey);
@@ -1991,6 +2013,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     try {
       parsedPrompt = JSON.parse(prompt);
     } catch {
+      // Non-JSON prompts are treated as plain text
       return [{ type: 'text', text: prompt, text_elements: [] }];
     }
 
@@ -2194,6 +2217,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         break;
       case 'error':
         if (params.willRetry === true) {
+          logger.debug('[CodexAppServer] Retryable error received', {
+            error: params.error?.message,
+            threadId: params.threadId,
+            turnId: params.turnId,
+          });
           break;
         }
         state.error = params.error?.message ?? 'Codex app-server error';
@@ -2502,7 +2530,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         );
       }
     } catch (error) {
-      logger.debug('[CodexAppServer] Error cleaning up thread', {
+      logger.warn('[CodexAppServer] Error cleaning up thread after turn', {
         threadId: threadHandle.threadId,
         error,
       });
@@ -3104,7 +3132,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     }
     try {
       return JSON.stringify(sanitized);
-    } catch {
+    } catch (error) {
+      logger.debug('[CodexAppServer] Failed to stringify sanitized trace text', { error });
       return undefined;
     }
   }

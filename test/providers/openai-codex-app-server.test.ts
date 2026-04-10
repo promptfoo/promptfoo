@@ -3743,4 +3743,398 @@ describe('OpenAICodexAppServerProvider', () => {
     });
     expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
   });
+
+  it('surfaces non-retryable error notifications as provider errors', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_cleanup: 'none' },
+    });
+
+    const resultPromise = provider.callApi('Hello');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_err' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({ id: turnStart.id, result: { turn: { id: 'turn_err', status: 'inProgress' } } });
+
+    server.send({
+      method: 'error',
+      params: {
+        threadId: 'thr_err',
+        turnId: 'turn_err',
+        willRetry: false,
+        error: { message: 'rate limit exceeded' },
+      },
+    });
+
+    const result = await resultPromise;
+    expect(result.error).toContain('rate limit exceeded');
+  });
+
+  it('propagates JSON-RPC error responses as provider errors', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_cleanup: 'none' },
+    });
+
+    const resultPromise = provider.callApi('Hello');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({
+      id: threadStart.id,
+      error: { code: -32600, message: 'invalid thread params' },
+    });
+
+    const result = await resultPromise;
+    expect(result.error).toContain('invalid thread params');
+  });
+
+  it('returns early when abort signal is already aborted before callApi starts', async () => {
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_cleanup: 'none' },
+    });
+
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await provider.callApi('Hello', undefined, {
+      abortSignal: controller.signal,
+    });
+
+    expect(result.error).toBe('OpenAI Codex app-server call aborted before it started');
+    expect(mocks.spawn).not.toHaveBeenCalled();
+  });
+
+  it('sends thread/archive when thread_cleanup is set to archive', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_cleanup: 'archive' },
+    });
+
+    const resultPromise = provider.callApi('Hello');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_archive' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_archive', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_archive',
+        turnId: 'turn_archive',
+        item: { id: 'item_1', type: 'agentMessage', text: 'Done' },
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: { threadId: 'thr_archive', turnId: 'turn_archive', turn: { id: 'turn_archive' } },
+    });
+
+    const archiveRequest = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/archive',
+    );
+    expect(archiveRequest.params).toMatchObject({ threadId: 'thr_archive' });
+    server.send({ id: archiveRequest.id, result: {} });
+
+    const result = await resultPromise;
+    expect(result.output).toBe('Done');
+  });
+
+  it('sends correct sandboxPolicy for workspace-write mode', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        sandbox_mode: 'workspace-write',
+        network_access_enabled: true,
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Hello');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_ws' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+
+    expect(turnStart.params.sandboxPolicy).toMatchObject({
+      type: 'workspaceWrite',
+      networkAccess: true,
+      excludeTmpdirEnvVar: false,
+      excludeSlashTmp: false,
+    });
+    expect(turnStart.params.sandboxPolicy.writableRoots).toBeDefined();
+    expect(turnStart.params.sandboxPolicy.readOnlyAccess).toEqual({ type: 'fullAccess' });
+
+    server.send({ id: turnStart.id, result: { turn: { id: 'turn_ws', status: 'inProgress' } } });
+    server.send({
+      method: 'turn/completed',
+      params: { threadId: 'thr_ws', turnId: 'turn_ws', turn: { id: 'turn_ws' } },
+    });
+    await resultPromise;
+  });
+
+  it('sends correct sandboxPolicy for danger-full-access mode', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        sandbox_mode: 'danger-full-access',
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Hello');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_full' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+
+    expect(turnStart.params.sandboxPolicy).toEqual({ type: 'dangerFullAccess' });
+
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_full', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: { threadId: 'thr_full', turnId: 'turn_full', turn: { id: 'turn_full' } },
+    });
+    await resultPromise;
+  });
+
+  it('responds with empty answers for user_input policy set to empty', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+        server_request_policy: {
+          user_input: 'empty',
+        },
+      },
+    });
+
+    const resultPromise = provider.callApi('Hello');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_ui' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_ui', status: 'inProgress' } },
+    });
+
+    server.send({
+      id: 100,
+      method: 'item/tool/requestUserInput',
+      params: {
+        threadId: 'thr_ui',
+        turnId: 'turn_ui',
+        questions: [{ id: 'q1', label: 'Pick one', options: [{ label: 'A' }, { label: 'B' }] }],
+      },
+    });
+
+    const userInputResponse = await waitForMessage(server, (message) => message.id === 100);
+    expect(userInputResponse.result.answers.q1).toEqual({ answers: [] });
+
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_ui',
+        turnId: 'turn_ui',
+        item: { id: 'item_1', type: 'agentMessage', text: 'Ok' },
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: { threadId: 'thr_ui', turnId: 'turn_ui', turn: { id: 'turn_ui' } },
+    });
+    const result = await resultPromise;
+    expect(result.output).toBe('Ok');
+  });
+
+  it('returns JSON-RPC error for unsupported server request methods', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_cleanup: 'none' },
+    });
+
+    const resultPromise = provider.callApi('Hello');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_unsupported' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_unsupported', status: 'inProgress' } },
+    });
+
+    server.send({
+      id: 200,
+      method: 'some/unknownMethod',
+      params: { threadId: 'thr_unsupported', turnId: 'turn_unsupported' },
+    });
+
+    const errorResponse = await waitForMessage(
+      server,
+      (message) => message.id === 200 && message.error !== undefined,
+    );
+    expect(errorResponse.error.message).toContain('Unsupported codex app-server request');
+
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_unsupported',
+        turnId: 'turn_unsupported',
+        item: { id: 'item_1', type: 'agentMessage', text: 'Done' },
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_unsupported',
+        turnId: 'turn_unsupported',
+        turn: { id: 'turn_unsupported' },
+      },
+    });
+    const result = await resultPromise;
+    expect(result.output).toBe('Done');
+  });
+
+  it('responds with map-based user input answers', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+        server_request_policy: {
+          user_input: {
+            q1: 'Option A',
+            q2: ['X', 'Y'],
+          },
+        },
+      },
+    });
+
+    const resultPromise = provider.callApi('Hello');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_map' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_map', status: 'inProgress' } },
+    });
+
+    server.send({
+      id: 300,
+      method: 'item/tool/requestUserInput',
+      params: {
+        threadId: 'thr_map',
+        turnId: 'turn_map',
+        questions: [
+          { id: 'q1', label: 'Single answer' },
+          { id: 'q2', label: 'Multi answer' },
+          { id: 'q3', label: 'Unconfigured' },
+        ],
+      },
+    });
+
+    const userInputResponse = await waitForMessage(server, (message) => message.id === 300);
+    expect(userInputResponse.result.answers.q1).toEqual({ answers: ['Option A'] });
+    expect(userInputResponse.result.answers.q2).toEqual({ answers: ['X', 'Y'] });
+    expect(userInputResponse.result.answers.q3).toEqual({ answers: [] });
+
+    server.send({
+      method: 'turn/completed',
+      params: { threadId: 'thr_map', turnId: 'turn_map', turn: { id: 'turn_map' } },
+    });
+    await resultPromise;
+  });
+
+  it('propagates base_url to spawn environment', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        apiKey: 'test-key',
+        base_url: 'https://custom.example.com/v1',
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Hello');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+
+    const spawnEnv = mocks.spawn.mock.calls[0][2].env;
+    expect(spawnEnv.OPENAI_BASE_URL).toBe('https://custom.example.com/v1');
+    expect(spawnEnv.OPENAI_API_BASE_URL).toBe('https://custom.example.com/v1');
+
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_base' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_base', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: { threadId: 'thr_base', turnId: 'turn_base', turn: { id: 'turn_base' } },
+    });
+    await resultPromise;
+  });
 });
