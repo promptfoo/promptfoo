@@ -365,6 +365,61 @@ describe('AssertionsResult', () => {
         safety: 0,
       });
     });
+
+    it('should preserve nested namedScoreWeights when merging child named scores', async () => {
+      const assertionsResult = new AssertionsResult({});
+
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: false,
+          score: 0.75,
+          reason: 'Nested assertion set partially failed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          namedScores: {
+            accuracy: 0.75,
+          },
+          namedScoreWeights: {
+            accuracy: 4,
+          },
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.namedScores!['accuracy']).toBeCloseTo(0.75);
+      expect(result.namedScoreWeights).toEqual({
+        accuracy: 4,
+      });
+    });
+
+    it('should scale nested namedScoreWeights by parent assertion weight', async () => {
+      const assertionsResult = new AssertionsResult({});
+
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 0.75,
+          reason: 'Nested assertion set passed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          namedScores: {
+            accuracy: 0.75,
+          },
+          namedScoreWeights: {
+            accuracy: 4,
+          },
+        },
+        weight: 2,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.namedScores!['accuracy']).toBeCloseTo(0.75);
+      expect(result.namedScoreWeights).toEqual({
+        accuracy: 8,
+      });
+    });
   });
 
   describe('parentAssertionSet', () => {
