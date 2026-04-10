@@ -17,6 +17,7 @@ const orderRedTeam = (redteam: Partial<RedteamFileConfig>): Record<string, unkno
     'strategies',
     'language',
     'numTests',
+    'maxCharsPerMessage',
     'maxConcurrency',
   ] as const;
 

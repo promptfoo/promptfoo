@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Config } from '../types';
 import {
   DelayBetweenAPICallsInput,
+  MaxCharsPerMessageInput,
   MaxNumberOfConcurrentRequestsInput,
   NumberOfTestCasesInput,
   RUNOPTIONS_TEXT,
@@ -31,6 +32,10 @@ describe('RUNOPTIONS_TEXT', () => {
     expect(RUNOPTIONS_TEXT.maxConcurrentRequests).toBeDefined();
     expect(RUNOPTIONS_TEXT.maxConcurrentRequests.helper).toBeDefined();
     expect(RUNOPTIONS_TEXT.maxConcurrentRequests.error).toBeDefined();
+
+    expect(RUNOPTIONS_TEXT.maxCharsPerMessage).toBeDefined();
+    expect(RUNOPTIONS_TEXT.maxCharsPerMessage.helper).toBeDefined();
+    expect(RUNOPTIONS_TEXT.maxCharsPerMessage.error).toBeDefined();
   });
 });
 
@@ -40,6 +45,7 @@ describe('RunOptionsContent', () => {
 
   const defaultProps = {
     numTests: 10,
+    maxCharsPerMessage: 250,
     runOptions: {
       delay: 0,
       maxConcurrency: 1,
@@ -70,6 +76,10 @@ describe('RunOptionsContent', () => {
       expect(maxConcurrencyInput).toBeInTheDocument();
       expect(maxConcurrencyInput).toHaveValue(defaultProps.runOptions.maxConcurrency);
       expect(maxConcurrencyInput).not.toBeDisabled();
+
+      const maxCharsPerMessageInput = screen.getByLabelText('Max chars per message');
+      expect(maxCharsPerMessageInput).toBeInTheDocument();
+      expect(maxCharsPerMessageInput).toHaveValue(defaultProps.maxCharsPerMessage);
 
       const debugSwitch = screen.getByRole('switch', { name: /Debug mode/i });
       expect(debugSwitch).toBeInTheDocument();
@@ -124,6 +134,7 @@ describe('RunOptionsContent', () => {
         const props = {
           ...defaultProps,
           numTests: largeValue,
+          maxCharsPerMessage: largeValue,
           runOptions: {
             delay: largeValue,
             maxConcurrency: largeValue,
@@ -146,6 +157,12 @@ describe('RunOptionsContent', () => {
         ) as HTMLInputElement;
         expect(maxConcurrencyInput).toBeInTheDocument();
         expect(Number(maxConcurrencyInput.value)).toBe(largeValue);
+
+        const maxCharsPerMessageInput = screen.getByLabelText(
+          'Max chars per message',
+        ) as HTMLInputElement;
+        expect(maxCharsPerMessageInput).toBeInTheDocument();
+        expect(Number(maxCharsPerMessageInput.value)).toBe(largeValue);
       });
     });
   });
@@ -168,6 +185,28 @@ describe('RunOptionsContent', () => {
       fireEvent.blur(numTestsInput);
       expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
       expect(mockUpdateConfig).toHaveBeenCalledWith('numTests', REDTEAM_DEFAULTS.NUM_TESTS);
+    });
+
+    it('should call updateConfig with maxCharsPerMessage when that field is set to a valid value', () => {
+      renderWithTooltipProvider(
+        <RunOptionsContent {...defaultProps} maxCharsPerMessage={undefined} />,
+      );
+      const maxCharsPerMessageInput = screen.getByLabelText('Max chars per message');
+
+      fireEvent.change(maxCharsPerMessageInput, { target: { value: '120' } });
+      fireEvent.blur(maxCharsPerMessageInput);
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('maxCharsPerMessage', 120);
+    });
+
+    it('should clear maxCharsPerMessage when the field is emptied', () => {
+      renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
+      const maxCharsPerMessageInput = screen.getByLabelText('Max chars per message');
+
+      fireEvent.change(maxCharsPerMessageInput, { target: { value: '' } });
+      fireEvent.blur(maxCharsPerMessageInput);
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('maxCharsPerMessage', undefined);
     });
   });
 
@@ -591,5 +630,76 @@ describe('NumberOfTestCasesInput', () => {
 
     // @ts-ignore - Restoring the original object
     RUNOPTIONS_TEXT.missingProperty = originalRunOptionsText.missingProperty;
+  });
+});
+
+describe('MaxCharsPerMessageInput', () => {
+  const setValue = vi.fn();
+  const updateConfig = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should persist a valid positive integer on blur', () => {
+    renderWithTooltipProvider(
+      <MaxCharsPerMessageInput value="42" setValue={setValue} updateConfig={updateConfig} />,
+    );
+
+    const input = screen.getByLabelText('Max chars per message');
+    fireEvent.blur(input);
+
+    expect(updateConfig).toHaveBeenCalledWith('maxCharsPerMessage', 42);
+    expect(setValue).toHaveBeenCalledWith('42');
+  });
+
+  it('should clear the config value when the field is blank', () => {
+    renderWithTooltipProvider(
+      <MaxCharsPerMessageInput value="" setValue={setValue} updateConfig={updateConfig} />,
+    );
+
+    const input = screen.getByLabelText('Max chars per message');
+    fireEvent.blur(input);
+
+    expect(updateConfig).toHaveBeenCalledWith('maxCharsPerMessage', undefined);
+    expect(setValue).toHaveBeenCalledWith('');
+  });
+
+  it('should clear invalid values on blur', () => {
+    renderWithTooltipProvider(
+      <MaxCharsPerMessageInput value="0" setValue={setValue} updateConfig={updateConfig} />,
+    );
+
+    const input = screen.getByLabelText('Max chars per message');
+    fireEvent.blur(input);
+
+    expect(updateConfig).toHaveBeenCalledWith('maxCharsPerMessage', undefined);
+    expect(setValue).toHaveBeenCalledWith('');
+  });
+
+  it('should show validation helper text when the value is below 1', () => {
+    renderWithTooltipProvider(
+      <MaxCharsPerMessageInput value="0" setValue={setValue} updateConfig={updateConfig} />,
+    );
+
+    const input = screen.getByLabelText('Max chars per message');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText(RUNOPTIONS_TEXT.maxCharsPerMessage.error)).toBeInTheDocument();
+  });
+
+  it('should not persist changes when readOnly is true', () => {
+    renderWithTooltipProvider(
+      <MaxCharsPerMessageInput
+        value="100"
+        setValue={setValue}
+        updateConfig={updateConfig}
+        readOnly
+      />,
+    );
+
+    const input = screen.getByLabelText('Max chars per message');
+    fireEvent.blur(input);
+
+    expect(updateConfig).not.toHaveBeenCalled();
   });
 });
