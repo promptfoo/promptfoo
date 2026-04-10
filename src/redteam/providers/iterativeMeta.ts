@@ -23,6 +23,7 @@ import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags } from '../util';
 import {
+  buildGraderResultAssertion,
   createIterationContext,
   externalizeResponseForRedteamHistory,
   getTargetResponse,
@@ -520,18 +521,14 @@ export async function runMetaAgentRedteam({
           targetResponse.output,
           iterationTest,
           gradingProvider,
-          assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+          'value' in assertToUse ? assertToUse.value : undefined,
           additionalRubric,
           undefined, // skipRefusalCheck
           gradingContext,
         );
         graderResult = {
           ...grade,
-          assertion: grade.assertion
-            ? { ...grade.assertion, value: rubric }
-            : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
-              ? { ...assertToUse, value: rubric }
-              : undefined,
+          assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
         };
         storedGraderResult = graderResult;
 
