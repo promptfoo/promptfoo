@@ -1,8 +1,27 @@
 import { vi } from 'vitest';
 
 type RestoreBrowserMock = () => void;
+type MockWindowLocationValue =
+  | string
+  | URL
+  | Partial<
+      Pick<
+        Location,
+        'hash' | 'host' | 'hostname' | 'href' | 'pathname' | 'port' | 'protocol' | 'search'
+      >
+    >;
 
 const restoreCallbacks: RestoreBrowserMock[] = [];
+const mockWindowLocationUrlKeys = new Set([
+  'hash',
+  'host',
+  'hostname',
+  'href',
+  'pathname',
+  'port',
+  'protocol',
+  'search',
+]);
 
 export function restoreBrowserMocks() {
   while (restoreCallbacks.length > 0) {
@@ -132,11 +151,67 @@ export function mockObjectUrl(url = 'blob:test') {
   return { createObjectURL, revokeObjectURL };
 }
 
-export function mockWindowLocation(value: Partial<Location>) {
-  return mockBrowserProperty(window, 'location', {
-    ...window.location,
-    ...value,
-  } as Location);
+function createMockWindowLocationUrl(value: MockWindowLocationValue) {
+  if (typeof value === 'string' || value instanceof URL) {
+    return new URL(value.toString(), window.location.href);
+  }
+
+  const unsupportedKeys = Object.keys(value).filter((key) => !mockWindowLocationUrlKeys.has(key));
+  if (unsupportedKeys.length > 0) {
+    throw new Error(
+      `mockWindowLocation only supports URL fields (${Array.from(mockWindowLocationUrlKeys).join(
+        ', ',
+      )}); unsupported fields: ${unsupportedKeys.join(', ')}`,
+    );
+  }
+
+  if (value.href !== undefined) {
+    return new URL(value.href, window.location.href);
+  }
+
+  const nextUrl = new URL(window.location.href);
+  if (value.protocol !== undefined) {
+    nextUrl.protocol = value.protocol;
+  }
+  if (value.host !== undefined) {
+    nextUrl.host = value.host;
+  }
+  if (value.hostname !== undefined) {
+    nextUrl.hostname = value.hostname;
+  }
+  if (value.port !== undefined) {
+    nextUrl.port = value.port;
+  }
+  if (value.pathname !== undefined) {
+    nextUrl.pathname = value.pathname;
+  }
+  if (value.search !== undefined) {
+    nextUrl.search = value.search;
+  }
+  if (value.hash !== undefined) {
+    nextUrl.hash = value.hash;
+  }
+
+  return nextUrl;
+}
+
+export function mockWindowLocation(value: MockWindowLocationValue) {
+  const originalUrl = window.location.href;
+  const nextUrl = createMockWindowLocationUrl(value);
+
+  if (nextUrl.origin !== window.location.origin) {
+    throw new Error(
+      `mockWindowLocation only supports same-origin URLs; received ${nextUrl.href} from ${originalUrl}`,
+    );
+  }
+
+  window.history.replaceState(window.history.state, '', nextUrl);
+
+  restoreCallbacks.push(() => {
+    window.history.replaceState(window.history.state, '', originalUrl);
+  });
+
+  return window.location;
 }
 
 export function mockWindowOpen() {

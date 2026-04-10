@@ -27,7 +27,7 @@ describe('PostHogPageViewTracker', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockWindowLocation({ href: '' });
+    mockWindowLocation({ pathname: '/', search: '', hash: '' });
 
     mockedUsePostHog.mockReturnValue({
       posthog: mockPostHog as any,
@@ -45,13 +45,17 @@ describe('PostHogPageViewTracker', () => {
       unstable_mask: undefined,
     };
     mockedUseLocation.mockReturnValue(initialLocation);
-    window.location.href = `http://localhost${initialLocation.pathname}${initialLocation.search}${initialLocation.hash}`;
+    mockWindowLocation({
+      pathname: initialLocation.pathname,
+      search: initialLocation.search,
+      hash: initialLocation.hash,
+    });
 
     const { rerender } = render(<PostHogPageViewTracker />, { wrapper: MemoryRouter });
 
     expect(mockPostHog.capture).toHaveBeenCalledTimes(1);
     expect(mockPostHog.capture).toHaveBeenCalledWith('$pageview', {
-      $current_url: 'http://localhost/dashboard?filter=active#overview',
+      $current_url: `${window.location.origin}/dashboard?filter=active#overview`,
       pathname: '/dashboard',
       search: '?filter=active',
       hash: '#overview',
@@ -66,13 +70,17 @@ describe('PostHogPageViewTracker', () => {
       unstable_mask: undefined,
     };
     mockedUseLocation.mockReturnValue(newLocation);
-    window.location.href = `http://localhost${newLocation.pathname}`;
+    mockWindowLocation({
+      pathname: newLocation.pathname,
+      search: newLocation.search,
+      hash: newLocation.hash,
+    });
 
     rerender(<PostHogPageViewTracker />);
 
     expect(mockPostHog.capture).toHaveBeenCalledTimes(2);
     expect(mockPostHog.capture).toHaveBeenLastCalledWith('$pageview', {
-      $current_url: 'http://localhost/settings',
+      $current_url: `${window.location.origin}/settings`,
       pathname: '/settings',
       search: '',
       hash: '',
