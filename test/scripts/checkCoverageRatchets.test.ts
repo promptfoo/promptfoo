@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -6,6 +8,7 @@ import {
   DEFAULT_COVERAGE_THRESHOLDS,
   evaluateCoverageRatchets,
   parseChangedFileList,
+  readGithubPullRequestBaseSha,
   runCoverageRatchetCli,
   summarizeFileCoverage,
 } from '../../scripts/checkCoverageRatchets';
@@ -190,5 +193,27 @@ describe('coverage ratchets', () => {
     expect(() => runCoverageRatchetCli(['--base', '--report', 'backend'])).toThrow(
       'Missing value for --base',
     );
+  });
+
+  it('reads the base SHA from a GitHub pull request event payload', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coverage-ratchet-'));
+    const eventPath = path.join(tempDir, 'event.json');
+
+    try {
+      fs.writeFileSync(
+        eventPath,
+        JSON.stringify({
+          pull_request: {
+            base: {
+              sha: '0123456789abcdef',
+            },
+          },
+        }),
+      );
+
+      expect(readGithubPullRequestBaseSha(eventPath)).toBe('0123456789abcdef');
+    } finally {
+      fs.rmSync(tempDir, { force: true, recursive: true });
+    }
   });
 });

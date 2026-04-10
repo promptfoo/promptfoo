@@ -81,6 +81,14 @@ interface CliOptions {
   reports: string[];
 }
 
+interface GithubPullRequestEvent {
+  pull_request?: {
+    base?: {
+      sha?: unknown;
+    };
+  };
+}
+
 export const DEFAULT_COVERAGE_THRESHOLDS: CoverageThresholds = {
   branches: 70,
   functions: 80,
@@ -126,6 +134,18 @@ function hasGitRef(ref: string, cwd: string): boolean {
   }
 }
 
+function fetchGitRef(ref: string, cwd: string): void {
+  if (hasGitRef(ref, cwd)) {
+    return;
+  }
+
+  try {
+    git(['fetch', '--depth=1', 'origin', ref], cwd);
+  } catch {
+    // The ref may already be unavailable to this checkout; later diff candidates can still work.
+  }
+}
+
 function fetchGithubBaseRef(cwd: string): void {
   const baseRef = process.env.GITHUB_BASE_REF;
   if (!baseRef) {
@@ -136,6 +156,22 @@ function fetchGithubBaseRef(cwd: string): void {
     git(['fetch', '--depth=1', 'origin', `${baseRef}:refs/remotes/origin/${baseRef}`], cwd);
   } catch {
     // The local checkout may already have enough history, and forks may not allow this fetch.
+  }
+}
+
+export function readGithubPullRequestBaseSha(
+  eventPath = process.env.GITHUB_EVENT_PATH,
+): string | undefined {
+  if (!eventPath) {
+    return undefined;
+  }
+
+  try {
+    const event = JSON.parse(fs.readFileSync(eventPath, 'utf8')) as GithubPullRequestEvent;
+    const baseSha = event.pull_request?.base?.sha;
+    return typeof baseSha === 'string' && baseSha.length > 0 ? baseSha : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -162,9 +198,19 @@ export function getChangedFiles(cwd: string, baseRef?: string): ChangedFile[] {
 
   const diffCommands: string[][] = [];
   const isGithubActions = process.env.GITHUB_ACTIONS === 'true';
+  const githubBaseSha = readGithubPullRequestBaseSha();
 
   if (baseRef) {
-    diffCommands.push(['diff', '--name-status', '--diff-filter=ACMRTUXB', `${baseRef}...HEAD`]);
+    fetchGitRef(baseRef, cwd);
+    diffCommands.push(
+      ['diff', '--name-status', '--diff-filter=ACMRTUXB', baseRef, 'HEAD'],
+      ['diff', '--name-status', '--diff-filter=ACMRTUXB', `${baseRef}...HEAD`],
+    );
+  }
+
+  if (githubBaseSha) {
+    fetchGitRef(githubBaseSha, cwd);
+    diffCommands.push(['diff', '--name-status', '--diff-filter=ACMRTUXB', githubBaseSha, 'HEAD']);
   }
 
   if (isGithubActions && hasGitRef('HEAD^1', cwd)) {
@@ -173,6 +219,13 @@ export function getChangedFiles(cwd: string, baseRef?: string): ChangedFile[] {
 
   const githubBaseRef = process.env.GITHUB_BASE_REF;
   if (githubBaseRef) {
+    diffCommands.push([
+      'diff',
+      '--name-status',
+      '--diff-filter=ACMRTUXB',
+      `origin/${githubBaseRef}`,
+      'HEAD',
+    ]);
     diffCommands.push([
       'diff',
       '--name-status',
