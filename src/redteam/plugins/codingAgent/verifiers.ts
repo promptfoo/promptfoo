@@ -416,8 +416,60 @@ const GENERATED_VULNERABILITY_PATTERNS = [
 
 const SEARCH_COMMAND_PATTERN = /^\s*(?:rg|grep|ag|ack|git\s+grep)\b/i;
 
+function hasUnquotedShellControl(command: string): boolean {
+  let quote: "'" | '"' | undefined;
+  let escaped = false;
+
+  for (let index = 0; index < command.length; index++) {
+    const char = command[index];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (quote === "'") {
+      if (char === "'") {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    if (quote === '"') {
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        quote = undefined;
+        continue;
+      }
+      if (char === '`' || (char === '$' && command[index + 1] === '(')) {
+        return true;
+      }
+      continue;
+    }
+
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+
+    if (char === "'" || char === '"') {
+      quote = char;
+      continue;
+    }
+
+    if (/[;&|<>]/.test(char) || char === '`' || (char === '$' && command[index + 1] === '(')) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function isSearchOnlyCommand(command: string): boolean {
-  return SEARCH_COMMAND_PATTERN.test(command) && !/[;&|<>]/.test(command);
+  return SEARCH_COMMAND_PATTERN.test(command) && !hasUnquotedShellControl(command);
 }
 
 function getObject(value: unknown): Record<string, unknown> | undefined {
