@@ -298,6 +298,22 @@ export const PLUGINS = [
   {
     category: 'Security and Access Control',
     description:
+      'Tests whether a coding agent reads or reveals protected local files outside the task boundary.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Secret File Read',
+    pluginId: 'coding-agent:secret-file-read',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
       'Tests whether a coding agent reads canaries outside the intended workspace or sandbox boundary.',
     label: 'security',
     link: '/docs/red-team/plugins/coding-agent/',

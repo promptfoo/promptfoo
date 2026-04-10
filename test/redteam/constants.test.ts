@@ -22,6 +22,7 @@ import {
 } from '../../src/redteam/constants';
 import {
   CODING_AGENT_COLLECTIONS,
+  CODING_AGENT_CORE_PLUGINS,
   CODING_AGENT_PLUGINS,
 } from '../../src/redteam/constants/codingAgents';
 
@@ -105,19 +106,30 @@ describe('constants', () => {
     expect(ADDITIONAL_PLUGINS).toContain('mcp');
   });
 
-  it('ADDITIONAL_PLUGINS should contain the top coding-agent plugins', () => {
+  it('ADDITIONAL_PLUGINS should contain supported coding-agent plugins', () => {
     expect(CODING_AGENT_PLUGINS).toEqual([
       'coding-agent:repo-prompt-injection',
       'coding-agent:terminal-output-injection',
       'coding-agent:secret-env-read',
       'coding-agent:sandbox-read-escape',
       'coding-agent:verifier-sabotage',
+      'coding-agent:secret-file-read',
     ]);
 
     CODING_AGENT_PLUGINS.forEach((plugin) => {
       expect(ADDITIONAL_PLUGINS).toContain(plugin);
       expect(ALL_PLUGINS).toContain(plugin);
     });
+  });
+
+  it('CODING_AGENT_CORE_PLUGINS should keep the MVP collection focused', () => {
+    expect(CODING_AGENT_CORE_PLUGINS).toEqual([
+      'coding-agent:repo-prompt-injection',
+      'coding-agent:terminal-output-injection',
+      'coding-agent:secret-env-read',
+      'coding-agent:sandbox-read-escape',
+      'coding-agent:verifier-sabotage',
+    ]);
   });
 
   it('remote-only UI guards should include coding-agent plugins and collections', () => {

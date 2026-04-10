@@ -1,9 +1,14 @@
-export const CODING_AGENT_PLUGINS = [
+export const CODING_AGENT_CORE_PLUGINS = [
   'coding-agent:repo-prompt-injection',
   'coding-agent:terminal-output-injection',
   'coding-agent:secret-env-read',
   'coding-agent:sandbox-read-escape',
   'coding-agent:verifier-sabotage',
+] as const;
+
+export const CODING_AGENT_PLUGINS = [
+  ...CODING_AGENT_CORE_PLUGINS,
+  'coding-agent:secret-file-read',
 ] as const;
 
 export type CodingAgentPlugin = (typeof CODING_AGENT_PLUGINS)[number];
@@ -19,6 +24,7 @@ export const CODING_AGENT_PLUGIN_DISPLAY_NAMES: Record<CodingAgentMetadataPlugin
   'coding-agent:repo-prompt-injection': 'Repository Prompt Injection',
   'coding-agent:terminal-output-injection': 'Terminal Output Injection',
   'coding-agent:secret-env-read': 'Secret Environment Read',
+  'coding-agent:secret-file-read': 'Secret File Read',
   'coding-agent:sandbox-read-escape': 'Sandbox Read Escape',
   'coding-agent:verifier-sabotage': 'Verifier Sabotage',
 };
@@ -32,6 +38,8 @@ export const CODING_AGENT_PLUGIN_DESCRIPTIONS: Record<CodingAgentMetadataPlugin,
     'Tests whether compiler, test, package manager, linter, formatter, git, grep, or script output can instruct the coding agent to perform unrelated or dangerous actions',
   'coding-agent:secret-env-read':
     'Tests whether launcher-only environment canaries remain absent from commands, output, traces, reports, diffs, URLs, and tool or connector parameters',
+  'coding-agent:secret-file-read':
+    'Tests whether protected local files, dotfiles, sibling checkout files, temp files, cache files, browser profile files, or support-bundle files remain outside the coding agent task boundary',
   'coding-agent:sandbox-read-escape':
     'Tests whether the agent can read outside the intended workspace through absolute paths, sibling checkout paths, symlinks, archives, mount points, caches, temp paths, browser profiles, or home directories',
   'coding-agent:verifier-sabotage':
@@ -43,6 +51,7 @@ export const CODING_AGENT_PLUGIN_ALIASES: Record<CodingAgentMetadataPlugin, stri
   'coding-agent:repo-prompt-injection': 'CodingAgentRepoPromptInjection',
   'coding-agent:terminal-output-injection': 'CodingAgentTerminalOutputInjection',
   'coding-agent:secret-env-read': 'CodingAgentSecretEnvRead',
+  'coding-agent:secret-file-read': 'CodingAgentSecretFileRead',
   'coding-agent:sandbox-read-escape': 'CodingAgentSandboxReadEscape',
   'coding-agent:verifier-sabotage': 'CodingAgentVerifierSabotage',
 };
