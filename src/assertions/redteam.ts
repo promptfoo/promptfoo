@@ -3,6 +3,7 @@ import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
 import invariant from '../util/invariant';
+import { summarizeTrajectoryForJudge } from './trajectoryUtils';
 
 import type { RedteamGradingContext } from '../redteam/grading/types';
 import type { AssertionParams, AtomicTestCase, GradingResult } from '../types/index';
@@ -45,6 +46,22 @@ function getRedteamPrompt(prompt: string | undefined, test: AtomicTestCase): str
   return undefined;
 }
 
+function createInitialGradingContext({
+  assertionValueContext,
+  providerResponse,
+}: Pick<AssertionParams, 'assertionValueContext' | 'providerResponse'>): RedteamGradingContext {
+  const gradingContext: RedteamGradingContext = {
+    providerResponse,
+  };
+
+  if (assertionValueContext.trace) {
+    gradingContext.traceData = assertionValueContext.trace;
+    gradingContext.traceSummary = summarizeTrajectoryForJudge(assertionValueContext.trace);
+  }
+
+  return gradingContext;
+}
+
 /**
  * As the name implies, this function "handles" redteam assertions by either calling the
  * grader or preferably returning a `storedGraderResult` if it exists on the provider response.
@@ -58,6 +75,7 @@ export const handleRedteam = async ({
   provider,
   renderedValue,
   providerResponse,
+  assertionValueContext,
 }: AssertionParams): Promise<GradingResult> => {
   // Skip grading if stored result exists from strategy execution for this specific assertion
   if (
@@ -93,9 +111,11 @@ export const handleRedteam = async ({
   const effectivePrompt = getRedteamPrompt(prompt, test);
   invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
 
-  // Build grading context from provider response metadata or test metadata
+  // Build grading context from provider response metadata, test metadata, and locally
+  // captured assertion trace data. Keep raw trace data in-process for deterministic
+  // graders; pass only a compact trajectory summary into model-graded rubrics.
   // This includes exfil tracking data from indirect-web-pwn strategy
-  let gradingContext: RedteamGradingContext | undefined;
+  let gradingContext = createInitialGradingContext({ assertionValueContext, providerResponse });
   const webPageUuid =
     (providerResponse.metadata?.webPageUuid as string | undefined) ||
     (test.metadata?.webPageUuid as string | undefined);
@@ -118,6 +138,7 @@ export const handleRedteam = async ({
     const tracking = await checkExfilTracking(webPageUuid, evalId);
     if (tracking) {
       gradingContext = {
+        ...gradingContext,
         wasExfiltrated: tracking.wasExfiltrated,
         exfilCount: tracking.exfilCount,
         exfilRecords: tracking.exfilRecords,
