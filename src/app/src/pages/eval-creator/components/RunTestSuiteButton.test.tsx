@@ -4,7 +4,7 @@ import { mockCallApiRoutes, rejectCallApi, resetCallApiMock } from '@app/tests/a
 import { type TestTimers, useTestTimers } from '@app/tests/timers';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RunTestSuiteButton from './RunTestSuiteButton';
 
 const renderWithProvider = (ui: React.ReactElement) => {
@@ -35,10 +35,6 @@ describe('RunTestSuiteButton', () => {
     resetCallApiMock();
     mockShowToast.mockReset();
     timers = useTestTimers();
-  });
-
-  afterEach(() => {
-    timers.restore({ runPending: true });
   });
 
   it('should be disabled when there are no prompts or tests', () => {
@@ -137,7 +133,5 @@ describe('RunTestSuiteButton', () => {
     });
 
     expect(screen.getByRole('button', { name: 'Run Eval' })).toBeInTheDocument();
-
-    timers.useFakeTimers();
   });
 });

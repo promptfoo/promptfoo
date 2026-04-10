@@ -150,26 +150,22 @@ describe('LauncherPage', () => {
   it('should call checkHealth every 2 seconds after the initial 3-second delay', async () => {
     const timers = useTestTimers();
 
-    try {
-      const checkHealthMock = vi.fn();
-      (useApiHealth as Mock).mockReturnValue({
-        data: { status: 'unknown', message: null },
-        refetch: checkHealthMock,
-        isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+    const checkHealthMock = vi.fn();
+    (useApiHealth as Mock).mockReturnValue({
+      data: { status: 'unknown', message: null },
+      refetch: checkHealthMock,
+      isLoading: false,
+    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      renderLauncher();
+    renderLauncher();
 
-      timers.advanceBy(3000);
-      expect(checkHealthMock).toHaveBeenCalledTimes(1);
+    timers.advanceBy(3000);
+    expect(checkHealthMock).toHaveBeenCalledTimes(1);
 
-      timers.advanceBy(2000);
-      expect(checkHealthMock).toHaveBeenCalledTimes(2);
+    timers.advanceBy(2000);
+    expect(checkHealthMock).toHaveBeenCalledTimes(2);
 
-      timers.advanceBy(2000);
-      expect(checkHealthMock).toHaveBeenCalledTimes(3);
-    } finally {
-      timers.restore();
-    }
+    timers.advanceBy(2000);
+    expect(checkHealthMock).toHaveBeenCalledTimes(3);
   });
 });

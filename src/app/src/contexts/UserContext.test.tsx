@@ -14,8 +14,8 @@ describe('UserProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Note: Do NOT use vi.useFakeTimers() here - it breaks waitFor
-    // Only use fake timers in specific tests that need timer control
+    // Do not enable fake timers for the whole suite; waitFor needs real timers in most tests.
+    // Only use the shared timer helper in specific tests that need timer control.
   });
 
   afterEach(() => {
@@ -112,40 +112,36 @@ describe('UserProvider', () => {
     // This test needs fake timers to control timing
     const timers = useTestTimers();
 
-    try {
-      const testEmail = 'test.user@example.com';
-      const setEmailMock = vi.fn();
-      mockFetchUserEmail(testEmail);
+    const testEmail = 'test.user@example.com';
+    const setEmailMock = vi.fn();
+    mockFetchUserEmail(testEmail);
 
-      const originalContext = React.createContext<any>({});
-      const UserContextSpy = vi
-        .spyOn(React, 'createContext')
-        .mockImplementation(() => originalContext);
+    const originalContext = React.createContext<any>({});
+    const UserContextSpy = vi
+      .spyOn(React, 'createContext')
+      .mockImplementation(() => originalContext);
 
-      const contextValue: any = {
-        email: null,
-        setEmail: setEmailMock,
-        isLoading: true,
-      };
+    const contextValue: any = {
+      email: null,
+      setEmail: setEmailMock,
+      isLoading: true,
+    };
 
-      UserContextSpy.mockReturnValue(contextValue);
+    UserContextSpy.mockReturnValue(contextValue);
 
-      const { unmount } = render(
-        <UserProvider>
-          <TestConsumer />
-        </UserProvider>,
-      );
+    const { unmount } = render(
+      <UserProvider>
+        <TestConsumer />
+      </UserProvider>,
+    );
 
-      unmount();
+    unmount();
 
-      // Advance fake timers instead of using real setTimeout
-      await act(async () => {
-        await timers.advanceByAsync(100);
-      });
+    // Advance fake timers instead of using real setTimeout
+    await act(async () => {
+      await timers.advanceByAsync(100);
+    });
 
-      expect(setEmailMock).not.toHaveBeenCalled();
-    } finally {
-      timers.restore();
-    }
+    expect(setEmailMock).not.toHaveBeenCalled();
   });
 });
