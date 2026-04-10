@@ -3,6 +3,7 @@ import { gatherFeedback, sendFeedback } from '../src/feedback';
 import logger from '../src/logger';
 import { fetchWithProxy } from '../src/util/fetch/index';
 import * as readlineUtils from '../src/util/readline';
+import { mockConsole } from './util/utils';
 
 let actualFeedback: typeof import('../src/feedback');
 
@@ -56,18 +57,19 @@ const createMockResponse = (data: any): Response => {
 };
 
 describe('Feedback Module', () => {
-  const originalConsoleLog = console.log;
+  let consoleLogSpy: ReturnType<typeof mockConsole>;
+
   beforeAll(async () => {
     actualFeedback = await vi.importActual('../src/feedback');
   });
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleLogSpy = mockConsole('log');
   });
 
   afterEach(() => {
-    console.log = originalConsoleLog;
+    consoleLogSpy.mockRestore();
   });
 
   describe('sendFeedback', () => {
