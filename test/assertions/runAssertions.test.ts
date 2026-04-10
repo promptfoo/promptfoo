@@ -376,6 +376,45 @@ describe('runAssertions', () => {
       });
     });
 
+    it('preserves child metric weights inside assert-set', async () => {
+      const output = 'Expected output';
+      const test: AtomicTestCase = {
+        assert: [
+          {
+            type: 'assert-set',
+            assert: [
+              {
+                type: 'equals',
+                value: 'Expected output',
+                metric: 'Accuracy',
+                weight: 3,
+              },
+              {
+                type: 'equals',
+                value: 'Nope',
+                metric: 'Accuracy',
+                weight: 1,
+              },
+            ],
+          },
+        ],
+      };
+
+      const result: GradingResult = await runAssertions({
+        prompt,
+        provider,
+        test,
+        providerResponse: { output },
+      });
+
+      expect(result.namedScores).toEqual({
+        Accuracy: 0.75,
+      });
+      expect(result.namedScoreWeights).toEqual({
+        Accuracy: 4,
+      });
+    });
+
     it('uses assert-set weight', async () => {
       const output = 'Expected';
       const test: AtomicTestCase = {

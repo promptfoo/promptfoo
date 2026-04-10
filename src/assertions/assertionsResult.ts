@@ -112,8 +112,12 @@ export class AssertionsResult {
     if (result.namedScores) {
       Object.entries(result.namedScores).forEach(([metricName, score]) => {
         if (metricName !== metric) {
-          this.namedScores[metricName] = (this.namedScores[metricName] || 0) + score * weight;
-          this.namedScoreWeights[metricName] = (this.namedScoreWeights[metricName] || 0) + weight;
+          const incomingWeight = result.namedScoreWeights?.[metricName] ?? 1;
+          const weightedIncomingWeight = incomingWeight * weight;
+          this.namedScores[metricName] =
+            (this.namedScores[metricName] || 0) + score * weightedIncomingWeight;
+          this.namedScoreWeights[metricName] =
+            (this.namedScoreWeights[metricName] || 0) + weightedIncomingWeight;
         }
       });
     }
