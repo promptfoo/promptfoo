@@ -14,6 +14,14 @@ import type {
 
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
+  // Claude Mythos Preview - gated research preview for defensive cybersecurity (Project Glasswing)
+  ...['claude-mythos-preview'].map((model) => ({
+    id: model,
+    cost: {
+      input: 25 / 1e6, // $25 / MTok
+      output: 125 / 1e6, // $125 / MTok
+    },
+  })),
   // Claude 4.6 models - Latest generation
   ...['claude-sonnet-4-6', 'claude-sonnet-4-6-latest'].map((model) => ({
     id: model,
@@ -340,6 +348,25 @@ export function calculateAnthropicCost(
   return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
 }
 
+/**
+ * Extract refusal details from the Anthropic stop_details field.
+ * Returns a human-readable string if the response was refused, or undefined otherwise.
+ */
+export function getRefusalDetails(data: Anthropic.Messages.Message): string | undefined {
+  if (data.stop_reason !== 'refusal' || !data.stop_details) {
+    return undefined;
+  }
+  const details = data.stop_details;
+  const parts: string[] = ['Content refused by Anthropic safety filters'];
+  if (details.category) {
+    parts.push(`category: ${details.category}`);
+  }
+  if (details.explanation) {
+    parts.push(`explanation: ${details.explanation}`);
+  }
+  return parts.join(' — ');
+}
+
 export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     // Anthropic: total input = input_tokens + cache_read_input_tokens + cache_creation_input_tokens
@@ -380,20 +407,20 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
 export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConfig)[] = []): {
   processedTools: (
     | Anthropic.Tool
-    | Anthropic.Beta.Messages.BetaWebFetchTool20250910
+    | Anthropic.Messages.WebFetchTool20250910
     | Anthropic.Messages.WebFetchTool20260209
     | Anthropic.Messages.WebFetchTool20260309
-    | Anthropic.Beta.Messages.BetaWebSearchTool20250305
+    | Anthropic.Messages.WebSearchTool20250305
     | Anthropic.Messages.WebSearchTool20260209
   )[];
   requiredBetaFeatures: string[];
 } {
   const processedTools: (
     | Anthropic.Tool
-    | Anthropic.Beta.Messages.BetaWebFetchTool20250910
+    | Anthropic.Messages.WebFetchTool20250910
     | Anthropic.Messages.WebFetchTool20260209
     | Anthropic.Messages.WebFetchTool20260309
-    | Anthropic.Beta.Messages.BetaWebSearchTool20250305
+    | Anthropic.Messages.WebSearchTool20250305
     | Anthropic.Messages.WebSearchTool20260209
   )[] = [];
   const requiredBetaFeatures: string[] = [];
@@ -443,7 +470,7 @@ export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConf
  */
 function applyWebFetchFields(
   tool:
-    | Anthropic.Beta.Messages.BetaWebFetchTool20250910
+    | Anthropic.Messages.WebFetchTool20250910
     | Anthropic.Messages.WebFetchTool20260209
     | Anthropic.Messages.WebFetchTool20260309,
   config: WebFetchToolConfig | WebFetchToolConfig20260209 | WebFetchToolConfigV2,
@@ -479,8 +506,8 @@ function applyWebFetchFields(
 
 function transformWebFetchTool(
   config: WebFetchToolConfig,
-): Anthropic.Beta.Messages.BetaWebFetchTool20250910 {
-  const tool: Anthropic.Beta.Messages.BetaWebFetchTool20250910 = {
+): Anthropic.Messages.WebFetchTool20250910 {
+  const tool: Anthropic.Messages.WebFetchTool20250910 = {
     type: 'web_fetch_20250910',
     name: 'web_fetch',
   };
@@ -514,9 +541,7 @@ function transformWebFetchToolV2(
 }
 
 function applyWebSearchFields(
-  tool:
-    | Anthropic.Beta.Messages.BetaWebSearchTool20250305
-    | Anthropic.Messages.WebSearchTool20260209,
+  tool: Anthropic.Messages.WebSearchTool20250305 | Anthropic.Messages.WebSearchTool20260209,
   config: WebSearchToolConfig | WebSearchToolConfig20260209,
 ): void {
   if (config.allowed_callers !== undefined) {
@@ -550,8 +575,8 @@ function applyWebSearchFields(
  */
 function transformWebSearchTool(
   config: WebSearchToolConfig,
-): Anthropic.Beta.Messages.BetaWebSearchTool20250305 {
-  const tool: Anthropic.Beta.Messages.BetaWebSearchTool20250305 = {
+): Anthropic.Messages.WebSearchTool20250305 {
+  const tool: Anthropic.Messages.WebSearchTool20250305 = {
     type: 'web_search_20250305',
     name: 'web_search',
   };
