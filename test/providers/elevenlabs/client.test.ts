@@ -190,8 +190,7 @@ describe('ElevenLabsClient', () => {
       expect(mockFetch).toHaveBeenCalledTimes(3);
     });
 
-    it('should throw ElevenLabsAPIError on 500', async () => {
-      // Mock all retry attempts (retries: 2 means 3 total attempts)
+    it('should throw ElevenLabsAPIError on 500 without retrying', async () => {
       const errorResponse = {
         ok: false,
         status: 500,
@@ -204,7 +203,7 @@ describe('ElevenLabsClient', () => {
       await vi.runAllTimersAsync();
       const error = await promise;
       expect(error).toBeInstanceOf(ElevenLabsAPIError);
-      expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
 
