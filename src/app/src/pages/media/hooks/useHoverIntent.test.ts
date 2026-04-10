@@ -1,17 +1,20 @@
 import { mockMatchMedia } from '@app/tests/browserMocks';
+import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useHoverIntent } from './useHoverIntent';
 
 describe('useHoverIntent', () => {
+  let timers: TestTimers;
+
   beforeEach(() => {
-    vi.useFakeTimers();
+    timers = useTestTimers();
 
     mockMatchMedia({ matches: (query) => query === '(hover: hover)' });
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    restoreTestTimers();
     vi.restoreAllMocks();
   });
 
@@ -47,7 +50,7 @@ describe('useHoverIntent', () => {
     expect(result.current.isIntentional).toBe(false);
 
     act(() => {
-      vi.advanceTimersByTime(300);
+      timers.advanceBy(300);
     });
 
     expect(result.current.isIntentional).toBe(true);
@@ -58,7 +61,7 @@ describe('useHoverIntent', () => {
 
     act(() => {
       result.current.hoverProps.onMouseEnter();
-      vi.advanceTimersByTime(300);
+      timers.advanceBy(300);
     });
 
     expect(result.current.isHovering).toBe(true);
@@ -77,7 +80,7 @@ describe('useHoverIntent', () => {
 
     act(() => {
       result.current.hoverProps.onMouseEnter();
-      vi.advanceTimersByTime(100); // Only 100ms, not full 300ms
+      timers.advanceBy(100); // Only 100ms, not full 300ms
       result.current.hoverProps.onMouseLeave();
     });
 
@@ -85,7 +88,7 @@ describe('useHoverIntent', () => {
 
     // Even after more time, should not become intentional
     act(() => {
-      vi.advanceTimersByTime(300);
+      timers.advanceBy(300);
     });
 
     expect(result.current.isIntentional).toBe(false);
@@ -96,13 +99,13 @@ describe('useHoverIntent', () => {
 
     act(() => {
       result.current.hoverProps.onMouseEnter();
-      vi.advanceTimersByTime(300);
+      timers.advanceBy(300);
     });
 
     expect(result.current.isIntentional).toBe(false);
 
     act(() => {
-      vi.advanceTimersByTime(200);
+      timers.advanceBy(200);
     });
 
     expect(result.current.isIntentional).toBe(true);
@@ -124,7 +127,7 @@ describe('useHoverIntent', () => {
 
       act(() => {
         result.current.hoverProps.onFocus();
-        vi.advanceTimersByTime(150); // Half of 300ms
+        timers.advanceBy(150); // Half of 300ms
       });
 
       expect(result.current.isIntentional).toBe(true);
@@ -135,7 +138,7 @@ describe('useHoverIntent', () => {
 
       act(() => {
         result.current.hoverProps.onFocus();
-        vi.advanceTimersByTime(150);
+        timers.advanceBy(150);
       });
 
       expect(result.current.isIntentional).toBe(true);
@@ -155,7 +158,7 @@ describe('useHoverIntent', () => {
 
       act(() => {
         result.current.hoverProps.onMouseEnter();
-        vi.advanceTimersByTime(500);
+        timers.advanceBy(500);
       });
 
       expect(result.current.isHovering).toBe(false);
@@ -174,7 +177,7 @@ describe('useHoverIntent', () => {
 
       act(() => {
         result.current.hoverProps.onMouseEnter();
-        vi.advanceTimersByTime(500);
+        timers.advanceBy(500);
       });
 
       expect(result.current.isIntentional).toBe(false);
@@ -190,7 +193,7 @@ describe('useHoverIntent', () => {
 
       act(() => {
         result.current.hoverProps.onMouseEnter();
-        vi.advanceTimersByTime(500);
+        timers.advanceBy(500);
       });
 
       expect(result.current.isIntentional).toBe(true);
@@ -205,7 +208,7 @@ describe('useHoverIntent', () => {
 
       act(() => {
         result.current.hoverProps.onMouseEnter();
-        vi.advanceTimersByTime(500);
+        timers.advanceBy(500);
       });
 
       expect(result.current.isIntentional).toBe(false);

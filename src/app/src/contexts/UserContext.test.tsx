@@ -1,5 +1,6 @@
 import React, { useContext } from 'react';
 
+import { useTestTimers } from '@app/tests/timers';
 import * as api from '@app/utils/api';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -109,40 +110,42 @@ describe('UserProvider', () => {
 
   it('should not update state after unmounting', async () => {
     // This test needs fake timers to control timing
-    vi.useFakeTimers();
+    const timers = useTestTimers();
 
-    const testEmail = 'test.user@example.com';
-    const setEmailMock = vi.fn();
-    mockFetchUserEmail(testEmail);
+    try {
+      const testEmail = 'test.user@example.com';
+      const setEmailMock = vi.fn();
+      mockFetchUserEmail(testEmail);
 
-    const originalContext = React.createContext<any>({});
-    const UserContextSpy = vi
-      .spyOn(React, 'createContext')
-      .mockImplementation(() => originalContext);
+      const originalContext = React.createContext<any>({});
+      const UserContextSpy = vi
+        .spyOn(React, 'createContext')
+        .mockImplementation(() => originalContext);
 
-    const contextValue: any = {
-      email: null,
-      setEmail: setEmailMock,
-      isLoading: true,
-    };
+      const contextValue: any = {
+        email: null,
+        setEmail: setEmailMock,
+        isLoading: true,
+      };
 
-    UserContextSpy.mockReturnValue(contextValue);
+      UserContextSpy.mockReturnValue(contextValue);
 
-    const { unmount } = render(
-      <UserProvider>
-        <TestConsumer />
-      </UserProvider>,
-    );
+      const { unmount } = render(
+        <UserProvider>
+          <TestConsumer />
+        </UserProvider>,
+      );
 
-    unmount();
+      unmount();
 
-    // Advance fake timers instead of using real setTimeout
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(100);
-    });
+      // Advance fake timers instead of using real setTimeout
+      await act(async () => {
+        await timers.advanceByAsync(100);
+      });
 
-    expect(setEmailMock).not.toHaveBeenCalled();
-
-    vi.useRealTimers();
+      expect(setEmailMock).not.toHaveBeenCalled();
+    } finally {
+      timers.restore();
+    }
   });
 });
