@@ -12,12 +12,14 @@ const MOCKED_MODULES = [
   '../../../src/constants',
 ];
 
-function mockRemoteGeneration(responseBody: unknown) {
-  const fetchWithRetries = vi.fn().mockResolvedValueOnce(
-    createMockResponse({
-      body: responseBody,
-    }),
-  );
+function mockRemoteGeneration(responseBody: unknown, rejectWith?: Error) {
+  const fetchWithRetries = rejectWith
+    ? vi.fn().mockRejectedValueOnce(rejectWith)
+    : vi.fn().mockResolvedValueOnce(
+        createMockResponse({
+          body: responseBody,
+        }),
+      );
 
   vi.doMock('../../../src/util/fetch/index', () => ({
     fetchWithRetries,
@@ -55,7 +57,8 @@ async function generatePromptForStrategy(strategyId: MultiTurnPromptParams['stra
 }
 
 function expectTaskRequest(fetchWithRetries: ReturnType<typeof vi.fn>, expectedTask: string) {
-  const [url, request, timeout] = fetchWithRetries.mock.calls[0];
+  expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+  const [url, request, timeout] = fetchWithRetries.mock.calls[0]!;
   const body = JSON.parse(String(request.body));
 
   expect(url).toBe(REMOTE_GENERATION_URL);
@@ -73,6 +76,7 @@ describe('redteamTestCaseGenerationService', () => {
   });
 
   afterEach(() => {
+    vi.resetAllMocks();
     for (const modulePath of MOCKED_MODULES) {
       vi.doUnmock(modulePath);
     }
@@ -89,6 +93,14 @@ describe('redteamTestCaseGenerationService', () => {
       await generatePromptForStrategy('goat');
 
       expectTaskRequest(fetchWithRetries, 'goat');
+    });
+
+    it('should propagate remote generation failures', async () => {
+      const remoteError = new Error('remote generation failed');
+      const fetchWithRetries = mockRemoteGeneration(undefined, remoteError);
+
+      await expect(generatePromptForStrategy('goat')).rejects.toThrow('remote generation failed');
+      expect(fetchWithRetries).toHaveBeenCalledTimes(1);
     });
 
     it('should call fetchWithRetries with correct parameters for Crescendo strategy', async () => {
