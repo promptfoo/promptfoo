@@ -365,8 +365,8 @@ export class AzureAssistantProvider extends AzureGenericProvider {
    * Helper method to make HTTP requests using fetchWithCache
    */
   private async makeRequest<T>(url: string, options: RequestInit): Promise<T> {
-    const timeoutMs = this.assistantConfig.timeoutMs || REQUEST_TIMEOUT_MS;
-    const retries = this.assistantConfig.retryOptions?.maxRetries || 4;
+    const timeoutMs = this.assistantConfig.timeoutMs ?? REQUEST_TIMEOUT_MS;
+    const retries = this.assistantConfig.retryOptions?.maxRetries ?? 4;
 
     // These operations should never be cached
     const shouldBustCache =
