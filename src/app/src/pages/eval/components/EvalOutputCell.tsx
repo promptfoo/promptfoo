@@ -39,12 +39,24 @@ type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
 };
 
-function scoreToString(score: number | null) {
-  if (score === null || score === 0 || score === 1) {
+function scoreToString(score: number | null | undefined) {
+  if (typeof score !== 'number' || score === 0 || score === 1) {
     // Don't show boolean scores.
     return '';
   }
   return `(${score.toFixed(2)})`;
+}
+
+function stringifyOutputText(text: unknown): string {
+  if (typeof text === 'string') {
+    return text;
+  }
+
+  if (text == null) {
+    return '';
+  }
+
+  return JSON.stringify(text) ?? String(text);
 }
 
 /**
@@ -199,7 +211,7 @@ function EvalOutputCell({
   evaluationId,
   testCaseId,
 }: EvalOutputCellProps & {
-  firstOutput: EvaluateTableOutput;
+  firstOutput?: EvaluateTableOutput | null;
   showDiffs: boolean;
   searchText?: string;
 }) {
@@ -295,7 +307,7 @@ function EvalOutputCell({
     setCommentText(newCommentText);
   };
 
-  const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+  const text = stringifyOutputText(output.text);
   const normalizedText = normalizeMediaText(text);
   const inlineImageSrc = resolveImageSource(text);
   const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
@@ -334,8 +346,7 @@ function EvalOutputCell({
   }
 
   if (showDiffs && firstOutput) {
-    const firstOutputText =
-      typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
+    const firstOutputText = stringifyOutputText(firstOutput.text);
 
     let diffResult;
     try {
@@ -708,9 +719,9 @@ function EvalOutputCell({
       passCount = gradingResult.pass ? 1 : 0;
       failCount = gradingResult.pass ? 0 : 1;
     }
-  } else if (output.pass) {
+  } else if (output.pass === true) {
     passCount = 1;
-  } else if (!output.pass) {
+  } else if (output.pass === false) {
     failCount = 1;
   }
 
@@ -753,10 +764,11 @@ function EvalOutputCell({
   }
 
   const scoreString = scoreToString(output.score);
+  const statusClass = output.pass === true || (passCount > 0 && failCount === 0) ? 'pass' : 'fail';
 
   const getCombinedContextText = () => {
     if (!output.gradingResult?.componentResults) {
-      return output.text;
+      return text;
     }
 
     return output.gradingResult.componentResults
@@ -989,7 +1001,7 @@ function EvalOutputCell({
   return (
     <div id={`eval-output-cell-${outputCellId}`} className="cell" style={cellStyle}>
       {showPassFail && (
-        <div className={`status ${output.pass ? 'pass' : 'fail'}`}>
+        <div className={`status ${statusClass}`}>
           <div className="status-row">
             <div className="pill">
               {passFailText}
@@ -997,7 +1009,7 @@ function EvalOutputCell({
             </div>
             {providerOverride}
           </div>
-          <CustomMetrics lookup={output.namedScores} />
+          <CustomMetrics lookup={output.namedScores ?? {}} />
           {failReasons.length > 0 && (
             <span className="fail-reason">
               <FailReasonCarousel failReasons={failReasons} />
@@ -1014,7 +1026,7 @@ function EvalOutputCell({
           )}
         </div>
       )}
-      {showPrompts && firstOutput.prompt && (
+      {showPrompts && firstOutput?.prompt && (
         <div className="prompt">
           <span className="pill">Prompt</span>
           {typeof output.prompt === 'string'
