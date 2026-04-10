@@ -6,6 +6,7 @@ import type { ApiProvider, TestSuite } from '../src/types/index';
 
 // Create hoisted mock for transform
 const mockTransform = vi.hoisted(() => vi.fn());
+const mockRunAssertions = vi.hoisted(() => vi.fn());
 
 // Mock the transform function to track calls
 vi.mock('../src/util/transform', () => ({
@@ -21,13 +22,7 @@ vi.mock('../src/assertions', async () => {
   const actual = await vi.importActual('../src/assertions');
   return {
     ...(actual as any),
-    runAssertions: vi.fn(() =>
-      Promise.resolve({
-        pass: true,
-        score: 1,
-        namedScores: {},
-      }),
-    ),
+    runAssertions: mockRunAssertions,
   };
 });
 
@@ -82,13 +77,20 @@ vi.mock('../src/esm', () => ({}));
 describe('Transformation integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockTransform.mockReset();
+    mockRunAssertions.mockReset();
+    mockRunAssertions.mockResolvedValue({
+      pass: true,
+      score: 1,
+      namedScores: {},
+    });
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it.skip('should apply test.options.transform and assert.contextTransform from provider output', async () => {
+  it('passes provider-transformed output to test transforms and context assertions', async () => {
     // Track the transformation sequence
     const transformCalls: { expression: string; input: any }[] = [];
 
@@ -101,9 +103,6 @@ describe('Transformation integration', () => {
       } else if (expression === 'output + " - test transformed"') {
         // Test transform - should receive provider output
         return input + ' - test transformed';
-      } else if (expression === 'output.split(" ")[0]') {
-        // Context transform - should also receive provider output
-        return String(input).split(' ')[0];
       }
       return input;
     });
@@ -146,25 +145,25 @@ describe('Transformation integration', () => {
     const evalRecord = new Eval({});
     const results = await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
 
-    // Check that both test transform and context transform received provider output
+    // Check that the test transform received provider output.
     const testTransformCall = transformCalls.find(
       (c) => c.expression === 'output + " - test transformed"',
     );
-    const contextTransformCall = transformCalls.find(
-      (c) => c.expression === 'output.split(" ")[0]',
-    );
 
     expect(testTransformCall?.input).toBe('PROVIDER TRANSFORMED');
-    expect(contextTransformCall?.input).toBe('PROVIDER TRANSFORMED');
-
-    // The final output should have the test transform applied
     expect(results.results[0].response?.output).toBe('PROVIDER TRANSFORMED - test transformed');
 
-    // Context transform should have extracted first word from provider output
-    expect(contextTransformCall?.input).toBe('PROVIDER TRANSFORMED');
+    expect(mockRunAssertions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerResponse: expect.objectContaining({
+          output: 'PROVIDER TRANSFORMED - test transformed',
+          providerTransformedOutput: 'PROVIDER TRANSFORMED',
+        }),
+      }),
+    );
   });
 
-  it.skip('should handle multiple context transforms', async () => {
+  it('passes provider-transformed output through with multiple context assertions', async () => {
     const transformCalls: { expression: string; input: any; timestamp: number }[] = [];
 
     mockTransform.mockImplementation(async (expression, input) => {
@@ -177,20 +176,6 @@ describe('Transformation integration', () => {
         // Test transform
         const parsed = typeof input === 'string' ? JSON.parse(input) : input;
         return parsed.provider.toLowerCase();
-      } else if (expression.startsWith('JSON.parse(output)')) {
-        // Context transforms - all should receive provider output
-        if (typeof input === 'string') {
-          JSON.parse(input); // Validate that input is valid JSON
-        }
-        if (expression.includes('context1')) {
-          return 'context1 from provider';
-        }
-        if (expression.includes('context2')) {
-          return 'context2 from provider';
-        }
-        if (expression.includes('context3')) {
-          return 'context3 from provider';
-        }
       }
       return input;
     });
@@ -236,22 +221,24 @@ describe('Transformation integration', () => {
     const evalRecord = new Eval({});
     await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
 
-    // All context transforms should receive the same provider-transformed output
-    const contextTransforms = transformCalls.filter(
-      (c) =>
-        c.expression.includes('context1') ||
-        c.expression.includes('context2') ||
-        c.expression.includes('context3'),
-    );
-
-    // All should have received the JSON stringified provider output
-    contextTransforms.forEach((call) => {
-      expect(call.input).toBe('{"provider":"ORIGINAL"}');
-    });
-
-    // Test transform should also receive provider output
     const testTransform = transformCalls.find((c) => c.expression.includes('toLowerCase'));
     expect(testTransform?.input).toBe('{"provider":"ORIGINAL"}');
+
+    expect(mockRunAssertions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerResponse: expect.objectContaining({
+          output: 'original',
+          providerTransformedOutput: '{"provider":"ORIGINAL"}',
+        }),
+        test: expect.objectContaining({
+          assert: [
+            expect.objectContaining({ contextTransform: 'JSON.parse(output).context1' }),
+            expect.objectContaining({ contextTransform: 'JSON.parse(output).context2' }),
+            expect.objectContaining({ contextTransform: 'JSON.parse(output).context3' }),
+          ],
+        }),
+      }),
+    );
   });
 
   it('should work correctly with only provider transform', async () => {
@@ -291,19 +278,7 @@ describe('Transformation integration', () => {
     expect(results.results[0].response?.output).toBe('SPACED OUTPUT');
   });
 
-  it.skip('should maintain backwards compatibility when contextTransform is used without test transform', async () => {
-    const transformCalls: { expression: string; input: any }[] = [];
-
-    mockTransform.mockImplementation(async (expression, input) => {
-      transformCalls.push({ expression, input });
-
-      if (expression === 'output.metadata') {
-        // Should receive provider output directly when no test transform
-        return { extracted: 'metadata' };
-      }
-      return input;
-    });
-
+  it('passes raw provider output to context assertions when no transforms are configured', async () => {
     const testSuite: TestSuite = {
       prompts: [{ raw: 'Test prompt', label: 'Test' }],
       providers: [
@@ -331,14 +306,22 @@ describe('Transformation integration', () => {
     const evalRecord = new Eval({});
     await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
 
-    const contextTransformCall = transformCalls.find(
-      (call) => call.expression === 'output.metadata',
+    expect(mockRunAssertions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerResponse: expect.objectContaining({
+          output: {
+            data: 'test',
+            metadata: { extracted: 'metadata' },
+          },
+          providerTransformedOutput: {
+            data: 'test',
+            metadata: { extracted: 'metadata' },
+          },
+        }),
+        test: expect.objectContaining({
+          assert: [expect.objectContaining({ contextTransform: 'output.metadata' })],
+        }),
+      }),
     );
-
-    // Should receive the raw provider output
-    expect(contextTransformCall?.input).toEqual({
-      data: 'test',
-      metadata: { extracted: 'metadata' },
-    });
   });
 });
