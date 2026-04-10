@@ -806,7 +806,7 @@ export class HydraProvider implements ApiProvider {
             targetResponse.output,
             test,
             targetProvider,
-            assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+            'value' in assertToUse ? assertToUse.value : undefined,
             undefined, // additionalRubric
             undefined, // skipRefusalCheck
             gradingContext,

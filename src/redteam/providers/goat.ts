@@ -27,7 +27,7 @@ import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
-import { getLastMessageContent, tryUnblocking } from './shared';
+import { buildGraderResultAssertion, getLastMessageContent, tryUnblocking } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { type RawTracingConfig, resolveTracingOptions } from './tracingOptions';
 
@@ -670,7 +670,7 @@ export default class GoatProvider implements ApiProvider {
         lastTargetResponse = finalResponse;
 
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
-        if (test && grader && finalOutput) {
+        if (test && assertToUse && grader && finalOutput) {
           // Build grading context with tracing and exfil tracking data
           let gradingContext:
             | {
@@ -738,7 +738,7 @@ export default class GoatProvider implements ApiProvider {
             finalOutput,
             test,
             targetProvider,
-            assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+            'value' in assertToUse ? assertToUse.value : undefined,
             additionalRubric,
             undefined,
             gradingContext,
@@ -746,11 +746,7 @@ export default class GoatProvider implements ApiProvider {
           graderPassed = grade.pass;
           storedGraderResult = {
             ...grade,
-            assertion: grade.assertion
-              ? { ...grade.assertion, value: rubric }
-              : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
-                ? { ...assertToUse, value: rubric }
-                : undefined,
+            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
           };
         }
 
