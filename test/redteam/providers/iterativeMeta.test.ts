@@ -212,6 +212,48 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(result.metadata.stopReason).toBe('Grader failed');
     });
 
+    it('passes target provider raw response into the grader', async () => {
+      const mockGrader = {
+        getResult: vi.fn<any>().mockResolvedValue({
+          grade: { pass: true, score: 0, reason: 'Target defended' },
+          rubric: 'test rubric',
+        }),
+      };
+      mockGetGraderById.mockReturnValue(mockGrader);
+      mockGetTargetResponse.mockResolvedValue({
+        output: 'Target response',
+        raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
+      });
+
+      await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: {
+          vars: { query: 'test' },
+          assert: [{ type: 'promptfoo:redteam:harmful', metric: 'Harmful' }],
+        } as AtomicTestCase,
+        vars: { query: 'test' },
+      });
+
+      expect(mockGrader.getResult).toHaveBeenCalled();
+      const gradingContext = mockGrader.getResult.mock.calls[0][7] as {
+        providerResponse?: ProviderResponse;
+      };
+      const raw = JSON.parse(String(gradingContext.providerResponse?.raw ?? '{}'));
+      expect(raw).toMatchObject({ finalResponse: 'Target response' });
+    });
+
     it('should handle agent provider errors gracefully', async () => {
       mockAgentProvider.callApi = vi
         .fn<() => Promise<ProviderResponse>>()

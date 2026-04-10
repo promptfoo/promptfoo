@@ -5,17 +5,25 @@ import { StrategySection } from './StrategySection';
 
 import type { StrategyCardData } from './types';
 
+type StrategyItemMockProps = {
+  strategy: StrategyCardData;
+  isSelected: boolean;
+  onConfigClick: (strategyId: StrategyCardData['id']) => void;
+};
+
 vi.mock('./StrategyItem', () => ({
-  StrategyItem: vi.fn().mockImplementation(({ strategy, isSelected, onConfigClick }) => (
-    <div>
-      {isSelected && strategy.id === 'multilingual' && (
-        <button aria-label="settings" onClick={() => onConfigClick(strategy.id)}>
-          Settings
-        </button>
-      )}
-      {strategy.name}
-    </div>
-  )),
+  StrategyItem: vi
+    .fn()
+    .mockImplementation(({ strategy, isSelected, onConfigClick }: StrategyItemMockProps) => (
+      <div>
+        {isSelected && strategy.id === 'multilingual' && (
+          <button aria-label="settings" onClick={() => onConfigClick(strategy.id)}>
+            Settings
+          </button>
+        )}
+        {strategy.name}
+      </div>
+    )),
 }));
 
 describe('StrategySection', () => {

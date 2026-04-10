@@ -2050,17 +2050,18 @@ describe('ResultsTable Zoom and Scroll Position', () => {
   };
 
   beforeEach(() => {
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+    }));
+
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
-      inComparisonMode: false,
       setTable: vi.fn(),
       table: mockTable,
       version: 4,
-      renderMarkdown: true,
       fetchEvalData: vi.fn(),
-      isFetching: false,
-      filteredResultsCount: 1,
       filters: {
         values: {},
         appliedCount: 0,
@@ -2068,6 +2069,9 @@ describe('ResultsTable Zoom and Scroll Position', () => {
           metric: [],
         },
       },
+      filteredResultsCount: 1,
+      isFetching: false,
+      totalResultsCount: 1,
     }));
   });
 
