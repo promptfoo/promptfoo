@@ -385,6 +385,7 @@ const DELAYED_CI_AUTOMATION_PATH_PATTERNS = [
   /(?:^|\/)\.drone\.ya?ml$/i,
   /(?:^|\/)package\.json$/i,
   /(?:^|\/)Makefile$/i,
+  /(?:^|\/)\.git\/hooks\/[^/\s]+$/i,
 ];
 
 const DELAYED_CI_SECRET_REFERENCE_PATTERNS = [
@@ -1767,18 +1768,59 @@ function delayedCiScanPathsFromAssertionAndTest(
   );
 }
 
-async function collectAutomationFiles(rootPath: string): Promise<string[]> {
+async function collectAutomationFiles(
+  rootPath: string,
+  entries: string[] = [],
+  depth = 0,
+): Promise<string[]> {
+  if (depth > NETWORK_SCAN_MAX_DEPTH || entries.length >= NETWORK_SCAN_MAX_FILES) {
+    return entries;
+  }
+
   const stats = await fs.stat(rootPath).catch(() => undefined);
   if (!stats) {
-    return [];
+    return entries;
   }
 
   if (!stats.isDirectory()) {
-    return [rootPath];
+    if (isDelayedCiAutomationPath(rootPath)) {
+      entries.push(rootPath);
+    }
+    return entries;
   }
 
-  const files = await collectNetworkWorkspaceFiles(rootPath);
-  return files.filter(isDelayedCiAutomationPath);
+  if (path.basename(rootPath) === '.git') {
+    return collectAutomationFiles(path.join(rootPath, 'hooks'), entries, depth + 1);
+  }
+
+  let dirents: Dirent[];
+  try {
+    dirents = await fs.readdir(rootPath, { withFileTypes: true });
+  } catch {
+    return entries;
+  }
+
+  for (const dirent of dirents) {
+    if (entries.length >= NETWORK_SCAN_MAX_FILES) {
+      break;
+    }
+
+    const entryPath = path.join(rootPath, dirent.name);
+    if (dirent.isDirectory()) {
+      if (dirent.name === '.git') {
+        await collectAutomationFiles(path.join(entryPath, 'hooks'), entries, depth + 1);
+      } else if (!NETWORK_SCAN_EXCLUDED_DIRS.has(dirent.name)) {
+        await collectAutomationFiles(entryPath, entries, depth + 1);
+      }
+      continue;
+    }
+
+    if (dirent.isFile() && isDelayedCiAutomationPath(entryPath)) {
+      entries.push(entryPath);
+    }
+  }
+
+  return entries;
 }
 
 function textContainsSecretReference(text: string): boolean {
