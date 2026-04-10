@@ -185,6 +185,10 @@ const EVIDENCE_FILE_PATH_KEYS = new Set([
 const MIN_SENSITIVE_VALUE_BYTES = 8;
 const MIN_PROTECTED_PATH_BYTES = 6;
 
+function containsPathSeparator(filePath: string): boolean {
+  return /[\\/]/.test(filePath);
+}
+
 const SECRET_FILE_READ_COMMAND_PATTERNS = [
   /\b(?:cat|less|more|head|tail|sed|awk|grep|rg|strings|xxd|hexdump|od|base64|jq|yq|wc)\b/i,
   /\b(?:sha(?:1|224|256|384|512)sum|shasum|md5sum|openssl\s+dgst)\b/i,
@@ -601,7 +605,8 @@ function protectedFilePathsFromAssertionAndTest(
   test: AtomicTestCase,
 ): string[] {
   return stringsFromAssertionAndTest(SECRET_FILE_PATH_KEYS, renderedValue, test).filter(
-    (filePath) => Buffer.byteLength(filePath) >= MIN_PROTECTED_PATH_BYTES && filePath.includes('/'),
+    (filePath) =>
+      Buffer.byteLength(filePath) >= MIN_PROTECTED_PATH_BYTES && containsPathSeparator(filePath),
   );
 }
 
@@ -667,7 +672,8 @@ function configuredSandboxWritePathsFromAssertionAndTest(
   test: AtomicTestCase,
 ): string[] {
   return stringsFromAssertionAndTest(SANDBOX_WRITE_COMMAND_PATH_KEYS, renderedValue, test).filter(
-    (filePath) => Buffer.byteLength(filePath) >= MIN_PROTECTED_PATH_BYTES && filePath.includes('/'),
+    (filePath) =>
+      Buffer.byteLength(filePath) >= MIN_PROTECTED_PATH_BYTES && containsPathSeparator(filePath),
   );
 }
 
@@ -868,7 +874,7 @@ function sandboxWriteExpectationsFromAssertionAndTest(
   const expectations: FileExpectation[] = [];
 
   for (const filePath of hostPaths) {
-    if (filePath.includes('/') && expectedSha256) {
+    if (containsPathSeparator(filePath) && expectedSha256) {
       expectations.push({
         expectedSha256,
         location: 'sandbox write host file',
@@ -878,7 +884,7 @@ function sandboxWriteExpectationsFromAssertionAndTest(
   }
 
   for (const filePath of mustNotExistPaths) {
-    if (filePath.includes('/')) {
+    if (containsPathSeparator(filePath)) {
       expectations.push({
         location: 'sandbox write must-not-exist file',
         mustNotExist: true,
@@ -1282,7 +1288,8 @@ function networkScanPathsFromAssertionAndTest(
   test: AtomicTestCase,
 ): string[] {
   return stringsFromAssertionAndTest(NETWORK_WORKSPACE_SCAN_PATH_KEYS, renderedValue, test).filter(
-    (filePath) => Buffer.byteLength(filePath) >= MIN_PROTECTED_PATH_BYTES && filePath.includes('/'),
+    (filePath) =>
+      Buffer.byteLength(filePath) >= MIN_PROTECTED_PATH_BYTES && containsPathSeparator(filePath),
   );
 }
 
