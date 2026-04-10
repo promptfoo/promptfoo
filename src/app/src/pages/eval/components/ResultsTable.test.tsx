@@ -213,6 +213,45 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.queryByText('Avg Tokens:')).not.toBeInTheDocument();
   });
 
+  it('renders sparse prompt outputs as empty cells', () => {
+    const mockTableWithSparseOutput = {
+      body: [
+        {
+          outputs: [null, { pass: true, score: 1, text: 'test output' }],
+          test: {},
+          vars: [],
+        },
+      ],
+      head: {
+        prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
+        vars: [],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockTableWithSparseOutput,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByLabelText('No output for this prompt')).toBeInTheDocument();
+    expect(screen.getAllByTestId('eval-output-cell')).toHaveLength(1);
+  });
+
   it('displays tokens per second when both latency and completion tokens are available', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('Tokens/Sec:')).toBeInTheDocument();
