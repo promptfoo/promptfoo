@@ -27,6 +27,13 @@ const mockedUseTableStore = vi.mocked(useTableStore);
 const mockedIsPolicyMetric = vi.mocked(isPolicyMetric);
 const mockedDeserializePolicyIdFromMetric = vi.mocked(deserializePolicyIdFromMetric);
 
+beforeEach(() => {
+  mockedUseTableStore.mockReset();
+  mockedIsPolicyMetric.mockReset();
+  mockedDeserializePolicyIdFromMetric.mockReset();
+  mockedIsPolicyMetric.mockReturnValue(false);
+});
+
 describe('usePassingTestCounts', () => {
   it('should return an array of passing test counts for each prompt when the table is defined and each prompt has a metrics.testPassCount value', () => {
     const mockTable: EvaluateTable = {
