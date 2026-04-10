@@ -30,6 +30,8 @@ import {
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
 
+type ResultsFileConfigOnly = Pick<ResultsFile, 'config'>;
+
 export async function writeResultsToDatabase(
   results: EvaluateSummaryV2,
   config: Partial<UnifiedConfig>,
@@ -211,7 +213,7 @@ export async function updateResult(
 }
 
 async function getPromptsWithPredicate(
-  predicate: (result: ResultsFile) => boolean,
+  predicate: (result: ResultsFileConfigOnly) => boolean,
   limit: number,
 ): Promise<PromptWithMetadata[]> {
   // TODO(ian): Make this use a proper database query
@@ -221,7 +223,7 @@ async function getPromptsWithPredicate(
 
   for (const eval_ of evals_) {
     const createdAt = new Date(eval_.createdAt).toISOString();
-    const resultWrapper = { config: eval_.config } as ResultsFile;
+    const resultWrapper: ResultsFileConfigOnly = { config: eval_.config };
     if (predicate(resultWrapper)) {
       for (const prompt of eval_.getPrompts()) {
         const promptId = sha256(prompt.raw);
@@ -276,7 +278,7 @@ export function getPromptsForTestCasesHash(
 }
 
 async function getTestCasesWithPredicate(
-  predicate: (result: ResultsFile) => boolean,
+  predicate: (result: ResultsFileConfigOnly) => boolean,
   limit: number,
 ): Promise<TestCasesWithMetadata[]> {
   const evals_ = await Eval.getMany(limit);
@@ -285,7 +287,7 @@ async function getTestCasesWithPredicate(
 
   for (const eval_ of evals_) {
     const createdAt = new Date(eval_.createdAt).toISOString();
-    const resultWrapper = { config: eval_.config } as ResultsFile;
+    const resultWrapper: ResultsFileConfigOnly = { config: eval_.config };
     const testCases = resultWrapper.config.tests;
     if (testCases && predicate(resultWrapper)) {
       const evalId = eval_.id;
