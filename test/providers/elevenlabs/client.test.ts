@@ -190,6 +190,26 @@ describe('ElevenLabsClient', () => {
       expect(mockFetch).toHaveBeenCalledTimes(3);
     });
 
+    it('should retry POSTs when an idempotency-key header is present', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error')).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ success: true }),
+      } as Response);
+
+      const promise = client.post<{ success: boolean }>(
+        '/test',
+        {},
+        { headers: { 'Idempotency-Key': 'req-123' } },
+      );
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      expect(result).toEqual({ success: true });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
     it('should throw ElevenLabsAPIError on 500 without retrying', async () => {
       const errorResponse = {
         ok: false,
