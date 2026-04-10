@@ -694,6 +694,7 @@ class CodexAppServerConnection {
   private pending = new Map<JsonRpcId, PendingRequest>();
   private closed = false;
   private stderrChunks: string[] = [];
+  private stderrTotalLength = 0;
   private bufferedJsonRpcLines: string[] = [];
   private closePromise: Promise<void> | null = null;
 
@@ -983,8 +984,11 @@ class CodexAppServerConnection {
   private recordStderr(chunk: Buffer): void {
     const text = chunk.toString('utf8');
     this.stderrChunks.push(text);
-    if (this.stderrChunks.join('').length > 20_000) {
-      this.stderrChunks = [this.getStderr()];
+    this.stderrTotalLength += text.length;
+    if (this.stderrTotalLength > 20_000) {
+      const truncated = this.getStderr();
+      this.stderrChunks = [truncated];
+      this.stderrTotalLength = truncated.length;
     }
     logger.debug('[CodexAppServer] stderr', { text });
   }
@@ -1056,6 +1060,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   private threadRunQueues = new Map<string, Promise<void>>();
   private activeTurnsByThread = new Map<string, CodexAppServerTurnState>();
   private activeTurnsByTurn = new Map<string, CodexAppServerTurnState>();
+  private validatedWorkingDirs = new Set<string>();
   private ignoredProviderEnvWarningShown = false;
   private omittedProcessEnvWarningShown = false;
   private deepTracingWarningShown = false;
@@ -1105,6 +1110,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     this.activeTurnsByThread.clear();
     this.activeTurnsByTurn.clear();
     this.protectedThreadCounts.clear();
+    this.validatedWorkingDirs.clear();
 
     const connections = Array.from(
       new Set([...this.connections.values(), ...this.initializingConnections]),
@@ -2617,18 +2623,19 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     config: CodexAppServerConfig,
   ): ProviderResponse {
     const output = this.getFinalOutput(state);
+    const normalizedItems = state.items.map((item) => this.normalizeItemForMetadata(item));
     const raw = {
       output,
       thread: this.sanitizeForMetadata(threadHandle.response?.thread),
       turn: this.sanitizeForMetadata(state.turn),
-      items: state.items.map((item) => this.normalizeItemForMetadata(item)),
+      items: normalizedItems,
       tokenUsage: this.sanitizeForMetadata(state.rawTokenUsage),
       serverRequests: state.serverRequests,
       ...(config.include_raw_events
         ? { notifications: this.sanitizeForMetadata(state.notifications) }
         : {}),
     };
-    const metadata = this.buildResponseMetadata(state, threadHandle, config);
+    const metadata = this.buildResponseMetadata(state, threadHandle, config, normalizedItems);
 
     return {
       output,
@@ -2661,6 +2668,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     state: CodexAppServerTurnState,
     threadHandle: ThreadHandle,
     config: CodexAppServerConfig,
+    normalizedItems: Record<string, unknown>[],
   ): ProviderResponse['metadata'] {
     const skillMetadata = this.buildSkillMetadata(
       state.items,
@@ -2676,7 +2684,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         sandboxMode: config.sandbox_mode ?? 'read-only',
         approvalPolicy: config.approval_policy ?? 'never',
         itemCounts: this.getItemCounts(state.items),
-        items: state.items.map((item) => this.normalizeItemForMetadata(item)),
+        items: normalizedItems,
         serverRequests: state.serverRequests,
         notificationCount: state.notificationCount,
       },
@@ -2799,6 +2807,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   private validateWorkingDirectory(workingDir: string, skipGitCheck = false): void {
+    const cacheKey = `${workingDir}:${skipGitCheck}`;
+    if (this.validatedWorkingDirs.has(cacheKey)) {
+      return;
+    }
+
     let stats: fs.Stats;
     try {
       stats = fs.statSync(workingDir);
@@ -2821,6 +2834,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         To bypass this check, set skip_git_repo_check: true in your provider config.`,
       );
     }
+
+    this.validatedWorkingDirs.add(cacheKey);
   }
 
   private isInsideGitRepository(workingDir: string): boolean {
