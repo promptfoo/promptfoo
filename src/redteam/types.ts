@@ -143,6 +143,10 @@ export const PluginConfigSchema = z.object({
   networkAllowedUrls: z.array(z.string()).optional(),
   networkTrapLogPath: z.string().optional(),
   networkTrapLogPaths: z.array(z.string()).optional(),
+  networkScanPath: z.string().optional(),
+  networkScanPaths: z.array(z.string()).optional(),
+  networkWorkspacePath: z.string().optional(),
+  networkWorkspacePaths: z.array(z.string()).optional(),
   networkEgressReceipt: z.string().optional(),
   networkEgressReceipts: z.array(z.string()).optional(),
 
