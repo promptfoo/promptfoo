@@ -117,6 +117,100 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     expect(result.tokenUsage?.total).toBe(45);
   });
 
+  it('should force reasoning model behavior via config.isReasoningModel override', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+        isReasoningModel: true,
+        reasoning_effort: 'high',
+        temperature: 0.7,
+      },
+    });
+
+    expect(provider['isReasoningModel']()).toBe(true);
+    expect(provider['supportsTemperature']()).toBe(false);
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.reasoning).toEqual({ effort: 'high' });
+    expect(body.temperature).toBeUndefined();
+    expect(body.max_output_tokens).toBeUndefined();
+  });
+
+  it('should disable reasoning model behavior via config.isReasoningModel: false', async () => {
+    const provider = new OpenAiResponsesProvider('o3-mini', {
+      config: {
+        apiKey: 'test-key',
+        isReasoningModel: false,
+        reasoning: { effort: 'high' },
+        temperature: 0.5,
+      },
+    });
+
+    expect(provider['isReasoningModel']()).toBe(false);
+    expect(provider['supportsTemperature']()).toBe(true);
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.max_output_tokens).toBe(1024);
+    expect(body.reasoning).toBeUndefined();
+    expect(body.temperature).toBe(0.5);
+  });
+
+  it('should honor prompt-level isReasoningModel: true over provider config', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+        isReasoningModel: false,
+        max_output_tokens: 512,
+        temperature: 0.8,
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt', {
+      vars: {},
+      prompt: {
+        raw: 'Test prompt',
+        label: 'Test prompt',
+        config: {
+          isReasoningModel: true,
+          max_output_tokens: 2048,
+          reasoning: { effort: 'medium' },
+        },
+      },
+    });
+
+    expect(body.max_output_tokens).toBe(2048);
+    expect(body.reasoning).toEqual({ effort: 'medium' });
+    expect(body.temperature).toBeUndefined();
+  });
+
+  it('should honor prompt-level isReasoningModel: false over model-name detection', async () => {
+    const provider = new OpenAiResponsesProvider('o3-mini', {
+      config: {
+        apiKey: 'test-key',
+        reasoning: { effort: 'high' },
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt', {
+      vars: {},
+      prompt: {
+        raw: 'Test prompt',
+        label: 'Test prompt',
+        config: {
+          isReasoningModel: false,
+          max_output_tokens: 256,
+          temperature: 0.6,
+        },
+      },
+    });
+
+    expect(body.max_output_tokens).toBe(256);
+    expect(body.reasoning).toBeUndefined();
+    expect(body.temperature).toBe(0.6);
+  });
+
   it.each([
     { model: 'o3', reasoningEffort: 'high', maxOutputTokens: 2000 },
     { model: 'o3-pro', reasoningEffort: 'high', maxOutputTokens: 2000 },

@@ -1607,10 +1607,20 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(o4MiniProvider['isReasoningModel']()).toBe(true);
     });
 
-    it('should force reasoning model behavior via config.isReasoningModel override', () => {
+    it('should force reasoning model behavior via config.isReasoningModel override', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'forced reasoning output' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
       // Non-reasoning model name, but forced to reasoning by config
       const forcedProvider = new OpenAiChatCompletionProvider('gpt-4o', {
-        config: { isReasoningModel: true },
+        config: { isReasoningModel: true, reasoning_effort: 'medium' },
       });
       // Standard non-reasoning model without override
       const normalProvider = new OpenAiChatCompletionProvider('gpt-4o');
@@ -1619,6 +1629,41 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(forcedProvider['supportsTemperature']()).toBe(false);
       expect(normalProvider['isReasoningModel']()).toBe(false);
       expect(normalProvider['supportsTemperature']()).toBe(true);
+
+      // Verify the request body reflects reasoning model behavior
+      await forcedProvider.callApi('Test prompt');
+      const requestBody = JSON.parse(mockFetchWithCache.mock.calls[0][1].body);
+      expect(requestBody.reasoning_effort).toBe('medium');
+      expect(requestBody.temperature).toBeUndefined();
+      expect(requestBody.max_tokens).toBeUndefined();
+    });
+
+    it('should disable reasoning model behavior via config.isReasoningModel: false', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'non-reasoning output' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      // Reasoning model name, but forced to non-reasoning by config
+      const provider = new OpenAiChatCompletionProvider('o3-mini', {
+        config: { isReasoningModel: false, temperature: 0.7 },
+      });
+
+      expect(provider['isReasoningModel']()).toBe(false);
+      expect(provider['supportsTemperature']()).toBe(true);
+
+      // Verify the request body reflects non-reasoning behavior
+      await provider.callApi('Test prompt');
+      const requestBody = JSON.parse(mockFetchWithCache.mock.calls[0][1].body);
+      expect(requestBody.temperature).toBe(0.7);
+      expect(requestBody.reasoning_effort).toBeUndefined();
+      expect(requestBody.max_tokens).toBe(1024);
+      expect(requestBody.max_completion_tokens).toBeUndefined();
     });
 
     it('should identify GPT-5 models correctly including prefixed names', async () => {
