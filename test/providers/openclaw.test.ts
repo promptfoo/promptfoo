@@ -1760,6 +1760,48 @@ describe('OpenClaw Provider', () => {
       expect(result.output).toBe('No output from agent');
     });
 
+    it('should scope generated session keys for non-main agents', async () => {
+      const provider = new OpenClawAgentProvider('dev', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = messageHandlers.get('message')!;
+      const { agentReq, waitReq } = simulateHandshake(onMessage);
+
+      expect(agentReq.params.agentId).toBe('dev');
+      expect(agentReq.params.sessionKey).toMatch(/^agent:dev:promptfoo-[0-9a-f-]{36}$/);
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+        ),
+      );
+
+      await promise;
+    });
+
+    it('should scope unscoped configured session keys for non-main agents', async () => {
+      const provider = new OpenClawAgentProvider('dev', {
+        config: { gateway_url: 'http://test:18789', session_key: 'my-session' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = messageHandlers.get('message')!;
+      const { agentReq, waitReq } = simulateHandshake(onMessage);
+
+      expect(agentReq.params.agentId).toBe('dev');
+      expect(agentReq.params.sessionKey).toBe('agent:dev:my-session');
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+        ),
+      );
+
+      await promise;
+    });
+
     it('should include channel and account context when configured', async () => {
       const provider = new OpenClawAgentProvider('main', {
         config: {
@@ -1953,6 +1995,131 @@ describe('OpenClaw Provider', () => {
 
       const result = await promise;
       expect(result.error).toContain('Agent crashed during execution');
+    });
+
+    it('should surface terminal agent.wait error payloads', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = messageHandlers.get('message')!;
+      const { waitReq } = simulateHandshake(onMessage);
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'res',
+            id: waitReq.id,
+            ok: true,
+            payload: { status: 'error', error: 'LLM request failed: network connection error.' },
+          }),
+        ),
+      );
+
+      const result = await promise;
+      expect(result.error).toContain('LLM request failed');
+    });
+
+    it('should surface terminal agent.wait timeout payloads', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = messageHandlers.get('message')!;
+      const { waitReq } = simulateHandshake(onMessage);
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'res',
+            id: waitReq.id,
+            ok: true,
+            payload: { status: 'timeout' },
+          }),
+        ),
+      );
+
+      const result = await promise;
+      expect(result.error).toContain('timed out waiting for run run-1');
+    });
+
+    it('should surface lifecycle error events when wait returns without output', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = messageHandlers.get('message')!;
+      const { waitReq } = simulateHandshake(onMessage);
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'agent',
+            payload: {
+              runId: 'run-1',
+              stream: 'lifecycle',
+              data: { phase: 'error', error: 'LLM request failed: network connection error.' },
+            },
+          }),
+        ),
+      );
+      onMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+        ),
+      );
+
+      const result = await promise;
+      expect(result.error).toContain('LLM request failed');
+    });
+
+    it('should prefer recovered assistant output over earlier lifecycle errors', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = messageHandlers.get('message')!;
+      const { waitReq } = simulateHandshake(onMessage);
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'agent',
+            payload: {
+              runId: 'run-1',
+              stream: 'lifecycle',
+              data: { phase: 'error', error: 'transient model error' },
+            },
+          }),
+        ),
+      );
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'agent',
+            payload: {
+              runId: 'run-1',
+              stream: 'assistant',
+              data: { text: 'Recovered answer' },
+            },
+          }),
+        ),
+      );
+      onMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+        ),
+      );
+
+      const result = await promise;
+      expect(result.output).toBe('Recovered answer');
     });
 
     it('should resolve with error on unexpected WS close', async () => {

@@ -66,6 +66,7 @@ interface AgentConnectionState {
   waitRequestId: string;
   idempotencyKey: string;
   lastText: string;
+  lastError: string;
   connected: boolean;
   prompt: string;
   sessionKey: string;
@@ -100,6 +101,20 @@ function getStringArray(value: unknown): string[] | undefined {
 function stripRetryMarker(result: OpenClawAgentCallResult): ProviderResponse {
   const { retryWithDeviceToken: _retryWithDeviceToken, ...providerResponse } = result;
   return providerResponse;
+}
+
+function buildOpenClawAgentSessionKey(agentId: string, sessionKey: string): string {
+  const trimmedSessionKey = sessionKey.trim();
+  if (!trimmedSessionKey || trimmedSessionKey.toLowerCase().startsWith('agent:')) {
+    return trimmedSessionKey;
+  }
+
+  const trimmedAgentId = agentId.trim();
+  if (!trimmedAgentId || trimmedAgentId.toLowerCase() === 'main') {
+    return trimmedSessionKey;
+  }
+
+  return `agent:${trimmedAgentId}:${trimmedSessionKey}`;
 }
 
 /**
@@ -169,7 +184,10 @@ export class OpenClawAgentProvider implements ApiProvider {
 
   async callApi(prompt: string): Promise<ProviderResponse> {
     // Keep eval runs isolated from the user's persistent main session unless explicitly pinned.
-    const sessionKey = this.openclawConfig.session_key || `promptfoo-${crypto.randomUUID()}`;
+    const sessionKey = buildOpenClawAgentSessionKey(
+      this.agentId,
+      this.openclawConfig.session_key || `promptfoo-${crypto.randomUUID()}`,
+    );
 
     const firstResult = await this.callApiOnce(prompt, sessionKey);
     if (firstResult.retryWithDeviceToken) {
@@ -215,6 +233,7 @@ export class OpenClawAgentProvider implements ApiProvider {
         waitRequestId: crypto.randomUUID(),
         idempotencyKey: crypto.randomUUID(),
         lastText: '',
+        lastError: '',
         connected: false,
         prompt,
         sessionKey,
@@ -254,6 +273,15 @@ export class OpenClawAgentProvider implements ApiProvider {
         type: frame.type,
         event: frame.event,
         id: frame.id,
+        ok: frame.ok,
+        payloadStatus:
+          frame.payload && typeof frame.payload.status === 'string'
+            ? frame.payload.status
+            : undefined,
+        payloadStream:
+          frame.payload && typeof frame.payload.stream === 'string'
+            ? frame.payload.stream
+            : undefined,
       });
       return frame;
     } catch {
@@ -368,9 +396,18 @@ export class OpenClawAgentProvider implements ApiProvider {
     const payload = frame.payload as {
       runId?: string;
       stream?: string;
-      data?: { text?: string; delta?: string };
+      data?: { text?: string; delta?: string; phase?: string; error?: string; reason?: string };
     };
     if (payload?.runId && state.runId && payload.runId !== state.runId) {
+      return;
+    }
+    if (payload?.stream === 'lifecycle' && payload.data?.phase === 'error') {
+      state.lastError = payload.data.error || 'OpenClaw agent lifecycle error';
+      return;
+    }
+    if (payload?.stream === 'error') {
+      state.lastError =
+        payload.data?.error || payload.data?.reason || 'OpenClaw agent stream error';
       return;
     }
     if (payload?.stream !== 'assistant') {
@@ -378,21 +415,53 @@ export class OpenClawAgentProvider implements ApiProvider {
     }
     if (typeof payload?.data?.text === 'string') {
       state.lastText = payload.data.text;
+      state.lastError = '';
       return;
     }
     if (typeof payload?.data?.delta === 'string') {
       state.lastText += payload.data.delta;
+      state.lastError = '';
     }
   }
 
   private handleAgentWaitResponse(frame: OpenClawWsFrame, state: AgentConnectionState): void {
-    if (frame.ok) {
-      state.finish({ output: state.lastText || 'No output from agent' });
+    if (!frame.ok) {
+      state.finish({
+        error: `OpenClaw agent error: ${frame.error?.message || 'unknown error'}`,
+      });
       return;
     }
-    state.finish({
-      error: `OpenClaw agent error: ${frame.error?.message || 'unknown error'}`,
-    });
+
+    const payload = frame.payload as {
+      status?: string;
+      error?: string;
+      output?: string;
+      text?: string;
+    };
+    if (payload?.status === 'error') {
+      state.finish({ error: `OpenClaw agent error: ${payload.error || 'unknown error'}` });
+      return;
+    }
+    if (payload?.status === 'timeout') {
+      state.finish({ error: `OpenClaw agent error: timed out waiting for run ${state.runId}` });
+      return;
+    }
+
+    const finalText =
+      typeof payload?.output === 'string'
+        ? payload.output
+        : typeof payload?.text === 'string'
+          ? payload.text
+          : undefined;
+    if (state.lastText || finalText) {
+      state.finish({ output: state.lastText || finalText });
+      return;
+    }
+    if (state.lastError) {
+      state.finish({ error: `OpenClaw agent error: ${state.lastError}` });
+      return;
+    }
+    state.finish({ output: 'No output from agent' });
   }
 
   private sendJson(ws: WebSocket, payload: unknown): void {
