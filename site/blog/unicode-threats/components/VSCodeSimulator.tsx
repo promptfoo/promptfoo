@@ -922,7 +922,7 @@ module.exports = { validateUser, validatePasswordStrength };`;
             <select
               className={styles.promptSelect}
               value={selectedPrompt}
-              onChange={(e) => setSelectedPrompt(e.target.value)}
+              onChange={handlePromptSelect}
             >
               <option value="">Select a prompt...</option>
               {prompts.map((prompt) => (

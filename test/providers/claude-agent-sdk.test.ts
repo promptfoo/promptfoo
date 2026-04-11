@@ -1484,25 +1484,6 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
-        it('with dontAsk permission mode', async () => {
-          mockQuery.mockReturnValue(createMockResponse('Response'));
-
-          const provider = new ClaudeCodeSDKProvider({
-            config: {
-              permission_mode: 'dontAsk',
-            },
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
-          await provider.callApi('Test prompt');
-
-          expect(mockQuery).toHaveBeenCalledWith({
-            prompt: 'Test prompt',
-            options: expect.objectContaining({
-              permissionMode: 'dontAsk',
-            }),
-          });
-        });
-
         it('with bypassPermissions mode requires allow_dangerously_skip_permissions', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 

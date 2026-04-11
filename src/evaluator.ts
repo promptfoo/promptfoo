@@ -3213,11 +3213,9 @@ class Evaluator {
     serialRunEvalOptions: RunEvalOptions[];
     shouldGroupGradingByProvider: boolean;
   }): Promise<Eval | undefined> {
-    let flushGroupedRows: (() => Promise<void>) | undefined;
-
     try {
       if (shouldGroupGradingByProvider) {
-        flushGroupedRows = await this.runGroupedEvalSteps({
+        await this.runGroupedEvalSteps({
           checkAbort,
           evalStepIndexMap,
           groupedRunEvalOptions,
@@ -3250,7 +3248,6 @@ class Evaluator {
         throw err;
       }
 
-      await flushGroupedRows?.();
       if (isEvalTimedOut()) {
         logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
       } else if (!processingContext.targetUnavailable) {
@@ -3289,7 +3286,7 @@ class Evaluator {
     processingContext: EvalProcessingContext;
     processedIndices: Set<number>;
     prompts: CompletedPrompt[];
-  }) {
+  }): Promise<void> {
     const providerCallQueue = new ProviderGroupedCallQueue();
     const groupedRows: GroupedRows[] = [];
     const processGroupedRows = async ({ evalStep, index, rows }: GroupedRows) => {
@@ -3338,7 +3335,6 @@ class Evaluator {
     }
 
     await flushGroupedRows();
-    return undefined;
   }
 
   private async handleGroupedRowsAfterRun({

@@ -111,15 +111,18 @@ describe('PromptEditor', () => {
   });
 
   it('should call onCancel, exit edit mode, and reset the prompt value when the Cancel button is clicked in edit mode', async () => {
-    defaultProps.editMode = true;
     const onCancelMock = vi.fn();
     const onEditModeChangeMock = vi.fn();
     const onPromptChangeMock = vi.fn();
-    defaultProps.onCancel = onCancelMock;
-    defaultProps.onEditModeChange = onEditModeChangeMock;
-    defaultProps.onPromptChange = onPromptChangeMock;
+    const props = {
+      ...defaultProps,
+      editMode: true,
+      onCancel: onCancelMock,
+      onEditModeChange: onEditModeChangeMock,
+      onPromptChange: onPromptChangeMock,
+    };
 
-    render(<PromptEditor {...defaultProps} />);
+    render(<PromptEditor {...props} />);
 
     const cancelButton = screen.getByRole('button', { name: 'Cancel' });
     await userEvent.click(cancelButton);
@@ -158,20 +161,26 @@ describe('PromptEditor', () => {
   });
 
   it('should call onCopy when the Copy button in CodeDisplay is clicked (when not in edit mode)', async () => {
-    defaultProps.hoveredElement = 'prompt';
-    render(<PromptEditor {...defaultProps} />);
+    const props = {
+      ...defaultProps,
+      hoveredElement: 'prompt',
+    };
+    render(<PromptEditor {...props} />);
 
     await userEvent.click(screen.getByRole('button', { name: /copy prompt/i }));
 
-    expect(defaultProps.onCopy).toHaveBeenCalledTimes(1);
+    expect(props.onCopy).toHaveBeenCalledTimes(1);
   });
 
   it('should handle and display prompts exceeding maxRows in edit mode', () => {
     const longPrompt = 'This is a very long prompt.\n'.repeat(30);
-    defaultProps.editMode = true;
-    defaultProps.editedPrompt = longPrompt;
+    const props = {
+      ...defaultProps,
+      editMode: true,
+      editedPrompt: longPrompt,
+    };
 
-    render(<PromptEditor {...defaultProps} />);
+    render(<PromptEditor {...props} />);
 
     const textField = screen.getByRole('textbox');
     expect(textField).toBeInTheDocument();

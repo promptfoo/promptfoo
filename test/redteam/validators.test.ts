@@ -371,10 +371,23 @@ describe('redteamConfigSchema', () => {
     expect(result.data?.strategies).toBeDefined();
 
     // Verify the structure is correct
-    const filteredPlugins = samplePlugins.filter((id) => !COLLECTIONS.includes(id as any));
+    const collectionIds = new Set<string>(COLLECTIONS);
+    const filteredPlugins = samplePlugins.filter((id) => !collectionIds.has(id));
     expect(result.data?.plugins).toHaveLength(filteredPlugins.length);
 
     expect(result.data?.strategies?.length).toBeGreaterThan(0);
+  });
+
+  it('should validate every defined plugin id individually', () => {
+    for (const pluginId of REDTEAM_ALL_PLUGINS) {
+      expect(RedteamPluginSchema.safeParse(pluginId).success, pluginId).toBe(true);
+    }
+  });
+
+  it('should validate every defined strategy id individually', () => {
+    for (const strategyId of REDTEAM_ALL_STRATEGIES) {
+      expect(RedteamStrategySchema.safeParse(strategyId).success, strategyId).toBe(true);
+    }
   });
 
   it('should expand harmful plugin to all harm categories', () => {
