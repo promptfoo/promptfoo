@@ -1,3 +1,4 @@
+import logger from '../logger';
 import { DEFAULT_WEB_SEARCH_PROMPT } from '../prompts/grading';
 import { DEFAULT_ANTHROPIC_MODEL } from '../providers/anthropic/defaults';
 import { getDefaultProviders } from '../providers/defaults';
@@ -129,8 +130,11 @@ export async function matchesSearchRubric(
         searchProvider: searchProvider.id(),
       },
     };
-  } catch {
-    // Try to parse as a simple pass/fail
+  } catch (err) {
+    // JSON extraction failed - fall back to naive substring matching
+    logger.warn(
+      `[search-rubric] Could not parse structured JSON from provider response, falling back to substring matching: ${(err as Error).message}`,
+    );
     const outputLower = String(resp.output).toLowerCase();
     const pass = outputLower.includes('"pass":true') || outputLower.includes('"pass": true');
 
