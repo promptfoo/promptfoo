@@ -153,6 +153,75 @@ describe('matchesGEval', () => {
     });
   });
 
+  it('should return provider errors from the step-generation call', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      error: 'steps provider unavailable',
+      tokenUsage: { total: 3, prompt: 1, completion: 2 },
+    });
+
+    const result = await matchesGEval('Evaluate coherence', 'Test input', 'Test output', 0.7);
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'steps provider unavailable',
+      tokensUsed: expect.objectContaining({
+        total: 3,
+        prompt: 1,
+        completion: 2,
+      }),
+    });
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('should return provider errors from the evaluation call', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi')
+      .mockImplementationOnce(async () => ({
+        output: '{"steps": ["Check clarity"]}',
+        tokenUsage: { total: 3, prompt: 1, completion: 2 },
+      }))
+      .mockImplementationOnce(async () => ({
+        error: 'evaluation provider unavailable',
+        tokenUsage: { total: 4, prompt: 2, completion: 2 },
+      }));
+
+    const result = await matchesGEval('Evaluate coherence', 'Test input', 'Test output', 0.7);
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'evaluation provider unavailable',
+      tokensUsed: expect.objectContaining({
+        total: 7,
+        prompt: 3,
+        completion: 4,
+      }),
+    });
+  });
+
+  it('should fail clearly when the evaluation result is not a string', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi')
+      .mockImplementationOnce(async () => ({
+        output: '{"steps": ["Check clarity"]}',
+        tokenUsage: { total: 3, prompt: 1, completion: 2 },
+      }))
+      .mockImplementationOnce(async () => ({
+        output: { score: 8, reason: 'object output' },
+        tokenUsage: { total: 4, prompt: 2, completion: 2 },
+      }));
+
+    const result = await matchesGEval('Evaluate coherence', 'Test input', 'Test output', 0.7);
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'LLM-proposed evaluation result response is not a string',
+      tokensUsed: expect.objectContaining({
+        total: 7,
+      }),
+    });
+  });
+
   it('tracks token usage for both API calls', async () => {
     const criteria = 'Evaluate coherence and clarity';
     const input = 'Test input';

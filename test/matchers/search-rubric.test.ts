@@ -170,7 +170,7 @@ describe('matchesSearchRubric', () => {
     mocks.loadApiProvider.mockResolvedValue(null);
 
     await expect(matchesSearchRubric('Confirm current facts', 'output', {})).rejects.toThrow(
-      'search-rubric assertion requires a grading provider with web search capabilities',
+      'anthropic:messages:claude-sonnet-4-6',
     );
   });
 });

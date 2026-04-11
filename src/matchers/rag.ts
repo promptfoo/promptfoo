@@ -196,7 +196,10 @@ export async function matchesContextRecall(
 
   for (const sentence of sentences) {
     // Case-insensitive check for attribution - handles [ATTRIBUTED], [Attributed], etc.
-    const isAttributed = sentence.toLowerCase().includes(attributedTokenLower);
+    const lowerSentence = sentence.toLowerCase();
+    const isAttributed =
+      !lowerSentence.includes(notAttributedTokenLower) &&
+      lowerSentence.includes(attributedTokenLower);
     if (isAttributed) {
       numerator++;
     }
@@ -297,8 +300,9 @@ export async function matchesContextRelevance(
     numerator = 0;
   } else {
     // Count the extracted sentences as relevant
-    numerator = extractedSentences.length;
-    relevantSentences.push(...extractedSentences);
+    const uniqueRelevantSentences = [...new Set(extractedSentences)];
+    numerator = Math.min(uniqueRelevantSentences.length, totalContextUnits);
+    relevantSentences.push(...uniqueRelevantSentences);
   }
 
   // RAGAS CONTEXT RELEVANCE FORMULA: relevant units / total context units

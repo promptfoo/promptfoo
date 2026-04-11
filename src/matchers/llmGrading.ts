@@ -451,11 +451,27 @@ export async function matchesGEval(
     providerCallContext,
   );
   accumulateTokens(tokensUsed, respSteps.tokenUsage);
+  if (respSteps.error) {
+    return fail(respSteps.error, tokensUsed);
+  }
+  if (!respSteps.output) {
+    return fail('No output', tokensUsed);
+  }
+  if (typeof respSteps.output !== 'string') {
+    return fail('LLM-proposed evaluation steps response is not a string', tokensUsed);
+  }
   let steps;
 
   try {
     // NOTE: use regexp for reliable, because sometimes LLM wraps response to markdown format ```json...```
-    steps = JSON.parse(respSteps.output.match(/\{"steps".+\}/g)[0]).steps;
+    const stepsMatch = respSteps.output.match(/\{"steps".+\}/g);
+    if (!stepsMatch) {
+      return fail(
+        `LLM-proposed evaluation steps are not in JSON format: ${respSteps.output}`,
+        tokensUsed,
+      );
+    }
+    steps = JSON.parse(stepsMatch[0]).steps;
 
     if (!steps.length) {
       return fail('LLM does not propose any evaluation step', tokensUsed);
@@ -495,10 +511,26 @@ export async function matchesGEval(
     providerCallContext,
   );
   accumulateTokens(tokensUsed, resp.tokenUsage);
+  if (resp.error) {
+    return fail(resp.error, tokensUsed);
+  }
+  if (!resp.output) {
+    return fail('No output', tokensUsed);
+  }
+  if (typeof resp.output !== 'string') {
+    return fail('LLM-proposed evaluation result response is not a string', tokensUsed);
+  }
   let result;
 
   try {
-    result = JSON.parse(resp.output.match(/\{.+\}/g)[0]);
+    const resultMatch = resp.output.match(/\{.+\}/g);
+    if (!resultMatch) {
+      return fail(
+        `LLM-proposed evaluation result is not in JSON format: ${resp.output}`,
+        tokensUsed,
+      );
+    }
+    result = JSON.parse(resultMatch[0]);
   } catch {
     return fail(`LLM-proposed evaluation result is not in JSON format: ${resp.output}`, tokensUsed);
   }
