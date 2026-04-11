@@ -19,6 +19,14 @@ export const handleGEval = async ({
   const threshold = assertion.threshold ?? 0.7;
 
   if (Array.isArray(renderedValue)) {
+    if (renderedValue.length === 0) {
+      return {
+        assertion,
+        pass: false,
+        score: 0,
+        reason: 'G-Eval assertion requires at least one criterion string in the value array.',
+      };
+    }
     const scores: number[] = [];
     const reasons: string[] = [];
     for (const value of renderedValue) {
