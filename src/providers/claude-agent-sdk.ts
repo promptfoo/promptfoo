@@ -902,7 +902,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       promptSuggestions: config.prompt_suggestions,
       agentProgressSummaries: config.agent_progress_summaries,
       settings:
-        typeof config.settings === 'string'
+        typeof config.settings === 'string' && config.settings
           ? safeResolve(basePath, config.settings)
           : config.settings,
       betas: config.betas,
