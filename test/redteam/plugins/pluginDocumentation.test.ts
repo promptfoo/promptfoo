@@ -135,13 +135,10 @@ describe('Plugin Documentation', () => {
         (plugin) => !docsPlugins.has(plugin) && !collections.has(plugin),
       );
 
-      if (missingFromDocs.length > 0) {
-        console.log('\nPlugins missing from documentation data:');
-        missingFromDocs.forEach((plugin) => console.log(`  - ${plugin}`));
-        console.log('\nAdd these plugins to site/docs/_shared/data/plugins.ts');
-      }
-
-      expect(missingFromDocs).toEqual([]);
+      expect(
+        missingFromDocs,
+        `Plugins missing from documentation data. Add these plugins to site/docs/_shared/data/plugins.ts:\n${missingFromDocs.map((plugin) => `  - ${plugin}`).join('\n')}`,
+      ).toEqual([]);
     });
 
     it('should not have orphaned plugins in documentation data', async () => {
@@ -153,15 +150,10 @@ describe('Plugin Documentation', () => {
         (plugin) => !constantsPlugins.has(plugin),
       );
 
-      if (missingFromConstants.length > 0) {
-        console.log('\nOrphaned plugins in documentation data:');
-        missingFromConstants.forEach((plugin) => console.log(`  - ${plugin}`));
-        console.log(
-          '\nRemove these from site/docs/_shared/data/plugins.ts or add them to src/redteam/constants/plugins.ts',
-        );
-      }
-
-      expect(missingFromConstants).toEqual([]);
+      expect(
+        missingFromConstants,
+        `Orphaned plugins in documentation data. Remove these from site/docs/_shared/data/plugins.ts or add them to src/redteam/constants/plugins.ts:\n${missingFromConstants.map((plugin) => `  - ${plugin}`).join('\n')}`,
+      ).toEqual([]);
     });
 
     it('should have plugin constants and documentation data files', async () => {

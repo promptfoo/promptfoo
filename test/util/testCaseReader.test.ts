@@ -26,7 +26,7 @@ import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/ty
 import type { ApiProvider, ProviderOptions } from '../../src/types/providers';
 
 // Spy on logger.warn for tests that check warnings
-vi.spyOn(logger, 'warn');
+vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
 // Mock fetchWithTimeout before any imports that might use telemetry
 vi.mock('../../src/util/fetch', () => ({
@@ -559,11 +559,11 @@ describe('readStandaloneTestsFile', () => {
         expect(frenchTest).toBeDefined();
         expect(frenchTest?.vars?.body).toBe('Hello world');
       } else {
-        console.log('Skipping integration test - example Excel file not found');
+        return;
       }
-    } catch (error) {
+    } catch {
       // Skip test if read-excel-file is not installed
-      console.log('Skipping integration test - read-excel-file not available:', error);
+      return;
     }
   });
 

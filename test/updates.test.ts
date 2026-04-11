@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mockConsole } from './util/utils';
 
 // Create mock for exec - using vi.hoisted to ensure it's available in vi.mock factory
 const { mockExecAsync } = vi.hoisted(() => {
@@ -29,6 +28,7 @@ vi.mock('../src/version', () => ({
   ENGINES: { node: '>=20.0.0' },
 }));
 
+import logger from '../src/logger';
 import {
   checkForUpdates,
   checkModelAuditUpdates,
@@ -71,18 +71,18 @@ describe('getLatestVersion', () => {
 });
 
 describe('checkForUpdates', () => {
-  let consoleLogSpy: ReturnType<typeof mockConsole>;
+  let loggerInfoSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     // Reset fetchWithTimeout to clear any queued mockResolvedValueOnce from other tests
     vi.mocked(fetchWithTimeout).mockReset();
     // Clear env var that other tests may have set
     delete process.env.PROMPTFOO_DISABLE_UPDATE;
-    consoleLogSpy = mockConsole('log');
+    loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
   });
 
   afterEach(() => {
-    consoleLogSpy.mockRestore();
+    loggerInfoSpy.mockRestore();
   });
 
   it('should log an update message if a newer version is available - minor ver', async () => {
@@ -179,15 +179,15 @@ describe('getModelAuditCurrentVersion', () => {
 });
 
 describe('checkModelAuditUpdates', () => {
-  let consoleLogSpy: ReturnType<typeof mockConsole>;
+  let loggerInfoSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    consoleLogSpy = mockConsole('log');
+    loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
     delete process.env.PROMPTFOO_DISABLE_UPDATE;
   });
 
   afterEach(() => {
-    consoleLogSpy.mockRestore();
+    loggerInfoSpy.mockRestore();
   });
 
   it('should return true and log message when update is available', async () => {
