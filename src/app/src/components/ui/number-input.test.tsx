@@ -192,6 +192,12 @@ describe('NumberInput', () => {
     expect(input.value).toBe('');
   });
 
+  it('handles NaN value as empty string', () => {
+    render(<NumberInput value={Number.NaN} onChange={vi.fn()} />);
+    const input = screen.getByRole('spinbutton') as HTMLInputElement;
+    expect(input.value).toBe('');
+  });
+
   it('calls onBlur when provided', async () => {
     const user = userEvent.setup();
     const handleBlur = vi.fn();

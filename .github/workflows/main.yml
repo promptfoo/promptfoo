@@ -386,9 +386,18 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run Site Tests
+      - name: Run Site Tests with Coverage
         working-directory: site
-        run: npm test
+        run: npm run test:coverage
+
+      - name: Upload Site Coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          files: ./site/coverage/coverage-final.json
+          flags: site
+          name: site-coverage
+          fail_ci_if_error: true
+          use_oidc: true
 
   webui:
     name: webui tests
@@ -412,6 +421,9 @@ jobs:
 
       - name: Install Dependencies
         run: npm ci
+
+      - name: Run App Browser Tests
+        run: npm run test:app:browser
 
       - name: Run App Tests with Coverage
         run: npm run test:coverage --prefix src/app

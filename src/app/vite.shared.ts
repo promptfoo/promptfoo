@@ -49,29 +49,55 @@ const browserModuleImportFilter = /(?:^|[\\/])(?:logger|createHash)(?:\.ts)?$/;
 const nodeModulesPathPattern = /[\\/]node_modules[\\/]/;
 
 // Extract React Compiler Babel plugins from @vitejs/plugin-react's preset.
-// The type assertion mirrors the shape returned by reactCompilerPreset() —
-// if a future version of plugin-react changes this, the optional chaining
-// below will keep the build working (compiler just won't run) and the
-// warning will surface the issue.
-const reactCompilerConfig = reactCompilerPreset() as {
-  preset: () => { plugins: TransformOptions['plugins'] };
-  rolldown?: { filter?: { code?: RegExp } };
-};
-const reactCompilerPlugins = reactCompilerConfig.preset().plugins;
-const reactCompilerCodeFilter = reactCompilerConfig.rolldown?.filter?.code;
+// Validate the runtime shape defensively so plugin-react API changes disable
+// only this optimization instead of failing config evaluation.
+function getReactCompilerPresetValue(): unknown {
+  try {
+    return reactCompilerPreset();
+  } catch {
+    return undefined;
+  }
+}
+
+const reactCompilerPresetValue: unknown = getReactCompilerPresetValue();
+const reactCompilerPlugins: TransformOptions['plugins'] | undefined = (() => {
+  if (!reactCompilerPresetValue || typeof reactCompilerPresetValue !== 'object') {
+    return undefined;
+  }
+
+  const presetCandidate = (reactCompilerPresetValue as { preset?: unknown }).preset;
+  if (typeof presetCandidate !== 'function') {
+    return undefined;
+  }
+
+  try {
+    const presetResult = presetCandidate() as { plugins?: unknown } | null | undefined;
+    return Array.isArray(presetResult?.plugins)
+      ? (presetResult.plugins as TransformOptions['plugins'])
+      : undefined;
+  } catch {
+    return undefined;
+  }
+})();
+const reactCompilerCodeFilter: RegExp | undefined = (() => {
+  if (!reactCompilerPresetValue || typeof reactCompilerPresetValue !== 'object') {
+    return undefined;
+  }
+
+  const codeCandidate = (
+    reactCompilerPresetValue as {
+      rolldown?: { filter?: { code?: unknown } };
+    }
+  ).rolldown?.filter?.code;
+
+  return codeCandidate instanceof RegExp ? codeCandidate : undefined;
+})();
 const reactCompilerFileFilter = /\.[jt]sx?$/;
 const reactCompilerFileExcludes = [
   // Keep this table out of React Compiler centrally. Source-level compiler
   // opt-out directives are flagged by GitHub code scanning as unknown JS directives.
   /[\\/]src[\\/]app[\\/]src[\\/]pages[\\/]eval[\\/]components[\\/]ResultsTable\.tsx$/,
 ];
-
-if (!reactCompilerPlugins?.length) {
-  console.warn(
-    '[react-compiler] Failed to extract Babel plugins from @vitejs/plugin-react. ' +
-      'The React Compiler will be disabled for this build.',
-  );
-}
 
 export function browserModulesPlugin(): Plugin {
   return {
@@ -120,8 +146,17 @@ export function reactCompilerPlugin(): Plugin {
   return {
     name: 'react-compiler',
     enforce: 'pre',
-    async transform(code, id) {
+    buildStart() {
       if (!reactCompilerPlugins?.length) {
+        this.warn(
+          '[react-compiler] Failed to extract Babel plugins from @vitejs/plugin-react. ' +
+            'The React Compiler will be disabled for this build.',
+        );
+      }
+    },
+    async transform(code, id) {
+      const compilerPlugins = reactCompilerPlugins;
+      if (!compilerPlugins?.length) {
         return null;
       }
 
@@ -145,7 +180,7 @@ export function reactCompilerPlugin(): Plugin {
         parserOpts: {
           plugins: ['jsx', 'typescript'],
         },
-        plugins: reactCompilerPlugins,
+        plugins: compilerPlugins,
       });
 
       return result?.code ? { code: result.code, map: result.map } : null;

@@ -34,6 +34,8 @@ import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { RedteamHistoryEntry } from '../types';
 
+export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
+
 async function loadRedteamProvider({
   provider,
   jsonOnly = false,
@@ -595,7 +597,7 @@ export async function tryUnblocking({
     const { checkServerFeatureSupport } = await import('../../util/server');
     const supportsUnblocking = await checkServerFeatureSupport(
       'blocking-question-analysis',
-      '2025-06-16T14:49:11-07:00',
+      BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
     );
 
     if (!supportsUnblocking) {

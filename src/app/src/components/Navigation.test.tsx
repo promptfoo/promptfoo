@@ -236,11 +236,8 @@ describe('Navigation', () => {
       expect(modelAuditItem).toHaveAttribute('href', '/model-audit/setup');
 
       // Verify keyboard accessibility of the link
-      // Note: MUI may set tabindex="-1" for accessibility reasons in some cases
-      const tabIndex = modelAuditItem?.getAttribute('tabindex');
-      console.log('Model Audit link tabindex:', tabIndex);
-      // Accept current behavior rather than assert specific tabindex value
       expect(modelAuditItem).toBeInTheDocument();
+      expect(modelAuditItem).not.toHaveAttribute('aria-hidden', 'true');
     });
 
     it('shows correct descriptions for all dropdown items', () => {

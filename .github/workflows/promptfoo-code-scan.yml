@@ -34,12 +34,13 @@ jobs:
       - name: Run Promptfoo Code Scan
         uses: promptfoo/code-scan-action@v0
         env:
-          # promptfoo@0.121.3 is compatible, but newer @asamuzakjp/css-color releases
-          # currently break jsdom's CommonJS import path during the global CLI install.
-          NPM_CONFIG_BEFORE: '2026-03-29T00:00:00.000Z'
+          # Keep the global CLI install on the first promptfoo release that retries
+          # transient repository MCP timeouts, while avoiding future dependency drift.
+          NPM_CONFIG_BEFORE: '2026-04-11T00:40:00.000Z'
           # Avoid combining the workflow's before pin with this repo's project .npmrc
-          # min-release-age setting when the published action invokes nested npx commands.
-          NPM_CONFIG_LOCATION: 'global'
+          # min-release-age setting without changing nested npx package layout.
+          NPM_CONFIG_USERCONFIG: '/dev/null'
         with:
           min-severity: medium
+          config-path: .github/promptfoo-code-scan.yaml
           enable-fork-prs: true

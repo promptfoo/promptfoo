@@ -321,7 +321,6 @@ describe('Script Assertion Smoke Tests', () => {
       if (exitCode !== 0) {
         const output = stdout + stderr;
         if (output.toLowerCase().includes('python') && output.toLowerCase().includes('not found')) {
-          console.warn('Skipping Python assertion test - Python not available');
           return;
         }
       }
