@@ -207,7 +207,12 @@ export function getChangedFiles(cwd: string, baseRef?: string): ChangedFile[] {
 
   if (githubBaseSha) {
     fetchGitRef(githubBaseSha, cwd);
-    diffCommands.push(['diff', '--name-status', '--diff-filter=ACMRTUXB', githubBaseSha, 'HEAD']);
+    diffCommands.push([
+      'diff',
+      '--name-status',
+      '--diff-filter=ACMRTUXB',
+      `${githubBaseSha}...HEAD`,
+    ]);
   }
 
   if (isGithubActions && hasGitRef('HEAD^1', cwd)) {
