@@ -25,9 +25,14 @@ type AllowedSkip = {
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const testDir = path.join(repoRoot, 'test');
+const biomeConfigPath = path.join(repoRoot, 'biome.jsonc');
 const thisFile = fileURLToPath(import.meta.url);
 const testFilePattern = /\.(?:test|spec)\.(?:ts|tsx)$/;
 const testApiNames = new Set(['describe', 'it', 'suite', 'test']);
+const biomeDirectProcessEnvMutationAllowlistStart =
+  '// BEGIN direct process.env mutation legacy allowlist';
+const biomeDirectProcessEnvMutationAllowlistEnd =
+  '// END direct process.env mutation legacy allowlist';
 
 const allowedSkippedTests: AllowedSkip[] = [
   {
@@ -315,6 +320,21 @@ function findFilesMatchingPolicy(predicate: (source: string) => boolean): string
     .sort();
 }
 
+function findBiomeLegacyDirectProcessEnvMutationExclusions(): string[] {
+  const source = readFileSync(biomeConfigPath, 'utf8');
+  const start = source.indexOf(biomeDirectProcessEnvMutationAllowlistStart);
+  const end = source.indexOf(biomeDirectProcessEnvMutationAllowlistEnd);
+
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error('Biome process.env mutation allowlist markers are missing or out of order');
+  }
+
+  return Array.from(
+    source.slice(start, end).matchAll(/"!!test\/([^"]+)"/g),
+    ([, file]) => file,
+  ).sort();
+}
+
 function isTestControlKind(name: string): name is TestControlKind {
   return name === 'only' || name === 'skip' || name === 'skipIf';
 }
@@ -555,5 +575,11 @@ describe('root test hygiene', () => {
       .sort();
 
     expect(staleFiles).toEqual([]);
+  });
+
+  it('keeps Biome process.env mutation exclusions in sync with the hygiene allowlist', () => {
+    expect(findBiomeLegacyDirectProcessEnvMutationExclusions()).toEqual(
+      Array.from(legacyDirectProcessEnvMutationFiles).sort(),
+    );
   });
 });

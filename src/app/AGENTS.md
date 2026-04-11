@@ -92,6 +92,8 @@ npm run test:app -- src/pages/path/to/test.test.tsx --run   # Single frontend te
 
 See `src/app/src/hooks/usePageMeta.test.ts` for patterns. Use `vi.fn()` for mocks, `vi.mock()` for modules.
 
+For frontend tests that need environment variables, use `vi.stubEnv()` and clean up with `vi.unstubAllEnvs()` in `afterEach`. Avoid direct `process.env.FOO = ...`, `delete process.env.FOO`, or `process.env = ...` mutations; Biome blocks those in new frontend tests.
+
 ## Key Patterns
 
 - **Zustand stores**: See `src/app/src/store/` for implementation patterns; see `test/AGENTS.md` "Zustand Store Testing" section for testing patterns
