@@ -298,9 +298,9 @@ redteam:
 
 [OpenTelemetry tracing](/docs/tracing/) gives Promptfoo evidence about what the agent actually did during a red-team test: LLM calls, guardrail decisions, tool executions, shell commands, searches, reasoning steps, and errors. Promptfoo can normalize those spans into an agent trajectory, which is a time-ordered summary of the run.
 
-In most red-team runs, you don't need to hand-write trajectory assertions for every generated case. Promptfoo's red-team plugins generate the attacks and graders. Tracing adds evidence that those generated graders and iterative attack strategies can use:
+In most red-team runs, you don't need to hand-write trajectory assertions for every generated case. Promptfoo's red-team plugins generate the attacks and graders. Tracing adds evidence that generated graders, iterative attack strategies, and follow-up regression evals can use:
 
-- **Grading evidence**: Red-team graders can use a compact trajectory summary to distinguish "the agent said it would not do that" from "the agent actually called the forbidden tool."
+- **Grading evidence**: Red-team grading can receive a compact trajectory summary to distinguish "the agent said it would not do that" from "the agent actually called the forbidden tool."
 - **Attack feedback**: Iterative strategies can use the previous attempt's trace summary to probe deeper on the next turn.
 - **Investigation**: the Trace Timeline helps you debug whether a failure happened in the planner, a guardrail, a tool, an API permission layer, or the final response.
 
@@ -316,13 +316,15 @@ This creates an evidence loop:
 
 #### What Adversaries Can Observe
 
-When `redteam.tracing.includeInAttack` is enabled, attack strategies gain visibility into:
+When `redteam.tracing.includeInAttack` is enabled, compatible attack strategies receive a compact, sanitized trace summary. That summary is most useful for control-flow evidence:
 
 - **Guardrail decisions**: Which filters triggered and why ("content-filter: blocked")
-- **Tool chain execution**: Sequence, timing, and arguments of tool calls
+- **Tool chain execution**: Tool names, sequence, timing, and errors
 - **Error conditions**: Rate limits, validation failures, parsing errors
 - **Internal LLM calls**: Model selection, token usage patterns
 - **Performance characteristics**: Operation timing that reveals bottlenecks
+
+Avoid putting secrets or sensitive IDs in span names, tool names, or other attributes you choose to expose. Use trajectory assertions for argument-level regression checks, where Promptfoo can inspect trace data without feeding it back into the attacker.
 
 Example trace summary provided to an attacker:
 
@@ -351,7 +353,7 @@ The attack strategy now knows:
 - The `user_search` tool is available and was called twice
 - The agent uses separate planning and generation steps
 
-If you want trace-aware grading without giving the attacker this extra visibility, set `includeInAttack: false` and keep `includeInGrading: true`.
+If you want trace-aware grading without giving the attacker this extra visibility, set `includeInAttack: false` and keep `includeInGrading: true`. `includeInAttack` defaults to `true` when red-team tracing is enabled, so disable it explicitly for a black-box first pass.
 
 #### Trajectory Evidence in Red Teams
 
@@ -365,7 +367,7 @@ Trajectory evaluation is useful when the security outcome depends on intermediat
 | Did the agent exfiltrate or beacon out?   | HTTP, search, shell, or network spans include an unexpected destination      |
 | Did the agent only claim it was safe?     | Final answer is safe, but the trajectory shows unsafe intermediate execution |
 
-The same trajectory layer powers optional assertions such as `trajectory:tool-used`, `trajectory:tool-args-match`, `trajectory:tool-sequence`, `trajectory:step-count`, and `trajectory:goal-success`. These are most useful after a red-team finding, when you turn the issue into a focused regression eval or CI check.
+The same trace data also powers optional assertions such as `trajectory:tool-used`, `trajectory:tool-args-match`, `trajectory:tool-sequence`, `trajectory:step-count`, and `trajectory:goal-success`. These are most useful after a red-team finding, when you turn the issue into a focused regression eval or CI check.
 
 For example, a generated red-team run might reveal that a support agent called `refund_payment` without first confirming account ownership. You would keep using the red-team plugins for broad coverage, then add a small targeted eval that verifies the agent no longer makes that specific tool call:
 
@@ -403,9 +405,12 @@ redteam:
     includeInAttack: true
     includeInGrading: true
     spanFilter:
+      - 'llm.*'
       - 'agent.*'
       - 'guardrail.*'
       - 'tool.*'
+      - 'command.*'
+      - 'search.*'
   plugins:
     - excessive-agency
     - rbac
@@ -415,7 +420,7 @@ redteam:
     - jailbreak:hydra
 ```
 
-For useful trajectories, your agent or provider needs to emit spans that identify internal steps. Add attributes such as `tool.name`, `tool.arguments`, `command`, `search.query`, or guardrail decision fields. Built-in providers emit provider-level GenAI spans automatically, but deeper agent evidence requires instrumenting the agent workflow or using a provider that already streams tool and command spans.
+For useful trajectories, your agent or provider needs to emit spans that identify internal steps. Add attributes such as `tool.name`, `tool.arguments`, `command`, `search.query`, or guardrail decision fields. Built-in providers emit provider-level GenAI spans automatically, but deeper agent evidence requires instrumenting the agent workflow or using a provider that already streams tool and command spans. Keep `spanFilter` aligned with the span names your agent emits; overly narrow filters can hide the evidence you want graders or assertions to inspect.
 
 #### How Trace Feedback Improves Attacks
 
