@@ -85,4 +85,63 @@ describe('matchesModeration', () => {
 
     expect(replicateSpy).toHaveBeenCalledWith('test prompt', 'test response');
   });
+
+  it('should fail when the moderation API returns an error', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    vi.spyOn(OpenAiModerationProvider.prototype, 'callModerationApi').mockResolvedValue({
+      error: 'provider unavailable',
+    });
+
+    await expect(
+      matchesModeration({
+        userPrompt: 'test prompt',
+        assistantResponse: 'test response',
+      }),
+    ).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Moderation API error: provider unavailable',
+    });
+  });
+
+  it('should fail when moderation flags match the requested categories', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    vi.spyOn(OpenAiModerationProvider.prototype, 'callModerationApi').mockResolvedValue({
+      flags: [
+        { code: 'violence', description: 'Violence' },
+        { code: 'hate', description: 'Hate' },
+      ],
+    });
+
+    await expect(
+      matchesModeration({
+        userPrompt: 'test prompt',
+        assistantResponse: 'test response',
+        categories: ['hate'],
+      }),
+    ).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Moderation flags detected: Hate',
+    });
+  });
+
+  it('should pass when flags do not match the requested categories', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    vi.spyOn(OpenAiModerationProvider.prototype, 'callModerationApi').mockResolvedValue({
+      flags: [{ code: 'violence', description: 'Violence' }],
+    });
+
+    await expect(
+      matchesModeration({
+        userPrompt: 'test prompt',
+        assistantResponse: 'test response',
+        categories: ['hate'],
+      }),
+    ).resolves.toEqual({
+      pass: true,
+      score: 1,
+      reason: 'No relevant moderation flags detected',
+    });
+  });
 });
