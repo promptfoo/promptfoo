@@ -1121,6 +1121,33 @@ describe('loadApiProvider', () => {
     delete process.env.TEST_SESSION_7079_HTTP;
   });
 
+  it('lets explicit env overrides win for providers loaded from file references', async () => {
+    const mockYamlContent = dedent`
+      id: 'https://{{env.TEST_FILE_PROVIDER_ENV}}.example.com/api'
+      env:
+        TEST_FILE_PROVIDER_ENV: 'file-default'
+      config:
+        method: 'GET'
+        headers:
+          Authorization: 'Bearer {{env.TEST_FILE_PROVIDER_ENV}}'
+    `;
+    mockFsReadFileSync.mockReturnValue(mockYamlContent);
+
+    const provider = await loadApiProvider('file://path/to/provider.yaml', {
+      env: {
+        TEST_FILE_PROVIDER_ENV: 'context-env',
+      },
+      options: {
+        env: {
+          TEST_FILE_PROVIDER_ENV: 'explicit-env',
+        },
+      },
+    });
+
+    expect(provider.id()).toBe('https://explicit-env.example.com/api');
+    expect(provider.config.headers?.Authorization).toBe('Bearer explicit-env');
+  });
+
   it('uses provider env overrides when rendering provider config', async () => {
     const provider = await loadApiProvider('echo', {
       options: {

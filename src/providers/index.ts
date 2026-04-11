@@ -131,7 +131,7 @@ export async function loadApiProvider(
     // Merge file's env with context.env - context.env takes precedence
     // This allows callers to override file-defined defaults
     const mergedFileEnv: EnvOverrides | undefined =
-      fileContent.env || env ? { ...fileContent.env, ...env } : undefined;
+      fileContent.env || mergedEnv ? { ...fileContent.env, ...mergedEnv } : undefined;
 
     return loadApiProvider(fileContent.id, {
       basePath,
