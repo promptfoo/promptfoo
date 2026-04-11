@@ -1,6 +1,6 @@
 import select from '@inquirer/select';
 import { Command } from 'commander';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authCommand } from '../../src/commands/auth';
 import { isNonInteractive } from '../../src/envars';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
@@ -9,7 +9,7 @@ import logger from '../../src/logger';
 import { getDefaultTeam, getUserTeams } from '../../src/util/cloud';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { openAuthBrowser } from '../../src/util/server';
-import { createMockResponse, stripAnsi } from '../util/utils';
+import { createMockResponse, mockGlobal, stripAnsi } from '../util/utils';
 
 vi.mock('@inquirer/select');
 
@@ -45,7 +45,11 @@ vi.mock('../../src/util/fetch/index.ts');
 vi.mock('../../src/util/server');
 
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+const restoreFetch = mockGlobal('fetch', mockFetch);
+
+afterAll(() => {
+  restoreFetch();
+});
 
 describe('auth command', () => {
   let program: Command;

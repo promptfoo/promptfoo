@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { mockIntersectionObserver, mockMatchMedia } from '@app/tests/browserMocks';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -21,29 +22,6 @@ vi.mock('@app/utils/media', () => ({
   getKindLabel: (kind: string) => kind.charAt(0).toUpperCase() + kind.slice(1),
   hashToNumber: () => 0,
 }));
-
-// Mock matchMedia
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: vi.fn().mockImplementation((query: string) => ({
-    matches: query === '(hover: hover)',
-    media: query,
-    onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })),
-});
-
-// Mock IntersectionObserver
-class MockIntersectionObserver {
-  observe = vi.fn();
-  unobserve = vi.fn();
-  disconnect = vi.fn();
-}
-window.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver;
 
 // Wrapper component with providers
 const Wrapper = ({ children }: { children: ReactNode }) => (
@@ -73,6 +51,8 @@ const createMockMediaItem = (overrides: Partial<MediaItem> = {}): MediaItem => (
 describe('MediaCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockMatchMedia({ matches: (query) => query === '(hover: hover)' });
+    mockIntersectionObserver();
   });
 
   describe('rendering', () => {

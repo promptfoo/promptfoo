@@ -345,9 +345,14 @@ export async function renderPrompt(
       }
     } else if (isPackagePath(value)) {
       const basePath = cliState.basePath || '';
-      const javascriptOutput = (await (
-        await loadFromPackage(value, basePath)
-      )(varName, basePrompt, vars, provider)) as {
+      const requiredModule = await loadFromPackage(value, basePath);
+      if (typeof requiredModule !== 'function') {
+        throw new Error(
+          `Variable source malformed: ${value} must export a function. Received: ${typeof requiredModule}`,
+        );
+      }
+
+      const javascriptOutput = (await requiredModule(varName, basePrompt, vars, provider)) as {
         output?: string;
         error?: string;
       };

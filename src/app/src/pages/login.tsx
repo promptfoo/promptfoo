@@ -113,7 +113,7 @@ export default function LoginPage() {
     }
   }, [isLoading, email, handleRedirect]);
 
-  if (isLoading || (!isLoading && email)) {
+  if (isLoading || email) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Spinner size="lg" />

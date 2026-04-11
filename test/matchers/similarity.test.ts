@@ -343,6 +343,32 @@ describe('matchesSimilarity', () => {
   });
 
   describe('metric validation', () => {
+    it('should normalize missing completion details for native similarity providers', async () => {
+      const mockProvider = {
+        id: () => 'test-similarity-provider',
+        callSimilarityApi: vi.fn().mockResolvedValue({
+          similarity: 0.9,
+          tokenUsage: { total: 5, prompt: 2, completion: 3 },
+        }),
+      };
+
+      const grading: GradingConfig = {
+        provider: mockProvider as any,
+      };
+
+      await expect(matchesSimilarity('expected', 'output', 0.8, false, grading)).resolves.toEqual(
+        expect.objectContaining({
+          tokensUsed: expect.objectContaining({
+            completionDetails: {
+              reasoning: 0,
+              acceptedPrediction: 0,
+              rejectedPrediction: 0,
+            },
+          }),
+        }),
+      );
+    });
+
     it('should reject non-cosine metric for callSimilarityApi providers', async () => {
       const mockProvider = {
         id: () => 'test-similarity-provider',

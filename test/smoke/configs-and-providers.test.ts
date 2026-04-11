@@ -187,7 +187,6 @@ describe('Provider Smoke Tests', () => {
       if (exitCode !== 0) {
         const output = stdout + stderr;
         if (output.includes('python') || output.includes('Python')) {
-          console.warn('Skipping Python provider test - Python not available');
           return;
         }
       }

@@ -104,6 +104,7 @@ function resolveGatewayHost(gatewayConfig: OpenClawGatewayConfig['gateway'] | un
 function buildLocalGatewayUrl(
   gatewayConfig: OpenClawGatewayConfig['gateway'],
   transport: GatewayTransport,
+  portOverride?: number,
 ): string {
   const scheme =
     transport === 'ws'
@@ -113,7 +114,7 @@ function buildLocalGatewayUrl(
       : gatewayConfig?.tls?.enabled
         ? 'https'
         : 'http';
-  const port = gatewayConfig?.port ?? DEFAULT_GATEWAY_PORT;
+  const port = portOverride ?? gatewayConfig?.port ?? DEFAULT_GATEWAY_PORT;
   const host = resolveGatewayHost(gatewayConfig);
   return `${scheme}://${host}:${port}`;
 }
@@ -121,6 +122,7 @@ function buildLocalGatewayUrl(
 function resolveGatewayUrlFromConfig(
   openclawConfig: OpenClawGatewayConfig | undefined,
   transport: GatewayTransport,
+  portOverride?: number,
 ): string | undefined {
   const gatewayConfig = openclawConfig?.gateway;
   if (!gatewayConfig) {
@@ -134,7 +136,19 @@ function resolveGatewayUrlFromConfig(
     }
   }
 
-  return buildLocalGatewayUrl(gatewayConfig, transport);
+  return buildLocalGatewayUrl(gatewayConfig, transport, portOverride);
+}
+
+function resolveGatewayPortOverride(env?: Record<string, string | undefined>): number | undefined {
+  const rawPort = env?.OPENCLAW_GATEWAY_PORT || getEnvString('OPENCLAW_GATEWAY_PORT');
+  const trimmedPort = rawPort?.trim();
+  if (!trimmedPort || !/^\d+$/.test(trimmedPort)) {
+    return undefined;
+  }
+  const parsedPort = Number(trimmedPort);
+  return Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535
+    ? parsedPort
+    : undefined;
 }
 
 function toAuthSecret(
@@ -203,7 +217,7 @@ export function readOpenClawConfig(
     cachedConfigPath = configPath;
     return config;
   } catch (err) {
-    logger.debug(`Failed to read OpenClaw config at ${configPath}: ${err}`);
+    logger.warn(`Failed to read OpenClaw config at ${configPath}`, { err });
     return undefined;
   }
 }
@@ -248,15 +262,16 @@ function resolveGatewayTransportUrl(
   }
 
   // 3. Auto-detect from the active OpenClaw config file
+  const portOverride = resolveGatewayPortOverride(env);
   const openclawConfig = readOpenClawConfig(env);
-  const resolvedUrl = resolveGatewayUrlFromConfig(openclawConfig, transport);
+  const resolvedUrl = resolveGatewayUrlFromConfig(openclawConfig, transport, portOverride);
   if (resolvedUrl) {
     return resolvedUrl;
   }
 
   // 4. Default
   const scheme = transport === 'ws' ? 'ws' : 'http';
-  return `${scheme}://${DEFAULT_GATEWAY_HOST}:${DEFAULT_GATEWAY_PORT}`;
+  return `${scheme}://${DEFAULT_GATEWAY_HOST}:${portOverride ?? DEFAULT_GATEWAY_PORT}`;
 }
 
 export function resolveAuthSecret(
@@ -308,7 +323,64 @@ export function resolveAuthToken(
 }
 
 /**
- * Build common OpenClaw headers for agent-id and session-key.
+ * Build the canonical OpenClaw model id for OpenAI-compatible endpoints.
+ */
+export function buildOpenClawModelName(agentId: string): string {
+  const trimmedAgentId = agentId.trim();
+  if (!trimmedAgentId || trimmedAgentId === 'default' || trimmedAgentId === 'openclaw') {
+    return 'openclaw/default';
+  }
+  if (trimmedAgentId.startsWith('openclaw/')) {
+    const targetAgentId = trimmedAgentId.slice('openclaw/'.length).trim();
+    return targetAgentId ? `openclaw/${targetAgentId}` : 'openclaw/default';
+  }
+  if (trimmedAgentId.startsWith('openclaw:')) {
+    const targetAgentId = trimmedAgentId.slice('openclaw:'.length).trim();
+    return targetAgentId ? `openclaw/${targetAgentId}` : 'openclaw/default';
+  }
+  if (trimmedAgentId.startsWith('agent:')) {
+    const targetAgentId = trimmedAgentId.slice('agent:'.length).trim();
+    return targetAgentId ? `openclaw/${targetAgentId}` : 'openclaw/default';
+  }
+  return `openclaw/${trimmedAgentId}`;
+}
+
+function normalizeHeaderValue(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+/**
+ * Build OpenClaw request context headers shared by HTTP-compatible endpoints.
+ */
+export function buildOpenClawContextHeaders(config?: OpenClawConfig): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const backendModel = normalizeHeaderValue(config?.backend_model || config?.model_override);
+  const messageChannel = normalizeHeaderValue(config?.message_channel);
+  const accountId = normalizeHeaderValue(config?.account_id);
+  const scopes = config?.scopes
+    ?.map((scope) => scope.trim())
+    .filter(Boolean)
+    .join(',');
+
+  if (backendModel) {
+    headers['x-openclaw-model'] = backendModel;
+  }
+  if (messageChannel) {
+    headers['x-openclaw-message-channel'] = messageChannel;
+  }
+  if (accountId) {
+    headers['x-openclaw-account-id'] = accountId;
+  }
+  if (scopes) {
+    headers['x-openclaw-scopes'] = scopes;
+  }
+
+  return headers;
+}
+
+/**
+ * Build common OpenClaw headers for agent-id, session-key, and request context.
  * Note: thinking_level is only supported by the WS Agent provider and is
  * passed as an RPC param there, not as an HTTP header.
  */
@@ -322,7 +394,10 @@ export function buildOpenClawHeaders(
   if (config?.session_key) {
     headers['x-openclaw-session-key'] = config.session_key;
   }
-  return headers;
+  return {
+    ...headers,
+    ...buildOpenClawContextHeaders(config),
+  };
 }
 
 /**

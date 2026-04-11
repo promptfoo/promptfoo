@@ -3,7 +3,7 @@ import { DEFAULT_ANTHROPIC_MODEL } from '../providers/anthropic/defaults';
 import { getDefaultProviders } from '../providers/defaults';
 import { hasWebSearchCapability, loadWebSearchProvider } from '../providers/webSearchUtils';
 import { extractFirstJsonObject } from '../util/json';
-import { callProviderWithContext } from './providers';
+import { callProviderWithContext, getGradingProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import { tryParse } from './shared';
 
@@ -33,13 +33,28 @@ export async function matchesSearchRubric(
 
   // Search rubric assertion is like llm-rubric but with web search capabilities
   const defaultProviders = await getDefaultProviders();
+  const defaultSearchProviders = [
+    defaultProviders.webSearchProvider,
+    defaultProviders.llmRubricProvider,
+    defaultProviders.gradingProvider,
+  ];
+  const configuredProvider = grading.provider
+    ? await getGradingProvider('text', grading.provider, null)
+    : null;
 
   // Get a provider with web search capabilities
   let searchProvider =
-    grading.provider ||
-    defaultProviders.webSearchProvider ||
-    defaultProviders.llmRubricProvider ||
-    defaultProviders.gradingProvider;
+    configuredProvider || defaultSearchProviders.find((provider) => Boolean(provider));
+
+  // Prefer a known web-search default over a configured/default text grader that lacks search.
+  if (!hasWebSearchCapability(searchProvider)) {
+    const webSearchDefault = defaultSearchProviders.find((provider) =>
+      hasWebSearchCapability(provider),
+    );
+    if (webSearchDefault) {
+      searchProvider = webSearchDefault;
+    }
+  }
 
   // Check if current provider has web search, if not try to load one
   if (!hasWebSearchCapability(searchProvider)) {

@@ -1,3 +1,4 @@
+import { mockClipboard, mockDocumentExecCommand, mockWindowOpen } from '@app/tests/browserMocks';
 import { callApi } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -8,15 +9,6 @@ import ShareModal from './ShareModal';
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
 }));
-
-// Mock document.execCommand for copy functionality
-Object.assign(navigator, {
-  clipboard: {
-    writeText: vi.fn(),
-  },
-});
-
-global.document.execCommand = vi.fn();
 
 describe('ShareModal', () => {
   const mockOnClose = vi.fn();
@@ -32,6 +24,8 @@ describe('ShareModal', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockClipboard();
+    mockDocumentExecCommand();
     // Mock successful domain check by default
     mockCallApi.mockResolvedValue(
       Response.json({
@@ -158,9 +152,7 @@ describe('ShareModal', () => {
       }),
     );
 
-    // Mock window.open
-    const mockOpen = vi.fn();
-    vi.stubGlobal('open', mockOpen);
+    const mockOpen = mockWindowOpen();
 
     render(<ShareModal {...defaultProps} />);
 

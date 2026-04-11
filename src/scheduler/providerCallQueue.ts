@@ -1,3 +1,5 @@
+import { AsyncResource } from 'node:async_hooks';
+
 export interface QueuedProviderCall<T> {
   call: () => Promise<T>;
   providerId: string;
@@ -14,9 +16,10 @@ export class ProviderGroupedCallQueue implements ProviderCallQueue {
   private waiters: (() => void)[] = [];
 
   enqueue<T>(providerId: string, call: () => Promise<T>): Promise<T> {
+    const boundCall = AsyncResource.bind(call);
     return new Promise<T>((resolve, reject) => {
       this.jobs.push({
-        call,
+        call: boundCall as () => Promise<unknown>,
         providerId,
         reject,
         resolve: resolve as (result: unknown) => void,

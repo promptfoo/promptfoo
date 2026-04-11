@@ -94,9 +94,66 @@ export const PluginConfigSchema = z.object({
   // Strategy exclusions - allows plugins to exclude incompatible strategies
   excludeStrategies: z.array(z.string()).optional(),
 
+  // Coding agent deterministic fixture fields
+  protectedFilePath: z.string().optional(),
+  protectedFilePaths: z.array(z.string()).optional(),
+  secretFilePath: z.string().optional(),
+  secretFilePaths: z.array(z.string()).optional(),
+  secretLocalFilePath: z.string().optional(),
+  secretLocalFilePaths: z.array(z.string()).optional(),
+  secretFileValue: z.string().optional(),
+  secretFileValues: z.array(z.string()).optional(),
+  outsideWritePath: z.string().optional(),
+  outsideWritePaths: z.array(z.string()).optional(),
+  outsideWriteHostPath: z.string().optional(),
+  outsideWriteHostPaths: z.array(z.string()).optional(),
+  outsideWriteProbeDir: z.string().optional(),
+  outsideWriteProbeDirs: z.array(z.string()).optional(),
+  outsideWriteAllowedPath: z.string().optional(),
+  outsideWriteAllowedPaths: z.array(z.string()).optional(),
+  outsideWriteExpectedSha256: z.string().optional(),
+  outsideWritePathSha256: z.string().optional(),
+  outsideWriteSha256: z.string().optional(),
+  outsideWriteMustNotExistPath: z.string().optional(),
+  outsideWriteMustNotExistPaths: z.array(z.string()).optional(),
+  mustNotExistPath: z.string().optional(),
+  mustNotExistPaths: z.array(z.string()).optional(),
+  protectedWritePath: z.string().optional(),
+  protectedWritePaths: z.array(z.string()).optional(),
+  sandboxWritePath: z.string().optional(),
+  sandboxWritePaths: z.array(z.string()).optional(),
+  workspacePath: z.string().optional(),
+  workspacePaths: z.array(z.string()).optional(),
+  workspaceRoot: z.string().optional(),
+  workspaceRoots: z.array(z.string()).optional(),
+  workingDirectory: z.string().optional(),
+  workingDirectoryPath: z.string().optional(),
+  workingDir: z.string().optional(),
+  networkEgressUrl: z.string().optional(),
+  networkEgressUrls: z.array(z.string()).optional(),
+  networkTrapUrl: z.string().optional(),
+  networkTrapUrls: z.array(z.string()).optional(),
+  networkEgressHost: z.string().optional(),
+  networkEgressHosts: z.array(z.string()).optional(),
+  networkTrapHost: z.string().optional(),
+  networkTrapHosts: z.array(z.string()).optional(),
+  networkAllowedHost: z.string().optional(),
+  networkAllowedHosts: z.array(z.string()).optional(),
+  networkAllowedUrl: z.string().optional(),
+  networkAllowedUrls: z.array(z.string()).optional(),
+  networkTrapLogPath: z.string().optional(),
+  networkTrapLogPaths: z.array(z.string()).optional(),
+  networkScanPath: z.string().optional(),
+  networkScanPaths: z.array(z.string()).optional(),
+  networkWorkspacePath: z.string().optional(),
+  networkWorkspacePaths: z.array(z.string()).optional(),
+  networkEgressReceipt: z.string().optional(),
+  networkEgressReceipts: z.array(z.string()).optional(),
+
   // Multi-variable inputs - allows generating test cases with multiple variables
   // Keys are variable names, values are descriptions of what each variable should contain
   inputs: InputsSchema.optional(),
+  maxCharsPerMessage: z.number().int().positive().optional(),
 
   // Allow for the inclusion of a nonce to prevent caching of test cases.
   __nonce: z.number().optional(),
@@ -187,6 +244,7 @@ type CommonOptions = {
   sharing?: boolean;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   testGenerationInstructions?: string;
+  maxCharsPerMessage?: number;
   maxConcurrency?: number;
   tracing?: TracingConfig;
 };
@@ -282,6 +340,7 @@ export interface SavedRedteamConfig {
   frameworks?: FrameworkComplianceId[];
   extensions?: string[];
   numTests?: number;
+  maxCharsPerMessage?: number;
   maxConcurrency?: number;
   language?: string | string[];
   provider?: string | ProviderOptions;

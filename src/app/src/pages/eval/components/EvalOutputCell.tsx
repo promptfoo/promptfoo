@@ -25,6 +25,7 @@ import {
   ThumbsUp,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import logger from '../../../../../logger';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
@@ -39,12 +40,28 @@ type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
 };
 
-function scoreToString(score: number | null) {
-  if (score === null || score === 0 || score === 1) {
+function scoreToString(score: number | null | undefined) {
+  if (typeof score !== 'number' || score === 0 || score === 1) {
     // Don't show boolean scores.
     return '';
   }
   return `(${score.toFixed(2)})`;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function stringifyOutputText(text: unknown): string {
+  if (typeof text === 'string') {
+    return text;
+  }
+
+  if (text == null) {
+    return '';
+  }
+
+  return JSON.stringify(text) ?? String(text);
 }
 
 /**
@@ -199,7 +216,7 @@ function EvalOutputCell({
   evaluationId,
   testCaseId,
 }: EvalOutputCellProps & {
-  firstOutput: EvaluateTableOutput;
+  firstOutput?: EvaluateTableOutput | null;
   showDiffs: boolean;
   searchText?: string;
 }) {
@@ -295,7 +312,7 @@ function EvalOutputCell({
     setCommentText(newCommentText);
   };
 
-  const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+  const text = stringifyOutputText(output.text);
   const normalizedText = normalizeMediaText(text);
   const inlineImageSrc = resolveImageSource(text);
   const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
@@ -334,8 +351,7 @@ function EvalOutputCell({
   }
 
   if (showDiffs && firstOutput) {
-    const firstOutputText =
-      typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
+    const firstOutputText = stringifyOutputText(firstOutput.text);
 
     let diffResult;
     try {
@@ -566,6 +582,55 @@ function EvalOutputCell({
   };
 
   const [linked, setLinked] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+  const isMountedRef = React.useRef(true);
+  const linkedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  const copiedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+
+  const clearLinkedResetTimeout = useCallback(() => {
+    if (linkedResetTimeoutRef.current !== null) {
+      globalThis.clearTimeout(linkedResetTimeoutRef.current);
+      linkedResetTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearCopiedResetTimeout = useCallback(() => {
+    if (copiedResetTimeoutRef.current !== null) {
+      globalThis.clearTimeout(copiedResetTimeoutRef.current);
+      copiedResetTimeoutRef.current = null;
+    }
+  }, []);
+
+  React.useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      clearLinkedResetTimeout();
+      clearCopiedResetTimeout();
+    };
+  }, [clearLinkedResetTimeout, clearCopiedResetTimeout]);
+
+  const scheduleLinkedReset = useCallback(() => {
+    clearLinkedResetTimeout();
+    linkedResetTimeoutRef.current = globalThis.setTimeout(() => {
+      linkedResetTimeoutRef.current = null;
+      if (isMountedRef.current) {
+        setLinked(false);
+      }
+    }, 3000);
+  }, [clearLinkedResetTimeout]);
+
+  const scheduleCopiedReset = useCallback(() => {
+    clearCopiedResetTimeout();
+    copiedResetTimeoutRef.current = globalThis.setTimeout(() => {
+      copiedResetTimeoutRef.current = null;
+      if (isMountedRef.current) {
+        setCopied(false);
+      }
+    }, 3000);
+  }, [clearCopiedResetTimeout]);
+
   const handleRowShareLink = () => {
     const url = new URL(window.location.href);
     url.searchParams.set('rowId', String(rowIndex + 1));
@@ -573,24 +638,35 @@ function EvalOutputCell({
     navigator.clipboard
       .writeText(url.toString())
       .then(() => {
+        if (!isMountedRef.current) {
+          return;
+        }
         setLinked(true);
-        setTimeout(() => setLinked(false), 3000);
+        scheduleLinkedReset();
       })
       .catch((error) => {
-        console.error('Failed to copy link to clipboard:', error);
+        if (!isMountedRef.current) {
+          return;
+        }
+        logger.error('Failed to copy link to clipboard', { error: getErrorMessage(error) });
       });
   };
 
-  const [copied, setCopied] = React.useState(false);
   const handleCopy = () => {
     navigator.clipboard
       .writeText(text)
       .then(() => {
+        if (!isMountedRef.current) {
+          return;
+        }
         setCopied(true);
-        setTimeout(() => setCopied(false), 3000);
+        scheduleCopiedReset();
       })
       .catch((error) => {
-        console.error('Failed to copy output to clipboard:', error);
+        if (!isMountedRef.current) {
+          return;
+        }
+        logger.error('Failed to copy output to clipboard', { error: getErrorMessage(error) });
       });
   };
 
@@ -708,9 +784,9 @@ function EvalOutputCell({
       passCount = gradingResult.pass ? 1 : 0;
       failCount = gradingResult.pass ? 0 : 1;
     }
-  } else if (output.pass) {
+  } else if (output.pass === true) {
     passCount = 1;
-  } else if (!output.pass) {
+  } else if (output.pass === false) {
     failCount = 1;
   }
 
@@ -753,10 +829,11 @@ function EvalOutputCell({
   }
 
   const scoreString = scoreToString(output.score);
+  const statusClass = output.pass === true || (passCount > 0 && failCount === 0) ? 'pass' : 'fail';
 
   const getCombinedContextText = () => {
     if (!output.gradingResult?.componentResults) {
-      return output.text;
+      return text;
     }
 
     return output.gradingResult.componentResults
@@ -989,7 +1066,7 @@ function EvalOutputCell({
   return (
     <div id={`eval-output-cell-${outputCellId}`} className="cell" style={cellStyle}>
       {showPassFail && (
-        <div className={`status ${output.pass ? 'pass' : 'fail'}`}>
+        <div className={`status ${statusClass}`}>
           <div className="status-row">
             <div className="pill">
               {passFailText}
@@ -997,7 +1074,7 @@ function EvalOutputCell({
             </div>
             {providerOverride}
           </div>
-          <CustomMetrics lookup={output.namedScores} />
+          <CustomMetrics lookup={output.namedScores ?? {}} />
           {failReasons.length > 0 && (
             <span className="fail-reason">
               <FailReasonCarousel failReasons={failReasons} />
@@ -1014,7 +1091,7 @@ function EvalOutputCell({
           )}
         </div>
       )}
-      {showPrompts && firstOutput.prompt && (
+      {showPrompts && firstOutput?.prompt && (
         <div className="prompt">
           <span className="pill">Prompt</span>
           {typeof output.prompt === 'string'

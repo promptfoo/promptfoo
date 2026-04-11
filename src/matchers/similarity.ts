@@ -39,7 +39,11 @@ function assignProviderTokenUsage(
   target.completion = source?.completion || 0;
   target.cached = source?.cached || 0;
   target.numRequests = source?.numRequests || 0;
-  target.completionDetails = source?.completionDetails;
+  target.completionDetails = {
+    reasoning: source?.completionDetails?.reasoning || 0,
+    acceptedPrediction: source?.completionDetails?.acceptedPrediction || 0,
+    rejectedPrediction: source?.completionDetails?.rejectedPrediction || 0,
+  };
   return target;
 }
 

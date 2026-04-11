@@ -18,6 +18,7 @@ import { AnthropicGenericProvider } from './generic';
 import {
   ANTHROPIC_MODELS,
   calculateAnthropicCost,
+  getRefusalDetails,
   getTokenUsage,
   outputFromMessage,
   parseMessages,
@@ -253,6 +254,17 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       );
     }
 
+    // Warn about assistant prefilling on Opus 4.6 (not supported, returns 400)
+    const isOpus46 = this.modelName.startsWith('claude-opus-4-6');
+    if (isOpus46 && extractedMessages.length > 0) {
+      const lastMessage = extractedMessages[extractedMessages.length - 1];
+      if (lastMessage.role === 'assistant') {
+        logger.warn(
+          'Assistant message prefilling is not supported on Claude Opus 4.6 and will cause a 400 error. Remove the trailing assistant message from your prompt.',
+        );
+      }
+    }
+
     const shouldStream = config.stream ?? false;
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
@@ -335,10 +347,15 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
             }
           }
 
+          const cachedRefusalDetails = getRefusalDetails(parsedCachedResponse);
+
           return {
             output,
             tokenUsage: getTokenUsage(parsedCachedResponse, true),
             ...(finishReason && { finishReason }),
+            ...(cachedRefusalDetails && {
+              guardrails: { flagged: true, reason: cachedRefusalDetails },
+            }),
             cost: calculateAnthropicCost(
               this.modelName,
               config,
@@ -390,10 +407,16 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           }
         }
 
+        const refusalDetails = getRefusalDetails(finalMessage);
+        if (refusalDetails) {
+          logger.warn(refusalDetails);
+        }
+
         return {
           output,
           tokenUsage: getTokenUsage(finalMessage, false),
           ...(finishReason && { finishReason }),
+          ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
           cost: calculateAnthropicCost(
             this.modelName,
             config,
@@ -430,10 +453,16 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           }
         }
 
+        const refusalDetails = getRefusalDetails(response);
+        if (refusalDetails) {
+          logger.warn(refusalDetails);
+        }
+
         return {
           output,
           tokenUsage: getTokenUsage(response, false),
           ...(finishReason && { finishReason }),
+          ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
           cost: calculateAnthropicCost(
             this.modelName,
             config,

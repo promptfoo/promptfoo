@@ -33,6 +33,7 @@ The OpenAI provider supports the following model formats:
 - `openai:agents:<agent name>` - runs agentic workflows via OpenAI Agents SDK
 - `openai:chatkit:<workflow_id>` - runs ChatKit workflows
 - `openai:codex-sdk` / `openai:codex` - runs agentic coding workflows via OpenAI Codex SDK, with optional inline model selection like `openai:codex:gpt-5.4`
+- `openai:codex-app-server` / `openai:codex-desktop` - runs the experimental Codex app-server protocol for rich-client event, approval, sandbox, skill, plugin, and thread lifecycle evals
 
 The `openai:<endpoint>:<model name>` construction is useful if OpenAI releases a new model,
 or if you have a custom model.
@@ -2266,6 +2267,8 @@ providers:
       response_format: file://./response-schema.json
 ```
 
+Legacy `apiHost`, newer `apiBaseUrl`, and OpenAI endpoint environment variable Azure configurations all support the same Responses reasoning and verbosity options.
+
 For comprehensive Azure Responses API documentation, see the [Azure provider documentation](/docs/providers/azure#azure-responses-api).
 
 ### Complete Example
@@ -2333,3 +2336,7 @@ providers:
 ```
 
 See the [OpenAI Codex SDK documentation](/docs/providers/openai-codex-sdk) for thread management, structured output, and Git-aware operations.
+
+### Codex App Server
+
+For app-server protocol evals, use the [OpenAI Codex App Server provider](/docs/providers/openai-codex-app-server). It starts `codex app-server` as a local child process and is intended for rich-client behavior such as streamed app-server items, approval requests, MCP elicitations, skill/plugin/app connector events, and thread lifecycle metadata. It does not attach to an already-running Codex Desktop app process.

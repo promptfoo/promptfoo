@@ -11,14 +11,30 @@ ATLAS organizes adversarial techniques into tactics that represent the adversary
 
 ## MITRE ATLAS Tactics
 
-ATLAS organizes adversarial ML techniques into the following tactics:
+ATLAS currently organizes adversarial ML techniques into these tactics. Promptfoo's `mitre:atlas` preset accepts all current tactic aliases; tactics with no direct promptfoo plugin stay in the preset as explicit coverage gaps.
 
-1. [Reconnaissance](#reconnaissance-mitre-atlas-reconnaissance) - Gathering information about the ML system
-2. [Resource Development](#resource-development-mitre-atlas-resource-development) - Establishing resources to support targeting
-3. [Initial Access](#initial-access-mitre-atlas-initial-access) - Gaining entry into the ML system
-4. [ML Attack Staging](#ml-attack-staging-mitre-atlas-ml-attack-staging) - Preparing and positioning attacks against the ML model
-5. [Exfiltration](#exfiltration-mitre-atlas-exfiltration) - Stealing data or model information
-6. [Impact](#impact-mitre-atlas-impact) - Disrupting, degrading, or destroying the ML system
+| ATLAS tactic                                                          | Promptfoo alias                    | Coverage                       |
+| --------------------------------------------------------------------- | ---------------------------------- | ------------------------------ |
+| Reconnaissance                                                        | `mitre:atlas:reconnaissance`       | Mapped checks                  |
+| Resource Development                                                  | `mitre:atlas:resource-development` | Mapped checks                  |
+| Initial Access                                                        | `mitre:atlas:initial-access`       | Mapped checks                  |
+| AI Model Access                                                       | `mitre:atlas:ai-model-access`      | Coverage gap: no direct checks |
+| Execution                                                             | `mitre:atlas:execution`            | Mapped checks                  |
+| Persistence                                                           | `mitre:atlas:persistence`          | Mapped checks                  |
+| Privilege Escalation                                                  | `mitre:atlas:privilege-escalation` | Mapped checks                  |
+| Defense Evasion                                                       | `mitre:atlas:defense-evasion`      | Mapped checks                  |
+| Credential Access                                                     | `mitre:atlas:credential-access`    | Mapped checks                  |
+| Discovery                                                             | `mitre:atlas:discovery`            | Mapped checks                  |
+| Lateral Movement                                                      | `mitre:atlas:lateral-movement`     | Mapped checks                  |
+| Collection                                                            | `mitre:atlas:collection`           | Mapped checks                  |
+| [AI Attack Staging](#ml-attack-staging-mitre-atlas-ml-attack-staging) | `mitre:atlas:ai-attack-staging`    | Mapped checks                  |
+| Command and Control                                                   | `mitre:atlas:command-and-control`  | Mapped checks                  |
+| [Exfiltration](#exfiltration-mitre-atlas-exfiltration)                | `mitre:atlas:exfiltration`         | Mapped checks                  |
+| [Impact](#impact-mitre-atlas-impact)                                  | `mitre:atlas:impact`               | Mapped checks                  |
+
+:::note
+`mitre:atlas:ml-attack-staging` is still accepted for older configs. New configs should use `mitre:atlas:ai-attack-staging`.
+:::
 
 ## Scanning for MITRE ATLAS Threats
 
@@ -39,8 +55,8 @@ Or target specific tactics:
 redteam:
   plugins:
     - mitre:atlas:reconnaissance
-    - mitre:atlas:exfiltration
-    - mitre:atlas:impact
+    - mitre:atlas:persistence
+    - mitre:atlas:credential-access
 ```
 
 ## Reconnaissance (mitre:atlas:reconnaissance) {#reconnaissance-mitre-atlas-reconnaissance}
@@ -176,9 +192,9 @@ redteam:
     - mitre:atlas:initial-access
 ```
 
-## ML Attack Staging (mitre:atlas:ml-attack-staging) {#ml-attack-staging-mitre-atlas-ml-attack-staging}
+## AI Attack Staging (mitre:atlas:ai-attack-staging) {#ml-attack-staging-mitre-atlas-ml-attack-staging}
 
-ML Attack Staging involves techniques that adversaries use to prepare and position attacks specifically against the ML model itself. This includes poisoning inputs, manipulating model behavior, and exploiting ML-specific vulnerabilities.
+AI Attack Staging involves techniques that adversaries use to prepare and position attacks against an AI model or AI-enabled system. This includes poisoning inputs, manipulating model behavior, and exploiting AI-specific vulnerabilities.
 
 ### Threat Landscape
 
@@ -218,7 +234,7 @@ Or use the ATLAS shorthand:
 ```yaml
 redteam:
   plugins:
-    - mitre:atlas:ml-attack-staging
+    - mitre:atlas:ai-attack-staging
 ```
 
 ## Exfiltration (mitre:atlas:exfiltration) {#exfiltration-mitre-atlas-exfiltration}
@@ -385,8 +401,10 @@ MITRE ATLAS documents real-world attacks against ML systems. For LLMs, examples 
 
 - **AML.T0043 - Craft Adversarial Data**: Creating prompts designed to elicit harmful outputs
 - **AML.T0051 - LLM Prompt Injection**: Manipulating LLM behavior through crafted inputs
-- **AML.T0024 - Exfiltration via ML Inference API**: Extracting training data through queries
+- **AML.T0024 - Exfiltration via AI Inference API**: Extracting training data through queries
 - **AML.T0020 - Poison Training Data**: Manipulating fine-tuning or RAG data sources
+- **AML.T0086 - Exfiltration via AI Agent Tool Invocation**: Using connected tools to move data out of an AI system
+- **AML.T0110 - AI Agent Tool Poisoning**: Modifying agent tools so future invocations execute attacker-controlled behavior
 
 Promptfoo's plugins map to these specific ATLAS techniques, enabling targeted testing.
 

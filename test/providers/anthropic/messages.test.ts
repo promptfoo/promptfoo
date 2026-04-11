@@ -2,6 +2,7 @@ import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache, getCache } from '../../../src/cache';
+import logger from '../../../src/logger';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { MCPClient } from '../../../src/providers/mcp/client';
 import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
@@ -1826,6 +1827,204 @@ describe('AnthropicMessagesProvider', () => {
           temperature: 0.1,
         }),
         {},
+      );
+    });
+  });
+
+  describe('Opus 4.6 prefill warning', () => {
+    it('should warn when assistant prefilling is used with claude-opus-4-6', async () => {
+      const provider = createProvider('claude-opus-4-6', { config: {} });
+      const mockResp = {
+        content: [{ type: 'text', text: 'Output' }],
+        model: 'claude-opus-4-6',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_details: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message;
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await provider.callApi(
+        JSON.stringify([
+          { role: 'user', content: 'Hello' },
+          { role: 'assistant', content: 'I will' },
+        ]),
+      );
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Assistant message prefilling is not supported on Claude Opus 4.6'),
+      );
+    });
+
+    it('should not warn for non-Opus 4.6 models with prefilling', async () => {
+      const provider = createProvider('claude-sonnet-4-6', { config: {} });
+      const mockResp = {
+        content: [{ type: 'text', text: 'Output' }],
+        model: 'claude-sonnet-4-6',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_details: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message;
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await provider.callApi(
+        JSON.stringify([
+          { role: 'user', content: 'Hello' },
+          { role: 'assistant', content: 'I will' },
+        ]),
+      );
+
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Assistant message prefilling is not supported'),
+      );
+    });
+  });
+
+  describe('refusal stop_details handling', () => {
+    it('should include guardrails in response when stop_reason is refusal', async () => {
+      const provider = createProvider('claude-sonnet-4-6', { config: {} });
+      const refusalResponse = {
+        content: [{ type: 'text', text: '' }],
+        model: 'claude-sonnet-4-6',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'refusal',
+        stop_details: {
+          type: 'refusal',
+          category: 'cyber',
+          explanation: 'Request involves prohibited activities',
+        },
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 0 },
+      } as unknown as Anthropic.Messages.Message;
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(refusalResponse);
+
+      const result = await provider.callApi('How to hack a system');
+
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        reason: expect.stringContaining('category: cyber'),
+      });
+      expect(result.finishReason).toBe('content_filter');
+    });
+
+    it('should not include guardrails for non-refusal responses', async () => {
+      const provider = createProvider('claude-sonnet-4-6', { config: {} });
+      const normalResponse = {
+        content: [{ type: 'text', text: 'Hello' }],
+        model: 'claude-sonnet-4-6',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_details: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message;
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(normalResponse);
+
+      const result = await provider.callApi('Hello');
+
+      expect(result.guardrails).toBeUndefined();
+    });
+
+    it('should include guardrails in cached response when stop_reason is refusal', async () => {
+      const provider = createProvider('claude-sonnet-4-6', { config: {} });
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [],
+      } as unknown as Anthropic.Messages.Message);
+
+      // Manually populate cache with a refusal response (like the existing legacy cache test pattern)
+      const refusalMessage = {
+        content: [{ type: 'text', text: '' }],
+        model: 'claude-sonnet-4-6',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'refusal',
+        stop_details: {
+          type: 'refusal',
+          category: 'cyber',
+          explanation: 'Prohibited content',
+        },
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 0 },
+      };
+      const cacheKey =
+        'anthropic:{"model":"claude-sonnet-4-6","max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"Hack something"}]}],"stream":false,"temperature":0}';
+      const cache = await getCache();
+      await cache.set(cacheKey, JSON.stringify(refusalMessage));
+
+      const result = await provider.callApi('Hack something');
+      expect(result.cached).toBe(true);
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        reason: expect.stringContaining('category: cyber'),
+      });
+    });
+
+    it('should include guardrails in streaming response when stop_reason is refusal', async () => {
+      const provider = createProvider('claude-sonnet-4-6', { config: { stream: true } });
+      const refusalResponse = {
+        content: [{ type: 'text', text: '' }],
+        model: 'claude-sonnet-4-6',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'refusal',
+        stop_details: {
+          type: 'refusal',
+          category: 'bio',
+          explanation: null,
+        },
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 0 },
+      } as unknown as Anthropic.Messages.Message;
+      vi.spyOn(provider.anthropic.messages, 'stream').mockReturnValue({
+        finalMessage: vi.fn().mockResolvedValue(refusalResponse),
+      } as any);
+
+      const result = await provider.callApi('Dangerous request');
+
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        reason: expect.stringContaining('category: bio'),
+      });
+    });
+  });
+
+  describe('claude-mythos-preview model', () => {
+    it('should accept claude-mythos-preview as a valid model without warning', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = createProvider('claude-mythos-preview', { config: {} });
+      const mockResp = {
+        content: [{ type: 'text', text: 'Response' }],
+        model: 'claude-mythos-preview',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_details: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message;
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toBe('Response');
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Using unknown Anthropic model'),
       );
     });
   });

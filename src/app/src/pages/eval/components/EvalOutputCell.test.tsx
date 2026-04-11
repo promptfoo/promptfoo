@@ -1,12 +1,14 @@
+import { mockClipboard } from '@app/tests/browserMocks';
+import { type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import {
   type AssertionType,
   type EvaluateTableOutput,
   ResultFailureReason,
 } from '@promptfoo/types';
-import { fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCell';
 
@@ -52,6 +54,16 @@ const resetMockStoreState = () => {
   Object.assign(mockTableStoreState, defaultTableStoreState);
 };
 
+const mockClipboardWriteText = () => {
+  const clipboard = {
+    writeText: vi.fn().mockResolvedValue(undefined),
+  };
+
+  mockClipboard({ writeText: clipboard.writeText as Clipboard['writeText'] });
+
+  return clipboard;
+};
+
 vi.mock('./store', () => ({
   useResultsViewSettingsStore: () => mockResultsViewSettings,
   useTableStore: () => mockTableStoreState,
@@ -61,21 +73,6 @@ vi.mock('../../../hooks/useShiftKey', () => ({
   useShiftKey: () => true,
 }));
 
-// Use fake timers with shouldAdvanceTime to automatically advance time
-// This prevents "window is not defined" errors from timers firing after test cleanup
-beforeAll(() => {
-  vi.useFakeTimers({ shouldAdvanceTime: true });
-});
-
-afterAll(() => {
-  vi.useRealTimers();
-});
-
-// Clear all pending timers after each test to prevent cross-test interference
-afterEach(() => {
-  vi.clearAllTimers();
-});
-
 interface MockEvalOutputCellProps extends EvalOutputCellProps {
   firstOutput: EvaluateTableOutput;
   searchText: string;
@@ -84,6 +81,7 @@ interface MockEvalOutputCellProps extends EvalOutputCellProps {
 
 describe('EvalOutputCell', () => {
   const mockOnRating = vi.fn();
+  let timers: TestTimers | undefined;
 
   const defaultProps: MockEvalOutputCellProps = {
     firstOutput: {
@@ -153,6 +151,26 @@ describe('EvalOutputCell', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetMockStoreState();
+  });
+
+  afterEach(() => {
+    timers?.restore();
+    timers = undefined;
+  });
+
+  it('handles outputs without text without throwing', () => {
+    const propsWithoutText: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        namedScores: undefined as unknown as Record<string, number>,
+        pass: undefined as unknown as boolean,
+        score: undefined as unknown as number,
+        text: undefined as unknown as string,
+      },
+    };
+
+    expect(() => renderWithProviders(<EvalOutputCell {...propsWithoutText} />)).not.toThrow();
   });
 
   it('passes metadata correctly to the dialog', async () => {
@@ -676,28 +694,9 @@ describe('EvalOutputCell', () => {
   });
 
   it('allows copying row link to clipboard', async () => {
-    const originalClipboard = navigator.clipboard;
-    const mockClipboard = {
-      writeText: vi.fn().mockResolvedValue(undefined),
-    };
-    Object.defineProperty(navigator, 'clipboard', {
-      value: mockClipboard,
-      configurable: true,
-      writable: true,
-    });
-
-    const originalURL = global.URL;
-    const mockUrl = {
-      toString: vi.fn().mockReturnValue('https://example.com/?rowId=1'),
-      searchParams: {
-        set: vi.fn(),
-      },
-    };
-    global.URL = class MockURL {
-      constructor() {
-        return mockUrl;
-      }
-    } as unknown as typeof URL;
+    const clipboard = mockClipboardWriteText();
+    const expectedUrl = new URL(window.location.href);
+    expectedUrl.searchParams.set('rowId', '1');
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
@@ -706,57 +705,78 @@ describe('EvalOutputCell', () => {
 
     fireEvent.click(shareButton);
 
-    expect(mockUrl.searchParams.set).toHaveBeenCalledWith('rowId', '1');
-
-    expect(mockClipboard.writeText).toHaveBeenCalled();
-
-    Object.defineProperty(navigator, 'clipboard', {
-      value: originalClipboard,
-      configurable: true,
-      writable: true,
+    await waitFor(() => {
+      expect(clipboard.writeText).toHaveBeenCalledWith(expectedUrl.toString());
     });
-    global.URL = originalURL;
   });
 
   it('shows checkmark after copying link', async () => {
-    const originalClipboard = navigator.clipboard;
-    const mockClipboard = {
-      writeText: vi.fn().mockResolvedValue(undefined),
-    };
-    Object.defineProperty(navigator, 'clipboard', {
-      value: mockClipboard,
-      configurable: true,
-      writable: true,
-    });
-
-    const mockUrl = {
-      toString: vi.fn().mockReturnValue('https://example.com/?rowId=1'),
-      searchParams: {
-        set: vi.fn(),
-      },
-    };
-    const originalURL = global.URL;
-    global.URL = class MockURL {
-      constructor() {
-        return mockUrl;
-      }
-    } as unknown as typeof URL;
+    timers = useTestTimers();
+    const clipboard = mockClipboardWriteText();
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
     const shareButton = screen.getByRole('button', { name: /Copy link to output/i });
     expect(shareButton).toBeInTheDocument();
 
-    fireEvent.click(shareButton);
-
-    expect(mockClipboard.writeText).toHaveBeenCalled();
-
-    Object.defineProperty(navigator, 'clipboard', {
-      value: originalClipboard,
-      configurable: true,
-      writable: true,
+    await act(async () => {
+      fireEvent.click(shareButton);
+      await clipboard.writeText.mock.results[0]?.value;
     });
-    global.URL = originalURL;
+
+    expect(clipboard.writeText).toHaveBeenCalled();
+    expect(shareButton.querySelector('.lucide-check')).toBeInTheDocument();
+
+    act(() => {
+      timers?.advanceBy(3000);
+    });
+
+    expect(shareButton.querySelector('.lucide-link')).toBeInTheDocument();
+  });
+
+  it('clears the link feedback timer on unmount after copying link', async () => {
+    timers = useTestTimers();
+    const clipboard = mockClipboardWriteText();
+
+    const { unmount } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Copy link to output/i }));
+      await clipboard.writeText.mock.results[0]?.value;
+    });
+
+    expect(timers.getTimerCount()).toBe(1);
+
+    unmount();
+
+    expect(timers.getTimerCount()).toBe(0);
+  });
+
+  it('does not schedule link feedback after unmount if clipboard resolves late', async () => {
+    timers = useTestTimers();
+    let resolveClipboardWrite: () => void = () => {};
+    const writeTextPromise = new Promise<void>((resolve) => {
+      resolveClipboardWrite = resolve;
+    });
+    const clipboard = {
+      writeText: vi.fn().mockReturnValue(writeTextPromise),
+    };
+
+    mockClipboard({ writeText: clipboard.writeText as Clipboard['writeText'] });
+
+    const { unmount } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Copy link to output/i }));
+    expect(clipboard.writeText).toHaveBeenCalled();
+
+    unmount();
+
+    await act(async () => {
+      resolveClipboardWrite();
+      await writeTextPromise;
+    });
+
+    expect(timers.getTimerCount()).toBe(0);
   });
 
   it('displays the token usage tooltip with reasoning tokens', () => {

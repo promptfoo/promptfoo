@@ -1,5 +1,6 @@
+import { mockClipboard } from '@app/tests/browserMocks';
 import { render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LogViewer } from './LogViewer';
 
 vi.mock('@app/hooks/useToast', () => ({
@@ -8,21 +9,11 @@ vi.mock('@app/hooks/useToast', () => ({
   }),
 }));
 
-Object.defineProperty(navigator, 'clipboard', {
-  value: {
-    writeText: vi.fn().mockResolvedValue(undefined),
-  },
-  configurable: true,
-});
-
-// Mock ResizeObserver
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
-
 describe('LogViewer', () => {
+  beforeEach(() => {
+    mockClipboard();
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
   });

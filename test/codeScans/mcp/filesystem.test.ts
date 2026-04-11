@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import type { ChildProcess } from 'child_process';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockProcessEnv } from '../../util/utils';
 
 const mocks = vi.hoisted(() => ({
   spawn: vi.fn(),
@@ -35,15 +36,16 @@ function createFakeProcess(): ChildProcess & { stderr: EventEmitter } {
 
 describe('filesystem MCP server management', () => {
   const originalEnv = { ...process.env };
+  let restoreEnv: () => void;
 
   beforeEach(() => {
     vi.useFakeTimers();
     vi.resetAllMocks();
-    process.env = { ...originalEnv };
+    restoreEnv = mockProcessEnv(originalEnv, { clear: true });
   });
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    restoreEnv();
     vi.useRealTimers();
     vi.clearAllMocks();
   });

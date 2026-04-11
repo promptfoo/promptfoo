@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Codex app-server structured repo review
+
+prompts:
+  - 'Return a concise JSON summary of this workspace. Include the main purpose and two likely maintenance risks.'
+
+providers:
+  - id: openai:codex-app-server:gpt-5.4
+    config:
+      sandbox_mode: read-only
+      approval_policy: never
+      skip_git_repo_check: true
+      output_schema:
+        type: object
+        properties:
+          summary:
+            type: string
+          risks:
+            type: array
+            items:
+              type: string
+        required: [summary, risks]
+        additionalProperties: false
+
+defaultTest:
+  assert:
+    - type: is-json
+    - type: javascript
+      value: |
+        const parsed = JSON.parse(output);
+        return typeof parsed.summary === 'string' && Array.isArray(parsed.risks);
+
+tests:
+  - vars: {}

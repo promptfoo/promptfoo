@@ -27,11 +27,11 @@ vi.mock('@app/hooks/useApiHealth', () => ({
   useApiHealth: vi.fn(),
 }));
 
-vi.mocked(useApiHealth).mockReturnValue({
+const connectedApiHealth = {
   data: { status: 'connected', message: null },
   refetch: mockCheckHealth,
   isLoading: false,
-} as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+} as unknown as DefinedUseQueryResult<ApiHealthResult, Error>;
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
@@ -51,6 +51,11 @@ describe('Purpose Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    } as Response);
+    vi.mocked(useApiHealth).mockReturnValue(connectedApiHealth);
     mockUseRedTeamConfig.mockReturnValue({
       config: {
         applicationDefinition: {
