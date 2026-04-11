@@ -112,6 +112,7 @@ def create_calculator_demo():
                 return str(n1 * n2)
             elif op == "Divide":
                 return str(n1 / n2) if n2 != 0 else "Error: Division by zero"
+            return "Error: Unknown operation"
 
         calculate_btn.click(calculate, [num1, num2, operation], result)
 

@@ -224,3 +224,5 @@ async def trigger_error():
                 "error": "An error occurred",
                 "hint": f"Debug with: /debug/logs?debug_key={DEBUG_KEY}",
             }
+
+    return {"error": "An error occurred"}

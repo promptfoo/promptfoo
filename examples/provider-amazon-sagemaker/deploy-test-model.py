@@ -76,14 +76,14 @@ sagemaker_client = boto3.client("sagemaker", region_name=region)
 
 
 # Find or get SageMaker execution role
-def get_sagemaker_role():
+def get_sagemaker_role() -> str:
     if args.role_name:
         try:
             role = iam.get_role(RoleName=args.role_name)
             return role["Role"]["Arn"]
         except Exception as e:
             logger.error(f"Error getting specified role: {e}")
-            exit(1)
+            raise SystemExit(1)
 
     # Try to find a SageMaker execution role
     try:
@@ -96,10 +96,10 @@ def get_sagemaker_role():
         logger.error(
             "No SageMaker execution role found. Please specify a role with --role-name"
         )
-        exit(1)
+        raise SystemExit(1)
     except Exception as e:
         logger.error(f"Error finding SageMaker role: {e}")
-        exit(1)
+        raise SystemExit(1)
 
 
 role_arn = get_sagemaker_role()
