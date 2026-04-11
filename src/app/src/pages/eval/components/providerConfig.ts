@@ -112,6 +112,12 @@ function normalizeProviderDef(provider: ProviderDef | null | undefined): Provide
   return null;
 }
 
+/**
+ * Reattach original provider fields after normalization.
+ *
+ * Normalization extracts comparable id/label/config data, but display code still
+ * needs the provider's full object shape when one was supplied.
+ */
 function mergeProviderConfig(
   provider: ProviderDef | null | undefined,
   normalized: ProviderOptions,
@@ -122,6 +128,9 @@ function mergeProviderConfig(
   return normalized;
 }
 
+/**
+ * Build a match result using the original provider shape plus normalized fields.
+ */
 function createProviderMatch(
   provider: ProviderDef | null | undefined,
   normalized: ProviderOptions,
@@ -133,6 +142,9 @@ function createProviderMatch(
   };
 }
 
+/**
+ * Prefer explicit provider identity matches before falling back to prompt order.
+ */
 function findIdOrLabelMatch(
   providerString: string,
   providersArray: ProviderDef[],
@@ -153,6 +165,9 @@ function findIdOrLabelMatch(
   }
 }
 
+/**
+ * Match by prompt/provider index for legacy configs that cannot be matched by id.
+ */
 function getFallbackProviderMatch(
   providersArray: ProviderDef[],
   fallbackIndex: number | undefined,
@@ -228,10 +243,17 @@ export function extractConfigBadges(
   ];
 }
 
+/**
+ * Provider badge fields usually live under config, but some call sites pass them
+ * directly on the provider object.
+ */
 function getBadgeSourceConfig(providerConfig: ProviderOptions): BadgeSourceConfig {
   return (providerConfig.config || providerConfig) as BadgeSourceConfig;
 }
 
+/**
+ * Extract reasoning/effort controls across OpenAI-compatible and Anthropic configs.
+ */
 function getReasoningBadges(config: BadgeSourceConfig): ConfigBadge[] {
   const badges: ConfigBadge[] = [];
 
@@ -262,6 +284,9 @@ function getReasoningBadges(config: BadgeSourceConfig): ConfigBadge[] {
   return badges;
 }
 
+/**
+ * Extract Gemini thinking settings, preferring level over budget when both exist.
+ */
 function getGoogleThinkingBadges(config: BadgeSourceConfig): ConfigBadge[] {
   if (config.generationConfig?.thinkingConfig) {
     const thinkingConfig = config.generationConfig.thinkingConfig;
@@ -291,6 +316,9 @@ function getGoogleThinkingBadges(config: BadgeSourceConfig): ConfigBadge[] {
   return [];
 }
 
+/**
+ * Extract Claude extended-thinking settings when thinking is explicitly enabled.
+ */
 function getAnthropicThinkingBadges(config: BadgeSourceConfig): ConfigBadge[] {
   if (
     config.thinking?.type !== 'enabled' &&
@@ -311,6 +339,9 @@ function getAnthropicThinkingBadges(config: BadgeSourceConfig): ConfigBadge[] {
   ];
 }
 
+/**
+ * Extract sampling and reproducibility controls that are useful at a glance.
+ */
 function getSamplingBadges(config: BadgeSourceConfig): ConfigBadge[] {
   const badges: ConfigBadge[] = [];
 

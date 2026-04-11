@@ -7,6 +7,12 @@ interface ParsedField {
   nextIndex: number;
 }
 
+/**
+ * Advance over separators between parsed fields.
+ *
+ * Contains-any values allow whitespace around comma delimiters, and historical
+ * parsing ignored repeated commas rather than producing empty fields.
+ */
 function skipWhitespaceAndCommas(value: string, startIndex: number): number {
   let i = startIndex;
   while (i < value.length) {
@@ -19,6 +25,9 @@ function skipWhitespaceAndCommas(value: string, startIndex: number): number {
   return i;
 }
 
+/**
+ * Advance over whitespace while preserving comma delimiter handling for callers.
+ */
 function skipWhitespace(value: string, startIndex: number): number {
   let i = startIndex;
   while (i < value.length && /\s/.test(value[i])) {
@@ -27,6 +36,12 @@ function skipWhitespace(value: string, startIndex: number): number {
   return i;
 }
 
+/**
+ * Parse a quoted field using the assertion parser's CSV-like escape rules.
+ *
+ * Supports backslash-escaped quotes/backslashes and doubled quotes, and rejects
+ * unterminated fields so malformed assertion values do not silently pass.
+ */
 function parseQuotedField(value: string, startIndex: number): ParsedField {
   let i = startIndex + 1;
   let field = '';
@@ -53,6 +68,9 @@ function parseQuotedField(value: string, startIndex: number): ParsedField {
   return { field, nextIndex: i };
 }
 
+/**
+ * Parse an unquoted field up to the next comma, trimming surrounding whitespace.
+ */
 function parseUnquotedField(value: string, startIndex: number): ParsedField {
   let i = startIndex;
   while (i < value.length && value[i] !== ',') {
@@ -61,6 +79,9 @@ function parseUnquotedField(value: string, startIndex: number): ParsedField {
   return { field: value.substring(startIndex, i).trim(), nextIndex: i };
 }
 
+/**
+ * Split a contains-any string into fields while preserving quoted commas.
+ */
 function parseCommaSeparatedValues(value: string): string[] {
   const results: string[] = [];
   let i = 0;
