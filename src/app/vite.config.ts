@@ -5,6 +5,7 @@ import os from 'os';
 import path from 'path';
 
 import react from '@vitejs/plugin-react';
+import { configDefaults } from 'vitest/config';
 import packageJson from '../../package.json' with { type: 'json' };
 import {
   browserModulesPlugin,
@@ -22,6 +23,42 @@ const maxForks = process.env.CI
   : Math.max(cpuCount - 2, 2); // Leave headroom for system locally
 
 const API_PORT = process.env.API_PORT || '15500';
+
+const ignoredTestConsolePatterns = [
+  /^Warning: .*not wrapped in act/,
+  /^An update to .*not wrapped in act/,
+  /^(Warning: )?The current testing environment is not configured to support act/,
+  /^Warning: Received NaN for the `children` attribute/,
+  /^Error checking ModelAudit installation:/,
+  /^Error loading eval:/,
+  /^Failed to fetch datasets:/,
+  /^Error parsing file:/,
+  /^deeply nested key "metrics\.score" returned undefined/,
+  /^Logout failed/,
+  /^Error during logout:/,
+  /^Error fetching user email:/,
+  /^Failed to parse YAML:/,
+  /^Invalid JSON configuration:/,
+  /^Error fetching eval data:/,
+  /^Error fetching metadata keys:/,
+  /^Error parsing CSV:/,
+  /^No worst strategy found for plugin/,
+  /^Failed to delete eval:/,
+  /^EnterpriseBanner: No evalId provided/,
+  /^Error checking cloud status:/,
+  /^Error setting email:/,
+  /^Error checking email status:/,
+  /^Error clearing email:/,
+  /^Error fetching cloud config:/,
+  /^Failed to copy text:/,
+  /^Failed to check share domain:/,
+  /^Failed to generate share URL/,
+  /^Error during target purpose discovery:/,
+];
+
+const showTestConsoleOutput =
+  process.env.PROMPTFOO_TEST_SHOW_OUTPUT === 'true' ||
+  process.env.PROMPTFOO_APP_TEST_SHOW_OUTPUT === 'true';
 
 // These environment variables are inherited from the parent process (main promptfoo server)
 // We set VITE_ prefixed variables here so Vite can expose them to the client code
@@ -95,9 +132,22 @@ export default {
     // Limit concurrent tests within each worker to prevent memory spikes
     maxConcurrency: 5,
 
+    // Keep ad hoc benchmarks out of ordinary unit-test runs; they print timing diagnostics by design.
+    exclude: [...configDefaults.exclude, 'src/**/__benchmarks__/**'],
+
     // Run tests in random order to catch test isolation issues early.
     sequence: {
       shuffle: true,
+    },
+
+    onConsoleLog(log: string, type: 'stdout' | 'stderr') {
+      if (
+        !showTestConsoleOutput &&
+        type === 'stderr' &&
+        ignoredTestConsolePatterns.some((pattern) => pattern.test(log.trimStart()))
+      ) {
+        return false;
+      }
     },
 
     // Fail fast on first error in CI

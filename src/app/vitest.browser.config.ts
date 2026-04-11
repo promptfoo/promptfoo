@@ -14,6 +14,9 @@ export default {
     testTimeout: process.env.CI ? 20_000 : 30_000,
     hookTimeout: process.env.CI ? 20_000 : 30_000,
     teardownTimeout: 10_000,
+    sequence: {
+      shuffle: true,
+    },
     browser: {
       enabled: true,
       headless: true,
