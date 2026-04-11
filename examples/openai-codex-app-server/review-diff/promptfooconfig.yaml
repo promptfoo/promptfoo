@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Codex app-server git diff review
+
+prompts:
+  - |
+    Review the current git diff in this workspace.
+
+    Focus only on actionable correctness, security, data-loss, resource-leak,
+    API-contract, and missing-test risks introduced by the diff. Ignore style-only
+    issues.
+
+    Return JSON with:
+    - comments: an array of review comments
+    - summary: one short sentence
+
+    Each comment must include file, line, severity, and body. If there are no
+    actionable comments, return an empty comments array.
+
+providers:
+  - id: openai:codex-app-server:gpt-5.4
+    config:
+      sandbox_mode: read-only
+      approval_policy: never
+      skip_git_repo_check: false
+      turn_timeout_ms: 900000
+      output_schema:
+        type: object
+        properties:
+          comments:
+            type: array
+            items:
+              type: object
+              properties:
+                file:
+                  type: string
+                line:
+                  type: integer
+                severity:
+                  type: string
+                body:
+                  type: string
+              required: [file, line, severity, body]
+              additionalProperties: false
+          summary:
+            type: string
+        required: [comments, summary]
+        additionalProperties: false
+
+defaultTest:
+  assert:
+    - type: is-json
+
+tests:
+  - vars: {}

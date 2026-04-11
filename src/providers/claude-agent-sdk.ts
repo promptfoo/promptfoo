@@ -901,7 +901,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       toolConfig: config.tool_config,
       promptSuggestions: config.prompt_suggestions,
       agentProgressSummaries: config.agent_progress_summaries,
-      settings: config.settings,
+      settings:
+        typeof config.settings === 'string' && config.settings
+          ? safeResolve(basePath, config.settings)
+          : config.settings,
       betas: config.betas,
       thinking: config.thinking,
       effort: config.effort,
