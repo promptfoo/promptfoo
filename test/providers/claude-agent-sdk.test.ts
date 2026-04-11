@@ -2032,6 +2032,25 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
+        it('with settings as empty file path passes through unchanged', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              settings: '',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              settings: '',
+            }),
+          });
+        });
+
         it('with settings as object', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
