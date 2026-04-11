@@ -6,7 +6,7 @@ import {
   mockIntersectionObserver,
   mockMatchMedia,
 } from '@app/tests/browserMocks';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MediaGrid } from './MediaGrid';
@@ -65,6 +65,18 @@ const createMockItems = (count: number): MediaItem[] =>
     }),
   );
 
+const getMediaCardActions = () =>
+  within(screen.getByRole('list')).getAllByRole('button', { name: /^Image: Evaluation \d+/ });
+
+const getMediaCardAction = (name: string | RegExp) =>
+  within(screen.getByRole('list')).getByRole('button', { name });
+
+const getCardContainer = (name: string | RegExp) => {
+  const primaryAction = getMediaCardAction(name);
+  expect(primaryAction.parentElement).not.toBeNull();
+  return primaryAction.parentElement as HTMLElement;
+};
+
 describe('MediaGrid', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -85,7 +97,7 @@ describe('MediaGrid', () => {
   describe('rendering', () => {
     it('renders media items in a grid', () => {
       const items = createMockItems(3);
-      const { container } = renderWithProviders(
+      renderWithProviders(
         <MediaGrid
           items={items}
           isLoading={false}
@@ -97,8 +109,7 @@ describe('MediaGrid', () => {
       );
 
       expect(screen.getByRole('list')).toBeInTheDocument();
-      const cards = container.querySelectorAll('[data-media-card]');
-      expect(cards).toHaveLength(3);
+      expect(getMediaCardActions()).toHaveLength(3);
     });
 
     it('renders with correct aria-label showing item count', () => {
@@ -171,7 +182,7 @@ describe('MediaGrid', () => {
       const user = userEvent.setup();
       const onItemClick = vi.fn();
       const items = createMockItems(3);
-      const { container } = renderWithProviders(
+      renderWithProviders(
         <MediaGrid
           items={items}
           isLoading={false}
@@ -182,8 +193,7 @@ describe('MediaGrid', () => {
         />,
       );
 
-      const cards = container.querySelectorAll('[data-media-card]');
-      await user.click(cards[1] as HTMLElement);
+      await user.click(getMediaCardAction('Image: Evaluation 2'));
 
       expect(onItemClick).toHaveBeenCalledWith(items[1]);
     });
@@ -240,7 +250,7 @@ describe('MediaGrid', () => {
   describe('viewing state', () => {
     it('passes viewingHash to MediaCard', () => {
       const items = createMockItems(3);
-      const { container } = renderWithProviders(
+      renderWithProviders(
         <MediaGrid
           items={items}
           isLoading={false}
@@ -252,17 +262,17 @@ describe('MediaGrid', () => {
         />,
       );
 
-      // The viewing card should have special styling
-      const cards = container.querySelectorAll('[data-media-card]');
-      const viewingCard = cards[1]?.closest('.group');
-      expect(viewingCard).toHaveClass('border-primary');
+      expect(getCardContainer('Image: Evaluation 2 (currently viewing)')).toHaveClass(
+        'border-primary',
+      );
     });
   });
 
   describe('keyboard navigation', () => {
-    it('navigates right with ArrowRight', () => {
+    it('navigates right with ArrowRight', async () => {
+      const user = userEvent.setup();
       const items = createMockItems(6);
-      const { container } = renderWithProviders(
+      renderWithProviders(
         <MediaGrid
           items={items}
           isLoading={false}
@@ -273,26 +283,18 @@ describe('MediaGrid', () => {
         />,
       );
 
-      // Get the MediaCard elements and focus first one
-      const cards = container.querySelectorAll('[data-media-card]');
+      await user.tab();
+      expect(getMediaCardActions()[0]).toHaveFocus();
 
-      // Use act() to ensure state updates are flushed
-      act(() => {
-        fireEvent.focus(cards[0] as HTMLElement);
-      });
+      await user.keyboard('{ArrowRight}');
 
-      act(() => {
-        fireEvent.keyDown(screen.getByRole('list'), { key: 'ArrowRight' });
-      });
-
-      // Re-query cards after state update - second card should now be focusable
-      const updatedCards = container.querySelectorAll('[data-media-card]');
-      expect(updatedCards[1]).toHaveAttribute('tabIndex', '0');
+      expect(getMediaCardActions()[1]).toHaveFocus();
     });
 
-    it('navigates left with ArrowLeft', () => {
+    it('navigates left with ArrowLeft', async () => {
+      const user = userEvent.setup();
       const items = createMockItems(6);
-      const { container } = renderWithProviders(
+      renderWithProviders(
         <MediaGrid
           items={items}
           isLoading={false}
@@ -303,30 +305,20 @@ describe('MediaGrid', () => {
         />,
       );
 
-      const cards = container.querySelectorAll('[data-media-card]');
+      await user.tab();
+      await user.keyboard('{ArrowRight}');
+      await user.keyboard('{ArrowRight}');
+      expect(getMediaCardActions()[2]).toHaveFocus();
 
-      // Focus second card first
-      act(() => {
-        fireEvent.focus(cards[1] as HTMLElement);
-      });
+      await user.keyboard('{ArrowLeft}');
 
-      act(() => {
-        fireEvent.keyDown(screen.getByRole('list'), { key: 'ArrowRight' });
-      });
-
-      // Now go left
-      act(() => {
-        fireEvent.keyDown(screen.getByRole('list'), { key: 'ArrowLeft' });
-      });
-
-      // Re-query after state update
-      const updatedCards = container.querySelectorAll('[data-media-card]');
-      expect(updatedCards[1]).toHaveAttribute('tabIndex', '0');
+      expect(getMediaCardActions()[1]).toHaveFocus();
     });
 
-    it('navigates to first item with Home key', () => {
+    it('navigates to first item with Home key', async () => {
+      const user = userEvent.setup();
       const items = createMockItems(10);
-      const { container } = renderWithProviders(
+      renderWithProviders(
         <MediaGrid
           items={items}
           isLoading={false}
@@ -337,26 +329,19 @@ describe('MediaGrid', () => {
         />,
       );
 
-      const cards = container.querySelectorAll('[data-media-card]');
+      await user.tab();
+      await user.keyboard('{End}');
+      expect(getMediaCardActions()[9]).toHaveFocus();
 
-      // Move to middle first
-      act(() => {
-        fireEvent.focus(cards[5] as HTMLElement);
-      });
+      await user.keyboard('{Home}');
 
-      // Press Home
-      act(() => {
-        fireEvent.keyDown(screen.getByRole('list'), { key: 'Home' });
-      });
-
-      // Re-query after state update
-      const updatedCards = container.querySelectorAll('[data-media-card]');
-      expect(updatedCards[0]).toHaveAttribute('tabIndex', '0');
+      expect(getMediaCardActions()[0]).toHaveFocus();
     });
 
-    it('navigates to last item with End key', () => {
+    it('navigates to last item with End key', async () => {
+      const user = userEvent.setup();
       const items = createMockItems(10);
-      const { container } = renderWithProviders(
+      renderWithProviders(
         <MediaGrid
           items={items}
           isLoading={false}
@@ -367,26 +352,18 @@ describe('MediaGrid', () => {
         />,
       );
 
-      const cards = container.querySelectorAll('[data-media-card]');
+      await user.tab();
 
-      act(() => {
-        fireEvent.focus(cards[0] as HTMLElement);
-      });
+      await user.keyboard('{End}');
 
-      act(() => {
-        fireEvent.keyDown(screen.getByRole('list'), { key: 'End' });
-      });
-
-      // Re-query after state update
-      const updatedCards = container.querySelectorAll('[data-media-card]');
-      expect(updatedCards[9]).toHaveAttribute('tabIndex', '0');
+      expect(getMediaCardActions()[9]).toHaveFocus();
     });
 
     it('triggers onItemClick with Enter key (native button activation)', async () => {
       const user = userEvent.setup();
       const onItemClick = vi.fn();
       const items = createMockItems(3);
-      const { container } = renderWithProviders(
+      renderWithProviders(
         <MediaGrid
           items={items}
           isLoading={false}
@@ -397,8 +374,8 @@ describe('MediaGrid', () => {
         />,
       );
 
-      const cards = container.querySelectorAll('[data-media-card]');
-      (cards[0] as HTMLElement).focus();
+      await user.tab();
+      expect(getMediaCardActions()[0]).toHaveFocus();
       await user.keyboard('{Enter}');
 
       expect(onItemClick).toHaveBeenCalledWith(items[0]);
@@ -408,7 +385,7 @@ describe('MediaGrid', () => {
       const user = userEvent.setup();
       const onItemClick = vi.fn();
       const items = createMockItems(3);
-      const { container } = renderWithProviders(
+      renderWithProviders(
         <MediaGrid
           items={items}
           isLoading={false}
@@ -419,8 +396,8 @@ describe('MediaGrid', () => {
         />,
       );
 
-      const cards = container.querySelectorAll('[data-media-card]');
-      (cards[0] as HTMLElement).focus();
+      await user.tab();
+      expect(getMediaCardActions()[0]).toHaveFocus();
       await user.keyboard(' ');
 
       expect(onItemClick).toHaveBeenCalledWith(items[0]);
@@ -609,7 +586,7 @@ describe('MediaGrid', () => {
   describe('focus management', () => {
     it('first item has tabIndex 0 when no item is focused', () => {
       const items = createMockItems(3);
-      const { container } = renderWithProviders(
+      renderWithProviders(
         <MediaGrid
           items={items}
           isLoading={false}
@@ -620,7 +597,7 @@ describe('MediaGrid', () => {
         />,
       );
 
-      const cards = container.querySelectorAll('[data-media-card]');
+      const cards = getMediaCardActions();
       expect(cards[0]).toHaveAttribute('tabIndex', '0');
       expect(cards[1]).toHaveAttribute('tabIndex', '-1');
       expect(cards[2]).toHaveAttribute('tabIndex', '-1');
