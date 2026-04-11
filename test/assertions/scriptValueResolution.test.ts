@@ -83,6 +83,7 @@ describe('Script value resolution', () => {
 
   afterEach(() => {
     cliState.basePath = originalBasePath;
+    vi.resetAllMocks();
   });
 
   const baseProviderResponse: ProviderResponse = {

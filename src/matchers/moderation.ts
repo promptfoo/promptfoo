@@ -5,7 +5,7 @@ import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../redteam/constants';
 import invariant from '../util/invariant';
 import { getAndCheckProvider } from './providers';
 
-import type { ApiModerationProvider, GradingConfig } from '../types/index';
+import type { ApiModerationProvider, GradingConfig, GradingResult } from '../types/index';
 
 interface ModerationMatchOptions {
   userPrompt: string;
@@ -16,7 +16,7 @@ interface ModerationMatchOptions {
 export async function matchesModeration(
   { userPrompt, assistantResponse, categories = [] }: ModerationMatchOptions,
   grading?: GradingConfig,
-) {
+): Promise<Omit<GradingResult, 'assertion'>> {
   if (!assistantResponse) {
     return {
       pass: true,

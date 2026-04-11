@@ -177,7 +177,9 @@ export async function getGradingProvider(
       // Recursively call getGradingProvider to handle all provider types (string, object, etc.)
       finalProvider = await getGradingProvider(type, cfg, defaultProvider);
       if (finalProvider) {
-        logger.debug(`[Grading] Using provider from defaultTest fallback: ${finalProvider.id()}`);
+        logger.debug('[Grading] Using provider from defaultTest fallback', {
+          providerId: finalProvider.id(),
+        });
       }
     } else {
       finalProvider = defaultProvider;
@@ -195,7 +197,10 @@ export async function getAndCheckProvider(
   const matchedProvider = await getGradingProvider(type, provider, defaultProvider);
   if (!matchedProvider) {
     if (defaultProvider) {
-      logger.warn(`No provider of type ${type} found for '${checkName}', falling back to default`);
+      logger.warn('[Grading] Falling back to default provider', {
+        checkName,
+        type,
+      });
       return defaultProvider;
     } else {
       throw new Error(`No provider of type ${type} found for '${checkName}'`);
@@ -214,9 +219,11 @@ export async function getAndCheckProvider(
 
   if (!isValidProviderType) {
     if (defaultProvider) {
-      logger.warn(
-        `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}', falling back to default`,
-      );
+      logger.warn('[Grading] Falling back to default provider after type check failed', {
+        checkName,
+        providerId: matchedProvider.id(),
+        type,
+      });
       return defaultProvider;
     } else {
       throw new Error(
