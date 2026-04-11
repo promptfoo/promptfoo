@@ -168,15 +168,22 @@ export async function matchesLlmRubric(
     cliState.config?.redteam &&
     shouldGenerateRemote({ canUseCodexDefaultProvider: true })
   ) {
-    return {
-      ...(await doRemoteGrading({
-        task: 'llm-rubric',
-        rubric,
-        output: llmOutput,
-        vars: vars || {},
-      })),
-      assertion,
-    };
+    try {
+      return {
+        ...(await doRemoteGrading({
+          task: 'llm-rubric',
+          rubric,
+          output: llmOutput,
+          vars: vars || {},
+        })),
+        assertion,
+      };
+    } catch (error) {
+      return {
+        ...fail(`Could not perform remote grading: ${error}`),
+        assertion,
+      };
+    }
   }
 
   try {
