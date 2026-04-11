@@ -51,7 +51,15 @@ const nodeModulesPathPattern = /[\\/]node_modules[\\/]/;
 // Extract React Compiler Babel plugins from @vitejs/plugin-react's preset.
 // Validate the runtime shape defensively so plugin-react API changes disable
 // only this optimization instead of failing config evaluation.
-const reactCompilerPresetValue: unknown = reactCompilerPreset();
+function getReactCompilerPresetValue(): unknown {
+  try {
+    return reactCompilerPreset();
+  } catch {
+    return undefined;
+  }
+}
+
+const reactCompilerPresetValue: unknown = getReactCompilerPresetValue();
 const reactCompilerPlugins: TransformOptions['plugins'] | undefined = (() => {
   if (!reactCompilerPresetValue || typeof reactCompilerPresetValue !== 'object') {
     return undefined;
@@ -62,10 +70,14 @@ const reactCompilerPlugins: TransformOptions['plugins'] | undefined = (() => {
     return undefined;
   }
 
-  const presetResult = presetCandidate() as { plugins?: unknown } | null | undefined;
-  return Array.isArray(presetResult?.plugins)
-    ? (presetResult.plugins as TransformOptions['plugins'])
-    : undefined;
+  try {
+    const presetResult = presetCandidate() as { plugins?: unknown } | null | undefined;
+    return Array.isArray(presetResult?.plugins)
+      ? (presetResult.plugins as TransformOptions['plugins'])
+      : undefined;
+  } catch {
+    return undefined;
+  }
 })();
 const reactCompilerCodeFilter: RegExp | undefined = (() => {
   if (!reactCompilerPresetValue || typeof reactCompilerPresetValue !== 'object') {
