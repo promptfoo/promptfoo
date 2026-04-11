@@ -179,7 +179,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       const hostname = new URL(endpoint).hostname.toLowerCase();
       return hostname === 'openai.azure.com' || hostname.endsWith('.openai.azure.com');
     } catch {
-      return value.toLowerCase().includes('openai.azure.com');
+      return false;
     }
   }
 
