@@ -476,9 +476,9 @@ export async function matchesGEval(
     if (!steps.length) {
       return fail('LLM does not propose any evaluation step', tokensUsed);
     }
-  } catch {
+  } catch (err) {
     return fail(
-      `LLM-proposed evaluation steps are not in JSON format: ${respSteps.output}`,
+      `LLM-proposed evaluation steps are not in JSON format: ${(err as Error).message}\n\n${respSteps.output}`,
       tokensUsed,
     );
   }
@@ -531,13 +531,24 @@ export async function matchesGEval(
       );
     }
     result = JSON.parse(resultMatch[0]);
-  } catch {
-    return fail(`LLM-proposed evaluation result is not in JSON format: ${resp.output}`, tokensUsed);
+  } catch (err) {
+    return fail(
+      `LLM-proposed evaluation result is not in JSON format: ${(err as Error).message}\n\n${resp.output}`,
+      tokensUsed,
+    );
+  }
+
+  const rawScore = typeof result.score === 'number' ? result.score : Number(result.score);
+  if (!Number.isFinite(rawScore)) {
+    return fail(
+      `G-Eval result has invalid or missing score: ${JSON.stringify(result.score)}`,
+      tokensUsed,
+    );
   }
 
   return {
-    pass: result.score / maxScore >= threshold,
-    score: result.score / maxScore,
+    pass: rawScore / maxScore >= threshold,
+    score: rawScore / maxScore,
     reason: result.reason,
     tokensUsed,
   };
