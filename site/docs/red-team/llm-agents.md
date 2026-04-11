@@ -357,7 +357,7 @@ If you want trace-aware grading without giving the attacker this extra visibilit
 
 #### Trajectory Evidence in Red Teams
 
-Trajectory evaluation is useful when the security outcome depends on intermediate actions, not just the final text. For example:
+Trajectory eval is useful when the security outcome depends on intermediate actions, not just the final text. For example:
 
 | Red-team question                         | Trajectory evidence that helps answer it                                     |
 | ----------------------------------------- | ---------------------------------------------------------------------------- |
@@ -418,6 +418,7 @@ redteam:
   strategies:
     - jailbreak:meta
     - jailbreak:hydra
+    - jailbreak:composite
 ```
 
 For useful trajectories, your agent or provider needs to emit spans that identify internal steps. Add attributes such as `tool.name`, `tool.arguments`, `command`, `search.query`, or guardrail decision fields. Built-in providers emit provider-level GenAI spans automatically, but deeper agent evidence requires instrumenting the agent workflow or using a provider that already streams tool and command spans. Keep `spanFilter` aligned with the span names your agent emits; it uses case-insensitive substring matching, not wildcards or regex, so values like `llm.` and `tool.` will match spans such as `llm.chat.completions` or `tool.database_query`. Overly narrow filters can hide the evidence you want graders or assertions to inspect.
