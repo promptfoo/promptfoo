@@ -218,6 +218,14 @@ export async function getAndCheckProvider(
   }
 
   if (!isValidProviderType) {
+    // If the user explicitly configured a provider that doesn't match the
+    // required type, throw rather than silently falling back to a different
+    // provider, which could produce results from an unintended model.
+    if (provider) {
+      throw new Error(
+        `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}'`,
+      );
+    }
     if (defaultProvider) {
       logger.warn('[Grading] Falling back to default provider after type check failed', {
         checkName,
@@ -225,11 +233,10 @@ export async function getAndCheckProvider(
         type,
       });
       return defaultProvider;
-    } else {
-      throw new Error(
-        `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}'`,
-      );
     }
+    throw new Error(
+      `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}'`,
+    );
   }
 
   return matchedProvider;
