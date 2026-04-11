@@ -61,7 +61,7 @@ session = boto3.session.Session()
 region = args.region or session.region_name
 if not region:
     logger.error("AWS region not specified and not found in AWS CLI configuration")
-    exit(1)
+    raise SystemExit(1)
 
 # Generate endpoint name if not provided
 if not args.endpoint_name:
@@ -76,14 +76,15 @@ sagemaker_client = boto3.client("sagemaker", region_name=region)
 
 
 # Find or get SageMaker execution role
-def get_sagemaker_role():
+def get_sagemaker_role() -> str:
+    """Return the requested role ARN or discover a SageMaker execution role."""
     if args.role_name:
         try:
             role = iam.get_role(RoleName=args.role_name)
             return role["Role"]["Arn"]
         except Exception as e:
             logger.error(f"Error getting specified role: {e}")
-            exit(1)
+            raise SystemExit(1)
 
     # Try to find a SageMaker execution role
     try:
@@ -96,10 +97,10 @@ def get_sagemaker_role():
         logger.error(
             "No SageMaker execution role found. Please specify a role with --role-name"
         )
-        exit(1)
+        raise SystemExit(1)
     except Exception as e:
         logger.error(f"Error finding SageMaker role: {e}")
-        exit(1)
+        raise SystemExit(1)
 
 
 role_arn = get_sagemaker_role()
@@ -187,7 +188,7 @@ try:
             logger.error(
                 f"Endpoint creation failed: {response.get('FailureReason', 'Unknown reason')}"
             )
-            exit(1)
+            raise SystemExit(1)
 
         if status != "InService":
             logger.info(f"Endpoint status: {status}. Waiting...")
@@ -221,4 +222,4 @@ providers:
 
 except Exception as e:
     logger.error(f"Error deploying model: {e}")
-    exit(1)
+    raise SystemExit(1)

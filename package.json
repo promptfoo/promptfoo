@@ -92,7 +92,7 @@
     "whatwg-url": "16.0.1",
     "esbuild": "0.28.0",
     "jsdom": {
-      "@asamuzakjp/css-color": "5.1.9"
+      "@asamuzakjp/css-color": "5.1.10"
     },
     "storybook": {
       "esbuild": "0.27.7"
@@ -286,7 +286,7 @@
     "json5": "^2.2.3",
     "keyv": "^5.6.0",
     "keyv-file": "^5.3.3",
-    "lru-cache": "^11.2.7",
+    "lru-cache": "^11.3.0",
     "mathjs": "^15.1.1",
     "minimatch": "^10.2.4",
     "nunjucks": "^3.2.4",
