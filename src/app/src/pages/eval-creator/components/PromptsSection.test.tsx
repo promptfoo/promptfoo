@@ -272,7 +272,7 @@ describe('PromptsSection', () => {
 
     const file = new File([longLineText], 'long_line.txt', { type: 'text/plain' });
     // Find the hidden file input
-    const fileInput = document.querySelector('input[type="file"]');
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
 
     if (!fileInput) {
       throw new Error('File input element not found');

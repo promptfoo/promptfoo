@@ -137,7 +137,7 @@ describe('TestCasesSection', () => {
         .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
       const file = new File([''], 'empty.csv', { type: 'text/csv' });
 
-      await user.upload(fileInput, file, { applyAccept: false });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(

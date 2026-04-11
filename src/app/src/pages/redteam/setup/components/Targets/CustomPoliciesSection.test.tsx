@@ -44,6 +44,14 @@ const renderComponent = () => {
   );
 };
 
+const getUploadInputForLabel = (label: HTMLElement) => {
+  const fileInput = label.closest('label')?.querySelector<HTMLInputElement>('input[type="file"]');
+  if (!fileInput) {
+    throw new Error('CSV upload input not found');
+  }
+  return fileInput;
+};
+
 describe('CustomPoliciesSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -171,10 +179,9 @@ describe('CustomPoliciesSection', () => {
         value: () => Promise.resolve(csvContent),
       });
 
-      const fileInput = uploadButton.closest('label')?.querySelector('input[type="file"]');
-      expect(fileInput).not.toBeNull();
+      const fileInput = getUploadInputForLabel(uploadButton);
 
-      await user.upload(fileInput!, file);
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockUpdateConfig).toHaveBeenCalled();
@@ -203,9 +210,9 @@ describe('CustomPoliciesSection', () => {
       // Wait for component to be ready
       const uploadLabel = await screen.findByText(/upload csv/i);
       const uploadButton = uploadLabel.closest('label');
-      const fileInput = uploadButton?.querySelector('input[type="file"]');
+      const fileInput = getUploadInputForLabel(uploadLabel);
 
-      const uploadPromise = user.upload(fileInput!, file);
+      const uploadPromise = user.upload(fileInput, file);
 
       // Wait for the "Uploading..." state to appear
       await waitFor(() => {
@@ -233,10 +240,9 @@ describe('CustomPoliciesSection', () => {
 
       // Wait for component to be ready
       const uploadLabel = await screen.findByText(/upload csv/i);
-      const fileInput = uploadLabel.closest('label')?.querySelector('input[type="file"]');
-      expect(fileInput).not.toBeNull();
+      const fileInput = getUploadInputForLabel(uploadLabel);
 
-      await user.upload(fileInput!, file);
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -258,9 +264,9 @@ describe('CustomPoliciesSection', () => {
 
       // Wait for component to be ready
       const uploadLabel = await screen.findByText(/upload csv/i);
-      const fileInput = uploadLabel.closest('label')?.querySelector('input[type="file"]');
+      const fileInput = getUploadInputForLabel(uploadLabel);
 
-      await user.upload(fileInput!, file);
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -281,9 +287,9 @@ describe('CustomPoliciesSection', () => {
 
       // Wait for component to be ready
       const uploadLabel = await screen.findByText(/upload csv/i);
-      const fileInput = uploadLabel.closest('label')?.querySelector('input[type="file"]');
+      const fileInput = getUploadInputForLabel(uploadLabel);
 
-      await user.upload(fileInput!, file);
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
