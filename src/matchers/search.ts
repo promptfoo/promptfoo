@@ -43,7 +43,6 @@ export async function matchesSearchRubric(
     ? await getGradingProvider('text', grading.provider, null)
     : null;
 
-  // Get a provider with web search capabilities
   let searchProvider =
     configuredProvider || defaultSearchProviders.find((provider) => Boolean(provider));
 
@@ -83,7 +82,6 @@ export async function matchesSearchRubric(
     ...(vars || {}),
   });
 
-  // Get the evaluation from the search provider
   const resp = await callProviderWithContext(
     searchProvider,
     prompt,
@@ -102,7 +100,6 @@ export async function matchesSearchRubric(
     };
   }
 
-  // Parse the response
   try {
     const result = extractFirstJsonObject(String(resp.output)) as {
       pass?: boolean;

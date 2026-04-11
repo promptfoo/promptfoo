@@ -146,7 +146,6 @@ export async function matchesContextRecall(
     'context recall check',
   );
 
-  // Convert context to string for LLM prompt
   const contextString = serializeContext(context);
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RECALL);
@@ -239,7 +238,6 @@ export async function matchesContextRelevance(
     'context relevance check',
   );
 
-  // Convert context to string for LLM prompt
   const contextString = serializeContext(context);
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RELEVANCE);
@@ -270,7 +268,6 @@ export async function matchesContextRelevance(
     : splitIntoSentences(context);
   const totalContextUnits = contextUnits.length;
 
-  // Parse the LLM's response to get relevant sentences
   const extractedSentences = splitIntoSentences(resp.output);
   const relevantSentences: string[] = [];
   const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
@@ -368,7 +365,6 @@ export async function matchesContextFaithfulness(
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
 
-  // Convert context to string for LLM prompt
   const contextString = serializeContext(context);
 
   const statements = splitIntoSentences(resp.output);

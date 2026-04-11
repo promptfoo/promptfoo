@@ -25,7 +25,6 @@ export async function matchesModeration(
     };
   }
 
-  // Get default providers
   const defaultProviders = await getDefaultProviders();
 
   // Only try to use Replicate if OpenAI is not available
