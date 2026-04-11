@@ -967,6 +967,23 @@ describe('loadApiProvider', () => {
     expect(providers[2]).toBeInstanceOf(AnthropicCompletionProvider);
   });
 
+  it('loadApiProviders uses ProviderOptionsMap keys for loading and nested ids for labels', async () => {
+    const providers = await loadApiProviders([
+      {
+        'openai:chat:gpt-4': {
+          id: 'custom-openai',
+          label: 'Custom OpenAI',
+          config: { apiKey: 'test-key' },
+        },
+      },
+    ]);
+
+    expect(providers).toHaveLength(1);
+    expect(providers[0]).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(providers[0].id()).toBe('custom-openai');
+    expect(providers[0].label).toBe('Custom OpenAI');
+  });
+
   it('loadApiProvider sets provider.delay', async () => {
     const providerOptions = {
       id: 'test-delay',

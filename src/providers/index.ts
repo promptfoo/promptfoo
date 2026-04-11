@@ -1,9 +1,5 @@
-import fs from 'fs';
-import path from 'path';
-
 import chalk from 'chalk';
 import dedent from 'dedent';
-import yaml from 'js-yaml';
 import cliState from '../cliState';
 import logger from '../logger';
 import {
@@ -12,8 +8,13 @@ import {
   isCloudProvider,
   validateLinkedTargetId,
 } from '../util/cloud';
-import { maybeLoadConfigFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
+import {
+  isProviderConfigFileReference,
+  loadProviderConfigsFromFile,
+  normalizeProviderRef,
+  readProviderConfigFile,
+} from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
 import { providerMap } from './registry';
 
@@ -109,30 +110,23 @@ export async function loadApiProvider(
     return loadApiProvider(cloudProvider.id, mergedContext);
   }
 
-  if (
-    renderedProviderPath.startsWith('file://') &&
-    (renderedProviderPath.endsWith('.yaml') ||
-      renderedProviderPath.endsWith('.yml') ||
-      renderedProviderPath.endsWith('.json'))
-  ) {
-    const filePath = renderedProviderPath.slice('file://'.length);
-    const modulePath = path.isAbsolute(filePath)
-      ? filePath
-      : path.join(basePath || process.cwd(), filePath);
-    const rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
-    const fileContent = maybeLoadConfigFromExternalFile(rawContent) as ProviderOptions;
-    invariant(fileContent, `Provider config ${filePath} is undefined`);
+  if (isProviderConfigFileReference(renderedProviderPath)) {
+    const { configs, relativePath, wasArray } = readProviderConfigFile(
+      renderedProviderPath,
+      basePath,
+    );
+    const fileContent = configs[0];
 
     // If fileContent is an array, it contains multiple providers
-    if (Array.isArray(fileContent)) {
+    if (wasArray) {
       // This is handled by loadApiProviders, so we'll throw an error here
       throw new Error(
-        `Multiple providers found in ${filePath}. Use loadApiProviders instead of loadApiProvider.`,
+        `Multiple providers found in ${relativePath}. Use loadApiProviders instead of loadApiProvider.`,
       );
     }
 
-    invariant(fileContent.id, `Provider config ${filePath} must have an id`);
-    logger.info(`Loaded provider ${fileContent.id} from ${filePath}`);
+    invariant(fileContent.id, `Provider config ${relativePath} must have an id`);
+    logger.info(`Loaded provider ${fileContent.id} from ${relativePath}`);
 
     // Merge file's env with context.env - context.env takes precedence
     // This allows callers to override file-defined defaults
@@ -199,6 +193,7 @@ export async function resolveProvider(
     if (providerMap[provider]) {
       return providerMap[provider];
     }
+    const descriptor = normalizeProviderRef(provider);
     const loadOptions: LoadApiProviderOptions = {};
     if (context.env) {
       loadOptions.env = context.env;
@@ -206,56 +201,31 @@ export async function resolveProvider(
     if (context.basePath) {
       loadOptions.basePath = context.basePath;
     }
-    return await loadApiProvider(provider, loadOptions);
+    return await loadApiProvider(descriptor.loadProviderPath!, loadOptions);
   } else if (typeof provider === 'object') {
-    const casted = provider as ProviderOptions;
-    invariant(casted.id, 'Provider object must have an id');
-    const loadOptions: LoadApiProviderOptions = { options: casted };
+    const descriptor = normalizeProviderRef(provider);
+    invariant(
+      descriptor.kind === 'options' && descriptor.loadOptions && descriptor.loadProviderPath,
+      'Provider object must have an id',
+    );
+    const loadOptions: LoadApiProviderOptions = { options: descriptor.loadOptions };
     if (context.env) {
       loadOptions.env = context.env;
     }
     if (context.basePath) {
       loadOptions.basePath = context.basePath;
     }
-    return await loadApiProvider(casted.id, loadOptions);
+    return await loadApiProvider(descriptor.loadProviderPath, loadOptions);
   } else if (typeof provider === 'function') {
+    const descriptor = normalizeProviderRef(provider);
     // Handle function providers directly instead of passing to loadApiProvider
     return {
-      id: () => provider.label ?? 'custom-function',
+      id: () => descriptor.id,
       callApi: provider,
     };
   } else {
     throw new Error('Invalid provider type');
   }
-}
-
-/**
- * Helper function to load provider configs from a file path without instantiating them.
- * Returns the raw ProviderOptions with all fields (including `prompts`) intact.
- */
-function loadProviderConfigsFromFile(filePath: string, basePath?: string): ProviderOptions[] {
-  const relativePath = filePath.slice('file://'.length);
-  const modulePath = path.isAbsolute(relativePath)
-    ? relativePath
-    : path.join(basePath || process.cwd(), relativePath);
-
-  const rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
-  const fileContent = maybeLoadConfigFromExternalFile(rawContent) as
-    | ProviderOptions
-    | ProviderOptions[];
-  invariant(fileContent, `Provider config ${relativePath} is undefined`);
-
-  return [fileContent].flat() as ProviderOptions[];
-}
-
-/**
- * Checks if a string is a file:// reference to a YAML/JSON config file.
- */
-function isFileReference(str: string): boolean {
-  return (
-    str.startsWith('file://') &&
-    (str.endsWith('.yaml') || str.endsWith('.yml') || str.endsWith('.json'))
-  );
 }
 
 /**
@@ -275,7 +245,7 @@ export function resolveProviderConfigs(
   const { basePath } = options;
 
   if (typeof providerPaths === 'string') {
-    if (isFileReference(providerPaths)) {
+    if (isProviderConfigFileReference(providerPaths)) {
       return loadProviderConfigsFromFile(providerPaths, basePath);
     }
     // Keep non-file strings as-is for loadApiProviders to handle
@@ -294,14 +264,13 @@ export function resolveProviderConfigs(
   const results: (string | ProviderFunction | ProviderOptions | ProviderOptionsMap)[] = [];
 
   for (const provider of providerPaths) {
-    if (typeof provider === 'string') {
-      if (isFileReference(provider)) {
-        // Resolve file:// references to ProviderOptions[]
-        results.push(...loadProviderConfigsFromFile(provider, basePath));
-      } else {
-        // Keep non-file strings as-is
-        results.push(provider);
-      }
+    const descriptor = normalizeProviderRef(provider);
+    if (descriptor.kind === 'file') {
+      // Resolve file:// references to ProviderOptions[]
+      results.push(...loadProviderConfigsFromFile(provider as string, basePath));
+    } else if (descriptor.kind === 'string') {
+      // Keep non-file strings as-is
+      results.push(provider as string);
     } else if (typeof provider === 'function') {
       // Keep functions as-is
       results.push(provider);
@@ -353,12 +322,7 @@ export async function loadApiProviders(
 
   if (typeof providerPaths === 'string') {
     // Check if the string path points to a file
-    if (
-      providerPaths.startsWith('file://') &&
-      (providerPaths.endsWith('.yaml') ||
-        providerPaths.endsWith('.yml') ||
-        providerPaths.endsWith('.json'))
-    ) {
+    if (isProviderConfigFileReference(providerPaths)) {
       return loadProvidersFromFile(providerPaths, { basePath, env });
     }
     return [await loadApiProvider(providerPaths, { basePath, env })];
@@ -372,38 +336,31 @@ export async function loadApiProviders(
   } else if (Array.isArray(providerPaths)) {
     const providersArrays = await Promise.all(
       providerPaths.map(async (provider, idx) => {
-        if (typeof provider === 'string') {
-          if (
-            provider.startsWith('file://') &&
-            (provider.endsWith('.yaml') || provider.endsWith('.yml') || provider.endsWith('.json'))
-          ) {
-            return loadProvidersFromFile(provider, { basePath, env });
-          }
-          return [await loadApiProvider(provider, { basePath, env })];
+        const descriptor = normalizeProviderRef(provider, { index: idx });
+        if (descriptor.kind === 'file') {
+          return loadProvidersFromFile(provider as string, { basePath, env });
         }
-        if (typeof provider === 'function') {
+        if (descriptor.kind === 'string') {
+          return [await loadApiProvider(descriptor.loadProviderPath!, { basePath, env })];
+        }
+        if (descriptor.kind === 'function') {
           return [
             {
-              id: () => provider.label ?? `custom-function-${idx}`,
-              callApi: provider,
+              id: () => descriptor.id,
+              callApi: provider as ProviderFunction,
             },
           ];
         }
-        if (provider.id) {
-          // List of ProviderConfig objects
+        if (descriptor.kind === 'options' || descriptor.kind === 'map') {
           return [
-            await loadApiProvider((provider as ProviderOptions).id!, {
-              options: provider,
+            await loadApiProvider(descriptor.loadProviderPath!, {
+              options: descriptor.loadOptions,
               basePath,
               env,
             }),
           ];
         }
-        // List of { id: string, config: ProviderConfig } objects
-        const id = Object.keys(provider)[0];
-        const providerObject = (provider as ProviderOptionsMap)[id];
-        const context = { ...providerObject, id: providerObject.id || id };
-        return [await loadApiProvider(id, { options: context, basePath, env })];
+        throw new Error('Invalid providers list');
       }),
     );
     return providersArrays.flat();
@@ -431,7 +388,7 @@ function getProviderIdsFromFile(providerPath: string): string[] {
 
 export function getProviderIds(providerPaths: TestSuiteConfig['providers']): string[] {
   if (typeof providerPaths === 'string') {
-    if (isFileReference(providerPaths)) {
+    if (isProviderConfigFileReference(providerPaths)) {
       return getProviderIdsFromFile(providerPaths);
     }
     return [providerPaths];
@@ -439,21 +396,14 @@ export function getProviderIds(providerPaths: TestSuiteConfig['providers']): str
     return ['custom-function'];
   } else if (Array.isArray(providerPaths)) {
     return providerPaths.flatMap((provider, idx) => {
-      if (typeof provider === 'string') {
-        if (isFileReference(provider)) {
-          return getProviderIdsFromFile(provider);
-        }
-        return provider;
+      const descriptor = normalizeProviderRef(provider, { index: idx });
+      if (descriptor.kind === 'file') {
+        return getProviderIdsFromFile(provider as string);
       }
-      if (typeof provider === 'function') {
-        return provider.label || `custom-function-${idx}`;
+      if (descriptor.kind === 'unknown') {
+        throw new Error('Invalid providers list');
       }
-      if ((provider as ProviderOptions).id) {
-        return (provider as ProviderOptions).id!;
-      }
-      const id = Object.keys(provider)[0];
-      const providerObject = (provider as ProviderOptionsMap)[id];
-      return providerObject.id || id;
+      return descriptor.id;
     });
   }
   throw new Error('Invalid providers list');

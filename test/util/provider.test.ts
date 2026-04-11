@@ -12,8 +12,63 @@ import {
   isProviderAllowed,
   providerToIdentifier,
 } from '../../src/util/provider';
+import { isProviderConfigFileReference, normalizeProviderRef } from '../../src/util/providerRef';
 
 import type { ApiProvider } from '../../src/types/index';
+
+describe('normalizeProviderRef', () => {
+  it('identifies provider config file references without treating script providers as config', () => {
+    expect(isProviderConfigFileReference('file://providers.yaml')).toBe(true);
+    expect(isProviderConfigFileReference('file://providers.yml')).toBe(true);
+    expect(isProviderConfigFileReference('file://providers.json')).toBe(true);
+    expect(isProviderConfigFileReference('file://provider.js')).toBe(false);
+  });
+
+  it('normalizes ProviderOptionsMap refs with explicit id overrides', () => {
+    const descriptor = normalizeProviderRef({
+      'openai:chat:gpt-4': {
+        id: 'custom-openai',
+        label: 'Fast OpenAI',
+        config: { temperature: 0.2 },
+      },
+    });
+
+    expect(descriptor).toMatchObject({
+      kind: 'map',
+      id: 'custom-openai',
+      label: 'Fast OpenAI',
+      loadProviderPath: 'openai:chat:gpt-4',
+      loadOptions: {
+        id: 'custom-openai',
+        label: 'Fast OpenAI',
+        config: { temperature: 0.2 },
+      },
+    });
+  });
+
+  it('uses function labels before positional custom-function fallbacks', () => {
+    const labeled = Object.assign(async () => ({ output: 'ok' }), { label: 'custom-label' });
+    const unlabeled = async () => ({ output: 'ok' });
+
+    expect(normalizeProviderRef(labeled, { index: 3 })).toMatchObject({
+      kind: 'function',
+      id: 'custom-label',
+      label: 'custom-label',
+    });
+    expect(normalizeProviderRef(unlabeled, { index: 3 })).toMatchObject({
+      kind: 'function',
+      id: 'custom-function-3',
+    });
+  });
+
+  it('falls back to labels for malformed provider configs used by filtering', () => {
+    expect(normalizeProviderRef({ id: '', label: 'Provider2' }, { index: 1 })).toMatchObject({
+      kind: 'unknown',
+      id: 'Provider2',
+      label: 'Provider2',
+    });
+  });
+});
 
 describe('providerToIdentifier', () => {
   it('works with provider string', () => {
