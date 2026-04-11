@@ -515,6 +515,7 @@ export abstract class RedteamGraderBase {
       Object.defineProperty(grading, '__promptfooPreferRemote', {
         value: true,
       });
+      logger.debug('[Redteam] No configured grading provider detected, preferring remote grading');
     }
     const grade = (await matchesLlmRubric(finalRubric, llmOutput, grading)) as GradingResult;
 
