@@ -53,14 +53,14 @@ describe('getAndCheckProvider', () => {
     ).resolves.toBe(DefaultGradingProvider);
   });
 
-  it('should return the default provider when provider does not support type', async () => {
+  it('should throw when explicitly configured provider does not support type', async () => {
     const provider = {
       id: () => 'test-provider',
       callApi: () => Promise.resolve({ output: 'test' }),
     };
     await expect(
       getAndCheckProvider('embedding', provider, DefaultEmbeddingProvider, 'test check'),
-    ).resolves.toBe(DefaultEmbeddingProvider);
+    ).rejects.toThrow('is not a valid embedding provider');
   });
 
   it('should return the provider if it implements the required method', async () => {
