@@ -38,8 +38,8 @@ jobs:
           # transient repository MCP timeouts, while avoiding future dependency drift.
           NPM_CONFIG_BEFORE: '2026-04-11T00:40:00.000Z'
           # Avoid combining the workflow's before pin with this repo's project .npmrc
-          # min-release-age setting when the published action invokes nested npx commands.
-          NPM_CONFIG_LOCATION: 'global'
+          # min-release-age setting without changing nested npx package layout.
+          NPM_CONFIG_USERCONFIG: '/dev/null'
         with:
           min-severity: medium
           enable-fork-prs: true
