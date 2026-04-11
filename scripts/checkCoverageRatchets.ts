@@ -202,10 +202,7 @@ export function getChangedFiles(cwd: string, baseRef?: string): ChangedFile[] {
 
   if (baseRef) {
     fetchGitRef(baseRef, cwd);
-    diffCommands.push(
-      ['diff', '--name-status', '--diff-filter=ACMRTUXB', baseRef, 'HEAD'],
-      ['diff', '--name-status', '--diff-filter=ACMRTUXB', `${baseRef}...HEAD`],
-    );
+    diffCommands.push(['diff', '--name-status', '--diff-filter=ACMRTUXB', `${baseRef}...HEAD`]);
   }
 
   if (githubBaseSha) {
@@ -219,13 +216,6 @@ export function getChangedFiles(cwd: string, baseRef?: string): ChangedFile[] {
 
   const githubBaseRef = process.env.GITHUB_BASE_REF;
   if (githubBaseRef) {
-    diffCommands.push([
-      'diff',
-      '--name-status',
-      '--diff-filter=ACMRTUXB',
-      `origin/${githubBaseRef}`,
-      'HEAD',
-    ]);
     diffCommands.push([
       'diff',
       '--name-status',
@@ -484,7 +474,6 @@ function parseArgs(argv: string[]): CliOptions {
 
 export function runCoverageRatchetCli(argv: string[], cwd = process.cwd()): number {
   const options = parseArgs(argv);
-  const changedFiles = getChangedFiles(cwd, options.baseRef);
   const reportNames = new Set(COVERAGE_RATCHET_REPORTS.map((report) => report.name));
   const unknownReports = options.reports.filter((report) => !reportNames.has(report));
   if (unknownReports.length > 0) {
@@ -497,14 +486,32 @@ export function runCoverageRatchetCli(argv: string[], cwd = process.cwd()): numb
       : COVERAGE_RATCHET_REPORTS;
 
   let failureCount = 0;
+  const availableReports: CoverageReportConfig[] = [];
 
   for (const report of selectedReports) {
     const coverageFile = path.resolve(cwd, report.coverageFile);
     if (!fs.existsSync(coverageFile)) {
-      console.log(`[coverage-ratchet] ${report.name}: skipped missing ${report.coverageFile}`);
+      const message = `[coverage-ratchet] ${report.name}: missing ${report.coverageFile}`;
+      if (options.reports.length > 0) {
+        console.error(message);
+        failureCount += 1;
+      } else {
+        console.log(`${message} (skipped)`);
+      }
       continue;
     }
 
+    availableReports.push(report);
+  }
+
+  if (failureCount > 0 || availableReports.length === 0) {
+    return failureCount === 0 ? 0 : 1;
+  }
+
+  const changedFiles = getChangedFiles(cwd, options.baseRef);
+
+  for (const report of availableReports) {
+    const coverageFile = path.resolve(cwd, report.coverageFile);
     const result = evaluateCoverageRatchets({
       changedFiles,
       coverageMap: readCoverageMap(coverageFile),

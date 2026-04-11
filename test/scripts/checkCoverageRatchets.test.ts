@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   COVERAGE_RATCHET_REPORTS,
   DEFAULT_COVERAGE_THRESHOLDS,
@@ -193,6 +193,21 @@ describe('coverage ratchets', () => {
     expect(() => runCoverageRatchetCli(['--base', '--report', 'backend'])).toThrow(
       'Missing value for --base',
     );
+  });
+
+  it('fails explicit report runs when the coverage artifact is missing', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coverage-ratchet-'));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      expect(runCoverageRatchetCli(['--report', 'backend'], tempDir)).toBe(1);
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[coverage-ratchet] backend: missing coverage/coverage-final.json',
+      );
+    } finally {
+      errorSpy.mockRestore();
+      fs.rmSync(tempDir, { force: true, recursive: true });
+    }
   });
 
   it('reads the base SHA from a GitHub pull request event payload', () => {
