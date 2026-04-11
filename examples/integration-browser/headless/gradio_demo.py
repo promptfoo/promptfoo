@@ -5,7 +5,7 @@ import gradio as gr
 
 # Simple chatbot function
 def chatbot_response(message, history):
-    """Simple chatbot that responds to messages"""
+    """Return deterministic keyword replies for browser automation tests."""
     time.sleep(1)  # Simulate processing time
 
     responses = {

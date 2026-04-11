@@ -21,7 +21,7 @@ DEBUG_KEY = "cloudswag_debug_2024"
 
 
 def add_debug_log(entry: dict):
-    """Add an entry to debug logs."""
+    """Append a debug log entry and retain only the latest 100 records."""
     debug_logs.append(entry)
     # Keep only last 100 entries
     if len(debug_logs) > 100:
