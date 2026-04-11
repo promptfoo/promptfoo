@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import NotFoundPage from './NotFoundPage';
@@ -40,7 +41,8 @@ describe('NotFoundPage', () => {
     expect(explanatoryText).toBeInTheDocument();
   });
 
-  it('should navigate to /evals when the See Evals button is clicked', () => {
+  it('should navigate to /evals when the See Evals button is clicked', async () => {
+    const user = userEvent.setup();
     render(
       <MemoryRouter>
         <NotFoundPage />
@@ -48,7 +50,7 @@ describe('NotFoundPage', () => {
     );
 
     const seeEvalsButton = screen.getByRole('button', { name: /see evals/i });
-    fireEvent.click(seeEvalsButton);
+    await user.click(seeEvalsButton);
 
     expect(mockNavigate).toHaveBeenCalledWith('/evals');
   });

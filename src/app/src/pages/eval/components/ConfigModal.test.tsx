@@ -1,6 +1,7 @@
 import { mockDocumentExecCommand, mockObjectUrl } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ConfigModal from './ConfigModal';
@@ -72,25 +73,26 @@ describe('ConfigModal', () => {
     expect(getDownloadButton()).toBeInTheDocument();
   });
 
-  it('copies config to clipboard when copy button is clicked', () => {
+  it('copies config to clipboard when copy button is clicked', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
 
     const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
     textarea.select = vi.fn();
 
-    fireEvent.click(getCopyButton());
+    await user.click(getCopyButton());
 
     expect(document.execCommand).toHaveBeenCalledWith('copy');
   });
 
   it('shows check icon after copying', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
 
     const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
     textarea.select = vi.fn();
 
-    // Click copy button
-    fireEvent.click(getCopyButton());
+    await user.click(getCopyButton());
 
     // After clicking, should show check icon somewhere in the dialog
     await waitFor(() => {
@@ -101,32 +103,35 @@ describe('ConfigModal', () => {
     expect(document.execCommand).toHaveBeenCalledWith('copy');
   });
 
-  it('downloads config as YAML file when download button is clicked', () => {
+  it('downloads config as YAML file when download button is clicked', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
 
-    fireEvent.click(getDownloadButton());
+    await user.click(getDownloadButton());
 
     expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
     expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
   });
 
-  it('sets the config download filename', () => {
+  it('sets the config download filename', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
 
-    fireEvent.click(getDownloadButton());
+    await user.click(getDownloadButton());
 
     const anchor = vi.mocked(HTMLAnchorElement.prototype.click).mock
       .contexts[0] as HTMLAnchorElement;
     expect(anchor.download).toBe('config.yaml');
   });
 
-  it('calls onClose when close button is clicked', () => {
+  it('calls onClose when close button is clicked', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
 
     // Close the dialog by clicking close button
     const closeButtons = screen.getAllByRole('button', { name: /close/i });
-    fireEvent.click(closeButtons[0]);
+    await user.click(closeButtons[0]);
 
     expect(mockOnClose).toHaveBeenCalled();
   });
@@ -195,23 +200,25 @@ describe('ConfigModal', () => {
     expect(textarea.value).toBe('null\n');
   });
 
-  it('creates blob with correct type for download', () => {
+  it('creates blob with correct type for download', async () => {
+    const user = userEvent.setup();
     const blobSpy = vi.spyOn(global, 'Blob');
 
     renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
 
-    fireEvent.click(getDownloadButton());
+    await user.click(getDownloadButton());
 
     expect(blobSpy).toHaveBeenCalledWith([expect.any(String)], { type: 'text/yaml;charset=utf-8' });
   });
 
-  it('selects textarea content when copy button is clicked', () => {
+  it('selects textarea content when copy button is clicked', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<ConfigModal open={true} onClose={mockOnClose} />);
 
     const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
     const selectSpy = vi.spyOn(textarea, 'select');
 
-    fireEvent.click(getCopyButton());
+    await user.click(getCopyButton());
 
     expect(selectSpy).toHaveBeenCalled();
   });

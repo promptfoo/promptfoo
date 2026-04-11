@@ -2,7 +2,8 @@ import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import ProviderTypeSelector from './ProviderTypeSelector';
 
@@ -19,7 +20,8 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 }));
 
 describe('ProviderTypeSelector', () => {
-  it('should update selectedProviderType and call setProvider with the correct provider configuration when a provider type card is selected', () => {
+  it('should update selectedProviderType and call setProvider with the correct provider configuration when a provider type card is selected', async () => {
+    const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'http',
@@ -44,7 +46,7 @@ describe('ProviderTypeSelector', () => {
     expect(pythonProviderCard).toBeInTheDocument();
 
     if (pythonProviderCard) {
-      fireEvent.click(pythonProviderCard);
+      await user.click(pythonProviderCard);
     }
 
     expect(mockSetProvider).toHaveBeenCalledWith(
@@ -60,7 +62,8 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Python')).toBeVisible();
   });
 
-  it('should filter provider options by search term when the user enters text in the search box', () => {
+  it('should filter provider options by search term when the user enters text in the search box', async () => {
+    const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     // Start with no provider to get expanded view initially
     const initialProvider: ProviderOptions = {
@@ -74,14 +77,17 @@ describe('ProviderTypeSelector', () => {
 
     // Should start in expanded view since no provider is initially selected
     const searchInput = screen.getByPlaceholderText('Search providers...');
-    fireEvent.change(searchInput, { target: { value: 'openai' } });
+    await user.click(searchInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('openai');
 
     expect(screen.getByText('OpenAI')).toBeVisible();
 
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
   });
 
-  it('should filter provider options by selected category when a category chip is toggled on', () => {
+  it('should filter provider options by selected category when a category chip is toggled on', async () => {
+    const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     // Start with no provider to get expanded view initially
     const initialProvider: ProviderOptions = {
@@ -96,7 +102,7 @@ describe('ProviderTypeSelector', () => {
     // Should start in expanded view since no provider is initially selected
     // Click on 'AI Providers' tag to filter to only AI providers
     const aiProvidersChip = screen.getByText(/^AI Providers \(/);
-    fireEvent.click(aiProvidersChip);
+    await user.click(aiProvidersChip);
 
     // OpenAI should be visible under AI Providers
     expect(screen.getByText('OpenAI')).toBeVisible();
@@ -170,7 +176,8 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('OpenAI')).toBeVisible();
   });
 
-  it('should maintain category filters when a search term is entered and then cleared', () => {
+  it('should maintain category filters when a search term is entered and then cleared', async () => {
+    const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     // Start with no provider to get expanded view initially
     const initialProvider: ProviderOptions = {
@@ -184,12 +191,13 @@ describe('ProviderTypeSelector', () => {
 
     // Should start in expanded view since no provider is initially selected
     const myAppCategoryChip = screen.getByText(/^My Application \(/);
-    fireEvent.click(myAppCategoryChip);
+    await user.click(myAppCategoryChip);
 
     const searchInput = screen.getByPlaceholderText('Search providers...');
-    fireEvent.change(searchInput, { target: { value: 'javascript' } });
-
-    fireEvent.change(searchInput, { target: { value: '' } });
+    await user.click(searchInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('javascript');
+    await user.clear(searchInput);
 
     // Providers in the 'My Application' (app) tag
     const appProviders = [
@@ -233,7 +241,8 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText(/^All \(/)).toBeVisible();
   });
 
-  it("should call setProvider with the correct Go provider configuration when the 'Go' card is selected", () => {
+  it("should call setProvider with the correct Go provider configuration when the 'Go' card is selected", async () => {
+    const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'http',
@@ -257,7 +266,7 @@ describe('ProviderTypeSelector', () => {
     expect(goProviderCard).toBeInTheDocument();
 
     if (goProviderCard) {
-      fireEvent.click(goProviderCard);
+      await user.click(goProviderCard);
     }
 
     expect(mockSetProvider).toHaveBeenCalledWith(
@@ -315,7 +324,8 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('GPT-5.2, GPT-5.1, and GPT-5 models')).toBeVisible();
   });
 
-  it('should correctly update provider configuration when switching from Go provider to HTTP provider', () => {
+  it('should correctly update provider configuration when switching from Go provider to HTTP provider', async () => {
+    const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'file:///path/to/your/script.go',
@@ -340,7 +350,7 @@ describe('ProviderTypeSelector', () => {
     expect(httpProviderCard).toBeInTheDocument();
 
     if (httpProviderCard) {
-      fireEvent.click(httpProviderCard);
+      await user.click(httpProviderCard);
     }
 
     expect(mockSetProvider).toHaveBeenCalledWith(
@@ -421,7 +431,8 @@ describe('ProviderTypeSelector', () => {
 
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
   });
-  it('should call setProvider with the correct configuration when an agentic framework is selected', () => {
+  it('should call setProvider with the correct configuration when an agentic framework is selected', async () => {
+    const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'http',
@@ -446,7 +457,7 @@ describe('ProviderTypeSelector', () => {
     expect(langchainProviderCard).toBeInTheDocument();
 
     if (langchainProviderCard) {
-      fireEvent.click(langchainProviderCard);
+      await user.click(langchainProviderCard);
     }
 
     expect(mockSetProvider).toHaveBeenCalledWith(
@@ -462,7 +473,8 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Popular framework for LLM applications')).toBeVisible();
   });
 
-  it('should filter provider options to show only agentic frameworks when the Agent Frameworks category chip is selected', () => {
+  it('should filter provider options to show only agentic frameworks when the Agent Frameworks category chip is selected', async () => {
+    const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: '',
@@ -474,7 +486,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     const agentsChip = screen.getByText(/^Agent Frameworks \(/);
-    fireEvent.click(agentsChip);
+    await user.click(agentsChip);
 
     expect(screen.getByText('LangChain')).toBeVisible();
     expect(screen.getByText('AutoGen')).toBeVisible();
@@ -491,7 +503,8 @@ describe('ProviderTypeSelector', () => {
     expect(screen.queryByText('Amazon SageMaker')).toBeNull();
   });
 
-  it('should call recordEvent with the correct parameters when a category chip is selected or a provider type is selected', () => {
+  it('should call recordEvent with the correct parameters when a category chip is selected or a provider type is selected', async () => {
+    const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     const mockRecordEvent = vi.fn();
 
@@ -509,7 +522,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     const agentsCategoryChip = screen.getByText(/^Agent Frameworks \(/);
-    fireEvent.click(agentsCategoryChip);
+    await user.click(agentsCategoryChip);
 
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
       feature: 'redteam_provider_tag_filtered',
@@ -518,7 +531,7 @@ describe('ProviderTypeSelector', () => {
 
     const langchainProviderCard = screen.getByText('LangChain').closest('[role="button"]');
     if (langchainProviderCard) {
-      fireEvent.click(langchainProviderCard);
+      await user.click(langchainProviderCard);
     }
 
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
@@ -531,7 +544,8 @@ describe('ProviderTypeSelector', () => {
 
   // Test removed - collapsed view and Change button no longer exist
 
-  it('should update selectedProviderType and call setProvider with the correct file path format when an agent provider is selected', () => {
+  it('should update selectedProviderType and call setProvider with the correct file path format when an agent provider is selected', async () => {
+    const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'http',
@@ -556,7 +570,7 @@ describe('ProviderTypeSelector', () => {
     expect(langchainProviderCard).toBeInTheDocument();
 
     if (langchainProviderCard) {
-      fireEvent.click(langchainProviderCard);
+      await user.click(langchainProviderCard);
     }
 
     expect(mockSetProvider).toHaveBeenCalledWith(
@@ -572,7 +586,8 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Popular framework for LLM applications')).toBeVisible();
   });
 
-  it('should correctly transform provider configuration when switching from a non-agent provider to an agent provider, preserving the provider label', () => {
+  it('should correctly transform provider configuration when switching from a non-agent provider to an agent provider, preserving the provider label', async () => {
+    const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'http',
@@ -604,7 +619,7 @@ describe('ProviderTypeSelector', () => {
     expect(langchainProviderCard).toBeInTheDocument();
 
     if (langchainProviderCard) {
-      fireEvent.click(langchainProviderCard);
+      await user.click(langchainProviderCard);
     }
 
     expect(mockSetProvider).toHaveBeenCalledWith(
@@ -620,7 +635,8 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Popular framework for LLM applications')).toBeVisible();
   });
 
-  it('should filter provider options by selected tag and call recordEvent with the correct tag when a tag chip is toggled on', () => {
+  it('should filter provider options by selected tag and call recordEvent with the correct tag when a tag chip is toggled on', async () => {
+    const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     const mockRecordEvent = vi.fn();
 
@@ -638,7 +654,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     const agentsChip = screen.getByText(/^Agent Frameworks \(/);
-    fireEvent.click(agentsChip);
+    await user.click(agentsChip);
 
     expect(screen.getByText('LangChain')).toBeVisible();
     expect(screen.getByText('AutoGen')).toBeVisible();
@@ -660,7 +676,8 @@ describe('ProviderTypeSelector', () => {
     });
   });
 
-  it('should call recordEvent with the correct provider_tag when a provider type is selected', () => {
+  it('should call recordEvent with the correct provider_tag when a provider type is selected', async () => {
+    const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     const mockRecordEvent = vi.fn();
 
@@ -679,7 +696,7 @@ describe('ProviderTypeSelector', () => {
 
     const pythonProviderCard = screen.getByText('Python').closest('[role="button"]');
     if (pythonProviderCard) {
-      fireEvent.click(pythonProviderCard);
+      await user.click(pythonProviderCard);
     }
 
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
@@ -690,7 +707,8 @@ describe('ProviderTypeSelector', () => {
     });
   });
 
-  it('should reset the tag filter and display all provider options when the "All Tags" chip is clicked', () => {
+  it('should reset the tag filter and display all provider options when the "All Tags" chip is clicked', async () => {
+    const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: '',
@@ -702,17 +720,18 @@ describe('ProviderTypeSelector', () => {
     );
 
     const agentsChip = screen.getByText(/^Agent Frameworks \(/);
-    fireEvent.click(agentsChip);
+    await user.click(agentsChip);
 
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
 
     const allTagsChip = screen.getByText(/^All \(/);
-    fireEvent.click(allTagsChip);
+    await user.click(allTagsChip);
 
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
   });
 
-  it('should clear the selectedTag and show all provider options when All filter is clicked', () => {
+  it('should clear the selectedTag and show all provider options when All filter is clicked', async () => {
+    const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'http',
@@ -732,17 +751,18 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
 
     const agentsChip = screen.getByText(/^Agent Frameworks \(/);
-    fireEvent.click(agentsChip);
+    await user.click(agentsChip);
 
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
 
     const allTagsButton = screen.getByText(/^All \(/);
-    fireEvent.click(allTagsButton);
+    await user.click(allTagsButton);
 
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
   });
 
-  it('should filter provider options correctly when availableProviderIds, search term, and tag are all provided', () => {
+  it('should filter provider options correctly when availableProviderIds, search term, and tag are all provided', async () => {
+    const user = userEvent.setup();
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: '',
@@ -760,10 +780,12 @@ describe('ProviderTypeSelector', () => {
     );
 
     const searchInput = screen.getByPlaceholderText('Search providers...');
-    fireEvent.change(searchInput, { target: { value: 'lang' } });
+    await user.click(searchInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('lang');
 
     const agentsChip = screen.getByText(/^Agent Frameworks \(/);
-    fireEvent.click(agentsChip);
+    await user.click(agentsChip);
 
     expect(screen.getByText('LangChain')).toBeVisible();
     expect(screen.queryByText('AutoGen')).toBeNull();
@@ -771,7 +793,8 @@ describe('ProviderTypeSelector', () => {
   });
 
   describe('handleProviderTypeChange - default configuration values', () => {
-    it('should set stateful: true in HTTP provider config by default', () => {
+    it('should set stateful: true in HTTP provider config by default', async () => {
+      const user = userEvent.setup();
       const mockSetProvider = vi.fn();
       const initialProvider: ProviderOptions = {
         id: 'python',
@@ -789,7 +812,7 @@ describe('ProviderTypeSelector', () => {
 
       const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]');
       if (httpProviderCard) {
-        fireEvent.click(httpProviderCard);
+        await user.click(httpProviderCard);
       }
 
       expect(mockSetProvider).toHaveBeenCalledWith(
@@ -810,7 +833,8 @@ describe('ProviderTypeSelector', () => {
       );
     });
 
-    it('should set comprehensive default values for WebSocket provider including type, url, messageTemplate, transformResponse, timeoutMs, and stateful', () => {
+    it('should set comprehensive default values for WebSocket provider including type, url, messageTemplate, transformResponse, timeoutMs, and stateful', async () => {
+      const user = userEvent.setup();
       const mockSetProvider = vi.fn();
       const initialProvider: ProviderOptions = {
         id: 'http',
@@ -828,7 +852,7 @@ describe('ProviderTypeSelector', () => {
 
       const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
       if (websocketProviderCard) {
-        fireEvent.click(websocketProviderCard);
+        await user.click(websocketProviderCard);
       }
 
       expect(mockSetProvider).toHaveBeenCalledWith(
@@ -848,7 +872,8 @@ describe('ProviderTypeSelector', () => {
       );
     });
 
-    it('should use DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE constant for WebSocket transformResponse value', () => {
+    it('should use DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE constant for WebSocket transformResponse value', async () => {
+      const user = userEvent.setup();
       const mockSetProvider = vi.fn();
       const initialProvider: ProviderOptions = {
         id: 'http',
@@ -866,14 +891,15 @@ describe('ProviderTypeSelector', () => {
 
       const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
       if (websocketProviderCard) {
-        fireEvent.click(websocketProviderCard);
+        await user.click(websocketProviderCard);
       }
 
       const callArgs = mockSetProvider.mock.calls[0][0];
       expect(callArgs.config.transformResponse).toBe('data.message');
     });
 
-    it('should use DEFAULT_WEBSOCKET_TIMEOUT_MS constant for WebSocket timeoutMs value', () => {
+    it('should use DEFAULT_WEBSOCKET_TIMEOUT_MS constant for WebSocket timeoutMs value', async () => {
+      const user = userEvent.setup();
       const mockSetProvider = vi.fn();
       const initialProvider: ProviderOptions = {
         id: 'http',
@@ -891,14 +917,15 @@ describe('ProviderTypeSelector', () => {
 
       const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
       if (websocketProviderCard) {
-        fireEvent.click(websocketProviderCard);
+        await user.click(websocketProviderCard);
       }
 
       const callArgs = mockSetProvider.mock.calls[0][0];
       expect(callArgs.config.timeoutMs).toBe(300000);
     });
 
-    it('should set default navigate step for Browser provider with example.com URL', () => {
+    it('should set default navigate step for Browser provider with example.com URL', async () => {
+      const user = userEvent.setup();
       const mockSetProvider = vi.fn();
       const initialProvider: ProviderOptions = {
         id: 'http',
@@ -916,7 +943,7 @@ describe('ProviderTypeSelector', () => {
 
       const browserProviderCard = screen.getByText('Browser Automation').closest('[role="button"]');
       if (browserProviderCard) {
-        fireEvent.click(browserProviderCard);
+        await user.click(browserProviderCard);
       }
 
       expect(mockSetProvider).toHaveBeenCalledWith(
@@ -936,7 +963,8 @@ describe('ProviderTypeSelector', () => {
       );
     });
 
-    it('should set enabled: true and verbose: false for MCP provider by default', () => {
+    it('should set enabled: true and verbose: false for MCP provider by default', async () => {
+      const user = userEvent.setup();
       const mockSetProvider = vi.fn();
       const initialProvider: ProviderOptions = {
         id: 'http',
@@ -954,7 +982,7 @@ describe('ProviderTypeSelector', () => {
 
       const mcpProviderCard = screen.getByText('MCP Server').closest('[role="button"]');
       if (mcpProviderCard) {
-        fireEvent.click(mcpProviderCard);
+        await user.click(mcpProviderCard);
       }
 
       expect(mockSetProvider).toHaveBeenCalledWith(
@@ -970,7 +998,8 @@ describe('ProviderTypeSelector', () => {
       );
     });
 
-    it('should preserve provider label when switching to WebSocket provider with new defaults', () => {
+    it('should preserve provider label when switching to WebSocket provider with new defaults', async () => {
+      const user = userEvent.setup();
       const mockSetProvider = vi.fn();
       const initialProvider: ProviderOptions = {
         id: 'openai:gpt-4',
@@ -988,7 +1017,7 @@ describe('ProviderTypeSelector', () => {
 
       const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
       if (websocketProviderCard) {
-        fireEvent.click(websocketProviderCard);
+        await user.click(websocketProviderCard);
       }
 
       const callArgs = mockSetProvider.mock.calls[0][0];
@@ -997,7 +1026,8 @@ describe('ProviderTypeSelector', () => {
       expect(callArgs.config.stateful).toBe(true);
     });
 
-    it('should preserve provider label when switching to Browser provider with new defaults', () => {
+    it('should preserve provider label when switching to Browser provider with new defaults', async () => {
+      const user = userEvent.setup();
       const mockSetProvider = vi.fn();
       const initialProvider: ProviderOptions = {
         id: 'anthropic:claude',
@@ -1015,7 +1045,7 @@ describe('ProviderTypeSelector', () => {
 
       const browserProviderCard = screen.getByText('Browser Automation').closest('[role="button"]');
       if (browserProviderCard) {
-        fireEvent.click(browserProviderCard);
+        await user.click(browserProviderCard);
       }
 
       const callArgs = mockSetProvider.mock.calls[0][0];
@@ -1028,7 +1058,8 @@ describe('ProviderTypeSelector', () => {
       ]);
     });
 
-    it('should preserve provider label when switching to MCP provider with new defaults', () => {
+    it('should preserve provider label when switching to MCP provider with new defaults', async () => {
+      const user = userEvent.setup();
       const mockSetProvider = vi.fn();
       const initialProvider: ProviderOptions = {
         id: 'python',
@@ -1046,7 +1077,7 @@ describe('ProviderTypeSelector', () => {
 
       const mcpProviderCard = screen.getByText('MCP Server').closest('[role="button"]');
       if (mcpProviderCard) {
-        fireEvent.click(mcpProviderCard);
+        await user.click(mcpProviderCard);
       }
 
       const callArgs = mockSetProvider.mock.calls[0][0];

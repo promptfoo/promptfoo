@@ -1,7 +1,8 @@
 import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import useApiConfig from '@app/stores/apiConfig';
 import { renderWithProviders } from '@app/utils/testutils';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ApiSettingsModal from './ApiSettingsModal';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
@@ -52,10 +53,13 @@ describe('ApiSettingsModal', () => {
     expect(input.value).toBe('https://api.example.com');
   });
 
-  it('updates API URL when typing', () => {
+  it('updates API URL when typing', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     const input = screen.getByLabelText('API Base URL');
-    fireEvent.change(input, { target: { value: 'https://new-api.example.com' } });
+    await user.click(input);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('https://new-api.example.com');
     expect((input as HTMLInputElement).value).toBe('https://new-api.example.com');
   });
 
@@ -112,13 +116,16 @@ describe('ApiSettingsModal', () => {
   });
 
   it('handles save button click correctly', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
 
     const input = screen.getByLabelText('API Base URL');
-    fireEvent.change(input, { target: { value: 'https://new-api.example.com' } });
+    await user.click(input);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('https://new-api.example.com');
 
     const saveButton = screen.getByText('Save');
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
 
     await waitFor(() => {
       expect(mockSetApiBaseUrl).toHaveBeenCalledWith('https://new-api.example.com');
@@ -145,11 +152,12 @@ describe('ApiSettingsModal', () => {
     expect(footerCloseButton).toBeDisabled();
   });
 
-  it('shows refresh button and handles click', () => {
+  it('shows refresh button and handles click', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
 
     const refreshButton = screen.getByLabelText('Check connection');
-    fireEvent.click(refreshButton);
+    await user.click(refreshButton);
 
     expect(mockCheckHealth).toHaveBeenCalled();
   });

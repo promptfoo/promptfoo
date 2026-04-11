@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DataTable } from './data-table';
@@ -148,7 +148,8 @@ describe('DataTable', () => {
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
   });
 
-  it('should show toolbar when filter returns no results so users can clear filters', () => {
+  it('should show toolbar when filter returns no results so users can clear filters', async () => {
+    const user = userEvent.setup();
     const toolbarActions = <button data-testid="custom-action">Add Item</button>;
 
     const data: TestRow[] = [
@@ -164,7 +165,9 @@ describe('DataTable', () => {
 
     // Type a search term that matches nothing
     const searchInput = screen.getByPlaceholderText('Search...');
-    fireEvent.change(searchInput, { target: { value: 'xyz-no-match' } });
+    await user.click(searchInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('xyz-no-match');
 
     // Data should be filtered out
     expect(screen.queryByText('Apple')).not.toBeInTheDocument();
@@ -211,7 +214,9 @@ describe('DataTable', () => {
 
     await user.click(screen.getByRole('button', { name: 'Filter Name' }));
     const headerFilterInput = await screen.findByPlaceholderText('Value...');
-    fireEvent.change(headerFilterInput, { target: { value: 'Item 2' } });
+    await user.click(headerFilterInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('Item 2');
     await user.click(screen.getByRole('button', { name: 'Filter Name' }));
 
     await user.click(screen.getByRole('button', { name: /^Filters/ }));
@@ -463,7 +468,9 @@ describe('DataTable', () => {
       expect(screen.queryByText('Target-6')).not.toBeInTheDocument();
 
       const searchInput = screen.getByPlaceholderText('Search...');
-      fireEvent.change(searchInput, { target: { value: 'Target' } });
+      await user.click(searchInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('Target');
 
       expect(screen.getByText(/Showing 1 to 5 of 10 rows/)).toBeInTheDocument();
       expect(screen.getByText('Target-5')).toBeInTheDocument();
@@ -539,7 +546,9 @@ describe('DataTable', () => {
       );
 
       await user.click(screen.getByRole('button', { name: 'Filter Name' }));
-      fireEvent.change(screen.getByPlaceholderText('Value...'), { target: { value: 'test' } });
+      await user.click(screen.getByPlaceholderText('Value...'));
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('test');
 
       expect(onColumnFiltersChange).toHaveBeenCalled();
       const lastCall =
@@ -611,7 +620,9 @@ describe('DataTable', () => {
       render(<DataTable columns={headerFilterColumns} data={data} showPagination={false} />);
 
       await user.click(screen.getByRole('button', { name: 'Filter Name' }));
-      fireEvent.change(screen.getByPlaceholderText('Value...'), { target: { value: 'Alpha' } });
+      await user.click(screen.getByPlaceholderText('Value...'));
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('Alpha');
 
       expect(screen.getByText('Alpha Row')).toBeInTheDocument();
       expect(screen.queryByText('Row Two')).not.toBeInTheDocument();
@@ -632,7 +643,7 @@ describe('DataTable', () => {
 
       await user.click(valueSelect);
       const option = screen.getByRole('option', { name: 'Beta', hidden: true });
-      fireEvent.click(option);
+      await user.click(option);
 
       expect(screen.getByText('Row Two')).toBeInTheDocument();
       expect(screen.queryByText('Row One')).not.toBeInTheDocument();
@@ -681,7 +692,9 @@ describe('DataTable', () => {
       expect(valueInput).toBeInTheDocument();
       expect(valueInput).toBeEnabled();
 
-      fireEvent.change(valueInput, { target: { value: 'Row' } });
+      await user.click(valueInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('Row');
       expect(screen.getByText('Row One')).toBeInTheDocument();
     });
 
@@ -696,7 +709,7 @@ describe('DataTable', () => {
       const valueSelect = comboboxes[1];
       await user.click(valueSelect);
       const betaOption = screen.getByRole('option', { name: 'Beta', hidden: true });
-      fireEvent.click(betaOption);
+      await user.click(betaOption);
 
       await user.click(screen.getByRole('button', { name: /Filters/ }));
       const toolbarDialog = screen

@@ -1,5 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { TestCaseDialog, TestCaseGenerateButton } from './TestCaseDialog';
@@ -52,12 +52,13 @@ describe('TestCaseGenerateButton', () => {
     });
 
     it('should show tooltip on mouse enter', async () => {
+      const user = userEvent.setup();
       renderWithTooltipProvider(
         <TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Test tooltip" />,
       );
 
       const iconButton = screen.getByRole('button');
-      fireEvent.mouseEnter(iconButton);
+      await user.hover(iconButton);
 
       const tooltip = screen.getByRole('tooltip');
       expect(tooltip).toBeInTheDocument();
@@ -65,38 +66,41 @@ describe('TestCaseGenerateButton', () => {
     });
 
     it('should hide tooltip on mouse leave', async () => {
+      const user = userEvent.setup();
       renderWithTooltipProvider(
         <TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Test tooltip" />,
       );
 
       const iconButton = screen.getByRole('button');
-      fireEvent.mouseEnter(iconButton);
+      await user.hover(iconButton);
       expect(screen.getByRole('tooltip')).toBeInTheDocument();
 
-      fireEvent.mouseLeave(iconButton);
+      await user.unhover(iconButton);
       expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     });
 
     it('should hide tooltip when button is clicked', async () => {
+      const user = userEvent.setup();
       renderWithTooltipProvider(
         <TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Test tooltip" />,
       );
 
       const iconButton = screen.getByRole('button');
-      fireEvent.mouseEnter(iconButton);
+      await user.hover(iconButton);
       expect(screen.getByRole('tooltip')).toBeInTheDocument();
 
-      fireEvent.click(iconButton);
+      await user.click(iconButton);
       expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 
       expect(mockOnClick).toHaveBeenCalledTimes(1);
     });
 
     it('should display default tooltip title when tooltipTitle prop is not provided', async () => {
+      const user = userEvent.setup();
       renderWithTooltipProvider(<TestCaseGenerateButton onClick={mockOnClick} />);
 
       const iconButton = screen.getByRole('button');
-      fireEvent.mouseEnter(iconButton);
+      await user.hover(iconButton);
 
       expect(screen.getByRole('tooltip')).toHaveTextContent('Generate test case');
     });
@@ -126,24 +130,23 @@ describe('TestCaseGenerateButton', () => {
     });
 
     it('should maintain tooltip state independently across multiple hover/unhover cycles', async () => {
+      const user = userEvent.setup();
       renderWithTooltipProvider(
         <TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Test tooltip" />,
       );
 
       const iconButton = screen.getByRole('button');
 
-      // First hover cycle
-      fireEvent.mouseEnter(iconButton);
+      await user.hover(iconButton);
       expect(screen.getByRole('tooltip')).toBeInTheDocument();
 
-      fireEvent.mouseLeave(iconButton);
+      await user.unhover(iconButton);
       expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 
-      // Second hover cycle
-      fireEvent.mouseEnter(iconButton);
+      await user.hover(iconButton);
       expect(screen.getByRole('tooltip')).toBeInTheDocument();
 
-      fireEvent.mouseLeave(iconButton);
+      await user.unhover(iconButton);
       expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     });
 
@@ -157,7 +160,7 @@ describe('TestCaseGenerateButton', () => {
       );
 
       const iconButton = screen.getByRole('button');
-      fireEvent.mouseEnter(iconButton);
+      await user.hover(iconButton);
       expect(screen.getByRole('tooltip')).toBeInTheDocument();
 
       // Click outside the button, which should trigger Tooltip's onClose handler

@@ -1,5 +1,6 @@
 import { renderWithProviders } from '@app/utils/testutils';
-import { cleanup, fireEvent, screen } from '@testing-library/react';
+import { cleanup, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import CustomMetrics from './CustomMetrics';
 
@@ -242,7 +243,8 @@ describe('CustomMetrics', () => {
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('-20.75');
   });
 
-  it('renders a "Show more..." button when metrics exceed truncationCount and calls onShowMore when clicked', () => {
+  it('renders a "Show more..." button when metrics exceed truncationCount and calls onShowMore when clicked', async () => {
+    const user = userEvent.setup();
     const lookup = {
       metric1: 1,
       metric2: 2,
@@ -261,7 +263,7 @@ describe('CustomMetrics', () => {
     renderWithProviders(<CustomMetrics lookup={lookup} onShowMore={onShowMore} />);
 
     const showMoreButton = screen.getByTestId('toggle-show-more');
-    fireEvent.click(showMoreButton);
+    await user.click(showMoreButton);
 
     expect(onShowMore).toHaveBeenCalled();
   });

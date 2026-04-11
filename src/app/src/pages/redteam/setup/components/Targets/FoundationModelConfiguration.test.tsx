@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
 
@@ -22,7 +23,8 @@ describe('FoundationModelConfiguration', () => {
     mockUpdateCustomTarget = vi.fn();
   });
 
-  it('should display advanced configuration fields with values from selectedTarget.config and call updateCustomTarget with the correct field and value when changed', () => {
+  it('should display advanced configuration fields with values from selectedTarget.config and call updateCustomTarget with the correct field and value when changed', async () => {
+    const user = userEvent.setup();
     render(
       <FoundationModelConfiguration
         selectedTarget={initialTarget}
@@ -32,7 +34,7 @@ describe('FoundationModelConfiguration', () => {
     );
 
     const accordionSummary = screen.getByRole('button', { name: /Advanced Configuration/ });
-    fireEvent.click(accordionSummary);
+    await user.click(accordionSummary);
 
     const temperatureInput = screen.getByLabelText('Temperature');
     const maxTokensInput = screen.getByLabelText('Max Tokens');
@@ -46,19 +48,29 @@ describe('FoundationModelConfiguration', () => {
     expect(apiKeyInput).toHaveValue('test-key-123');
     expect(apiBaseUrlInput).toHaveValue('https://custom.api.example.com/v1');
 
-    fireEvent.change(temperatureInput, { target: { value: '0.8' } });
+    await user.click(temperatureInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('0.8');
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('temperature', 0.8);
 
-    fireEvent.change(maxTokensInput, { target: { value: '2048' } });
+    await user.click(maxTokensInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('2048');
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('max_tokens', 2048);
 
-    fireEvent.change(topPInput, { target: { value: '0.95' } });
+    await user.click(topPInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('0.95');
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('top_p', 0.95);
 
-    fireEvent.change(apiKeyInput, { target: { value: 'new-api-key' } });
+    await user.click(apiKeyInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('new-api-key');
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('apiKey', 'new-api-key');
 
-    fireEvent.change(apiBaseUrlInput, { target: { value: 'https://new.api.example.com/v2' } });
+    await user.click(apiBaseUrlInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('https://new.api.example.com/v2');
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
       'apiBaseUrl',
       'https://new.api.example.com/v2',
@@ -83,7 +95,8 @@ describe('FoundationModelConfiguration', () => {
     expect(modelIdInput).toHaveValue('test-model-id');
   });
 
-  it('should call updateCustomTarget with the correct arguments when the user types a new model ID', () => {
+  it('should call updateCustomTarget with the correct arguments when the user types a new model ID', async () => {
+    const user = userEvent.setup();
     render(
       <FoundationModelConfiguration
         selectedTarget={initialTarget}
@@ -93,7 +106,9 @@ describe('FoundationModelConfiguration', () => {
     );
 
     const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
-    fireEvent.change(modelIdInput, { target: { value: 'new-model-id' } });
+    await user.click(modelIdInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('new-model-id');
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', 'new-model-id');
   });
@@ -121,7 +136,8 @@ describe('FoundationModelConfiguration', () => {
     );
   });
 
-  it('should call updateCustomTarget with undefined when Temperature field is cleared', () => {
+  it('should call updateCustomTarget with undefined when Temperature field is cleared', async () => {
+    const user = userEvent.setup();
     render(
       <FoundationModelConfiguration
         selectedTarget={initialTarget}
@@ -131,14 +147,15 @@ describe('FoundationModelConfiguration', () => {
     );
 
     const accordionSummary = screen.getByRole('button', { name: /Advanced Configuration/ });
-    fireEvent.click(accordionSummary);
+    await user.click(accordionSummary);
 
     const temperatureInput = screen.getByLabelText('Temperature');
-    fireEvent.change(temperatureInput, { target: { value: '' } });
+    await user.clear(temperatureInput);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('temperature', undefined);
   });
 
-  it('should call updateCustomTarget with undefined when API Base URL field is cleared', () => {
+  it('should call updateCustomTarget with undefined when API Base URL field is cleared', async () => {
+    const user = userEvent.setup();
     render(
       <FoundationModelConfiguration
         selectedTarget={initialTarget}
@@ -148,12 +165,12 @@ describe('FoundationModelConfiguration', () => {
     );
 
     const accordionSummary = screen.getByRole('button', { name: /Advanced Configuration/ });
-    fireEvent.click(accordionSummary);
+    await user.click(accordionSummary);
 
     const apiBaseUrlInput = screen.getByLabelText('API Base URL');
     expect(apiBaseUrlInput).toHaveValue('https://custom.api.example.com/v1');
 
-    fireEvent.change(apiBaseUrlInput, { target: { value: '' } });
+    await user.clear(apiBaseUrlInput);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('apiBaseUrl', undefined);
   });
 
@@ -318,7 +335,8 @@ describe('FoundationModelConfiguration', () => {
     expect(modelIdInput).toHaveValue('');
   });
 
-  it('should call updateCustomTarget with the provided model ID, even if it does not match the expected format for the selected provider', () => {
+  it('should call updateCustomTarget with the provided model ID, even if it does not match the expected format for the selected provider', async () => {
+    const user = userEvent.setup();
     const googleTarget: ProviderOptions = {
       id: 'google:gemini-2.5-pro',
       config: {},
@@ -333,7 +351,9 @@ describe('FoundationModelConfiguration', () => {
     );
 
     const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
-    fireEvent.change(modelIdInput, { target: { value: 'openai:gpt-4' } });
+    await user.click(modelIdInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('openai:gpt-4');
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', 'openai:gpt-4');
   });

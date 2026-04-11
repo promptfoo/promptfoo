@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsState } from './hooks/useSettingsState';
 import TableSettingsModal from './TableSettingsModal';
@@ -49,18 +50,20 @@ describe('TableSettingsModal', () => {
     expect(screen.getByText('Table Settings')).toBeInTheDocument();
   });
 
-  it('should call the onClose callback when the close button is clicked', () => {
+  it('should call the onClose callback when the close button is clicked', async () => {
+    const user = userEvent.setup();
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
     const closeButton = screen.getByRole('button', { name: 'Close' });
-    fireEvent.click(closeButton);
+    await user.click(closeButton);
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should call resetToDefaults when the "Reset to Defaults" button is clicked', () => {
+  it('should call resetToDefaults when the "Reset to Defaults" button is clicked', async () => {
+    const user = userEvent.setup();
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
 
     const resetButton = screen.getByRole('button', { name: 'Reset settings to defaults' });
-    fireEvent.click(resetButton);
+    await user.click(resetButton);
 
     expect(mockResetToDefaults).toHaveBeenCalled();
   });
@@ -75,10 +78,11 @@ describe('TableSettingsModal', () => {
     expect(useSettingsState).toHaveBeenCalledWith(true);
   });
 
-  it('should call onClose when the Done button is clicked', () => {
+  it('should call onClose when the Done button is clicked', async () => {
+    const user = userEvent.setup();
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
     const mainActionButton = screen.getByRole('button', { name: 'Done' });
-    fireEvent.click(mainActionButton);
+    await user.click(mainActionButton);
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
@@ -91,13 +95,14 @@ describe('TableSettingsModal', () => {
     expect(dialog).toHaveClass('max-w-[680px]');
   });
 
-  it('should call the onClose callback when the modal is closed unexpectedly with unsaved changes', () => {
+  it('should call the onClose callback when the modal is closed unexpectedly with unsaved changes', async () => {
+    const user = userEvent.setup();
     mockSettingsState(true);
 
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
 
     const closeButton = screen.getByRole('button', { name: 'Close' });
-    fireEvent.click(closeButton);
+    await user.click(closeButton);
 
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });

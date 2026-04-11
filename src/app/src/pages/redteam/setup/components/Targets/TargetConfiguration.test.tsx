@@ -2,7 +2,8 @@ import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { renderWithProviders } from '@app/utils/testutils';
-import { fireEvent, queryByRole, screen } from '@testing-library/react';
+import { queryByRole, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TargetConfiguration from './TargetConfiguration';
 
@@ -85,7 +86,8 @@ describe('TargetConfiguration', () => {
   });
 
   describe('Navigation', () => {
-    it("should call onNext when 'Next' is clicked, provider is valid, and there are no validation errors", () => {
+    it("should call onNext when 'Next' is clicked, provider is valid, and there are no validation errors", async () => {
+      const user = userEvent.setup();
       mockValidate.mockReturnValue(true);
 
       renderWithProviders(<TargetConfiguration onNext={onNextMock} onBack={onBackMock} />);
@@ -94,7 +96,7 @@ describe('TargetConfiguration', () => {
 
       expect(nextButton).not.toBeDisabled();
 
-      fireEvent.click(nextButton);
+      await user.click(nextButton);
 
       expect(mockValidate).toHaveBeenCalledTimes(1);
       expect(onNextMock).toHaveBeenCalledTimes(1);
@@ -120,11 +122,12 @@ describe('TargetConfiguration', () => {
       expect(nextButton).toBeDisabled();
     });
 
-    it("should call onBack when 'Back' is clicked", () => {
+    it("should call onBack when 'Back' is clicked", async () => {
+      const user = userEvent.setup();
       renderWithProviders(<TargetConfiguration onNext={onNextMock} onBack={onBackMock} />);
 
       const backButton = screen.getByRole('button', { name: /Back/i });
-      fireEvent.click(backButton);
+      await user.click(backButton);
 
       expect(onBackMock).toHaveBeenCalledTimes(1);
       expect(onNextMock).not.toHaveBeenCalled();
@@ -206,7 +209,8 @@ describe('TargetConfiguration', () => {
   });
 
   describe('Error Handling', () => {
-    it('should display error message when provider configuration has errors', () => {
+    it('should display error message when provider configuration has errors', async () => {
+      const user = userEvent.setup();
       mockUseRedTeamConfig.mockReturnValue({
         config: {
           target: { id: 'test-provider', label: 'Test Provider', config: {} },
@@ -221,20 +225,21 @@ describe('TargetConfiguration', () => {
 
       // Trigger error from the provider config editor
       const errorButton = screen.getByText('Trigger Error');
-      fireEvent.click(errorButton);
+      await user.click(errorButton);
 
       // Check that error is displayed
       expect(screen.getByText('Test error')).toBeInTheDocument();
     });
 
-    it('should disable Next button when there are validation errors', () => {
+    it('should disable Next button when there are validation errors', async () => {
+      const user = userEvent.setup();
       mockValidate.mockReturnValue(false);
 
       renderWithProviders(<TargetConfiguration onNext={onNextMock} onBack={onBackMock} />);
 
       // Trigger error from the provider config editor
       const errorButton = screen.getByText('Trigger Error');
-      fireEvent.click(errorButton);
+      await user.click(errorButton);
 
       const nextButton = screen.getByRole('button', { name: /Next/i });
       expect(nextButton).toBeDisabled();

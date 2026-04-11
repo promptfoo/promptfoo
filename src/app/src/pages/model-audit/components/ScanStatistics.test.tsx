@@ -1,5 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import ScanStatistics from './ScanStatistics';
 
@@ -73,7 +74,8 @@ describe('ScanStatistics', () => {
     expect(filesScannedCard).toHaveTextContent('125');
   });
 
-  it('should call onSeverityClick with the correct severity value when a severity StatCard is clicked', () => {
+  it('should call onSeverityClick with the correct severity value when a severity StatCard is clicked', async () => {
+    const user = userEvent.setup();
     const mockScanResults = createMockScanResults({
       issues: [{ severity: 'error', message: 'Critical issue' } as ScanIssue],
     });
@@ -81,12 +83,13 @@ describe('ScanStatistics', () => {
     renderScanStatistics(mockScanResults, null, mockOnSeverityClick, mockOnFilesClick);
 
     const criticalCard = screen.getByText('Critical').closest('button');
-    fireEvent.click(criticalCard as HTMLElement);
+    await user.click(criticalCard as HTMLElement);
 
     expect(mockOnSeverityClick).toHaveBeenCalledWith('error');
   });
 
-  it('should call onSeverityClick with null when the currently selected severity StatCard is clicked again', () => {
+  it('should call onSeverityClick with null when the currently selected severity StatCard is clicked again', async () => {
+    const user = userEvent.setup();
     const mockScanResults = createMockScanResults({
       issues: [{ severity: 'warning', message: 'Warning issue 1' } as ScanIssue],
       scannedFiles: 100,
@@ -96,12 +99,13 @@ describe('ScanStatistics', () => {
     renderScanStatistics(mockScanResults, selectedSeverity, mockOnSeverityClick, mockOnFilesClick);
 
     const warningsCard = screen.getByText('Warnings').closest('button');
-    fireEvent.click(warningsCard as Element);
+    await user.click(warningsCard as Element);
 
     expect(mockOnSeverityClick).toHaveBeenCalledWith(null);
   });
 
-  it('should call onFilesClick when the Files Scanned StatCard is clicked', () => {
+  it('should call onFilesClick when the Files Scanned StatCard is clicked', async () => {
+    const user = userEvent.setup();
     const mockScanResults = createMockScanResults({
       scannedFiles: 125,
     });
@@ -109,7 +113,7 @@ describe('ScanStatistics', () => {
     renderScanStatistics(mockScanResults, null, mockOnSeverityClick, mockOnFilesClick);
 
     const filesScannedCard = screen.getByText('Files Scanned').closest('button');
-    fireEvent.click(filesScannedCard as Element);
+    await user.click(filesScannedCard as Element);
 
     expect(mockOnFilesClick).toHaveBeenCalled();
   });

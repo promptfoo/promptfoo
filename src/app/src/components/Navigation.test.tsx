@@ -1,6 +1,7 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Navigation from './Navigation';
@@ -92,9 +93,10 @@ describe('Navigation', () => {
     expect(header).toHaveClass('z-(--z-appbar)');
   });
 
-  it('shows the Model Audit item in the Create dropdown', () => {
+  it('shows the Model Audit item in the Create dropdown', async () => {
+    const user = userEvent.setup();
     renderNavigation();
-    fireEvent.click(screen.getByText('New'));
+    await user.click(screen.getByText('New'));
     const modelAuditItem = screen.getByText('Model Audit', { selector: 'div' });
     expect(modelAuditItem).toBeInTheDocument();
     expect(modelAuditItem.closest('a')).toHaveAttribute('href', '/model-audit/setup');
@@ -107,13 +109,14 @@ describe('Navigation', () => {
     expect(createButton).toBeInTheDocument();
   });
 
-  it('calls onToggleDarkMode when the dark mode toggle is clicked', () => {
+  it('calls onToggleDarkMode when the dark mode toggle is clicked', async () => {
+    const user = userEvent.setup();
     const onToggleDarkMode = vi.fn();
     renderNavigation({ onToggleDarkMode });
     const darkModeToggle = screen.getByRole('button', {
       name: /switch to dark mode/i,
     });
-    fireEvent.click(darkModeToggle);
+    await user.click(darkModeToggle);
     expect(onToggleDarkMode).toHaveBeenCalledTimes(1);
   });
 
@@ -177,11 +180,12 @@ describe('Navigation', () => {
   });
 
   describe('Create Dropdown', () => {
-    it('opens dropdown on click and shows Model Audit option', () => {
+    it('opens dropdown on click and shows Model Audit option', async () => {
+      const user = userEvent.setup();
       renderNavigation();
 
       const createButton = screen.getByText('New');
-      fireEvent.click(createButton);
+      await user.click(createButton);
 
       const modelAuditItem = screen.getByText('Model Audit', { selector: 'div' });
       expect(modelAuditItem).toBeInTheDocument();
@@ -192,44 +196,46 @@ describe('Navigation', () => {
     });
 
     it('closes dropdown when clicking outside', async () => {
+      const user = userEvent.setup();
       renderNavigation();
 
       const createButton = screen.getByText('New');
-      fireEvent.click(createButton);
+      await user.click(createButton);
 
       // Wait for dropdown to appear
       await waitFor(() => {
         expect(screen.getByText('Model Audit', { selector: 'div' })).toBeInTheDocument();
       });
 
-      // Click outside the dropdown
-      fireEvent.mouseDown(document.body);
+      await user.click(document.body);
 
-      // The dropdown may stay open due to hover/mouse behavior, so we just verify it works
-      expect(screen.getByText('Model Audit', { selector: 'div' })).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.queryByText('Model Audit', { selector: 'div' })).not.toBeInTheDocument();
+      });
     });
 
-    it('closes dropdown when selecting an item', () => {
+    it('closes dropdown when selecting an item', async () => {
+      const user = userEvent.setup();
       renderNavigation();
 
       const createButton = screen.getByText('New');
-      fireEvent.click(createButton);
+      await user.click(createButton);
       expect(screen.getByText('Model Audit', { selector: 'div' })).toBeInTheDocument();
 
       const modelAuditItem = screen.getByText('Model Audit', { selector: 'div' });
-      fireEvent.click(modelAuditItem);
+      await user.click(modelAuditItem);
 
       // Dropdown should close after selection
       expect(screen.queryByText('Model Audit', { selector: 'div' })).not.toBeInTheDocument();
     });
 
-    it('supports keyboard navigation in dropdown', () => {
+    it('supports keyboard navigation in dropdown', async () => {
+      const user = userEvent.setup();
       renderNavigation();
 
       const createButton = screen.getByText('New');
 
-      // Click to open dropdown
-      fireEvent.click(createButton);
+      await user.click(createButton);
 
       // Verify dropdown opens and items are accessible
       const modelAuditItem = screen.getByText('Model Audit', { selector: 'div' }).closest('a');
@@ -240,10 +246,11 @@ describe('Navigation', () => {
       expect(modelAuditItem).not.toHaveAttribute('aria-hidden', 'true');
     });
 
-    it('shows correct descriptions for all dropdown items', () => {
+    it('shows correct descriptions for all dropdown items', async () => {
+      const user = userEvent.setup();
       renderNavigation();
 
-      fireEvent.click(screen.getByText('New'));
+      await user.click(screen.getByText('New'));
 
       // Verify Model Audit description
       expect(screen.getByText('Configure and run a model security scan')).toBeInTheDocument();
@@ -325,30 +332,32 @@ describe('Navigation', () => {
   });
 
   describe('Accessibility', () => {
-    it('has proper ARIA attributes on dropdown trigger', () => {
+    it('has proper ARIA attributes on dropdown trigger', async () => {
+      const user = userEvent.setup();
       renderNavigation();
 
       const createButton = screen.getByText('New').closest('button');
       expect(createButton).toBeInTheDocument();
 
-      // Check basic accessibility - button should be focusable
-      fireEvent.click(createButton!);
+      await user.click(createButton!);
 
       // Verify dropdown functionality works
       expect(screen.getByText('Model Audit', { selector: 'div' })).toBeInTheDocument();
     });
 
-    it('has accessible link labels for Model Audit', () => {
+    it('has accessible link labels for Model Audit', async () => {
+      const user = userEvent.setup();
       renderNavigation();
 
-      fireEvent.click(screen.getByText('New'));
+      await user.click(screen.getByText('New'));
 
       const modelAuditLink = screen.getByText('Model Audit', { selector: 'div' }).closest('a');
       expect(modelAuditLink).toHaveAttribute('href', '/model-audit/setup');
       expect(modelAuditLink).toBeInTheDocument();
     });
 
-    it('supports keyboard navigation patterns', () => {
+    it('supports keyboard navigation patterns', async () => {
+      const user = userEvent.setup();
       renderNavigation();
 
       const createButton = screen.getByText('New').closest('button');
@@ -358,17 +367,18 @@ describe('Navigation', () => {
 
       // Focus and activate with click (keyboard simulation is complex with MUI)
       createButton?.focus();
-      fireEvent.click(createButton!);
+      await user.click(createButton!);
 
       expect(screen.getByText('Model Audit', { selector: 'div' })).toBeInTheDocument();
     });
   });
 
-  it("should display the 'Red Team Vulnerability Reports' menu item with the correct description when the Results dropdown is open", () => {
+  it("should display the 'Red Team Vulnerability Reports' menu item with the correct description when the Results dropdown is open", async () => {
+    const user = userEvent.setup();
     renderNavigation();
 
     const evalsButton = screen.getByRole('button', { name: /View Results/i });
-    fireEvent.click(evalsButton);
+    await user.click(evalsButton);
 
     expect(screen.getByText('Red Team Vulnerability Reports')).toBeInTheDocument();
     expect(screen.getByText('View findings from red teams')).toBeInTheDocument();

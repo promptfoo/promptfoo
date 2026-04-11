@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import InputsEditor from './InputsEditor';
 
@@ -57,10 +58,11 @@ describe('InputsEditor', () => {
 
   describe('adding variables', () => {
     it('should add a variable with default name when clicking Add Variable', async () => {
+      const user = userEvent.setup();
       renderWithProviders(<ControlledInputsEditor {...defaultProps} compact />);
 
       const addButton = screen.getByRole('button', { name: /add variable/i });
-      fireEvent.click(addButton);
+      await user.click(addButton);
 
       expect(screen.getByDisplayValue('variable')).toBeInTheDocument();
       expect(screen.getByLabelText('Variable Name')).toBeInTheDocument();
@@ -68,22 +70,20 @@ describe('InputsEditor', () => {
     });
 
     it('should increment variable name if default name already exists', async () => {
+      const user = userEvent.setup();
       renderWithProviders(<ControlledInputsEditor {...defaultProps} compact />);
 
-      // Add first variable
-      fireEvent.click(screen.getByRole('button', { name: /add variable/i }));
+      await user.click(screen.getByRole('button', { name: /add variable/i }));
       const inputs = screen.getAllByPlaceholderText('e.g., user_id');
       expect(inputs).toHaveLength(1);
       expect(inputs[0]).toHaveValue('variable');
 
-      // Add second variable - should be named variable1
-      fireEvent.click(screen.getByRole('button', { name: /add variable/i }));
+      await user.click(screen.getByRole('button', { name: /add variable/i }));
       const inputs2 = screen.getAllByPlaceholderText('e.g., user_id');
       expect(inputs2).toHaveLength(2);
       expect(inputs2[1]).toHaveValue('variable1');
 
-      // Add third variable - should be named variable2
-      fireEvent.click(screen.getByRole('button', { name: /add variable/i }));
+      await user.click(screen.getByRole('button', { name: /add variable/i }));
       const inputs3 = screen.getAllByPlaceholderText('e.g., user_id');
       expect(inputs3).toHaveLength(3);
       expect(inputs3[2]).toHaveValue('variable2');
@@ -92,35 +92,39 @@ describe('InputsEditor', () => {
 
   describe('editing variables', () => {
     it('should update variable name when typing', async () => {
+      const user = userEvent.setup();
       renderWithProviders(<ControlledInputsEditor {...defaultProps} compact />);
 
-      // Add a variable
-      fireEvent.click(screen.getByRole('button', { name: /add variable/i }));
+      await user.click(screen.getByRole('button', { name: /add variable/i }));
 
       const nameInput = screen.getByDisplayValue('variable');
-      fireEvent.change(nameInput, { target: { value: 'user_id' } });
+      await user.click(nameInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('user_id');
 
       expect(screen.getByDisplayValue('user_id')).toBeInTheDocument();
     });
 
     it('should update variable description when typing', async () => {
+      const user = userEvent.setup();
       renderWithProviders(<ControlledInputsEditor {...defaultProps} compact />);
 
-      // Add a variable
-      fireEvent.click(screen.getByRole('button', { name: /add variable/i }));
+      await user.click(screen.getByRole('button', { name: /add variable/i }));
 
       const descInput = screen.getByPlaceholderText('e.g., A realistic user ID in UUID format');
-      fireEvent.change(descInput, { target: { value: 'A test description' } });
+      await user.click(descInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('A test description');
 
       expect(screen.getByDisplayValue('A test description')).toBeInTheDocument();
     });
 
     it('should call onChange immediately when adding a variable', async () => {
+      const user = userEvent.setup();
       const onChange = vi.fn();
       renderWithProviders(<ControlledInputsEditor {...defaultProps} onChange={onChange} compact />);
 
-      // Add a variable
-      fireEvent.click(screen.getByRole('button', { name: /add variable/i }));
+      await user.click(screen.getByRole('button', { name: /add variable/i }));
 
       // onChange should be called immediately (no debounce)
       expect(onChange).toHaveBeenCalledWith({ variable: '' });
@@ -129,29 +133,29 @@ describe('InputsEditor', () => {
 
   describe('removing variables', () => {
     it('should remove a variable when clicking delete button', async () => {
+      const user = userEvent.setup();
       renderWithProviders(<ControlledInputsEditor {...defaultProps} compact />);
 
-      // Add a variable
-      fireEvent.click(screen.getByRole('button', { name: /add variable/i }));
+      await user.click(screen.getByRole('button', { name: /add variable/i }));
       expect(screen.getByDisplayValue('variable')).toBeInTheDocument();
 
       // Remove the variable
       const deleteButton = screen.getByRole('button', { name: /delete variable/i });
-      fireEvent.click(deleteButton);
+      await user.click(deleteButton);
 
       expect(screen.queryByDisplayValue('variable')).not.toBeInTheDocument();
     });
 
     it('should call onChange with undefined when all variables are removed', async () => {
+      const user = userEvent.setup();
       const onChange = vi.fn();
       renderWithProviders(<ControlledInputsEditor {...defaultProps} onChange={onChange} compact />);
 
-      // Add a variable
-      fireEvent.click(screen.getByRole('button', { name: /add variable/i }));
+      await user.click(screen.getByRole('button', { name: /add variable/i }));
 
       // Remove the variable
       const deleteButton = screen.getByRole('button', { name: /delete variable/i });
-      fireEvent.click(deleteButton);
+      await user.click(deleteButton);
 
       // onChange should be called immediately with undefined (no debounce)
       expect(onChange).toHaveBeenLastCalledWith(undefined);
@@ -180,15 +184,17 @@ describe('InputsEditor', () => {
     });
 
     it('should allow renaming variable to a unique name', async () => {
+      const user = userEvent.setup();
       renderWithProviders(<ControlledInputsEditor {...defaultProps} compact />);
 
-      // Add a variable
-      fireEvent.click(screen.getByRole('button', { name: /add variable/i }));
+      await user.click(screen.getByRole('button', { name: /add variable/i }));
       expect(screen.getByDisplayValue('variable')).toBeInTheDocument();
 
       // Rename to a unique name
       const nameInput = screen.getByDisplayValue('variable');
-      fireEvent.change(nameInput, { target: { value: 'unique_name' } });
+      await user.click(nameInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('unique_name');
 
       // No error should appear
       expect(screen.queryByText('Duplicate variable name')).not.toBeInTheDocument();
@@ -303,18 +309,20 @@ describe('InputsEditor', () => {
     });
 
     it('should update duplicate detection when variable name changes', async () => {
+      const user = userEvent.setup();
       renderWithProviders(<ControlledInputsEditor {...defaultProps} compact />);
 
-      // Add two variables
-      fireEvent.click(screen.getByRole('button', { name: /add variable/i }));
-      fireEvent.click(screen.getByRole('button', { name: /add variable/i }));
+      await user.click(screen.getByRole('button', { name: /add variable/i }));
+      await user.click(screen.getByRole('button', { name: /add variable/i }));
 
       // Initially, no duplicates (variable and variable1)
       expect(screen.queryByText('Duplicate variable name')).not.toBeInTheDocument();
 
       // Rename second variable to match first (with trimming)
       const nameInputs = screen.getAllByPlaceholderText('e.g., user_id');
-      fireEvent.change(nameInputs[1], { target: { value: ' variable ' } });
+      await user.click(nameInputs[1]);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste(' variable ');
 
       // Now there should be duplicate errors
       const duplicateErrors = screen.getAllByText('Duplicate variable name');
@@ -324,6 +332,7 @@ describe('InputsEditor', () => {
 
   describe('updateVariableName', () => {
     it('should preserve object key order when renaming', async () => {
+      const user = userEvent.setup();
       const onChange = vi.fn();
       const inputs = {
         first: 'First variable',
@@ -335,7 +344,9 @@ describe('InputsEditor', () => {
 
       // Rename the second variable
       const nameInputs = screen.getAllByPlaceholderText('e.g., user_id');
-      fireEvent.change(nameInputs[1], { target: { value: 'renamed_second' } });
+      await user.click(nameInputs[1]);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('renamed_second');
 
       // Check that onChange was called with correct order preserved
       expect(onChange).toHaveBeenCalledWith({
@@ -350,6 +361,7 @@ describe('InputsEditor', () => {
     });
 
     it('should handle renaming first variable while preserving order', async () => {
+      const user = userEvent.setup();
       const onChange = vi.fn();
       const inputs = {
         first: 'First variable',
@@ -360,7 +372,9 @@ describe('InputsEditor', () => {
 
       // Rename the first variable
       const nameInputs = screen.getAllByPlaceholderText('e.g., user_id');
-      fireEvent.change(nameInputs[0], { target: { value: 'renamed_first' } });
+      await user.click(nameInputs[0]);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('renamed_first');
 
       expect(onChange).toHaveBeenCalledWith({
         renamed_first: 'First variable',
@@ -372,6 +386,7 @@ describe('InputsEditor', () => {
     });
 
     it('should handle renaming last variable while preserving order', async () => {
+      const user = userEvent.setup();
       const onChange = vi.fn();
       const inputs = {
         first: 'First variable',
@@ -383,7 +398,9 @@ describe('InputsEditor', () => {
 
       // Rename the last variable
       const nameInputs = screen.getAllByPlaceholderText('e.g., user_id');
-      fireEvent.change(nameInputs[2], { target: { value: 'renamed_third' } });
+      await user.click(nameInputs[2]);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('renamed_third');
 
       expect(onChange).toHaveBeenCalledWith({
         first: 'First variable',
@@ -396,6 +413,7 @@ describe('InputsEditor', () => {
     });
 
     it('should preserve description value when renaming variable', async () => {
+      const user = userEvent.setup();
       const onChange = vi.fn();
       const inputs = {
         user_id: 'A detailed user ID description',
@@ -405,7 +423,9 @@ describe('InputsEditor', () => {
 
       // Rename the variable
       const nameInput = screen.getByPlaceholderText('e.g., user_id');
-      fireEvent.change(nameInput, { target: { value: 'account_id' } });
+      await user.click(nameInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('account_id');
 
       // Description should be preserved
       expect(onChange).toHaveBeenCalledWith({
@@ -414,6 +434,7 @@ describe('InputsEditor', () => {
     });
 
     it('should handle renaming to empty string', async () => {
+      const user = userEvent.setup();
       const onChange = vi.fn();
       const inputs = {
         user_id: 'A user ID',
@@ -423,7 +444,7 @@ describe('InputsEditor', () => {
 
       // Rename to empty string
       const nameInput = screen.getByPlaceholderText('e.g., user_id');
-      fireEvent.change(nameInput, { target: { value: '' } });
+      await user.clear(nameInput);
 
       // Should still call onChange with empty string key
       expect(onChange).toHaveBeenCalledWith({

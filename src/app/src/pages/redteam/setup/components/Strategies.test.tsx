@@ -3,7 +3,8 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { MULTI_MODAL_STRATEGIES } from '@promptfoo/redteam/constants';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
@@ -212,7 +213,8 @@ describe('Strategies', () => {
       expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
     });
 
-    it('renders the Multi-modal Strategies section when expanded', () => {
+    it('renders the Multi-modal Strategies section when expanded', async () => {
+      const user = userEvent.setup();
       (useRedTeamConfig as any).mockReturnValue({
         config: {
           target: {
@@ -229,22 +231,23 @@ describe('Strategies', () => {
 
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Expand the advanced strategies section
-      fireEvent.click(screen.getByText('Show Advanced Strategies'));
+      await user.click(screen.getByText('Show Advanced Strategies'));
 
       expect(screen.getByText('Multi-modal Strategies')).toBeInTheDocument();
     });
 
-    it('shows Composite Jailbreaks in advanced strategies when expanded', () => {
+    it('shows Composite Jailbreaks in advanced strategies when expanded', async () => {
+      const user = userEvent.setup();
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-      fireEvent.click(screen.getByText('Show Advanced Strategies'));
+      await user.click(screen.getByText('Show Advanced Strategies'));
 
       expect(screen.getByText('Composite Jailbreaks')).toBeInTheDocument();
     });
   });
 
-  it('renders hero section heading and advanced section after expansion', () => {
+  it('renders hero section heading and advanced section after expansion', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
     // Strategy section headings are h3 elements
@@ -252,33 +255,33 @@ describe('Strategies', () => {
     // Initially should have "Recommended Strategies" heading
     expect(initialHeadings.length).toBeGreaterThanOrEqual(1);
 
-    // Expand advanced strategies
-    fireEvent.click(screen.getByText('Show Advanced Strategies'));
+    await user.click(screen.getByText('Show Advanced Strategies'));
 
     // After expansion, should have more headings
     const expandedHeadings = screen.getAllByRole('heading', { level: 3 });
     expect(expandedHeadings.length).toBeGreaterThan(initialHeadings.length);
   });
 
-  it('calls onNext and onBack when the respective buttons are clicked', () => {
+  it('calls onNext and onBack when the respective buttons are clicked', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
     const nextButton = screen.getByRole('button', { name: 'Next' });
     const backButton = screen.getByRole('button', { name: 'Back' });
 
-    fireEvent.click(nextButton);
+    await user.click(nextButton);
     expect(mockOnNext).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(backButton);
+    await user.click(backButton);
     expect(mockOnBack).toHaveBeenCalledTimes(1);
   });
 
   describe('AgenticStrategiesGroup integration', () => {
-    it('renders AgenticStrategiesGroup with parent header when expanded', () => {
+    it('renders AgenticStrategiesGroup with parent header when expanded', async () => {
+      const user = userEvent.setup();
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Expand advanced strategies
-      fireEvent.click(screen.getByText('Show Advanced Strategies'));
+      await user.click(screen.getByText('Show Advanced Strategies'));
 
       // Should render "Agentic Strategies" as the parent header
       expect(screen.getByText('Agentic Strategies')).toBeInTheDocument();
@@ -289,11 +292,11 @@ describe('Strategies', () => {
       ).toBeInTheDocument();
     });
 
-    it('renders subsection labels for single-turn and multi-turn agentic strategies when expanded', () => {
+    it('renders subsection labels for single-turn and multi-turn agentic strategies when expanded', async () => {
+      const user = userEvent.setup();
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Expand advanced strategies
-      fireEvent.click(screen.getByText('Show Advanced Strategies'));
+      await user.click(screen.getByText('Show Advanced Strategies'));
 
       // Check for subsection labels
       expect(screen.getByText('Single-turn Only')).toBeInTheDocument();
@@ -308,11 +311,11 @@ describe('Strategies', () => {
       ).toBeInTheDocument();
     });
 
-    it('renders Reset All button for agentic strategies section when expanded', () => {
+    it('renders Reset All button for agentic strategies section when expanded', async () => {
+      const user = userEvent.setup();
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Expand advanced strategies
-      fireEvent.click(screen.getByText('Show Advanced Strategies'));
+      await user.click(screen.getByText('Show Advanced Strategies'));
 
       // Find all Reset buttons - one should be "Reset All" for the agentic strategies
       const resetButtons = screen.getAllByText(/Reset/);
@@ -321,13 +324,14 @@ describe('Strategies', () => {
       expect(resetAllButton).toBeInTheDocument();
     });
 
-    it('updates config when hero strategies are selected', () => {
+    it('updates config when hero strategies are selected', async () => {
+      const user = userEvent.setup();
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Click a hero strategy card to toggle selection
       const metaAgentCard = screen.getByText('Meta Agent').closest('[class*="cursor-pointer"]');
       expect(metaAgentCard).toBeInTheDocument();
-      fireEvent.click(metaAgentCard!);
+      await user.click(metaAgentCard!);
       expect(mockUpdateConfig).toHaveBeenCalled();
     });
   });

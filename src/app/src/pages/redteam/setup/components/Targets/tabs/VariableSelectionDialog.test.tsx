@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import VariableSelectionDialog from './VariableSelectionDialog';
 
@@ -19,12 +20,13 @@ describe('VariableSelectionDialog', () => {
     expect(screen.getByText(/Your configuration has multiple input variables/)).toBeInTheDocument();
   });
 
-  it('should render all variables in select dropdown', () => {
+  it('should render all variables in select dropdown', async () => {
+    const user = userEvent.setup();
     render(<VariableSelectionDialog {...defaultProps} />);
 
     // Click to open the select
     const selectTrigger = screen.getByRole('combobox');
-    fireEvent.click(selectTrigger);
+    await user.click(selectTrigger);
 
     // Check that all variables are rendered
     expect(screen.getByText('{{user_id}}')).toBeInTheDocument();
@@ -32,7 +34,8 @@ describe('VariableSelectionDialog', () => {
     expect(screen.getByText('{{role}}')).toBeInTheDocument();
   });
 
-  it('should display variable descriptions when provided', () => {
+  it('should display variable descriptions when provided', async () => {
+    const user = userEvent.setup();
     const propsWithDescriptions = {
       ...defaultProps,
       variableDescriptions: {
@@ -46,7 +49,7 @@ describe('VariableSelectionDialog', () => {
 
     // Click to open the select
     const selectTrigger = screen.getByRole('combobox');
-    fireEvent.click(selectTrigger);
+    await user.click(selectTrigger);
 
     // Check that descriptions are rendered
     expect(screen.getByText(/A unique user identifier/)).toBeInTheDocument();
@@ -54,18 +57,20 @@ describe('VariableSelectionDialog', () => {
     expect(screen.getByText(/User role/)).toBeInTheDocument();
   });
 
-  it('should not display descriptions when not provided', () => {
+  it('should not display descriptions when not provided', async () => {
+    const user = userEvent.setup();
     render(<VariableSelectionDialog {...defaultProps} />);
 
     // Click to open the select
     const selectTrigger = screen.getByRole('combobox');
-    fireEvent.click(selectTrigger);
+    await user.click(selectTrigger);
 
     // Only variable names should be present, no description text
     expect(screen.queryByText(/-/)).not.toBeInTheDocument();
   });
 
-  it('should call onSelectedVariableChange when a variable is selected', () => {
+  it('should call onSelectedVariableChange when a variable is selected', async () => {
+    const user = userEvent.setup();
     const onSelectedVariableChange = vi.fn();
 
     render(
@@ -77,11 +82,11 @@ describe('VariableSelectionDialog', () => {
 
     // Click to open the select
     const selectTrigger = screen.getByRole('combobox');
-    fireEvent.click(selectTrigger);
+    await user.click(selectTrigger);
 
     // Select a variable
     const option = screen.getByText('{{user_id}}');
-    fireEvent.click(option);
+    await user.click(option);
 
     expect(onSelectedVariableChange).toHaveBeenCalledWith('user_id');
   });
@@ -100,7 +105,8 @@ describe('VariableSelectionDialog', () => {
     expect(runTestButton).not.toBeDisabled();
   });
 
-  it('should call onConfirm when Run Test button is clicked', () => {
+  it('should call onConfirm when Run Test button is clicked', async () => {
+    const user = userEvent.setup();
     const onConfirm = vi.fn();
 
     render(
@@ -112,18 +118,19 @@ describe('VariableSelectionDialog', () => {
     );
 
     const runTestButton = screen.getByRole('button', { name: /run test/i });
-    fireEvent.click(runTestButton);
+    await user.click(runTestButton);
 
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
-  it('should call onOpenChange when Cancel button is clicked', () => {
+  it('should call onOpenChange when Cancel button is clicked', async () => {
+    const user = userEvent.setup();
     const onOpenChange = vi.fn();
 
     render(<VariableSelectionDialog {...defaultProps} onOpenChange={onOpenChange} />);
 
     const cancelButton = screen.getByRole('button', { name: /cancel/i });
-    fireEvent.click(cancelButton);
+    await user.click(cancelButton);
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
@@ -140,7 +147,8 @@ describe('VariableSelectionDialog', () => {
     expect(screen.getByText(/Other variables will use test values/)).toBeInTheDocument();
   });
 
-  it('should render with single variable', () => {
+  it('should render with single variable', async () => {
+    const user = userEvent.setup();
     const propsWithOneVariable = {
       ...defaultProps,
       variables: ['user_id'],
@@ -150,7 +158,7 @@ describe('VariableSelectionDialog', () => {
 
     // Click to open the select
     const selectTrigger = screen.getByRole('combobox');
-    fireEvent.click(selectTrigger);
+    await user.click(selectTrigger);
 
     expect(screen.getByText('{{user_id}}')).toBeInTheDocument();
     // Should only have one option
@@ -158,7 +166,8 @@ describe('VariableSelectionDialog', () => {
     expect(options).toHaveLength(1);
   });
 
-  it('should handle empty variables array gracefully', () => {
+  it('should handle empty variables array gracefully', async () => {
+    const user = userEvent.setup();
     const propsWithNoVariables = {
       ...defaultProps,
       variables: [],
@@ -168,7 +177,7 @@ describe('VariableSelectionDialog', () => {
 
     // Click to open the select
     const selectTrigger = screen.getByRole('combobox');
-    fireEvent.click(selectTrigger);
+    await user.click(selectTrigger);
 
     // Should not crash and should show no options
     const options = screen.queryAllByRole('option');
@@ -190,7 +199,8 @@ describe('VariableSelectionDialog', () => {
     expect(selectTrigger).toHaveTextContent('Select a variable');
   });
 
-  it('should render variable descriptions only for variables that have them', () => {
+  it('should render variable descriptions only for variables that have them', async () => {
+    const user = userEvent.setup();
     const propsWithPartialDescriptions = {
       ...defaultProps,
       variableDescriptions: {
@@ -204,7 +214,7 @@ describe('VariableSelectionDialog', () => {
 
     // Click to open the select
     const selectTrigger = screen.getByRole('combobox');
-    fireEvent.click(selectTrigger);
+    await user.click(selectTrigger);
 
     // user_id should have description
     expect(screen.getByText(/A unique user identifier/)).toBeInTheDocument();

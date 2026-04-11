@@ -3,7 +3,7 @@ import * as ReactDOM from 'react-dom/client';
 import { mockClipboard } from '@app/tests/browserMocks';
 import { useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
@@ -159,6 +159,7 @@ describe('EvalOutputPromptDialog', () => {
   });
 
   it('copies prompt to clipboard when copy button is clicked', async () => {
+    const user = userEvent.setup();
     const clipboard = {
       writeText: vi.fn().mockResolvedValue(undefined),
     };
@@ -171,8 +172,7 @@ describe('EvalOutputPromptDialog', () => {
     const promptContainer = promptText.closest('.relative');
     expect(promptContainer).toBeInTheDocument();
 
-    // Trigger hover to make copy button visible
-    fireEvent.mouseEnter(promptContainer!);
+    await user.hover(promptContainer!);
 
     // Wait for the copy button to appear after hover
     const copyButton = await screen.findByRole('button', { name: /^copy\s*$/i });
@@ -187,6 +187,7 @@ describe('EvalOutputPromptDialog', () => {
   });
 
   it('copies assertion value to clipboard when copy button is clicked', async () => {
+    const user = userEvent.setup();
     const clipboard = {
       writeText: vi.fn().mockResolvedValue(undefined),
     };
@@ -201,7 +202,7 @@ describe('EvalOutputPromptDialog', () => {
     // Trigger the hover event on the value cell to make the copy button visible
     const valueCell = screen.getByText('expected value').closest('td');
     if (valueCell) {
-      fireEvent.mouseEnter(valueCell);
+      await user.hover(valueCell);
     }
 
     // Get the button by its aria-label

@@ -10,7 +10,8 @@ import { ToastProvider } from '@app/contexts/ToastContext';
 import { callApi } from '@app/utils/api';
 import { Plugin, Strategy } from '@promptfoo/redteam/constants';
 import { within } from '@testing-library/dom';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestCaseGenerationProvider, useTestCaseGeneration } from './TestCaseGenerationProvider';
 import type { PluginConfig } from '@promptfoo/redteam/types';
@@ -183,8 +184,18 @@ describe('TestCaseGenerationProvider', () => {
 
   describe('Test case generation', () => {
     it('should generate a test case', async () => {
+      const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
       const testStrategy = 'basic';
+      let resolveGeneration!: (response: Response) => void;
+      callApiMock.mockImplementation((path: string, options?: RequestInit) => {
+        if (path === '/redteam/generate-test') {
+          return new Promise<Response>((resolve) => {
+            resolveGeneration = resolve;
+          });
+        }
+        return defaultCallApiImplementation(path, options);
+      });
 
       render(
         <ToastProvider>
@@ -196,7 +207,7 @@ describe('TestCaseGenerationProvider', () => {
 
       // Kick off the test case generation
       const generateTestCaseButton = screen.getByTestId('test-case-generation-btn');
-      fireEvent.click(generateTestCaseButton);
+      await user.click(generateTestCaseButton);
 
       // Validate the context state updates immediately
       expect(screen.getByTestId('isGenerating')).toHaveTextContent('true');
@@ -211,6 +222,14 @@ describe('TestCaseGenerationProvider', () => {
       expect(
         within(testCaseDialogComponent).queryByTestId('strategy-chip'),
       ).not.toBeInTheDocument();
+
+      resolveGeneration(
+        createJsonResponse({
+          prompt: 'Generated test prompt',
+          context: 'Test context',
+          metadata: {},
+        }),
+      );
 
       // The plugin label and name should be rendered in the dialog
       const pluginLabel = within(testCaseDialogComponent).getByTestId('plugin-chip');
@@ -246,6 +265,7 @@ describe('TestCaseGenerationProvider', () => {
     });
 
     it('should apply the configured review language to generated example tests', async () => {
+      const user = userEvent.setup();
       render(
         <ToastProvider>
           <TestCaseGenerationProvider
@@ -259,7 +279,7 @@ describe('TestCaseGenerationProvider', () => {
         </ToastProvider>,
       );
 
-      fireEvent.click(screen.getByTestId('test-case-generation-btn'));
+      await user.click(screen.getByTestId('test-case-generation-btn'));
 
       await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
 
@@ -273,6 +293,7 @@ describe('TestCaseGenerationProvider', () => {
     });
 
     it('should preserve plugin-specific language when review language is configured', async () => {
+      const user = userEvent.setup();
       render(
         <ToastProvider>
           <TestCaseGenerationProvider
@@ -290,7 +311,7 @@ describe('TestCaseGenerationProvider', () => {
         </ToastProvider>,
       );
 
-      fireEvent.click(screen.getByTestId('test-case-generation-btn'));
+      await user.click(screen.getByTestId('test-case-generation-btn'));
 
       await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
 
@@ -304,6 +325,7 @@ describe('TestCaseGenerationProvider', () => {
     });
 
     it('should use the first configured review language for generated example tests', async () => {
+      const user = userEvent.setup();
       render(
         <ToastProvider>
           <TestCaseGenerationProvider
@@ -317,7 +339,7 @@ describe('TestCaseGenerationProvider', () => {
         </ToastProvider>,
       );
 
-      fireEvent.click(screen.getByTestId('test-case-generation-btn'));
+      await user.click(screen.getByTestId('test-case-generation-btn'));
 
       await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
 
@@ -331,6 +353,7 @@ describe('TestCaseGenerationProvider', () => {
     });
 
     it('should hide plugin documentation link when plugin is static', async () => {
+      const user = userEvent.setup();
       render(
         <ToastProvider>
           <TestCaseGenerationProvider redTeamConfig={MOCK_CONFIG}>
@@ -339,7 +362,7 @@ describe('TestCaseGenerationProvider', () => {
         </ToastProvider>,
       );
 
-      fireEvent.click(screen.getByTestId('test-case-generation-btn'));
+      await user.click(screen.getByTestId('test-case-generation-btn'));
 
       const testCaseDialogComponent = await screen.findByTestId('test-case-dialog');
 
@@ -351,6 +374,7 @@ describe('TestCaseGenerationProvider', () => {
     });
 
     it('should generate images (strategy: image)', async () => {
+      const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
       const testStrategy = 'image';
 
@@ -364,7 +388,7 @@ describe('TestCaseGenerationProvider', () => {
 
       // Kick off the test case generation
       const generateTestCaseButton = screen.getByTestId('test-case-generation-btn');
-      fireEvent.click(generateTestCaseButton);
+      await user.click(generateTestCaseButton);
 
       // TestCaseDialog should be open
       const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
@@ -387,6 +411,7 @@ describe('TestCaseGenerationProvider', () => {
     });
 
     it('should generate videos (strategy: video)', async () => {
+      const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
       const testStrategy = 'video';
 
@@ -400,7 +425,7 @@ describe('TestCaseGenerationProvider', () => {
 
       // Kick off the test case generation
       const generateTestCaseButton = screen.getByTestId('test-case-generation-btn');
-      fireEvent.click(generateTestCaseButton);
+      await user.click(generateTestCaseButton);
 
       // TestCaseDialog should be open
       const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
@@ -420,6 +445,7 @@ describe('TestCaseGenerationProvider', () => {
     });
 
     it('should generate audio (strategy: audio)', async () => {
+      const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
       const testStrategy = 'audio';
 
@@ -433,7 +459,7 @@ describe('TestCaseGenerationProvider', () => {
 
       // Kick off the test case generation
       const generateTestCaseButton = screen.getByTestId('test-case-generation-btn');
-      fireEvent.click(generateTestCaseButton);
+      await user.click(generateTestCaseButton);
 
       // TestCaseDialog should be open
       const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
@@ -455,6 +481,7 @@ describe('TestCaseGenerationProvider', () => {
 
   describe('Test case execution', () => {
     it('should execute a test case against a target', async () => {
+      const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
       const testStrategy = 'basic';
 
@@ -476,7 +503,7 @@ describe('TestCaseGenerationProvider', () => {
 
       // Kick off the test case generation
       const generateTestCaseButton = screen.getByTestId('test-case-generation-btn');
-      fireEvent.click(generateTestCaseButton);
+      await user.click(generateTestCaseButton);
 
       // TestCaseDialog should be open
       const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
@@ -509,6 +536,7 @@ describe('TestCaseGenerationProvider', () => {
     });
 
     it('should execute multi-turn test cases', async () => {
+      const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
       const testStrategy = 'goat'; // 'goat' is a multi-turn strategy
 
@@ -530,7 +558,7 @@ describe('TestCaseGenerationProvider', () => {
 
       // Kick off the test case generation
       const generateTestCaseButton = screen.getByTestId('test-case-generation-btn');
-      fireEvent.click(generateTestCaseButton);
+      await user.click(generateTestCaseButton);
 
       // TestCaseDialog should be open
       const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
@@ -573,6 +601,7 @@ describe('TestCaseGenerationProvider', () => {
 
   describe('Batch generation', () => {
     it('should request batch of test cases for single-turn strategies', async () => {
+      const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
       const testStrategy = 'basic';
 
@@ -586,7 +615,7 @@ describe('TestCaseGenerationProvider', () => {
 
       // Kick off the test case generation
       const generateTestCaseButton = screen.getByTestId('test-case-generation-btn');
-      fireEvent.click(generateTestCaseButton);
+      await user.click(generateTestCaseButton);
 
       // Wait for the API call to be made
       await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
@@ -612,6 +641,7 @@ describe('TestCaseGenerationProvider', () => {
     });
 
     it('should use cached test cases on regenerate without API call', async () => {
+      const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
       const testStrategy = 'basic';
 
@@ -623,8 +653,7 @@ describe('TestCaseGenerationProvider', () => {
         </ToastProvider>,
       );
 
-      // Kick off the test case generation
-      fireEvent.click(screen.getByTestId('test-case-generation-btn'));
+      await user.click(screen.getByTestId('test-case-generation-btn'));
 
       // Wait for the initial batch to load
       await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
@@ -646,7 +675,7 @@ describe('TestCaseGenerationProvider', () => {
       const regenerateButton = within(testCaseDialogComponent).getByRole('button', {
         name: /regenerate/i,
       });
-      fireEvent.click(regenerateButton);
+      await user.click(regenerateButton);
 
       // Should NOT make a new API call (using cache)
       await waitFor(() => {
@@ -660,6 +689,7 @@ describe('TestCaseGenerationProvider', () => {
     });
 
     it('should fetch new batch when cache is exhausted', async () => {
+      const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
       const testStrategy = 'basic';
 
@@ -693,8 +723,7 @@ describe('TestCaseGenerationProvider', () => {
         </ToastProvider>,
       );
 
-      // Kick off the test case generation
-      fireEvent.click(screen.getByTestId('test-case-generation-btn'));
+      await user.click(screen.getByTestId('test-case-generation-btn'));
 
       // Wait for the initial batch to load
       await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
@@ -711,7 +740,7 @@ describe('TestCaseGenerationProvider', () => {
         const regenerateButton = within(testCaseDialogComponent).getByRole('button', {
           name: /regenerate/i,
         });
-        fireEvent.click(regenerateButton);
+        await user.click(regenerateButton);
       }
 
       // At this point we should have used 5 from first batch
@@ -722,6 +751,7 @@ describe('TestCaseGenerationProvider', () => {
     });
 
     it('should NOT use batch generation for multi-turn strategies', async () => {
+      const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
       const testStrategy = 'goat'; // Multi-turn strategy
 
@@ -741,8 +771,7 @@ describe('TestCaseGenerationProvider', () => {
         </ToastProvider>,
       );
 
-      // Kick off the test case generation
-      fireEvent.click(screen.getByTestId('test-case-generation-btn'));
+      await user.click(screen.getByTestId('test-case-generation-btn'));
 
       // Wait for the API call
       await waitFor(() => expect(callApi).toHaveBeenCalled());

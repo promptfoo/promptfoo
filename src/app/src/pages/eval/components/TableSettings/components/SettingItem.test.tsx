@@ -1,5 +1,6 @@
 import { renderWithProviders } from '@app/utils/testutils';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { List } from 'lucide-react';
 import { describe, expect, it, vi } from 'vitest';
 import SettingItem from './SettingItem';
@@ -48,7 +49,8 @@ describe('SettingItem', () => {
     expect(infoIcon).toBeInTheDocument();
   });
 
-  it('should call the onChange callback with the new checked value when the checkbox is clicked and disabled is false', () => {
+  it('should call the onChange callback with the new checked value when the checkbox is clicked and disabled is false', async () => {
+    const user = userEvent.setup();
     const onChange = vi.fn();
     render(
       <SettingItem
@@ -60,11 +62,12 @@ describe('SettingItem', () => {
       />,
     );
     const checkbox = screen.getByRole('checkbox');
-    fireEvent.click(checkbox);
+    await user.click(checkbox);
     expect(onChange).toHaveBeenCalledWith(true);
   });
 
-  it('should render the control as disabled and not call onChange when disabled is true', () => {
+  it('should render the control as disabled and not call onChange when disabled is true', async () => {
+    const user = userEvent.setup();
     const onChange = vi.fn();
     render(
       <SettingItem
@@ -78,7 +81,7 @@ describe('SettingItem', () => {
     const checkbox = screen.getByRole('checkbox');
     expect(checkbox).toBeDisabled();
 
-    fireEvent.click(checkbox);
+    await user.click(checkbox);
     expect(onChange).toHaveBeenCalledTimes(0);
   });
 

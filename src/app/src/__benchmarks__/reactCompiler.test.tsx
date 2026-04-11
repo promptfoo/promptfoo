@@ -10,7 +10,8 @@
 
 import { Profiler, useState } from 'react';
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 // Test components that simulate common patterns
@@ -114,6 +115,7 @@ describe('React Compiler Performance Benchmarks', () => {
   });
 
   it('measures callback stability impact on list re-renders', async () => {
+    const user = userEvent.setup();
     const { metrics, onRender } = createMetricsCollector();
 
     render(
@@ -128,7 +130,7 @@ describe('React Compiler Performance Benchmarks', () => {
     // Trigger multiple state updates
     const button = screen.getByTestId('increment');
     for (let i = 0; i < 10; i++) {
-      fireEvent.click(button);
+      await user.click(button);
     }
 
     // With React Compiler, children should NOT re-render when callbacks are stable
@@ -146,6 +148,7 @@ describe('React Compiler Performance Benchmarks', () => {
   });
 
   it('measures expensive child memoization', async () => {
+    const user = userEvent.setup();
     const { metrics, onRender } = createMetricsCollector();
 
     render(
@@ -159,7 +162,7 @@ describe('React Compiler Performance Benchmarks', () => {
     // Trigger state updates that should NOT affect expensive child
     const button = screen.getByTestId('increment');
     for (let i = 0; i < 5; i++) {
-      fireEvent.click(button);
+      await user.click(button);
     }
 
     const updateDuration = metrics.totalActualDuration - initialActualDuration;
