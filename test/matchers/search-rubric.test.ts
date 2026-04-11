@@ -41,6 +41,15 @@ vi.mock('../../src/providers/defaults', () => ({
 describe('matchesSearchRubric', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mocks.configuredProvider.callApi = vi.fn(
+      async (): Promise<ProviderResponse> => ({ output: 'should not be used' }),
+    ) as ApiProvider['callApi'];
+    mocks.webSearchProvider.callApi = vi.fn(
+      async (): Promise<ProviderResponse> => ({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'web search ok' }),
+        tokenUsage: { total: 5, prompt: 3, completion: 2 },
+      }),
+    ) as ApiProvider['callApi'];
     mocks.loadApiProvider.mockResolvedValue(mocks.configuredProvider);
     mocks.getDefaultProviders.mockResolvedValue({
       webSearchProvider: mocks.webSearchProvider,
