@@ -158,6 +158,7 @@ describe('fetchWithProxy', () => {
     clearAgentCache();
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
     vi.mocked(ProxyAgent).mockClear();
+    cliState.basePath = undefined;
     cliState.maxConcurrency = undefined;
   });
 
@@ -165,6 +166,8 @@ describe('fetchWithProxy', () => {
     vi.resetAllMocks();
     restoreFetchTestEnv();
     restoreFetchTestEnv = () => {};
+    cliState.basePath = undefined;
+    cliState.maxConcurrency = undefined;
   });
 
   it('should add version header to all requests', async () => {
@@ -560,6 +563,8 @@ describe('fetchWithProxy', () => {
       https_proxy: 'http://https-proxy-lower.example.com',
       HTTP_PROXY: 'http://http-proxy.example.com',
       http_proxy: 'http://http-proxy-lower.example.com',
+      ALL_PROXY: 'http://all-proxy.example.com',
+      all_proxy: 'http://all-proxy-lower.example.com',
     } as const;
 
     const httpTestCases = [
@@ -570,6 +575,14 @@ describe('fetchWithProxy', () => {
       {
         env: { http_proxy: mockProxyUrls.http_proxy },
         expected: { url: mockProxyUrls.http_proxy },
+      },
+      {
+        env: { ALL_PROXY: mockProxyUrls.ALL_PROXY },
+        expected: { url: mockProxyUrls.ALL_PROXY },
+      },
+      {
+        env: { all_proxy: mockProxyUrls.all_proxy },
+        expected: { url: mockProxyUrls.all_proxy },
       },
     ];
 
@@ -582,10 +595,19 @@ describe('fetchWithProxy', () => {
         env: { https_proxy: mockProxyUrls.https_proxy },
         expected: { url: mockProxyUrls.https_proxy },
       },
+      {
+        env: { ALL_PROXY: mockProxyUrls.ALL_PROXY },
+        expected: { url: mockProxyUrls.ALL_PROXY },
+      },
+      {
+        env: { all_proxy: mockProxyUrls.all_proxy },
+        expected: { url: mockProxyUrls.all_proxy },
+      },
     ];
 
     for (const testCase of httpTestCases) {
       vi.clearAllMocks();
+      clearAgentCache();
 
       clearProxyEnv();
 
@@ -625,6 +647,7 @@ describe('fetchWithProxy', () => {
 
     for (const testCase of httpsTestCases) {
       vi.clearAllMocks();
+      clearAgentCache();
 
       clearProxyEnv();
 
@@ -1279,12 +1302,16 @@ describe('fetchWithProxy with NO_PROXY', () => {
     clearAgentCache();
     vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
     vi.mocked(ProxyAgent).mockClear();
+    cliState.basePath = undefined;
+    cliState.maxConcurrency = undefined;
   });
 
   afterEach(() => {
     vi.resetAllMocks();
     restoreFetchTestEnv();
     restoreFetchTestEnv = () => {};
+    cliState.basePath = undefined;
+    cliState.maxConcurrency = undefined;
   });
 
   it('should respect NO_PROXY for localhost URLs', async () => {
