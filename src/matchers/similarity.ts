@@ -2,8 +2,15 @@ import cliState from '../cliState';
 import { getDefaultProviders } from '../providers/defaults';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
+import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import { getAndCheckProvider } from './providers';
-import { cosineSimilarity, dotProduct, euclideanDistance, fail } from './shared';
+import {
+  cosineSimilarity,
+  dotProduct,
+  euclideanDistance,
+  fail,
+  normalizeMatcherTokenUsage,
+} from './shared';
 
 import type {
   ApiEmbeddingProvider,
@@ -15,67 +22,11 @@ import type {
 
 type SimilarityMetric = 'cosine' | 'dot_product' | 'euclidean';
 
-function createEmptySimilarityTokenUsage(): Partial<TokenUsage> {
-  return {
-    total: 0,
-    prompt: 0,
-    completion: 0,
-    cached: 0,
-    numRequests: 0,
-    completionDetails: {
-      reasoning: 0,
-      acceptedPrediction: 0,
-      rejectedPrediction: 0,
-    },
-  };
-}
-
-function assignProviderTokenUsage(
-  target: Partial<TokenUsage>,
-  source?: Partial<TokenUsage>,
-): Partial<TokenUsage> {
-  target.total = source?.total || 0;
-  target.prompt = source?.prompt || 0;
-  target.completion = source?.completion || 0;
-  target.cached = source?.cached || 0;
-  target.numRequests = source?.numRequests || 0;
-  target.completionDetails = {
-    reasoning: source?.completionDetails?.reasoning || 0,
-    acceptedPrediction: source?.completionDetails?.acceptedPrediction || 0,
-    rejectedPrediction: source?.completionDetails?.rejectedPrediction || 0,
-  };
-  return target;
-}
-
-function mergeEmbeddingTokenUsage(
-  expectedUsage?: Partial<TokenUsage>,
-  outputUsage?: Partial<TokenUsage>,
-): Partial<TokenUsage> {
-  return {
-    total: (expectedUsage?.total || 0) + (outputUsage?.total || 0),
-    prompt: (expectedUsage?.prompt || 0) + (outputUsage?.prompt || 0),
-    completion: (expectedUsage?.completion || 0) + (outputUsage?.completion || 0),
-    cached: (expectedUsage?.cached || 0) + (outputUsage?.cached || 0),
-    numRequests: (expectedUsage?.numRequests || 0) + (outputUsage?.numRequests || 0),
-    completionDetails: {
-      reasoning:
-        (expectedUsage?.completionDetails?.reasoning || 0) +
-        (outputUsage?.completionDetails?.reasoning || 0),
-      acceptedPrediction:
-        (expectedUsage?.completionDetails?.acceptedPrediction || 0) +
-        (outputUsage?.completionDetails?.acceptedPrediction || 0),
-      rejectedPrediction:
-        (expectedUsage?.completionDetails?.rejectedPrediction || 0) +
-        (outputUsage?.completionDetails?.rejectedPrediction || 0),
-    },
-  };
-}
-
 function calculateSimilarityScore(
   expectedEmbedding: number[],
   outputEmbedding: number[],
   metric: SimilarityMetric,
-  tokensUsed: Partial<TokenUsage>,
+  tokensUsed: TokenUsage,
 ): number | Omit<GradingResult, 'assertion'> {
   switch (metric) {
     case 'cosine':
@@ -96,7 +47,7 @@ function buildSimilarityResult(
   threshold: number,
   inverse: boolean,
   metric: SimilarityMetric,
-  tokensUsed: Partial<TokenUsage>,
+  tokensUsed: TokenUsage,
 ): Omit<GradingResult, 'assertion'> {
   if (metric === 'euclidean') {
     // For distance metrics: lower is better, threshold is maximum distance
@@ -104,8 +55,7 @@ function buildSimilarityResult(
     const pass = inverse
       ? distance >= threshold - Number.EPSILON
       : distance <= threshold + Number.EPSILON;
-    // Convert distance to a 0-1 score where lower distance = higher score
-    // Using formula: score = 1 / (1 + distance)
+    // Convert distance to a 0-1 score: score = 1 / (1 + distance)
     const normalizedScore = 1 / (1 + distance);
     const score = inverse ? 1 - normalizedScore : normalizedScore;
     const belowThresholdReason = `Distance ${distance.toFixed(2)} is less than or equal to threshold ${threshold}`;
@@ -152,11 +102,11 @@ async function calculateProviderSimilarity(
   expected: string,
   output: string,
   metric: SimilarityMetric,
-  tokensUsed: Partial<TokenUsage>,
+  tokensUsed: TokenUsage,
 ): Promise<number | Omit<GradingResult, 'assertion'>> {
   if (metric === 'cosine' && 'callSimilarityApi' in finalProvider) {
     const similarityResp = await finalProvider.callSimilarityApi(expected, output);
-    assignProviderTokenUsage(tokensUsed, similarityResp.tokenUsage);
+    accumulateTokenUsage(tokensUsed, similarityResp.tokenUsage);
     if (similarityResp.error) {
       return fail(similarityResp.error, tokensUsed);
     }
@@ -181,12 +131,15 @@ async function calculateProviderSimilarity(
     throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
   }
 
-  const expectedEmbedding = await callEmbeddingApi.call(finalProvider, expected);
-  const outputEmbedding = await callEmbeddingApi.call(finalProvider, output);
-  assignProviderTokenUsage(
-    tokensUsed,
-    mergeEmbeddingTokenUsage(expectedEmbedding.tokenUsage, outputEmbedding.tokenUsage),
-  );
+  const [expectedEmbedding, outputEmbedding] = await Promise.all([
+    callEmbeddingApi.call(finalProvider, expected),
+    callEmbeddingApi.call(finalProvider, output),
+  ]);
+
+  const mergedUsage = normalizeMatcherTokenUsage(undefined);
+  accumulateTokenUsage(mergedUsage, expectedEmbedding.tokenUsage);
+  accumulateTokenUsage(mergedUsage, outputEmbedding.tokenUsage);
+  accumulateTokenUsage(tokensUsed, mergedUsage);
 
   if (expectedEmbedding.error || outputEmbedding.error) {
     return fail(
@@ -241,7 +194,7 @@ export async function matchesSimilarity(
     'similarity check',
   )) as ApiEmbeddingProvider | ApiSimilarityProvider;
 
-  const tokensUsed = createEmptySimilarityTokenUsage();
+  const tokensUsed = normalizeMatcherTokenUsage(undefined);
   const similarity = await calculateProviderSimilarity(
     finalProvider,
     expected,

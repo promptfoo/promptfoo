@@ -3,7 +3,7 @@ import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
-import { fail, tryParse } from './shared';
+import { fail, normalizeMatcherTokenUsage, tryParse } from './shared';
 
 import type {
   Assertion,
@@ -66,18 +66,7 @@ export async function matchesSelectBest(
     );
   }
 
-  const tokensUsed = {
-    total: resp.tokenUsage?.total || 0,
-    prompt: resp.tokenUsage?.prompt || 0,
-    completion: resp.tokenUsage?.completion || 0,
-    cached: resp.tokenUsage?.cached || 0,
-    numRequests: resp.tokenUsage?.numRequests || 0,
-    completionDetails: resp.tokenUsage?.completionDetails || {
-      reasoning: 0,
-      acceptedPrediction: 0,
-      rejectedPrediction: 0,
-    },
-  };
+  const tokensUsed = normalizeMatcherTokenUsage(resp.tokenUsage);
   return outputs.map((_output, index) => {
     if (index === verdict) {
       return {

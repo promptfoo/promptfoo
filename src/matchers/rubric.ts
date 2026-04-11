@@ -13,7 +13,7 @@ import invariant from '../util/invariant';
 import { extractJsonObjects, safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
-import { fail } from './shared';
+import { fail, normalizeMatcherTokenUsage } from './shared';
 
 import type {
   Assertion,
@@ -259,19 +259,10 @@ export async function runJsonGradingPrompt({
     pass,
     score,
     reason,
-    tokensUsed: {
-      total: resp.tokenUsage?.total || 0,
-      prompt: resp.tokenUsage?.prompt || 0,
-      completion: resp.tokenUsage?.completion || 0,
-      cached: resp.tokenUsage?.cached || 0,
-      numRequests: resp.tokenUsage?.numRequests || 0,
-      completionDetails: resp.tokenUsage?.completionDetails ||
-        parsed.tokensUsed?.completionDetails || {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
-    },
+    tokensUsed: normalizeMatcherTokenUsage({
+      ...resp.tokenUsage,
+      completionDetails: resp.tokenUsage?.completionDetails || parsed.tokensUsed?.completionDetails,
+    }),
     metadata: {
       ...responseMetadata,
       renderedGradingPrompt: prompt,

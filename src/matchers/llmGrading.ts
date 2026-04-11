@@ -14,6 +14,7 @@ import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
 import invariant from '../util/invariant';
 import { extractFirstJsonObject } from '../util/json';
+import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import {
   LlmRubricProviderError,
@@ -21,7 +22,7 @@ import {
   renderLlmRubricPrompt,
   runJsonGradingPrompt,
 } from './rubric';
-import { accumulateTokens, fail, tryParse } from './shared';
+import { fail, normalizeMatcherTokenUsage, tryParse } from './shared';
 
 import type {
   Assertion,
@@ -29,7 +30,6 @@ import type {
   GradingConfig,
   GradingResult,
   ProviderResponse,
-  TokenUsage,
   VarValue,
 } from '../types/index';
 
@@ -55,23 +55,6 @@ function getFactualityScoreLookup(grading: GradingConfig): Record<string, number
   };
 }
 
-function getProviderTokenUsage(resp: ProviderResponse): TokenUsage {
-  return (
-    resp.tokenUsage || {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-      numRequests: 0,
-      completionDetails: {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
-    }
-  );
-}
-
 function buildFactualityResult(
   option: string,
   reason: string,
@@ -88,7 +71,7 @@ function buildFactualityResult(
     pass,
     score,
     reason,
-    tokensUsed: getProviderTokenUsage(resp),
+    tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
   };
 }
 
@@ -277,15 +260,12 @@ export async function matchesFactuality(
     );
   }
 
-  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, PROMPTFOO_FACTUALITY_PROMPT);
-  const prompt = await renderLlmRubricPrompt(rubricPrompt, {
-    input,
-    ideal: expected,
-    completion: tryParse(output),
-    ...(vars || {}),
-  });
+  const parsedOutput = tryParse(output);
+  const templateVars = { input, ideal: expected, completion: parsedOutput, ...(vars || {}) };
 
-  // Get the appropriate provider
+  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, PROMPTFOO_FACTUALITY_PROMPT);
+  const prompt = await renderLlmRubricPrompt(rubricPrompt, templateVars);
+
   const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
@@ -297,12 +277,7 @@ export async function matchesFactuality(
     finalProvider,
     prompt,
     'factuality',
-    {
-      input,
-      ideal: expected,
-      completion: tryParse(output),
-      ...(vars || {}),
-    },
+    templateVars,
     providerCallContext,
   );
   if (resp.error || !resp.output) {
@@ -344,13 +319,11 @@ export async function matchesClosedQa(
     );
   }
 
+  const parsedOutput = tryParse(output);
+  const templateVars = { input, criteria: expected, completion: parsedOutput, ...(vars || {}) };
+
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, OPENAI_CLOSED_QA_PROMPT);
-  const prompt = await renderLlmRubricPrompt(rubricPrompt, {
-    input,
-    criteria: expected,
-    completion: tryParse(output),
-    ...(vars || {}),
-  });
+  const prompt = await renderLlmRubricPrompt(rubricPrompt, templateVars);
 
   const finalProvider = await getAndCheckProvider(
     'text',
@@ -362,12 +335,7 @@ export async function matchesClosedQa(
     finalProvider,
     prompt,
     'model-graded-closedqa',
-    {
-      input,
-      criteria: expected,
-      completion: tryParse(output),
-      ...(vars || {}),
-    },
+    templateVars,
     providerCallContext,
   );
   if (resp.error || !resp.output) {
@@ -389,18 +357,7 @@ export async function matchesClosedQa(
       pass,
       score: pass ? 1 : 0,
       reason,
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-        cached: resp.tokenUsage?.cached || 0,
-        numRequests: resp.tokenUsage?.numRequests || 0,
-        completionDetails: resp.tokenUsage?.completionDetails || {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
-      },
+      tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
     };
   } catch (err) {
     return fail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
@@ -427,18 +384,7 @@ export async function matchesGEval(
     'reply geval check',
   );
 
-  const tokensUsed: Partial<TokenUsage> = {
-    total: 0,
-    prompt: 0,
-    completion: 0,
-    cached: 0,
-    numRequests: 0,
-    completionDetails: {
-      reasoning: 0,
-      acceptedPrediction: 0,
-      rejectedPrediction: 0,
-    },
-  };
+  const tokensUsed = normalizeMatcherTokenUsage(undefined);
 
   // Step 1: Get evaluation steps using renderLlmRubricPrompt
   const stepsRubricPrompt =
@@ -457,7 +403,7 @@ export async function matchesGEval(
     },
     providerCallContext,
   );
-  accumulateTokens(tokensUsed, respSteps.tokenUsage);
+  accumulateTokenUsage(tokensUsed, respSteps.tokenUsage);
   if (respSteps.error) {
     return fail(respSteps.error, tokensUsed);
   }
@@ -496,28 +442,23 @@ export async function matchesGEval(
       ? grading?.rubricPrompt?.['evaluate']
       : undefined;
   const evalPrompt = await loadRubricPrompt(evalRubricPrompt, GEVAL_PROMPT_EVALUATE);
-  const promptText = await renderLlmRubricPrompt(evalPrompt, {
+  const evalVars = {
     criteria,
     steps: steps.join('\n- '),
     maxScore: maxScore.toString(),
     input: tryParse(input),
     output: tryParse(output),
-  });
+  };
+  const promptText = await renderLlmRubricPrompt(evalPrompt, evalVars);
 
   const resp = await callProviderWithContext(
     textProvider,
     promptText,
     'g-eval',
-    {
-      criteria,
-      steps: steps.join('\n- '),
-      maxScore: maxScore.toString(),
-      input: tryParse(input),
-      output: tryParse(output),
-    },
+    evalVars,
     providerCallContext,
   );
-  accumulateTokens(tokensUsed, resp.tokenUsage);
+  accumulateTokenUsage(tokensUsed, resp.tokenUsage);
   if (resp.error) {
     return fail(resp.error, tokensUsed);
   }

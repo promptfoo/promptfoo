@@ -11,17 +11,18 @@ import {
 } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
+import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
-import { accumulateTokens, cosineSimilarity, fail, splitIntoSentences, tryParse } from './shared';
+import {
+  cosineSimilarity,
+  fail,
+  normalizeMatcherTokenUsage,
+  splitIntoSentences,
+  tryParse,
+} from './shared';
 
-import type {
-  CallApiContextParams,
-  GradingConfig,
-  GradingResult,
-  TokenUsage,
-  VarValue,
-} from '../types/index';
+import type { CallApiContextParams, GradingConfig, GradingResult, VarValue } from '../types/index';
 
 export async function matchesAnswerRelevance(
   input: string,
@@ -30,47 +31,38 @@ export async function matchesAnswerRelevance(
   grading?: GradingConfig,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
+  const defaults = await getDefaultProviders();
   const embeddingProvider = await getAndCheckProvider(
     'embedding',
     grading?.provider,
-    (await getDefaultProviders()).embeddingProvider,
+    defaults.embeddingProvider,
     'answer relevancy check',
   );
   const textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
-    (await getDefaultProviders()).gradingProvider,
+    defaults.gradingProvider,
     'answer relevancy check',
   );
 
-  const tokensUsed: Partial<TokenUsage> = {
-    total: 0,
-    prompt: 0,
-    completion: 0,
-    cached: 0,
-    numRequests: 0,
-    completionDetails: {
-      reasoning: 0,
-      acceptedPrediction: 0,
-      rejectedPrediction: 0,
-    },
-  };
+  const tokensUsed = normalizeMatcherTokenUsage(undefined);
+
+  // Hoist rubric loading and output parsing out of the loop
+  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, ANSWER_RELEVANCY_GENERATE);
+  const parsedOutput = tryParse(output);
+  const promptText = await renderLlmRubricPrompt(rubricPrompt, { answer: parsedOutput });
 
   const candidateQuestions: string[] = [];
   for (let i = 0; i < 3; i++) {
     // TODO(ian): Parallelize
-    const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, ANSWER_RELEVANCY_GENERATE);
-    const promptText = await renderLlmRubricPrompt(rubricPrompt, { answer: tryParse(output) });
     const resp = await callProviderWithContext(
       textProvider,
       promptText,
       'answer-relevance',
-      {
-        answer: tryParse(output),
-      },
+      { answer: parsedOutput },
       providerCallContext,
     );
-    accumulateTokens(tokensUsed, resp.tokenUsage);
+    accumulateTokenUsage(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.output) {
       return fail(resp.error || 'No output', tokensUsed);
     }
@@ -88,7 +80,7 @@ export async function matchesAnswerRelevance(
   );
 
   const inputEmbeddingResp = await embeddingProvider.callEmbeddingApi(input);
-  accumulateTokens(tokensUsed, inputEmbeddingResp.tokenUsage);
+  accumulateTokenUsage(tokensUsed, inputEmbeddingResp.tokenUsage);
   if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
     return fail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
   }
@@ -99,7 +91,7 @@ export async function matchesAnswerRelevance(
 
   for (const question of candidateQuestions) {
     const resp = await embeddingProvider.callEmbeddingApi(question);
-    accumulateTokens(tokensUsed, resp.tokenUsage);
+    accumulateTokenUsage(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.embedding) {
       return fail(resp.error || 'No embedding', tokensUsed);
     }
@@ -228,18 +220,7 @@ export async function matchesContextRecall(
     reason: pass
       ? `Recall ${score.toFixed(2)} is >= ${threshold}`
       : `Recall ${score.toFixed(2)} is < ${threshold}`,
-    tokensUsed: {
-      total: resp.tokenUsage?.total || 0,
-      prompt: resp.tokenUsage?.prompt || 0,
-      completion: resp.tokenUsage?.completion || 0,
-      cached: resp.tokenUsage?.cached || 0,
-      numRequests: resp.tokenUsage?.numRequests || 0,
-      completionDetails: resp.tokenUsage?.completionDetails || {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
-    },
+    tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
     metadata,
   };
 }
@@ -325,18 +306,7 @@ export async function matchesContextRelevance(
     reason: pass
       ? `Context relevance ${score.toFixed(2)} is >= ${threshold}`
       : `Context relevance ${score.toFixed(2)} is < ${threshold}`,
-    tokensUsed: {
-      total: resp.tokenUsage?.total || 0,
-      prompt: resp.tokenUsage?.prompt || 0,
-      completion: resp.tokenUsage?.completion || 0,
-      cached: resp.tokenUsage?.cached || 0,
-      numRequests: resp.tokenUsage?.numRequests || 0,
-      completionDetails: resp.tokenUsage?.completionDetails || {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
-    },
+    tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
     metadata,
   };
 }
@@ -357,18 +327,7 @@ export async function matchesContextFaithfulness(
     'faithfulness check',
   );
 
-  const tokensUsed: Partial<TokenUsage> = {
-    total: 0,
-    prompt: 0,
-    completion: 0,
-    cached: 0,
-    numRequests: 0,
-    completionDetails: {
-      reasoning: 0,
-      acceptedPrediction: 0,
-      rejectedPrediction: 0,
-    },
-  };
+  const tokensUsed = normalizeMatcherTokenUsage(undefined);
 
   if (grading?.rubricPrompt) {
     invariant(Array.isArray(grading.rubricPrompt), 'rubricPrompt must be an array');
@@ -402,7 +361,7 @@ export async function matchesContextFaithfulness(
     },
     providerCallContext,
   );
-  accumulateTokens(tokensUsed, resp.tokenUsage);
+  accumulateTokenUsage(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', tokensUsed);
   }
@@ -430,7 +389,7 @@ export async function matchesContextFaithfulness(
     },
     providerCallContext,
   );
-  accumulateTokens(tokensUsed, resp.tokenUsage);
+  accumulateTokenUsage(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', tokensUsed);
   }

@@ -1,6 +1,27 @@
-import { accumulateTokenUsage } from '../util/tokenUsageUtils';
-
 import type { GradingResult, TokenUsage } from '../types/index';
+
+/**
+ * Normalize token usage for matcher results. Unlike the evaluator-level
+ * normalizeTokenUsage, this excludes the `assertions` field and preserves
+ * the existing completionDetails shape (passing through whatever the
+ * provider returned, or undefined if not present).
+ */
+export function normalizeMatcherTokenUsage(
+  tokenUsage: Partial<TokenUsage> | undefined,
+): TokenUsage {
+  return {
+    total: tokenUsage?.total || 0,
+    prompt: tokenUsage?.prompt || 0,
+    completion: tokenUsage?.completion || 0,
+    cached: tokenUsage?.cached || 0,
+    numRequests: tokenUsage?.numRequests || 0,
+    completionDetails: tokenUsage?.completionDetails || {
+      reasoning: 0,
+      acceptedPrediction: 0,
+      rejectedPrediction: 0,
+    },
+  };
+}
 
 export function fail(
   reason: string,
@@ -10,19 +31,8 @@ export function fail(
     pass: false,
     reason,
     score: 0,
-    tokensUsed: {
-      total: tokensUsed?.total || 0,
-      prompt: tokensUsed?.prompt || 0,
-      completion: tokensUsed?.completion || 0,
-      cached: tokensUsed?.cached || 0,
-      numRequests: tokensUsed?.numRequests || 0,
-      completionDetails: tokensUsed?.completionDetails,
-    },
+    tokensUsed: normalizeMatcherTokenUsage(tokensUsed),
   };
-}
-
-export function accumulateTokens(target: TokenUsage, update?: Partial<TokenUsage>) {
-  accumulateTokenUsage(target, update);
 }
 
 export function cosineSimilarity(vecA: number[], vecB: number[]): number {

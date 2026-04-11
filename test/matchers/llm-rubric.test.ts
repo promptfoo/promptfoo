@@ -302,7 +302,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         numRequests: 0,
       },
     });
@@ -331,7 +331,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         numRequests: 0,
       },
     });
@@ -361,7 +361,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         numRequests: 0,
       },
     });
@@ -390,7 +390,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         numRequests: 0,
       },
     });
@@ -419,7 +419,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         numRequests: 0,
       },
     });
@@ -449,7 +449,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         numRequests: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
   });
@@ -479,7 +479,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         numRequests: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
   });
@@ -508,7 +508,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         numRequests: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
   });
@@ -537,7 +537,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         numRequests: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
   });
