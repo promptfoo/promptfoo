@@ -115,6 +115,29 @@ export function mockProcessEnv(
   };
 }
 
+export const PROXY_ENV_KEYS = [
+  'HTTP_PROXY',
+  'http_proxy',
+  'HTTPS_PROXY',
+  'https_proxy',
+  'ALL_PROXY',
+  'all_proxy',
+  'NO_PROXY',
+  'no_proxy',
+  'NPM_CONFIG_PROXY',
+  'NPM_CONFIG_HTTP_PROXY',
+  'NPM_CONFIG_HTTPS_PROXY',
+  'npm_config_proxy',
+  'npm_config_http_proxy',
+  'npm_config_https_proxy',
+] as const;
+
+export function clearProxyEnv(): void {
+  for (const key of PROXY_ENV_KEYS) {
+    delete process.env[key];
+  }
+}
+
 export function mockGlobal<T>(name: string, value: T): () => void {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
 
