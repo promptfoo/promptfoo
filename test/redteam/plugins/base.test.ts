@@ -1239,6 +1239,32 @@ describe('RedteamGraderBase', () => {
     expect(Object.getOwnPropertyDescriptor(grading, '__promptfooPreferRemote')?.value).toBe(true);
   });
 
+  it('should prefer remote grading when defaultTest.provider is a target provider', async () => {
+    cliState.config = {
+      redteam: {},
+      defaultTest: {
+        provider: 'openai:gpt-4o',
+      },
+    };
+    const mockResult: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+    };
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+    await grader.getResult(
+      'test prompt',
+      'test output',
+      mockTest,
+      undefined /* provider */,
+      undefined /* renderedValue */,
+    );
+
+    const grading = (matchesLlmRubric as Mock).mock.calls[0][2];
+    expect(Object.getOwnPropertyDescriptor(grading, '__promptfooPreferRemote')?.value).toBe(true);
+  });
+
   describe('grader examples', () => {
     it('should append grader examples to rubric when present', async () => {
       const mockResult: GradingResult = {
