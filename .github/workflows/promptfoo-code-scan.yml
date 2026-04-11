@@ -42,4 +42,5 @@ jobs:
           NPM_CONFIG_USERCONFIG: '/dev/null'
         with:
           min-severity: medium
+          config-path: .github/promptfoo-code-scan.yaml
           enable-fork-prs: true
