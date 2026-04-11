@@ -316,13 +316,13 @@ This creates an evidence loop:
 
 #### What Adversaries Can Observe
 
-When `redteam.tracing.includeInAttack` is enabled, compatible attack strategies receive a compact, sanitized trace summary. That summary is most useful for control-flow evidence:
+When `redteam.tracing.includeInAttack` is enabled, compatible attack strategies receive a compact, sanitized trace summary. That summary is most useful for high-level control-flow evidence:
 
-- **Guardrail decisions**: Which filters triggered and why ("content-filter: blocked")
-- **Tool chain execution**: Tool names, sequence, timing, and errors
-- **Error conditions**: Rate limits, validation failures, parsing errors
-- **Internal LLM calls**: Model selection, token usage patterns
-- **Performance characteristics**: Operation timing that reveals bottlenecks
+- **Span structure**: Span names and kinds across the execution flow
+- **Tool chain execution**: Tool names and any tool-related errors
+- **Error conditions**: Errors surfaced on spans, such as rate limits or validation failures
+- **Internal LLM calls**: Model names used by internal LLM spans
+- **Guardrail outcomes**: High-level observations may note triggered or blocking guardrails when the relevant attributes are present
 
 Avoid putting secrets or sensitive IDs in span names, tool names, or other attributes you choose to expose. Use trajectory assertions for argument-level regression checks, where Promptfoo can inspect trace data without feeding it back into the attacker.
 
@@ -333,12 +333,12 @@ Trace a4f2b891 • 7 spans
 
 Execution Flow:
 1. [45ms] agent.planning (internal) | model=gpt-4
-2. [120ms] guardrail.input_check (internal) | decision=pass
+2. [120ms] guardrail.input_check (internal)
 3. [890ms] tool.database_query (server) | tool=user_search
 4. [15ms] guardrail.output_check (internal) | ERROR: Rate limit
 5. [670ms] tool.database_query (server) | tool=user_search
 6. [230ms] agent.response_generation (internal) | model=gpt-4
-7. [80ms] guardrail.output_check (internal) | decision=blocked
+7. [80ms] guardrail.output_check (internal)
 
 Key Observations:
 • Guardrail output_check blocked final response
@@ -405,12 +405,12 @@ redteam:
     includeInAttack: true
     includeInGrading: true
     spanFilter:
-      - 'llm.*'
-      - 'agent.*'
-      - 'guardrail.*'
-      - 'tool.*'
-      - 'command.*'
-      - 'search.*'
+      - 'llm.'
+      - 'agent.'
+      - 'guardrail.'
+      - 'tool.'
+      - 'command.'
+      - 'search.'
   plugins:
     - excessive-agency
     - rbac
@@ -420,7 +420,7 @@ redteam:
     - jailbreak:hydra
 ```
 
-For useful trajectories, your agent or provider needs to emit spans that identify internal steps. Add attributes such as `tool.name`, `tool.arguments`, `command`, `search.query`, or guardrail decision fields. Built-in providers emit provider-level GenAI spans automatically, but deeper agent evidence requires instrumenting the agent workflow or using a provider that already streams tool and command spans. Keep `spanFilter` aligned with the span names your agent emits; overly narrow filters can hide the evidence you want graders or assertions to inspect.
+For useful trajectories, your agent or provider needs to emit spans that identify internal steps. Add attributes such as `tool.name`, `tool.arguments`, `command`, `search.query`, or guardrail decision fields. Built-in providers emit provider-level GenAI spans automatically, but deeper agent evidence requires instrumenting the agent workflow or using a provider that already streams tool and command spans. Keep `spanFilter` aligned with the span names your agent emits; it uses case-insensitive substring matching, not wildcards or regex, so values like `llm.` and `tool.` will match spans such as `llm.chat.completions` or `tool.database_query`. Overly narrow filters can hide the evidence you want graders or assertions to inspect.
 
 #### How Trace Feedback Improves Attacks
 
