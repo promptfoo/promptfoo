@@ -159,7 +159,7 @@ describe('Plugin IDs', () => {
 
     // Make a single assertion for all unexpected plugins
     expect(
-      unexpectedPlugins,
+      { unexpectedPlugins, idsMissingPrefix },
       [
         'Unexpected plugin IDs:',
         ...unexpectedPlugins.map(({ id, baseId }) => `  - ${id} (base: ${baseId})`),
@@ -168,6 +168,6 @@ describe('Plugin IDs', () => {
       ]
         .filter(Boolean)
         .join('\n'),
-    ).toEqual([]);
+    ).toEqual({ unexpectedPlugins: [], idsMissingPrefix: [] });
   });
 });

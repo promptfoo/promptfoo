@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { PythonWorker } from '../../src/python/worker';
 
 vi.mock('../../src/logger', () => ({
@@ -12,6 +12,10 @@ vi.mock('../../src/logger', () => ({
     warn: vi.fn(),
   },
 }));
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
 
 // Windows CI has severe filesystem delays (antivirus, etc.) - allow up to 90s
 // Non-Windows CI can also have timing variance with Python IPC, so use 15s (matching windows-path.test.ts)

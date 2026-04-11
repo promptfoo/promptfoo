@@ -539,32 +539,34 @@ describe('readStandaloneTestsFile', () => {
     // Only run if read-excel-file is actually installed (in dev environment)
     try {
       await import('read-excel-file/node');
-      const fs = require('fs');
-
-      if (fs.existsSync(exampleFile)) {
-        const result = await readStandaloneTestsFile(exampleFile);
-
-        // Verify the structure matches expected test cases
-        expect(result).toHaveLength(4); // Based on the known test data
-        expect(result[0]).toMatchObject({
-          vars: expect.objectContaining({
-            language: expect.any(String),
-            body: expect.any(String),
-          }),
-          assert: expect.any(Array),
-        });
-
-        // Verify specific test case content
-        const frenchTest = result.find((test) => test.vars?.language === 'French');
-        expect(frenchTest).toBeDefined();
-        expect(frenchTest?.vars?.body).toBe('Hello world');
-      } else {
-        return;
-      }
     } catch {
       // Skip test if read-excel-file is not installed
       return;
     }
+
+    const actualFs = await vi.importActual<typeof import('fs')>('fs');
+    if (!actualFs.existsSync(exampleFile)) {
+      return;
+    }
+
+    vi.mocked(fs.existsSync).mockImplementation((filePath) => actualFs.existsSync(filePath));
+
+    const result = await readStandaloneTestsFile(exampleFile);
+
+    // Verify the structure matches expected test cases
+    expect(result).toHaveLength(4); // Based on the known test data
+    expect(result[0]).toMatchObject({
+      vars: expect.objectContaining({
+        language: expect.any(String),
+        body: expect.any(String),
+      }),
+      assert: expect.any(Array),
+    });
+
+    // Verify specific test case content
+    const frenchTest = result.find((test) => test.vars?.language === 'French');
+    expect(frenchTest).toBeDefined();
+    expect(frenchTest?.vars?.body).toBe('Hello world');
   });
 
   it('should handle Python files with default function name', async () => {

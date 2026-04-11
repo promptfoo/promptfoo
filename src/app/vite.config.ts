@@ -55,6 +55,10 @@ const ignoredTestConsolePatterns = [
   'Error during target purpose discovery:',
 ];
 
+const showTestConsoleOutput =
+  process.env.PROMPTFOO_TEST_SHOW_OUTPUT === 'true' ||
+  process.env.PROMPTFOO_APP_TEST_SHOW_OUTPUT === 'true';
+
 // These environment variables are inherited from the parent process (main promptfoo server)
 // We set VITE_ prefixed variables here so Vite can expose them to the client code
 if (process.env.NODE_ENV === 'development') {
@@ -137,6 +141,7 @@ export default {
 
     onConsoleLog(log: string, type: 'stdout' | 'stderr') {
       if (
+        !showTestConsoleOutput &&
         type === 'stderr' &&
         ignoredTestConsolePatterns.some((pattern) => log.includes(pattern))
       ) {

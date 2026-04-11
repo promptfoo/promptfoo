@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearProfilerMetrics,
   getAllProfilerSummaries,
@@ -14,6 +14,10 @@ describe('performanceProfiler', () => {
     // Clear metrics before each test
     clearProfilerMetrics();
     consoleDebugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleDebugSpy.mockRestore();
   });
 
   describe('onRenderCallback', () => {
