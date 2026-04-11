@@ -24,6 +24,7 @@ function skipWhitespaceAndCommas(value: string, startIndex: number): number {
 function parseQuotedField(value: string, startIndex: number): ParsedField {
   let i = startIndex + 1;
   let field = '';
+  let terminated = false;
 
   while (i < value.length) {
     if (value[i] === '\\' && i + 1 < value.length && ['"', '\\'].includes(value[i + 1])) {
@@ -34,6 +35,7 @@ function parseQuotedField(value: string, startIndex: number): ParsedField {
       i += 2;
     } else if (value[i] === '"') {
       i++;
+      terminated = true;
       break;
     } else {
       field += value[i];
@@ -41,6 +43,7 @@ function parseQuotedField(value: string, startIndex: number): ParsedField {
     }
   }
 
+  invariant(terminated, 'Unterminated quoted field in contains assertion value');
   return { field, nextIndex: i };
 }
 

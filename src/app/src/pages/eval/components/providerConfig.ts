@@ -153,42 +153,11 @@ function findIdOrLabelMatch(
   }
 }
 
-function getRecordStyleKey(provider: ProviderDef | null | undefined): string | undefined {
-  if (typeof provider !== 'object' || provider === null) {
-    return undefined;
-  }
-
-  const keys = Object.keys(provider);
-  const [key] = keys;
-  return keys.length === 1 && !PROVIDER_OPTIONS_FIELDS.has(key) ? key : undefined;
-}
-
-function findRecordKeyMatch(
-  providerString: string,
-  providersArray: ProviderDef[],
-): ProviderConfigMatch | undefined {
-  for (const provider of providersArray) {
-    const key = getRecordStyleKey(provider);
-    if (key !== providerString) {
-      continue;
-    }
-
-    const value = (provider as Record<string, unknown>)[key];
-    return {
-      config: {
-        id: key,
-        ...(typeof value === 'object' && value !== null ? value : {}),
-      } as ProviderOptions,
-      matchType: 'record-key',
-    };
-  }
-}
-
 function getFallbackProviderMatch(
   providersArray: ProviderDef[],
   fallbackIndex: number | undefined,
 ): ProviderConfigMatch | undefined {
-  if (fallbackIndex === undefined || fallbackIndex >= providersArray.length) {
+  if (fallbackIndex === undefined || fallbackIndex < 0 || fallbackIndex >= providersArray.length) {
     return undefined;
   }
 
@@ -227,7 +196,6 @@ export function findProviderConfig(
 
   return (
     findIdOrLabelMatch(providerString, providersArray) ??
-    findRecordKeyMatch(providerString, providersArray) ??
     getFallbackProviderMatch(providersArray, fallbackIndex) ?? {
       config: undefined,
       matchType: 'none',
