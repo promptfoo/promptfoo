@@ -61,7 +61,7 @@ session = boto3.session.Session()
 region = args.region or session.region_name
 if not region:
     logger.error("AWS region not specified and not found in AWS CLI configuration")
-    exit(1)
+    raise SystemExit(1)
 
 # Generate endpoint name if not provided
 if not args.endpoint_name:
@@ -188,7 +188,7 @@ try:
             logger.error(
                 f"Endpoint creation failed: {response.get('FailureReason', 'Unknown reason')}"
             )
-            exit(1)
+            raise SystemExit(1)
 
         if status != "InService":
             logger.info(f"Endpoint status: {status}. Waiting...")
@@ -222,4 +222,4 @@ providers:
 
 except Exception as e:
     logger.error(f"Error deploying model: {e}")
-    exit(1)
+    raise SystemExit(1)

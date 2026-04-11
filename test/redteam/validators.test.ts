@@ -380,13 +380,13 @@ describe('redteamConfigSchema', () => {
 
   it('should validate every defined plugin id individually', () => {
     for (const pluginId of REDTEAM_ALL_PLUGINS) {
-      expect(RedteamPluginSchema.safeParse(pluginId).success).toBe(true);
+      expect(RedteamPluginSchema.safeParse(pluginId).success, pluginId).toBe(true);
     }
   });
 
   it('should validate every defined strategy id individually', () => {
     for (const strategyId of REDTEAM_ALL_STRATEGIES) {
-      expect(RedteamStrategySchema.safeParse(strategyId).success).toBe(true);
+      expect(RedteamStrategySchema.safeParse(strategyId).success, strategyId).toBe(true);
     }
   });
 
