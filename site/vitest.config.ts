@@ -7,6 +7,7 @@ import { defineConfig } from 'vitest/config';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const docusaurusComponentStub = path.resolve(__dirname, 'src/test/docusaurusComponentStub.tsx');
 const docusaurusRuntimeStub = path.resolve(__dirname, 'src/test/docusaurusRuntimeStub.tsx');
+const docusaurusUseIsBrowserStub = path.resolve(__dirname, 'src/test/useIsBrowserStub.ts');
 
 export default defineConfig({
   plugins: [...react()],
@@ -54,8 +55,9 @@ export default defineConfig({
         find: /^@docusaurus\/(?:plugin-content-blog|plugin-content-docs)(?:\/client)?$/,
         replacement: docusaurusRuntimeStub,
       },
+      { find: /^@docusaurus\/useIsBrowser$/, replacement: docusaurusUseIsBrowserStub },
       {
-        find: /^@docusaurus\/(?:router|theme-common|useBaseUrl|useDocusaurusContext|useIsBrowser)$/,
+        find: /^@docusaurus\/(?:router|theme-common|useBaseUrl|useDocusaurusContext)$/,
         replacement: docusaurusRuntimeStub,
       },
       { find: /^@theme(?:-original)?\/.+$/, replacement: docusaurusComponentStub },
