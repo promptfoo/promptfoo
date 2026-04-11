@@ -88,7 +88,6 @@ vi.mock('../../../src/util/server', () => ({
 const mockedSleep = vi.mocked(sleep);
 const mockedLoadApiProviders = mockLoadApiProviders;
 const mockedCheckServerFeatureSupport = mockCheckServerFeatureSupport;
-const _mockedOpenAiProvider = MockOpenAiChatCompletionProvider;
 
 describe('shared redteam provider utilities', () => {
   beforeEach(() => {
