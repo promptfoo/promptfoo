@@ -101,6 +101,16 @@ const directCallApiMockPatterns = [
     message: 'mock callApi with @app/tests/apiMocks helpers instead of casting callApi',
   },
 ];
+const directTimerMockPatterns = [
+  {
+    pattern: /\bvi\.useFakeTimers\s*\(/,
+    message: 'use @app/tests/timers useTestTimers()',
+  },
+  {
+    pattern: /\bDate\.now\s*=(?!=)/,
+    message: 'mock time with vi.setSystemTime() or @app/tests/timers helpers',
+  },
+];
 const legacyDirectCallApiMockFiles = new Set([
   'hooks/useEvalOperations.test.ts',
   'pages/eval/components/Eval.test.tsx',
@@ -166,6 +176,25 @@ function findPatternViolations(
     toPosixRelativePath(file),
     patterns,
   );
+}
+
+function findLinePatternViolations(
+  file: string,
+  patterns: { pattern: RegExp; message: string }[],
+): string[] {
+  return readFileSync(file, 'utf8')
+    .split('\n')
+    .flatMap((line, index) => {
+      if (line.trim().startsWith('//')) {
+        return [];
+      }
+
+      return patterns.flatMap(({ pattern, message }) =>
+        pattern.test(line)
+          ? [`${toPosixRelativePath(file)}:${index + 1}: ${message}: ${line.trim()}`]
+          : [],
+      );
+    });
 }
 
 describe('test hygiene', () => {
@@ -264,6 +293,37 @@ describe('test hygiene', () => {
   });
 
   it.each([
+    'vi.useFakeTimers()',
+    'Date.now = vi.fn(() => timestamp)',
+  ])('detects direct timer mock source in %s', (source) => {
+    const matches = directTimerMockPatterns.filter(({ pattern }) => pattern.test(source));
+
+    expect(matches).toHaveLength(1);
+  });
+
+  it.each([
+    'useTestTimers()',
+    'vi.setSystemTime(timestamp)',
+    '// Note: Do NOT use vi.useFakeTimers() here - it breaks waitFor',
+  ])('ignores shared timer helper source in %s', (source) => {
+    const matches =
+      source.trim().startsWith('//') || source.includes('useTestTimers')
+        ? []
+        : directTimerMockPatterns.filter(({ pattern }) => pattern.test(source));
+
+    expect(matches).toEqual([]);
+  });
+
+  it.each([
+    'Date.now === originalDateNow',
+    'Date.now == originalDateNow',
+  ])('does not flag Date.now comparison source in %s', (source) => {
+    const matches = directTimerMockPatterns.filter(({ pattern }) => pattern.test(source));
+
+    expect(matches).toEqual([]);
+  });
+
+  it.each([
     'mockCallApiResponse({ ok: true })',
     'mockCallApiResponseOnce({ step: 1 })',
     'rejectCallApi(new Error("network"))',
@@ -309,6 +369,18 @@ describe('test hygiene', () => {
       }
 
       return findPatternViolations(file, directCallApiMockPatterns);
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('uses shared timer helpers for frontend fake timers', () => {
+    const violations = findTestFiles(srcDir).flatMap((file) => {
+      if (file === thisFile) {
+        return [];
+      }
+
+      return findLinePatternViolations(file, directTimerMockPatterns);
     });
 
     expect(violations).toEqual([]);

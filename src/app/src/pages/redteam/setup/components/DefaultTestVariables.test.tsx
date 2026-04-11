@@ -1,3 +1,4 @@
+import { type TestTimers, useTestTimers } from '@app/tests/timers';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DefaultTestVariables from './DefaultTestVariables';
@@ -11,6 +12,8 @@ vi.mock('../hooks/useRedTeamConfig', () => ({
 }));
 
 describe('DefaultTestVariables Component', () => {
+  let timers: TestTimers;
+
   const defaultConfig = {
     description: 'Test Configuration',
     plugins: [],
@@ -35,7 +38,7 @@ describe('DefaultTestVariables Component', () => {
   };
 
   beforeEach(() => {
-    vi.useFakeTimers();
+    timers = useTestTimers();
     vi.clearAllMocks();
     mockUseRedTeamConfig.mockReturnValue({
       config: defaultConfig,
@@ -44,12 +47,12 @@ describe('DefaultTestVariables Component', () => {
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    timers.restore();
   });
 
   async function flushDebouncedUpdate() {
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(300);
+      await timers.advanceByAsync(300);
     });
   }
 
@@ -460,37 +463,33 @@ describe('DefaultTestVariables Component', () => {
   describe('ID Generation', () => {
     it('generates unique IDs even when multiple variables are created in the same millisecond', async () => {
       const timestamp = Date.now();
-      const originalDateNow = Date.now;
-      Date.now = vi.fn(() => timestamp);
-      try {
-        mockUseRedTeamConfig.mockReturnValue({
-          config: {
-            ...defaultConfig,
-            defaultTest: { vars: {} },
-          },
-          updateConfig: mockUpdateConfig,
-        });
+      timers.setSystemTime(timestamp);
 
-        render(<DefaultTestVariables />);
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          ...defaultConfig,
+          defaultTest: { vars: {} },
+        },
+        updateConfig: mockUpdateConfig,
+      });
 
-        const addButton = screen.getByText('Add Variable');
-        fireEvent.click(addButton);
-        fireEvent.click(addButton);
-        fireEvent.click(addButton);
+      render(<DefaultTestVariables />);
 
-        await flushDebouncedUpdate();
+      const addButton = screen.getByText('Add Variable');
+      fireEvent.click(addButton);
+      fireEvent.click(addButton);
+      fireEvent.click(addButton);
 
-        expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
+      await flushDebouncedUpdate();
 
-        const vars = mockUpdateConfig.mock.calls[0][1].vars;
-        const ids = Object.keys(vars);
+      expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
 
-        expect(ids[0]).not.toBe(ids[1]);
-        expect(ids[0]).not.toBe(ids[2]);
-        expect(ids[1]).not.toBe(ids[2]);
-      } finally {
-        Date.now = originalDateNow;
-      }
+      const vars = mockUpdateConfig.mock.calls[0][1].vars;
+      const ids = Object.keys(vars);
+
+      expect(ids[0]).not.toBe(ids[1]);
+      expect(ids[0]).not.toBe(ids[2]);
+      expect(ids[1]).not.toBe(ids[2]);
     });
   });
 
