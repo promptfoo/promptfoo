@@ -28,6 +28,7 @@ def chatbot_response(message, history):
 
 # Create the Gradio interface
 def create_demo():
+    """Create the chatbot demo used by browser automation examples."""
     with gr.Blocks(title="Browser Testing Demo") as demo:
         gr.Markdown(
             """
@@ -71,6 +72,7 @@ def create_demo():
 
         # Handle message submission
         def respond(message, chat_history):
+            """Append the user message and deterministic bot response."""
             bot_message = chatbot_response(message, chat_history)
             # Use the new messages format with role and content
             chat_history.append({"role": "user", "content": message})
@@ -87,6 +89,7 @@ def create_demo():
 
 # Simple calculator for testing form inputs
 def create_calculator_demo():
+    """Create the calculator demo used for form input testing."""
     with gr.Blocks(title="Calculator Demo") as calc_demo:
         gr.Markdown("## Simple Calculator for Testing")
 
@@ -104,6 +107,7 @@ def create_calculator_demo():
         result = gr.Textbox(label="Result", elem_id="result")
 
         def calculate(n1, n2, op):
+            """Calculate the selected arithmetic operation."""
             if op == "Add":
                 return str(n1 + n2)
             elif op == "Subtract":
