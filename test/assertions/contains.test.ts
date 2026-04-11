@@ -459,6 +459,34 @@ describe('handleContainsAny', () => {
       'Unterminated quoted field in contains assertion value',
     );
   });
+
+  it('should reject non-delimiter characters after quoted fields', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'contains-any', value: '"hello"world' },
+      renderedValue: '"hello"world' as AssertionValue,
+      outputString: 'hello world',
+      inverse: false,
+    };
+
+    expect(() => handleContainsAny(params)).toThrow(
+      'Expected comma after quoted field in contains assertion value',
+    );
+  });
+
+  it('should reject whitespace-separated quoted and unquoted fields without a comma', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'contains-any', value: '"hello" world' },
+      renderedValue: '"hello" world' as AssertionValue,
+      outputString: 'hello world',
+      inverse: false,
+    };
+
+    expect(() => handleContainsAny(params)).toThrow(
+      'Expected comma after quoted field in contains assertion value',
+    );
+  });
 });
 
 describe('handleIContainsAny', () => {

@@ -10,12 +10,18 @@ interface ParsedField {
 function skipWhitespaceAndCommas(value: string, startIndex: number): number {
   let i = startIndex;
   while (i < value.length) {
-    while (i < value.length && /\s/.test(value[i])) {
-      i++;
-    }
+    i = skipWhitespace(value, i);
     if (value[i] !== ',') {
       break;
     }
+    i++;
+  }
+  return i;
+}
+
+function skipWhitespace(value: string, startIndex: number): number {
+  let i = startIndex;
+  while (i < value.length && /\s/.test(value[i])) {
     i++;
   }
   return i;
@@ -64,9 +70,14 @@ function parseCommaSeparatedValues(value: string): string[] {
       break;
     }
 
-    const parsed = value[i] === '"' ? parseQuotedField(value, i) : parseUnquotedField(value, i);
+    const isQuotedField = value[i] === '"';
+    const parsed = isQuotedField ? parseQuotedField(value, i) : parseUnquotedField(value, i);
     results.push(parsed.field);
-    i = parsed.nextIndex;
+    i = isQuotedField ? skipWhitespace(value, parsed.nextIndex) : parsed.nextIndex;
+    invariant(
+      !isQuotedField || i >= value.length || value[i] === ',',
+      'Expected comma after quoted field in contains assertion value',
+    );
   }
   return results;
 }
