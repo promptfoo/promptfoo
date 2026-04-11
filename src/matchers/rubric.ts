@@ -4,6 +4,7 @@ import path from 'path';
 import { loadFromJavaScriptFile } from '../assertions/utils';
 import cliState from '../cliState';
 import { getEnvBool } from '../envars';
+import logger from '../logger';
 import { getDefaultProviders } from '../providers/defaults';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -117,9 +118,11 @@ export async function renderLlmRubricPrompt(
       typeof v === 'string' ? nunjucks.renderString(v, processedContext) : v,
     );
     return JSON.stringify(parsed);
-  } catch {
-    // not valid JSON...
-    // output a warning?
+  } catch (err) {
+    // Not valid JSON - fall through to legacy Nunjucks rendering below.
+    logger.debug(
+      `[Rubric] Rubric prompt is not valid JSON, using Nunjucks rendering: ${(err as Error).message}`,
+    );
   }
 
   // Legacy rendering for non-JSON prompts
