@@ -108,7 +108,8 @@ describe('CommonConfigurationOptions', () => {
     expect(onValidationChange).toHaveBeenCalledWith(true);
   });
 
-  it('should call onExtensionsChange when ExtensionEditor updates extensions', () => {
+  it('should call onExtensionsChange when ExtensionEditor updates extensions', async () => {
+    const user = userEvent.setup();
     const onExtensionsChange = vi.fn();
 
     renderWithProviders(
@@ -116,7 +117,7 @@ describe('CommonConfigurationOptions', () => {
     );
 
     const editor = screen.getByTestId('mock-extension-editor');
-    editor.click();
+    await user.click(editor);
 
     expect(onExtensionsChange).toHaveBeenCalledWith(['file://new-extension.js:hook']);
   });
@@ -139,7 +140,7 @@ describe('CommonConfigurationOptions', () => {
     await user.click(testGenTrigger);
 
     const inputsEditor = screen.getByTestId('mock-inputs-editor');
-    inputsEditor.click();
+    await user.click(inputsEditor);
 
     expect(updateCustomTarget).toHaveBeenCalledWith('inputs', { testVar: 'test description' });
   });

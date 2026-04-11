@@ -53,6 +53,7 @@ describe('ReportSettingsDialogButton', () => {
     const slider = screen.getByRole('slider');
 
     slider.focus();
+    // jsdom does not apply native range keyboard defaults, so set the DOM value directly.
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(slider, '0.75');
     slider.dispatchEvent(new Event('input', { bubbles: true }));
     slider.dispatchEvent(new Event('change', { bubbles: true }));

@@ -196,6 +196,7 @@ describe('TestCasesSection', () => {
         .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
       const file = new File(['some content'], 'test.txt', { type: 'text/plain' });
 
+      // Bypass the browser accept filter to exercise the defensive unsupported-file branch.
       Object.defineProperty(fileInput, 'files', {
         value: [file],
         configurable: true,
