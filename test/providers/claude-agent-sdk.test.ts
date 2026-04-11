@@ -1994,7 +1994,7 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
-        it('with settings as file path', async () => {
+        it('with settings as absolute file path', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
           const provider = new ClaudeCodeSDKProvider({
@@ -2009,6 +2009,44 @@ describe('ClaudeCodeSDKProvider', () => {
             prompt: 'Test prompt',
             options: expect.objectContaining({
               settings: '/path/to/settings.json',
+            }),
+          });
+        });
+
+        it('with settings as relative file path resolves to absolute', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              settings: './my-settings.json',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              settings: path.resolve(testBasePath, './my-settings.json'),
+            }),
+          });
+        });
+
+        it('with settings as empty file path passes through unchanged', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              settings: '',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              settings: '',
             }),
           });
         });

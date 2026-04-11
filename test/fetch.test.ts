@@ -18,7 +18,24 @@ import {
   isTransientError,
 } from '../src/util/fetch/index';
 import { sleep } from '../src/util/time';
-import { createMockResponse } from './util/utils';
+import { clearProxyEnv, createMockResponse, mockProcessEnv, PROXY_ENV_KEYS } from './util/utils';
+
+const FETCH_TEST_ENV_KEYS = [
+  ...PROXY_ENV_KEYS,
+  'PROMPTFOO_INSECURE_SSL',
+  'PROMPTFOO_CA_CERT_PATH',
+] as const;
+
+function mockFetchTestEnv(): () => void {
+  return mockProcessEnv(
+    Object.fromEntries(FETCH_TEST_ENV_KEYS.map((key) => [key, undefined])) as Record<
+      string,
+      string | undefined
+    >,
+  );
+}
+
+let restoreFetchTestEnv = () => {};
 
 vi.mock('../src/util/time', () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
@@ -135,28 +152,22 @@ vi.mock('../src/cliState', () => ({
 
 describe('fetchWithProxy', () => {
   beforeEach(() => {
+    restoreFetchTestEnv();
+    restoreFetchTestEnv = mockFetchTestEnv();
     vi.clearAllMocks();
     clearAgentCache();
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
     vi.mocked(ProxyAgent).mockClear();
+    cliState.basePath = undefined;
     cliState.maxConcurrency = undefined;
-
-    delete process.env.HTTPS_PROXY;
-    delete process.env.https_proxy;
-    delete process.env.HTTP_PROXY;
-    delete process.env.http_proxy;
-    delete process.env.npm_config_https_proxy;
-    delete process.env.npm_config_http_proxy;
-    delete process.env.npm_config_proxy;
-    delete process.env.all_proxy;
-    delete process.env.PROMPTFOO_INSECURE_SSL;
-    delete process.env.PROMPTFOO_CA_CERT_PATH;
   });
 
   afterEach(() => {
     vi.resetAllMocks();
-    delete process.env.PROMPTFOO_INSECURE_SSL;
-    delete process.env.PROMPTFOO_CA_CERT_PATH;
+    restoreFetchTestEnv();
+    restoreFetchTestEnv = () => {};
+    cliState.basePath = undefined;
+    cliState.maxConcurrency = undefined;
   });
 
   it('should add version header to all requests', async () => {
@@ -552,9 +563,9 @@ describe('fetchWithProxy', () => {
       https_proxy: 'http://https-proxy-lower.example.com',
       HTTP_PROXY: 'http://http-proxy.example.com',
       http_proxy: 'http://http-proxy-lower.example.com',
+      ALL_PROXY: 'http://all-proxy.example.com',
+      all_proxy: 'http://all-proxy-lower.example.com',
     } as const;
-
-    const allProxyVars = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'];
 
     const httpTestCases = [
       {
@@ -564,6 +575,14 @@ describe('fetchWithProxy', () => {
       {
         env: { http_proxy: mockProxyUrls.http_proxy },
         expected: { url: mockProxyUrls.http_proxy },
+      },
+      {
+        env: { ALL_PROXY: mockProxyUrls.ALL_PROXY },
+        expected: { url: mockProxyUrls.ALL_PROXY },
+      },
+      {
+        env: { all_proxy: mockProxyUrls.all_proxy },
+        expected: { url: mockProxyUrls.all_proxy },
       },
     ];
 
@@ -576,14 +595,21 @@ describe('fetchWithProxy', () => {
         env: { https_proxy: mockProxyUrls.https_proxy },
         expected: { url: mockProxyUrls.https_proxy },
       },
+      {
+        env: { ALL_PROXY: mockProxyUrls.ALL_PROXY },
+        expected: { url: mockProxyUrls.ALL_PROXY },
+      },
+      {
+        env: { all_proxy: mockProxyUrls.all_proxy },
+        expected: { url: mockProxyUrls.all_proxy },
+      },
     ];
 
     for (const testCase of httpTestCases) {
       vi.clearAllMocks();
+      clearAgentCache();
 
-      allProxyVars.forEach((key) => {
-        delete process.env[key];
-      });
+      clearProxyEnv();
 
       Object.entries(testCase.env).forEach(([key, value]) => {
         process.env[key] = value;
@@ -616,17 +642,14 @@ describe('fetchWithProxy', () => {
 
       expect(proxyConfigCalls).toEqual([`Using proxy: ${testCase.expected.url}`]);
 
-      allProxyVars.forEach((key) => {
-        delete process.env[key];
-      });
+      clearProxyEnv();
     }
 
     for (const testCase of httpsTestCases) {
       vi.clearAllMocks();
+      clearAgentCache();
 
-      allProxyVars.forEach((key) => {
-        delete process.env[key];
-      });
+      clearProxyEnv();
 
       Object.entries(testCase.env).forEach(([key, value]) => {
         process.env[key] = value;
@@ -659,9 +682,7 @@ describe('fetchWithProxy', () => {
 
       expect(proxyConfigCalls).toEqual([`Using proxy: ${testCase.expected.url}`]);
 
-      allProxyVars.forEach((key) => {
-        delete process.env[key];
-      });
+      clearProxyEnv();
     }
   });
 
@@ -1275,35 +1296,22 @@ describe('fetchWithRetries', () => {
 
 describe('fetchWithProxy with NO_PROXY', () => {
   beforeEach(() => {
+    restoreFetchTestEnv();
+    restoreFetchTestEnv = mockFetchTestEnv();
     vi.clearAllMocks();
     clearAgentCache();
     vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
     vi.mocked(ProxyAgent).mockClear();
-
-    delete process.env.HTTPS_PROXY;
-    delete process.env.https_proxy;
-    delete process.env.HTTP_PROXY;
-    delete process.env.http_proxy;
-    delete process.env.npm_config_https_proxy;
-    delete process.env.npm_config_http_proxy;
-    delete process.env.npm_config_proxy;
-    delete process.env.all_proxy;
-    delete process.env.NO_PROXY;
-    delete process.env.no_proxy;
+    cliState.basePath = undefined;
+    cliState.maxConcurrency = undefined;
   });
 
   afterEach(() => {
-    delete process.env.HTTPS_PROXY;
-    delete process.env.https_proxy;
-    delete process.env.HTTP_PROXY;
-    delete process.env.http_proxy;
-    delete process.env.npm_config_https_proxy;
-    delete process.env.npm_config_http_proxy;
-    delete process.env.npm_config_proxy;
-    delete process.env.all_proxy;
-    delete process.env.NO_PROXY;
-    delete process.env.no_proxy;
     vi.resetAllMocks();
+    restoreFetchTestEnv();
+    restoreFetchTestEnv = () => {};
+    cliState.basePath = undefined;
+    cliState.maxConcurrency = undefined;
   });
 
   it('should respect NO_PROXY for localhost URLs', async () => {

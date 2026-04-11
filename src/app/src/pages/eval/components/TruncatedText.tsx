@@ -73,7 +73,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
     if (Array.isArray(node)) {
       const nodes: React.ReactNode[] = [];
       let currentLength = length;
-      for (const child of node) {
+      for (const child of React.Children.toArray(node)) {
         const childLength = textLength(child);
         if (currentLength + childLength > maxLength) {
           nodes.push(truncateText(child, currentLength));

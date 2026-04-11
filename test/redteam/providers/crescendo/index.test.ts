@@ -53,6 +53,15 @@ vi.mock('../../../../src/redteam/graders', () => ({
   getGraderById: mockGetGraderById,
 }));
 
+vi.mock('../../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
+
 vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => {
   return {
     ...(await importOriginal()),
