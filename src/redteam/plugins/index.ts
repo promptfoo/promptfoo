@@ -255,11 +255,16 @@ function dedupeTestCases(testCases: TestCase[]): TestCase[] {
 }
 
 function buildMaxCharsRetryInstructions(rejectedPromptLengths: number[], limit?: number): string {
+  const longestRejectedPromptText =
+    rejectedPromptLengths.length > 0
+      ? `${Math.max(...rejectedPromptLengths)} characters`
+      : 'unknown length';
+
   return dedent`
     Your previous response included ${rejectedPromptLengths.length} generated prompt${
       rejectedPromptLengths.length === 1 ? '' : 's'
     } that exceeded the ${limit ?? 'configured'}-character limit.
-    The longest rejected prompt was ${Math.max(...rejectedPromptLengths)} characters.
+    The longest rejected prompt was ${longestRejectedPromptText}.
     Generate replacement prompts only, and keep every user message within the character limit.
   `.trim();
 }
