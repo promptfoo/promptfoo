@@ -224,10 +224,8 @@ export async function resolveProvider(
   } else if (typeof provider === 'object') {
     const descriptor = normalizeProviderRef(provider);
     invariant(
-      (descriptor.kind === 'options' || descriptor.kind === 'map') &&
-        descriptor.loadOptions &&
-        descriptor.loadProviderPath,
-      'Provider object must have an id',
+      descriptor.kind === 'options' || descriptor.kind === 'map',
+      `Provider object must have an 'id' field or be a ProviderOptionsMap (e.g. { "openai:chat:gpt-4": { config: ... } }). Got: ${describeInvalidProvider(provider)}`,
     );
     const loadOptions: LoadApiProviderOptions = { options: descriptor.loadOptions };
     if (context.env) {
