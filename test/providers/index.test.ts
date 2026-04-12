@@ -1669,10 +1669,10 @@ describe('getProviderIds', () => {
 
   it('does not treat option-only provider objects as ProviderOptionsMap objects', () => {
     expect(() => getProviderIds([{ config: { temperature: 0.5 } } as any])).toThrow(
-      'Invalid providers list',
+      'Invalid provider at index 0',
     );
     expect(() => getProviderIds([{ prompts: ['prompt1'] } as any])).toThrow(
-      'Invalid providers list',
+      'Invalid provider at index 0',
     );
   });
 

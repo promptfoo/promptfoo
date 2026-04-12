@@ -365,7 +365,9 @@ export async function loadApiProviders(
             }),
           ];
         }
-        throw new Error('Invalid providers list');
+        throw new Error(
+          `Invalid provider at index ${idx}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap (e.g. { "openai:chat:gpt-4": { config: ... } }). Got: ${JSON.stringify(provider).slice(0, 200)}`,
+        );
       }),
     );
     return providersArrays.flat();
@@ -406,7 +408,9 @@ export function getProviderIds(providerPaths: TestSuiteConfig['providers']): str
         return getProviderIdsFromFile(provider as string);
       }
       if (descriptor.kind === 'unknown') {
-        throw new Error('Invalid providers list');
+        throw new Error(
+          `Invalid provider at index ${idx}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap. Got: ${JSON.stringify(provider).slice(0, 200)}`,
+        );
       }
       return descriptor.id;
     });
