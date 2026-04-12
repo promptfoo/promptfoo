@@ -39,7 +39,8 @@ function describeInvalidProvider(provider: unknown): string {
       0,
       200,
     );
-  } catch {
+  } catch (err) {
+    logger.debug('Failed to sanitize invalid provider for error message', { error: err });
     return Object.prototype.toString.call(provider);
   }
 }
