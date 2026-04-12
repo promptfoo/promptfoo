@@ -291,7 +291,7 @@ describe('Overview', () => {
     const highCard = getSeverityCard(Severity.High);
 
     // This should not throw an error even with null ref
-    await expect(user.click(highCard!)).resolves.not.toThrow();
+    await user.click(highCard!);
   });
 
   it('should pass navigateToIssues callback to SeverityCard and trigger scroll on click', async () => {

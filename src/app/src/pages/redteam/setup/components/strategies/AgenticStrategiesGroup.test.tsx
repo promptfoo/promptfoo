@@ -545,7 +545,7 @@ describe('AgenticStrategiesGroup', () => {
       expect(resetButton).toBeInTheDocument();
 
       // Clicking reset shouldn't cause errors
-      await expect(user.click(resetButton)).resolves.not.toThrow();
+      await user.click(resetButton);
     });
   });
 
