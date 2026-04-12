@@ -186,6 +186,9 @@ export function normalizeProviderRef(
   const { index } = options;
 
   if (typeof provider === 'string') {
+    if (!isValidProviderId(provider)) {
+      return { kind: 'unknown', id: index === undefined ? 'unknown' : `unknown-${index}` };
+    }
     if (isProviderConfigFileReference(provider)) {
       return { kind: 'file', id: provider, loadProviderPath: provider };
     }

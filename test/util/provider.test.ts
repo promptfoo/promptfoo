@@ -157,6 +157,14 @@ describe('normalizeProviderRef', () => {
     });
   });
 
+  it('returns kind unknown for empty string provider IDs', () => {
+    expect(normalizeProviderRef('')).toMatchObject({ kind: 'unknown', id: 'unknown' });
+    expect(normalizeProviderRef('', { index: 2 })).toMatchObject({
+      kind: 'unknown',
+      id: 'unknown-2',
+    });
+  });
+
   it('returns kind unknown for null, undefined, and non-provider types', () => {
     expect(normalizeProviderRef(null)).toMatchObject({ kind: 'unknown', id: 'unknown' });
     expect(normalizeProviderRef(undefined)).toMatchObject({ kind: 'unknown', id: 'unknown' });
