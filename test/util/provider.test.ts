@@ -12,7 +12,11 @@ import {
   isProviderAllowed,
   providerToIdentifier,
 } from '../../src/util/provider';
-import { isProviderConfigFileReference, normalizeProviderRef } from '../../src/util/providerRef';
+import {
+  canonicalizeProviderId,
+  isProviderConfigFileReference,
+  normalizeProviderRef,
+} from '../../src/util/providerRef';
 
 import type { ApiProvider } from '../../src/types/index';
 
@@ -103,6 +107,105 @@ describe('normalizeProviderRef', () => {
       id: 'Provider2',
       label: 'Provider2',
     });
+  });
+
+  it('classifies string providers as named vs file based on extension', () => {
+    expect(normalizeProviderRef('openai:chat:gpt-4')).toMatchObject({
+      kind: 'named',
+      id: 'openai:chat:gpt-4',
+      loadProviderPath: 'openai:chat:gpt-4',
+    });
+    expect(normalizeProviderRef('file://providers.yaml')).toMatchObject({
+      kind: 'file',
+      id: 'file://providers.yaml',
+      loadProviderPath: 'file://providers.yaml',
+    });
+    expect(normalizeProviderRef('file://provider.js')).toMatchObject({
+      kind: 'named',
+      id: 'file://provider.js',
+      loadProviderPath: 'file://provider.js',
+    });
+  });
+
+  it('normalizes ProviderOptionsMap without nested id override (key becomes id)', () => {
+    const descriptor = normalizeProviderRef({
+      'openai:chat:gpt-4': {
+        config: { temperature: 0.2 },
+      },
+    });
+
+    expect(descriptor).toMatchObject({
+      kind: 'map',
+      id: 'openai:chat:gpt-4',
+      loadProviderPath: 'openai:chat:gpt-4',
+      loadOptions: {
+        id: 'openai:chat:gpt-4',
+        config: { temperature: 0.2 },
+      },
+    });
+  });
+
+  it('returns kind unknown for null, undefined, and non-provider types', () => {
+    expect(normalizeProviderRef(null)).toMatchObject({ kind: 'unknown', id: 'unknown' });
+    expect(normalizeProviderRef(undefined)).toMatchObject({ kind: 'unknown', id: 'unknown' });
+    expect(normalizeProviderRef(42)).toMatchObject({ kind: 'unknown', id: 'unknown' });
+    expect(normalizeProviderRef([])).toMatchObject({ kind: 'unknown', id: 'unknown' });
+  });
+});
+
+describe('canonicalizeProviderId', () => {
+  it('resolves relative file:// paths to absolute', () => {
+    const cwd = process.cwd();
+    expect(canonicalizeProviderId('file://./provider.js')).toBe(
+      `file://${path.join(cwd, 'provider.js')}`,
+    );
+  });
+
+  it('preserves absolute file:// paths', () => {
+    expect(canonicalizeProviderId('file:///absolute/path.js')).toBe('file:///absolute/path.js');
+  });
+
+  it('resolves exec: paths with slashes', () => {
+    const cwd = process.cwd();
+    expect(canonicalizeProviderId('exec:./script.py')).toBe(`exec:${path.join(cwd, 'script.py')}`);
+  });
+
+  it('preserves exec: paths without slashes', () => {
+    expect(canonicalizeProviderId('exec:my-script')).toBe('exec:my-script');
+  });
+
+  it('resolves python: paths with slashes', () => {
+    const cwd = process.cwd();
+    expect(canonicalizeProviderId('python:./provider.py')).toBe(
+      `python:${path.join(cwd, 'provider.py')}`,
+    );
+  });
+
+  it('resolves golang: paths with slashes', () => {
+    const cwd = process.cwd();
+    expect(canonicalizeProviderId('golang:./main.go')).toBe(`golang:${path.join(cwd, 'main.go')}`);
+  });
+
+  it('preserves golang: paths without slashes', () => {
+    expect(canonicalizeProviderId('golang:my-binary')).toBe('golang:my-binary');
+  });
+
+  it('wraps bare .js/.ts/.mjs paths with file://', () => {
+    const cwd = process.cwd();
+    expect(canonicalizeProviderId('./provider.js')).toBe(`file://${path.join(cwd, 'provider.js')}`);
+    expect(canonicalizeProviderId('./provider.ts')).toBe(`file://${path.join(cwd, 'provider.ts')}`);
+    expect(canonicalizeProviderId('./provider.mjs')).toBe(
+      `file://${path.join(cwd, 'provider.mjs')}`,
+    );
+  });
+
+  it('does not wrap bare .js/.ts/.mjs without path separators', () => {
+    expect(canonicalizeProviderId('provider.js')).toBe('provider.js');
+  });
+
+  it('passes through plain provider IDs unchanged', () => {
+    expect(canonicalizeProviderId('openai:chat:gpt-4')).toBe('openai:chat:gpt-4');
+    expect(canonicalizeProviderId('echo')).toBe('echo');
   });
 });
 
