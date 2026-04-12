@@ -984,6 +984,29 @@ describe('loadApiProvider', () => {
     expect(providers[0].label).toBe('Custom OpenAI');
   });
 
+  it('redacts invalid provider config details before formatting load errors', async () => {
+    const provider = {
+      config: {
+        apiKey: 'sk-proj-invalid-provider-secret',
+      },
+      headers: {
+        Authorization: 'Bearer invalid-provider-secret-token',
+      },
+    };
+
+    let message = '';
+    try {
+      await loadApiProviders([provider as any]);
+    } catch (err) {
+      message = (err as Error).message;
+    }
+
+    expect(message).toContain('Invalid provider at index 0');
+    expect(message).toContain('[REDACTED]');
+    expect(message).not.toContain('sk-proj-invalid-provider-secret');
+    expect(message).not.toContain('Bearer invalid-provider-secret-token');
+  });
+
   it('loadApiProvider sets provider.delay', async () => {
     const providerOptions = {
       id: 'test-delay',
@@ -1692,6 +1715,29 @@ describe('getProviderIds', () => {
     provider.self = provider;
 
     expect(() => getProviderIds([provider])).toThrow('Invalid provider at index 0');
+  });
+
+  it('redacts invalid provider config details before formatting id extraction errors', () => {
+    const provider = {
+      config: {
+        apiKey: 'sk-proj-invalid-provider-secret',
+      },
+      headers: {
+        Authorization: 'Bearer invalid-provider-secret-token',
+      },
+    };
+
+    let message = '';
+    try {
+      getProviderIds([provider as any]);
+    } catch (err) {
+      message = (err as Error).message;
+    }
+
+    expect(message).toContain('Invalid provider at index 0');
+    expect(message).toContain('[REDACTED]');
+    expect(message).not.toContain('sk-proj-invalid-provider-secret');
+    expect(message).not.toContain('Bearer invalid-provider-secret-token');
   });
 
   it('does not treat file:// paths without yaml/yml/json extension as file references', () => {

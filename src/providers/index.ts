@@ -17,6 +17,7 @@ import {
   readProviderConfigFile,
 } from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
+import { sanitizeObject } from '../util/sanitizer';
 import { providerMap } from './registry';
 
 import type { EnvOverrides } from '../types/env';
@@ -29,7 +30,18 @@ import type {
 } from '../types/providers';
 
 function describeInvalidProvider(provider: unknown): string {
-  return (safeJsonStringify(provider) ?? Object.prototype.toString.call(provider)).slice(0, 200);
+  try {
+    const sanitizedProvider = sanitizeObject(provider, {
+      context: 'invalid provider config',
+      throwOnError: true,
+    });
+    return (safeJsonStringify(sanitizedProvider) ?? Object.prototype.toString.call(provider)).slice(
+      0,
+      200,
+    );
+  } catch {
+    return Object.prototype.toString.call(provider);
+  }
 }
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
