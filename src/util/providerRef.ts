@@ -7,7 +7,7 @@ import invariant from './invariant';
 
 import type { ProviderOptions, ProviderOptionsMap } from '../types/providers';
 
-export type ProviderRefKind = 'string' | 'file' | 'function' | 'options' | 'map' | 'unknown';
+export type ProviderRefKind = 'named' | 'file' | 'function' | 'options' | 'map' | 'unknown';
 
 const PROVIDER_OPTION_KEYS = new Set<string>([
   'id',
@@ -20,14 +20,48 @@ const PROVIDER_OPTION_KEYS = new Set<string>([
   'inputs',
 ]);
 
-export interface ProviderRefDescriptor {
-  kind: ProviderRefKind;
+interface ProviderRefBase {
   id: string;
   label?: string;
-  loadOptions?: ProviderOptions;
-  loadProviderPath?: string;
-  original: unknown;
 }
+
+export interface NamedProviderRef extends ProviderRefBase {
+  kind: 'named';
+  loadProviderPath: string;
+}
+
+export interface FileProviderRef extends ProviderRefBase {
+  kind: 'file';
+  loadProviderPath: string;
+}
+
+export interface FunctionProviderRef extends ProviderRefBase {
+  kind: 'function';
+}
+
+export interface OptionsProviderRef extends ProviderRefBase {
+  kind: 'options';
+  loadOptions: ProviderOptions;
+  loadProviderPath: string;
+}
+
+export interface MapProviderRef extends ProviderRefBase {
+  kind: 'map';
+  loadOptions: ProviderOptions;
+  loadProviderPath: string;
+}
+
+export interface UnknownProviderRef extends ProviderRefBase {
+  kind: 'unknown';
+}
+
+export type ProviderRefDescriptor =
+  | NamedProviderRef
+  | FileProviderRef
+  | FunctionProviderRef
+  | OptionsProviderRef
+  | MapProviderRef
+  | UnknownProviderRef;
 
 export interface ProviderConfigFile {
   configs: ProviderOptions[];
@@ -138,12 +172,12 @@ export function normalizeProviderRef(
   const { index } = options;
 
   if (typeof provider === 'string') {
+    const kind = isProviderConfigFileReference(provider) ? 'file' : 'named';
     return {
-      kind: isProviderConfigFileReference(provider) ? 'file' : 'string',
+      kind,
       id: provider,
       loadProviderPath: provider,
-      original: provider,
-    };
+    } as NamedProviderRef | FileProviderRef;
   }
 
   if (typeof provider === 'function') {
@@ -155,7 +189,6 @@ export function normalizeProviderRef(
         options.functionId ??
         (index === undefined ? 'custom-function' : `custom-function-${index}`),
       label,
-      original: provider,
     };
   }
 
@@ -169,7 +202,6 @@ export function normalizeProviderRef(
         label,
         loadOptions: provider as ProviderOptions,
         loadProviderPath: providerId,
-        original: provider,
       };
     }
 
@@ -194,7 +226,6 @@ export function normalizeProviderRef(
             id,
           },
           loadProviderPath: originalId,
-          original: provider,
         };
       }
     }
@@ -204,7 +235,6 @@ export function normalizeProviderRef(
         kind: 'unknown',
         id: label,
         label,
-        original: provider,
       };
     }
   }
@@ -212,6 +242,5 @@ export function normalizeProviderRef(
   return {
     kind: 'unknown',
     id: options.unknownId ?? (index === undefined ? 'unknown' : `unknown-${index}`),
-    original: provider,
   };
 }

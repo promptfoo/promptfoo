@@ -196,7 +196,6 @@ export async function resolveProvider(
     if (providerMap[provider]) {
       return providerMap[provider];
     }
-    const descriptor = normalizeProviderRef(provider);
     const loadOptions: LoadApiProviderOptions = {};
     if (context.env) {
       loadOptions.env = context.env;
@@ -204,11 +203,13 @@ export async function resolveProvider(
     if (context.basePath) {
       loadOptions.basePath = context.basePath;
     }
-    return await loadApiProvider(descriptor.loadProviderPath!, loadOptions);
+    return await loadApiProvider(provider, loadOptions);
   } else if (typeof provider === 'object') {
     const descriptor = normalizeProviderRef(provider);
     invariant(
-      descriptor.kind === 'options' && descriptor.loadOptions && descriptor.loadProviderPath,
+      (descriptor.kind === 'options' || descriptor.kind === 'map') &&
+        descriptor.loadOptions &&
+        descriptor.loadProviderPath,
       'Provider object must have an id',
     );
     const loadOptions: LoadApiProviderOptions = { options: descriptor.loadOptions };
@@ -271,7 +272,7 @@ export function resolveProviderConfigs(
     if (descriptor.kind === 'file') {
       // Resolve file:// references to ProviderOptions[]
       results.push(...loadProviderConfigsFromFile(provider as string, basePath));
-    } else if (descriptor.kind === 'string') {
+    } else if (descriptor.kind === 'named') {
       // Keep non-file strings as-is
       results.push(provider as string);
     } else if (typeof provider === 'function') {
@@ -343,8 +344,8 @@ export async function loadApiProviders(
         if (descriptor.kind === 'file') {
           return loadProvidersFromFile(provider as string, { basePath, env });
         }
-        if (descriptor.kind === 'string') {
-          return [await loadApiProvider(descriptor.loadProviderPath!, { basePath, env })];
+        if (descriptor.kind === 'named') {
+          return [await loadApiProvider(descriptor.loadProviderPath, { basePath, env })];
         }
         if (descriptor.kind === 'function') {
           return [
@@ -356,7 +357,7 @@ export async function loadApiProviders(
         }
         if (descriptor.kind === 'options' || descriptor.kind === 'map') {
           return [
-            await loadApiProvider(descriptor.loadProviderPath!, {
+            await loadApiProvider(descriptor.loadProviderPath, {
               options: descriptor.loadOptions,
               basePath,
               env,
