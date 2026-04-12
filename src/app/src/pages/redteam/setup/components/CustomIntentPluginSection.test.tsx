@@ -338,20 +338,22 @@ describe('CustomIntentPluginSection', () => {
         await user.keyboard('{Control>}a{/Control}');
         await user.paste('New intent');
 
-        let index = 0;
-        while (index < setTimeoutSpy.mock.calls.length) {
-          const callback = setTimeoutSpy.mock.calls[index]?.[0];
-          index += 1;
-
+        const runLatestTimerCallback = async (delay: number) => {
+          const callback = setTimeoutSpy.mock.calls.findLast(
+            ([, timerDelay]) => timerDelay === delay,
+          )?.[0];
           if (typeof callback === 'function') {
             await act(async () => {
               callback();
             });
           }
-        }
+        };
+
+        await runLatestTimerCallback(50);
+        await runLatestTimerCallback(1000);
 
         await waitFor(() => {
-          expect(mockUpdatePlugins).toHaveBeenCalled();
+          expect(mockUpdatePlugins).toHaveBeenCalledTimes(1);
         });
       } finally {
         setTimeoutSpy.mockRestore();

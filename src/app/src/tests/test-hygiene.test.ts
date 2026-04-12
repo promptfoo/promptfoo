@@ -355,6 +355,28 @@ describe('test hygiene', () => {
   });
 
   it.each([
+    ['split member access', ['fireEvent', '  .click(button)'].join('\n')],
+    [
+      'multiline import',
+      [
+        'import {',
+        '  render,',
+        '  fireEvent as testingFireEvent,',
+        '  screen,',
+        '} from "@testing-library/react";',
+      ].join('\n'),
+    ],
+  ])('detects multiline fireEvent interaction source in %s', (_name, source) => {
+    const violations = findPatternViolationsInSource(
+      source,
+      'components/example.test.tsx',
+      fireEventInteractionPatterns,
+    );
+
+    expect(violations).toHaveLength(1);
+  });
+
+  it.each([
     'const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTimeAsync })',
     'await user.click(button)',
     'await user.paste("value")',
@@ -423,7 +445,7 @@ describe('test hygiene', () => {
         return [];
       }
 
-      return findLinePatternViolations(file, fireEventInteractionPatterns);
+      return findPatternViolations(file, fireEventInteractionPatterns);
     });
 
     expect(violations).toEqual([]);

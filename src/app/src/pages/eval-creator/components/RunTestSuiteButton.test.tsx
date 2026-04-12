@@ -91,8 +91,9 @@ describe('RunTestSuiteButton', () => {
     expect(button).not.toBeDisabled();
 
     // Click the button with fake timers active to control the interval
-    act(() => {
+    await act(async () => {
       button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
     });
 
     // Advance timers to trigger the polling interval (1000ms in the component)

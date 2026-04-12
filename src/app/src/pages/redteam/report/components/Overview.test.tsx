@@ -289,6 +289,7 @@ describe('Overview', () => {
 
     // Find and click the High severity card
     const highCard = getSeverityCard(Severity.High);
+    expect(highCard).toBeInTheDocument();
 
     // This should not throw an error even with null ref
     await user.click(highCard!);

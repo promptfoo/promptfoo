@@ -104,6 +104,12 @@ function createMetricsCollector(): {
   };
 }
 
+function benchmarkClick(element: HTMLElement) {
+  act(() => {
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  });
+}
+
 describe('React Compiler Performance Benchmarks', () => {
   beforeEach(() => {
     cleanup();
@@ -129,9 +135,7 @@ describe('React Compiler Performance Benchmarks', () => {
     // userEvent overhead distorting the benchmark.
     const button = screen.getByTestId('increment');
     for (let i = 0; i < 10; i++) {
-      act(() => {
-        button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      });
+      benchmarkClick(button);
     }
 
     // With React Compiler, children should NOT re-render when callbacks are stable
@@ -163,9 +167,7 @@ describe('React Compiler Performance Benchmarks', () => {
     // low-level dispatch to avoid userEvent overhead distorting the benchmark.
     const button = screen.getByTestId('increment');
     for (let i = 0; i < 5; i++) {
-      act(() => {
-        button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      });
+      benchmarkClick(button);
     }
 
     const updateDuration = metrics.totalActualDuration - initialActualDuration;

@@ -248,8 +248,6 @@ describe('StrategyStats', () => {
         'View details for prompt-injection attack method',
       );
       promptInjectionButton.focus();
-
-      promptInjectionButton.focus();
       await user.keyboard('{Enter}');
 
       // Wait for the sheet/dialog to appear
