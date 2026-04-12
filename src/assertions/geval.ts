@@ -1,4 +1,4 @@
-import { matchesGEval } from '../matchers';
+import { matchesGEval } from '../matchers/llmGrading';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';

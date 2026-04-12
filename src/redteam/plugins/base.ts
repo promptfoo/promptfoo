@@ -1,6 +1,7 @@
 import dedent from 'dedent';
+import cliState from '../../cliState';
 import logger from '../../logger';
-import { matchesLlmRubric } from '../../matchers';
+import { matchesLlmRubric } from '../../matchers/llmGrading';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -499,10 +500,24 @@ export abstract class RedteamGraderBase {
       };
     }
 
-    const grade = (await matchesLlmRubric(finalRubric, llmOutput, {
+    const defaultTest =
+      typeof cliState.config?.defaultTest === 'object'
+        ? (cliState.config.defaultTest as TestCase)
+        : undefined;
+    const hasConfiguredGradingProvider = Boolean(
+      cliState.config?.redteam?.provider || defaultTest?.options?.provider,
+    );
+    const grading = {
       ...test.options,
       provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
-    })) as GradingResult;
+    };
+    if (!hasConfiguredGradingProvider) {
+      Object.defineProperty(grading, '__promptfooPreferRemote', {
+        value: true,
+      });
+      logger.debug('[Redteam] No configured grading provider detected, preferring remote grading');
+    }
+    const grade = (await matchesLlmRubric(finalRubric, llmOutput, grading)) as GradingResult;
 
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 

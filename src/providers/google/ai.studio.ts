@@ -293,7 +293,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         } as RequestInit,
         REQUEST_TIMEOUT_MS,
         'json',
-        context?.bustCache ?? context?.debug,
+        shouldBustCache(context),
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
       return {

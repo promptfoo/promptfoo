@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesTrajectoryGoalSuccess } from '../../src/matchers';
+import { matchesTrajectoryGoalSuccess } from '../../src/matchers/llmGrading';
 
 import type { Assertion, GradingConfig } from '../../src/types/index';
 

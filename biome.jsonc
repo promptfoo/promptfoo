@@ -311,7 +311,6 @@
         "!!test/logger.test.ts",
         "!!test/matchers/closed-qa.test.ts",
         "!!test/matchers/factuality.test.ts",
-        "!!test/matchers/moderation.test.ts",
         "!!test/matchers/similarity.test.ts",
         "!!test/matchers/utils.test.ts",
         "!!test/onboarding.test.ts",
