@@ -45,7 +45,8 @@ function describeInvalidProvider(provider: unknown): string {
   }
 }
 
-// FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
+// NOTE: loadApiProvider only accepts string paths. Callers use normalizeProviderRef
+// (src/util/providerRef.ts) to classify provider shapes before calling this function.
 export async function loadApiProvider(
   providerPath: string,
   context: LoadApiProviderContext = {},
