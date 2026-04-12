@@ -61,6 +61,27 @@ describe('normalizeProviderRef', () => {
     });
   });
 
+  it('guards every ProviderOptions key against ProviderOptionsMap misclassification', () => {
+    // Each key from the ProviderOptions interface must be guarded so that
+    // objects like { transform: "..." } are not mistaken for { "transform": { ...providerOpts } }.
+    // If you add a key to ProviderOptions, add it here too.
+    const providerOptionKeys = [
+      'id',
+      'label',
+      'config',
+      'prompts',
+      'transform',
+      'delay',
+      'env',
+      'inputs',
+    ];
+    for (const key of providerOptionKeys) {
+      const obj = { [key]: { nested: true } };
+      const descriptor = normalizeProviderRef(obj);
+      expect(descriptor.kind, `key "${key}" should not produce kind 'map'`).not.toBe('map');
+    }
+  });
+
   it('uses function labels before positional custom-function fallbacks', () => {
     const labeled = Object.assign(async () => ({ output: 'ok' }), { label: 'custom-label' });
     const unlabeled = async () => ({ output: 'ok' });
