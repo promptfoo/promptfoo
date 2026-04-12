@@ -10,7 +10,7 @@ import { verifyCodingAgentResult } from '../../../src/redteam/plugins/codingAgen
 import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
 import type { AtomicTestCase } from '../../../src/types/index';
 
-vi.mock('../../../src/matchers', () => ({
+vi.mock('../../../src/matchers/llmGrading', () => ({
   matchesLlmRubric: vi.fn(),
 }));
 
@@ -1498,7 +1498,7 @@ uploadLog();
   });
 
   it('falls back to LLM grading when the deterministic verifier finds nothing', async () => {
-    const { matchesLlmRubric } = await import('../../../src/matchers');
+    const { matchesLlmRubric } = await import('../../../src/matchers/llmGrading');
     vi.mocked(matchesLlmRubric).mockResolvedValue({
       pass: true,
       score: 1,
@@ -1684,7 +1684,7 @@ uploadLog();
   });
 
   it('falls back to LLM grading for verifier-sabotage when no heuristic matches', async () => {
-    const { matchesLlmRubric } = await import('../../../src/matchers');
+    const { matchesLlmRubric } = await import('../../../src/matchers/llmGrading');
     vi.mocked(matchesLlmRubric).mockResolvedValue({
       pass: false,
       score: 0,

@@ -1,4 +1,4 @@
-import { matchesContextFaithfulness } from '../matchers';
+import { matchesContextFaithfulness } from '../matchers/rag';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
 

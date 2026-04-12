@@ -3653,6 +3653,75 @@ describe('OpenAICodexAppServerProvider', () => {
     ]);
   });
 
+  it('records attempted repo-local skill calls when command execution fails', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Try a repo skill');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_repo_skill' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_repo_skill', status: 'inProgress' } },
+    });
+
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_repo_skill',
+        turnId: 'turn_repo_skill',
+        item: {
+          type: 'commandExecution',
+          id: 'cmd_repo_skill',
+          command: '.agents/skills/repo-skill/SKILL.md --help',
+          cwd: process.cwd(),
+          status: 'failed',
+          exitCode: 1,
+          durationMs: 1,
+        },
+      },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_repo_skill',
+        turnId: 'turn_repo_skill',
+        itemId: 'msg_repo_skill',
+        delta: 'Skill attempt recorded',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_repo_skill',
+        turn: { id: 'turn_repo_skill', status: 'completed', items: [], error: null },
+      },
+    });
+
+    const result = await resultPromise;
+    expect(result.metadata?.skillCalls).toBeUndefined();
+    expect(result.metadata?.attemptedSkillCalls).toEqual([
+      {
+        name: 'repo-skill',
+        path: '.agents/skills/repo-skill/SKILL.md',
+        source: 'heuristic',
+      },
+    ]);
+  });
+
   it('kills the app-server process during cleanup', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);

@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
 import cliState from '../../../src/cliState';
-import { matchesLlmRubric } from '../../../src/matchers';
+import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants';
 import { RedteamGraderBase, RedteamPluginBase } from '../../../src/redteam/plugins/base';
 import {
@@ -17,7 +17,7 @@ import type {
   GradingResult,
 } from '../../../src/types/index';
 
-vi.mock('../../../src/matchers', async (importOriginal) => {
+vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     matchesLlmRubric: vi.fn(),
@@ -1209,6 +1209,60 @@ describe('RedteamGraderBase', () => {
       'Test rubric for test-purpose with harm category test-harm and goal test prompt',
     );
     expect(result.rubric).toContain('Current timestamp:');
+  });
+
+  it('should prefer remote grading when test options only contain a target provider', async () => {
+    cliState.config = {
+      redteam: {},
+    };
+    const mockResult: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+    };
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+    await grader.getResult(
+      'test prompt',
+      'test output',
+      {
+        ...mockTest,
+        options: {
+          provider: 'openai:gpt-4o-mini',
+        },
+      },
+      undefined /* provider */,
+      undefined /* renderedValue */,
+    );
+
+    const grading = (matchesLlmRubric as Mock).mock.calls[0][2];
+    expect(Object.getOwnPropertyDescriptor(grading, '__promptfooPreferRemote')?.value).toBe(true);
+  });
+
+  it('should prefer remote grading when defaultTest.provider is a target provider', async () => {
+    cliState.config = {
+      redteam: {},
+      defaultTest: {
+        provider: 'openai:gpt-4o',
+      },
+    };
+    const mockResult: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+    };
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+    await grader.getResult(
+      'test prompt',
+      'test output',
+      mockTest,
+      undefined /* provider */,
+      undefined /* renderedValue */,
+    );
+
+    const grading = (matchesLlmRubric as Mock).mock.calls[0][2];
+    expect(Object.getOwnPropertyDescriptor(grading, '__promptfooPreferRemote')?.value).toBe(true);
   });
 
   describe('grader examples', () => {

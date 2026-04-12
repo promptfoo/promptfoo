@@ -162,7 +162,6 @@ const legacyDirectProcessEnvMutationFiles = new Set([
   'logger.test.ts',
   'matchers/closed-qa.test.ts',
   'matchers/factuality.test.ts',
-  'matchers/moderation.test.ts',
   'matchers/similarity.test.ts',
   'matchers/utils.test.ts',
   'onboarding.test.ts',

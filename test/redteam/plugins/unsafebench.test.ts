@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
 import logger from '../../../src/logger';
-import { matchesLlmRubric } from '../../../src/matchers';
+import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import {
   UnsafeBenchGrader,
   UnsafeBenchPlugin,
@@ -17,7 +17,7 @@ vi.mock('../../../src/logger', () => ({
     error: vi.fn(),
   },
 }));
-vi.mock('../../../src/matchers', async (importOriginal) => {
+vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     matchesLlmRubric: vi.fn(),

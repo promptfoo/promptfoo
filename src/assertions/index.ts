@@ -8,19 +8,17 @@ import { getEnvInt } from '../envars';
 import { handleConversationRelevance } from '../external/assertions/deepeval';
 import { matchesConversationRelevance } from '../external/matchers/deepeval';
 import logger from '../logger';
+import { matchesClassification } from '../matchers/classification';
+import { matchesSelectBest } from '../matchers/comparison';
+import { matchesClosedQa, matchesFactuality, matchesLlmRubric } from '../matchers/llmGrading';
+import { matchesModeration } from '../matchers/moderation';
 import {
   matchesAnswerRelevance,
-  matchesClassification,
-  matchesClosedQa,
   matchesContextFaithfulness,
   matchesContextRecall,
   matchesContextRelevance,
-  matchesFactuality,
-  matchesLlmRubric,
-  matchesModeration,
-  matchesSelectBest,
-  matchesSimilarity,
-} from '../matchers';
+} from '../matchers/rag';
+import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
