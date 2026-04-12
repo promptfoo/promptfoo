@@ -116,8 +116,8 @@ export async function loadApiProvider(
       basePath,
     );
     const fileContent = configs[0];
+    invariant(fileContent, `Provider config file ${relativePath} contains no providers`);
 
-    // If fileContent is an array, it contains multiple providers
     if (wasArray) {
       // This is handled by loadApiProviders, so we'll throw an error here
       throw new Error(
