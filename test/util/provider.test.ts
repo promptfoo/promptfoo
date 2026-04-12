@@ -65,6 +65,18 @@ describe('normalizeProviderRef', () => {
     });
   });
 
+  it('requires ProviderOptionsMap refs to use a single provider id key', () => {
+    expect(
+      normalizeProviderRef({
+        'openai:gpt-4': { config: { temperature: 0.2 } },
+        'anthropic:messages:claude-sonnet-4-5': { config: { temperature: 0.1 } },
+      }),
+    ).toMatchObject({
+      kind: 'unknown',
+      id: 'unknown',
+    });
+  });
+
   it('guards every ProviderOptions key against ProviderOptionsMap misclassification', () => {
     // Each key from the ProviderOptions interface must be guarded so that
     // objects like { transform: "..." } are not mistaken for { "transform": { ...providerOpts } }.
@@ -150,6 +162,10 @@ describe('normalizeProviderRef', () => {
     expect(normalizeProviderRef(undefined)).toMatchObject({ kind: 'unknown', id: 'unknown' });
     expect(normalizeProviderRef(42)).toMatchObject({ kind: 'unknown', id: 'unknown' });
     expect(normalizeProviderRef([])).toMatchObject({ kind: 'unknown', id: 'unknown' });
+    expect(normalizeProviderRef([{ id: 'openai:gpt-4' }])).toMatchObject({
+      kind: 'unknown',
+      id: 'unknown',
+    });
   });
 });
 

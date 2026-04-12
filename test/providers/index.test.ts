@@ -1676,6 +1676,24 @@ describe('getProviderIds', () => {
     );
   });
 
+  it('does not treat multi-key objects as ProviderOptionsMap objects', () => {
+    expect(() =>
+      getProviderIds([
+        {
+          'openai:gpt-4o-mini': { config: { temperature: 0.5 } },
+          'anthropic:messages:claude-3-5-sonnet-20241022': { config: { temperature: 0.4 } },
+        } as any,
+      ]),
+    ).toThrow('Invalid provider at index 0');
+  });
+
+  it('formats invalid provider errors for circular objects', () => {
+    const provider: any = { config: { temperature: 0.5 } };
+    provider.self = provider;
+
+    expect(() => getProviderIds([provider])).toThrow('Invalid provider at index 0');
+  });
+
   it('does not treat file:// paths without yaml/yml/json extension as file references', () => {
     const providerIds = getProviderIds('file://path/to/provider.js');
     expect(providerIds).toEqual(['file://path/to/provider.js']);

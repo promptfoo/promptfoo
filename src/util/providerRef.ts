@@ -203,7 +203,7 @@ export function normalizeProviderRef(
     };
   }
 
-  if (typeof provider === 'object' && provider !== null) {
+  if (typeof provider === 'object' && provider !== null && !Array.isArray(provider)) {
     const providerId = (provider as ProviderOptions).id;
     const label = getProviderLabel(provider);
     if (isValidProviderId(providerId)) {
@@ -217,15 +217,14 @@ export function normalizeProviderRef(
     }
 
     const keys = Object.keys(provider);
-    if (keys.length > 0) {
+    if (keys.length === 1 && !PROVIDER_OPTION_KEYS.has(keys[0])) {
       const originalId = keys[0];
       const providerObject = (provider as ProviderOptionsMap)[originalId];
       if (
         typeof providerObject === 'object' &&
         providerObject !== null &&
         !Array.isArray(providerObject) &&
-        isValidProviderId(originalId) &&
-        !PROVIDER_OPTION_KEYS.has(originalId)
+        isValidProviderId(originalId)
       ) {
         const id = isValidProviderId(providerObject.id) ? providerObject.id : originalId;
         return {

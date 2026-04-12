@@ -9,6 +9,7 @@ import {
   validateLinkedTargetId,
 } from '../util/cloud';
 import invariant from '../util/invariant';
+import { safeJsonStringify } from '../util/json';
 import {
   isProviderConfigFileReference,
   loadProviderConfigsFromFile,
@@ -26,6 +27,10 @@ import type {
   ProviderOptions,
   ProviderOptionsMap,
 } from '../types/providers';
+
+function describeInvalidProvider(provider: unknown): string {
+  return (safeJsonStringify(provider) ?? Object.prototype.toString.call(provider)).slice(0, 200);
+}
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
@@ -366,7 +371,7 @@ export async function loadApiProviders(
           ];
         }
         throw new Error(
-          `Invalid provider at index ${idx}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap (e.g. { "openai:chat:gpt-4": { config: ... } }). Got: ${JSON.stringify(provider).slice(0, 200)}`,
+          `Invalid provider at index ${idx}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap (e.g. { "openai:chat:gpt-4": { config: ... } }). Got: ${describeInvalidProvider(provider)}`,
         );
       }),
     );
@@ -409,7 +414,7 @@ export function getProviderIds(providerPaths: TestSuiteConfig['providers']): str
       }
       if (descriptor.kind === 'unknown') {
         throw new Error(
-          `Invalid provider at index ${idx}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap. Got: ${JSON.stringify(provider).slice(0, 200)}`,
+          `Invalid provider at index ${idx}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap. Got: ${describeInvalidProvider(provider)}`,
         );
       }
       return descriptor.id;
