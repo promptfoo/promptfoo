@@ -99,6 +99,10 @@ function applyFreshRubyCallApiMetadata(apiType: RubyApiType, result: any) {
   logger.debug(`RubyProvider explicitly setting cached=false for fresh result`);
   result.cached = false;
 
+  // Unlike Python's applyFreshCallApiMetadata, Ruby does not backfill
+  // tokenUsage.numRequests on fresh results. This preserves the historical
+  // fresh-result shape that Ruby scripts and downstream consumers already
+  // depend on — changing it would break backward compatibility.
   return result;
 }
 
