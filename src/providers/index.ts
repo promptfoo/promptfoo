@@ -118,8 +118,8 @@ export async function loadApiProvider(
     const fileContent = configs[0];
     invariant(fileContent, `Provider config file ${relativePath} contains no providers`);
 
+    // Multi-provider files must go through loadApiProviders
     if (wasArray) {
-      // This is handled by loadApiProviders, so we'll throw an error here
       throw new Error(
         `Multiple providers found in ${relativePath}. Use loadApiProviders instead of loadApiProvider.`,
       );
@@ -279,7 +279,8 @@ export function resolveProviderConfigs(
       // Keep functions as-is
       results.push(provider);
     } else {
-      // Keep ProviderOptions and ProviderOptionsMap as-is
+      // Keep ProviderOptions, ProviderOptionsMap, and unrecognized objects as-is
+      // for downstream validation by loadApiProviders
       results.push(provider);
     }
   }

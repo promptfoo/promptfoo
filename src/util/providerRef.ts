@@ -70,6 +70,7 @@ export interface ProviderConfigFile {
   wasArray: boolean;
 }
 
+/** Returns true if the value is a non-empty string suitable as a provider identifier. */
 export function isValidProviderId(id: unknown): id is string {
   return id !== null && id !== undefined && typeof id === 'string' && id !== '';
 }
@@ -86,6 +87,10 @@ function getProviderLabel(provider: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * Resolves relative file paths in provider IDs to absolute paths for consistent matching.
+ * Handles file://, exec:, python:, golang: prefixes and bare .js/.ts/.mjs paths.
+ */
 export function canonicalizeProviderId(id: string): string {
   if (id.startsWith('file://')) {
     const filePath = id.slice('file://'.length);
@@ -127,6 +132,8 @@ export function isProviderConfigFileReference(providerPath: string): boolean {
 
 /**
  * Reads a provider config file and normalizes single-provider and multi-provider files.
+ * Returns a `wasArray` flag so callers can detect multi-provider files that require
+ * `loadApiProviders` instead of `loadApiProvider`.
  */
 export function readProviderConfigFile(
   providerPath: string,
@@ -162,8 +169,8 @@ export function loadProviderConfigsFromFile(
 }
 
 /**
- * Converts every supported provider reference shape into one descriptor used by
- * provider loading, filtering, and id extraction.
+ * Pure, synchronous classifier that converts every supported provider reference shape
+ * into a discriminated descriptor. Does not read files or instantiate providers.
  */
 export function normalizeProviderRef(
   provider: unknown,
