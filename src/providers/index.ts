@@ -196,12 +196,12 @@ interface LoadApiProviderOptions {
 }
 
 /**
- * Helper function to resolve provider from various formats (string, object, function)
- * Uses providerMap for optimization and falls back to loadApiProvider with proper context
+ * Helper function to resolve provider from various formats (string, object, function).
+ * Checks the resolved provider cache first and falls back to loadApiProvider for uncached providers.
  */
 export async function resolveProvider(
   provider: any,
-  providerMap: Record<string, ApiProvider>,
+  resolvedProviders: Record<string, ApiProvider>,
   context: { env?: any; basePath?: string } = {},
 ): Promise<ApiProvider> {
   // Guard clause for null or undefined provider values
@@ -210,9 +210,8 @@ export async function resolveProvider(
   }
 
   if (typeof provider === 'string') {
-    // Check providerMap first for optimization, then fall back to loadApiProvider with context
-    if (providerMap[provider]) {
-      return providerMap[provider];
+    if (resolvedProviders[provider]) {
+      return resolvedProviders[provider];
     }
     const loadOptions: LoadApiProviderOptions = {};
     if (context.env) {
