@@ -37,6 +37,7 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
+import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import {
   ReplicateImageProvider,
@@ -970,7 +971,7 @@ describe('loadApiProvider', () => {
   it('loadApiProviders uses ProviderOptionsMap keys for loading and nested ids for labels', async () => {
     const providers = await loadApiProviders([
       {
-        'openai:chat:gpt-4': {
+        'openai:responses:gpt-5.4': {
           id: 'custom-openai',
           label: 'Custom OpenAI',
           config: { apiKey: 'test-key' },
@@ -979,7 +980,7 @@ describe('loadApiProvider', () => {
     ]);
 
     expect(providers).toHaveLength(1);
-    expect(providers[0]).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(providers[0]).toBeInstanceOf(OpenAiResponsesProvider);
     expect(providers[0].id()).toBe('custom-openai');
     expect(providers[0].label).toBe('Custom OpenAI');
   });

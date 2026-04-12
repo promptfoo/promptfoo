@@ -226,7 +226,7 @@ export async function resolveProvider(
     const descriptor = normalizeProviderRef(provider);
     invariant(
       descriptor.kind === 'options' || descriptor.kind === 'map',
-      `Provider object must have an 'id' field or be a ProviderOptionsMap (e.g. { "openai:chat:gpt-4": { config: ... } }). Got: ${describeInvalidProvider(provider)}`,
+      `Provider object must have an 'id' field or be a ProviderOptionsMap (e.g. { "openai:responses:gpt-5.4": { config: ... } }). Got: ${describeInvalidProvider(provider)}`,
     );
     const loadOptions: LoadApiProviderOptions = { options: descriptor.loadOptions };
     if (context.env) {
@@ -378,7 +378,7 @@ export async function loadApiProviders(
             ];
           case 'unknown':
             throw new Error(
-              `Invalid provider at index ${idx}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap (e.g. { "openai:chat:gpt-4": { config: ... } }). Got: ${describeInvalidProvider(provider)}`,
+              `Invalid provider at index ${idx}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap (e.g. { "openai:responses:gpt-5.4": { config: ... } }). Got: ${describeInvalidProvider(provider)}`,
             );
           default: {
             const _exhaustive: never = descriptor;

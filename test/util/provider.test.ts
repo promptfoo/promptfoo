@@ -30,7 +30,7 @@ describe('normalizeProviderRef', () => {
 
   it('normalizes ProviderOptionsMap refs with explicit id overrides', () => {
     const descriptor = normalizeProviderRef({
-      'openai:chat:gpt-4': {
+      'openai:responses:gpt-5.4': {
         id: 'custom-openai',
         label: 'Fast OpenAI',
         config: { temperature: 0.2 },
@@ -41,7 +41,7 @@ describe('normalizeProviderRef', () => {
       kind: 'map',
       id: 'custom-openai',
       label: 'Fast OpenAI',
-      loadProviderPath: 'openai:chat:gpt-4',
+      loadProviderPath: 'openai:responses:gpt-5.4',
       loadOptions: {
         id: 'custom-openai',
         label: 'Fast OpenAI',
@@ -122,10 +122,10 @@ describe('normalizeProviderRef', () => {
   });
 
   it('classifies string providers as named vs file based on extension', () => {
-    expect(normalizeProviderRef('openai:chat:gpt-4')).toMatchObject({
+    expect(normalizeProviderRef('openai:responses:gpt-5.4')).toMatchObject({
       kind: 'named',
-      id: 'openai:chat:gpt-4',
-      loadProviderPath: 'openai:chat:gpt-4',
+      id: 'openai:responses:gpt-5.4',
+      loadProviderPath: 'openai:responses:gpt-5.4',
     });
     expect(normalizeProviderRef('file://providers.yaml')).toMatchObject({
       kind: 'file',
@@ -141,17 +141,17 @@ describe('normalizeProviderRef', () => {
 
   it('normalizes ProviderOptionsMap without nested id override (key becomes id)', () => {
     const descriptor = normalizeProviderRef({
-      'openai:chat:gpt-4': {
+      'openai:responses:gpt-5.4': {
         config: { temperature: 0.2 },
       },
     });
 
     expect(descriptor).toMatchObject({
       kind: 'map',
-      id: 'openai:chat:gpt-4',
-      loadProviderPath: 'openai:chat:gpt-4',
+      id: 'openai:responses:gpt-5.4',
+      loadProviderPath: 'openai:responses:gpt-5.4',
       loadOptions: {
-        id: 'openai:chat:gpt-4',
+        id: 'openai:responses:gpt-5.4',
         config: { temperature: 0.2 },
       },
     });
@@ -228,7 +228,7 @@ describe('canonicalizeProviderId', () => {
   });
 
   it('passes through plain provider IDs unchanged', () => {
-    expect(canonicalizeProviderId('openai:chat:gpt-4')).toBe('openai:chat:gpt-4');
+    expect(canonicalizeProviderId('openai:responses:gpt-5.4')).toBe('openai:responses:gpt-5.4');
     expect(canonicalizeProviderId('echo')).toBe('echo');
   });
 });
