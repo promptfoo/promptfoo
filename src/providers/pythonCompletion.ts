@@ -117,6 +117,11 @@ function applyFreshCallApiMetadata(apiType: PythonApiType, result: any) {
 }
 
 function hasPythonResultError(result: any): boolean {
+  // Must stay consistent with validateCallApiResult's own-property check:
+  // loosening this to `'error' in result` without also loosening validation
+  // would let a script return an error on the prototype chain, pass validation
+  // via an own `output`, and then be cached as a successful result — a
+  // cache-poisoning vector.
   return (
     hasPythonResultProperty(result, 'error') &&
     result.error !== null &&

@@ -107,6 +107,11 @@ function applyFreshRubyCallApiMetadata(apiType: RubyApiType, result: any) {
 }
 
 function hasRubyResultError(result: any): boolean {
+  // Must stay consistent with validateRubyCallApiResult's own-property check:
+  // loosening this to `'error' in result` without also loosening validation
+  // would let a script return an error on the prototype chain, pass validation
+  // via an own `output`, and then be cached as a successful result — a
+  // cache-poisoning vector.
   return (
     hasRubyResultProperty(result, 'error') &&
     result.error !== null &&
