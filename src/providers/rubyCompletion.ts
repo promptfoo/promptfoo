@@ -37,10 +37,19 @@ function sanitizeRubyContext(
 
   // Remove properties not useful in Ruby and non-serializable objects.
   // These can contain circular references (e.g., Timeout objects) that break JSON serialization.
-  delete sanitizedContext.getCache;
-  delete sanitizedContext.logger;
-  delete sanitizedContext.filters; // NunjucksFilterMap contains functions
-  delete sanitizedContext.originalProvider; // ApiProvider object with methods
+  const stripped: string[] = [];
+  for (const key of ['getCache', 'logger', 'filters', 'originalProvider'] as const) {
+    if (key in sanitizedContext) {
+      stripped.push(key);
+      delete sanitizedContext[key];
+    }
+  }
+
+  if (stripped.length > 0) {
+    logger.debug(
+      `RubyProvider sanitized context: stripped non-serializable keys [${stripped.join(', ')}]`,
+    );
+  }
 
   return sanitizedContext;
 }
