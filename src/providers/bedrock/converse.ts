@@ -293,15 +293,13 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
  * Supports OpenAI tool choice format and native Bedrock format.
  */
 function isNamedConverseToolChoice(toolChoice: unknown): toolChoice is { tool: { name: string } } {
-  if (toolChoice === null || typeof toolChoice !== 'object' || !('tool' in toolChoice)) {
+  if (!toolChoice || typeof toolChoice !== 'object' || !('tool' in toolChoice)) {
     return false;
   }
 
   const tool = (toolChoice as { tool?: unknown }).tool;
-  return (
-    typeof tool === 'object' &&
-    tool !== null &&
-    typeof (tool as { name?: unknown }).name === 'string'
+  return Boolean(
+    tool && typeof tool === 'object' && typeof (tool as { name?: unknown }).name === 'string',
   );
 }
 
