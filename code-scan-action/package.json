@@ -27,10 +27,10 @@
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "^24.12.0",
-    "esbuild": "^0.27.4",
+    "esbuild": "^0.28.0",
     "typescript": "^6.0.2"
   },
   "overrides": {
-    "undici": "^7.22.0"
+    "undici": "^7.24.5"
   }
 }

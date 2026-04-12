@@ -7,6 +7,7 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 
 import type {
   ApiProvider,
@@ -116,6 +117,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     const totalTokenUsage = createEmptyTokenUsage();
 
     // Call the target provider with the injected attack
+    throwIfTargetPromptExceedsMaxChars(renderedAttackerPrompt);
     const targetResponse = await targetProvider.callApi(renderedAttackerPrompt, context, options);
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 

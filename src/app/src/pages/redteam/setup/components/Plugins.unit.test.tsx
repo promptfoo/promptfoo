@@ -8,7 +8,6 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Plugins from './Plugins';
-import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
@@ -54,6 +53,48 @@ vi.mock('./PluginConfigDialog', () => ({
   default: () => <div data-testid="plugin-config-dialog"></div>,
 }));
 
+vi.mock('./TestCaseDialog', () => ({
+  TestCaseDialog: () => <div data-testid="test-case-dialog" />,
+  TestCaseGenerateButton: ({
+    children,
+    isGenerating: _isGenerating,
+    tooltipTitle: _tooltipTitle,
+    ...props
+  }: React.ComponentProps<'button'> & {
+    isGenerating?: boolean;
+    tooltipTitle?: string;
+  }) => (
+    <button type="button" {...props}>
+      {children ?? 'Generate test case'}
+    </button>
+  ),
+}));
+
+vi.mock('./PluginsTab', async () => {
+  const { DEFAULT_PLUGINS, MINIMAL_TEST_PLUGINS, RAG_PLUGINS } = await import(
+    '@promptfoo/redteam/constants'
+  );
+
+  return {
+    default: ({ setSelectedPlugins }: { setSelectedPlugins: (plugins: Set<string>) => void }) => (
+      <div>
+        <button type="button" onClick={() => setSelectedPlugins(new Set(DEFAULT_PLUGINS))}>
+          Recommended
+        </button>
+        <button type="button" onClick={() => setSelectedPlugins(new Set(MINIMAL_TEST_PLUGINS))}>
+          Minimal Test
+        </button>
+        <button type="button" onClick={() => setSelectedPlugins(new Set(RAG_PLUGINS))}>
+          RAG
+        </button>
+        <button type="button" onClick={() => setSelectedPlugins(new Set())}>
+          Select none
+        </button>
+      </div>
+    ),
+  };
+});
+
 vi.mock('react-error-boundary', () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -62,15 +103,10 @@ const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
 const mockUseRecentlyUsedPlugins = useRecentlyUsedPlugins as unknown as Mock;
 
 const renderWithProviders = (ui: React.ReactNode) => {
-  const redTeamConfig = mockUseRedTeamConfig();
   return render(
     <MemoryRouter>
       <TooltipProvider>
-        <ToastProvider>
-          <TestCaseGenerationProvider redTeamConfig={redTeamConfig}>
-            {ui}
-          </TestCaseGenerationProvider>
-        </ToastProvider>
+        <ToastProvider>{ui}</ToastProvider>
       </TooltipProvider>
     </MemoryRouter>,
   );
@@ -200,15 +236,7 @@ describe('Plugins - State Management Unit Tests', () => {
         <MemoryRouter>
           <TooltipProvider>
             <ToastProvider>
-              <TestCaseGenerationProvider
-                redTeamConfig={
-                  {
-                    plugins: ['harmful:hate', 'bola'],
-                  } as any
-                }
-              >
-                <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-              </TestCaseGenerationProvider>
+              <Plugins onNext={mockOnNext} onBack={mockOnBack} />
             </ToastProvider>
           </TooltipProvider>
         </MemoryRouter>,
@@ -706,20 +734,7 @@ describe('Plugins - State Management Unit Tests', () => {
         <MemoryRouter>
           <TooltipProvider>
             <ToastProvider>
-              <TestCaseGenerationProvider
-                redTeamConfig={
-                  {
-                    plugins: [
-                      {
-                        id: 'indirect-prompt-injection',
-                        config: { systemPrompt: 'new prompt' },
-                      },
-                    ],
-                  } as any
-                }
-              >
-                <Plugins onNext={mockOnNext} onBack={mockOnBack} />
-              </TestCaseGenerationProvider>
+              <Plugins onNext={mockOnNext} onBack={mockOnBack} />
             </ToastProvider>
           </TooltipProvider>
         </MemoryRouter>,

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearProfilerMetrics,
   getAllProfilerSummaries,
@@ -8,10 +8,16 @@ import {
 } from './performanceProfiler';
 
 describe('performanceProfiler', () => {
+  let consoleDebugSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     // Clear metrics before each test
     clearProfilerMetrics();
-    vi.clearAllMocks();
+    consoleDebugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleDebugSpy.mockRestore();
   });
 
   describe('onRenderCallback', () => {
@@ -50,27 +56,19 @@ describe('performanceProfiler', () => {
     });
 
     it('logs significant renders to console.debug', () => {
-      const consoleDebugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
-
       // Significant render (> 1ms)
       onRenderCallback('SlowComponent', 'mount', 5.5, 4.0, 100, 105);
 
       expect(consoleDebugSpy).toHaveBeenCalledWith(
         expect.stringContaining('[Profiler] SlowComponent mount: 5.50ms'),
       );
-
-      consoleDebugSpy.mockRestore();
     });
 
     it('does not log insignificant renders', () => {
-      const consoleDebugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
-
       // Insignificant render (<= 1ms)
       onRenderCallback('FastComponent', 'mount', 0.5, 0.4, 100, 100.5);
 
       expect(consoleDebugSpy).not.toHaveBeenCalled();
-
-      consoleDebugSpy.mockRestore();
     });
 
     it('handles nested-update phase', () => {

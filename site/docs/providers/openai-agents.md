@@ -76,6 +76,42 @@ providers:
 
 Top-level `tools`, `handoffs`, `inputGuardrails`, and `outputGuardrails` augment whatever is already defined on the loaded agent.
 
+## Multimodal Input
+
+If a rendered prompt is a JSON object or array that matches the SDK's `AgentInputItem` shape, Promptfoo passes it to `run()` as structured input instead of a plain string. This supports image, audio, and file inputs:
+
+```yaml
+prompts:
+  - file://./prompts/vision-input.json
+
+providers:
+  - id: openai:agents:vision-agent
+    config:
+      agent: file://./agents/vision-agent.ts
+
+tests:
+  - vars:
+      image: file://./images/cat.jpg
+```
+
+Example prompt file (`prompts/vision-input.json`):
+
+```json
+[
+  {
+    "role": "user",
+    "content": [
+      { "type": "input_text", "text": "What is in this image?" },
+      { "type": "input_image", "image": "{{image}}" }
+    ]
+  }
+]
+```
+
+Promptfoo resolves local image vars like `file://./images/cat.jpg` to data URLs before the prompt is passed to the SDK.
+
+Arbitrary JSON prompts that do not match an agent input item are still sent as plain text.
+
 **Example agent file (`agents/support-agent.ts`):**
 
 ```typescript

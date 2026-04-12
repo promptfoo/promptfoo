@@ -62,6 +62,14 @@ describe('loadFromPackage', () => {
     expect(importModule).toHaveBeenCalledWith(mockPackagePath);
   });
 
+  it('should distinguish missing exports from falsy exported values', async () => {
+    const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
+    vi.mocked(resolvePackageEntryPoint).mockReturnValue(mockPackagePath);
+    vi.mocked(importModule).mockResolvedValue({ getVariable: false });
+
+    await expect(loadFromPackage(mockProviderPath, mockBasePath)).resolves.toBe(false);
+  });
+
   it('should throw an error for invalid provider format', async () => {
     await expect(loadFromPackage('invalid:format', mockBasePath)).rejects.toThrow(
       'Invalid package format: invalid:format. Expected format: package:packageName:exportedClassOrFunction',
@@ -148,6 +156,16 @@ describe('parsePackageProvider', () => {
 
     await expect(parsePackageProvider(mockProviderPath, mockBasePath, mockOptions)).rejects.toThrow(
       `Package not found: ${mockPackageName}. Make sure it's installed in ${mockBasePath}`,
+    );
+  });
+
+  it('should throw a clear error if provider export is not constructable', async () => {
+    const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
+    vi.mocked(resolvePackageEntryPoint).mockReturnValue(mockPackagePath);
+    vi.mocked(importModule).mockResolvedValue({ Provider: false });
+
+    await expect(parsePackageProvider(mockProviderPath, mockBasePath, mockOptions)).rejects.toThrow(
+      `Provider malformed: ${mockProviderPath} must export a provider constructor. Received: boolean`,
     );
   });
 

@@ -69,17 +69,6 @@ function CountdownTimer(): React.ReactElement {
 export default function BSidesSF2026(): React.ReactElement {
   useForcedTheme('dark');
 
-  const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
-    e.preventDefault();
-    const element = document.querySelector(targetId);
-    if (element) {
-      const offset = 80;
-      const elementPosition = element.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + window.pageYOffset - offset;
-      window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
-    }
-  };
-
   return (
     <Layout
       title="Promptfoo at BSides SF 2026"

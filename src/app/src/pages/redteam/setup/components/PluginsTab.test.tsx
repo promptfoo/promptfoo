@@ -6,7 +6,7 @@
  * ```
  */
 
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { ToastProvider } from '@app/contexts/ToastContext';
@@ -27,6 +27,7 @@ import {
   OWASP_API_TOP_10_MAPPING,
   OWASP_LLM_RED_TEAM_MAPPING,
   OWASP_LLM_TOP_10_MAPPING,
+  type Plugin,
   RAG_PLUGINS,
   riskCategories,
 } from '@promptfoo/redteam/constants';
@@ -35,10 +36,12 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import Plugins from './Plugins';
+import PluginsTab from './PluginsTab';
 import { DOMAIN_SPECIFIC_PLUGINS } from './verticalSuites';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
+
+import type { LocalPluginConfig } from '../types';
 
 // ===================================================================
 // Mocks
@@ -77,6 +80,56 @@ vi.mock('@app/hooks/useCloudConfig', () => ({
   })),
 }));
 
+vi.mock('@app/components/ui/badge', () => ({
+  Badge: ({ children, ...props }: React.HTMLAttributes<HTMLSpanElement>) => (
+    <span {...props}>{children}</span>
+  ),
+}));
+
+vi.mock('@app/components/ui/button', () => ({
+  Button: ({
+    children,
+    size: _size,
+    variant: _variant,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    size?: string;
+    variant?: string;
+  }) => <button {...props}>{children}</button>,
+}));
+
+vi.mock('@app/components/ui/checkbox', () => ({
+  Checkbox: ({
+    checked = false,
+    disabled,
+    onCheckedChange,
+    ...props
+  }: Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> & {
+    onCheckedChange?: (checked: boolean) => void;
+  }) => (
+    <input
+      {...props}
+      type="checkbox"
+      checked={checked}
+      disabled={disabled}
+      onChange={() => onCheckedChange?.(!checked)}
+    />
+  ),
+}));
+
+vi.mock('@app/components/ui/input', () => ({
+  Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
+}));
+
+vi.mock('@app/components/ui/tooltip', () => ({
+  TooltipProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipTrigger: ({ children }: { children: React.ReactNode; asChild?: boolean }) => (
+    <>{children}</>
+  ),
+}));
+
 // Mock TestCaseGenerationProvider for PluginsTab isolated tests
 vi.mock('./TestCaseGenerationProvider', () => ({
   useTestCaseGeneration: () => ({
@@ -93,6 +146,43 @@ vi.mock('./PluginConfigDialog', () => ({
   default: () => <div data-testid="plugin-config-dialog" />,
 }));
 
+vi.mock('./PresetCard', () => ({
+  default: ({
+    name,
+    onClick,
+  }: {
+    name: string;
+    description: string;
+    isSelected: boolean;
+    onClick: () => void;
+  }) => (
+    <button
+      type="button"
+      data-testid={`preset-card-${name.toLowerCase().replace(/\s+/g, '-')}`}
+      onClick={onClick}
+    >
+      {name}
+    </button>
+  ),
+}));
+
+vi.mock('./TestCaseDialog', () => ({
+  TestCaseDialog: () => <div data-testid="test-case-dialog" />,
+  TestCaseGenerateButton: ({
+    children,
+    isGenerating: _isGenerating,
+    tooltipTitle: _tooltipTitle,
+    ...props
+  }: React.ComponentProps<'button'> & {
+    isGenerating?: boolean;
+    tooltipTitle?: string;
+  }) => (
+    <button type="button" {...props}>
+      {children ?? 'Generate test case'}
+    </button>
+  ),
+}));
+
 vi.mock('react-error-boundary', () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -106,20 +196,140 @@ vi.mock('./CustomPoliciesTab', () => ({
   default: () => <div data-testid="custom-policies-tab" />,
 }));
 
+vi.mock('./VerticalSuiteCard', () => ({
+  default: ({ suite }: { suite: { id: string; name: string } }) => (
+    <div data-testid={`vertical-suite-${suite.id}`}>{suite.name}</div>
+  ),
+}));
+
 // ===================================================================
 // Test Helpers
 // ===================================================================
 
 /**
- * Renders the actual Plugins component which connects to the real Zustand store.
- * This tests the full integration path: store -> Plugins -> PluginsTab -> store update.
+ * Renders PluginsTab against a tiny parent harness backed by the real Zustand stores.
+ * This keeps the store integration path under test without mounting the full Plugins wizard.
  */
+function PluginsTabHarness() {
+  const { config, updatePlugins } = useRedTeamConfig();
+  const { plugins: recentlyUsedPlugins, addPlugin } = useRecentlyUsedPlugins();
+
+  const selectedPlugins = useMemo(
+    () =>
+      new Set(
+        config.plugins
+          .map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id))
+          .filter((id) => id !== 'policy' && id !== 'intent') as Plugin[],
+      ),
+    [config.plugins],
+  );
+
+  const pluginConfig = useMemo<LocalPluginConfig>(
+    () =>
+      config.plugins.reduce<LocalPluginConfig>((configs, plugin) => {
+        if (typeof plugin === 'object' && plugin.config) {
+          if (plugin.id !== 'intent' && plugin.id !== 'policy') {
+            configs[plugin.id] = plugin.config;
+          }
+        }
+        return configs;
+      }, {}),
+    [config.plugins],
+  );
+
+  const handlePluginToggle = useCallback(
+    (plugin: Plugin) => {
+      const policyPlugins = config.plugins.filter(
+        (item) => typeof item === 'object' && item.id === 'policy',
+      );
+      const intentPlugins = config.plugins.filter(
+        (item) => typeof item === 'object' && item.id === 'intent',
+      );
+      const regularPlugins = config.plugins.filter((item) => {
+        const id = typeof item === 'string' ? item : item.id;
+        return id !== 'policy' && id !== 'intent';
+      });
+
+      if (selectedPlugins.has(plugin)) {
+        updatePlugins([
+          ...regularPlugins.filter((item) => {
+            const id = typeof item === 'string' ? item : item.id;
+            return id !== plugin;
+          }),
+          ...policyPlugins,
+          ...intentPlugins,
+        ]);
+        return;
+      }
+
+      addPlugin(plugin);
+      updatePlugins([...regularPlugins, plugin, ...policyPlugins, ...intentPlugins]);
+    },
+    [addPlugin, config.plugins, selectedPlugins, updatePlugins],
+  );
+
+  const setSelectedPlugins = useCallback(
+    (newSelectedPlugins: Set<Plugin>) => {
+      const policyPlugins = config.plugins.filter(
+        (item) => typeof item === 'object' && item.id === 'policy',
+      );
+      const intentPlugins = config.plugins.filter(
+        (item) => typeof item === 'object' && item.id === 'intent',
+      );
+
+      const nextPlugins = Array.from(newSelectedPlugins).map((plugin) => {
+        const existing = config.plugins.find(
+          (item) => (typeof item === 'string' ? item : item.id) === plugin,
+        );
+        if (existing && typeof existing === 'object' && existing.config) {
+          return existing;
+        }
+        return plugin;
+      });
+
+      updatePlugins([...nextPlugins, ...policyPlugins, ...intentPlugins]);
+    },
+    [config.plugins, updatePlugins],
+  );
+
+  const updatePluginConfig = useCallback(
+    (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => {
+      updatePlugins(
+        config.plugins.map((item) => {
+          const id = typeof item === 'string' ? item : item.id;
+          if (id !== plugin) {
+            return item;
+          }
+          const existingConfig = typeof item === 'object' ? item.config || {} : {};
+          return {
+            id: plugin,
+            config: { ...existingConfig, ...newConfig },
+          };
+        }),
+      );
+    },
+    [config.plugins, updatePlugins],
+  );
+
+  return (
+    <PluginsTab
+      selectedPlugins={selectedPlugins}
+      handlePluginToggle={handlePluginToggle}
+      setSelectedPlugins={setSelectedPlugins}
+      pluginConfig={pluginConfig}
+      updatePluginConfig={updatePluginConfig}
+      recentlyUsedPlugins={recentlyUsedPlugins}
+      isRemoteGenerationDisabled={false}
+    />
+  );
+}
+
 const renderComponent = ({ initialEntries = ['/'] }: { initialEntries?: string[] } = {}) => {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <TooltipProvider>
         <ToastProvider>
-          <Plugins onNext={vi.fn()} onBack={vi.fn()} />
+          <PluginsTabHarness />
         </ToastProvider>
       </TooltipProvider>
     </MemoryRouter>,
@@ -312,6 +522,22 @@ describe('PluginsTab', () => {
         expect(
           screen.queryByTestId(`plugin-list-item-${datasetsPlugins[0]}`),
         ).not.toBeInTheDocument();
+      });
+
+      test('Recently Used count dedupes duplicate plugin ids', async () => {
+        const [recentPlugin] = riskCategories['Security & Access Control'];
+
+        act(() => {
+          useRecentlyUsedPlugins.setState({
+            plugins: [recentPlugin, recentPlugin],
+          });
+        });
+
+        renderComponent();
+
+        await waitFor(() => {
+          expect(screen.getByRole('button', { name: /^Recently Used\s*1$/ })).toBeInTheDocument();
+        });
       });
 
       test('Selecting "Security & Access Control" renders correct plugins', async () => {

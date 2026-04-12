@@ -3,6 +3,7 @@ import fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache, getCache } from '../../src/cache';
+import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import {
   CLAUDE_CODE_MODEL_ALIASES,
@@ -11,7 +12,12 @@ import {
 } from '../../src/providers/claude-agent-sdk';
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
 import { checkProviderApiKeys } from '../../src/util/provider';
-import type { NonNullableUsage, Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import type {
+  NonNullableUsage,
+  Query,
+  SDKMessage,
+  TerminalReason,
+} from '@anthropic-ai/claude-agent-sdk';
 import type { MockInstance } from 'vitest';
 
 import type { EnvOverrides } from '../../src/types/env';
@@ -65,7 +71,7 @@ const createMockUsage = (input = 0, output = 0): NonNullableUsage => ({
 });
 
 // Helper to create a mock BetaMessage with required fields
-// The BetaMessage type requires: id, container, content, context_management, model, role, stop_reason, stop_sequence, type, usage
+// The BetaMessage type requires: id, container, content, context_management, model, role, stop_details, stop_reason, stop_sequence, type, usage
 // We use 'as any' for content since test mocks don't need the full BetaContentBlock discriminated union
 const createMockBetaMessage = (
   content: Array<{ type: string; id?: string; name?: string; input?: unknown; text?: string }>,
@@ -76,6 +82,7 @@ const createMockBetaMessage = (
   context_management: null,
   model: 'claude-sonnet-4-20250514' as const,
   role: 'assistant' as const,
+  stop_details: null,
   stop_reason: 'tool_use' as const,
   stop_sequence: null,
   type: 'message' as const,
@@ -116,6 +123,7 @@ const createMockResponse = (
   usage?: { input_tokens?: number; output_tokens?: number },
   cost = 0.001,
   sessionId = 'test-session-123',
+  terminalReason?: TerminalReason,
 ): Query => {
   return createMockQuery({
     type: 'result',
@@ -130,6 +138,7 @@ const createMockResponse = (
     is_error: false,
     num_turns: 1,
     permission_denials: [],
+    ...(terminalReason === undefined ? {} : { terminal_reason: terminalReason }),
   });
 };
 
@@ -186,7 +195,6 @@ describe('ClaudeCodeSDKProvider', () => {
     vi.clearAllMocks();
 
     // Setup importModule to return our mockQuery
-    const { importModule } = await import('../../src/esm');
     vi.mocked(importModule).mockResolvedValue({ query: mockQuery });
 
     // Default mocks
@@ -330,6 +338,26 @@ describe('ClaudeCodeSDKProvider', () => {
             strictMcpConfig: true,
           }),
         });
+      });
+
+      it('should include terminal reason metadata when provided by SDK', async () => {
+        mockQuery.mockReturnValue(
+          createMockResponse(
+            'Test response',
+            { input_tokens: 10, output_tokens: 20 },
+            0.002,
+            'test-session-123',
+            'completed',
+          ),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata?.terminalReason).toBe('completed');
+        expect(JSON.parse(result.raw as string).terminal_reason).toBe('completed');
       });
 
       it('should handle SDK error response', async () => {
@@ -489,6 +517,18 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(result.size).toBe(1);
         expect(result.get('ANTHROPIC_API_KEY')).toEqual(['anthropic:claude-agent-sdk']);
       });
+
+      it('should not report missing key when apiKeyRequired is false', () => {
+        delete process.env.ANTHROPIC_API_KEY;
+        delete process.env.CLAUDE_CODE_USE_VERTEX;
+        delete process.env.CLAUDE_CODE_USE_BEDROCK;
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: { apiKeyRequired: false },
+        });
+        const result = checkProviderApiKeys([provider]);
+        expect(result.size).toBe(0);
+      });
     });
 
     describe('provider-level env overrides via loadApiProvider', () => {
@@ -496,14 +536,10 @@ describe('ClaudeCodeSDKProvider', () => {
         delete process.env.ANTHROPIC_API_KEY;
         delete process.env.CLAUDE_CODE_USE_VERTEX;
 
-        const { loadApiProvider } = await import('../../src/providers/index');
-        const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
-          options: {
-            env: { CLAUDE_CODE_USE_VERTEX: 'true' } as EnvOverrides,
-          },
+        const provider = new ClaudeCodeSDKProvider({
+          env: { CLAUDE_CODE_USE_VERTEX: 'true' } as EnvOverrides,
         });
 
-        // Provider should have received the env override through the registry
         const result = checkProviderApiKeys([provider]);
         expect(result.size).toBe(0);
       });
@@ -987,6 +1023,25 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
+        it('with taskBudget configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              task_budget: { total: 50000 },
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              taskBudget: { total: 50000 },
+            }),
+          });
+        });
+
         it('with additionalDirectories configuration', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
@@ -1245,12 +1300,32 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
+        it('with auto permission mode', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              permission_mode: 'auto',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              permissionMode: 'auto',
+            }),
+          });
+        });
+
         it('with sandbox configuration', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
           const sandbox = {
             enabled: true,
             autoAllowBashIfSandboxed: true,
+            failIfUnavailable: false,
             network: {
               allowedDomains: ['api.example.com'],
               allowLocalBinding: true,
@@ -1405,25 +1480,6 @@ describe('ClaudeCodeSDKProvider', () => {
             prompt: 'Test prompt',
             options: expect.objectContaining({
               sandbox,
-            }),
-          });
-        });
-
-        it('with dontAsk permission mode', async () => {
-          mockQuery.mockReturnValue(createMockResponse('Response'));
-
-          const provider = new ClaudeCodeSDKProvider({
-            config: {
-              permission_mode: 'dontAsk',
-            },
-            env: { ANTHROPIC_API_KEY: 'test-api-key' },
-          });
-          await provider.callApi('Test prompt');
-
-          expect(mockQuery).toHaveBeenCalledWith({
-            prompt: 'Test prompt',
-            options: expect.objectContaining({
-              permissionMode: 'dontAsk',
             }),
           });
         });
@@ -1835,6 +1891,186 @@ describe('ClaudeCodeSDKProvider', () => {
             prompt: 'Test prompt',
             options: expect.objectContaining({
               spawnClaudeCodeProcess: spawnCallback,
+            }),
+          });
+        });
+
+        it('with include_hook_events configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              include_hook_events: true,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              includeHookEvents: true,
+            }),
+          });
+        });
+
+        it('with tool_config configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              tool_config: {
+                askUserQuestion: { previewFormat: 'html' },
+              },
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              toolConfig: {
+                askUserQuestion: { previewFormat: 'html' },
+              },
+            }),
+          });
+        });
+
+        it('with prompt_suggestions configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              prompt_suggestions: true,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              promptSuggestions: true,
+            }),
+          });
+        });
+
+        it('with agent_progress_summaries configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              agent_progress_summaries: true,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              agentProgressSummaries: true,
+            }),
+          });
+        });
+
+        it('with settings as absolute file path', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              settings: '/path/to/settings.json',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              settings: '/path/to/settings.json',
+            }),
+          });
+        });
+
+        it('with settings as relative file path resolves to absolute', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              settings: './my-settings.json',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              settings: path.resolve(testBasePath, './my-settings.json'),
+            }),
+          });
+        });
+
+        it('with settings as empty file path passes through unchanged', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              settings: '',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              settings: '',
+            }),
+          });
+        });
+
+        it('with settings as object', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              settings: {
+                permissions: { allow: ['Bash(*)'] },
+              },
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              settings: {
+                permissions: { allow: ['Bash(*)'] },
+              },
+            }),
+          });
+        });
+
+        it('with on_elicitation callback', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const elicitationCallback = vi.fn();
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              on_elicitation: elicitationCallback,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              onElicitation: elicitationCallback,
             }),
           });
         });

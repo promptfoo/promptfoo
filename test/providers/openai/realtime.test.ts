@@ -27,11 +27,15 @@ describe('OpenAI Realtime Provider', () => {
   let mockHandlers: { [key: string]: Function[] };
   const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
   const originalCustomRealtimeApiKey = process.env.CUSTOM_REALTIME_API_KEY;
+  const originalOpenAiApiBaseUrl = process.env.OPENAI_API_BASE_URL;
+  const originalOpenAiBaseUrl = process.env.OPENAI_BASE_URL;
 
   beforeEach(() => {
     vi.resetAllMocks();
     disableCache();
     process.env.OPENAI_API_KEY = 'test-api-key';
+    delete process.env.OPENAI_API_BASE_URL;
+    delete process.env.OPENAI_BASE_URL;
     mockHandlers = {
       open: [],
       message: [],
@@ -61,6 +65,8 @@ describe('OpenAI Realtime Provider', () => {
     enableCache();
     restoreEnvVar('OPENAI_API_KEY', originalOpenAiApiKey);
     restoreEnvVar('CUSTOM_REALTIME_API_KEY', originalCustomRealtimeApiKey);
+    restoreEnvVar('OPENAI_API_BASE_URL', originalOpenAiApiBaseUrl);
+    restoreEnvVar('OPENAI_BASE_URL', originalOpenAiBaseUrl);
   });
 
   describe('Basic Functionality', () => {
@@ -199,6 +205,29 @@ describe('OpenAI Realtime Provider', () => {
         temperature: 0.8,
         max_response_output_tokens: 'inf',
       });
+    });
+
+    it.each([
+      [0, 'inf'],
+      [-1, 'inf'],
+      [1.5, 'inf'],
+      [4097, 'inf'],
+      ['0', 'inf'],
+      ['1', 'inf'],
+      ['inf', 'inf'],
+      [1, 1],
+      [4096, 4096],
+    ] as const)('normalizes max_response_output_tokens=%s to %s in the session body', async (maxResponseOutputTokens, expected) => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: {
+          modalities: ['text'],
+          max_response_output_tokens: maxResponseOutputTokens as any,
+        },
+      });
+
+      const body = await provider.getRealtimeSessionBody();
+
+      expect(body.max_response_output_tokens).toBe(expected);
     });
 
     it('should handle basic text response with persistent connection', async () => {
@@ -750,6 +779,43 @@ describe('OpenAI Realtime Provider', () => {
       expect(constructedUrl).toBe(
         'wss://api.openai.com/v1/realtime?model=' + encodeURIComponent('gpt-4o-realtime-preview'),
       );
+    });
+
+    it('normalizes invalid max_response_output_tokens in session.update', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: { max_response_output_tokens: -1 },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+
+      const sessionUpdate = JSON.parse(mockWs.send.mock.calls[0][0]);
+      expect(sessionUpdate.session.max_response_output_tokens).toBe('inf');
+
+      const messageHandlers = mockHandlers.message;
+      const lastHandler = messageHandlers[messageHandlers.length - 1];
+      lastHandler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'conversation.item.created',
+            item: { id: 'msg_zero', role: 'user' },
+          }),
+        ),
+      );
+      lastHandler(
+        Buffer.from(JSON.stringify({ type: 'response.created', response: { id: 'resp_zero' } })),
+      );
+      lastHandler(Buffer.from(JSON.stringify({ type: 'response.text.done', text: 'ok' })));
+      lastHandler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+          }),
+        ),
+      );
+
+      await promise;
     });
 
     it('converts custom https apiBaseUrl to wss for direct WebSocket', async () => {

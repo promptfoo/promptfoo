@@ -214,7 +214,7 @@ describe('PythonProvider', () => {
         mockPoolInstance.execute.mockResolvedValue({ invalidKey: 'invalid value' });
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Python script `call_api` function must return a dict with an `output` string/object or `error` string, instead got: {"invalidKey":"invalid value"}',
+          'The Python script `call_api` function must return a dict with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: {"invalidKey":"invalid value"}',
         );
       });
 
@@ -230,7 +230,7 @@ describe('PythonProvider', () => {
         mockPoolInstance.execute.mockResolvedValue(null as never);
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Python script `call_api` function must return a dict with an `output` string/object or `error` string, instead got: null',
+          'The Python script `call_api` function must return a dict with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: null',
         );
       });
 
@@ -239,7 +239,17 @@ describe('PythonProvider', () => {
         mockPoolInstance.execute.mockResolvedValue('string result');
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          "Cannot use 'in' operator to search for 'output' in string result",
+          'The Python script `call_api` function must return a dict with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: "string result"',
+        );
+      });
+
+      it('should reject inherited output properties from a polluted prototype', async () => {
+        const provider = new PythonProvider('script.py');
+        const inheritedResult = Object.create({ output: 'polluted output' });
+        mockPoolInstance.execute.mockResolvedValue(inheritedResult);
+
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          'The Python script `call_api` function must return a dict with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: {}',
         );
       });
 
@@ -271,7 +281,17 @@ describe('PythonProvider', () => {
       mockPoolInstance.execute.mockResolvedValue({ invalidKey: 'invalid value' });
 
       await expect(provider.callEmbeddingApi('test prompt')).rejects.toThrow(
-        'The Python script `call_embedding_api` function must return a dict with an `embedding` array or `error` string, instead got {"invalidKey":"invalid value"}',
+        'The Python script `call_embedding_api` function must return a dict with an own `embedding` array or `error` string (inherited prototype properties are rejected), instead got {"invalidKey":"invalid value"}',
+      );
+    });
+
+    it('should reject inherited embedding properties from a polluted prototype', async () => {
+      const provider = new PythonProvider('script.py');
+      const inheritedResult = Object.create({ embedding: [0.1, 0.2, 0.3] });
+      mockPoolInstance.execute.mockResolvedValue(inheritedResult);
+
+      await expect(provider.callEmbeddingApi('test prompt')).rejects.toThrow(
+        'The Python script `call_embedding_api` function must return a dict with an own `embedding` array or `error` string (inherited prototype properties are rejected), instead got {}',
       );
     });
   });
@@ -295,7 +315,17 @@ describe('PythonProvider', () => {
       mockPoolInstance.execute.mockResolvedValue({ invalidKey: 'invalid value' });
 
       await expect(provider.callClassificationApi('test prompt')).rejects.toThrow(
-        'The Python script `call_classification_api` function must return a dict with a `classification` object or `error` string, instead of {"invalidKey":"invalid value"}',
+        'The Python script `call_classification_api` function must return a dict with an own `classification` object or `error` string (inherited prototype properties are rejected), instead of {"invalidKey":"invalid value"}',
+      );
+    });
+
+    it('should reject inherited classification properties from a polluted prototype', async () => {
+      const provider = new PythonProvider('script.py');
+      const inheritedResult = Object.create({ classification: { label: 'polluted' } });
+      mockPoolInstance.execute.mockResolvedValue(inheritedResult);
+
+      await expect(provider.callClassificationApi('test prompt')).rejects.toThrow(
+        'The Python script `call_classification_api` function must return a dict with an own `classification` object or `error` string (inherited prototype properties are rejected), instead of {}',
       );
     });
   });
@@ -493,6 +523,38 @@ describe('PythonProvider', () => {
 
       // The second call should contain the custom function name
       expect(cacheSetCalls[1][0]).toContain(':custom_function:');
+    });
+
+    it('should not apply cached metadata to embedding results', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(JSON.stringify({ embedding: [0.1, 0.2, 0.3] })),
+        set: vi.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+
+      const result = await provider.callEmbeddingApi('test prompt');
+
+      expect(result).toEqual({ embedding: [0.1, 0.2, 0.3] });
+      expect(result).not.toHaveProperty('cached');
+    });
+
+    it('should not apply cached metadata to classification results', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi
+          .fn()
+          .mockResolvedValue(JSON.stringify({ classification: { label: 'test', score: 0.9 } })),
+        set: vi.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+
+      const result = await provider.callClassificationApi('test prompt');
+
+      expect(result).toEqual({ classification: { label: 'test', score: 0.9 } });
+      expect(result).not.toHaveProperty('cached');
     });
   });
 

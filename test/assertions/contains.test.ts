@@ -446,7 +446,7 @@ describe('handleContainsAny', () => {
     expect(result.pass).toBe(false);
   });
 
-  it('should handle regex match with unmatched quotes', () => {
+  it('should reject unmatched quotes', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains-any', value: '"test' },
@@ -455,13 +455,37 @@ describe('handleContainsAny', () => {
       inverse: false,
     };
 
-    const result = handleContainsAny(params);
-    expect(result).toEqual({
-      pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
+    expect(() => handleContainsAny(params)).toThrow(
+      'Unterminated quoted field in contains assertion value',
+    );
+  });
+
+  it('should reject non-delimiter characters after quoted fields', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'contains-any', value: '"hello"world' },
+      renderedValue: '"hello"world' as AssertionValue,
+      outputString: 'hello world',
+      inverse: false,
+    };
+
+    expect(() => handleContainsAny(params)).toThrow(
+      'Expected comma after quoted field in contains assertion value',
+    );
+  });
+
+  it('should reject whitespace-separated quoted and unquoted fields without a comma', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'contains-any', value: '"hello" world' },
+      renderedValue: '"hello" world' as AssertionValue,
+      outputString: 'hello world',
+      inverse: false,
+    };
+
+    expect(() => handleContainsAny(params)).toThrow(
+      'Expected comma after quoted field in contains assertion value',
+    );
   });
 });
 

@@ -1242,6 +1242,9 @@ export default class Eval {
     if (this.persisted) {
       const db = getDb();
       db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+      // Notify the view server after prompt metadata changes so cached /api/prompts
+      // responses and socket listeners can pick up prompts added after eval creation.
+      updateSignalFile(this.id);
     }
   }
 

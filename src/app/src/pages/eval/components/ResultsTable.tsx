@@ -61,6 +61,7 @@ import { NumberInput } from '@app/components/ui/number-input';
 import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
+import { getNamedMetricTotals } from './utils';
 
 /**
  * Audio player component that handles both storage refs and base64 data
@@ -117,7 +118,11 @@ const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
 const DESCRIPTION_COLUMN_SIZE_PX = 100;
 
-function formatRowOutput(output: EvaluateTableOutput | string) {
+function formatRowOutput(output: EvaluateTableOutput | string | null | undefined) {
+  if (output == null) {
+    return output;
+  }
+
   if (typeof output === 'string') {
     // Backwards compatibility for 0.15.0 breaking change. Remove eventually.
     const pass = output.startsWith('[PASS]');
@@ -236,7 +241,6 @@ function ResultsTableHeader({
   hasMinimalScrollRoom: boolean;
   zoom: number;
 }) {
-  'use no memo';
   return (
     <div
       data-testid="results-table-header"
@@ -310,7 +314,6 @@ function ResultsTable({
   onFailureFilterToggle,
   zoom,
 }: ResultsTableProps) {
-  'use no memo';
   const {
     evalId,
     table,
@@ -525,11 +528,15 @@ function ResultsTable({
   const tableBody = React.useMemo(() => {
     return body.map((row, rowIndex) => ({
       ...row,
-      outputs: row.outputs.map((output, promptIndex) => ({
-        ...output,
-        originalRowIndex: rowIndex,
-        originalPromptIndex: promptIndex,
-      })),
+      outputs: row.outputs.map((output, promptIndex) =>
+        output == null
+          ? null
+          : {
+              ...output,
+              originalRowIndex: rowIndex,
+              originalPromptIndex: promptIndex,
+            },
+      ),
     })) as ExtendedEvaluateTableRow[];
   }, [body]);
 
@@ -976,24 +983,25 @@ function ResultsTable({
   );
 
   const metricTotals = React.useMemo(() => {
-    // Use the backend's already-correct namedScoresCount instead of recalculating
+    // Use the backend's already-correct metric totals instead of recalculating
     const firstProvider = table?.head?.prompts?.[0];
-    const backendCounts = firstProvider?.metrics?.namedScoresCount;
+    const backendTotals = getNamedMetricTotals(firstProvider?.metrics);
 
-    if (backendCounts) {
-      return backendCounts;
+    if (backendTotals) {
+      return backendTotals;
     }
 
     const totals: Record<string, number> = {};
     table?.body.forEach((row) => {
       row.test.assert?.forEach((assertion) => {
         if (assertion.metric) {
-          totals[assertion.metric] = (totals[assertion.metric] || 0) + 1;
+          totals[assertion.metric] = (totals[assertion.metric] || 0) + (assertion.weight ?? 1);
         }
         if ('assert' in assertion && Array.isArray(assertion.assert)) {
           assertion.assert.forEach((subAssertion) => {
             if ('metric' in subAssertion && subAssertion.metric) {
-              totals[subAssertion.metric] = (totals[subAssertion.metric] || 0) + 1;
+              totals[subAssertion.metric] =
+                (totals[subAssertion.metric] || 0) + (subAssertion.weight ?? 1);
             }
           });
         }
@@ -1207,7 +1215,7 @@ function ResultsTable({
                       <div className="collapse-hidden">
                         <CustomMetrics
                           lookup={metrics.namedScores}
-                          counts={metrics.namedScoresCount}
+                          counts={getNamedMetricTotals(metrics)}
                           metricTotals={metricTotals}
                           onShowMore={() => setCustomMetricsDialogOpen(true)}
                         />
@@ -1268,7 +1276,7 @@ function ResultsTable({
                   />
                 </ErrorBoundary>
               ) : (
-                <div style={{ padding: '20px' }}>'Test still in progress...'</div>
+                <div className="cell" aria-label="No output for this prompt" />
               );
             },
             size: PROMPT_COLUMN_SIZE_PX,

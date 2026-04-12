@@ -218,6 +218,17 @@ describe('getUnifiedConfig', () => {
     expect(result.redteam.testGenerationInstructions).toBe('Generate more tests');
   });
 
+  it('should include maxCharsPerMessage if provided', () => {
+    const configWithMaxChars: SavedRedteamConfig = {
+      ...baseConfig,
+      maxCharsPerMessage: 125,
+    };
+
+    const result = getUnifiedConfig(configWithMaxChars);
+
+    expect(result.redteam.maxCharsPerMessage).toBe(125);
+  });
+
   it('should omit plugin config if empty', () => {
     const configWithEmptyPluginConfig: SavedRedteamConfig = {
       ...baseConfig,

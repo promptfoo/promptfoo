@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Codex app-server skill input
+
+prompts:
+  - file://skill-input.json
+
+providers:
+  - id: openai:codex-app-server:gpt-5.4
+    config:
+      sandbox_mode: read-only
+      approval_policy: never
+      skip_git_repo_check: true
+
+defaultTest:
+  assert:
+    - type: contains-any
+      value:
+        - test
+        - verify
+        - checklist
+
+tests:
+  - vars: {}

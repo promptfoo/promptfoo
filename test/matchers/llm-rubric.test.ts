@@ -4,7 +4,8 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadFromJavaScriptFile } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
-import { matchesLlmRubric, renderLlmRubricPrompt } from '../../src/matchers';
+import { matchesLlmRubric } from '../../src/matchers/llmGrading';
+import { renderLlmRubricPrompt } from '../../src/matchers/rubric';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 import * as remoteGrading from '../../src/remoteGrading';
@@ -128,6 +129,32 @@ describe('matchesLlmRubric', () => {
         },
       }),
     );
+  });
+
+  it('should preserve provider completion details when grader JSON omits them', async () => {
+    const completionDetails = {
+      reasoning: 3,
+      acceptedPrediction: 2,
+      rejectedPrediction: 1,
+    };
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
+          tokenUsage: {
+            total: 10,
+            prompt: 5,
+            completion: 5,
+            completionDetails,
+          },
+        }),
+      },
+    });
+
+    expect(result.tokensUsed?.completionDetails).toEqual(completionDetails);
   });
 
   it('should merge provider metadata into the grading result metadata', async () => {
@@ -275,7 +302,66 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+        numRequests: 0,
+      },
+    });
+  });
+
+  it('should fail when output is null', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: null,
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason: 'No output',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+        numRequests: 0,
+      },
+    });
+  });
+
+  it('should fail when output is an array', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: [{ pass: false, score: 0, reason: 'bad' }],
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason:
+        'llm-rubric produced malformed response - output must be string or object. Output: [{"pass":false,"score":0,"reason":"bad"}]',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         numRequests: 0,
       },
     });
@@ -304,7 +390,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         numRequests: 0,
       },
     });
@@ -333,7 +419,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         numRequests: 0,
       },
     });
@@ -363,7 +449,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         numRequests: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
   });
@@ -393,7 +479,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         numRequests: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
   });
@@ -422,7 +508,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         numRequests: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
   });
@@ -451,7 +537,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         numRequests: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
   });
@@ -1190,6 +1276,66 @@ Evaluate the response
     );
   });
 
+  it('should not call remote when a grading provider is configured, even if redteam is enabled', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      provider: {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Local provider used' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    (cliState as any).config = { redteam: {} };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    expect(remoteGrading.doRemoteGrading).not.toHaveBeenCalled();
+    expect(grading.provider.callApi).toHaveBeenCalled();
+    expect(result.reason).toBe('Local provider used');
+  });
+
+  it('should call remote when a caller prefers remote despite an injected default provider', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      provider: {
+        id: () => 'implicit-default-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Local provider used' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Remote grading passed',
+    });
+    (cliState as any).config = { redteam: {} };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading, undefined, undefined, {
+      preferRemote: true,
+    });
+
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
+      task: 'llm-rubric',
+      rubric,
+      output: llmOutput,
+      vars: {},
+    });
+    expect(grading.provider.callApi).not.toHaveBeenCalled();
+    expect(result.reason).toBe('Remote grading passed');
+  });
+
   it('should call remote when redteam is enabled and rubric prompt is not overridden and no provider is configured', async () => {
     const rubric = 'Test rubric';
     const llmOutput = 'Test output';
@@ -1219,6 +1365,9 @@ Evaluate the response
       rubric,
       output: llmOutput,
       vars: {},
+    });
+    expect(remoteGeneration.shouldGenerateRemote).toHaveBeenCalledWith({
+      canUseCodexDefaultProvider: true,
     });
   });
 

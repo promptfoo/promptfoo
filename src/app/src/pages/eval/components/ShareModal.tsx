@@ -13,6 +13,7 @@ import { Input } from '@app/components/ui/input';
 import { Spinner } from '@app/components/ui/spinner';
 import { callApi } from '@app/utils/api';
 import { Check, Copy } from 'lucide-react';
+import logger from '../../../../../logger';
 
 interface ShareModalProps {
   open: boolean;
@@ -65,7 +66,7 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
             const url = await onShare(evalId);
             setShareUrl(url);
           } catch (error) {
-            console.error('Failed to generate share URL:', error);
+            logger.error('Failed to generate share URL', { error, evalId });
             setError('Failed to generate share URL');
           } finally {
             setIsLoading(false);

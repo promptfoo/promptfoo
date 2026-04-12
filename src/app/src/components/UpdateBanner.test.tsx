@@ -1,4 +1,5 @@
 import { useVersionCheck } from '@app/hooks/useVersionCheck';
+import { mockClipboard } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -71,11 +72,7 @@ describe('UpdateBanner', () => {
     mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
 
     const mockWriteText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, {
-      clipboard: {
-        writeText: mockWriteText,
-      },
-    });
+    mockClipboard({ writeText: mockWriteText as Clipboard['writeText'] });
 
     renderWithProviders(<UpdateBanner />);
 

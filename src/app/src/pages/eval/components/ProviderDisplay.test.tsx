@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { filterConfigForDisplay, ProviderDisplay } from './ProviderDisplay';
 
 describe('filterConfigForDisplay', () => {
@@ -307,6 +307,14 @@ describe('filterConfigForDisplay', () => {
 });
 
 describe('ProviderDisplay', () => {
+  beforeEach(() => {
+    useTestTimers();
+  });
+
+  afterEach(() => {
+    restoreTestTimers();
+  });
+
   const renderWithProviders = (
     providerString: string,
     providersArray: any[] | undefined,
@@ -321,6 +329,14 @@ describe('ProviderDisplay', () => {
         />
       </TooltipProvider>,
     );
+  };
+
+  const hoverAndGetTooltip = async (element: Element) => {
+    fireEvent.pointerMove(element, { pointerType: 'mouse' });
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    return screen.getByRole('tooltip');
   };
 
   describe('provider name display', () => {
@@ -367,7 +383,6 @@ describe('ProviderDisplay', () => {
 
   describe('tooltip behavior', () => {
     it('shows tooltip with config on hover', async () => {
-      const user = userEvent.setup();
       const providers = [
         {
           id: 'openai:gpt-4o',
@@ -381,11 +396,7 @@ describe('ProviderDisplay', () => {
       const wrapperSpan = providerElement.parentElement?.parentElement;
       expect(wrapperSpan).toHaveClass('cursor-help');
 
-      await user.hover(providerElement);
-
-      // Wait for Radix tooltip to appear
-      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
-      const tooltip = document.querySelector('[role="tooltip"]');
+      const tooltip = await hoverAndGetTooltip(providerElement);
       // Config should be wrapped in config: to match YAML structure
       expect(tooltip?.textContent).toContain('config:');
       expect(tooltip?.textContent).toContain('temperature');
@@ -393,7 +404,6 @@ describe('ProviderDisplay', () => {
     });
 
     it('shows id in tooltip when label differs from underlying id', async () => {
-      const user = userEvent.setup();
       const providers = [
         {
           id: 'openai:gpt-4o',
@@ -405,10 +415,7 @@ describe('ProviderDisplay', () => {
 
       expect(screen.getByText('Fast Model')).toBeInTheDocument();
 
-      await user.hover(screen.getByText('Fast Model'));
-
-      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
-      const tooltip = document.querySelector('[role="tooltip"]');
+      const tooltip = await hoverAndGetTooltip(screen.getByText('Fast Model'));
       // Should show underlying id since display shows "Fast Model"
       expect(tooltip?.textContent).toContain('id: openai:gpt-4o');
       expect(tooltip?.textContent).toContain('temperature');
@@ -417,7 +424,6 @@ describe('ProviderDisplay', () => {
     it('shows id in tooltip when label is just the model name', async () => {
       // When label="gpt-4o" but id="openai:gpt-4o", we SHOULD show the id
       // because "gpt-4o" could be from any provider (openai, azure, etc.)
-      const user = userEvent.setup();
       const providers = [
         {
           id: 'openai:gpt-4o',
@@ -427,15 +433,11 @@ describe('ProviderDisplay', () => {
       ];
       renderWithProviders('gpt-4o', providers);
 
-      await user.hover(screen.getByText('gpt-4o'));
-
-      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
-      const tooltip = document.querySelector('[role="tooltip"]');
+      const tooltip = await hoverAndGetTooltip(screen.getByText('gpt-4o'));
       expect(tooltip?.textContent).toContain('id: openai:gpt-4o');
     });
 
     it('does not show id in tooltip when display already shows full id', async () => {
-      const user = userEvent.setup();
       const providers = [
         {
           id: 'openai:gpt-4o',
@@ -444,10 +446,7 @@ describe('ProviderDisplay', () => {
       ];
       renderWithProviders('openai:gpt-4o', providers);
 
-      await user.hover(screen.getByText('gpt-4o'));
-
-      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
-      const tooltip = document.querySelector('[role="tooltip"]');
+      const tooltip = await hoverAndGetTooltip(screen.getByText('gpt-4o'));
       // Should NOT contain "id:" since display shows "openai:gpt-4o"
       expect(tooltip?.textContent).not.toContain('id:');
       // Should still show config
@@ -484,7 +483,6 @@ describe('ProviderDisplay', () => {
     });
 
     it('handles provider with nested config.config structure', async () => {
-      const user = userEvent.setup();
       const providers = [
         {
           id: 'openai:gpt-4o',
@@ -495,10 +493,7 @@ describe('ProviderDisplay', () => {
       ];
       renderWithProviders('openai:gpt-4o', providers);
 
-      await user.hover(screen.getByText('gpt-4o'));
-
-      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
-      const tooltip = document.querySelector('[role="tooltip"]');
+      const tooltip = await hoverAndGetTooltip(screen.getByText('gpt-4o'));
       expect(tooltip?.textContent).toContain('temperature');
     });
 
@@ -541,7 +536,6 @@ describe('ProviderDisplay', () => {
     });
 
     it('handles fallback to index when provider not found by id/label', async () => {
-      const user = userEvent.setup();
       const providers = [
         { id: 'openai:gpt-4o', config: { temperature: 0.5 } },
         { id: 'anthropic:claude-3', config: { temperature: 0.7 } },
@@ -553,9 +547,7 @@ describe('ProviderDisplay', () => {
       const span = container.querySelector('span');
       expect(span).toBeInTheDocument();
       if (span) {
-        await user.hover(span);
-        await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
-        const tooltip = document.querySelector('[role="tooltip"]');
+        const tooltip = await hoverAndGetTooltip(span);
         // Should show config from providers[1] (temperature: 0.7)
         expect(tooltip?.textContent).toContain('temperature');
         expect(tooltip?.textContent).toContain('0.7');
@@ -586,7 +578,6 @@ describe('ProviderDisplay', () => {
     });
 
     it('displays config with stringified boolean values in tooltip', async () => {
-      const user = userEvent.setup();
       const providers = [
         {
           id: 'openai:gpt-4o',
@@ -595,15 +586,12 @@ describe('ProviderDisplay', () => {
       ];
       renderWithProviders('openai:gpt-4o', providers);
 
-      await user.hover(screen.getByText('gpt-4o'));
-      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
-      const tooltip = document.querySelector('[role="tooltip"]');
+      const tooltip = await hoverAndGetTooltip(screen.getByText('gpt-4o'));
       expect(tooltip?.textContent).toContain('true');
       expect(tooltip?.textContent).toContain('false');
     });
 
     it('displays config with numeric values including decimals', async () => {
-      const user = userEvent.setup();
       const providers = [
         {
           id: 'openai:gpt-4o',
@@ -612,16 +600,13 @@ describe('ProviderDisplay', () => {
       ];
       renderWithProviders('openai:gpt-4o', providers);
 
-      await user.hover(screen.getByText('gpt-4o'));
-      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
-      const tooltip = document.querySelector('[role="tooltip"]');
+      const tooltip = await hoverAndGetTooltip(screen.getByText('gpt-4o'));
       expect(tooltip?.textContent).toContain('0.7');
       expect(tooltip?.textContent).toContain('0.95');
       expect(tooltip?.textContent).toContain('1000');
     });
 
     it('displays config with negative numbers', async () => {
-      const user = userEvent.setup();
       const providers = [
         {
           id: 'openai:gpt-4o',
@@ -630,15 +615,12 @@ describe('ProviderDisplay', () => {
       ];
       renderWithProviders('openai:gpt-4o', providers);
 
-      await user.hover(screen.getByText('gpt-4o'));
-      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
-      const tooltip = document.querySelector('[role="tooltip"]');
+      const tooltip = await hoverAndGetTooltip(screen.getByText('gpt-4o'));
       expect(tooltip?.textContent).toContain('-0.5');
       expect(tooltip?.textContent).toContain('-1.2');
     });
 
     it('displays config with string values containing special characters', async () => {
-      const user = userEvent.setup();
       const providers = [
         {
           id: 'openai:gpt-4o',
@@ -647,14 +629,11 @@ describe('ProviderDisplay', () => {
       ];
       renderWithProviders('openai:gpt-4o', providers);
 
-      await user.hover(screen.getByText('gpt-4o'));
-      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
-      const tooltip = document.querySelector('[role="tooltip"]');
+      const tooltip = await hoverAndGetTooltip(screen.getByText('gpt-4o'));
       expect(tooltip?.textContent).toContain('gpt-4o-2024-05-13');
     });
 
     it('displays config with lines without colons', async () => {
-      const user = userEvent.setup();
       const providers = [
         {
           id: 'openai:gpt-4o',
@@ -665,16 +644,13 @@ describe('ProviderDisplay', () => {
       ];
       renderWithProviders('openai:gpt-4o', providers);
 
-      await user.hover(screen.getByText('gpt-4o'));
-      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
-      const tooltip = document.querySelector('[role="tooltip"]');
+      const tooltip = await hoverAndGetTooltip(screen.getByText('gpt-4o'));
       // YAML arrays render with - prefix, which doesn't match colon pattern
       expect(tooltip?.textContent).toContain('STOP');
       expect(tooltip?.textContent).toContain('END');
     });
 
     it('handles config with multiple colons in value', async () => {
-      const user = userEvent.setup();
       const providers = [
         {
           id: 'openai:gpt-4o',
@@ -683,15 +659,12 @@ describe('ProviderDisplay', () => {
       ];
       renderWithProviders('openai:gpt-4o', providers);
 
-      await user.hover(screen.getByText('gpt-4o'));
-      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
-      const tooltip = document.querySelector('[role="tooltip"]');
+      const tooltip = await hoverAndGetTooltip(screen.getByText('gpt-4o'));
       // Regex should only match the FIRST colon, preserving colons in the value
       expect(tooltip?.textContent).toContain('https://api.openai.com:443/v1');
     });
 
     it('displays config with zero numeric value correctly', async () => {
-      const user = userEvent.setup();
       const providers = [
         {
           id: 'openai:gpt-4o',
@@ -700,9 +673,7 @@ describe('ProviderDisplay', () => {
       ];
       renderWithProviders('openai:gpt-4o', providers);
 
-      await user.hover(screen.getByText('gpt-4o'));
-      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
-      const tooltip = document.querySelector('[role="tooltip"]');
+      const tooltip = await hoverAndGetTooltip(screen.getByText('gpt-4o'));
       // Zero should be detected as a number and styled appropriately
       expect(tooltip?.textContent).toContain('0');
     });
@@ -723,7 +694,6 @@ describe('ProviderDisplay', () => {
     });
 
     it('handles config with empty string values', async () => {
-      const user = userEvent.setup();
       const providers = [
         {
           id: 'openai:gpt-4o',
@@ -732,9 +702,7 @@ describe('ProviderDisplay', () => {
       ];
       renderWithProviders('openai:gpt-4o', providers);
 
-      await user.hover(screen.getByText('gpt-4o'));
-      await expect.poll(() => document.querySelector('[role="tooltip"]')).toBeTruthy();
-      const tooltip = document.querySelector('[role="tooltip"]');
+      const tooltip = await hoverAndGetTooltip(screen.getByText('gpt-4o'));
       expect(tooltip?.textContent).toContain('suffix');
       expect(tooltip?.textContent).toContain('user');
     });

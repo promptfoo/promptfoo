@@ -1,12 +1,14 @@
+import { mockClipboard } from '@app/tests/browserMocks';
+import { type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import {
   type AssertionType,
   type EvaluateTableOutput,
   ResultFailureReason,
 } from '@promptfoo/types';
-import { screen } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCell';
 
@@ -52,6 +54,16 @@ const resetMockStoreState = () => {
   Object.assign(mockTableStoreState, defaultTableStoreState);
 };
 
+const mockClipboardWriteText = () => {
+  const clipboard = {
+    writeText: vi.fn().mockResolvedValue(undefined),
+  };
+
+  mockClipboard({ writeText: clipboard.writeText as Clipboard['writeText'] });
+
+  return clipboard;
+};
+
 vi.mock('./store', () => ({
   useResultsViewSettingsStore: () => mockResultsViewSettings,
   useTableStore: () => mockTableStoreState,
@@ -61,21 +73,6 @@ vi.mock('../../../hooks/useShiftKey', () => ({
   useShiftKey: () => true,
 }));
 
-// Use fake timers with shouldAdvanceTime to automatically advance time
-// This prevents "window is not defined" errors from timers firing after test cleanup
-beforeAll(() => {
-  vi.useFakeTimers({ shouldAdvanceTime: true });
-});
-
-afterAll(() => {
-  vi.useRealTimers();
-});
-
-// Clear all pending timers after each test to prevent cross-test interference
-afterEach(() => {
-  vi.clearAllTimers();
-});
-
 interface MockEvalOutputCellProps extends EvalOutputCellProps {
   firstOutput: EvaluateTableOutput;
   searchText: string;
@@ -84,6 +81,7 @@ interface MockEvalOutputCellProps extends EvalOutputCellProps {
 
 describe('EvalOutputCell', () => {
   const mockOnRating = vi.fn();
+  let timers: TestTimers | undefined;
 
   const defaultProps: MockEvalOutputCellProps = {
     firstOutput: {
@@ -155,9 +153,29 @@ describe('EvalOutputCell', () => {
     resetMockStoreState();
   });
 
+  afterEach(() => {
+    timers?.restore();
+    timers = undefined;
+  });
+
+  it('handles outputs without text without throwing', () => {
+    const propsWithoutText: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        namedScores: undefined as unknown as Record<string, number>,
+        pass: undefined as unknown as boolean,
+        score: undefined as unknown as number,
+        text: undefined as unknown as string,
+      },
+    };
+
+    expect(() => renderWithProviders(<EvalOutputCell {...propsWithoutText} />)).not.toThrow();
+  });
+
   it('passes metadata correctly to the dialog', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
-    await userEvent.click(screen.getByRole('button', { name: /view output and test details/i }));
+    fireEvent.click(screen.getByRole('button', { name: /view output and test details/i }));
 
     const dialogComponent = screen.getByTestId('dialog-component');
     expect(dialogComponent).toBeInTheDocument();
@@ -214,7 +232,7 @@ describe('EvalOutputCell', () => {
     };
 
     renderWithProviders(<EvalOutputCell {...propsWithMetadataCitations} />);
-    await userEvent.click(screen.getByRole('button', { name: /view output and test details/i }));
+    fireEvent.click(screen.getByRole('button', { name: /view output and test details/i }));
 
     const dialogComponent = screen.getByTestId('dialog-component');
     const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
@@ -241,7 +259,7 @@ describe('EvalOutputCell', () => {
   it('combines assertion contexts in comment dialog', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
-    await userEvent.click(screen.getByRole('button', { name: /edit comment/i }));
+    fireEvent.click(screen.getByRole('button', { name: /edit comment/i }));
 
     const dialogContent = screen.getByTestId('context-text');
     expect(dialogContent).toHaveTextContent('Assertion 1 (accuracy): expected value');
@@ -275,7 +293,7 @@ describe('EvalOutputCell', () => {
 
     renderWithProviders(<EvalOutputCell {...propsWithoutMetrics} />);
 
-    await userEvent.click(screen.getByRole('button', { name: /edit comment/i }));
+    fireEvent.click(screen.getByRole('button', { name: /edit comment/i }));
 
     const dialogContent = screen.getByTestId('context-text');
     expect(dialogContent).toHaveTextContent('Assertion 1 (contains): expected value');
@@ -284,13 +302,12 @@ describe('EvalOutputCell', () => {
   it('handles comment updates', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
-    await userEvent.click(screen.getByRole('button', { name: /edit comment/i }));
+    fireEvent.click(screen.getByRole('button', { name: /edit comment/i }));
 
     const commentInput = screen.getByRole('textbox');
-    await userEvent.clear(commentInput);
-    await userEvent.type(commentInput, 'New comment');
+    fireEvent.change(commentInput, { target: { value: 'New comment' } });
 
-    await userEvent.click(screen.getByText('Save'));
+    fireEvent.click(screen.getByText('Save'));
 
     expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, 'New comment');
   });
@@ -298,7 +315,7 @@ describe('EvalOutputCell', () => {
   it('handles highlight toggle', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
-    await userEvent.click(screen.getByLabelText('Toggle test highlight'));
+    fireEvent.click(screen.getByLabelText('Toggle test highlight'));
     expect(mockOnRating).toHaveBeenNthCalledWith(
       1,
       undefined,
@@ -306,7 +323,7 @@ describe('EvalOutputCell', () => {
       '!highlight Initial comment',
     );
 
-    await userEvent.click(screen.getByLabelText('Toggle test highlight'));
+    fireEvent.click(screen.getByLabelText('Toggle test highlight'));
 
     expect(mockOnRating).toHaveBeenNthCalledWith(2, undefined, undefined, 'Initial comment');
   });
@@ -328,7 +345,7 @@ describe('EvalOutputCell', () => {
 
     renderWithProviders(<EvalOutputCell {...propsWithoutResults} />);
 
-    await userEvent.click(screen.getByRole('button', { name: /edit comment/i }));
+    fireEvent.click(screen.getByRole('button', { name: /edit comment/i }));
 
     const dialogContent = screen.getByTestId('context-text');
     expect(dialogContent).toHaveTextContent('Test output text');
@@ -677,87 +694,89 @@ describe('EvalOutputCell', () => {
   });
 
   it('allows copying row link to clipboard', async () => {
-    const originalClipboard = navigator.clipboard;
-    const mockClipboard = {
-      writeText: vi.fn().mockResolvedValue(undefined),
-    };
-    Object.defineProperty(navigator, 'clipboard', {
-      value: mockClipboard,
-      configurable: true,
-      writable: true,
-    });
-
-    const originalURL = global.URL;
-    const mockUrl = {
-      toString: vi.fn().mockReturnValue('https://example.com/?rowId=1'),
-      searchParams: {
-        set: vi.fn(),
-      },
-    };
-    global.URL = class MockURL {
-      constructor() {
-        return mockUrl;
-      }
-    } as unknown as typeof URL;
+    const clipboard = mockClipboardWriteText();
+    const expectedUrl = new URL(window.location.href);
+    expectedUrl.searchParams.set('rowId', '1');
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
     const shareButton = screen.getByLabelText('Copy link to output');
     expect(shareButton).toBeInTheDocument();
 
-    await userEvent.click(shareButton);
+    fireEvent.click(shareButton);
 
-    expect(mockUrl.searchParams.set).toHaveBeenCalledWith('rowId', '1');
-
-    expect(mockClipboard.writeText).toHaveBeenCalled();
-
-    Object.defineProperty(navigator, 'clipboard', {
-      value: originalClipboard,
-      configurable: true,
-      writable: true,
+    await waitFor(() => {
+      expect(clipboard.writeText).toHaveBeenCalledWith(expectedUrl.toString());
     });
-    global.URL = originalURL;
   });
 
   it('shows checkmark after copying link', async () => {
-    const originalClipboard = navigator.clipboard;
-    const mockClipboard = {
-      writeText: vi.fn().mockResolvedValue(undefined),
-    };
-    Object.defineProperty(navigator, 'clipboard', {
-      value: mockClipboard,
-      configurable: true,
-      writable: true,
-    });
-
-    const mockUrl = {
-      toString: vi.fn().mockReturnValue('https://example.com/?rowId=1'),
-      searchParams: {
-        set: vi.fn(),
-      },
-    };
-    const originalURL = global.URL;
-    global.URL = class MockURL {
-      constructor() {
-        return mockUrl;
-      }
-    } as unknown as typeof URL;
+    timers = useTestTimers();
+    const clipboard = mockClipboardWriteText();
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
     const shareButton = screen.getByRole('button', { name: /Copy link to output/i });
     expect(shareButton).toBeInTheDocument();
 
-    await userEvent.click(shareButton);
-
-    expect(mockClipboard.writeText).toHaveBeenCalled();
-
-    Object.defineProperty(navigator, 'clipboard', {
-      value: originalClipboard,
-      configurable: true,
-      writable: true,
+    await act(async () => {
+      fireEvent.click(shareButton);
+      await clipboard.writeText.mock.results[0]?.value;
     });
-    global.URL = originalURL;
+
+    expect(clipboard.writeText).toHaveBeenCalled();
+    expect(shareButton.querySelector('.lucide-check')).toBeInTheDocument();
+
+    act(() => {
+      timers?.advanceBy(3000);
+    });
+
+    expect(shareButton.querySelector('.lucide-link')).toBeInTheDocument();
+  });
+
+  it('clears the link feedback timer on unmount after copying link', async () => {
+    timers = useTestTimers();
+    const clipboard = mockClipboardWriteText();
+
+    const { unmount } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Copy link to output/i }));
+      await clipboard.writeText.mock.results[0]?.value;
+    });
+
+    expect(timers.getTimerCount()).toBe(1);
+
+    unmount();
+
+    expect(timers.getTimerCount()).toBe(0);
+  });
+
+  it('does not schedule link feedback after unmount if clipboard resolves late', async () => {
+    timers = useTestTimers();
+    let resolveClipboardWrite: () => void = () => {};
+    const writeTextPromise = new Promise<void>((resolve) => {
+      resolveClipboardWrite = resolve;
+    });
+    const clipboard = {
+      writeText: vi.fn().mockReturnValue(writeTextPromise),
+    };
+
+    mockClipboard({ writeText: clipboard.writeText as Clipboard['writeText'] });
+
+    const { unmount } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Copy link to output/i }));
+    expect(clipboard.writeText).toHaveBeenCalled();
+
+    unmount();
+
+    await act(async () => {
+      resolveClipboardWrite();
+      await writeTextPromise;
+    });
+
+    expect(timers.getTimerCount()).toBe(0);
   });
 
   it('displays the token usage tooltip with reasoning tokens', () => {
@@ -1193,7 +1212,7 @@ describe('EvalOutputCell highlight toggle functionality', () => {
 
     // Click the highlight toggle button (only visible when shift is pressed)
     const highlightButton = screen.getByLabelText('Toggle test highlight');
-    await userEvent.click(highlightButton);
+    fireEvent.click(highlightButton);
 
     // Verify that onRating was called with the highlighted comment
     expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, '!highlight Regular comment');
@@ -1204,7 +1223,7 @@ describe('EvalOutputCell highlight toggle functionality', () => {
     renderWithProviders(<EvalOutputCell {...props} />);
 
     const highlightButton = screen.getByLabelText('Toggle test highlight');
-    await userEvent.click(highlightButton);
+    fireEvent.click(highlightButton);
 
     // Verify that onRating was called with the unhighlighted comment
     expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, 'Already highlighted comment');
@@ -1215,7 +1234,7 @@ describe('EvalOutputCell highlight toggle functionality', () => {
     renderWithProviders(<EvalOutputCell {...props} />);
 
     const highlightButton = screen.getByLabelText('Toggle test highlight');
-    await userEvent.click(highlightButton);
+    fireEvent.click(highlightButton);
 
     // Verify that onRating was called with just the highlight prefix
     expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, '!highlight');
@@ -1226,7 +1245,7 @@ describe('EvalOutputCell highlight toggle functionality', () => {
     renderWithProviders(<EvalOutputCell {...props} />);
 
     const highlightButton = screen.getByLabelText('Toggle test highlight');
-    await userEvent.click(highlightButton);
+    fireEvent.click(highlightButton);
 
     // Verify that onRating was called with empty string
     expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, '');
@@ -1313,7 +1332,7 @@ describe('EvalOutputCell highlight toggle functionality', () => {
     const { rerender } = renderWithProviders(<EvalOutputCell {...regularProps} />);
 
     const highlightButton = screen.getByLabelText('Toggle test highlight');
-    await userEvent.click(highlightButton);
+    fireEvent.click(highlightButton);
     expect(mockOnRating).toHaveBeenNthCalledWith(
       1,
       undefined,
@@ -1327,7 +1346,7 @@ describe('EvalOutputCell highlight toggle functionality', () => {
     rerender(<EvalOutputCell {...highlightedProps} />);
 
     const highlightButtonAfterRerender = screen.getByLabelText('Toggle test highlight');
-    await userEvent.click(highlightButtonAfterRerender);
+    fireEvent.click(highlightButtonAfterRerender);
     expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, 'Original comment');
   });
 });
@@ -1636,7 +1655,7 @@ describe('EvalOutputCell cell highlighting styling', () => {
 
     // Toggle highlight ON
     const highlightButton = screen.getByLabelText('Toggle test highlight');
-    await userEvent.click(highlightButton);
+    fireEvent.click(highlightButton);
 
     // Simulate the state change by re-rendering with highlighted comment
     currentComment = '!highlight Regular comment';
@@ -1656,7 +1675,7 @@ describe('EvalOutputCell cell highlighting styling', () => {
 
     // Toggle highlight OFF
     const newHighlightButton = screen.getByLabelText('Toggle test highlight');
-    await userEvent.click(newHighlightButton);
+    fireEvent.click(newHighlightButton);
 
     // Simulate state change back to non-highlighted
     const unhighlightedProps = createPropsWithComment('Regular comment');
@@ -2368,11 +2387,11 @@ describe('EvalOutputCell inline image lightbox', () => {
     expect(imgElement).toBeInTheDocument();
 
     // Open lightbox
-    await userEvent.click(imgElement);
+    fireEvent.click(imgElement);
     expect(container.querySelector('.lightbox')).toBeInTheDocument();
 
     // Close lightbox
-    await userEvent.click(container.querySelector('.lightbox')!);
+    fireEvent.click(container.querySelector('.lightbox')!);
     expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
   });
 
@@ -2428,23 +2447,23 @@ describe('EvalOutputCell inline image lightbox', () => {
     const imgElement = screen.getByRole('img');
 
     // Toggle open
-    await userEvent.click(imgElement);
+    fireEvent.click(imgElement);
     expect(container.querySelector('.lightbox')).toBeInTheDocument();
 
     // Toggle closed
-    await userEvent.click(container.querySelector('.lightbox')!);
+    fireEvent.click(container.querySelector('.lightbox')!);
     expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
 
     // Toggle open again (tests useCallback stability with functional update)
-    await userEvent.click(imgElement);
+    fireEvent.click(imgElement);
     expect(container.querySelector('.lightbox')).toBeInTheDocument();
 
     // Toggle closed again
-    await userEvent.click(container.querySelector('.lightbox')!);
+    fireEvent.click(container.querySelector('.lightbox')!);
     expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
 
     // Toggle once more to ensure the pattern continues to work
-    await userEvent.click(imgElement);
+    fireEvent.click(imgElement);
     expect(container.querySelector('.lightbox')).toBeInTheDocument();
   });
 });

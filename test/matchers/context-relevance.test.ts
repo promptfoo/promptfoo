@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesContextRelevance } from '../../src/matchers';
+import { matchesContextRelevance } from '../../src/matchers/rag';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
 describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
@@ -193,6 +193,27 @@ This policy excludes all staff going on any outgoing structured programs, short 
   });
 
   describe('Edge Cases', () => {
+    it('should dedupe repeated relevant sentences and keep scores at most 1', async () => {
+      const query = 'What is the answer?';
+      const context = 'The answer is 42.';
+
+      const mockCallApi = vi.fn().mockImplementation(() => {
+        return Promise.resolve({
+          output: 'The answer is 42.\nThe answer is 42.\nThe answer is 42.',
+          tokenUsage: { total: 5, prompt: 3, completion: 2 },
+        });
+      });
+
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+      const result = await matchesContextRelevance(query, context, 0.5);
+
+      expect(result.score).toBe(1);
+      expect(result.pass).toBe(true);
+      expect(result.metadata?.relevantSentenceCount).toBe(1);
+      expect(result.metadata?.extractedSentences).toEqual(['The answer is 42.']);
+    });
+
     it('should handle empty context', async () => {
       const query = 'What is the answer?';
       const context = '';
