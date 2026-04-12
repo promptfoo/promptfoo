@@ -8,6 +8,7 @@ import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
+import { sanitizeScriptContext } from './scriptContext';
 
 import type {
   ApiProvider,
@@ -23,36 +24,6 @@ interface RubyProviderConfig {
 }
 
 type RubyApiType = 'call_api' | 'call_embedding_api' | 'call_classification_api';
-
-function sanitizeRubyContext(
-  context: CallApiContextParams | undefined,
-): CallApiContextParams | undefined {
-  // Create a sanitized copy of context for Ruby.
-  // Avoid mutating caller-owned context because wrappers may reuse it.
-  const sanitizedContext = context ? { ...context } : undefined;
-
-  if (!sanitizedContext) {
-    return undefined;
-  }
-
-  // Remove properties not useful in Ruby and non-serializable objects.
-  // These can contain circular references (e.g., Timeout objects) that break JSON serialization.
-  const stripped: string[] = [];
-  for (const key of ['getCache', 'logger', 'filters', 'originalProvider'] as const) {
-    if (key in sanitizedContext) {
-      stripped.push(key);
-      delete sanitizedContext[key];
-    }
-  }
-
-  if (stripped.length > 0) {
-    logger.debug(
-      `RubyProvider sanitized context: stripped non-serializable keys [${stripped.join(', ')}]`,
-    );
-  }
-
-  return sanitizedContext;
-}
 
 function buildRubyScriptArgs(
   apiType: RubyApiType,
@@ -303,7 +274,7 @@ export class RubyProvider implements ApiProvider {
       // IMPORTANT: Set cached flag to true so evaluator recognizes this as cached
       return applyCachedRubyCallApiMetadata(apiType, parsedResult);
     } else {
-      const sanitizedContext = sanitizeRubyContext(context);
+      const sanitizedContext = sanitizeScriptContext('RubyProvider', context);
 
       // Create a new options object with processed file references included in the config
       // This ensures any file:// references are replaced with their actual content

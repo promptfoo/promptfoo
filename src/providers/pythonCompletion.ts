@@ -11,6 +11,7 @@ import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
 import { providerRegistry } from './providerRegistry';
+import { sanitizeScriptContext } from './scriptContext';
 
 import type {
   ApiProvider,
@@ -29,36 +30,6 @@ interface PythonProviderConfig {
 }
 
 type PythonApiType = 'call_api' | 'call_embedding_api' | 'call_classification_api';
-
-function sanitizePythonContext(
-  context: CallApiContextParams | undefined,
-): CallApiContextParams | undefined {
-  // Create a sanitized copy of context for Python.
-  // Avoid mutating the caller's context because multi-turn wrappers may reuse it.
-  const sanitizedContext = context ? { ...context } : undefined;
-
-  if (!sanitizedContext) {
-    return undefined;
-  }
-
-  // Remove properties not useful in Python and non-serializable objects.
-  // These can contain circular references (e.g., Timeout objects) that break JSON serialization.
-  const stripped: string[] = [];
-  for (const key of ['getCache', 'logger', 'filters', 'originalProvider'] as const) {
-    if (key in sanitizedContext) {
-      stripped.push(key);
-      delete sanitizedContext[key];
-    }
-  }
-
-  if (stripped.length > 0) {
-    logger.debug(
-      `PythonProvider sanitized context: stripped non-serializable keys [${stripped.join(', ')}]`,
-    );
-  }
-
-  return sanitizedContext;
-}
 
 function buildPythonScriptArgs(
   apiType: PythonApiType,
@@ -384,7 +355,7 @@ export class PythonProvider implements ApiProvider {
       // IMPORTANT: Set cached flag to true so evaluator recognizes this as cached
       return applyCachedCallApiMetadata(apiType, parsedResult);
     } else {
-      const sanitizedContext = sanitizePythonContext(context);
+      const sanitizedContext = sanitizeScriptContext('PythonProvider', context);
 
       // Create a new options object with processed file references included in the config
       // This ensures any file:// references are replaced with their actual content
