@@ -23,6 +23,7 @@ import { getGoalRubric } from '../prompts';
 import {
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
+  getGraderAssertionValue,
   getLastMessageContent,
   getTargetResponse,
   isConversationEndedResponse,
@@ -546,7 +547,7 @@ export class CustomProvider implements ApiProvider {
               lastResponse.output,
               test,
               provider,
-              'value' in assertToUse ? assertToUse.value : undefined,
+              getGraderAssertionValue(assertToUse),
               additionalRubric,
             );
             graderPassed = grade.pass;

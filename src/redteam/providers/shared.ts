@@ -668,6 +668,10 @@ export async function tryUnblocking({
   }
 }
 
+function isSingleAssertion(assertToUse: AssertionOrSet | undefined): assertToUse is Assertion {
+  return Boolean(assertToUse && assertToUse.type !== 'assert-set');
+}
+
 /**
  * Builds the assertion object for storedGraderResult with the rubric value.
  * This ensures the grading template is preserved for display in the UI.
@@ -680,8 +684,18 @@ export function buildGraderResultAssertion(
   if (gradeAssertion) {
     return { ...gradeAssertion, value: rubric };
   }
-  if (assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set') {
+  if (isSingleAssertion(assertToUse)) {
     return { ...assertToUse, value: rubric };
   }
   return undefined;
+}
+
+export function getGraderAssertionValue(
+  assertToUse: AssertionOrSet | undefined,
+): Assertion['value'] | undefined {
+  if (!isSingleAssertion(assertToUse)) {
+    return undefined;
+  }
+
+  return assertToUse.value;
 }

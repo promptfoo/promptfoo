@@ -7,7 +7,9 @@ import {
 } from '../../../src/redteam/providers/constants';
 import {
   BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
+  buildGraderResultAssertion,
   formatRedteamHistoryAsTranscript,
+  getGraderAssertionValue,
   getTargetResponse,
   type Message,
   messagesToRedteamHistory,
@@ -18,6 +20,8 @@ import { sleep } from '../../../src/util/time';
 
 import type {
   ApiProvider,
+  Assertion,
+  AssertionSet,
   CallApiContextParams,
   CallApiFunction,
   CallApiOptionsParams,
@@ -995,6 +999,49 @@ describe('shared redteam provider utilities', () => {
         'blocking-question-analysis',
         BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
       );
+    });
+  });
+
+  describe('grader assertion helpers', () => {
+    const singleAssertion: Assertion = {
+      type: 'llm-rubric',
+      value: 'original rubric',
+    };
+    const assertionSet: AssertionSet = {
+      type: 'assert-set',
+      assert: [singleAssertion],
+    };
+
+    it('uses grade assertion when present', () => {
+      expect(
+        buildGraderResultAssertion(
+          { type: 'javascript', pass: true, score: 1, reason: 'ok' } as Assertion,
+          singleAssertion,
+          'rendered rubric',
+        ),
+      ).toEqual({
+        type: 'javascript',
+        pass: true,
+        score: 1,
+        reason: 'ok',
+        value: 'rendered rubric',
+      });
+    });
+
+    it('falls back to a single assertion and exposes its value', () => {
+      expect(buildGraderResultAssertion(undefined, singleAssertion, 'rendered rubric')).toEqual({
+        type: 'llm-rubric',
+        value: 'rendered rubric',
+      });
+      expect(getGraderAssertionValue(singleAssertion)).toBe('original rubric');
+    });
+
+    it('ignores assert-set assertions and undefined values', () => {
+      expect(
+        buildGraderResultAssertion(undefined, assertionSet, 'rendered rubric'),
+      ).toBeUndefined();
+      expect(getGraderAssertionValue(assertionSet)).toBeUndefined();
+      expect(getGraderAssertionValue(undefined)).toBeUndefined();
     });
   });
 });

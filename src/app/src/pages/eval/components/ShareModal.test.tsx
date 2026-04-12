@@ -126,6 +126,19 @@ describe('ShareModal', () => {
     });
   });
 
+  it('does not rerun the domain check after share URL generation fails', async () => {
+    mockOnShare.mockRejectedValueOnce(new Error('Failed to generate share URL'));
+
+    render(<ShareModal {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to generate share URL')).toBeInTheDocument();
+    });
+
+    expect(mockCallApi).toHaveBeenCalledTimes(1);
+    expect(mockCallApi).toHaveBeenCalledWith('/results/share/check-domain?id=test-eval-id');
+  });
+
   it('calls onClose when close button is clicked', async () => {
     const testUrl = 'https://promptfoo.app/eval/test-id';
     mockOnShare.mockResolvedValue(testUrl);

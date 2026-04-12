@@ -37,10 +37,11 @@ export async function loadRubricPrompt(
   rubricPrompt: string | object | undefined,
   defaultPrompt: string,
 ): Promise<string> {
-  if (
-    !rubricPrompt ||
-    (typeof rubricPrompt === 'object' && Object.keys(rubricPrompt).length === 0)
-  ) {
+  if (!rubricPrompt) {
+    return defaultPrompt;
+  }
+
+  if (typeof rubricPrompt === 'object' && Object.keys(rubricPrompt).length === 0) {
     return defaultPrompt;
   }
 

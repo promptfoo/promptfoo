@@ -44,6 +44,7 @@ import {
   checkPenalizedPhrases,
   createIterationContext,
   externalizeResponseForRedteamHistory,
+  getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
 } from './shared';
@@ -849,7 +850,7 @@ async function runRedteamConversation({
               targetResponse.output,
               iterationTest,
               gradingProvider,
-              'value' in assertToUse ? assertToUse.value : undefined,
+              getGraderAssertionValue(assertToUse),
               additionalRubric,
               undefined, // skipRefusalCheck
               gradingContext,

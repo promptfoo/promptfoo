@@ -31,6 +31,7 @@ import {
 import {
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
+  getGraderAssertionValue,
   getTargetResponse,
   isConversationEndedResponse,
   isValidChatMessageArray,
@@ -806,7 +807,7 @@ export class HydraProvider implements ApiProvider {
             targetResponse.output,
             test,
             targetProvider,
-            'value' in assertToUse ? assertToUse.value : undefined,
+            getGraderAssertionValue(assertToUse),
             undefined, // additionalRubric
             undefined, // skipRefusalCheck
             gradingContext,

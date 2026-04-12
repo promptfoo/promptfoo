@@ -37,6 +37,7 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
+import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import {
   ReplicateImageProvider,
@@ -967,6 +968,46 @@ describe('loadApiProvider', () => {
     expect(providers[2]).toBeInstanceOf(AnthropicCompletionProvider);
   });
 
+  it('loadApiProviders uses ProviderOptionsMap keys for loading and nested ids for labels', async () => {
+    const providers = await loadApiProviders([
+      {
+        'openai:responses:gpt-5.4': {
+          id: 'custom-openai',
+          label: 'Custom OpenAI',
+          config: { apiKey: 'test-key' },
+        },
+      },
+    ]);
+
+    expect(providers).toHaveLength(1);
+    expect(providers[0]).toBeInstanceOf(OpenAiResponsesProvider);
+    expect(providers[0].id()).toBe('custom-openai');
+    expect(providers[0].label).toBe('Custom OpenAI');
+  });
+
+  it('redacts invalid provider config details before formatting load errors', async () => {
+    const provider = {
+      config: {
+        apiKey: 'sk-proj-invalid-provider-secret',
+      },
+      headers: {
+        Authorization: 'Bearer invalid-provider-secret-token',
+      },
+    };
+
+    let message = '';
+    try {
+      await loadApiProviders([provider as any]);
+    } catch (err) {
+      message = (err as Error).message;
+    }
+
+    expect(message).toContain('Invalid provider at index 0');
+    expect(message).toContain('[REDACTED]');
+    expect(message).not.toContain('sk-proj-invalid-provider-secret');
+    expect(message).not.toContain('Bearer invalid-provider-secret-token');
+  });
+
   it('loadApiProvider sets provider.delay', async () => {
     const providerOptions = {
       id: 'test-delay',
@@ -1102,6 +1143,33 @@ describe('loadApiProvider', () => {
     delete process.env.TEST_SVC_7079_HTTP;
     delete process.env.TEST_VER_7079_HTTP;
     delete process.env.TEST_SESSION_7079_HTTP;
+  });
+
+  it('lets explicit env overrides win for providers loaded from file references', async () => {
+    const mockYamlContent = dedent`
+      id: 'https://{{env.TEST_FILE_PROVIDER_ENV}}.example.com/api'
+      env:
+        TEST_FILE_PROVIDER_ENV: 'file-default'
+      config:
+        method: 'GET'
+        headers:
+          Authorization: 'Bearer {{env.TEST_FILE_PROVIDER_ENV}}'
+    `;
+    mockFsReadFileSync.mockReturnValue(mockYamlContent);
+
+    const provider = await loadApiProvider('file://path/to/provider.yaml', {
+      env: {
+        TEST_FILE_PROVIDER_ENV: 'context-env',
+      },
+      options: {
+        env: {
+          TEST_FILE_PROVIDER_ENV: 'explicit-env',
+        },
+      },
+    });
+
+    expect(provider.id()).toBe('https://explicit-env.example.com/api');
+    expect(provider.config.headers?.Authorization).toBe('Bearer explicit-env');
   });
 
   it('uses provider env overrides when rendering provider config', async () => {
@@ -1621,6 +1689,56 @@ describe('getProviderIds', () => {
       { 'anthropic:messages:claude-3-5-sonnet-20241022': { id: 'custom-id' } },
     ]);
     expect(providerIds).toEqual(['openai:gpt-4o-mini', 'custom-id']);
+  });
+
+  it('does not treat option-only provider objects as ProviderOptionsMap objects', () => {
+    expect(() => getProviderIds([{ config: { temperature: 0.5 } } as any])).toThrow(
+      'Invalid provider at index 0',
+    );
+    expect(() => getProviderIds([{ prompts: ['prompt1'] } as any])).toThrow(
+      'Invalid provider at index 0',
+    );
+  });
+
+  it('does not treat multi-key objects as ProviderOptionsMap objects', () => {
+    expect(() =>
+      getProviderIds([
+        {
+          'openai:gpt-4o-mini': { config: { temperature: 0.5 } },
+          'anthropic:messages:claude-3-5-sonnet-20241022': { config: { temperature: 0.4 } },
+        } as any,
+      ]),
+    ).toThrow('Invalid provider at index 0');
+  });
+
+  it('formats invalid provider errors for circular objects', () => {
+    const provider: any = { config: { temperature: 0.5 } };
+    provider.self = provider;
+
+    expect(() => getProviderIds([provider])).toThrow('Invalid provider at index 0');
+  });
+
+  it('redacts invalid provider config details before formatting id extraction errors', () => {
+    const provider = {
+      config: {
+        apiKey: 'sk-proj-invalid-provider-secret',
+      },
+      headers: {
+        Authorization: 'Bearer invalid-provider-secret-token',
+      },
+    };
+
+    let message = '';
+    try {
+      getProviderIds([provider as any]);
+    } catch (err) {
+      message = (err as Error).message;
+    }
+
+    expect(message).toContain('Invalid provider at index 0');
+    expect(message).toContain('[REDACTED]');
+    expect(message).not.toContain('sk-proj-invalid-provider-secret');
+    expect(message).not.toContain('Bearer invalid-provider-secret-token');
   });
 
   it('does not treat file:// paths without yaml/yml/json extension as file references', () => {

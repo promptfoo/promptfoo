@@ -27,7 +27,12 @@ import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
-import { buildGraderResultAssertion, getLastMessageContent, tryUnblocking } from './shared';
+import {
+  buildGraderResultAssertion,
+  getGraderAssertionValue,
+  getLastMessageContent,
+  tryUnblocking,
+} from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { type RawTracingConfig, resolveTracingOptions } from './tracingOptions';
 
@@ -738,7 +743,7 @@ export default class GoatProvider implements ApiProvider {
             finalOutput,
             test,
             targetProvider,
-            'value' in assertToUse ? assertToUse.value : undefined,
+            getGraderAssertionValue(assertToUse),
             additionalRubric,
             undefined,
             gradingContext,
