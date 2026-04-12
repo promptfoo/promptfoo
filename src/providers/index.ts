@@ -276,15 +276,12 @@ export function resolveProviderConfigs(
     const descriptor = normalizeProviderRef(provider);
     if (descriptor.kind === 'file') {
       // Resolve file:// references to ProviderOptions[]
-      results.push(...loadProviderConfigsFromFile(provider as string, basePath));
+      results.push(...loadProviderConfigsFromFile(descriptor.loadProviderPath, basePath));
     } else if (descriptor.kind === 'named') {
       // Keep non-file strings as-is
-      results.push(provider as string);
-    } else if (typeof provider === 'function') {
-      // Keep functions as-is
-      results.push(provider);
+      results.push(descriptor.loadProviderPath);
     } else {
-      // Keep ProviderOptions, ProviderOptionsMap, and unrecognized objects as-is
+      // Keep functions, ProviderOptions, ProviderOptionsMap, and unrecognized objects as-is
       // for downstream validation by loadApiProviders
       results.push(provider);
     }
@@ -348,7 +345,7 @@ export async function loadApiProviders(
       providerPaths.map(async (provider, idx) => {
         const descriptor = normalizeProviderRef(provider, { index: idx });
         if (descriptor.kind === 'file') {
-          return loadProvidersFromFile(provider as string, { basePath, env });
+          return loadProvidersFromFile(descriptor.loadProviderPath, { basePath, env });
         }
         if (descriptor.kind === 'named') {
           return [await loadApiProvider(descriptor.loadProviderPath, { basePath, env })];
@@ -410,7 +407,7 @@ export function getProviderIds(providerPaths: TestSuiteConfig['providers']): str
     return providerPaths.flatMap((provider, idx) => {
       const descriptor = normalizeProviderRef(provider, { index: idx });
       if (descriptor.kind === 'file') {
-        return getProviderIdsFromFile(provider as string);
+        return getProviderIdsFromFile(descriptor.loadProviderPath);
       }
       if (descriptor.kind === 'unknown') {
         throw new Error(

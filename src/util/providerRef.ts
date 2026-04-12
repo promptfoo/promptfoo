@@ -7,8 +7,6 @@ import invariant from './invariant';
 
 import type { ProviderOptions, ProviderOptionsMap } from '../types/providers';
 
-export type ProviderRefKind = 'named' | 'file' | 'function' | 'options' | 'map' | 'unknown';
-
 // Keys belonging to the ProviderOptions interface (src/types/providers.ts).
 // When an object's first key matches one of these, it is NOT treated as a
 // ProviderOptionsMap (where the key would be a provider ID like "openai:chat:gpt-4").
@@ -69,14 +67,13 @@ export type ProviderRefDescriptor =
 
 export interface ProviderConfigFile {
   configs: ProviderOptions[];
-  modulePath: string;
   relativePath: string;
   wasArray: boolean;
 }
 
 /** Returns true if the value is a non-empty string suitable as a provider identifier. */
 export function isValidProviderId(id: unknown): id is string {
-  return id !== null && id !== undefined && typeof id === 'string' && id !== '';
+  return typeof id === 'string' && id !== '';
 }
 
 function getProviderLabel(provider: unknown): string | undefined {
@@ -144,11 +141,11 @@ export function readProviderConfigFile(
   basePath?: string,
 ): ProviderConfigFile {
   const relativePath = providerPath.slice('file://'.length);
-  const modulePath = path.isAbsolute(relativePath)
+  const resolvedPath = path.isAbsolute(relativePath)
     ? relativePath
     : path.join(basePath || process.cwd(), relativePath);
 
-  const rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
+  const rawContent = yaml.load(fs.readFileSync(resolvedPath, 'utf8'));
   const fileContent = maybeLoadConfigFromExternalFile(rawContent) as
     | ProviderOptions
     | ProviderOptions[];
@@ -156,7 +153,6 @@ export function readProviderConfigFile(
 
   return {
     configs: [fileContent].flat() as ProviderOptions[],
-    modulePath,
     relativePath,
     wasArray: Array.isArray(fileContent),
   };
@@ -178,27 +174,22 @@ export function loadProviderConfigsFromFile(
  */
 export function normalizeProviderRef(
   provider: unknown,
-  options: { index?: number; functionId?: string; unknownId?: string } = {},
+  options: { index?: number } = {},
 ): ProviderRefDescriptor {
   const { index } = options;
 
   if (typeof provider === 'string') {
-    const kind = isProviderConfigFileReference(provider) ? 'file' : 'named';
-    return {
-      kind,
-      id: provider,
-      loadProviderPath: provider,
-    } as NamedProviderRef | FileProviderRef;
+    if (isProviderConfigFileReference(provider)) {
+      return { kind: 'file', id: provider, loadProviderPath: provider };
+    }
+    return { kind: 'named', id: provider, loadProviderPath: provider };
   }
 
   if (typeof provider === 'function') {
     const label = getProviderLabel(provider);
     return {
       kind: 'function',
-      id:
-        label ??
-        options.functionId ??
-        (index === undefined ? 'custom-function' : `custom-function-${index}`),
+      id: label ?? (index === undefined ? 'custom-function' : `custom-function-${index}`),
       label,
     };
   }
@@ -251,6 +242,6 @@ export function normalizeProviderRef(
 
   return {
     kind: 'unknown',
-    id: options.unknownId ?? (index === undefined ? 'unknown' : `unknown-${index}`),
+    id: index === undefined ? 'unknown' : `unknown-${index}`,
   };
 }

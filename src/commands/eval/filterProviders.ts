@@ -11,8 +11,7 @@ export function getProviderIdAndLabel(
   provider: string | ProviderOptions | ProviderOptionsMap | ((...args: unknown[]) => unknown),
   index: number,
 ): { id: string; label?: string } {
-  const { id, label } = normalizeProviderRef(provider, { index });
-  return { id, label };
+  return normalizeProviderRef(provider, { index });
 }
 
 /**
