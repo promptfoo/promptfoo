@@ -145,7 +145,14 @@ export function readProviderConfigFile(
     ? relativePath
     : path.join(basePath || process.cwd(), relativePath);
 
-  const rawContent = yaml.load(fs.readFileSync(resolvedPath, 'utf8'));
+  let rawContent: unknown;
+  try {
+    rawContent = yaml.load(fs.readFileSync(resolvedPath, 'utf8'));
+  } catch (err) {
+    throw new Error(
+      `Failed to load provider config ${relativePath}: ${err instanceof Error ? err.message : err}`,
+    );
+  }
   const fileContent = maybeLoadConfigFromExternalFile(rawContent) as
     | ProviderOptions
     | ProviderOptions[];
