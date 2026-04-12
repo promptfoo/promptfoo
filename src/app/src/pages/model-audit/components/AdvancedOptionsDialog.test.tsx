@@ -256,7 +256,7 @@ describe('AdvancedOptionsDialog', () => {
     const input = screen.getByPlaceholderText('e.g., 1GB, 500MB');
     await user.click(input);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(invalidSize));
+    await user.paste(invalidSize);
 
     const saveButton = screen.getByText('Save Options');
     await user.click(saveButton);

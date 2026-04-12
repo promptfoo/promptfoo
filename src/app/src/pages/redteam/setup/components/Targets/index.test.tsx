@@ -230,7 +230,7 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
 
     await user.click(configTextarea!);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(newConfigJson));
+    await user.paste(newConfigJson);
 
     // Verify that setRawConfigJson is called with the new JSON string
     expect(mockSetRawConfigJson).toHaveBeenCalledWith(newConfigJson);
@@ -259,7 +259,7 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
 
     await user.click(configTextarea!);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(invalidJson));
+    await user.paste(invalidJson);
 
     // Should still call setRawConfigJson to update the display
     expect(mockSetRawConfigJson).toHaveBeenCalledWith(invalidJson);
@@ -303,7 +303,7 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
 
     await user.click(targetIdInput);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(newId));
+    await user.paste(newId);
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', newId);
   });

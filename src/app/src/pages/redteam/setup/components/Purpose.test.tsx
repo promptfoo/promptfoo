@@ -133,7 +133,7 @@ describe('Purpose Component', () => {
 
     await user.click(purposeTextField);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(testPurpose));
+    await user.paste(testPurpose);
 
     expect(mockUpdateApplicationDefinition).toHaveBeenCalledTimes(1);
     expect(mockUpdateApplicationDefinition).toHaveBeenCalledWith('purpose', testPurpose);
@@ -206,7 +206,7 @@ describe('Purpose Component', () => {
 
       await user.click(purposeTextField);
       await user.keyboard('{Control>}a{/Control}');
-      await user.paste(String(longText));
+      await user.paste(longText);
 
       expect(mockUpdateApplicationDefinition).toHaveBeenCalledTimes(1);
       expect(mockUpdateApplicationDefinition).toHaveBeenCalledWith('purpose', longText);

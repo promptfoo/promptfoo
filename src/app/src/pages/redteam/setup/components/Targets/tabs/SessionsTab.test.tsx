@@ -347,7 +347,7 @@ describe('SessionsTab', () => {
 
         await user.click(bodyTextarea);
         await user.keyboard('{Control>}a{/Control}');
-        await user.paste(String(validJson));
+        await user.paste(validJson);
 
         expect(onUpdate).toHaveBeenCalledWith(
           'session',
@@ -382,7 +382,7 @@ describe('SessionsTab', () => {
 
         await user.click(bodyTextarea);
         await user.keyboard('{Control>}a{/Control}');
-        await user.paste(String(invalidJson));
+        await user.paste(invalidJson);
 
         expect(onUpdate).toHaveBeenCalledWith(
           'session',

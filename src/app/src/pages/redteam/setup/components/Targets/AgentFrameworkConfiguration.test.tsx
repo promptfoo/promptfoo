@@ -37,7 +37,7 @@ describe('AgentFrameworkConfiguration', () => {
     });
     await user.click(providerIdInput);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(newPath));
+    await user.paste(newPath);
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', newPath);
@@ -116,7 +116,7 @@ describe('AgentFrameworkConfiguration', () => {
     });
     await user.click(providerIdInput);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(invalidPath));
+    await user.paste(invalidPath);
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', invalidPath);
@@ -145,7 +145,7 @@ describe('AgentFrameworkConfiguration', () => {
     });
     await user.click(providerIdInput);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(invalidPath));
+    await user.paste(invalidPath);
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', invalidPath);

@@ -35,28 +35,26 @@ describe('PromptsSection', () => {
     );
   };
 
-  const openPromptDialog = async () => {
-    const user = userEvent.setup();
+  type UserEvent = ReturnType<typeof userEvent.setup>;
+
+  const openPromptDialog = async (user: UserEvent) => {
     const addPromptButton = screen.getByRole('button', { name: /add prompt/i });
     await user.click(addPromptButton);
   };
 
-  const fillPromptText = async (text: string) => {
-    const user = userEvent.setup();
+  const fillPromptText = async (user: UserEvent, text: string) => {
     const promptTextarea = screen.getByRole('textbox');
     await user.click(promptTextarea);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(text));
+    await user.paste(text);
   };
 
-  const submitPromptDialog = async () => {
-    const user = userEvent.setup();
+  const submitPromptDialog = async (user: UserEvent) => {
     const addButtonInDialog = screen.getByRole('button', { name: 'Add' });
     await user.click(addButtonInDialog);
   };
 
-  const savePromptDialog = async () => {
-    const user = userEvent.setup();
+  const savePromptDialog = async (user: UserEvent) => {
     const saveButton = screen.getByRole('button', { name: 'Save' });
     await user.click(saveButton);
   };
@@ -106,6 +104,7 @@ describe('PromptsSection', () => {
   });
 
   it("should add a new prompt to the list when the 'Add Prompt' button is clicked, the PromptDialog is filled, and the prompt is submitted", async () => {
+    const user = userEvent.setup();
     setupStore([]);
 
     const { rerender } = render(
@@ -116,15 +115,15 @@ describe('PromptsSection', () => {
 
     expect(screen.getByText('No prompts added yet.')).toBeInTheDocument();
 
-    await openPromptDialog();
+    await openPromptDialog(user);
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Add Prompt' })).toBeInTheDocument();
 
     const newPromptText = 'Write a story about a robot who discovers music.';
-    await fillPromptText(newPromptText);
+    await fillPromptText(user, newPromptText);
 
-    await submitPromptDialog();
+    await submitPromptDialog(user);
 
     expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
     expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -159,9 +158,9 @@ describe('PromptsSection', () => {
     expect(promptTextarea.value).toBe(initialPrompt);
 
     const updatedPromptText = 'Write a short story about a dog.';
-    await fillPromptText(updatedPromptText);
+    await fillPromptText(user, updatedPromptText);
 
-    await savePromptDialog();
+    await savePromptDialog(user);
 
     expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
     expect(mockUpdateConfig).toHaveBeenCalledWith({

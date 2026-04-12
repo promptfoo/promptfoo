@@ -53,7 +53,7 @@ describe('DigitalSignatureAuthTab', () => {
 
     await user.click(validityInput);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(String(newValidityValue)));
+    await user.paste(String(newValidityValue));
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -76,7 +76,7 @@ describe('DigitalSignatureAuthTab', () => {
 
     await user.click(refreshBufferInput);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(String(newRefreshBufferValue)));
+    await user.paste(String(newRefreshBufferValue));
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -120,7 +120,7 @@ describe('DigitalSignatureAuthTab', () => {
 
     await user.click(validityInput);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(String(negativeValidityValue)));
+    await user.paste(String(negativeValidityValue));
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -143,7 +143,7 @@ describe('DigitalSignatureAuthTab', () => {
 
     await user.click(validityInput);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(String(largeValidityValue)));
+    await user.paste(String(largeValidityValue));
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -166,7 +166,7 @@ describe('DigitalSignatureAuthTab', () => {
 
     await user.click(validityInput);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(String(decimalValue)));
+    await user.paste(String(decimalValue));
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -200,7 +200,7 @@ describe('DigitalSignatureAuthTab', () => {
 
     await user.click(refreshBufferInput);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(String(newRefreshBufferValue)));
+    await user.paste(String(newRefreshBufferValue));
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {

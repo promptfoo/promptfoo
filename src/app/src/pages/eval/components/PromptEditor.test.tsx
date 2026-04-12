@@ -149,7 +149,7 @@ describe('PromptEditor', () => {
 
     await user.click(textField);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(newValue));
+    await user.paste(newValue);
 
     expect(onPromptChange).toHaveBeenCalledWith(newValue);
   });
@@ -221,7 +221,7 @@ describe('PromptEditor', () => {
       'This is the edited prompt with a modified {{variable}} and a new {{another_variable}}.';
     await user.click(textField);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(newPromptValue));
+    await user.paste(newPromptValue);
 
     expect(onPromptChange).toHaveBeenCalledWith(newPromptValue);
   });

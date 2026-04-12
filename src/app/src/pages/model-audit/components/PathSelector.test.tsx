@@ -50,7 +50,7 @@ describe('PathSelector', () => {
 
       await user.click(input);
       await user.keyboard('{Control>}a{/Control}');
-      await user.paste(String(pathToAdd));
+      await user.paste(pathToAdd);
       await user.click(addButton);
 
       await waitFor(() => {
@@ -89,7 +89,7 @@ describe('PathSelector', () => {
 
       await user.click(input);
       await user.keyboard('{Control>}a{/Control}');
-      await user.paste(String(pathToAdd));
+      await user.paste(pathToAdd);
       await user.click(addButton);
 
       await waitFor(() => {
@@ -131,7 +131,7 @@ describe('PathSelector', () => {
 
       await user.click(input);
       await user.keyboard('{Control>}a{/Control}');
-      await user.paste(String(pathToAdd));
+      await user.paste(pathToAdd);
       await user.click(addButton);
 
       await waitFor(() => {
@@ -174,7 +174,7 @@ describe('PathSelector', () => {
 
       await user.click(input);
       await user.keyboard('{Control>}a{/Control}');
-      await user.paste(String(pathToAdd));
+      await user.paste(pathToAdd);
       await user.click(addButton);
 
       await waitFor(() => {

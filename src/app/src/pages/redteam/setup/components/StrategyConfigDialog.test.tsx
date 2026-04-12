@@ -239,7 +239,7 @@ describe('StrategyConfigDialog', () => {
     const strategyTextField = screen.getByLabelText('Strategy Text');
     await user.click(strategyTextField);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(strategyText));
+    await user.paste(strategyText);
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
     expect(saveButton).not.toBeDisabled();
@@ -318,6 +318,8 @@ describe('StrategyConfigDialog', () => {
     );
 
     const numTestsInput = screen.getByLabelText('Maximum Tests Per Plugin');
+    // Bypass browser type="number" validation via the native setter — userEvent
+    // correctly rejects non-numeric input, but we need to test defensive handling.
     act(() => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
         numTestsInput,
@@ -353,7 +355,7 @@ describe('StrategyConfigDialog', () => {
     const numIterationsInput = screen.getByLabelText('Number of Iterations');
     await user.click(numIterationsInput);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(newNumIterations.toString()));
+    await user.paste(String(newNumIterations));
     await user.tab();
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
@@ -470,7 +472,7 @@ describe('StrategyConfigDialog', () => {
     const nTextField = screen.getByLabelText('Number of Outputs (n)');
     await user.click(nTextField);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(newN.toString()));
+    await user.paste(String(newN));
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
     await user.click(saveButton);
@@ -811,7 +813,7 @@ describe('StrategyConfigDialog', () => {
     const numIterationsInput = screen.getByLabelText('Number of Iterations');
     await user.click(numIterationsInput);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(numIterations.toString()));
+    await user.paste(String(numIterations));
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
     await user.click(saveButton);
@@ -916,7 +918,7 @@ describe('StrategyConfigDialog', () => {
     const numIterationsInput = screen.getByLabelText('Number of Iterations');
     await user.click(numIterationsInput);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(newNumIterations.toString()));
+    await user.paste(String(newNumIterations));
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
     await user.click(saveButton);
@@ -953,7 +955,7 @@ describe('StrategyConfigDialog', () => {
     const numIterationsInput = screen.getByLabelText('Number of Iterations');
     await user.click(numIterationsInput);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(newNumIterations.toString()));
+    await user.paste(String(newNumIterations));
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
     await user.click(saveButton);

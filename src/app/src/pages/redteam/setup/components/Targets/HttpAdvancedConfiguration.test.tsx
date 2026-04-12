@@ -386,7 +386,7 @@ describe('HttpAdvancedConfiguration', () => {
     const envVar = '${MY_PASSWORD}';
     await user.click(keystorePasswordInput);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(envVar));
+    await user.paste(envVar);
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
       enabled: true,

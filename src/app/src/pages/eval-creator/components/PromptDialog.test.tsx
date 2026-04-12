@@ -38,7 +38,7 @@ describe('PromptDialog', () => {
 
     await user.click(textField);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(newValue));
+    await user.paste(newValue);
 
     expect(textField).toHaveValue(newValue);
   });

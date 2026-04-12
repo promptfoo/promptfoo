@@ -15,7 +15,7 @@ describe('JsonTextField', () => {
     const textField = screen.getByLabelText('JSON Input');
     await user.click(textField);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(validJsonString));
+    await user.paste(validJsonString);
 
     expect(textField).toHaveValue(validJsonString);
 
@@ -36,7 +36,7 @@ describe('JsonTextField', () => {
     const textField = screen.getByLabelText('JSON Input');
     await user.click(textField);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(validJsonNumber));
+    await user.paste(validJsonNumber);
 
     expect(textField).toHaveValue(validJsonNumber);
     expect(screen.queryByText('Invalid JSON')).not.toBeInTheDocument();

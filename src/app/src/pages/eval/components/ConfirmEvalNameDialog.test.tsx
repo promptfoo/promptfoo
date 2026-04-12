@@ -433,7 +433,7 @@ describe('ConfirmEvalNameDialog', () => {
       const input = screen.getByLabelText('Name') as HTMLInputElement;
       await user.click(input);
       await user.keyboard('{Control>}a{/Control}');
-      await user.paste(String(newName));
+      await user.paste(newName);
 
       const confirmButton = screen.getByRole('button', { name: 'Confirm' });
       await user.click(confirmButton);

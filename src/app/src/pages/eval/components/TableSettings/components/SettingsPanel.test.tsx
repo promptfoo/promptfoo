@@ -117,7 +117,6 @@ describe('SettingsPanel', () => {
 
     // Focus the slider and use keyboard to change value
     slider.focus();
-    slider.focus();
     await user.keyboard('{End}');
 
     // For Radix Slider, the store is called via onValueCommit after key events
