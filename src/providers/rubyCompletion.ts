@@ -142,7 +142,7 @@ function validateRubyCallApiResult(functionName: string, result: any): void {
 
   if (!hasRubyResultProperty(result, 'output') && !hasRubyResultProperty(result, 'error')) {
     throw new Error(
-      `The Ruby script \`${functionName}\` function must return a hash with an \`output\` string/object or \`error\` string, instead got: ${JSON.stringify(
+      `The Ruby script \`${functionName}\` function must return a hash with an own \`output\` string/object or \`error\` string (inherited prototype properties are rejected), instead got: ${JSON.stringify(
         result,
       )}`,
     );
@@ -152,7 +152,7 @@ function validateRubyCallApiResult(functionName: string, result: any): void {
 function validateRubyEmbeddingResult(functionName: string, result: any): void {
   if (!hasRubyResultProperty(result, 'embedding') && !hasRubyResultProperty(result, 'error')) {
     throw new Error(
-      `The Ruby script \`${functionName}\` function must return a hash with an \`embedding\` array or \`error\` string, instead got ${JSON.stringify(
+      `The Ruby script \`${functionName}\` function must return a hash with an own \`embedding\` array or \`error\` string (inherited prototype properties are rejected), instead got ${JSON.stringify(
         result,
       )}`,
     );
@@ -162,7 +162,7 @@ function validateRubyEmbeddingResult(functionName: string, result: any): void {
 function validateRubyClassificationResult(functionName: string, result: any): void {
   if (!hasRubyResultProperty(result, 'classification') && !hasRubyResultProperty(result, 'error')) {
     throw new Error(
-      `The Ruby script \`${functionName}\` function must return a hash with a \`classification\` object or \`error\` string, instead of ${JSON.stringify(
+      `The Ruby script \`${functionName}\` function must return a hash with an own \`classification\` object or \`error\` string (inherited prototype properties are rejected), instead of ${JSON.stringify(
         result,
       )}`,
     );

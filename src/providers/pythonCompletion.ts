@@ -152,7 +152,7 @@ function validateCallApiResult(functionName: string, result: any): void {
 
   if (!hasPythonResultProperty(result, 'output') && !hasPythonResultProperty(result, 'error')) {
     throw new Error(
-      `The Python script \`${functionName}\` function must return a dict with an \`output\` string/object or \`error\` string, instead got: ${JSON.stringify(
+      `The Python script \`${functionName}\` function must return a dict with an own \`output\` string/object or \`error\` string (inherited prototype properties are rejected), instead got: ${JSON.stringify(
         result,
       )}`,
     );
@@ -162,7 +162,7 @@ function validateCallApiResult(functionName: string, result: any): void {
 function validateEmbeddingResult(functionName: string, result: any): void {
   if (!hasPythonResultProperty(result, 'embedding') && !hasPythonResultProperty(result, 'error')) {
     throw new Error(
-      `The Python script \`${functionName}\` function must return a dict with an \`embedding\` array or \`error\` string, instead got ${JSON.stringify(
+      `The Python script \`${functionName}\` function must return a dict with an own \`embedding\` array or \`error\` string (inherited prototype properties are rejected), instead got ${JSON.stringify(
         result,
       )}`,
     );
@@ -175,7 +175,7 @@ function validateClassificationResult(functionName: string, result: any): void {
     !hasPythonResultProperty(result, 'error')
   ) {
     throw new Error(
-      `The Python script \`${functionName}\` function must return a dict with a \`classification\` object or \`error\` string, instead of ${JSON.stringify(
+      `The Python script \`${functionName}\` function must return a dict with an own \`classification\` object or \`error\` string (inherited prototype properties are rejected), instead of ${JSON.stringify(
         result,
       )}`,
     );
