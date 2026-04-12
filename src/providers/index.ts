@@ -401,6 +401,11 @@ function getProviderIdsFromFile(providerPath: string): string[] {
   });
 }
 
+/**
+ * Extracts provider IDs from a provider paths configuration without instantiating providers.
+ * Handles strings, functions, and arrays of mixed provider types.
+ * For file:// references, reads the config file to extract IDs.
+ */
 export function getProviderIds(providerPaths: TestSuiteConfig['providers']): string[] {
   if (typeof providerPaths === 'string') {
     if (isProviderConfigFileReference(providerPaths)) {
