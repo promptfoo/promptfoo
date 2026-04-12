@@ -497,6 +497,29 @@ describe('PythonProvider', () => {
       expect(mockCache.set).not.toHaveBeenCalled();
     });
 
+    it('should ignore inherited error properties when deciding whether to cache', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+
+      const result = Object.create({ error: 'prototype error' });
+      result.output = 'fresh result';
+      mockPoolInstance.execute.mockResolvedValue(result);
+
+      await expect(provider.callApi('test prompt')).resolves.toEqual({
+        output: 'fresh result',
+        cached: false,
+      });
+      expect(mockCache.set).toHaveBeenCalledWith(
+        'python:undefined:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
+        '{"output":"fresh result"}',
+      );
+    });
+
     it('should properly use different cache keys for different function names', async () => {
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
@@ -559,6 +582,47 @@ describe('PythonProvider', () => {
   });
 
   describe('worker pool integration', () => {
+    it('should reuse the in-flight initialization promise and skip reinitialization once ready', async () => {
+      const provider = new PythonProvider('script.py');
+      let resolveInitialize: (() => void) | undefined;
+      mockPoolInstance.initialize.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveInitialize = resolve;
+          }),
+      );
+
+      const firstInitialize = provider.initialize();
+      const secondInitialize = provider.initialize();
+
+      await Promise.resolve();
+      expect(mockPythonWorkerPool).toHaveBeenCalledTimes(1);
+      expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(1);
+
+      resolveInitialize?.();
+      await expect(Promise.all([firstInitialize, secondInitialize])).resolves.toEqual([
+        undefined,
+        undefined,
+      ]);
+      await provider.initialize();
+
+      expect(mockPythonWorkerPool).toHaveBeenCalledTimes(1);
+      expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(1);
+    });
+
+    it('should clear the initialization promise after a failed initialization attempt', async () => {
+      const provider = new PythonProvider('script.py');
+      mockPoolInstance.initialize
+        .mockRejectedValueOnce(new Error('pool init failed'))
+        .mockResolvedValueOnce(undefined);
+
+      await expect(provider.initialize()).rejects.toThrow('pool init failed');
+      await expect(provider.initialize()).resolves.toBeUndefined();
+
+      expect(mockPythonWorkerPool).toHaveBeenCalledTimes(2);
+      expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(2);
+    });
+
     it('should initialize worker pool with default worker count', async () => {
       const provider = new PythonProvider('script.py');
       await provider.initialize();

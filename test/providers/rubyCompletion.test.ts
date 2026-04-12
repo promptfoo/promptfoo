@@ -6,6 +6,7 @@ import { getCache, isCacheEnabled } from '../../src/cache';
 import { RubyProvider } from '../../src/providers/rubyCompletion';
 import * as rubyUtils from '../../src/ruby/rubyUtils';
 import { runRuby } from '../../src/ruby/rubyUtils';
+import * as fileReference from '../../src/util/fileReference';
 
 const fsMocks = vi.hoisted(() => ({
   readFileSync: vi.fn(),
@@ -483,6 +484,29 @@ describe('RubyProvider', () => {
       expect(mockCache.set).not.toHaveBeenCalled();
     });
 
+    it('should ignore inherited error properties when deciding whether to cache', async () => {
+      const provider = new RubyProvider('script.rb');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+
+      const result = Object.create({ error: 'prototype error' });
+      result.output = 'fresh result';
+      mockRunRuby.mockResolvedValue(result);
+
+      await expect(provider.callApi('test prompt')).resolves.toEqual({
+        output: 'fresh result',
+        cached: false,
+      });
+      expect(mockCache.set).toHaveBeenCalledWith(
+        'ruby:script.rb:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
+        '{"output":"fresh result"}',
+      );
+    });
+
     it('should properly use different cache keys for different function names', async () => {
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
@@ -541,6 +565,50 @@ describe('RubyProvider', () => {
 
       expect(result).toEqual({ classification: { label: 'test', score: 0.9 } });
       expect(result).not.toHaveProperty('cached');
+    });
+  });
+
+  describe('initialize', () => {
+    it('should reuse the in-flight initialization promise and skip reprocessing once ready', async () => {
+      const processConfigSpy = vi.spyOn(fileReference, 'processConfigFileReferences');
+      let resolveConfig: ((value: unknown) => void) | undefined;
+      processConfigSpy.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveConfig = resolve;
+          }) as Promise<any>,
+      );
+
+      const provider = new RubyProvider('script.rb');
+      const firstInitialize = provider.initialize();
+      const secondInitialize = provider.initialize();
+
+      expect(processConfigSpy).toHaveBeenCalledTimes(1);
+
+      resolveConfig?.({});
+      await expect(Promise.all([firstInitialize, secondInitialize])).resolves.toEqual([
+        undefined,
+        undefined,
+      ]);
+      await provider.initialize();
+
+      expect(processConfigSpy).toHaveBeenCalledTimes(1);
+      processConfigSpy.mockRestore();
+    });
+
+    it('should clear the initialization promise after a failed initialization attempt', async () => {
+      const processConfigSpy = vi.spyOn(fileReference, 'processConfigFileReferences');
+      processConfigSpy
+        .mockRejectedValueOnce(new Error('config processing failed'))
+        .mockResolvedValueOnce({});
+
+      const provider = new RubyProvider('script.rb');
+
+      await expect(provider.initialize()).rejects.toThrow('config processing failed');
+      await expect(provider.initialize()).resolves.toBeUndefined();
+
+      expect(processConfigSpy).toHaveBeenCalledTimes(2);
+      processConfigSpy.mockRestore();
     });
   });
 });
