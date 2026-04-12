@@ -390,12 +390,8 @@ export async function loadApiProviders(
 }
 
 /**
- * Given a `providerPaths` object, resolves a list of provider IDs. Mimics the waterfall behavior
- * of `loadApiProviders` to ensure consistent behavior given the shape of the `providerPaths`
- * object.
- *
- * @param providerPaths - The list of providers to get the IDs of.
- * @returns The IDs of the providers in the providerPaths list.
+ * Reads a provider config file and returns the IDs of all providers defined in it.
+ * Requires every provider entry to have an `id` field.
  */
 function getProviderIdsFromFile(providerPath: string): string[] {
   const basePath = cliState.basePath || process.cwd();
