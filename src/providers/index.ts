@@ -354,32 +354,36 @@ export async function loadApiProviders(
     const providersArrays = await Promise.all(
       providerPaths.map(async (provider, idx) => {
         const descriptor = normalizeProviderRef(provider, { index: idx });
-        if (descriptor.kind === 'file') {
-          return loadProvidersFromFile(descriptor.loadProviderPath, { basePath, env });
+        switch (descriptor.kind) {
+          case 'file':
+            return loadProvidersFromFile(descriptor.loadProviderPath, { basePath, env });
+          case 'named':
+            return [await loadApiProvider(descriptor.loadProviderPath, { basePath, env })];
+          case 'function':
+            return [
+              {
+                id: () => descriptor.id,
+                callApi: provider as ProviderFunction,
+              },
+            ];
+          case 'options':
+          case 'map':
+            return [
+              await loadApiProvider(descriptor.loadProviderPath, {
+                options: descriptor.loadOptions,
+                basePath,
+                env,
+              }),
+            ];
+          case 'unknown':
+            throw new Error(
+              `Invalid provider at index ${idx}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap (e.g. { "openai:chat:gpt-4": { config: ... } }). Got: ${describeInvalidProvider(provider)}`,
+            );
+          default: {
+            const _exhaustive: never = descriptor;
+            throw new Error(`Unhandled provider kind: ${(_exhaustive as any).kind}`);
+          }
         }
-        if (descriptor.kind === 'named') {
-          return [await loadApiProvider(descriptor.loadProviderPath, { basePath, env })];
-        }
-        if (descriptor.kind === 'function') {
-          return [
-            {
-              id: () => descriptor.id,
-              callApi: provider as ProviderFunction,
-            },
-          ];
-        }
-        if (descriptor.kind === 'options' || descriptor.kind === 'map') {
-          return [
-            await loadApiProvider(descriptor.loadProviderPath, {
-              options: descriptor.loadOptions,
-              basePath,
-              env,
-            }),
-          ];
-        }
-        throw new Error(
-          `Invalid provider at index ${idx}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap (e.g. { "openai:chat:gpt-4": { config: ... } }). Got: ${describeInvalidProvider(provider)}`,
-        );
       }),
     );
     return providersArrays.flat();
