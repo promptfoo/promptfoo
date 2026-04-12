@@ -28,6 +28,7 @@ vi.mock('../src/version', () => ({
   ENGINES: { node: '>=20.0.0' },
 }));
 
+import logger from '../src/logger';
 import {
   checkForUpdates,
   checkModelAuditUpdates,
@@ -70,16 +71,18 @@ describe('getLatestVersion', () => {
 });
 
 describe('checkForUpdates', () => {
+  let loggerInfoSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     // Reset fetchWithTimeout to clear any queued mockResolvedValueOnce from other tests
     vi.mocked(fetchWithTimeout).mockReset();
     // Clear env var that other tests may have set
     delete process.env.PROMPTFOO_DISABLE_UPDATE;
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+    loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
   });
 
   afterEach(() => {
-    vi.mocked(console.log).mockRestore();
+    loggerInfoSpy.mockRestore();
   });
 
   it('should log an update message if a newer version is available - minor ver', async () => {
@@ -176,13 +179,15 @@ describe('getModelAuditCurrentVersion', () => {
 });
 
 describe('checkModelAuditUpdates', () => {
+  let loggerInfoSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+    loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
     delete process.env.PROMPTFOO_DISABLE_UPDATE;
   });
 
   afterEach(() => {
-    vi.mocked(console.log).mockRestore();
+    loggerInfoSpy.mockRestore();
   });
 
   it('should return true and log message when update is available', async () => {

@@ -176,14 +176,32 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
             <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
               {/* Test Input Section */}
               <div className="space-y-2">
-                <Label className="text-sm font-semibold">{testInputLabel}</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-sm font-semibold">{testInputLabel}</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Format JSON"
+                        className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        onClick={formatJson}
+                      >
+                        <AlignLeft className="size-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>Format JSON</TooltipContent>
+                  </Tooltip>
+                </div>
                 <Collapsible
                   open={testInputExpanded}
                   onOpenChange={setTestInputExpanded}
                   className="rounded-lg border border-border"
                 >
                   <div className="flex items-center justify-between rounded-t-lg bg-muted/50 px-3 py-2">
-                    <CollapsibleTrigger className="flex flex-1 items-center justify-between text-left transition-colors hover:text-foreground">
+                    <CollapsibleTrigger
+                      type="button"
+                      className="flex flex-1 items-center justify-between text-left transition-colors hover:text-foreground"
+                    >
                       <span className="text-sm text-muted-foreground">Test input</span>
                       <ChevronDown
                         className={cn(
@@ -192,19 +210,6 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                         )}
                       />
                     </CollapsibleTrigger>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label="Format JSON"
-                          className="ml-2 rounded p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
-                          onClick={formatJson}
-                        >
-                          <AlignLeft className="size-4" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent>Format JSON</TooltipContent>
-                    </Tooltip>
                   </div>
                   <CollapsibleContent>
                     {formatError && (
@@ -244,7 +249,10 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                   onOpenChange={setDocsExpanded}
                   className="rounded-lg border border-border"
                 >
-                  <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-left transition-colors hover:bg-muted data-[state=open]:rounded-b-none">
+                  <CollapsibleTrigger
+                    type="button"
+                    className="flex w-full items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-left transition-colors hover:bg-muted data-[state=open]:rounded-b-none"
+                  >
                     <span className="text-sm text-muted-foreground">Documentation</span>
                     <ChevronDown
                       className={cn(

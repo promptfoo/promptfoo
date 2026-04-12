@@ -959,10 +959,10 @@ describe('TestSuiteConfigSchema', () => {
       );
 
       const result = extendedSchema.safeParse(config);
-      if (!result.success) {
-        console.error(`Validation failed for ${file}:`, result.error);
-      }
-      expect(result.success).toBe(true);
+      expect(
+        result.success,
+        `Validation failed for ${file}: ${result.success ? '' : result.error.message}`,
+      ).toBe(true);
     });
   }
 });

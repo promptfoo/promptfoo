@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { filterConfigForDisplay, ProviderDisplay } from './ProviderDisplay';
@@ -307,11 +308,11 @@ describe('filterConfigForDisplay', () => {
 
 describe('ProviderDisplay', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    useTestTimers();
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    restoreTestTimers();
   });
 
   const renderWithProviders = (

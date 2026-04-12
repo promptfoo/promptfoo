@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesContextRecall } from '../../src/matchers';
+import { matchesContextRecall } from '../../src/matchers/rag';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
 describe('matchesContextRecall', () => {
@@ -220,6 +220,31 @@ describe('matchesContextRecall', () => {
       // Line 2: [not attributed] - NOT counted as attributed (contains "not")
       // Line 3: [Attributed] - counted as attributed
       expect(result.metadata?.attributedSentences).toBe(2);
+    });
+
+    it('should let not-attributed markers take precedence over attributed markers', async () => {
+      const context = 'The context supports only one sentence.';
+      const groundTruth = 'First sentence. Second sentence.';
+      const threshold = 0.5;
+
+      const mockCallApi = vi.fn().mockImplementation(() => {
+        return Promise.resolve({
+          output:
+            'First sentence. [Attributed]\n' + 'Second sentence. [Not Attributed] [Attributed]',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      });
+
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+      const result = await matchesContextRecall(context, groundTruth, threshold);
+
+      expect(result.score).toBe(0.5);
+      expect(result.metadata?.attributedSentences).toBe(1);
+      expect(result.metadata?.sentenceAttributions).toEqual([
+        { sentence: 'First sentence', attributed: true },
+        { sentence: 'Second sentence', attributed: false },
+      ]);
     });
 
     it('should return score 0 when LLM returns no classification lines', async () => {

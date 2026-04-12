@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleGEval } from '../../src/assertions/geval';
-import { matchesGEval } from '../../src/matchers';
+import { matchesGEval } from '../../src/matchers/llmGrading';
 
-vi.mock('../../src/matchers');
+vi.mock('../../src/matchers/llmGrading');
 
 describe('handleGEval', () => {
   beforeEach(() => {

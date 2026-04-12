@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import * as pythonUtils from '../../src/python/pythonUtils';
 
@@ -13,28 +13,12 @@ const TEST_TIMEOUT = process.platform === 'win32' ? 90000 : 15000;
 // This test ensures paths like C:\ don't break the protocol parsing
 describe('PythonProvider Windows Path Handling', () => {
   let tempDir: string;
+  let previousCacheEnabled: string | undefined;
+  let pathProvider: PythonProvider;
+  let concurrentProvider: PythonProvider;
+  let protocolProvider: PythonProvider;
+  let specialCharsProvider: PythonProvider;
   const providers: PythonProvider[] = [];
-
-  beforeEach(() => {
-    // Reset Python state
-    pythonUtils.state.cachedPythonPath = null;
-    pythonUtils.state.validationPromise = null;
-
-    // Disable caching for tests
-    process.env.PROMPTFOO_CACHE_ENABLED = 'false';
-
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-windows-path-test-'));
-  });
-
-  afterEach(async () => {
-    // Cleanup providers
-    await Promise.all(providers.map((p) => p.shutdown().catch(() => {})));
-    providers.length = 0;
-
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true });
-    }
-  });
 
   const createProvider = (scriptName: string, scriptContent: string) => {
     const scriptPath = path.join(tempDir, scriptName);
@@ -47,14 +31,20 @@ describe('PythonProvider Windows Path Handling', () => {
     return provider;
   };
 
-  it(
-    'should handle paths with colons (like C:\\ on Windows)',
-    async () => {
-      // This test verifies that the protocol delimiter (pipe |) doesn't conflict
-      // with Windows drive letters (C:, D:, etc.) in file paths
-      const provider = createProvider(
-        'path_test.py',
-        `
+  beforeAll(async () => {
+    // Reset Python state
+    pythonUtils.state.cachedPythonPath = null;
+    pythonUtils.state.validationPromise = null;
+
+    // Disable caching for tests
+    previousCacheEnabled = process.env.PROMPTFOO_CACHE_ENABLED;
+    process.env.PROMPTFOO_CACHE_ENABLED = 'false';
+
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-windows-path-test-'));
+
+    pathProvider = createProvider(
+      'path_test.py',
+      `
 import os
 
 def call_api(prompt, options, context):
@@ -67,9 +57,91 @@ def call_api(prompt, options, context):
         }
     }
 `,
-      );
+    );
 
-      const result = await provider.callApi('Test prompt');
+    concurrentProvider = createProvider(
+      'concurrent_test.py',
+      `
+def call_api(prompt, options, context):
+    return {
+        "output": f"Processed: {prompt}"
+    }
+`,
+    );
+
+    protocolProvider = createProvider(
+      'protocol_test.py',
+      `
+def call_api(prompt, options, context):
+    # If we got here, the protocol parsing worked correctly
+    return {
+        "output": "Protocol parsing successful",
+        "platform": "${process.platform}"
+    }
+`,
+    );
+
+    specialCharsProvider = createProvider(
+      'special_chars.py',
+      `
+def call_api(prompt, options, context):
+    import os
+    temp_dir = os.environ.get('TEMP', '/tmp')
+    return {
+        "output": "Success",
+        "metadata": {
+            "temp_dir": temp_dir,
+            "has_special_chars": any(c in temp_dir for c in [' ', '-', '_', '.'])
+        }
+    }
+`,
+    );
+
+    await Promise.all(providers.map((provider) => provider.initialize()));
+  });
+
+  afterAll(async () => {
+    // Cleanup providers
+    const shutdownResults = await Promise.allSettled(
+      providers.map(async (provider) => ({
+        providerId: provider.id(),
+        result: await provider.shutdown(),
+      })),
+    );
+    const shutdownFailures = shutdownResults
+      .map((result, index) =>
+        result.status === 'rejected'
+          ? `${providers[index]?.id() ?? `provider-${index}`}: ${String(result.reason)}`
+          : null,
+      )
+      .filter((failure): failure is string => failure !== null);
+
+    providers.length = 0;
+
+    if (tempDir && fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true });
+    }
+
+    pythonUtils.state.cachedPythonPath = null;
+    pythonUtils.state.validationPromise = null;
+
+    if (previousCacheEnabled === undefined) {
+      delete process.env.PROMPTFOO_CACHE_ENABLED;
+    } else {
+      process.env.PROMPTFOO_CACHE_ENABLED = previousCacheEnabled;
+    }
+
+    if (shutdownFailures.length > 0) {
+      throw new Error(`PythonProvider shutdown failed: ${shutdownFailures.join('; ')}`);
+    }
+  });
+
+  it(
+    'should handle paths with colons (like C:\\ on Windows)',
+    async () => {
+      // This test verifies that the protocol delimiter (pipe |) doesn't conflict
+      // with Windows drive letters (C:, D:, etc.) in file paths
+      const result = await pathProvider.callApi('Test prompt');
 
       // Verify the call succeeded
       expect(result.output).toBe('Processed: Test prompt');
@@ -89,20 +161,10 @@ def call_api(prompt, options, context):
     async () => {
       // Stress test: ensure protocol works with multiple concurrent requests
       // where temp file paths all contain colons
-      const provider = createProvider(
-        'concurrent_test.py',
-        `
-def call_api(prompt, options, context):
-    return {
-        "output": f"Processed: {prompt}"
-    }
-`,
-      );
-
       // Execute multiple calls concurrently
       const promises = [];
       for (let i = 0; i < 5; i++) {
-        promises.push(provider.callApi(`Request ${i}`));
+        promises.push(concurrentProvider.callApi(`Request ${i}`));
       }
 
       const results = await Promise.all(promises);
@@ -123,20 +185,7 @@ def call_api(prompt, options, context):
       // This test verifies the internal protocol command parsing
       // Command format: CALL|function_name|request_file|response_file
       // With Windows paths: CALL|call_api|C:\path\req.json|C:\path\resp.json
-
-      const provider = createProvider(
-        'protocol_test.py',
-        `
-def call_api(prompt, options, context):
-    # If we got here, the protocol parsing worked correctly
-    return {
-        "output": "Protocol parsing successful",
-        "platform": "${process.platform}"
-    }
-`,
-      );
-
-      const result = await provider.callApi('Test');
+      const result = await protocolProvider.callApi('Test');
 
       expect(result.output).toBe('Protocol parsing successful');
       expect(result.error).toBeUndefined();
@@ -149,23 +198,7 @@ def call_api(prompt, options, context):
     async () => {
       // Test that paths with various special characters work
       // (except pipe | which is the delimiter)
-      const provider = createProvider(
-        'special_chars.py',
-        `
-def call_api(prompt, options, context):
-    import os
-    temp_dir = os.environ.get('TEMP', '/tmp')
-    return {
-        "output": "Success",
-        "metadata": {
-            "temp_dir": temp_dir,
-            "has_special_chars": any(c in temp_dir for c in [' ', '-', '_', '.'])
-        }
-    }
-`,
-      );
-
-      const result = await provider.callApi('Test');
+      const result = await specialCharsProvider.callApi('Test');
 
       expect(result.output).toBe('Success');
       expect(result.error).toBeUndefined();

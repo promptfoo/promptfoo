@@ -288,6 +288,10 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
   });
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 /**
  * Convert tool choice to Converse API format.
  * Supports OpenAI tool choice format and native Bedrock format.
@@ -304,9 +308,12 @@ function convertToolChoiceToConverseFormat(
   if (toolChoice === 'any') {
     return { any: {} };
   }
-  if (typeof toolChoice === 'object' && toolChoice && 'tool' in toolChoice) {
-    const tc = toolChoice as { tool: { name: string } };
-    return { tool: { name: tc.tool.name } };
+  if (
+    isRecord(toolChoice) &&
+    isRecord(toolChoice.tool) &&
+    typeof toolChoice.tool.name === 'string'
+  ) {
+    return { tool: { name: toolChoice.tool.name } };
   }
   return { auto: {} };
 }

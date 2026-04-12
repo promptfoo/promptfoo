@@ -43,6 +43,8 @@ When no `apiKey`, `OPENAI_API_KEY`, or `CODEX_API_KEY` is set, promptfoo will le
 
 Simple code generation with `sandbox_mode: read-only` so Codex can answer from the prompt without writing files. The example also sets `skip_git_repo_check: true` so it works in a standalone example directory that is not a Git repo.
 
+This basic example uses only deterministic string assertions, so it can run with either a Codex login or an API key without needing a separate grader model credential.
+
 **Location**: `./basic/`
 
 **Usage**:
@@ -78,6 +80,8 @@ This example demonstrates evaluating a local Codex skill stored under `.agents/s
 
 If you run the config from a different working directory, set `CODEX_SKILLS_WORKING_DIR` and `CODEX_HOME_OVERRIDE` to absolute paths before invoking `promptfoo eval`.
 The default relative paths in these configs are intentionally subdirectory-relative for the `(cd skills && promptfoo eval)` workflow above.
+
+The checked-in `sample-codex-home` fixture is intentionally empty of auth state. Use it with `OPENAI_API_KEY`/`CODEX_API_KEY`, or point `CODEX_HOME_OVERRIDE` at `$HOME/.codex` when you want to reuse a local Codex login.
 
 ### Thread Persistence
 

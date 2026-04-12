@@ -1,4 +1,4 @@
-import { matchesSearchRubric } from '../matchers';
+import { matchesSearchRubric } from '../matchers/search';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 

@@ -72,6 +72,7 @@ export interface Config {
   strategies: RedteamStrategy[];
   purpose?: string;
   numTests?: number;
+  maxCharsPerMessage?: number;
   maxConcurrency?: number;
   applicationDefinition: ApplicationDefinition;
   entities: string[];

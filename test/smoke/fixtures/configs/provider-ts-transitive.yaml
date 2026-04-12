@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - TypeScript provider with transitive helper import'
+
+providers:
+  - file://../providers/echo-ts-transitive.ts
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: helper
+    assert:
+      - type: contains
+        value: 'TypeScript Transitive Echo:'

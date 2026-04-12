@@ -1,5 +1,7 @@
 import * as ReactDOM from 'react-dom/client';
 
+import { mockClipboard } from '@app/tests/browserMocks';
+import { useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -157,10 +159,10 @@ describe('EvalOutputPromptDialog', () => {
   });
 
   it('copies prompt to clipboard when copy button is clicked', async () => {
-    const mockClipboard = {
+    const clipboard = {
       writeText: vi.fn().mockResolvedValue(undefined),
     };
-    Object.assign(navigator, { clipboard: mockClipboard });
+    mockClipboard({ writeText: clipboard.writeText as Clipboard['writeText'] });
 
     renderWithProviders(<EvalOutputPromptDialog {...defaultProps} />);
 
@@ -177,7 +179,7 @@ describe('EvalOutputPromptDialog', () => {
     expect(copyButton).toBeInTheDocument();
     await userEvent.click(copyButton);
 
-    expect(mockClipboard.writeText).toHaveBeenCalledWith('Test prompt');
+    expect(clipboard.writeText).toHaveBeenCalledWith('Test prompt');
     // Wait for Check icon to appear after state update (use document.body because Sheet uses portals)
     await waitFor(() => {
       expect(document.body.querySelector('svg.lucide-check')).toBeInTheDocument();
@@ -185,10 +187,10 @@ describe('EvalOutputPromptDialog', () => {
   });
 
   it('copies assertion value to clipboard when copy button is clicked', async () => {
-    const mockClipboard = {
+    const clipboard = {
       writeText: vi.fn().mockResolvedValue(undefined),
     };
-    Object.assign(navigator, { clipboard: mockClipboard });
+    mockClipboard({ writeText: clipboard.writeText as Clipboard['writeText'] });
 
     renderWithProviders(<EvalOutputPromptDialog {...defaultProps} />);
 
@@ -206,7 +208,7 @@ describe('EvalOutputPromptDialog', () => {
     const copyButton = screen.getByLabelText('Copy assertion value 0');
     await userEvent.click(copyButton);
 
-    expect(mockClipboard.writeText).toHaveBeenCalledWith('expected value');
+    expect(clipboard.writeText).toHaveBeenCalledWith('expected value');
     // Wait for Check icon to appear after state update (use document.body because Sheet uses portals)
     await waitFor(() => {
       expect(document.body.querySelector('svg.lucide-check')).toBeInTheDocument();
@@ -344,7 +346,7 @@ describe('EvalOutputPromptDialog', () => {
 
   it('handles unmounting during drawer transition', async () => {
     // This test needs fake timers to control transition timing
-    vi.useFakeTimers();
+    const timers = useTestTimers();
 
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -352,24 +354,34 @@ describe('EvalOutputPromptDialog', () => {
     const transitionDuration = { enter: 320, exit: 250 };
 
     const root = ReactDOM.createRoot(container);
-    root.render(<EvalOutputPromptDialog {...defaultProps} />);
+    let isUnmounted = false;
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(50);
-    });
+    try {
+      root.render(<EvalOutputPromptDialog {...defaultProps} />);
 
-    act(() => {
-      root.unmount();
-    });
+      await act(async () => {
+        await timers.advanceByAsync(50);
+      });
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(transitionDuration.enter);
-    });
+      act(() => {
+        root.unmount();
+        isUnmounted = true;
+      });
 
-    expect(true).toBe(true);
+      await act(async () => {
+        await timers.advanceByAsync(transitionDuration.enter);
+      });
 
-    document.body.removeChild(container);
-    vi.useRealTimers();
+      expect(true).toBe(true);
+    } finally {
+      if (!isUnmounted) {
+        act(() => {
+          root.unmount();
+        });
+      }
+      container.remove();
+      timers.restore({ runPending: true });
+    }
   });
 
   it('passes the promptIndex prop to DebuggingPanel when provided', async () => {

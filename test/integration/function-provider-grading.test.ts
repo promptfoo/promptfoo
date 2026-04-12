@@ -3,7 +3,7 @@
  * This tests the exact issue from #3784: function providers in defaultTest.options.provider
  */
 import { describe, expect, it, vi } from 'vitest';
-import { getGradingProvider } from '../../src/matchers';
+import { getGradingProvider } from '../../src/matchers/providers';
 
 import type { ApiProvider, ProviderType } from '../../src/types/providers';
 
@@ -21,7 +21,7 @@ describe('Function Provider Integration - Issue #3784', () => {
       callApi: mockFunctionProvider,
     };
 
-    // Now pass it through getGradingProvider (this is what matchers.ts does)
+    // Now pass it through getGradingProvider (this is what matcher provider helpers do)
     const gradingProvider = await getGradingProvider(
       'text' as ProviderType,
       resolvedProvider,

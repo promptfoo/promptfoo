@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { matchesTrajectoryGoalSuccess } from '../matchers';
+import { matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
 import {
   extractTrajectorySteps,
   formatTrajectoryArgs,

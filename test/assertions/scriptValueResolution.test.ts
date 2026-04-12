@@ -1,9 +1,10 @@
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
-import * as matchers from '../../src/matchers';
+import * as llmGradingMatchers from '../../src/matchers/llmGrading';
 import { runRuby } from '../../src/ruby/rubyUtils.js';
 
 import type { ProviderResponse } from '../../src/types/index';
@@ -44,13 +45,20 @@ vi.mock('../../src/ruby/rubyUtils.js', () => ({
   runRuby: vi.fn(),
 }));
 
-vi.mock('../../src/matchers', async () => {
-  const actual = await vi.importActual('../../src/matchers');
+vi.mock('../../src/matchers/llmGrading', async () => {
+  const actual = await vi.importActual('../../src/matchers/llmGrading');
   return {
     ...actual,
     matchesLlmRubric: vi.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
     matchesFactuality: vi.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
     matchesClosedQa: vi.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
+  };
+});
+
+vi.mock('../../src/matchers/similarity', async () => {
+  const actual = await vi.importActual('../../src/matchers/similarity');
+  return {
+    ...actual,
     matchesSimilarity: vi.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
   };
 });
@@ -75,6 +83,7 @@ describe('Script value resolution', () => {
 
   afterEach(() => {
     cliState.basePath = originalBasePath;
+    vi.resetAllMocks();
   });
 
   const baseProviderResponse: ProviderResponse = {
@@ -84,8 +93,7 @@ describe('Script value resolution', () => {
 
   describe('llm-rubric with file:// script', () => {
     it('should pass script output to matchesLlmRubric', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-      const mockMatchesLlmRubric = vi.mocked(matchers.matchesLlmRubric);
+      const mockMatchesLlmRubric = vi.mocked(llmGradingMatchers.matchesLlmRubric);
       mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' });
 
       await runAssertion({
@@ -109,8 +117,7 @@ describe('Script value resolution', () => {
     });
 
     it('should pass direct value to matchesLlmRubric when no script', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-      const mockMatchesLlmRubric = vi.mocked(matchers.matchesLlmRubric);
+      const mockMatchesLlmRubric = vi.mocked(llmGradingMatchers.matchesLlmRubric);
       mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' });
 
       await runAssertion({
@@ -134,8 +141,7 @@ describe('Script value resolution', () => {
     });
 
     it('should pass object returned by script to matchesLlmRubric', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-      const mockMatchesLlmRubric = vi.mocked(matchers.matchesLlmRubric);
+      const mockMatchesLlmRubric = vi.mocked(llmGradingMatchers.matchesLlmRubric);
       mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' });
 
       await runAssertion({
@@ -161,8 +167,6 @@ describe('Script value resolution', () => {
 
   describe('contains with file:// script', () => {
     it('should use script output for contains assertion', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'contains',
@@ -179,8 +183,6 @@ describe('Script value resolution', () => {
     });
 
     it('should fail when output does not contain script value', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'contains',
@@ -200,8 +202,6 @@ describe('Script value resolution', () => {
     });
 
     it('should use numeric script output for contains assertion', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'contains',
@@ -220,8 +220,6 @@ describe('Script value resolution', () => {
 
   describe('equals with file:// script', () => {
     it('should use script output for equals assertion', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'equals',
@@ -238,8 +236,6 @@ describe('Script value resolution', () => {
     });
 
     it('should fail when output does not equal script value', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'equals',
@@ -258,8 +254,6 @@ describe('Script value resolution', () => {
 
   describe('regex with file:// script', () => {
     it('should use script output as regex pattern', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'regex',
@@ -278,8 +272,6 @@ describe('Script value resolution', () => {
 
   describe('error handling', () => {
     it('should throw error when script returns function for non-script assertion', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       await expect(
         runAssertion({
           assertion: {
@@ -293,8 +285,6 @@ describe('Script value resolution', () => {
     });
 
     it('should throw error when script returns boolean for non-script assertion', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       await expect(
         runAssertion({
           assertion: {
@@ -308,8 +298,6 @@ describe('Script value resolution', () => {
     });
 
     it('should throw error when script returns GradingResult for non-script assertion', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       await expect(
         runAssertion({
           assertion: {
@@ -326,8 +314,6 @@ describe('Script value resolution', () => {
   // REGRESSION TESTS: Ensure javascript/python/ruby assertions still work correctly
   describe('javascript assertion regression', () => {
     it('should use script return value as assertion result (NOT as comparison)', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       // The gradingFunction returns { pass: true, score: 1, reason: '...' } when output contains 'expected'
       const result = await runAssertion({
         assertion: {
@@ -346,8 +332,6 @@ describe('Script value resolution', () => {
     });
 
     it('should fail when javascript grading function returns false', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'javascript',
@@ -364,8 +348,6 @@ describe('Script value resolution', () => {
     });
 
     it('should work with inline javascript code', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'javascript',
@@ -384,8 +366,6 @@ describe('Script value resolution', () => {
 
   describe('edge cases', () => {
     it('should handle empty string from script', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'equals',
@@ -402,8 +382,6 @@ describe('Script value resolution', () => {
     });
 
     it('should handle array from script for contains-all', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'contains-all',
@@ -420,7 +398,6 @@ describe('Script value resolution', () => {
     });
 
     it('should allow colons in class or function names when parsing file names', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
       const mockRunRuby = vi.mocked(runRuby);
       mockRunRuby.mockResolvedValue(true);
 
@@ -445,7 +422,6 @@ describe('Script value resolution', () => {
     });
 
     it('should return fail result when runRuby throws for a namespaced method', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
       const mockRunRuby = vi.mocked(runRuby);
       mockRunRuby.mockRejectedValue(new Error('Ruby execution error'));
 

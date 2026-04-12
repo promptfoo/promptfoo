@@ -1,12 +1,14 @@
 import React from 'react';
 
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PageWrapper from './PageWrapper';
 
-vi.spyOn(React, 'useEffect').mockImplementation((f) => f());
-
 describe('PageWrapper', () => {
+  beforeEach(() => {
+    vi.spyOn(React, 'useEffect').mockImplementation((f) => f());
+  });
+
   describe('Header Content', () => {
     it('should render the provided title and description in the header when given appropriate props', () => {
       const testTitle = 'My Test Page';
