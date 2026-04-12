@@ -126,7 +126,10 @@ export async function loadApiProvider(
     }
 
     invariant(fileContent.id, `Provider config ${relativePath} must have an id`);
-    logger.info(`Loaded provider ${fileContent.id} from ${relativePath}`);
+    logger.info('Loaded provider from config file', {
+      providerConfigPath: relativePath,
+      providerId: fileContent.id,
+    });
 
     // Merge file's env with context.env - context.env takes precedence
     // This allows callers to override file-defined defaults

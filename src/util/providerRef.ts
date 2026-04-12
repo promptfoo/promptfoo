@@ -9,6 +9,17 @@ import type { ProviderOptions, ProviderOptionsMap } from '../types/providers';
 
 export type ProviderRefKind = 'string' | 'file' | 'function' | 'options' | 'map' | 'unknown';
 
+const PROVIDER_OPTION_KEYS = new Set<string>([
+  'id',
+  'label',
+  'config',
+  'prompts',
+  'transform',
+  'delay',
+  'env',
+  'inputs',
+]);
+
 export interface ProviderRefDescriptor {
   kind: ProviderRefKind;
   id: string;
@@ -68,6 +79,9 @@ export function canonicalizeProviderId(id: string): string {
   return id;
 }
 
+/**
+ * Returns true for provider refs that should be expanded from YAML/JSON config files.
+ */
 export function isProviderConfigFileReference(providerPath: string): boolean {
   return (
     providerPath.startsWith('file://') &&
@@ -77,6 +91,9 @@ export function isProviderConfigFileReference(providerPath: string): boolean {
   );
 }
 
+/**
+ * Reads a provider config file and normalizes single-provider and multi-provider files.
+ */
 export function readProviderConfigFile(
   providerPath: string,
   basePath?: string,
@@ -100,6 +117,9 @@ export function readProviderConfigFile(
   };
 }
 
+/**
+ * Loads provider config objects from a file-backed provider reference.
+ */
 export function loadProviderConfigsFromFile(
   providerPath: string,
   basePath?: string,
@@ -107,6 +127,10 @@ export function loadProviderConfigsFromFile(
   return readProviderConfigFile(providerPath, basePath).configs;
 }
 
+/**
+ * Converts every supported provider reference shape into one descriptor used by
+ * provider loading, filtering, and id extraction.
+ */
 export function normalizeProviderRef(
   provider: unknown,
   options: { index?: number; functionId?: string; unknownId?: string } = {},
@@ -153,7 +177,13 @@ export function normalizeProviderRef(
     if (keys.length > 0) {
       const originalId = keys[0];
       const providerObject = (provider as ProviderOptionsMap)[originalId];
-      if (typeof providerObject === 'object' && providerObject !== null) {
+      if (
+        typeof providerObject === 'object' &&
+        providerObject !== null &&
+        !Array.isArray(providerObject) &&
+        isValidProviderId(originalId) &&
+        !PROVIDER_OPTION_KEYS.has(originalId)
+      ) {
         const id = isValidProviderId(providerObject.id) ? providerObject.id : originalId;
         return {
           kind: 'map',

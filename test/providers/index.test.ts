@@ -1667,6 +1667,15 @@ describe('getProviderIds', () => {
     expect(providerIds).toEqual(['openai:gpt-4o-mini', 'custom-id']);
   });
 
+  it('does not treat option-only provider objects as ProviderOptionsMap objects', () => {
+    expect(() => getProviderIds([{ config: { temperature: 0.5 } } as any])).toThrow(
+      'Invalid providers list',
+    );
+    expect(() => getProviderIds([{ prompts: ['prompt1'] } as any])).toThrow(
+      'Invalid providers list',
+    );
+  });
+
   it('does not treat file:// paths without yaml/yml/json extension as file references', () => {
     const providerIds = getProviderIds('file://path/to/provider.js');
     expect(providerIds).toEqual(['file://path/to/provider.js']);

@@ -46,6 +46,21 @@ describe('normalizeProviderRef', () => {
     });
   });
 
+  it('does not treat ProviderOptions-shaped objects as ProviderOptionsMap refs', () => {
+    expect(normalizeProviderRef({ config: { temperature: 0.2 } })).toMatchObject({
+      kind: 'unknown',
+      id: 'unknown',
+    });
+    expect(normalizeProviderRef({ prompts: ['prompt1'] })).toMatchObject({
+      kind: 'unknown',
+      id: 'unknown',
+    });
+    expect(normalizeProviderRef({ config: { id: 'openai:gpt-4' } })).toMatchObject({
+      kind: 'unknown',
+      id: 'unknown',
+    });
+  });
+
   it('uses function labels before positional custom-function fallbacks', () => {
     const labeled = Object.assign(async () => ({ output: 'ok' }), { label: 'custom-label' });
     const unlabeled = async () => ({ output: 'ok' });
