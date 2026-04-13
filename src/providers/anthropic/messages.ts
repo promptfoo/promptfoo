@@ -14,6 +14,7 @@ import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
 import { transformToolChoice, transformTools } from '../shared';
+import { CLAUDE_CODE_IDENTITY_PROMPT, CLAUDE_CODE_OAUTH_BETA_FEATURES } from './claudeCodeAuth';
 import { AnthropicGenericProvider } from './generic';
 import {
   ANTHROPIC_MODELS,
@@ -101,9 +102,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       await this.initializationPromise;
     }
 
-    if (!this.apiKey) {
+    if (!this.apiKey && !this.usingClaudeCodeOAuth) {
       throw new Error(
-        'Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add `apiKey` to the provider config.',
+        'Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add `apiKey` to the provider config. ' +
+          'Alternatively, if you have an active Claude Code session, set `apiKeyRequired: false` in the provider config to authenticate via Claude Code.',
       );
     }
 
@@ -265,10 +267,18 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
+    // When authenticating via a Claude Code OAuth token, Anthropic's API
+    // requires the Claude Code identity as the first system block — sending
+    // any other leading system block returns HTTP 400. Prepend it as its own
+    // block so the user-provided system prompt still flows through.
+    const resolvedSystem: Anthropic.TextBlockParam[] | undefined = this.usingClaudeCodeOAuth
+      ? [{ type: 'text', text: CLAUDE_CODE_IDENTITY_PROMPT }, ...(system ?? [])]
+      : system;
+
     const shouldStream = config.stream ?? false;
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
-      ...(system ? { system } : {}),
+      ...(resolvedSystem && resolvedSystem.length > 0 ? { system: resolvedSystem } : {}),
       max_tokens:
         config.max_tokens ?? getEnvInt('ANTHROPIC_MAX_TOKENS', thinkingEnabled ? 2048 : 1024),
       messages: extractedMessages,
@@ -315,6 +325,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // Automatically add structured-outputs beta when output_format is used
     if (processedOutputFormat && !allBetaFeatures.includes('structured-outputs-2025-11-13')) {
       allBetaFeatures.push('structured-outputs-2025-11-13');
+    }
+
+    // Claude Code OAuth tokens require additional beta flags. These are also
+    // set as default SDK headers by the generic provider, but we merge them
+    // into per-request headers as well so explicit `config.headers` or
+    // `config.beta` entries don't drop them.
+    if (this.usingClaudeCodeOAuth) {
+      allBetaFeatures.push(...CLAUDE_CODE_OAUTH_BETA_FEATURES);
     }
 
     // Deduplicate beta features
