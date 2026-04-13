@@ -73,7 +73,7 @@ function getReplicateAuthCacheNamespace(apiKey: string | undefined) {
     return 'no-api-key';
   }
 
-  return hashReplicateCacheValue(['auth', apiKey]);
+  return createHmac('sha256', apiKey).update(REPLICATE_CACHE_KEY_HMAC_KEY).digest('hex');
 }
 
 function getReplicateValueSummary(prefix: string, value: unknown): Record<string, unknown> {
