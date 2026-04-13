@@ -99,8 +99,11 @@ export class AnthropicGenericProvider implements ApiProvider {
         this.claudeCodeCredential = credential;
         defaultHeaders['anthropic-beta'] = CLAUDE_CODE_OAUTH_BETA_FEATURES.join(',');
         // Mimic the Claude Code CLI user-agent / x-app headers so the OAuth
-        // token is accepted. Anthropic's API gates OAuth tokens to the Claude
-        // Code app identity; without these headers requests fail with 401.
+        // token is accepted. As of 2025-Q4 Anthropic gates OAuth tokens to
+        // the Claude Code app identity; without these headers requests fail
+        // with 401 `authentication_error`. These are also re-applied as
+        // per-request headers in `messages.ts` so `config.headers` cannot
+        // silently clobber them.
         defaultHeaders['user-agent'] = CLAUDE_CODE_USER_AGENT;
         defaultHeaders['x-app'] = CLAUDE_CODE_X_APP;
       } else {

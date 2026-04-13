@@ -289,9 +289,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     }
 
     // When authenticating via a Claude Code OAuth token, Anthropic's API
-    // requires the Claude Code identity as the first system block — sending
-    // any other leading system block returns HTTP 400. Prepend it as its own
-    // block so the user-provided system prompt still flows through.
+    // requires the Claude Code identity as the first system block — as of
+    // 2025-Q4, sending any other leading system block returns HTTP 400
+    // `invalid_request_error`. Prepend it as its own block so the
+    // user-provided system prompt still flows through. If the user's own
+    // system prompt happens to start with the same string the API tolerates
+    // the duplicate.
     const resolvedSystem: Anthropic.TextBlockParam[] | undefined = this.usingClaudeCodeOAuth
       ? [{ type: 'text', text: CLAUDE_CODE_IDENTITY_PROMPT }, ...(system ?? [])]
       : system;

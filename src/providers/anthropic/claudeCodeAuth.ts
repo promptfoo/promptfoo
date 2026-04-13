@@ -19,9 +19,12 @@ export interface ClaudeCodeOAuthCredential {
 
 /**
  * Claude Code prepends this identity block as the first `system` message when
- * calling the Anthropic Messages API with an OAuth token. The API rejects
- * requests that omit it (HTTP 400), so any caller reusing a Claude Code
- * OAuth token must inject this block before the user-provided system prompt.
+ * calling the Anthropic Messages API with an OAuth token. As of 2025-Q4 the
+ * API returns HTTP 400 `invalid_request_error` when an OAuth-authenticated
+ * request's first system block is not this exact string, so any caller
+ * reusing a Claude Code OAuth token must inject this block before the
+ * user-provided system prompt. Re-verify if Anthropic ships an OAuth-native
+ * `/v1/messages` path that drops the requirement.
  */
 export const CLAUDE_CODE_IDENTITY_PROMPT =
   "You are Claude Code, Anthropic's official CLI for Claude.";
