@@ -42,8 +42,19 @@ function getNonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function fingerprintBedrockAuthValue(authSource: string, value: string, index: number) {
+  return createHmac('sha256', value)
+    .update(`${BEDROCK_CACHE_KEY_HMAC_KEY}:${authSource}:${index}`)
+    .digest('hex');
+}
+
 function getBedrockAuthCacheNamespace(authSource: string, values: (string | undefined)[]) {
-  return hashBedrockCacheValue([authSource, ...values]);
+  return hashBedrockCacheValue([
+    authSource,
+    ...values.map((value, index) =>
+      value ? fingerprintBedrockAuthValue(authSource, value, index) : undefined,
+    ),
+  ]);
 }
 
 function createBedrockAuthCacheMetadata({ config }: { config: BedrockOptions }) {
