@@ -68,6 +68,7 @@ export const handleGEval = async ({
         score: 0,
         reason: `G-Eval criterion ${failure.index + 1}/${renderedValue.length} (${JSON.stringify(criterion)}) failed: ${failure.resp.reason}`,
         tokensUsed,
+        metadata: failure.resp.metadata,
       };
     }
 
@@ -100,6 +101,7 @@ export const handleGEval = async ({
       score: 0,
       reason: resp.reason,
       tokensUsed: resp.tokensUsed,
+      metadata: resp.metadata,
     };
   }
 

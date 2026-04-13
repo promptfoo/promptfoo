@@ -770,6 +770,7 @@ describe('handleGEval', () => {
         score: 0,
         reason: 'No output',
         tokensUsed: { total: 11, prompt: 5, completion: 6 },
+        metadata: { graderError: true },
       });
     });
 
@@ -806,6 +807,7 @@ describe('handleGEval', () => {
         score: 0,
         reason: 'LLM-proposed evaluation result is not in JSON format: oops',
         tokensUsed: { total: 21, prompt: 12, completion: 9 },
+        metadata: { graderError: true },
       });
     });
 
@@ -838,6 +840,7 @@ describe('handleGEval', () => {
         pass: false,
         score: 0,
         reason: 'No output',
+        metadata: { graderError: true },
       });
     });
 
@@ -888,6 +891,7 @@ describe('handleGEval', () => {
           prompt: 13,
           completion: 14,
         }),
+        metadata: { graderError: true },
       });
     });
 
@@ -1028,6 +1032,7 @@ describe('handleGEval', () => {
       expect(result.pass).toBe(false);
       expect(result.score).toBe(0);
       expect(result.reason).toBe('API error: 500 Internal Server Error');
+      expect(result.metadata).toEqual({ graderError: true });
     });
   });
 });
