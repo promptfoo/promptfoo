@@ -209,18 +209,24 @@ describe('ScriptCompletionProvider', () => {
     expect(result.output).toBe('ok');
   });
 
-  it('should close stdin before rejecting on script execution errors', async () => {
+  it('should close stdin before the exec callback rejects on script execution errors', async () => {
     const stdinEnd = vi.fn();
     const errorMessage = 'Script execution failed';
+    let stdinClosedBeforeCallback = false;
     vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
-      if (typeof callback === 'function') {
-        callback(new Error(errorMessage), '', '');
-      }
-      return { stdin: { end: stdinEnd } } as any;
+      const childProcess = { stdin: { end: stdinEnd } } as any;
+      queueMicrotask(() => {
+        stdinClosedBeforeCallback = stdinEnd.mock.calls.length > 0;
+        if (typeof callback === 'function') {
+          callback(new Error(errorMessage), '', '');
+        }
+      });
+      return childProcess;
     });
 
     await expect(provider.callApi('test prompt')).rejects.toThrow(errorMessage);
     expect(stdinEnd).toHaveBeenCalledOnce();
+    expect(stdinClosedBeforeCallback).toBe(true);
   });
 
   it('should handle UTF-8 characters in script output', async () => {
