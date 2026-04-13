@@ -9,11 +9,12 @@ import {
   ResultFailureReason,
   type TestSuite,
 } from '../../src/types/index';
-import { mockGradingApiProviderPasses } from './helpers';
+import { mockGradingApiProviderPasses, resetMockProviders } from './helpers';
 
 describe('runEval', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetMockProviders();
   });
 
   afterEach(async () => {

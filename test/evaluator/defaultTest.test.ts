@@ -11,9 +11,11 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
-import { mockApiProvider, toPrompt } from './helpers';
+import { mockApiProvider, resetMockProviders, toPrompt } from './helpers';
 
 afterEach(async () => {
+  resetMockProviders();
+  vi.mocked(runExtensionHook).mockReset();
   vi.clearAllMocks();
   cliState.resume = false;
   cliState.basePath = '';
@@ -33,6 +35,7 @@ describe('evaluator defaultTest merging', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetMockProviders();
     // Reset runExtensionHook to default implementation (other tests may have overridden it)
     vi.mocked(runExtensionHook).mockReset();
     vi.mocked(runExtensionHook).mockImplementation(

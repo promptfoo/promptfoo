@@ -310,19 +310,22 @@ describeEvaluator('evaluator execution control', () => {
       tests: [{}],
     };
 
-    const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
-    await vi.advanceTimersByTimeAsync(50);
-    await evalPromise;
+    try {
+      const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
+      await vi.advanceTimersByTimeAsync(50);
+      await evalPromise;
 
-    expect(hangingProvider.cleanup).not.toHaveBeenCalled();
-    expect(mockAddResult).toHaveBeenCalledWith(
-      expect.objectContaining({
-        error: expect.stringContaining('Evaluation timed out after 50ms'),
-        success: false,
-        failureReason: ResultFailureReason.ERROR,
-      }),
-    );
-    vi.useRealTimers();
+      expect(hangingProvider.cleanup).not.toHaveBeenCalled();
+      expect(mockAddResult).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining('Evaluation timed out after 50ms'),
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should ignore stale provider rows that resolve after a timeout row is recorded', async () => {
@@ -373,28 +376,31 @@ describeEvaluator('evaluator execution control', () => {
       tests: [{}],
     };
 
-    const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
-    await vi.advanceTimersByTimeAsync(50);
-    await evalPromise;
+    try {
+      const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
+      await vi.advanceTimersByTimeAsync(50);
+      await evalPromise;
 
-    expect(mockAddResult).toHaveBeenCalledTimes(1);
-    expect(mockAddResult).toHaveBeenCalledWith(
-      expect.objectContaining({
-        error: expect.stringContaining('Evaluation timed out after 50ms'),
-        success: false,
-        failureReason: ResultFailureReason.ERROR,
-      }),
-    );
+      expect(mockAddResult).toHaveBeenCalledTimes(1);
+      expect(mockAddResult).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining('Evaluation timed out after 50ms'),
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+        }),
+      );
 
-    resolveLateResponse({
-      output: 'Late response',
-      tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-    });
-    await Promise.resolve();
-    await Promise.resolve();
+      resolveLateResponse({
+        output: 'Late response',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      });
+      await Promise.resolve();
+      await Promise.resolve();
 
-    expect(mockAddResult).toHaveBeenCalledTimes(1);
-    vi.useRealTimers();
+      expect(mockAddResult).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should honor external abortSignal when timeoutMs is set', async () => {

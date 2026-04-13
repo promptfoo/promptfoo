@@ -35,10 +35,10 @@ function mockTransformVars(code: string, input: any, context?: any) {
     return { ...input, defaultTransform: true };
   }
   if (code.includes('{ ...vars') && code.includes('toUpperCase()')) {
-    return { ...input, name: input.name.toUpperCase() };
+    return { ...input, name: input.name?.toUpperCase() };
   }
   if (code.includes('{ ...vars') && code.includes('vars.age + 5')) {
-    return { ...input, age: input.age + 5 };
+    return { ...input, age: (input.age ?? 0) + 5 };
   }
   if (code.includes('return {') && code.includes('context.uuid')) {
     return {
@@ -48,7 +48,7 @@ function mockTransformVars(code: string, input: any, context?: any) {
     };
   }
   if (code.includes('test2UpperCase: vars.test2.toUpperCase()')) {
-    return { ...input, test2UpperCase: input.test2.toUpperCase() };
+    return { ...input, test2UpperCase: input.test2?.toUpperCase() };
   }
 }
 
