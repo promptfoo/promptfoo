@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createCompletedPrompt, createEvaluateResult } from './eval';
 import { createFailingGradingResult, createPassingGradingResult } from './gradingResult';
-import { createProviderResponse, createRequiredTokenUsage } from './provider';
+import {
+  createMockProvider,
+  createProviderResponse,
+  createRequiredTokenUsage,
+  resetMockProvider,
+} from './provider';
 import { createPrompt } from './testSuite';
 
 describe('test factories', () => {
@@ -95,6 +100,81 @@ describe('test factories', () => {
       rejectedPrediction: 0,
       cacheReadInputTokens: 0,
       cacheCreationInputTokens: 0,
+    });
+  });
+
+  describe('createMockProvider', () => {
+    it('resolves the default callApi to createProviderResponse', async () => {
+      const provider = createMockProvider();
+      expect(provider.id()).toBe('test-provider');
+      await expect(provider.callApi('prompt')).resolves.toEqual(createProviderResponse());
+    });
+
+    it('accepts a function id that resolves lazily', () => {
+      let counter = 0;
+      const provider = createMockProvider({ id: () => `provider-${++counter}` });
+      expect(provider.id()).toBe('provider-1');
+      expect(provider.id()).toBe('provider-2');
+    });
+
+    it('invokes a user-supplied callApi implementation instead of the default', async () => {
+      const customCallApi = vi.fn(async () => createProviderResponse({ output: 'custom' }));
+      const provider = createMockProvider({ callApi: customCallApi });
+      await expect(provider.callApi('prompt')).resolves.toMatchObject({ output: 'custom' });
+      expect(customCallApi).toHaveBeenCalledWith('prompt');
+    });
+
+    it('wires cleanup as a resolved no-op when cleanup is true', async () => {
+      const provider = createMockProvider({ cleanup: true });
+      expect(provider.cleanup).toBeDefined();
+      await expect(provider.cleanup!()).resolves.toBeUndefined();
+    });
+
+    it('wires cleanup to a user-supplied implementation when cleanup is a function', async () => {
+      const cleanupImpl = vi.fn(async () => undefined);
+      const provider = createMockProvider({ cleanup: cleanupImpl });
+      await provider.cleanup!();
+      expect(cleanupImpl).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not attach cleanup when the option is omitted', () => {
+      const provider = createMockProvider();
+      expect(provider.cleanup).toBeUndefined();
+    });
+  });
+
+  describe('resetMockProvider', () => {
+    it('re-installs the default id and callApi resolution after reset', async () => {
+      const provider = createMockProvider({
+        id: 'original',
+        callApi: async () => createProviderResponse({ output: 'original' }),
+      });
+      await provider.callApi('prompt');
+      expect(provider.callApi).toHaveBeenCalledTimes(1);
+
+      resetMockProvider(provider);
+
+      expect(provider.callApi).toHaveBeenCalledTimes(0);
+      expect(provider.id()).toBe('test-provider');
+      await expect(provider.callApi('prompt')).resolves.toEqual(createProviderResponse());
+    });
+
+    it('re-installs an explicit response and id override', async () => {
+      const provider = createMockProvider();
+      resetMockProvider(provider, {
+        id: 'reset-provider',
+        response: createProviderResponse({ output: 'reset output' }),
+      });
+      expect(provider.id()).toBe('reset-provider');
+      await expect(provider.callApi('prompt')).resolves.toMatchObject({ output: 'reset output' });
+    });
+
+    it('re-seeds cleanup when the shared mock was constructed with cleanup: true', async () => {
+      const provider = createMockProvider({ cleanup: true });
+      const replacement = vi.fn(async () => undefined);
+      resetMockProvider(provider, { cleanup: replacement });
+      await provider.cleanup!();
+      expect(replacement).toHaveBeenCalledTimes(1);
     });
   });
 });
