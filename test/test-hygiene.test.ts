@@ -206,7 +206,6 @@ const legacyDirectProcessEnvMutationFiles = new Set([
   'providers/google/video.test.ts',
   'providers/groq/chat.test.ts',
   'providers/groq/responses.test.ts',
-  'providers/http.test.ts',
   'providers/huggingface.test.ts',
   'providers/hyperbolic.test.ts',
   'providers/hyperbolic/audio.test.ts',

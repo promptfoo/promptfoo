@@ -357,7 +357,6 @@
         "!!test/providers/google/video.test.ts",
         "!!test/providers/groq/chat.test.ts",
         "!!test/providers/groq/responses.test.ts",
-        "!!test/providers/http.test.ts",
         "!!test/providers/huggingface.test.ts",
         "!!test/providers/hyperbolic.test.ts",
         "!!test/providers/hyperbolic/audio.test.ts",
