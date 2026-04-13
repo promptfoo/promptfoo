@@ -35,14 +35,15 @@ export function createCompletedPrompt(
   raw = 'Test prompt',
   overrides: Partial<CompletedPrompt> = {},
 ): CompletedPrompt {
-  const prompt = createPrompt(raw, overrides);
+  // raw/label are resolved by createPrompt — pull them out of the override
+  // spread so the remaining fields layer on top without clobbering the
+  // derived label.
+  const { raw: _rawOverride, label: _labelOverride, ...rest } = overrides;
   return {
-    ...prompt,
+    ...createPrompt(raw, overrides),
     provider: 'test-provider',
     metrics: createPromptMetrics(),
-    ...overrides,
-    raw: prompt.raw,
-    label: prompt.label,
+    ...rest,
   };
 }
 
