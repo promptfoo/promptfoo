@@ -90,7 +90,28 @@ const mockDiff = mocks.mockDiff;
 
 describe('GitHub API Client', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    mocks.github.context.repo = {
+      owner: 'test-owner',
+      repo: 'test-repo',
+    };
+    mocks.github.context.payload = {
+      pull_request: {
+        number: 123,
+        head: {
+          sha: 'abc123',
+        },
+      },
+    };
+    mocks.Octokit.mockImplementation(() => ({
+      pulls: {
+        createReview: vi.fn().mockResolvedValue({}),
+        get: vi.fn().mockResolvedValue({ data: mockDiff }),
+      },
+      issues: {
+        createComment: vi.fn().mockResolvedValue({}),
+      },
+    }));
   });
 
   describe('getGitHubContext', () => {
