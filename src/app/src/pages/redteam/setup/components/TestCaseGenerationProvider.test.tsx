@@ -417,7 +417,8 @@ describe('TestCaseGenerationProvider', () => {
       const generationCalls = callApiMock.mock.calls.filter(
         (call) => call[0] === '/redteam/generate-test',
       );
-      const requestBody = JSON.parse(generationCalls.at(-1)?.[1]?.body as string);
+      const lastGenerationCall = generationCalls[generationCalls.length - 1];
+      const requestBody = JSON.parse(lastGenerationCall?.[1]?.body as string);
 
       expect(requestBody.plugin).toMatchObject({
         id: 'policy',
