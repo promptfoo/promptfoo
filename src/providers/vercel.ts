@@ -161,8 +161,8 @@ function pickGenerateOptions(config: VercelAiConfig) {
 }
 
 function fingerprintGatewayIdentity(value: string) {
-  return createHmac('sha256', 'promptfoo:vercel-gateway-cache-identity')
-    .update(value)
+  return createHmac('sha256', value)
+    .update('promptfoo:vercel-gateway-cache-identity')
     .digest('hex');
 }
 
