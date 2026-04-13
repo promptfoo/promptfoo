@@ -263,8 +263,8 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     liveRedteamConfig: config,
     force,
     verbose,
-    delay: delay ?? 0,
-    maxConcurrency: maxConcurrency ?? 1,
+    ...(delay === undefined ? {} : { delay }),
+    ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
     logCallback: (message: string) => {
       if (currentJobId === id) {
         const job = evalJobs.get(id);

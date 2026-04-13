@@ -340,7 +340,6 @@ export default function RedTeamSetupPage() {
       const hasAnyStatefulStrategies = strategies.some(
         (strat: RedteamStrategy) => typeof strat !== 'string' && strat?.config?.stateful,
       );
-      console.log({ hasAnyStatefulStrategies, strategies });
       if (hasAnyStatefulStrategies) {
         if (typeof target === 'string') {
           target = { id: target, config: { stateful: true } };

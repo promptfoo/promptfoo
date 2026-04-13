@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
@@ -432,6 +432,10 @@ export default function ProviderTypeSelector({
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedTag, setSelectedTag] = useState<string | undefined>();
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
+
+  useEffect(() => {
+    setSelectedProviderType(providerType);
+  }, [providerType]);
 
   // Tag filter options - 4 categories based on user intent
   type TagKey = 'app' | 'agents' | 'providers' | 'local';

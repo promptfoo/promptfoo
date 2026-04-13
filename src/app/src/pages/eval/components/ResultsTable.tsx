@@ -118,7 +118,11 @@ const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
 const DESCRIPTION_COLUMN_SIZE_PX = 100;
 
-function formatRowOutput(output: EvaluateTableOutput | string) {
+function formatRowOutput(output: EvaluateTableOutput | string | null | undefined) {
+  if (output == null) {
+    return output;
+  }
+
   if (typeof output === 'string') {
     // Backwards compatibility for 0.15.0 breaking change. Remove eventually.
     const pass = output.startsWith('[PASS]');
@@ -237,7 +241,6 @@ function ResultsTableHeader({
   hasMinimalScrollRoom: boolean;
   zoom: number;
 }) {
-  'use no memo';
   return (
     <div
       data-testid="results-table-header"
@@ -311,7 +314,6 @@ function ResultsTable({
   onFailureFilterToggle,
   zoom,
 }: ResultsTableProps) {
-  'use no memo';
   const {
     evalId,
     table,
@@ -526,11 +528,15 @@ function ResultsTable({
   const tableBody = React.useMemo(() => {
     return body.map((row, rowIndex) => ({
       ...row,
-      outputs: row.outputs.map((output, promptIndex) => ({
-        ...output,
-        originalRowIndex: rowIndex,
-        originalPromptIndex: promptIndex,
-      })),
+      outputs: row.outputs.map((output, promptIndex) =>
+        output == null
+          ? null
+          : {
+              ...output,
+              originalRowIndex: rowIndex,
+              originalPromptIndex: promptIndex,
+            },
+      ),
     })) as ExtendedEvaluateTableRow[];
   }, [body]);
 
@@ -1270,7 +1276,7 @@ function ResultsTable({
                   />
                 </ErrorBoundary>
               ) : (
-                <div style={{ padding: '20px' }}>'Test still in progress...'</div>
+                <div className="cell" aria-label="No output for this prompt" />
               );
             },
             size: PROMPT_COLUMN_SIZE_PX,

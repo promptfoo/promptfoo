@@ -12,8 +12,226 @@ import {
   isProviderAllowed,
   providerToIdentifier,
 } from '../../src/util/provider';
+import {
+  canonicalizeProviderId,
+  isProviderConfigFileReference,
+  normalizeProviderRef,
+} from '../../src/util/providerRef';
 
 import type { ApiProvider } from '../../src/types/index';
+
+describe('normalizeProviderRef', () => {
+  it('identifies provider config file references without treating script providers as config', () => {
+    expect(isProviderConfigFileReference('file://providers.yaml')).toBe(true);
+    expect(isProviderConfigFileReference('file://providers.yml')).toBe(true);
+    expect(isProviderConfigFileReference('file://providers.json')).toBe(true);
+    expect(isProviderConfigFileReference('file://provider.js')).toBe(false);
+  });
+
+  it('normalizes ProviderOptionsMap refs with explicit id overrides', () => {
+    const descriptor = normalizeProviderRef({
+      'openai:responses:gpt-5.4': {
+        id: 'custom-openai',
+        label: 'Fast OpenAI',
+        config: { temperature: 0.2 },
+      },
+    });
+
+    expect(descriptor).toMatchObject({
+      kind: 'map',
+      id: 'custom-openai',
+      label: 'Fast OpenAI',
+      loadProviderPath: 'openai:responses:gpt-5.4',
+      loadOptions: {
+        id: 'custom-openai',
+        label: 'Fast OpenAI',
+        config: { temperature: 0.2 },
+      },
+    });
+  });
+
+  it('does not treat ProviderOptions-shaped objects as ProviderOptionsMap refs', () => {
+    expect(normalizeProviderRef({ config: { temperature: 0.2 } })).toMatchObject({
+      kind: 'unknown',
+      id: 'unknown',
+    });
+    expect(normalizeProviderRef({ prompts: ['prompt1'] })).toMatchObject({
+      kind: 'unknown',
+      id: 'unknown',
+    });
+    expect(normalizeProviderRef({ config: { id: 'openai:gpt-4' } })).toMatchObject({
+      kind: 'unknown',
+      id: 'unknown',
+    });
+  });
+
+  it('requires ProviderOptionsMap refs to use a single provider id key', () => {
+    expect(
+      normalizeProviderRef({
+        'openai:gpt-4': { config: { temperature: 0.2 } },
+        'anthropic:messages:claude-sonnet-4-5': { config: { temperature: 0.1 } },
+      }),
+    ).toMatchObject({
+      kind: 'unknown',
+      id: 'unknown',
+    });
+  });
+
+  it('guards every ProviderOptions key against ProviderOptionsMap misclassification', () => {
+    // Each key from the ProviderOptions interface must be guarded so that
+    // objects like { transform: "..." } are not mistaken for { "transform": { ...providerOpts } }.
+    // If you add a key to ProviderOptions, add it here too.
+    const providerOptionKeys = [
+      'id',
+      'label',
+      'config',
+      'prompts',
+      'transform',
+      'delay',
+      'env',
+      'inputs',
+    ];
+    for (const key of providerOptionKeys) {
+      const obj = { [key]: { nested: true } };
+      const descriptor = normalizeProviderRef(obj);
+      expect(descriptor.kind, `key "${key}" should not produce kind 'map'`).not.toBe('map');
+    }
+  });
+
+  it('uses function labels before positional custom-function fallbacks', () => {
+    const labeled = Object.assign(async () => ({ output: 'ok' }), { label: 'custom-label' });
+    const unlabeled = async () => ({ output: 'ok' });
+
+    expect(normalizeProviderRef(labeled, { index: 3 })).toMatchObject({
+      kind: 'function',
+      id: 'custom-label',
+      label: 'custom-label',
+    });
+    expect(normalizeProviderRef(unlabeled, { index: 3 })).toMatchObject({
+      kind: 'function',
+      id: 'custom-function-3',
+    });
+  });
+
+  it('falls back to labels for malformed provider configs used by filtering', () => {
+    expect(normalizeProviderRef({ id: '', label: 'Provider2' }, { index: 1 })).toMatchObject({
+      kind: 'unknown',
+      id: 'Provider2',
+      label: 'Provider2',
+    });
+  });
+
+  it('classifies string providers as named vs file based on extension', () => {
+    expect(normalizeProviderRef('openai:responses:gpt-5.4')).toMatchObject({
+      kind: 'named',
+      id: 'openai:responses:gpt-5.4',
+      loadProviderPath: 'openai:responses:gpt-5.4',
+    });
+    expect(normalizeProviderRef('file://providers.yaml')).toMatchObject({
+      kind: 'file',
+      id: 'file://providers.yaml',
+      loadProviderPath: 'file://providers.yaml',
+    });
+    expect(normalizeProviderRef('file://provider.js')).toMatchObject({
+      kind: 'named',
+      id: 'file://provider.js',
+      loadProviderPath: 'file://provider.js',
+    });
+  });
+
+  it('normalizes ProviderOptionsMap without nested id override (key becomes id)', () => {
+    const descriptor = normalizeProviderRef({
+      'openai:responses:gpt-5.4': {
+        config: { temperature: 0.2 },
+      },
+    });
+
+    expect(descriptor).toMatchObject({
+      kind: 'map',
+      id: 'openai:responses:gpt-5.4',
+      loadProviderPath: 'openai:responses:gpt-5.4',
+      loadOptions: {
+        id: 'openai:responses:gpt-5.4',
+        config: { temperature: 0.2 },
+      },
+    });
+  });
+
+  it('returns kind unknown for empty string provider IDs', () => {
+    expect(normalizeProviderRef('')).toMatchObject({ kind: 'unknown', id: 'unknown' });
+    expect(normalizeProviderRef('', { index: 2 })).toMatchObject({
+      kind: 'unknown',
+      id: 'unknown-2',
+    });
+  });
+
+  it('returns kind unknown for null, undefined, and non-provider types', () => {
+    expect(normalizeProviderRef(null)).toMatchObject({ kind: 'unknown', id: 'unknown' });
+    expect(normalizeProviderRef(undefined)).toMatchObject({ kind: 'unknown', id: 'unknown' });
+    expect(normalizeProviderRef(42)).toMatchObject({ kind: 'unknown', id: 'unknown' });
+    expect(normalizeProviderRef([])).toMatchObject({ kind: 'unknown', id: 'unknown' });
+    expect(normalizeProviderRef([{ id: 'openai:gpt-4' }])).toMatchObject({
+      kind: 'unknown',
+      id: 'unknown',
+    });
+  });
+});
+
+describe('canonicalizeProviderId', () => {
+  it('resolves relative file:// paths to absolute', () => {
+    const cwd = process.cwd();
+    expect(canonicalizeProviderId('file://./provider.js')).toBe(
+      `file://${path.join(cwd, 'provider.js')}`,
+    );
+  });
+
+  it('preserves absolute file:// paths', () => {
+    expect(canonicalizeProviderId('file:///absolute/path.js')).toBe('file:///absolute/path.js');
+  });
+
+  it('resolves exec: paths with slashes', () => {
+    const cwd = process.cwd();
+    expect(canonicalizeProviderId('exec:./script.py')).toBe(`exec:${path.join(cwd, 'script.py')}`);
+  });
+
+  it('preserves exec: paths without slashes', () => {
+    expect(canonicalizeProviderId('exec:my-script')).toBe('exec:my-script');
+  });
+
+  it('resolves python: paths with slashes', () => {
+    const cwd = process.cwd();
+    expect(canonicalizeProviderId('python:./provider.py')).toBe(
+      `python:${path.join(cwd, 'provider.py')}`,
+    );
+  });
+
+  it('resolves golang: paths with slashes', () => {
+    const cwd = process.cwd();
+    expect(canonicalizeProviderId('golang:./main.go')).toBe(`golang:${path.join(cwd, 'main.go')}`);
+  });
+
+  it('preserves golang: paths without slashes', () => {
+    expect(canonicalizeProviderId('golang:my-binary')).toBe('golang:my-binary');
+  });
+
+  it('wraps bare .js/.ts/.mjs paths with file://', () => {
+    const cwd = process.cwd();
+    expect(canonicalizeProviderId('./provider.js')).toBe(`file://${path.join(cwd, 'provider.js')}`);
+    expect(canonicalizeProviderId('./provider.ts')).toBe(`file://${path.join(cwd, 'provider.ts')}`);
+    expect(canonicalizeProviderId('./provider.mjs')).toBe(
+      `file://${path.join(cwd, 'provider.mjs')}`,
+    );
+  });
+
+  it('does not wrap bare .js/.ts/.mjs without path separators', () => {
+    expect(canonicalizeProviderId('provider.js')).toBe('provider.js');
+  });
+
+  it('passes through plain provider IDs unchanged', () => {
+    expect(canonicalizeProviderId('openai:responses:gpt-5.4')).toBe('openai:responses:gpt-5.4');
+    expect(canonicalizeProviderId('echo')).toBe('echo');
+  });
+});
 
 describe('providerToIdentifier', () => {
   it('works with provider string', () => {

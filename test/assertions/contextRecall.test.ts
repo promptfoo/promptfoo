@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContextRecall } from '../../src/assertions/contextRecall';
 import * as contextUtils from '../../src/assertions/contextUtils';
-import * as matchers from '../../src/matchers';
+import * as matchers from '../../src/matchers/rag';
 
 import type { ApiProvider, AssertionParams, ProviderResponse } from '../../src/types/index';
 
-vi.mock('../../src/matchers');
+vi.mock('../../src/matchers/rag');
 vi.mock('../../src/assertions/contextUtils');
 
 describe('handleContextRecall', () => {

@@ -1857,6 +1857,43 @@ describe('HttpProvider', () => {
     );
   });
 
+  it('should bypass fetch cache when sending structured multipart requests', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        multipart: {
+          parts: [
+            {
+              kind: 'field',
+              name: 'documentQuery',
+              value: '{{prompt}}',
+            },
+          ],
+        },
+      },
+    });
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.any(FormData),
+      }),
+      expect.any(Number),
+      'text',
+      true,
+      undefined,
+    );
+  });
+
   it('should default to application/x-www-form-urlencoded for content-type if body is not an object', async () => {
     const provider = new HttpProvider(mockUrl, {
       config: {

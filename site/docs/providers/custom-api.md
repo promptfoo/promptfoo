@@ -249,6 +249,32 @@ export default class TypedProvider implements ApiProvider {
 }
 ```
 
+### TypeScript Providers in Frontend Projects
+
+Promptfoo loads TypeScript providers in Node.js, not through your frontend bundler. If your provider imports app code from a Vite, Next.js, or Webpack project, make sure the imports are also valid from Node.
+
+For path aliases such as `@/utils`, define the alias in `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  }
+}
+```
+
+Run `promptfoo eval` from the project root so the TypeScript loader can find that `tsconfig.json`.
+
+If your provider depends on bundler-only aliases, browser-only globals, CSS imports, or frontend plugins, compile or bundle the provider to JavaScript first and reference the built file:
+
+```yaml
+providers:
+  - file://dist/promptfoo-provider.js
+```
+
 ## Additional Capabilities
 
 ### Embeddings API

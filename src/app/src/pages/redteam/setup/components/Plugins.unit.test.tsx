@@ -55,12 +55,45 @@ vi.mock('./PluginConfigDialog', () => ({
 
 vi.mock('./TestCaseDialog', () => ({
   TestCaseDialog: () => <div data-testid="test-case-dialog" />,
-  TestCaseGenerateButton: ({ children, ...props }: React.ComponentProps<'button'>) => (
+  TestCaseGenerateButton: ({
+    children,
+    isGenerating: _isGenerating,
+    tooltipTitle: _tooltipTitle,
+    ...props
+  }: React.ComponentProps<'button'> & {
+    isGenerating?: boolean;
+    tooltipTitle?: string;
+  }) => (
     <button type="button" {...props}>
       {children ?? 'Generate test case'}
     </button>
   ),
 }));
+
+vi.mock('./PluginsTab', async () => {
+  const { DEFAULT_PLUGINS, MINIMAL_TEST_PLUGINS, RAG_PLUGINS } = await import(
+    '@promptfoo/redteam/constants'
+  );
+
+  return {
+    default: ({ setSelectedPlugins }: { setSelectedPlugins: (plugins: Set<string>) => void }) => (
+      <div>
+        <button type="button" onClick={() => setSelectedPlugins(new Set(DEFAULT_PLUGINS))}>
+          Recommended
+        </button>
+        <button type="button" onClick={() => setSelectedPlugins(new Set(MINIMAL_TEST_PLUGINS))}>
+          Minimal Test
+        </button>
+        <button type="button" onClick={() => setSelectedPlugins(new Set(RAG_PLUGINS))}>
+          RAG
+        </button>
+        <button type="button" onClick={() => setSelectedPlugins(new Set())}>
+          Select none
+        </button>
+      </div>
+    ),
+  };
+});
 
 vi.mock('react-error-boundary', () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,

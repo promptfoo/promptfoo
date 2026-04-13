@@ -123,7 +123,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   }
 
   // Other settings
-  if (options.cache === false || (options.repeat && options.repeat > 1)) {
+  if (options.cache === false) {
     cache.disableCache();
   }
 

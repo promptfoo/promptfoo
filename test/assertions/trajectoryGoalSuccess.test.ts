@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleTrajectoryGoalSuccess } from '../../src/assertions/trajectory';
-import { matchesTrajectoryGoalSuccess } from '../../src/matchers';
+import { matchesTrajectoryGoalSuccess } from '../../src/matchers/llmGrading';
 
 import type {
   ApiProvider,
@@ -10,7 +10,7 @@ import type {
 } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
-vi.mock('../../src/matchers', () => ({
+vi.mock('../../src/matchers/llmGrading', () => ({
   matchesTrajectoryGoalSuccess: vi.fn(),
 }));
 

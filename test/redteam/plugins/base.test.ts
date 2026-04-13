@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
-import { matchesLlmRubric } from '../../../src/matchers';
+import cliState from '../../../src/cliState';
+import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants';
 import { RedteamGraderBase, RedteamPluginBase } from '../../../src/redteam/plugins/base';
 import {
@@ -16,7 +17,7 @@ import type {
   GradingResult,
 } from '../../../src/types/index';
 
-vi.mock('../../../src/matchers', async (importOriginal) => {
+vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     matchesLlmRubric: vi.fn(),
@@ -55,6 +56,7 @@ describe('RedteamPluginBase', () => {
   let plugin: RedteamPluginBase;
 
   beforeEach(() => {
+    cliState.config = {};
     provider = {
       callApi: vi.fn().mockResolvedValue({
         output: 'Prompt: test prompt\nPrompt: another prompt\nirrelevant line',
@@ -65,6 +67,7 @@ describe('RedteamPluginBase', () => {
   });
 
   afterEach(() => {
+    cliState.config = {};
     vi.clearAllMocks();
   });
 
@@ -235,6 +238,66 @@ describe('RedteamPluginBase', () => {
     expect(Array.isArray(result)).toBe(true);
     expect(result).toHaveLength(5);
     expect(new Set(result.map((r) => r.vars?.testVar)).size).toBe(5);
+  });
+
+  it('should append max chars guidance from top-level redteam config and retry oversized prompts', async () => {
+    cliState.config = {
+      redteam: {
+        maxCharsPerMessage: 10,
+      },
+    };
+
+    vi.spyOn(provider, 'callApi')
+      .mockResolvedValueOnce({
+        output: 'Prompt: this one is too long\nPrompt: short',
+      })
+      .mockResolvedValueOnce({
+        output: 'Prompt: tiny',
+      });
+
+    const result = await plugin.generateTests(2);
+
+    expect(result).toHaveLength(2);
+    expect(result.map((test) => test.vars?.testVar).sort()).toEqual(['short', 'tiny']);
+    expect(provider.callApi).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining(
+        'maxCharsPerMessage: Each generated user message must be 10 characters or fewer.',
+      ),
+    );
+    expect(provider.callApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('The longest rejected prompt was 20 characters.'),
+    );
+    expect(result[0].metadata?.pluginConfig?.modifiers).toEqual({
+      language: 'German',
+      maxCharsPerMessage: 'Each generated user message must be 10 characters or fewer.',
+    });
+  });
+
+  it('should honor maxCharsPerMessage from plugin config without cliState', async () => {
+    plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
+      language: 'German',
+      maxCharsPerMessage: 8,
+    });
+
+    vi.spyOn(provider, 'callApi').mockResolvedValue({
+      output: 'Prompt: tiny',
+    });
+
+    const result = await plugin.generateTests(1);
+
+    expect(result).toHaveLength(1);
+    expect(provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'maxCharsPerMessage: Each generated user message must be 8 characters or fewer.',
+      ),
+    );
+    expect(result[0].metadata?.pluginConfig?.maxCharsPerMessage).toBe(8);
+    expect(result[0].metadata?.pluginConfig?.modifiers).toEqual({
+      language: 'German',
+      maxCharsPerMessage: 'Each generated user message must be 8 characters or fewer.',
+    });
   });
 
   describe('false positive refusal detection', () => {
@@ -1146,6 +1209,60 @@ describe('RedteamGraderBase', () => {
       'Test rubric for test-purpose with harm category test-harm and goal test prompt',
     );
     expect(result.rubric).toContain('Current timestamp:');
+  });
+
+  it('should prefer remote grading when test options only contain a target provider', async () => {
+    cliState.config = {
+      redteam: {},
+    };
+    const mockResult: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+    };
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+    await grader.getResult(
+      'test prompt',
+      'test output',
+      {
+        ...mockTest,
+        options: {
+          provider: 'openai:gpt-4o-mini',
+        },
+      },
+      undefined /* provider */,
+      undefined /* renderedValue */,
+    );
+
+    const grading = (matchesLlmRubric as Mock).mock.calls[0][2];
+    expect(Object.getOwnPropertyDescriptor(grading, '__promptfooPreferRemote')?.value).toBe(true);
+  });
+
+  it('should prefer remote grading when defaultTest.provider is a target provider', async () => {
+    cliState.config = {
+      redteam: {},
+      defaultTest: {
+        provider: 'openai:gpt-4o',
+      },
+    };
+    const mockResult: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+    };
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+    await grader.getResult(
+      'test prompt',
+      'test output',
+      mockTest,
+      undefined /* provider */,
+      undefined /* renderedValue */,
+    );
+
+    const grading = (matchesLlmRubric as Mock).mock.calls[0][2];
+    expect(Object.getOwnPropertyDescriptor(grading, '__promptfooPreferRemote')?.value).toBe(true);
   });
 
   describe('grader examples', () => {
@@ -2584,6 +2701,30 @@ describe('RedteamGraderBase', () => {
       expect(result.rubric).toContain('IMPORTANT PLUGIN-SPECIFIC GRADING GUIDANCE:');
       expect(result.rubric).toContain('This is the preferred graderGuidance field');
       expect(result.rubric).not.toContain('This is the deprecated gradingGuidance field');
+    });
+
+    it('should default traceSummary to an empty string when gradingContext is omitted', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const TestGraderWithOptionalTrace = class extends RedteamGraderBase {
+        id = 'test-grader-optional-trace';
+        rubric = 'Test rubric. Trace summary: "{{ traceSummary }}".';
+      };
+
+      const traceGrader = new TestGraderWithOptionalTrace();
+
+      await traceGrader.getResult('test prompt', 'test output', mockTest, undefined, undefined);
+
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.stringContaining('Trace summary: ""'),
+        'test output',
+        expect.any(Object),
+      );
     });
   });
 });

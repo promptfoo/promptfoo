@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
-import { getGradingProvider } from '../../src/matchers';
+import { getGradingProvider } from '../../src/matchers/providers';
 import { loadApiProvider } from '../../src/providers/index';
 
 vi.mock('../../src/providers', () => ({
@@ -37,6 +37,13 @@ describe('getGradingProvider', () => {
 
     it('should use provider when specified as ApiProvider object', async () => {
       const result = await getGradingProvider('text', mockProvider, null);
+
+      expect(result).toBe(mockProvider);
+      expect(loadApiProvider).not.toHaveBeenCalled();
+    });
+
+    it('should treat null provider as unspecified', async () => {
+      const result = await getGradingProvider('text', null as any, mockProvider);
 
       expect(result).toBe(mockProvider);
       expect(loadApiProvider).not.toHaveBeenCalled();

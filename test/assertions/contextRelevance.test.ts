@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContextRelevance } from '../../src/assertions/contextRelevance';
 import * as contextUtils from '../../src/assertions/contextUtils';
-import { matchesContextRelevance } from '../../src/matchers';
+import { matchesContextRelevance } from '../../src/matchers/rag';
 
-vi.mock('../../src/matchers');
+vi.mock('../../src/matchers/rag');
 vi.mock('../../src/assertions/contextUtils');
 
 describe('handleContextRelevance', () => {

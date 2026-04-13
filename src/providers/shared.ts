@@ -202,8 +202,7 @@ export function openaiToolChoiceToAnthropic(choice: OpenAIToolChoice): {
       case 'auto':
         return { type: 'auto' };
       case 'none':
-        // Anthropic doesn't have 'none', closest is not sending tool_choice
-        return { type: 'auto' };
+        return { type: 'none' };
       case 'required':
         return { type: 'any' };
     }

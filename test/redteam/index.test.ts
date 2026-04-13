@@ -245,6 +245,75 @@ describe('synthesize', () => {
       ]);
     });
 
+    it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'short' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((testCase: any) => ({
+          ...testCase,
+          metadata: {
+            ...testCase.metadata,
+            strategyId: 'goat',
+          },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: mockStrategyAction,
+        id: 'goat',
+      });
+
+      const result = await synthesize({
+        maxCharsPerMessage: 12,
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'goat' }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(mockPluginAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            maxCharsPerMessage: 12,
+            modifiers: expect.objectContaining({
+              maxCharsPerMessage: 'Each generated user message must be 12 characters or fewer.',
+            }),
+          }),
+        }),
+      );
+      expect(mockStrategyAction).toHaveBeenCalledWith(
+        expect.any(Array),
+        'query',
+        expect.objectContaining({
+          maxCharsPerMessage: 12,
+        }),
+        'goat',
+      );
+      expect(result.testCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              pluginId: 'test-plugin',
+              pluginConfig: expect.objectContaining({
+                maxCharsPerMessage: 12,
+              }),
+              modifiers: expect.objectContaining({
+                maxCharsPerMessage: 'Each generated user message must be 12 characters or fewer.',
+              }),
+            }),
+          }),
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              strategyConfig: expect.objectContaining({
+                maxCharsPerMessage: 12,
+              }),
+            }),
+          }),
+        ]),
+      );
+    });
+
     it('should warn about unregistered plugins', async () => {
       vi.spyOn(Plugins, 'find').mockReturnValue(undefined);
 

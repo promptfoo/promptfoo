@@ -3,6 +3,7 @@ import cliState from '../../src/cliState';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { isLoggedIntoCloud } from '../../src/globalConfig/accounts';
 import { readGlobalConfig } from '../../src/globalConfig/globalConfig';
+import { hasCodexDefaultCredentials } from '../../src/providers/openai/codexDefaults';
 import {
   getRemoteGenerationUrl,
   getRemoteGenerationUrlForUnaligned,
@@ -15,6 +16,9 @@ import {
 vi.mock('../../src/envars');
 vi.mock('../../src/globalConfig/accounts');
 vi.mock('../../src/globalConfig/globalConfig');
+vi.mock('../../src/providers/openai/codexDefaults', () => ({
+  hasCodexDefaultCredentials: vi.fn().mockReturnValue(false),
+}));
 vi.mock('../../src/cliState', () => ({
   default: {
     remote: undefined,
@@ -28,6 +32,7 @@ describe('shouldGenerateRemote', () => {
     vi.mocked(isLoggedIntoCloud).mockImplementation(function () {
       return false;
     });
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(false);
   });
 
   it('should return false when remote generation is explicitly disabled, even for cloud users', () => {
@@ -103,6 +108,43 @@ describe('shouldGenerateRemote', () => {
       return 'sk-123';
     });
     expect(shouldGenerateRemote()).toBe(false);
+  });
+
+  it('should return true for redteam generation when only Codex default credentials exist', () => {
+    vi.mocked(getEnvBool).mockReturnValue(false);
+    vi.mocked(getEnvString).mockReturnValue('');
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+
+    expect(shouldGenerateRemote()).toBe(true);
+  });
+
+  it('should return false when the caller can use Codex default providers locally', () => {
+    vi.mocked(getEnvBool).mockReturnValue(false);
+    vi.mocked(getEnvString).mockReturnValue('');
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+
+    expect(shouldGenerateRemote({ canUseCodexDefaultProvider: true })).toBe(false);
+  });
+
+  it('should return true for embedding-backed checks when only Codex default credentials exist', () => {
+    vi.mocked(getEnvBool).mockReturnValue(false);
+    vi.mocked(getEnvString).mockReturnValue('');
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+
+    expect(
+      shouldGenerateRemote({
+        canUseCodexDefaultProvider: true,
+        requireEmbeddingProvider: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('should return true when neither OpenAI nor Codex credentials exist', () => {
+    vi.mocked(getEnvBool).mockReturnValue(false);
+    vi.mocked(getEnvString).mockReturnValue('');
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(false);
+
+    expect(shouldGenerateRemote()).toBe(true);
   });
 
   it('should return false when remote generation is disabled and OpenAI key exists', () => {

@@ -8,17 +8,19 @@ import { handleGEval } from '../../src/assertions/geval';
 import { runCompareAssertion } from '../../src/assertions/index';
 import { handleLlmRubric } from '../../src/assertions/llmRubric';
 import { handleModelGradedClosedQa } from '../../src/assertions/modelGradedClosedQa';
+import { matchesSelectBest } from '../../src/matchers/comparison';
 import {
-  matchesAnswerRelevance,
   matchesClosedQa,
-  matchesContextFaithfulness,
-  matchesContextRecall,
-  matchesContextRelevance,
   matchesFactuality,
   matchesGEval,
   matchesLlmRubric,
-  matchesSelectBest,
-} from '../../src/matchers';
+} from '../../src/matchers/llmGrading';
+import {
+  matchesAnswerRelevance,
+  matchesContextFaithfulness,
+  matchesContextRecall,
+  matchesContextRelevance,
+} from '../../src/matchers/rag';
 
 import type {
   ApiProvider,
@@ -27,7 +29,9 @@ import type {
   ProviderResponse,
 } from '../../src/types/index';
 
-vi.mock('../../src/matchers');
+vi.mock('../../src/matchers/comparison');
+vi.mock('../../src/matchers/llmGrading');
+vi.mock('../../src/matchers/rag');
 vi.mock('../../src/assertions/contextUtils', () => ({
   resolveContext: vi.fn().mockResolvedValue('mocked context'),
 }));

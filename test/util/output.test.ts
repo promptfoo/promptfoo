@@ -2,12 +2,13 @@ import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import yaml from 'js-yaml';
-import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
 import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
 import { createOutputMetadata, writeMultipleOutputs, writeOutput } from '../../src/util/output';
+import { mockConsole } from './utils';
 
 vi.mock('../../src/database', () => ({
   getDb: vi.fn(),
@@ -48,7 +49,7 @@ vi.mock('../../src/googleSheets', () => ({
 }));
 
 describe('writeOutput', () => {
-  let consoleLogSpy: MockInstance;
+  let consoleLogSpy: ReturnType<typeof mockConsole>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -58,7 +59,7 @@ describe('writeOutput', () => {
     vi.mocked(fsPromises.open).mockResolvedValue(
       mockFileHandle as unknown as fsPromises.FileHandle,
     );
-    consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleLogSpy = mockConsole('log');
     // @ts-ignore
     vi.mocked(getDb).mockReturnValue({
       select: vi.fn().mockReturnValue({

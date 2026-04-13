@@ -1,5 +1,6 @@
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
+import { callApi } from '@app/utils/api';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -56,6 +57,7 @@ vi.mock('./components/Setup', () => ({
 const mockedUseTelemetry = useTelemetry as Mock;
 const mockedUseToast = useToast as Mock;
 const mockedUseSetupState = useSetupState as unknown as Mock;
+const mockedCallApi = vi.mocked(callApi);
 
 // Capture initial store state for reset
 const initialRedTeamState = useRedTeamConfig.getState();
@@ -79,6 +81,10 @@ describe('RedTeamSetupPage', () => {
       hasSeenSetup: true, // Assume setup has been seen to not render the modal
       markSetupAsSeen: vi.fn(),
     });
+    mockedCallApi.mockResolvedValue({
+      ok: true,
+      json: async () => ({ configs: [] }),
+    } as Response);
   });
 
   afterEach(() => {

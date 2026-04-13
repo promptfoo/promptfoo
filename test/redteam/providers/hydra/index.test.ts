@@ -1177,6 +1177,40 @@ describe('HydraProvider', () => {
         assertion: { type: 'harmful:test', value: testRubric },
       });
     });
+
+    it('passes target provider raw response into the grader', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      await provider.callApi('', context);
+
+      const gradingContext = mockGrader.getResult.mock.calls[0][7] as {
+        providerResponse?: { raw?: unknown };
+      };
+      expect(gradingContext.providerResponse?.raw).toContain('finalResponse');
+    });
   });
 
   describe('callApi() - scan learning', () => {

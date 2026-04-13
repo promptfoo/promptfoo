@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleModeration } from '../../src/assertions/moderation';
-import { matchesModeration } from '../../src/matchers';
+import { matchesModeration } from '../../src/matchers/moderation';
 
 import type {
   ApiProvider,
@@ -11,7 +11,7 @@ import type {
   TestCase,
 } from '../../src/types/index';
 
-vi.mock('../../src/matchers', () => ({
+vi.mock('../../src/matchers/moderation', () => ({
   matchesModeration: vi.fn(),
 }));
 

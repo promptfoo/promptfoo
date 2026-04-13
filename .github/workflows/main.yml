@@ -79,6 +79,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
 
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@v6
@@ -90,7 +92,7 @@ jobs:
       - name: Use Python 3.14
         uses: actions/setup-python@v6
         with:
-          python-version: 3.14.2
+          python-version: 3.14.4
 
       # Ruby 4.0.1 is not yet available on Windows via setup-ruby, use 4.0.0 on Windows
       - name: Use Ruby
@@ -113,6 +115,10 @@ jobs:
 
       - name: Test
         run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard && ' -- --coverage' || '' }}
+
+      - name: Check Backend Coverage Ratchets
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
+        run: npm run test:coverage:ratchet -- --report backend
 
       - name: Upload Backend Coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
@@ -380,9 +386,18 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run Site Tests
+      - name: Run Site Tests with Coverage
         working-directory: site
-        run: npm test
+        run: npm run test:coverage
+
+      - name: Upload Site Coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          files: ./site/coverage/coverage-final.json
+          flags: site
+          name: site-coverage
+          fail_ci_if_error: true
+          use_oidc: true
 
   webui:
     name: webui tests
@@ -391,6 +406,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
 
       - name: Use Node
         uses: actions/setup-node@v6
@@ -405,8 +422,14 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      - name: Run App Browser Tests
+        run: npm run test:app:browser
+
       - name: Run App Tests with Coverage
         run: npm run test:coverage --prefix src/app
+
+      - name: Check Frontend Coverage Ratchets
+        run: npm run test:coverage:ratchet -- --report frontend
 
       - name: Upload Frontend Coverage to Codecov
         uses: codecov/codecov-action@v6
@@ -438,7 +461,7 @@ jobs:
       - name: Use Python 3.14
         uses: actions/setup-python@v6
         with:
-          python-version: 3.14.2
+          python-version: 3.14.4
 
       - name: Use Ruby
         uses: ruby/setup-ruby@v1
@@ -473,7 +496,7 @@ jobs:
       - name: Use Python 3.14
         uses: actions/setup-python@v6
         with:
-          python-version: 3.14.2
+          python-version: 3.14.4
 
       - name: Use Ruby
         uses: ruby/setup-ruby@v1
