@@ -22,6 +22,7 @@ describe('AnthropicCompletionProvider', () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
     await clearCache();
     enableCache();
