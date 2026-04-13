@@ -287,6 +287,7 @@ describe('TestCaseDialog', () => {
           id: 'policy' as const,
           config: {
             policy: {
+              id: 'refund-policy',
               text: 'Refunds require approval.',
               name: 'Refund Policy',
             },
@@ -312,6 +313,7 @@ describe('TestCaseDialog', () => {
             config: {
               policy: {
                 name: 'Refund Policy',
+                id: 'refund-policy',
                 text: 'Refunds require approval.',
               },
             },
