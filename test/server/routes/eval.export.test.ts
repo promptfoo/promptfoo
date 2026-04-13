@@ -64,6 +64,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
             provider: 'openai:gpt-3.5-turbo',
             gradingResult: {
               pass: true,
+              score: 1,
               reason: 'Test passed',
               comment: 'Good response',
             },

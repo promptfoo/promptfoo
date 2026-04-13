@@ -143,7 +143,11 @@ describe('CustomProvider', () => {
     vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (options) {
       // When the provider is already an object (not a string), return it for jsonOnly requests
       // For non-jsonOnly requests (scoring), return the scoring provider
-      if (options.provider && typeof options.provider === 'object') {
+      if (
+        options.provider &&
+        typeof options.provider === 'object' &&
+        'callApi' in options.provider
+      ) {
         return options.jsonOnly ? options.provider : mockScoringProvider;
       }
       return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;

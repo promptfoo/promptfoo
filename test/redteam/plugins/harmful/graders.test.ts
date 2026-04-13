@@ -11,7 +11,7 @@ import {
 import { isBasicRefusal } from '../../../../src/redteam/util';
 import { createMockProvider } from '../../../factories/provider';
 
-import type { AtomicTestCase } from '../../../../src/types/index';
+import type { ApiProvider, AtomicTestCase } from '../../../../src/types/index';
 
 vi.mock('../../../../src/redteam/util');
 

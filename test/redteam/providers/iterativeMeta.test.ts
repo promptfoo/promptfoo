@@ -7,7 +7,7 @@ import {
   type MockApiProvider,
 } from '../../factories/provider';
 
-import type { AtomicTestCase } from '../../../src/types/index';
+import type { AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
 const mockGetProvider = vi.hoisted(() => vi.fn<() => Promise<any>>());
 const mockGetTargetResponse = vi.hoisted(() => vi.fn<() => Promise<any>>());

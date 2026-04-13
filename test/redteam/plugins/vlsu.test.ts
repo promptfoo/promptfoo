@@ -12,7 +12,7 @@ import {
 } from '../../../src/redteam/plugins/vlsu';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
-import type { AtomicTestCase } from '../../../src/types/index';
+import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
 vi.mock('../../../src/logger');
 vi.mock('../../../src/cache');
