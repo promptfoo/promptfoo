@@ -279,6 +279,64 @@ describe('TestCaseDialog', () => {
       expect(screen.getByTestId('plugin-dropdown')).toHaveClass('w-full', 'sm:w-[280px]');
     });
 
+    it('should label duplicate plugins distinctly and regenerate by selected index', async () => {
+      const user = userEvent.setup();
+      const onRegenerate = vi.fn();
+      const availablePlugins = [
+        {
+          id: 'policy' as const,
+          config: {
+            policy: {
+              text: 'Refunds require approval.',
+              name: 'Refund Policy',
+            },
+          },
+          isStatic: true,
+        },
+        {
+          id: 'policy' as const,
+          config: {
+            policy: 'Do not promise refunds without manager approval.',
+          },
+          isStatic: true,
+        },
+        { id: 'pii' as const, config: { name: 'email' }, isStatic: true },
+        { id: 'pii' as const, config: { name: 'phone' }, isStatic: true },
+      ];
+
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          plugin={{
+            id: 'policy',
+            config: {
+              policy: {
+                name: 'Refund Policy',
+                text: 'Refunds require approval.',
+              },
+            },
+            isStatic: true,
+          }}
+          availablePlugins={availablePlugins}
+          onRegenerate={onRegenerate}
+          allowPluginChange={true}
+        />,
+      );
+
+      expect(screen.getByTestId('plugin-dropdown')).toHaveTextContent('Refund Policy (1)');
+
+      await user.click(screen.getByTestId('plugin-dropdown'));
+
+      expect(screen.getByRole('option', { name: 'Refund Policy (1)' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'Custom Policy 2' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'PII Protection Suite (1)' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'PII Protection Suite (2)' })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('option', { name: 'Custom Policy 2' }));
+
+      expect(onRegenerate).toHaveBeenCalledWith('1');
+    });
+
     it('should NOT show plugin dropdown when allowPluginChange is false', () => {
       renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={false} />);
 

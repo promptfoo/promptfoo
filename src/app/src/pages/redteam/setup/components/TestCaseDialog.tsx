@@ -55,7 +55,7 @@ interface TestCaseDialogProps {
   generatedTestCases: GeneratedTestCase[];
   targetResponses: TargetResponse[];
   isRunningTest?: boolean;
-  onRegenerate: (newPluginId?: string) => void;
+  onRegenerate: (newPluginIndex?: string) => void;
   onContinue: (additionalTurns: number) => void;
   currentTurn: number;
   maxTurns: number;
@@ -63,6 +63,53 @@ interface TestCaseDialogProps {
   // Whether to allow changing the plugin (only on strategies page)
   allowPluginChange?: boolean;
 }
+
+const arePluginConfigsEqual = (
+  left: unknown,
+  right: unknown,
+  seen = new WeakMap<object, WeakSet<object>>(),
+): boolean => {
+  if (Object.is(left, right)) {
+    return true;
+  }
+
+  if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') {
+    return false;
+  }
+
+  const previouslySeenRight = seen.get(left);
+  if (previouslySeenRight?.has(right)) {
+    return true;
+  }
+
+  if (previouslySeenRight) {
+    previouslySeenRight.add(right);
+  } else {
+    seen.set(left, new WeakSet([right]));
+  }
+
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => arePluginConfigsEqual(value, right[index], seen))
+    );
+  }
+
+  const leftObject = left as Record<string, unknown>;
+  const rightObject = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftObject).sort();
+  const rightKeys = Object.keys(rightObject).sort();
+
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key, index) =>
+        key === rightKeys[index] && arePluginConfigsEqual(leftObject[key], rightObject[key], seen),
+    )
+  );
+};
 
 export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   open,
@@ -149,31 +196,40 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
     pluginName && !plugin?.isStatic && hasSpecificPluginDocumentation(pluginName as Plugin);
 
   const selectedPluginValue = useMemo(() => {
+    const exactIndex = availablePlugins.findIndex((option) => option === plugin);
+    if (exactIndex >= 0) {
+      return String(exactIndex);
+    }
+
     const index = availablePlugins.findIndex(
       (option) =>
-        option.id === plugin?.id &&
-        JSON.stringify(option.config) === JSON.stringify(plugin?.config ?? {}),
+        option.id === plugin?.id && arePluginConfigsEqual(option.config, plugin?.config ?? {}),
     );
     return index >= 0 ? String(index) : undefined;
   }, [availablePlugins, plugin]);
 
   const getAvailablePluginLabel = (option: TargetPlugin, index: number) => {
+    const pluginsWithSameId = availablePlugins.filter((plugin) => plugin.id === option.id);
+    const instanceNumber = availablePlugins
+      .slice(0, index + 1)
+      .filter((plugin) => plugin.id === option.id).length;
+    const duplicateSuffix = pluginsWithSameId.length > 1 ? ` (${instanceNumber})` : '';
+
     if (option.id === 'policy') {
       const policy = option.config?.policy as { name?: string } | string | undefined;
 
       if (policy && typeof policy === 'object' && typeof policy.name === 'string' && policy.name) {
-        return policy.name;
+        return `${policy.name}${duplicateSuffix}`;
       }
 
-      const policyIndex = availablePlugins
-        .slice(0, index + 1)
-        .filter((p) => p.id === 'policy').length;
-      return `Custom Policy ${policyIndex}`;
+      return `Custom Policy ${instanceNumber}`;
     }
 
-    return (
-      displayNameOverrides[option.id as Plugin] || categoryAliases[option.id as Plugin] || option.id
-    );
+    const baseLabel =
+      displayNameOverrides[option.id as Plugin] ||
+      categoryAliases[option.id as Plugin] ||
+      option.id;
+    return `${baseLabel}${duplicateSuffix}`;
   };
 
   return (

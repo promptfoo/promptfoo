@@ -579,14 +579,23 @@ export const TestCaseGenerationProvider: React.FC<{
 
   /**
    * Regenerates and optionally evaluates the plugin/strategy combination.
-   * Accepts an optional newPluginId to change the plugin before regenerating.
+   * Accepts an optional newPluginIndex to change the plugin before regenerating.
    * For single-turn strategies, uses cached batch when available.
    */
   const handleRegenerate = useCallback(
-    (newPluginId?: string) => {
+    (newPluginIndex?: string) => {
       // If plugin changed, clear batch and start fresh
-      if (newPluginId) {
-        const selectedPlugin = availablePlugins[Number(newPluginId)];
+      if (newPluginIndex !== undefined) {
+        const selectedPluginIndex = Number(newPluginIndex);
+        if (
+          !Number.isInteger(selectedPluginIndex) ||
+          selectedPluginIndex < 0 ||
+          selectedPluginIndex >= availablePlugins.length
+        ) {
+          return;
+        }
+
+        const selectedPlugin = availablePlugins[selectedPluginIndex];
         if (!selectedPlugin) {
           return;
         }
@@ -594,7 +603,7 @@ export const TestCaseGenerationProvider: React.FC<{
         // Clear batch since we're switching plugins
         setTestCaseBatch([]);
         setBatchIndex(0);
-        handleStart(selectedPlugin, strategy!);
+        handleStart({ ...selectedPlugin, isStatic: false }, strategy!);
         return;
       }
 

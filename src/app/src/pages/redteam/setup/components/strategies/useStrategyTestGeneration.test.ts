@@ -78,6 +78,56 @@ describe('useStrategyTestGeneration', () => {
     );
   });
 
+  it('preserves custom policy object config when generating a strategy preview', async () => {
+    vi.mocked(useRedTeamConfig).mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'policy',
+            config: {
+              policy: {
+                id: 'refund-policy',
+                name: 'Refund Policy',
+                text: 'Do not promise refunds without approval.',
+              },
+            },
+          },
+        ],
+        strategies: [],
+      },
+    } as ReturnType<typeof useRedTeamConfig>);
+
+    const { result } = renderHook(() =>
+      useStrategyTestGeneration({
+        strategyId: 'basic',
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleTestCaseGeneration();
+    });
+
+    expect(result.current.testGenerationPlugin).toBe('policy');
+    expect(generateTestCase).toHaveBeenCalledWith(
+      {
+        id: 'policy',
+        config: {
+          policy: {
+            id: 'refund-policy',
+            name: 'Refund Policy',
+            text: 'Do not promise refunds without approval.',
+          },
+        },
+        isStatic: true,
+      },
+      {
+        id: 'basic',
+        config: {},
+        isStatic: false,
+      },
+    );
+  });
+
   it('falls back to the default preview plugin when no plugins are configured', async () => {
     vi.mocked(useRedTeamConfig).mockReturnValue({
       config: {
