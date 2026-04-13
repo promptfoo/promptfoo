@@ -44,6 +44,8 @@ vi.mock('fs', () => ({
     size: 1000,
     isDirectory: () => false,
   })),
+  mkdirSync: vi.fn(),
+  chmodSync: vi.fn(),
   writeFileSync: vi.fn(),
 }));
 
