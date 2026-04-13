@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithCache, getCache, isCacheEnabled } from '../../../src/cache';
+import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../../../src/cache';
 import {
   formatModerationInput,
   type ImageInput,
@@ -20,6 +20,9 @@ describe('OpenAiModerationProvider', () => {
     vi.resetAllMocks();
     vi.mocked(isCacheEnabled).mockImplementation(function () {
       return false;
+    });
+    vi.mocked(getScopedCacheKey).mockImplementation(function (cacheKey) {
+      return cacheKey;
     });
     vi.mocked(fetchWithCache).mockImplementation(async function () {
       return {
@@ -177,7 +180,13 @@ describe('OpenAiModerationProvider', () => {
       // Verify we got an error response with the expected message
       expect(result).toHaveProperty('error');
       expect(result.error).toContain(getOpenAiMissingApiKeyMessage());
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('API error'));
+      expect(errorSpy).toHaveBeenCalledWith(
+        'OpenAI moderation API error',
+        expect.objectContaining({
+          error: expect.stringContaining(getOpenAiMissingApiKeyMessage()),
+          hasData: false,
+        }),
+      );
     });
 
     it('should use custom apiKeyEnvar in missing API key errors', async () => {
@@ -473,6 +482,56 @@ describe('OpenAiModerationProvider', () => {
         statusText: 'OK',
         cached: false,
       });
+
+      await expect(Promise.all([first, second])).resolves.toEqual([{ flags: [] }, { flags: [] }]);
+    });
+
+    it('should not deduplicate in-flight requests across cache namespaces', async () => {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      const provider = createProvider();
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      const mockResponse = {
+        id: 'modr-123',
+        model: 'text-moderation-latest',
+        results: [{ flagged: false, categories: {}, category_scores: {} }],
+      };
+      const resolvers: Array<(value: any) => void> = [];
+
+      vi.mocked(getCache).mockImplementation(function () {
+        return mockCache as any;
+      });
+      let namespaceIndex = 0;
+      vi.mocked(getScopedCacheKey).mockImplementation(function (cacheKey) {
+        const namespace = namespaceIndex++ === 0 ? 'repeat-0' : 'repeat-1';
+        return `${namespace}:${cacheKey}`;
+      });
+      vi.mocked(fetchWithCache).mockImplementation(
+        () =>
+          new Promise<any>((resolve) => {
+            resolvers.push(resolve);
+          }) as ReturnType<typeof fetchWithCache>,
+      );
+
+      const first = provider.callModerationApi('user', 'same sensitive text');
+      const second = provider.callModerationApi('user', 'same sensitive text');
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(fetchWithCache).toHaveBeenCalledTimes(2);
+
+      for (const resolveFetch of resolvers) {
+        resolveFetch({
+          data: mockResponse,
+          status: 200,
+          statusText: 'OK',
+          cached: false,
+        });
+      }
 
       await expect(Promise.all([first, second])).resolves.toEqual([{ flags: [] }, { flags: [] }]);
     });

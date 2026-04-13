@@ -1,6 +1,6 @@
 import { createHmac } from 'crypto';
 
-import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
+import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
@@ -90,15 +90,15 @@ function getOpenAIModerationAuthCacheNamespace(apiKey: string): string {
 }
 
 function fetchOpenAIModerationWithDedupe(
-  cacheKey: string,
+  inflightCacheKey: string,
   fetcher: () => Promise<OpenAIModerationFetchResult>,
 ): Promise<OpenAIModerationFetchResult> {
-  let inflightRequest = OPENAI_MODERATION_INFLIGHT_REQUESTS.get(cacheKey);
+  let inflightRequest = OPENAI_MODERATION_INFLIGHT_REQUESTS.get(inflightCacheKey);
   if (!inflightRequest) {
     inflightRequest = fetcher().finally(() => {
-      OPENAI_MODERATION_INFLIGHT_REQUESTS.delete(cacheKey);
+      OPENAI_MODERATION_INFLIGHT_REQUESTS.delete(inflightCacheKey);
     });
-    OPENAI_MODERATION_INFLIGHT_REQUESTS.set(cacheKey, inflightRequest);
+    OPENAI_MODERATION_INFLIGHT_REQUESTS.set(inflightCacheKey, inflightRequest);
   }
   return inflightRequest;
 }
@@ -155,7 +155,11 @@ function parseOpenAIModerationResponse(data: OpenAIModerationResponse): Provider
 }
 
 function handleApiError(err: any, data?: any): ProviderModerationResponse {
-  logger.error(`API error: ${String(err)}`);
+  logger.error('OpenAI moderation API error', {
+    error: err instanceof Error ? err.message : String(err),
+    hasData: data !== undefined,
+    dataLength: typeof data === 'string' ? data.length : undefined,
+  });
   return {
     error: data
       ? `API error: ${String(err)}: ${typeof data === 'string' ? data : JSON.stringify(data)}`
@@ -276,7 +280,7 @@ export class OpenAiModerationProvider
 
     try {
       const { data, status, statusText } = await fetchOpenAIModerationWithDedupe(
-        cacheKey,
+        getScopedCacheKey(cacheKey),
         async () =>
           fetchWithCache<OpenAIModerationResponse>(
             `${this.getApiUrl()}/moderations`,
