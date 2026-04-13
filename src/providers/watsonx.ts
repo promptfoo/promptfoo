@@ -188,6 +188,13 @@ function generatePromptHash(prompt: string): string {
   return hashWatsonXCacheValue(['prompt', prompt]);
 }
 
+function getWatsonXCredentialFingerprint(type: string, credential: string): string {
+  return crypto
+    .createHmac('sha256', credential)
+    .update(`${WATSONX_CACHE_HASH_KEY}:${type}`)
+    .digest('hex');
+}
+
 interface ModelSpec {
   model_id: string;
   input_tier: string;
@@ -218,7 +225,7 @@ function createWatsonXAuthCacheHash(authSelection: WatsonXAuthSelection): string
   return hashWatsonXCacheValue({
     type: authSelection.type,
     forcedByAuthType: authSelection.forcedByAuthType,
-    credentialFingerprint: hashWatsonXCacheValue([authSelection.type, credential]),
+    credentialFingerprint: getWatsonXCredentialFingerprint(authSelection.type, credential),
   });
 }
 
