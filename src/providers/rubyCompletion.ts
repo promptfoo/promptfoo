@@ -8,7 +8,7 @@ import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
-import { sanitizeScriptContext } from './scriptContext';
+import { buildCacheableScriptContext, sanitizeScriptContext } from './scriptContext';
 
 import type {
   ApiProvider,
@@ -261,10 +261,20 @@ export class RubyProvider implements ApiProvider {
 
     const args = buildRubyScriptArgs(apiType, prompt, optionsWithProcessedConfig, sanitizedContext);
 
+    // Build a separate arg set for cache-key hashing that excludes per-run
+    // non-deterministic fields (`evaluationId`, `traceparent`, etc.). The
+    // full `args` (with tracing metadata) are still forwarded to the worker.
+    const cacheKeyArgs = buildRubyScriptArgs(
+      apiType,
+      prompt,
+      optionsWithProcessedConfig,
+      buildCacheableScriptContext(context),
+    );
+
     // Create cache key including the resolved function and exact worker args to ensure
     // different invocation payloads don't share caches.
     const cacheKey = `ruby:${this.scriptPath}:${functionName}:${apiType}:${fileHash}:${sha256(
-      safeJsonStringify(args) ?? 'undefined',
+      safeJsonStringify(cacheKeyArgs) ?? 'undefined',
     )}`;
     logger.debug(`RubyProvider cache key: ${cacheKey}`);
 

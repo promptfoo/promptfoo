@@ -336,6 +336,74 @@ describe('ScriptCompletionProvider', () => {
     expect(expectedCacheKey).not.toContain('sk-test-context-label-secret');
   });
 
+  it('produces the same cache key for two runs that differ only by per-run identifiers', async () => {
+    const mockCache = {
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+    };
+    vi.spyOn(cacheModule, 'getCache').mockResolvedValue(mockCache as never);
+    vi.spyOn(cacheModule, 'isCacheEnabled').mockReturnValue(true);
+
+    existsSyncMock.mockReturnValue(true);
+    statSyncMock.mockReturnValue({ isFile: () => true } as fs.Stats);
+    readFileSyncMock.mockReturnValue('file content');
+
+    vi.mocked(crypto.createHash).mockImplementation(function () {
+      let value = '';
+      const mockHash = {
+        update: vi.fn((input: string | Buffer) => {
+          value += Buffer.isBuffer(input) ? input.toString('utf8') : String(input);
+          return mockHash;
+        }),
+        digest: vi.fn(() => realSha256(value)),
+      } as unknown as crypto.Hash;
+      return mockHash;
+    });
+
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      if (typeof callback === 'function') {
+        callback(null, Buffer.from('fresh result'), '');
+      }
+      return {} as any;
+    });
+
+    const baseContext = {
+      vars: { name: 'Alice' },
+      prompt: { raw: 'Hi Alice', label: 'Hi {{name}}' },
+      test: { vars: { name: 'Alice' }, assert: [], options: {}, metadata: {} },
+      repeatIndex: 0,
+    };
+
+    await provider.callApi('test prompt', {
+      ...baseContext,
+      evaluationId: 'eval-first-run',
+      testCaseId: 'case-first',
+      traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-aaaaaaaaaaaaaaaa-01',
+      tracestate: 'vendor=first',
+      testIdx: 0,
+      promptIdx: 0,
+    } as any);
+
+    await provider.callApi('test prompt', {
+      ...baseContext,
+      evaluationId: 'eval-second-run',
+      testCaseId: 'case-second',
+      traceparent: '00-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-bbbbbbbbbbbbbbbb-01',
+      tracestate: 'vendor=second',
+      testIdx: 3,
+      promptIdx: 2,
+    } as any);
+
+    const firstCacheKey = mockCache.get.mock.calls[0][0] as string;
+    const secondCacheKey = mockCache.get.mock.calls[1][0] as string;
+
+    expect(firstCacheKey).toBe(secondCacheKey);
+    // Neither key should embed the per-run identifiers that would break
+    // cache hits across eval runs.
+    expect(firstCacheKey).not.toContain('eval-first-run');
+    expect(secondCacheKey).not.toContain('eval-second-run');
+  });
+
   it('should separate cache keys for different context payloads', async () => {
     const mockCache = {
       get: vi.fn().mockResolvedValue(null),

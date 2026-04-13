@@ -11,7 +11,7 @@ import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
 import { providerRegistry } from './providerRegistry';
-import { sanitizeScriptContext } from './scriptContext';
+import { buildCacheableScriptContext, sanitizeScriptContext } from './scriptContext';
 
 import type {
   ApiProvider,
@@ -347,10 +347,20 @@ export class PythonProvider implements ApiProvider {
       sanitizedContext,
     );
 
+    // Build a separate arg set for cache-key hashing that excludes per-run
+    // non-deterministic fields (`evaluationId`, `traceparent`, etc.). The
+    // full `args` (with tracing metadata) are still forwarded to the worker.
+    const cacheKeyArgs = buildPythonScriptArgs(
+      apiType,
+      prompt,
+      optionsWithProcessedConfig,
+      buildCacheableScriptContext(context),
+    );
+
     // Create cache key including the resolved function and exact worker args to ensure
     // different invocation payloads don't share caches.
     const cacheKey = `python:${this.scriptPath}:${functionName}:${apiType}:${fileHash}:${sha256(
-      safeJsonStringify(args) ?? 'undefined',
+      safeJsonStringify(cacheKeyArgs) ?? 'undefined',
     )}`;
     logger.debug(`PythonProvider cache key: ${cacheKey}`);
 

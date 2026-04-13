@@ -607,6 +607,51 @@ describe('RubyProvider', () => {
       expect(result).toEqual({ classification: { label: 'test', score: 0.9 } });
       expect(result).not.toHaveProperty('cached');
     });
+
+    it('produces the same cache key for two runs that differ only by per-run identifiers', async () => {
+      const provider = new RubyProvider('script.rb');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+      vi.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+      mockRunRuby.mockResolvedValue({ output: 'fresh' });
+
+      const baseContext = {
+        vars: { name: 'Alice' },
+        prompt: { raw: 'Hi Alice', label: 'Hi {{name}}' },
+        test: { vars: { name: 'Alice' }, assert: [], options: {}, metadata: {} },
+        repeatIndex: 0,
+      };
+
+      await provider.callApi('test prompt', {
+        ...baseContext,
+        evaluationId: 'eval-first-run',
+        testCaseId: 'case-first',
+        traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-aaaaaaaaaaaaaaaa-01',
+        tracestate: 'vendor=first',
+        testIdx: 0,
+        promptIdx: 0,
+      } as any);
+
+      await provider.callApi('test prompt', {
+        ...baseContext,
+        evaluationId: 'eval-second-run',
+        testCaseId: 'case-second',
+        traceparent: '00-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-bbbbbbbbbbbbbbbb-01',
+        tracestate: 'vendor=second',
+        testIdx: 3,
+        promptIdx: 2,
+      } as any);
+
+      const firstCacheKey = mockCache.get.mock.calls[0][0] as string;
+      const secondCacheKey = mockCache.get.mock.calls[1][0] as string;
+
+      expect(firstCacheKey).toBe(secondCacheKey);
+      expect(firstCacheKey).not.toContain('eval-first-run');
+      expect(secondCacheKey).not.toContain('eval-second-run');
+    });
   });
 
   describe('initialize', () => {

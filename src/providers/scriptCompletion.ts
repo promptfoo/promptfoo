@@ -7,7 +7,7 @@ import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
-import { sanitizeScriptContext } from './scriptContext';
+import { buildCacheableScriptContext, sanitizeScriptContext } from './scriptContext';
 
 import type {
   ApiProvider,
@@ -72,6 +72,11 @@ export class ScriptCompletionProvider implements ApiProvider {
     const serializedOptions = safeJsonStringify(this.options ?? {}) ?? '{}';
     const sanitizedContext = sanitizeScriptContext('ScriptCompletionProvider', context) ?? {};
     const serializedContext = safeJsonStringify(sanitizedContext) ?? '{}';
+    // The cache-key hash must exclude per-run non-deterministic fields like
+    // `evaluationId` / `traceparent` so that two otherwise-identical eval
+    // runs hit the same cache entry.
+    const cacheableContext = buildCacheableScriptContext(context) ?? {};
+    const serializedCacheableContext = safeJsonStringify(cacheableContext) ?? '{}';
 
     if (fileHashes.length === 0) {
       logger.warn(`Could not find any valid files in the command: ${this.scriptPath}`);
@@ -79,7 +84,7 @@ export class ScriptCompletionProvider implements ApiProvider {
 
     const cacheKey = `exec:${this.scriptPath}:${fileHashes.join(':')}:${sha256(prompt)}:${sha256(
       serializedOptions,
-    )}:${sha256(serializedContext)}`;
+    )}:${sha256(serializedCacheableContext)}`;
 
     let cachedResult;
     if (fileHashes.length > 0 && isCacheEnabled()) {

@@ -358,6 +358,51 @@ describe('GolangProvider', () => {
       expect(result).toEqual({ output: 'test output' });
     });
 
+    it('produces the same cache key for two runs that differ only by per-run identifiers', async () => {
+      const options = { config: { basePath: '/absolute/path/to' } } as any;
+      const provider = new GolangProvider('script.go', options);
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+
+      const baseContext = {
+        vars: { name: 'Alice' },
+        prompt: { raw: 'Hi Alice', label: 'Hi {{name}}' },
+        test: { vars: { name: 'Alice' }, assert: [], options: {}, metadata: {} },
+        repeatIndex: 0,
+      };
+
+      await provider.callApi('test prompt', {
+        ...baseContext,
+        evaluationId: 'eval-first-run',
+        testCaseId: 'case-first',
+        traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-aaaaaaaaaaaaaaaa-01',
+        tracestate: 'vendor=first',
+        testIdx: 0,
+        promptIdx: 0,
+      } as any);
+
+      await provider.callApi('test prompt', {
+        ...baseContext,
+        evaluationId: 'eval-second-run',
+        testCaseId: 'case-second',
+        traceparent: '00-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-bbbbbbbbbbbbbbbb-01',
+        tracestate: 'vendor=second',
+        testIdx: 3,
+        promptIdx: 2,
+      } as any);
+
+      const firstCacheKey = mockCache.set.mock.calls[0][0] as string;
+      const secondCacheKey = mockCache.set.mock.calls[1][0] as string;
+
+      expect(firstCacheKey).toBe(secondCacheKey);
+      expect(firstCacheKey).not.toContain('eval-first-run');
+      expect(secondCacheKey).not.toContain('eval-second-run');
+    });
+
     it('should handle cache errors', async () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
