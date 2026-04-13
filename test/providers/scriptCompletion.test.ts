@@ -180,6 +180,35 @@ describe('ScriptCompletionProvider', () => {
     expect(provider.id()).toBe('exec:node script.js');
   });
 
+  it('should close stdin on the child process to prevent hanging', async () => {
+    const stdinEnd = vi.fn();
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      (callback as (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void)(
+        null,
+        Buffer.from('ok'),
+        '',
+      );
+      return { stdin: { end: stdinEnd } } as any;
+    });
+
+    await provider.callApi('test prompt');
+    expect(stdinEnd).toHaveBeenCalledOnce();
+  });
+
+  it('should handle child process with no stdin gracefully', async () => {
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      (callback as (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void)(
+        null,
+        Buffer.from('ok'),
+        '',
+      );
+      return { stdin: null } as any;
+    });
+
+    const result = await provider.callApi('test prompt');
+    expect(result.output).toBe('ok');
+  });
+
   it('should handle UTF-8 characters in script output', async () => {
     const utf8Output = 'Hello, 世界!';
     vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {

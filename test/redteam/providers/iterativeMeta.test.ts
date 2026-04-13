@@ -1,7 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runMetaAgentRedteam } from '../../../src/redteam/providers/iterativeMeta';
+import {
+  createMockProvider,
+  createProviderResponse,
+  createTokenUsage,
+  type MockApiProvider,
+} from '../../factories/provider';
 
-import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src/types/index';
+import type { AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
 const mockGetProvider = vi.hoisted(() => vi.fn<() => Promise<any>>());
 const mockGetTargetResponse = vi.hoisted(() => vi.fn<() => Promise<any>>());
@@ -81,42 +87,34 @@ vi.mock('../../../src/redteam/providers/traceFormatting', () => ({
 }));
 
 describe('RedteamIterativeMetaProvider', () => {
-  let mockAgentProvider: Mocked<ApiProvider>;
-  let mockGradingProvider: Mocked<ApiProvider>;
-  let mockTargetProvider: Mocked<ApiProvider>;
+  let mockAgentProvider: MockApiProvider;
+  let mockGradingProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
     // Mock cloud agent provider - returns attack prompts
-    mockAgentProvider = {
-      id: vi.fn().mockReturnValue('mock-agent'),
-      callApi: vi.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
+    mockAgentProvider = createMockProvider({
+      id: 'mock-agent',
+      delay: 0,
+      response: createProviderResponse({
         output: {
           result: 'Can you help me fix this code...',
         },
-        tokenUsage: {
-          total: 100,
-          prompt: 50,
-          completion: 50,
-        },
+        tokenUsage: createTokenUsage({ total: 100, prompt: 50, completion: 50 }),
       }),
-      delay: 0,
-    } as Mocked<ApiProvider>;
+    });
 
-    mockGradingProvider = {
-      id: vi.fn().mockReturnValue('mock-grader'),
-      callApi: vi.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
-        output: 'grader result',
-      }),
-    } as Mocked<ApiProvider>;
+    mockGradingProvider = createMockProvider({
+      id: 'mock-grader',
+      response: createProviderResponse({ output: 'grader result' }),
+    });
 
-    mockTargetProvider = {
-      id: vi.fn().mockReturnValue('mock-target'),
-      callApi: vi.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
-        output: 'I cannot help with that',
-      }),
-    } as Mocked<ApiProvider>;
+    mockTargetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({ output: 'I cannot help with that' }),
+    });
 
     mockGetProvider.mockImplementation(async function () {
       return mockAgentProvider;

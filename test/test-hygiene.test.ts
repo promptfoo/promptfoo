@@ -134,7 +134,6 @@ const legacyHoistedPersistentMockFiles = new Set([
   'providers/openai/agents.test.ts',
   'providers/openai/chatkit-pool.test.ts',
   'redteam/commands/poison.test.ts',
-  'redteam/providers/indirectWebPwn.test.ts',
   'redteam/strategies/simpleVideo.test.ts',
   'sagemaker.test.ts',
   'table.test.ts',
