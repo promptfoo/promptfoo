@@ -31,7 +31,7 @@ If you already have an active Claude Code session (for example as a Claude Pro o
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-6
     config:
       apiKeyRequired: false
 ```
@@ -39,11 +39,11 @@ providers:
 When `apiKeyRequired` is `false` and no `ANTHROPIC_API_KEY` is available, Promptfoo loads the Claude Code OAuth credential from:
 
 1. The macOS keychain entry `Claude Code-credentials` (darwin only), then
-2. `$HOME/.claude/.credentials.json`
+2. `$HOME/.claude/.credentials.json` on Linux and macOS, or `%USERPROFILE%\.claude\.credentials.json` on Windows.
 
 Promptfoo authenticates requests with a Bearer token, sends the `claude-code-20250219,oauth-2025-04-20` beta headers, and prepends the required Claude Code identity system block (`"You are Claude Code, Anthropic's official CLI for Claude."`) to every Messages request. Your own system prompt is still forwarded as the next system block.
 
-If you haven't logged in yet, run `claude /login` to create a credential. Re-run it if Promptfoo warns that the credential has expired. API usage counts against your Claude subscription the same way it does when using the Claude Code CLI.
+If you haven't logged in yet, run `claude /login` to create a credential. Re-run it if Promptfoo warns that the credential has expired. Requests made this way are expected to count against your Claude subscription the same way calls from the Claude Code CLI do — check [Anthropic's documentation](https://docs.claude.com/en/docs/claude-code/overview) for current billing behavior.
 
 This also enables [model-graded assertions](#model-graded-tests) such as `llm-rubric` to run without a separate Anthropic Console key — see [the example below](#model-graded-tests).
 
@@ -722,7 +722,7 @@ Claude Pro/Max subscribers without a separate Anthropic Console key can wire up 
 defaultTest:
   options:
     provider:
-      id: anthropic:messages:claude-sonnet-4-20250514
+      id: anthropic:messages:claude-sonnet-4-6
       config:
         apiKeyRequired: false
 ```
