@@ -1506,6 +1506,191 @@ describe('transform request error handling', () => {
   });
 });
 
+describe('status validator error handling', () => {
+  it('should throw error for invalid status validator expression', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'GET',
+        validateStatus: 'invalid syntax[',
+      },
+    });
+
+    const mockResponse = {
+      data: 'response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow('Invalid status validator expression');
+  });
+
+  it('should throw error for malformed file-based validator', async () => {
+    vi.mocked(importModule).mockRejectedValueOnce(new Error('Module not found'));
+
+    await expect(createValidateStatus('file://invalid-validator.js')).rejects.toThrow(
+      /Status validator malformed/,
+    );
+  });
+
+  it('should throw error for unsupported validator type', async () => {
+    await expect(createValidateStatus(123 as any)).rejects.toThrow(
+      'Unsupported status validator type: number',
+    );
+  });
+});
+
+describe('string-based validators', () => {
+  it('should handle expression format', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: 'status >= 200 && status < 300',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 201,
+      statusText: 'Created',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toEqual({ result: 'success' });
+
+    const errorResponse = {
+      data: 'Error message',
+      status: 400,
+      statusText: 'Bad Request',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'HTTP call failed with status 400 Bad Request: Error message',
+    );
+  });
+
+  it('should handle arrow function format with parameter', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: '(s) => s < 500',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 404,
+      statusText: 'Not Found',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toEqual({ result: 'success' });
+
+    const errorResponse = {
+      data: 'Error message',
+      status: 500,
+      statusText: 'Server Error',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'HTTP call failed with status 500 Server Error: Error message',
+    );
+  });
+
+  it('should handle arrow function format without parameter', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: '() => true',
+      },
+    });
+
+    const responses = [
+      { status: 200, statusText: 'OK' },
+      { status: 404, statusText: 'Not Found' },
+      { status: 500, statusText: 'Server Error' },
+    ];
+
+    for (const { status, statusText } of responses) {
+      const mockResponse = {
+        data: JSON.stringify({ result: 'success' }),
+        status,
+        statusText,
+        cached: false,
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('test');
+      expect(result.output).toEqual({ result: 'success' });
+    }
+  });
+
+  it('should handle regular function format', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: 'function(status) { return status < 500; }',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 404,
+      statusText: 'Not Found',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const result = await provider.callApi('test');
+    expect(result.output).toEqual({ result: 'success' });
+
+    const errorResponse = {
+      data: 'Error message',
+      status: 500,
+      statusText: 'Server Error',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(errorResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'HTTP call failed with status 500 Server Error: Error message',
+    );
+  });
+
+  it('should handle malformed string expressions', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { key: 'value' },
+        validateStatus: 'invalid[syntax',
+      },
+    });
+
+    const mockResponse = {
+      data: 'response',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await expect(provider.callApi('test')).rejects.toThrow('Invalid status validator expression');
+  });
+});
+
 describe('HttpProvider with token estimation', () => {
   beforeEach(() => {
     cliState.config = {} as any;
