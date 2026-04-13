@@ -75,16 +75,6 @@ describe('test factories', () => {
     });
   });
 
-  it('deep-merges token usage scaffolding when overriding a subset in createProviderResponse', () => {
-    expect(createProviderResponse({ tokenUsage: { total: 5 } }).tokenUsage).toEqual({
-      total: 5,
-      prompt: 5,
-      completion: 5,
-      cached: 0,
-      numRequests: 1,
-    });
-  });
-
   it('preserves required nested token usage defaults when overriding assertion details', () => {
     expect(
       createRequiredTokenUsage({

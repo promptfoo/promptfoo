@@ -64,14 +64,10 @@ export function createRequiredTokenUsage(overrides: TokenUsage = {}): Required<T
 export function createProviderResponse(
   overrides: Partial<ProviderResponse> = {},
 ): ProviderResponse {
-  // tokenUsage is deep-merged through createTokenUsage so callers can pass a
-  // partial like { total: 5 } without losing the default prompt/completion/
-  // cached/numRequests scaffolding — matching createRequiredTokenUsage's
-  // nested-merge behavior.
   return {
     output: 'Test output',
+    tokenUsage: createTokenUsage(),
     ...overrides,
-    tokenUsage: createTokenUsage(overrides.tokenUsage),
   };
 }
 
