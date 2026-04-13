@@ -51,13 +51,19 @@ export type {
  * to the Eval record, and a live SDK client (e.g. Bedrock's BedrockRuntime,
  * Anthropic's client) holds circular references that break drizzle's JSON
  * serialization on `evalRecord.save()`. Fixes #8687.
+ *
+ * Detaches only `options` and `assert[]`. Other reference fields (`provider`,
+ * `vars`, `metadata`, `providerOutput`) remain aliased — callers must reassign
+ * those by reference rather than mutating in place. `assert-set` children are
+ * not deep-cloned because the resolve loop skips `assert-set`; if that ever
+ * changes, extend this helper.
  */
 function cloneTestForResolve<T extends Pick<TestCase, 'options' | 'assert'>>(test: T): T {
   const cloned: T = { ...test };
   if (test.options) {
     cloned.options = { ...test.options };
   }
-  if (Array.isArray(test.assert)) {
+  if (test.assert) {
     cloned.assert = test.assert.map((assertion) => ({ ...assertion }));
   }
   return cloned;
@@ -98,10 +104,9 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     prompts: await processPrompts(testSuite.prompts),
   };
 
-  // Resolve nested providers. `constructedTestSuite` shallow-shares `defaultTest` and
-  // its `options` with the input, and `readTests()` shallow-copies inline test cases —
-  // so we clone before mutating to keep resolved ApiProvider instances out of the
-  // unified config persisted to the Eval record. See `cloneTestForResolve()`.
+  // Resolve nested providers. `constructedTestSuite` shallow-shares `defaultTest`
+  // and `readTests()` shallow-copies inline test cases, so detach via
+  // `cloneTestForResolve()` before mutating — see helper docstring for the why.
   if (typeof constructedTestSuite.defaultTest === 'object' && constructedTestSuite.defaultTest) {
     constructedTestSuite.defaultTest = cloneTestForResolve(constructedTestSuite.defaultTest);
 
@@ -155,6 +160,10 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   }
 
   const parsedProviderPromptMap = readProviderPromptMap(testSuite, constructedTestSuite.prompts);
+  // INVARIANT: the unified config persisted to the Eval record must not alias any
+  // object mutated above with a resolved ApiProvider (see `cloneTestForResolve()`).
+  // Live SDK clients hold circular refs and break drizzle JSON serialization on
+  // `evalRecord.save()`. Fixes #8687.
   const unifiedConfig = { ...testSuite, prompts: constructedTestSuite.prompts };
   const evalRecord = testSuite.writeLatestResults
     ? await Eval.create(unifiedConfig, constructedTestSuite.prompts)

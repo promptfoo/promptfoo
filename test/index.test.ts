@@ -1223,11 +1223,11 @@ describe('evaluate with external defaultTest', () => {
     });
   });
 
-  describe('input testSuite mutation safety (regression for #8687)', () => {
+  describe('input testSuite mutation safety', () => {
     let resolveProviderSpy: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
-      // Return a minimal fake ApiProvider for any raw provider config we're asked to resolve.
+      vi.mocked(doEvaluate).mockClear();
       resolveProviderSpy = vi
         .spyOn(providers, 'resolveProvider')
         .mockImplementation(async (provider) => {
@@ -1265,10 +1265,8 @@ describe('evaluate with external defaultTest', () => {
 
       await evaluate(testSuite);
 
-      // Reference preserved on the input.
       expect(testSuite.defaultTest).toBe(originalDefaultTest);
       expect(testSuite.defaultTest.options).toBe(originalOptions);
-      // Raw provider config on the input is untouched (no ApiProvider leaked in).
       expect(testSuite.defaultTest.options.provider).toBe(rawProviderConfig);
       expect(testSuite.defaultTest.options.provider).toEqual({
         id: 'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
@@ -1328,7 +1326,26 @@ describe('evaluate with external defaultTest', () => {
       expect(inlineTest.assert[0].provider).toBe(rawAssertProviderConfig);
     });
 
-    it('passes the resolved provider to doEvaluate on a cloned defaultTest (regression for #8687)', async () => {
+    it('only clones siblings of test cases that need provider resolution; unaffected siblings keep raw config', async () => {
+      const rawProviderConfig = { id: 'bedrock:test-model', config: { region: 'eu-west-1' } };
+      const testWithProvider = {
+        vars: { x: '1' },
+        options: { provider: rawProviderConfig },
+      };
+      const testWithoutProvider = { vars: { x: '2' } };
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [],
+        tests: [testWithProvider, testWithoutProvider],
+      };
+
+      await evaluate(testSuite);
+
+      expect(testWithProvider.options.provider).toBe(rawProviderConfig);
+      expect(testSuite.tests[1]).toBe(testWithoutProvider);
+    });
+
+    it('passes the resolved provider to doEvaluate on a cloned defaultTest', async () => {
       const rawProviderConfig = {
         id: 'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
         config: { region: 'us-east-1' },
@@ -1346,17 +1363,15 @@ describe('evaluate with external defaultTest', () => {
 
       await evaluate(testSuite);
 
-      // doEvaluate should see a defaultTest that is NOT the same object as the input
-      // (so any downstream mutation — such as the Bedrock/Anthropic SDK lazily
-      // attaching circular references on first callApi — cannot leak back into the
-      // input, which the unified config persisted to the Eval record aliases).
+      // The runtime defaultTest must be a different object than the input so the
+      // lazy SDK-client mutation downstream cannot leak back into the input that the
+      // unified config aliases.
       const passedTestSuite = vi.mocked(doEvaluate).mock.calls.at(-1)?.[0];
       expect(passedTestSuite).toBeDefined();
       expect(passedTestSuite!.defaultTest).not.toBe(testSuite.defaultTest);
       expect((passedTestSuite!.defaultTest as { options: unknown }).options).not.toBe(
         testSuite.defaultTest.options,
       );
-      // The resolved provider is still present on the runtime copy.
       expect(
         (
           passedTestSuite!.defaultTest as { options: { provider: { id: () => string } } }
@@ -1364,10 +1379,12 @@ describe('evaluate with external defaultTest', () => {
       ).toBe('bedrock:anthropic.claude-3-haiku-20240307-v1:0');
     });
 
-    it('produces a unified config that is JSON-serializable even when the resolved provider gains circular references', async () => {
-      // Simulate the real-world Bedrock/Anthropic scenario: resolveProvider returns an
-      // ApiProvider instance that later (on first callApi) mutates itself to hold a live
-      // SDK client with circular references.
+    it('produces an Eval config that is JSON-serializable even when the resolved provider gains circular references', async () => {
+      // Mimic the AWS / Anthropic SDK pattern: ApiProvider instance whose first
+      // `callApi` lazily attaches a client that holds a circular reference. Without
+      // the fix, the resolved instance was stored on the input, and once the cycle
+      // appeared the unified config persisted via drizzle's text-json column threw
+      // "Converting circular structure to JSON ... AwsRestJsonProtocol.serdeContext".
       type ResolvedProvider = {
         id: () => string;
         callApi: ReturnType<typeof vi.fn>;
@@ -1376,7 +1393,6 @@ describe('evaluate with external defaultTest', () => {
       const resolvedProvider: ResolvedProvider = {
         id: () => 'bedrock:resolved',
         callApi: vi.fn().mockImplementation(async function (this: ResolvedProvider) {
-          // Mimic the AWS SDK's lazy-init behavior: attach a client with a circular ref.
           const cyclic: { self?: unknown } = {};
           cyclic.self = cyclic;
           this.sdkClient = cyclic;
@@ -1384,6 +1400,8 @@ describe('evaluate with external defaultTest', () => {
         }),
       };
       resolveProviderSpy.mockResolvedValue(resolvedProvider);
+
+      const createEvalSpy = vi.spyOn(Eval, 'create');
 
       const testSuite = {
         prompts: ['test prompt'],
@@ -1397,11 +1415,11 @@ describe('evaluate with external defaultTest', () => {
           },
         },
         tests: [{ vars: { x: 'y' } }],
+        writeLatestResults: true,
       };
 
       await evaluate(testSuite);
 
-      // Force the lazy-init path the real provider takes on first callApi.
       await (resolvedProvider.callApi as unknown as (...args: unknown[]) => Promise<unknown>)(
         'anything',
         {},
@@ -1409,10 +1427,37 @@ describe('evaluate with external defaultTest', () => {
       );
       expect(resolvedProvider.sdkClient).toBeDefined();
 
-      // The unified config persisted to the Eval record must remain JSON-serializable
-      // — i.e. must NOT hold a reference to the now-circular provider instance.
-      // Before the fix, defaultTest.options.provider on the input aliased resolvedProvider
-      // and JSON.stringify would throw "Converting circular structure to JSON".
+      // Direct check on the actual production failure mode: the config object handed
+      // to Eval.create is what drizzle JSON-serializes via the text-json column.
+      const persistedConfig = createEvalSpy.mock.calls.at(-1)?.[0];
+      expect(persistedConfig).toBeDefined();
+      expect(() => JSON.stringify(persistedConfig)).not.toThrow();
+      // The input itself must also be safe — library callers may persist or log it.
+      expect(() => JSON.stringify(testSuite)).not.toThrow();
+
+      createEvalSpy.mockRestore();
+    });
+
+    it('passes scenario-nested test cases through unchanged (provider resolution there is the evaluator runtime path, not evaluate())', async () => {
+      // Pin current behavior: src/index.ts only resolves providers on
+      // `constructedTestSuite.tests`, NOT on `scenarios[i].tests`. If a future change
+      // adds scenario provider resolution at this layer, it must extend
+      // `cloneTestForResolve` coverage to scenarios — otherwise #8687 recurs.
+      const rawProviderConfig = {
+        id: 'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
+        config: { region: 'us-east-1' },
+      };
+      const scenarioTest = { vars: { x: 'y' }, options: { provider: rawProviderConfig } };
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [],
+        scenarios: [{ config: [{}], tests: [scenarioTest] }],
+        tests: [{ vars: { z: 'w' } }],
+      };
+
+      await evaluate(testSuite);
+
+      expect(scenarioTest.options.provider).toBe(rawProviderConfig);
       expect(() => JSON.stringify(testSuite)).not.toThrow();
     });
   });
