@@ -170,6 +170,17 @@ describe('Eval Routes - Sharing behavior', () => {
     expect(mockedEvaluate).not.toHaveBeenCalled();
   });
 
+  it('rejects extensionless local paths with non-word path segments', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['my+prompts/runner'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluate).not.toHaveBeenCalled();
+  });
+
   it('rejects glob prompt sources that contain spaces', async () => {
     const response = await postJob({
       ...minimalTestSuite,

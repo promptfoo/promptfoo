@@ -86,7 +86,7 @@ function hasPathLikeSeparator(value: string): boolean {
     );
   }
 
-  return isPathLikeSegment(firstSegment);
+  return /[a-z0-9]/i.test(firstSegment);
 }
 
 function hasFileLikeExtension(value: string): boolean {
