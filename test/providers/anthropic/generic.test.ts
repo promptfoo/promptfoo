@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../../src/logger';
 import { AnthropicGenericProvider } from '../../../src/providers/anthropic/generic';
 
 const claudeCodeAuthMocks = vi.hoisted(() => ({
@@ -211,19 +212,30 @@ describe('AnthropicGenericProvider', () => {
       expect(provider.anthropic.authToken).toBeNull();
     });
 
-    it('still uses an expired credential so the SDK surfaces the auth error', () => {
+    it('warns and stashes an expired credential so subclasses can throw at request time', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
       claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue({
         accessToken: 'sk-ant-oat-expired',
         expiresAt: Date.now() - 1000,
       });
       claudeCodeAuthMocks.isCredentialExpired.mockReturnValue(true);
 
-      const provider = new AnthropicGenericProvider('claude-sonnet-4-20250514', {
+      const provider = new AnthropicGenericProvider('claude-sonnet-4-6', {
         config: { apiKeyRequired: false },
       });
 
       expect(provider.usingClaudeCodeOAuth).toBe(true);
       expect(provider.anthropic.authToken).toBe('sk-ant-oat-expired');
+      // The constructor warns so users running with debug logging off still
+      // see the issue; the actual request-time throw lives in the subclass
+      // (covered in messages.test.ts).
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/expired.*claude \/login/));
+      // The credential must be stashed on the provider so subclasses can
+      // re-check expiry at request time without re-reading the keychain.
+      expect(provider.claudeCodeCredential).toEqual({
+        accessToken: 'sk-ant-oat-expired',
+        expiresAt: expect.any(Number),
+      });
     });
   });
 

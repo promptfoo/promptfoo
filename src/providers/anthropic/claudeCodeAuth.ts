@@ -68,19 +68,37 @@ function resolveCredentialsPath(): string {
   return path.join(os.homedir(), CLAUDE_CODE_CREDENTIALS_FILE);
 }
 
-function parseCredential(raw: unknown): ClaudeCodeOAuthCredential | null {
+/**
+ * Result of attempting to parse a Claude Code credential blob. Uses a
+ * discriminated union so callers can distinguish a parse failure (shape is
+ * wrong — warn the user) from a missing credential (silently fall through to
+ * the next source).
+ */
+type ParseResult =
+  | { ok: true; credential: ClaudeCodeOAuthCredential }
+  | { ok: false; reason: string };
+
+/**
+ * `security` exits with status 44 when the requested generic-password entry
+ * does not exist. Any other non-zero exit (or throw) indicates a real failure
+ * — ACL denial, corrupted entry, missing binary, timeout — and is worth a
+ * `warn` log rather than silently falling through.
+ */
+const SECURITY_ENTRY_NOT_FOUND = 44;
+
+function parseCredential(raw: unknown): ParseResult {
   if (!raw || typeof raw !== 'object') {
-    return null;
+    return { ok: false, reason: 'credential JSON is not an object' };
   }
   const outer = raw as Record<string, unknown>;
   const claudeAiOauth = outer.claudeAiOauth;
   if (!claudeAiOauth || typeof claudeAiOauth !== 'object') {
-    return null;
+    return { ok: false, reason: 'missing `claudeAiOauth` object' };
   }
   const inner = claudeAiOauth as Record<string, unknown>;
   const accessToken = inner.accessToken;
   if (typeof accessToken !== 'string' || !accessToken) {
-    return null;
+    return { ok: false, reason: 'missing `claudeAiOauth.accessToken` string' };
   }
   const credential: ClaudeCodeOAuthCredential = { accessToken };
   if (typeof inner.refreshToken === 'string' && inner.refreshToken) {
@@ -92,49 +110,96 @@ function parseCredential(raw: unknown): ClaudeCodeOAuthCredential | null {
   if (typeof inner.subscriptionType === 'string') {
     credential.subscriptionType = inner.subscriptionType;
   }
-  return credential;
+  return { ok: true, credential };
+}
+
+function parseJsonBlob(blob: string): ParseResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(blob);
+  } catch (err) {
+    return {
+      ok: false,
+      reason: `invalid JSON: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+  return parseCredential(parsed);
 }
 
 function readFromMacosKeychain(): ClaudeCodeOAuthCredential | null {
   if (process.platform !== 'darwin') {
     return null;
   }
+  let out: string;
   try {
     // `security` prints the password (the stored JSON blob) to stdout with -w.
     // stderr is silenced so denied keychain prompts do not pollute logs.
-    const out = execFileSync(
+    out = execFileSync(
       'security',
       ['find-generic-password', '-s', CLAUDE_CODE_KEYCHAIN_SERVICE, '-w'],
       { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 },
     );
-    const trimmed = out.trim();
-    if (!trimmed) {
+  } catch (err) {
+    const status = (err as NodeJS.ErrnoException & { status?: number })?.status;
+    if (status === SECURITY_ENTRY_NOT_FOUND) {
+      // No entry in the keychain — fall through to file-based lookup silently.
+      logger.debug(
+        '[anthropic] No Claude Code credential entry in the macOS keychain; trying file fallback.',
+      );
       return null;
     }
-    return parseCredential(JSON.parse(trimmed));
-  } catch (err) {
-    logger.debug('[anthropic] Failed to read Claude Code credential from macOS keychain', {
-      error: err instanceof Error ? err.message : String(err),
-    });
+    // Anything else is a real failure (ACL denied, `security` missing,
+    // timeout, etc.). Surface it at `warn` so users can diagnose a broken
+    // setup without enabling debug logging.
+    logger.warn(
+      '[anthropic] Failed to read Claude Code credential from macOS keychain; falling back to file lookup.',
+      { error: err instanceof Error ? err.message : String(err) },
+    );
     return null;
   }
+  const trimmed = out.trim();
+  if (!trimmed) {
+    // Keychain entry exists but is empty — treat as malformed and warn.
+    logger.warn(
+      '[anthropic] Claude Code macOS keychain entry is empty. Run `claude /login` to refresh it.',
+    );
+    return null;
+  }
+  const result = parseJsonBlob(trimmed);
+  if (!result.ok) {
+    logger.warn(
+      `[anthropic] Claude Code macOS keychain entry is malformed (${result.reason}). Run \`claude /login\` to refresh it.`,
+    );
+    return null;
+  }
+  return result.credential;
 }
 
 function readFromFile(): ClaudeCodeOAuthCredential | null {
   const filePath = resolveCredentialsPath();
-  try {
-    if (!fs.existsSync(filePath)) {
-      return null;
-    }
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    return parseCredential(JSON.parse(raw));
-  } catch (err) {
-    logger.debug('[anthropic] Failed to read Claude Code credentials file', {
-      filePath,
-      error: err instanceof Error ? err.message : String(err),
-    });
+  if (!fs.existsSync(filePath)) {
+    // No credentials file — this is the common "not logged in" path; the
+    // caller at `generic.ts` already surfaces a user-facing warning.
     return null;
   }
+  let raw: string;
+  try {
+    raw = fs.readFileSync(filePath, 'utf-8');
+  } catch (err) {
+    logger.warn(
+      `[anthropic] Claude Code credentials file at ${filePath} exists but could not be read. Run \`claude /login\` to refresh it.`,
+      { error: err instanceof Error ? err.message : String(err) },
+    );
+    return null;
+  }
+  const result = parseJsonBlob(raw);
+  if (!result.ok) {
+    logger.warn(
+      `[anthropic] Claude Code credentials file at ${filePath} is malformed (${result.reason}). Run \`claude /login\` to refresh it.`,
+    );
+    return null;
+  }
+  return result.credential;
 }
 
 /**
@@ -145,9 +210,16 @@ function readFromFile(): ClaudeCodeOAuthCredential | null {
  *    — only attempted on darwin.
  * 2. `$HOME/.claude/.credentials.json` — the Linux/Windows default used by
  *    Claude Code, and a fallback on macOS when the keychain entry is missing.
+ *    On Windows this resolves to `%USERPROFILE%\.claude\.credentials.json`.
  *
- * Returns `null` when no credential is available or the source is malformed.
- * Never throws; callers decide how to surface a missing credential.
+ * Returns `null` when no credential is available. Callers should check
+ * {@link isCredentialExpired} on a non-null return before using it — this
+ * function does not filter out expired credentials so callers can decide
+ * whether to warn, refuse, or surface a 401 to the user.
+ *
+ * Never throws. Missing credentials fall through silently; corrupted or
+ * unreadable credentials are logged at `warn` level with a reason so broken
+ * setups are diagnosable without enabling debug logging.
  */
 export function loadClaudeCodeCredential(): ClaudeCodeOAuthCredential | null {
   return readFromMacosKeychain() ?? readFromFile();

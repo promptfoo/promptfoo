@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../../src/logger';
 
 const mocks = vi.hoisted(() => ({
   execFileSync: vi.fn(),
@@ -99,6 +100,7 @@ describe('claudeCodeAuth', () => {
 
     it('falls back to ~/.claude/.credentials.json when the keychain lookup fails', () => {
       setPlatform('darwin');
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
       mocks.execFileSync.mockImplementation(() => {
         throw new Error('user denied keychain access');
       });
@@ -124,6 +126,50 @@ describe('claudeCodeAuth', () => {
         expect.stringContaining('/.claude/.credentials.json'),
         'utf-8',
       );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to read Claude Code credential from macOS keychain'),
+        expect.objectContaining({ error: expect.stringContaining('user denied keychain access') }),
+      );
+    });
+
+    it('falls through silently when the macOS keychain entry is simply missing (exit 44)', () => {
+      setPlatform('darwin');
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      mocks.execFileSync.mockImplementation(() => {
+        const err = new Error('The specified item could not be found in the keychain.') as Error & {
+          status?: number;
+        };
+        err.status = 44;
+        throw err;
+      });
+      mocks.existsSync.mockReturnValue(false);
+
+      expect(loadClaudeCodeCredential()).toBeNull();
+      // Exit 44 is "entry not present" — we should NOT warn the user about
+      // this; it's the common "first run, not logged in yet" path.
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('warns when the macOS keychain returns an empty entry', () => {
+      setPlatform('darwin');
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      mocks.execFileSync.mockReturnValue('   \n');
+      mocks.existsSync.mockReturnValue(false);
+
+      expect(loadClaudeCodeCredential()).toBeNull();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('keychain entry is empty'));
+    });
+
+    it('warns with the parse reason when the macOS keychain entry is malformed', () => {
+      setPlatform('darwin');
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      mocks.execFileSync.mockReturnValue('{"claudeAiOauth": {}}');
+      mocks.existsSync.mockReturnValue(false);
+
+      expect(loadClaudeCodeCredential()).toBeNull();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('missing `claudeAiOauth.accessToken` string'),
+      );
     });
 
     it('reads from the credentials file on Linux and skips the keychain', () => {
@@ -145,28 +191,55 @@ describe('claudeCodeAuth', () => {
       expect(mocks.execFileSync).not.toHaveBeenCalled();
     });
 
-    it('returns null when the credentials file is missing', () => {
+    it('returns null silently when the credentials file is missing', () => {
       setPlatform('linux');
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
       mocks.existsSync.mockReturnValue(false);
 
       expect(loadClaudeCodeCredential()).toBeNull();
       expect(mocks.readFileSync).not.toHaveBeenCalled();
+      // Missing file is the common "not logged in" path — do not warn here,
+      // the caller surfaces a single user-facing warning instead.
+      expect(warnSpy).not.toHaveBeenCalled();
     });
 
-    it('returns null when the credential payload is malformed', () => {
+    it('warns with the parse reason when the credential shape is malformed', () => {
       setPlatform('linux');
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
       mocks.existsSync.mockReturnValue(true);
       mocks.readFileSync.mockReturnValue('{"claudeAiOauth": {}}');
 
       expect(loadClaudeCodeCredential()).toBeNull();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('missing `claudeAiOauth.accessToken` string'),
+      );
     });
 
-    it('returns null when the credentials file is not valid JSON', () => {
+    it('warns with the JSON error when the credentials file is not valid JSON', () => {
       setPlatform('linux');
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
       mocks.existsSync.mockReturnValue(true);
       mocks.readFileSync.mockReturnValue('{not json');
 
       expect(loadClaudeCodeCredential()).toBeNull();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('invalid JSON'));
+    });
+
+    it('warns when the credentials file exists but is unreadable', () => {
+      setPlatform('linux');
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      mocks.existsSync.mockReturnValue(true);
+      mocks.readFileSync.mockImplementation(() => {
+        const err = new Error('EACCES: permission denied') as NodeJS.ErrnoException;
+        err.code = 'EACCES';
+        throw err;
+      });
+
+      expect(loadClaudeCodeCredential()).toBeNull();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('exists but could not be read'),
+        expect.objectContaining({ error: expect.stringContaining('EACCES') }),
+      );
     });
   });
 
