@@ -43,11 +43,9 @@ describe('sanitizeScriptContext', () => {
 
     expect(logger.debug).toHaveBeenCalledTimes(1);
     const message = vi.mocked(logger.debug).mock.calls[0][0] as string;
-    expect(message).toContain('PythonProvider');
-    expect(message).toContain('getCache');
-    expect(message).toContain('logger');
-    expect(message).toContain('filters');
-    expect(message).toContain('originalProvider');
+    expect(message).toBe(
+      'PythonProvider sanitized context: stripped non-serializable keys [getCache, logger, filters, originalProvider]',
+    );
   });
 
   it('does not mutate the caller-owned context', () => {
@@ -95,8 +93,10 @@ describe('sanitizeScriptContext', () => {
       getCache: vi.fn(),
     } as unknown as CallApiContextParams;
 
-    sanitizeScriptContext('PythonProvider', context);
+    const sanitized = sanitizeScriptContext('PythonProvider', context);
 
+    expect(sanitized).toEqual({ vars: { foo: 'bar' } });
+    expect(sanitized).not.toHaveProperty('getCache');
     expect(logger.debug).toHaveBeenCalledTimes(1);
     const message = vi.mocked(logger.debug).mock.calls[0][0] as string;
     expect(message).toContain('getCache');

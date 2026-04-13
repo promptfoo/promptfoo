@@ -144,6 +144,9 @@ vi.mock('../../../src/redteam/plugins/unsafebench', async () => {
         }),
       };
     });
+  Object.defineProperty(MockedUnsafeBenchPlugin, 'canGenerateRemote', {
+    value: originalModule.UnsafeBenchPlugin.canGenerateRemote,
+  });
 
   return {
     ...originalModule,
@@ -264,6 +267,7 @@ describe('UnsafeBenchPlugin', () => {
   });
 
   it('should set canGenerateRemote to false', () => {
+    expect(UnsafeBenchPlugin.canGenerateRemote).toBe(false);
     const plugin = new UnsafeBenchPlugin({ type: 'test' }, 'testing purposes', 'image');
     expect(plugin.canGenerateRemote).toBe(false);
   });

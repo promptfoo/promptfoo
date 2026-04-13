@@ -93,6 +93,10 @@ const mockedSleep = vi.mocked(sleep);
 const mockedLoadApiProviders = mockLoadApiProviders;
 const mockedCheckServerFeatureSupport = mockCheckServerFeatureSupport;
 
+function setCliStateConfig(config: typeof cliState.config) {
+  cliState.config = config;
+}
+
 describe('shared redteam provider utilities', () => {
   beforeEach(() => {
     // Clear all mocks thoroughly
@@ -110,11 +114,11 @@ describe('shared redteam provider utilities', () => {
     redteamProviderManager.clearProvider();
 
     // Reset cliState to default
-    cliState.config = {
+    setCliStateConfig({
       redteam: {
         provider: undefined,
       },
-    };
+    });
   });
 
   describe('RedteamProviderManager', () => {
@@ -200,18 +204,15 @@ describe('shared redteam provider utilities', () => {
       };
 
       // Clear and set up cliState for this test
-      cliState.config = {
+      setCliStateConfig({
         redteam: {
           provider: mockStateProvider,
         },
-      };
+      });
 
       const result = await redteamProviderManager.getProvider({});
 
       expect(result).toBe(mockStateProvider);
-
-      // Clean up for next test
-      cliState.config!.redteam!.provider = undefined;
     });
 
     it('sets and reuses providers', async () => {
@@ -230,7 +231,9 @@ describe('shared redteam provider utilities', () => {
 
       expect(result).toBe(mockProvider);
       expect(jsonResult).toBe(mockProvider);
-      expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2); // Once for regular, once for jsonOnly
+      expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2); // Preloads regular and jsonOnly caches
+      expect(mockedLoadApiProviders).toHaveBeenNthCalledWith(1, ['test-provider']);
+      expect(mockedLoadApiProviders).toHaveBeenNthCalledWith(2, ['test-provider']);
     });
 
     describe('getGradingProvider', () => {
@@ -256,11 +259,11 @@ describe('shared redteam provider utilities', () => {
         mockedLoadApiProviders.mockResolvedValue([mockProvider]);
 
         // Inject defaultTest provider config
-        (cliState as any).config = {
+        setCliStateConfig({
           defaultTest: {
             provider: 'from-defaultTest-provider',
           },
-        };
+        });
 
         const got = await redteamProviderManager.getGradingProvider();
         expect(got).toBe(mockProvider);
@@ -269,7 +272,7 @@ describe('shared redteam provider utilities', () => {
 
       it('falls back to redteam provider when grading not set', async () => {
         redteamProviderManager.clearProvider();
-        (cliState as any).config = {}; // no defaultTest
+        setCliStateConfig({}); // no defaultTest
 
         // Expect fallback to default OpenAI redteam provider
         const got = await redteamProviderManager.getGradingProvider({ jsonOnly: true });
@@ -291,7 +294,7 @@ describe('shared redteam provider utilities', () => {
         mockedLoadApiProviders.mockResolvedValue([mockProvider]);
 
         // Set defaultTest.options.provider but not redteam.provider
-        (cliState as any).config = {
+        setCliStateConfig({
           redteam: {
             provider: undefined,
           },
@@ -300,7 +303,7 @@ describe('shared redteam provider utilities', () => {
               provider: 'defaultTest-provider',
             },
           },
-        };
+        });
 
         const got = await redteamProviderManager.getProvider({});
         expect(got).toBe(mockProvider);
@@ -316,14 +319,14 @@ describe('shared redteam provider utilities', () => {
         mockedLoadApiProviders.mockResolvedValue([mockProvider]);
 
         // Set defaultTest.provider directly
-        (cliState as any).config = {
+        setCliStateConfig({
           redteam: {
             provider: undefined,
           },
           defaultTest: {
             provider: 'defaultTest-direct-provider',
           },
-        };
+        });
 
         const got = await redteamProviderManager.getProvider({});
         expect(got).toBe(mockProvider);
@@ -339,7 +342,7 @@ describe('shared redteam provider utilities', () => {
         mockedLoadApiProviders.mockResolvedValue([redteamProvider]);
 
         // Set both redteam.provider and defaultTest.options.provider
-        (cliState as any).config = {
+        setCliStateConfig({
           redteam: {
             provider: 'redteam-explicit-provider',
           },
@@ -348,7 +351,7 @@ describe('shared redteam provider utilities', () => {
               provider: 'defaultTest-provider',
             },
           },
-        };
+        });
 
         const got = await redteamProviderManager.getProvider({});
         expect(got).toBe(redteamProvider);
@@ -359,12 +362,12 @@ describe('shared redteam provider utilities', () => {
         redteamProviderManager.clearProvider();
         mockOpenAiInstances.length = 0;
 
-        (cliState as any).config = {
+        setCliStateConfig({
           redteam: {
             provider: undefined,
           },
           // No defaultTest
-        };
+        });
 
         const got = await redteamProviderManager.getProvider({});
         expect(got.id()).toContain('openai:');
@@ -454,11 +457,11 @@ describe('shared redteam provider utilities', () => {
 
   describe('getTargetResponse', () => {
     it('returns an error before calling the target when the prompt exceeds maxCharsPerMessage', async () => {
-      cliState.config = {
+      setCliStateConfig({
         redteam: {
           maxCharsPerMessage: 5,
         },
-      };
+      });
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
         callApi: vi.fn().mockResolvedValue({
@@ -478,11 +481,11 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('only enforces maxCharsPerMessage for user messages in chat arrays', async () => {
-      cliState.config = {
+      setCliStateConfig({
         redteam: {
           maxCharsPerMessage: 5,
         },
-      };
+      });
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
         callApi: vi.fn().mockResolvedValue({

@@ -573,7 +573,7 @@ describe('handleIContainsAny', () => {
     });
   });
 
-  it('should handle empty string in comma-separated list', () => {
+  it('should ignore empty entries in comma-separated list', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'icontains-any', value: ',WORLD,,' },
@@ -587,6 +587,24 @@ describe('handleIContainsAny', () => {
       pass: false,
       score: 0,
       reason: 'Expected output to contain one of "WORLD"',
+      assertion: params.assertion,
+    });
+  });
+
+  it('should preserve quoted empty strings in comma-separated list', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'icontains-any', value: '"",WORLD' },
+      renderedValue: '"",WORLD' as AssertionValue,
+      outputString: '',
+      inverse: false,
+    };
+
+    const result = handleIContainsAny(params);
+    expect(result).toEqual({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
       assertion: params.assertion,
     });
   });

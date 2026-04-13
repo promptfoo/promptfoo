@@ -387,7 +387,7 @@ describe('RubyProvider', () => {
       });
     });
 
-    it('should preserve cached=false for fresh results with token usage', async () => {
+    it('should preserve Ruby fresh token usage without numRequests for compatibility', async () => {
       const provider = new RubyProvider('script.rb');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
@@ -415,6 +415,7 @@ describe('RubyProvider', () => {
           total: 30,
         },
       });
+      expect(result.tokenUsage).not.toHaveProperty('numRequests');
     });
 
     it('should handle missing token usage in cached results', async () => {
@@ -502,7 +503,9 @@ describe('RubyProvider', () => {
         cached: false,
       });
       expect(mockCache.set).toHaveBeenCalledWith(
-        'ruby:script.rb:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
+        expect.stringMatching(
+          /^ruby:script\.rb:default:call_api:[a-f0-9]{64}:test prompt:undefined:undefined$/,
+        ),
         '{"output":"fresh result"}',
       );
     });
