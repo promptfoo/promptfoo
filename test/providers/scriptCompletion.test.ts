@@ -209,6 +209,20 @@ describe('ScriptCompletionProvider', () => {
     expect(result.output).toBe('ok');
   });
 
+  it('should close stdin before rejecting on script execution errors', async () => {
+    const stdinEnd = vi.fn();
+    const errorMessage = 'Script execution failed';
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      if (typeof callback === 'function') {
+        callback(new Error(errorMessage), '', '');
+      }
+      return { stdin: { end: stdinEnd } } as any;
+    });
+
+    await expect(provider.callApi('test prompt')).rejects.toThrow(errorMessage);
+    expect(stdinEnd).toHaveBeenCalledOnce();
+  });
+
   it('should handle UTF-8 characters in script output', async () => {
     const utf8Output = 'Hello, 世界!';
     vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
