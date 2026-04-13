@@ -11,19 +11,33 @@ export function createGradingResult(overrides: Partial<GradingResult> = {}): Gra
   };
 }
 
+export type PassingGradingResult = Readonly<GradingResult> & {
+  readonly pass: true;
+  readonly score: 1;
+};
+
+export type FailingGradingResult = Readonly<GradingResult> & {
+  readonly pass: false;
+  readonly score: 0;
+};
+
 // pass/score are locked after overrides so callers cannot accidentally flip
 // a passing fixture to a failure (or vice versa). reason remains overridable.
-export function createPassingGradingResult(overrides: Partial<GradingResult> = {}): GradingResult {
-  return createGradingResult({ ...overrides, pass: true, score: 1 });
+export function createPassingGradingResult(
+  overrides: Partial<GradingResult> = {},
+): PassingGradingResult {
+  return createGradingResult({ ...overrides, pass: true, score: 1 }) as PassingGradingResult;
 }
 
-export function createFailingGradingResult(overrides: Partial<GradingResult> = {}): GradingResult {
+export function createFailingGradingResult(
+  overrides: Partial<GradingResult> = {},
+): FailingGradingResult {
   return createGradingResult({
     reason: 'Grading failed reason',
     ...overrides,
     pass: false,
     score: 0,
-  });
+  }) as FailingGradingResult;
 }
 
 export function createGradingProviderResponse(
