@@ -13,6 +13,7 @@ import type { DefaultProviders } from '../../types/index';
 import type { OpenAICodexSDKConfig } from './codex-sdk';
 
 const CODEX_AUTH_FILENAME = 'auth.json';
+const CODEX_DEFAULT_PROVIDERS_CACHE_EVICTION_GRACE_MS = 60_000;
 const CODEX_DEFAULT_PROVIDERS_CACHE_MAX_ENTRIES = 32;
 const CODEX_DEFAULT_PROVIDERS_CACHE_HMAC_CONTEXT = 'promptfoo:codex-default-provider-cache-key';
 const CODEX_DEFAULT_PROVIDERS_CACHE_HMAC_KEY = randomBytes(32);
@@ -60,9 +61,11 @@ type ManagedCodexDefaultProviderBundle = CodexDefaultProviderBundle & {
   activeCalls: number;
   shutdownPromise?: Promise<void>;
   shutdownRequested: boolean;
+  shutdownTimer?: ReturnType<typeof setTimeout>;
 };
 
 const codexDefaultProvidersByCacheKey = new Map<string, ManagedCodexDefaultProviderBundle>();
+const evictedCodexDefaultProviderBundles = new Set<ManagedCodexDefaultProviderBundle>();
 
 const codexSdkAvailabilityByBaseDir = new Map<string, boolean>();
 
@@ -193,6 +196,7 @@ function shutdownCodexDefaultProviderBundle(
     return providers.shutdownPromise;
   }
 
+  evictedCodexDefaultProviderBundles.delete(providers);
   providers.shutdownPromise = Promise.all(
     getUniqueCodexDefaultProviders(providers).map((provider) =>
       provider.shutdown().catch((error) => {
@@ -204,11 +208,39 @@ function shutdownCodexDefaultProviderBundle(
   return providers.shutdownPromise;
 }
 
+function clearCodexDefaultProviderShutdownTimer(
+  providers: ManagedCodexDefaultProviderBundle,
+): void {
+  if (providers.shutdownTimer) {
+    clearTimeout(providers.shutdownTimer);
+    providers.shutdownTimer = undefined;
+    evictedCodexDefaultProviderBundles.delete(providers);
+  }
+}
+
+function scheduleCodexDefaultProviderBundleShutdown(
+  providers: ManagedCodexDefaultProviderBundle,
+): Promise<void> | undefined {
+  if (!providers.shutdownRequested || providers.activeCalls > 0 || providers.shutdownPromise) {
+    return providers.shutdownPromise;
+  }
+
+  if (!providers.shutdownTimer) {
+    evictedCodexDefaultProviderBundles.add(providers);
+    providers.shutdownTimer = setTimeout(() => {
+      providers.shutdownTimer = undefined;
+      void shutdownCodexDefaultProviderBundle(providers);
+    }, CODEX_DEFAULT_PROVIDERS_CACHE_EVICTION_GRACE_MS);
+  }
+
+  return providers.shutdownPromise;
+}
+
 function requestCodexDefaultProviderBundleShutdown(
   providers: ManagedCodexDefaultProviderBundle,
 ): void {
   providers.shutdownRequested = true;
-  void shutdownCodexDefaultProviderBundle(providers);
+  void scheduleCodexDefaultProviderBundleShutdown(providers);
 }
 
 function trackCodexDefaultProviderUsage(providers: ManagedCodexDefaultProviderBundle): void {
@@ -222,12 +254,13 @@ function trackCodexDefaultProviderUsage(providers: ManagedCodexDefaultProviderBu
   ])) {
     const callApi = provider.callApi.bind(provider);
     provider.callApi = async (...args) => {
+      clearCodexDefaultProviderShutdownTimer(providers);
       providers.activeCalls += 1;
       try {
         return await callApi(...args);
       } finally {
         providers.activeCalls -= 1;
-        void shutdownCodexDefaultProviderBundle(providers);
+        void scheduleCodexDefaultProviderBundleShutdown(providers);
       }
     };
   }
@@ -305,7 +338,14 @@ export function getCodexDefaultProviders(env?: EnvOverrides): CodexDefaultProvid
 }
 
 export function clearCodexDefaultProvidersForTesting(): void {
+  for (const providers of [
+    ...codexDefaultProvidersByCacheKey.values(),
+    ...evictedCodexDefaultProviderBundles,
+  ]) {
+    clearCodexDefaultProviderShutdownTimer(providers);
+  }
   codexDefaultProvidersByCacheKey.clear();
+  evictedCodexDefaultProviderBundles.clear();
   codexSdkAvailabilityByBaseDir.clear();
   codexDefaultWorkingDir = undefined;
 }

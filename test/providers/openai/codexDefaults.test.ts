@@ -53,6 +53,7 @@ describe('Codex default providers', () => {
     );
     clearCodexDefaultProvidersForTesting();
     await providerRegistry.shutdownAll();
+    vi.useRealTimers();
     vi.resetAllMocks();
 
     fs.rmSync(codexHome, { force: true, recursive: true });
@@ -230,6 +231,8 @@ describe('Codex default providers', () => {
   });
 
   it('evicts and shuts down idle least-recently-used cached providers when credentials rotate', async () => {
+    vi.useFakeTimers();
+
     const { getCodexDefaultProviders } = await import(
       '../../../src/providers/openai/codexDefaults'
     );
@@ -252,6 +255,12 @@ describe('Codex default providers', () => {
       getCodexDefaultProviders({ CODEX_API_KEY: `codex-key-${index}` });
     }
 
+    expect(firstGradingShutdown).not.toHaveBeenCalled();
+    expect(firstGradingJsonShutdown).not.toHaveBeenCalled();
+    expect(firstWebSearchShutdown).not.toHaveBeenCalled();
+
+    await vi.runOnlyPendingTimersAsync();
+
     expect(firstGradingShutdown).toHaveBeenCalledTimes(1);
     expect(firstGradingJsonShutdown).toHaveBeenCalledTimes(1);
     expect(firstWebSearchShutdown).toHaveBeenCalledTimes(1);
@@ -261,6 +270,8 @@ describe('Codex default providers', () => {
   });
 
   it('defers evicted provider shutdown until in-flight calls finish', async () => {
+    vi.useFakeTimers();
+
     const { OpenAICodexSDKProvider } = await import('../../../src/providers/openai/codex-sdk');
     const { getCodexDefaultProviders } = await import(
       '../../../src/providers/openai/codexDefaults'
@@ -295,11 +306,61 @@ describe('Codex default providers', () => {
     inFlightCall.resolve({ output: 'ok' });
     await expect(resultPromise).resolves.toEqual({ output: 'ok' });
 
-    await vi.waitFor(() => {
-      expect(firstGradingShutdown).toHaveBeenCalledTimes(1);
-      expect(firstGradingJsonShutdown).toHaveBeenCalledTimes(1);
-      expect(firstWebSearchShutdown).toHaveBeenCalledTimes(1);
-    });
+    expect(firstGradingShutdown).not.toHaveBeenCalled();
+    expect(firstGradingJsonShutdown).not.toHaveBeenCalled();
+    expect(firstWebSearchShutdown).not.toHaveBeenCalled();
+
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(firstGradingShutdown).toHaveBeenCalledTimes(1);
+    expect(firstGradingJsonShutdown).toHaveBeenCalledTimes(1);
+    expect(firstWebSearchShutdown).toHaveBeenCalledTimes(1);
     expect(callApiSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps evicted providers usable for sequential calls before the eviction grace period elapses', async () => {
+    vi.useFakeTimers();
+
+    const { OpenAICodexSDKProvider } = await import('../../../src/providers/openai/codex-sdk');
+    const { getCodexDefaultProviders } = await import(
+      '../../../src/providers/openai/codexDefaults'
+    );
+
+    const callApiSpy = vi
+      .spyOn(OpenAICodexSDKProvider.prototype, 'callApi')
+      .mockResolvedValue({ output: 'ok' });
+
+    const firstProviders = getCodexDefaultProviders({ CODEX_API_KEY: 'codex-key-0' });
+    const firstGradingShutdown = vi
+      .spyOn(firstProviders.gradingProvider as OpenAICodexSDKProvider, 'shutdown')
+      .mockResolvedValue(undefined);
+    const firstGradingJsonShutdown = vi
+      .spyOn(firstProviders.gradingJsonProvider as OpenAICodexSDKProvider, 'shutdown')
+      .mockResolvedValue(undefined);
+    const firstWebSearchShutdown = vi
+      .spyOn(firstProviders.webSearchProvider as OpenAICodexSDKProvider, 'shutdown')
+      .mockResolvedValue(undefined);
+
+    for (let index = 1; index <= 32; index++) {
+      getCodexDefaultProviders({ CODEX_API_KEY: `codex-key-${index}` });
+    }
+
+    await expect(firstProviders.gradingProvider.callApi('first prompt')).resolves.toEqual({
+      output: 'ok',
+    });
+    await expect(firstProviders.gradingProvider.callApi('second prompt')).resolves.toEqual({
+      output: 'ok',
+    });
+
+    expect(firstGradingShutdown).not.toHaveBeenCalled();
+    expect(firstGradingJsonShutdown).not.toHaveBeenCalled();
+    expect(firstWebSearchShutdown).not.toHaveBeenCalled();
+
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(firstGradingShutdown).toHaveBeenCalledTimes(1);
+    expect(firstGradingJsonShutdown).toHaveBeenCalledTimes(1);
+    expect(firstWebSearchShutdown).toHaveBeenCalledTimes(1);
+    expect(callApiSpy).toHaveBeenCalledTimes(2);
   });
 });
