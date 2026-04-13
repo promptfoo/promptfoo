@@ -11,8 +11,9 @@ import {
   runExtensionHook,
 } from '../src/evaluatorHelpers';
 import { transform } from '../src/util/transform';
+import { createMockProvider } from './factories/provider';
 
-import type { ApiProvider, Prompt, TestCase, TestSuite } from '../src/types/index';
+import type { Prompt, TestCase, TestSuite } from '../src/types/index';
 
 // Use vi.hoisted to define mocks and helpers that need to be accessible in vi.mock factories
 const { actualPathResolve, dynamicModuleMocks, mockDynamicModule, mockPathResolve } = vi.hoisted(
@@ -107,15 +108,7 @@ vi.mock('../src/util/transform', () => ({
   transform: vi.fn(),
 }));
 
-const mockApiProvider: ApiProvider = {
-  id: function id() {
-    return 'test-provider';
-  },
-  callApi: vi.fn().mockResolvedValue({
-    output: 'Test output',
-    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-  }),
-};
+const mockApiProvider = createMockProvider();
 
 function toPrompt(text: string): Prompt {
   return { raw: text, label: text };

@@ -6,15 +6,10 @@ import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { fetchWithRetries } from '../../src/util/fetch/index';
+import { createMockProvider } from '../factories/provider';
 import { TestGrader } from '../util/utils';
 
-import type {
-  ApiProvider,
-  Assertion,
-  AtomicTestCase,
-  GradingResult,
-  ProviderResponse,
-} from '../../src/types/index';
+import type { ApiProvider, Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
 
 vi.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
@@ -2013,14 +2008,10 @@ describe('runAssertion', () => {
     };
 
     // Test grader fails
-    const BogusGrader: ApiProvider = {
-      id(): string {
-        return 'BogusGrader';
-      },
-      async callApi(): Promise<ProviderResponse> {
-        throw new Error('Should not be called');
-      },
-    };
+    const BogusGrader = createMockProvider({
+      id: 'BogusGrader',
+      callApi: vi.fn<ApiProvider['callApi']>().mockRejectedValue(new Error('Should not be called')),
+    });
     const test: AtomicTestCase = {
       assert: [assertion],
       options: {

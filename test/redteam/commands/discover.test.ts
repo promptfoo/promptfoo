@@ -5,6 +5,7 @@ import {
   normalizeTargetPurposeDiscoveryResult,
 } from '../../../src/redteam/commands/discover';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
+import { createMockProvider } from '../../factories/provider';
 
 vi.mock('../../../src/util/fetch');
 
@@ -144,10 +145,10 @@ describe('doTargetPurposeDiscovery', () => {
       );
     });
 
-    const target = {
-      id: () => 'test',
-      callApi: vi.fn().mockResolvedValue({ output: 'I am a test assistant' }),
-    };
+    const target = createMockProvider({
+      id: 'test',
+      response: { output: 'I am a test assistant' },
+    });
 
     const discoveredPurpose = await doTargetPurposeDiscovery(target);
 
@@ -213,10 +214,10 @@ describe('doTargetPurposeDiscovery', () => {
       );
     });
 
-    const target = {
-      id: () => 'test',
-      callApi: vi.fn().mockResolvedValue({ output: 'I am a test assistant' }),
-    };
+    const target = createMockProvider({
+      id: 'test',
+      response: { output: 'I am a test assistant' },
+    });
     const prompt = {
       raw: 'This is a test prompt {{prompt}}',
       label: 'Test Prompt',

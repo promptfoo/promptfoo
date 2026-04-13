@@ -8,6 +8,7 @@ import { readProviderPromptMap } from '../src/prompts/index';
 import * as providers from '../src/providers/index';
 import * as fileUtils from '../src/util/file';
 import { writeMultipleOutputs, writeOutput } from '../src/util/index';
+import { createMockProvider } from './factories/provider';
 
 vi.mock('../src/cache');
 vi.mock('../src/database', () => ({
@@ -191,10 +192,9 @@ describe('evaluate function', () => {
 
     // Set up spies for provider functions
     loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
-    loadApiProviderSpy = vi.spyOn(providers, 'loadApiProvider').mockResolvedValue({
-      id: () => 'mock-provider',
-      callApi: vi.fn() as any,
-    });
+    loadApiProviderSpy = vi
+      .spyOn(providers, 'loadApiProvider')
+      .mockResolvedValue(createMockProvider({ id: 'mock-provider' }));
   });
 
   afterEach(() => {
@@ -437,15 +437,11 @@ describe('evaluate function', () => {
 
   describe('providerMap functionality', () => {
     it('should resolve assertion provider by ID from providerMap', async () => {
-      const mockProvider1 = {
-        id: () => 'provider-1',
+      const mockProvider1 = createMockProvider({
+        id: 'provider-1',
         label: 'Provider One',
-        callApi: vi.fn(),
-      };
-      const mockProvider2 = {
-        id: () => 'provider-2',
-        callApi: vi.fn(),
-      };
+      });
+      const mockProvider2 = createMockProvider({ id: 'provider-2' });
 
       // Mock loadApiProviders to return our test providers
       loadApiProvidersSpy.mockResolvedValueOnce([mockProvider1, mockProvider2]);
@@ -487,11 +483,10 @@ describe('evaluate function', () => {
     });
 
     it('should resolve assertion provider by label from providerMap', async () => {
-      const mockProvider = {
-        id: () => 'azure:chat:gpt-4',
+      const mockProvider = createMockProvider({
+        id: 'azure:chat:gpt-4',
         label: 'GPT-4',
-        callApi: vi.fn(),
-      };
+      });
 
       // Mock loadApiProviders to return our test provider
       loadApiProvidersSpy.mockResolvedValueOnce([mockProvider]);
@@ -533,10 +528,7 @@ describe('evaluate function', () => {
     });
 
     it('should fall back to loadApiProvider when provider not found in providerMap', async () => {
-      const mockExistingProvider = {
-        id: () => 'existing-provider',
-        callApi: vi.fn(),
-      };
+      const mockExistingProvider = createMockProvider({ id: 'existing-provider' });
 
       // Mock loadApiProviders to return existing provider
       loadApiProvidersSpy.mockResolvedValueOnce([mockExistingProvider]);
@@ -578,11 +570,7 @@ describe('evaluate function', () => {
     });
 
     it('should handle providers without labels in providerMap', async () => {
-      const mockProvider = {
-        id: () => 'provider-without-label',
-        callApi: vi.fn(),
-        // No label property
-      };
+      const mockProvider = createMockProvider({ id: 'provider-without-label' });
 
       loadApiProvidersSpy.mockResolvedValueOnce([mockProvider]);
 
@@ -624,16 +612,15 @@ describe('evaluate function', () => {
     // Test cases for GitHub issue #4111: Model-graded assertions with provider resolution
     describe('Model-graded assertions with provider resolution', () => {
       it('should resolve model-graded assertions using providers from main array', async () => {
-        const mockLiteLLMProvider = {
-          id: () => 'litellm:gemini-pro',
-          callApi: vi.fn(),
+        const mockLiteLLMProvider = createMockProvider({
+          id: 'litellm:gemini-pro',
           config: {
             apiBaseUrl: 'http://localhost:4000',
             apiKey: 'test-key',
             temperature: 0.1,
             max_tokens: 8096,
           },
-        };
+        });
 
         // Mock loadApiProviders to return the LiteLLM provider
         loadApiProvidersSpy.mockResolvedValueOnce([mockLiteLLMProvider]);
@@ -687,15 +674,8 @@ describe('evaluate function', () => {
       });
 
       it('should resolve different providers for response and model-graded assertions', async () => {
-        const mockResponseProvider = {
-          id: () => 'litellm:gpt-4',
-          callApi: vi.fn(),
-        };
-
-        const mockGevalProvider = {
-          id: () => 'litellm:gemini-pro',
-          callApi: vi.fn(),
-        };
+        const mockResponseProvider = createMockProvider({ id: 'litellm:gpt-4' });
+        const mockGevalProvider = createMockProvider({ id: 'litellm:gemini-pro' });
 
         // Mock loadApiProviders to return both providers
         loadApiProvidersSpy.mockResolvedValueOnce([mockResponseProvider, mockGevalProvider]);
@@ -738,10 +718,7 @@ describe('evaluate function', () => {
       });
 
       it('should handle multiple model-graded assertions with same provider', async () => {
-        const mockLiteLLMProvider = {
-          id: () => 'litellm:claude-3',
-          callApi: vi.fn(),
-        };
+        const mockLiteLLMProvider = createMockProvider({ id: 'litellm:claude-3' });
 
         loadApiProvidersSpy.mockResolvedValueOnce([mockLiteLLMProvider]);
 
@@ -792,10 +769,7 @@ describe('evaluate function', () => {
       });
 
       it('should fall back to loadApiProvider for model-graded assertions when provider not in main array', async () => {
-        const mockMainProvider = {
-          id: () => 'litellm:gpt-4',
-          callApi: vi.fn(),
-        };
+        const mockMainProvider = createMockProvider({ id: 'litellm:gpt-4' });
 
         // Mock main providers array (only has gpt-4)
         loadApiProvidersSpy.mockResolvedValueOnce([mockMainProvider]);
@@ -850,10 +824,9 @@ describe('evaluate with external defaultTest', () => {
 
     // Set up spies for provider functions
     loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
-    loadApiProviderSpy = vi.spyOn(providers, 'loadApiProvider').mockResolvedValue({
-      id: () => 'mock-provider',
-      callApi: vi.fn() as any,
-    });
+    loadApiProviderSpy = vi
+      .spyOn(providers, 'loadApiProvider')
+      .mockResolvedValue(createMockProvider({ id: 'mock-provider' }));
 
     maybeLoadFromExternalFileSpy = vi.mocked(fileUtils.maybeLoadFromExternalFile);
   });
@@ -870,10 +843,10 @@ describe('evaluate with external defaultTest', () => {
       options: { provider: 'openai:gpt-4' },
     };
 
-    const mockApiProvider = {
-      id: () => 'mock-provider',
-      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
-    };
+    const mockApiProvider = createMockProvider({
+      id: 'mock-provider',
+      response: { output: 'test output' },
+    });
 
     loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
     maybeLoadFromExternalFileSpy.mockResolvedValueOnce(externalDefaultTest);
@@ -900,10 +873,10 @@ describe('evaluate with external defaultTest', () => {
       vars: { inline: true },
     };
 
-    const mockApiProvider = {
-      id: () => 'mock-provider',
-      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
-    };
+    const mockApiProvider = createMockProvider({
+      id: 'mock-provider',
+      response: { output: 'test output' },
+    });
 
     loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
 
@@ -922,10 +895,10 @@ describe('evaluate with external defaultTest', () => {
   });
 
   it('should handle missing external defaultTest file gracefully', async () => {
-    const mockApiProvider = {
-      id: () => 'mock-provider',
-      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
-    };
+    const mockApiProvider = createMockProvider({
+      id: 'mock-provider',
+      response: { output: 'test output' },
+    });
 
     loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
 
@@ -944,10 +917,10 @@ describe('evaluate with external defaultTest', () => {
   });
 
   it('should not load external file when defaultTest is not a file:// string', async () => {
-    const mockApiProvider = {
-      id: () => 'mock-provider',
-      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
-    };
+    const mockApiProvider = createMockProvider({
+      id: 'mock-provider',
+      response: { output: 'test output' },
+    });
 
     loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
 
@@ -970,26 +943,26 @@ describe('evaluate with external defaultTest', () => {
     let resolveProviderSpy: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
-      mockApiProvider = {
-        id: () => 'mock-api-provider',
-        callApi: vi.fn().mockResolvedValue({ output: 'mock response' }),
-      };
+      mockApiProvider = createMockProvider({
+        id: 'mock-api-provider',
+        response: { output: 'mock response' },
+      });
 
-      mockCustomProvider = {
-        id: () => 'custom-validator',
-        callApi: vi.fn().mockResolvedValue({ output: 'custom validation response' }),
-      };
+      mockCustomProvider = createMockProvider({
+        id: 'custom-validator',
+        response: { output: 'custom validation response' },
+      });
 
       // Mock resolveProvider to track calls and return mock providers
       resolveProviderSpy = vi
         .spyOn(providers, 'resolveProvider')
         .mockImplementation(async (provider) => {
           if (typeof provider === 'string') {
-            return { id: () => provider, callApi: vi.fn() };
+            return createMockProvider({ id: provider });
           }
           if (typeof provider === 'object' && 'id' in provider && typeof provider.id === 'string') {
             // This is a ProviderOptions object
-            return { id: () => provider.id as string, callApi: vi.fn() };
+            return createMockProvider({ id: provider.id as string });
           }
           // This shouldn't be called for ApiProvider instances due to our fix
           return provider;

@@ -22,6 +22,7 @@ import {
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
 import { readTests } from '../../../src/util/testCaseReader';
+import { createMockProvider } from '../../factories/provider';
 
 vi.mock('../../../src/database', () => ({
   getDb: vi.fn(),
@@ -1457,11 +1458,9 @@ describe('resolveConfigs', () => {
 
     // Mock loadApiProviders to return the expected format
     vi.mocked(loadApiProviders).mockResolvedValue([
-      {
-        id: () => 'openai:gpt-4',
-        label: 'openai:gpt-4',
+      Object.assign(createMockProvider({ id: 'openai:gpt-4', label: 'openai:gpt-4' }), {
         modelName: 'gpt-4',
-      } as any,
+      }),
     ]);
 
     const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
@@ -1704,10 +1703,10 @@ describe('resolveConfigs', () => {
         { raw: 'Tell me about {{topic}}', label: 'Tell me about {{topic}}', config: {} },
       ]);
       vi.mocked(loadApiProviders).mockResolvedValue([
-        {
-          id: () => 'ollama:llama3.1:8b-instruct-fp16',
+        createMockProvider({
+          id: 'ollama:llama3.1:8b-instruct-fp16',
           label: 'ollama:llama3.1:8b-instruct-fp16',
-        } as any,
+        }),
       ]);
 
       return (cliProviders: string[]) =>
@@ -1779,10 +1778,10 @@ describe('resolveConfigs', () => {
         { raw: 'Tell me about {{topic}}', label: 'Tell me about {{topic}}', config: {} },
       ]);
       vi.mocked(loadApiProviders).mockResolvedValue([
-        {
-          id: () => 'ollama:llama3.1:8b-instruct-fp16',
+        createMockProvider({
+          id: 'ollama:llama3.1:8b-instruct-fp16',
           label: 'ollama:llama3.1:8b-instruct-fp16',
-        } as any,
+        }),
       ]);
 
       await resolveConfigs(
