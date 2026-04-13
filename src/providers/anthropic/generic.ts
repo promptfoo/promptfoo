@@ -3,12 +3,15 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
   CLAUDE_CODE_OAUTH_BETA_FEATURES,
+  CLAUDE_CODE_USER_AGENT,
+  CLAUDE_CODE_X_APP,
   isCredentialExpired,
   loadClaudeCodeCredential,
 } from './claudeCodeAuth';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
+import type { ClaudeCodeOAuthCredential } from './claudeCodeAuth';
 
 /**
  * Base options shared by all Anthropic provider implementations.
@@ -52,6 +55,13 @@ export class AnthropicGenericProvider implements ApiProvider {
    * OAuth-authenticated Messages requests.
    */
   usingClaudeCodeOAuth: boolean;
+  /**
+   * The Claude Code credential used to authenticate, when
+   * `usingClaudeCodeOAuth` is `true`. Kept so subclasses can re-check expiry
+   * at request time and surface a "run `claude /login`" error instead of a
+   * raw 401 from the SDK.
+   */
+  claudeCodeCredential?: ClaudeCodeOAuthCredential;
   anthropic: Anthropic;
 
   constructor(
@@ -86,12 +96,13 @@ export class AnthropicGenericProvider implements ApiProvider {
         }
         authToken = credential.accessToken;
         this.usingClaudeCodeOAuth = true;
+        this.claudeCodeCredential = credential;
         defaultHeaders['anthropic-beta'] = CLAUDE_CODE_OAUTH_BETA_FEATURES.join(',');
         // Mimic the Claude Code CLI user-agent / x-app headers so the OAuth
         // token is accepted. Anthropic's API gates OAuth tokens to the Claude
         // Code app identity; without these headers requests fail with 401.
-        defaultHeaders['user-agent'] = 'claude-cli/1.0.0 (external, promptfoo)';
-        defaultHeaders['x-app'] = 'cli';
+        defaultHeaders['user-agent'] = CLAUDE_CODE_USER_AGENT;
+        defaultHeaders['x-app'] = CLAUDE_CODE_X_APP;
       } else {
         logger.warn(
           '[anthropic] apiKeyRequired is false but no Claude Code credential was found. ' +

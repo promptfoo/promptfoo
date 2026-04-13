@@ -30,11 +30,36 @@ export const CLAUDE_CODE_IDENTITY_PROMPT =
  * Anthropic beta headers required when authenticating the Messages API with a
  * Claude Code OAuth token (e.g. a Claude Max subscription access token, or a
  * long-lived token minted by `claude setup-token`).
+ *
+ * - `oauth-2025-04-20` enables OAuth bearer tokens on `/v1/messages`.
+ * - `claude-code-20250219` enables the Claude Code tool-use surface area the
+ *   OAuth token is scoped to.
+ *
+ * Revisit if Anthropic ships an OAuth-native Messages path that no longer
+ * requires these betas.
  */
 export const CLAUDE_CODE_OAUTH_BETA_FEATURES = Object.freeze([
   'claude-code-20250219',
   'oauth-2025-04-20',
 ] as const);
+
+/**
+ * The `user-agent` value Claude Code CLI sends on OAuth-authenticated
+ * Messages requests. Anthropic's API gates OAuth tokens to the Claude Code
+ * app identity, so requests that use a different user-agent fail with 401.
+ *
+ * The `1.0.0` suffix is cosmetic — Anthropic gates on the `claude-cli`
+ * product identifier, not the semver. Revisit if OAuth requests start
+ * returning 401 after SDK or CLI updates.
+ */
+export const CLAUDE_CODE_USER_AGENT = 'claude-cli/1.0.0 (external, promptfoo)';
+
+/**
+ * The `x-app` header value Claude Code CLI sends. Paired with
+ * {@link CLAUDE_CODE_USER_AGENT} to satisfy Anthropic's OAuth app-identity
+ * gate.
+ */
+export const CLAUDE_CODE_X_APP = 'cli';
 
 const CLAUDE_CODE_KEYCHAIN_SERVICE = 'Claude Code-credentials';
 const CLAUDE_CODE_CREDENTIALS_FILE = path.join('.claude', '.credentials.json');
