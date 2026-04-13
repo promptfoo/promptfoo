@@ -98,6 +98,10 @@ function setCliStateConfig(config: typeof cliState.config) {
 }
 
 describe('shared redteam provider utilities', () => {
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   beforeEach(() => {
     // Clear all mocks thoroughly
     vi.clearAllMocks();
