@@ -98,6 +98,24 @@ describe('Provider Smoke Tests', () => {
       // Exec provider should have executed the echo command
       expect(result.response.output).toContain('Echo from exec');
     });
+
+    // Regression for #8686: exec provider must close the child's stdin so that
+    // scripts reading from stdin (e.g. opencode) do not hang forever.
+    it('3.1.3 - exec provider closes stdin on child process', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/exec-provider-stdin.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'exec-provider-stdin-output.json');
+
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
+
+      expect(exitCode).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      const result = parsed.results.results[0];
+
+      expect(result.success).toBe(true);
+      expect(result.response.output).toContain('stdin closed');
+    });
   });
 
   describe('3.3 OpenAI Tool Format', () => {
