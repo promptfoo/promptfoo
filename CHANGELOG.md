@@ -6,21 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.121.5](https://github.com/promptfoo/promptfoo/compare/0.121.4...0.121.5) (2026-04-13)
 
-
 ### Features
 
-* **providers:** add OpenAI Codex app-server provider ([#8578](https://github.com/promptfoo/promptfoo/issues/8578)) ([a403dd1](https://github.com/promptfoo/promptfoo/commit/a403dd17b012029bbd4323e3d95e44e5366d08a3))
-
+- **providers:** add OpenAI Codex app-server provider ([#8578](https://github.com/promptfoo/promptfoo/issues/8578)) ([a403dd1](https://github.com/promptfoo/promptfoo/commit/a403dd17b012029bbd4323e3d95e44e5366d08a3))
 
 ### Bug Fixes
 
-* **app:** chart toggle visibility ([#8439](https://github.com/promptfoo/promptfoo/issues/8439)) ([f9d448d](https://github.com/promptfoo/promptfoo/commit/f9d448dd74dbe6542a9c4ce7282dc0f85df42159))
-* correct rouge assertion reason messages when inverse: true ([#8682](https://github.com/promptfoo/promptfoo/issues/8682)) ([7d64d8d](https://github.com/promptfoo/promptfoo/commit/7d64d8daedaaac7c84b421046cdc3d85959870e8))
-* **deps:** update anthropic packages ([#8670](https://github.com/promptfoo/promptfoo/issues/8670)) ([0a4a7e0](https://github.com/promptfoo/promptfoo/commit/0a4a7e08075eaaa9f3605018da01fd7a41216f2f))
-* **deps:** update openai packages ([#8672](https://github.com/promptfoo/promptfoo/issues/8672)) ([1ae735c](https://github.com/promptfoo/promptfoo/commit/1ae735c8a9f2d7b7d62453f9c195cd691ff561b5))
-* **providers:** close stdin on exec provider to prevent child process hanging ([#8686](https://github.com/promptfoo/promptfoo/issues/8686)) ([9cd7709](https://github.com/promptfoo/promptfoo/commit/9cd7709d19fa8c85c97a402400d0f7cbb8a1762e))
-* **providers:** resolve settings file path for claude-agent-sdk ([#8606](https://github.com/promptfoo/promptfoo/issues/8606)) ([d575bd1](https://github.com/promptfoo/promptfoo/commit/d575bd1fc13809428216d1c2de1ea59249c19005))
-* **providers:** send reasoning config for Azure responses deployments ([#8255](https://github.com/promptfoo/promptfoo/issues/8255)) ([67437f3](https://github.com/promptfoo/promptfoo/commit/67437f3fc02c320dc3ea29c99ea69e6334cb3b2b))
+- **app:** chart toggle visibility ([#8439](https://github.com/promptfoo/promptfoo/issues/8439)) ([f9d448d](https://github.com/promptfoo/promptfoo/commit/f9d448dd74dbe6542a9c4ce7282dc0f85df42159))
+- correct rouge assertion reason messages when inverse: true ([#8682](https://github.com/promptfoo/promptfoo/issues/8682)) ([7d64d8d](https://github.com/promptfoo/promptfoo/commit/7d64d8daedaaac7c84b421046cdc3d85959870e8))
+- **deps:** update anthropic packages ([#8670](https://github.com/promptfoo/promptfoo/issues/8670)) ([0a4a7e0](https://github.com/promptfoo/promptfoo/commit/0a4a7e08075eaaa9f3605018da01fd7a41216f2f))
+- **deps:** update openai packages ([#8672](https://github.com/promptfoo/promptfoo/issues/8672)) ([1ae735c](https://github.com/promptfoo/promptfoo/commit/1ae735c8a9f2d7b7d62453f9c195cd691ff561b5))
+- **providers:** close stdin on exec provider to prevent child process hanging ([#8686](https://github.com/promptfoo/promptfoo/issues/8686)) ([9cd7709](https://github.com/promptfoo/promptfoo/commit/9cd7709d19fa8c85c97a402400d0f7cbb8a1762e))
+- **providers:** resolve settings file path for claude-agent-sdk ([#8606](https://github.com/promptfoo/promptfoo/issues/8606)) ([d575bd1](https://github.com/promptfoo/promptfoo/commit/d575bd1fc13809428216d1c2de1ea59249c19005))
+- **providers:** send reasoning config for Azure responses deployments ([#8255](https://github.com/promptfoo/promptfoo/issues/8255)) ([67437f3](https://github.com/promptfoo/promptfoo/commit/67437f3fc02c320dc3ea29c99ea69e6334cb3b2b))
 
 ## [0.121.4](https://github.com/promptfoo/promptfoo/compare/0.121.3...0.121.4) (2026-04-10)
 
