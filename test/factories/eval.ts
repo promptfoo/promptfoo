@@ -48,7 +48,12 @@ export function createCompletedPrompt(
 }
 
 export function createEvaluateResult(overrides: Partial<EvaluateResult> = {}): EvaluateResult {
-  const prompt = overrides.prompt ?? createPrompt();
+  // prompt and promptId are derived together — promptId defaults to the
+  // prompt's raw value unless the caller supplies one. Pull both out of the
+  // override spread so the remaining fields layer on top without having to
+  // re-pin them afterward.
+  const { prompt: promptOverride, promptId: promptIdOverride, ...rest } = overrides;
+  const prompt = promptOverride ?? createPrompt();
   return {
     promptIdx: 0,
     testIdx: 0,
@@ -64,9 +69,9 @@ export function createEvaluateResult(overrides: Partial<EvaluateResult> = {}): E
     namedScores: {},
     cost: 0,
     tokenUsage: createRequiredTokenUsage(),
-    ...overrides,
+    ...rest,
     prompt,
-    promptId: overrides.promptId ?? prompt.raw,
+    promptId: promptIdOverride ?? prompt.raw,
   };
 }
 
