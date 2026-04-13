@@ -5,6 +5,7 @@ import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import * as remoteGeneration from '../../src/redteam/remoteGeneration';
 import * as remoteGrading from '../../src/remoteGrading';
+import { createMockProvider } from '../factories/provider';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import type { GradingConfig } from '../../src/types/index';
@@ -344,13 +345,12 @@ describe('matchesSimilarity', () => {
 
   describe('metric validation', () => {
     it('should normalize missing completion details for native similarity providers', async () => {
-      const mockProvider = {
-        id: () => 'test-similarity-provider',
+      const mockProvider = Object.assign(createMockProvider({ id: 'test-similarity-provider' }), {
         callSimilarityApi: vi.fn().mockResolvedValue({
           similarity: 0.9,
           tokenUsage: { total: 5, prompt: 2, completion: 3 },
         }),
-      };
+      });
 
       const grading: GradingConfig = {
         provider: mockProvider as any,
@@ -370,13 +370,12 @@ describe('matchesSimilarity', () => {
     });
 
     it('should reject non-cosine metric for callSimilarityApi providers', async () => {
-      const mockProvider = {
-        id: () => 'test-similarity-provider',
+      const mockProvider = Object.assign(createMockProvider({ id: 'test-similarity-provider' }), {
         callSimilarityApi: vi.fn().mockResolvedValue({
           similarity: 0.9,
           tokenUsage: { total: 5, prompt: 2, completion: 3 },
         }),
-      };
+      });
 
       const grading: GradingConfig = {
         provider: mockProvider as any,
@@ -391,8 +390,7 @@ describe('matchesSimilarity', () => {
     });
 
     it('should use embeddings for non-cosine metrics when provider supports both APIs', async () => {
-      const mockProvider = {
-        id: () => 'hybrid-similarity-provider',
+      const mockProvider = Object.assign(createMockProvider({ id: 'hybrid-similarity-provider' }), {
         callSimilarityApi: vi.fn().mockResolvedValue({
           similarity: 0.1,
           tokenUsage: { total: 5, prompt: 2, completion: 3 },
@@ -403,7 +401,7 @@ describe('matchesSimilarity', () => {
             tokenUsage: { total: 5, prompt: 2, completion: 3 },
           }),
         ),
-      };
+      });
 
       const grading: GradingConfig = {
         provider: mockProvider as any,

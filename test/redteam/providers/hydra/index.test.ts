@@ -1,9 +1,14 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, Mock, Mocked, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../../factories/provider';
 
-import type { ApiProvider, CallApiContextParams, GradingResult } from '../../../../src/types/index';
+import type { CallApiContextParams, GradingResult } from '../../../../src/types/index';
 
 // Import HydraProvider dynamically after mocks are set up
 let HydraProvider: typeof import('../../../../src/redteam/providers/hydra/index').HydraProvider;
@@ -92,8 +97,8 @@ vi.mock('../../../../src/redteam/providers/traceFormatting', () => ({
 }));
 
 describe('HydraProvider', () => {
-  let mockAgentProvider: Mocked<ApiProvider>;
-  let mockTargetProvider: Mocked<ApiProvider>;
+  let mockAgentProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
   let mockGrader: any;
 
   beforeAll(async () => {
@@ -107,19 +112,14 @@ describe('HydraProvider', () => {
     mockGetGraderById.mockReset();
 
     // Mock agent provider (cloud provider)
-    mockAgentProvider = {
-      id: vi.fn().mockReturnValue('mock-agent'),
-      callApi: vi.fn(),
-      delay: 0,
-    } as Mocked<ApiProvider>;
+    mockAgentProvider = createMockProvider({ id: 'mock-agent', delay: 0 });
+    mockAgentProvider.callApi.mockReset();
 
     // Mock target provider
-    mockTargetProvider = {
-      id: vi.fn().mockReturnValue('mock-target'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Target response',
-      }),
-    } as Mocked<ApiProvider>;
+    mockTargetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({ output: 'Target response' }),
+    });
 
     // Mock grader
     mockGrader = {

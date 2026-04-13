@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sanitizeProvider } from '../../../src/models/evalResult';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
 
 import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
 
@@ -27,8 +32,7 @@ vi.mock('../../../src/redteam/remoteGeneration', () => ({
 
 describe('BestOfNProvider - Abort Signal Handling', () => {
   let BestOfNProvider: typeof import('../../../src/redteam/providers/bestOfN').default;
-  let mockTargetProvider: ApiProvider;
-  let mockCallApi: ReturnType<typeof vi.fn>;
+  let mockTargetProvider: MockApiProvider;
 
   const createMockContext = (targetProvider: ApiProvider): CallApiContextParams => ({
     originalProvider: targetProvider,
@@ -43,16 +47,9 @@ describe('BestOfNProvider - Abort Signal Handling', () => {
     const module = await import('../../../src/redteam/providers/bestOfN');
     BestOfNProvider = module.default;
 
-    mockCallApi = vi.fn();
-    mockCallApi.mockResolvedValue({
-      output: 'target response',
+    mockTargetProvider = createMockProvider({
+      response: createProviderResponse({ output: 'target response' }),
     });
-
-    mockTargetProvider = {
-      id: () => 'test-provider',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      callApi: mockCallApi as any,
-    };
 
     // Mock successful response from remote API
     mockFetchWithProxy.mockResolvedValue({
@@ -95,7 +92,11 @@ describe('BestOfNProvider - Abort Signal Handling', () => {
     await provider.callApi('test prompt', context, options);
 
     // The target provider should be called with the options
-    expect(mockCallApi).toHaveBeenCalledWith(expect.any(String), expect.any(Object), options);
+    expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Object),
+      options,
+    );
   });
 
   it('should re-throw AbortError and not swallow it', async () => {

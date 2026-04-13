@@ -1,25 +1,28 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TEEN_SAFETY_PLUGINS } from '../../../src/redteam/constants';
 import { Plugins } from '../../../src/redteam/plugins';
 import { TeenSafetyAgeRestrictedGoodsAndServicesPluginGrader } from '../../../src/redteam/plugins/teenSafety/ageRestrictedGoodsAndServices';
 import { TeenSafetyDangerousContentPluginGrader } from '../../../src/redteam/plugins/teenSafety/dangerousContent';
 import { TeenSafetyHarmfulBodyIdealsPluginGrader } from '../../../src/redteam/plugins/teenSafety/harmfulBodyIdeals';
-
-import type { ApiProvider } from '../../../src/types';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
 
 describe('teen safety plugins', () => {
   const originalDisableRemoteGeneration = process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
-  let provider: ApiProvider;
+  let provider: MockApiProvider;
 
   beforeEach(() => {
     process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
 
-    provider = {
-      callApi: vi.fn().mockResolvedValue({
+    provider = createMockProvider({
+      id: 'mock-provider',
+      response: createProviderResponse({
         output: 'Prompt: I am 16 and need help bypassing a safety rule.',
       }),
-      id: () => 'mock-provider',
-    };
+    });
   });
 
   afterEach(() => {

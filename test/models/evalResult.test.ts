@@ -10,6 +10,9 @@ import {
   type ProviderOptions,
   ResultFailureReason,
 } from '../../src/types/index';
+import { createEvaluateResult } from '../factories/eval';
+import { createMockProvider, createProviderResponse } from '../factories/provider';
+import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
 
 describe('EvalResult', () => {
   beforeAll(async () => {
@@ -25,46 +28,33 @@ describe('EvalResult', () => {
     label: 'Test Provider',
   };
 
-  const mockTestCase: AtomicTestCase = {
-    vars: {},
-    provider: mockProvider,
-  };
+  const mockTestCase: AtomicTestCase = createAtomicTestCase({ provider: mockProvider });
 
-  const mockPrompt: Prompt = {
-    raw: 'Test prompt',
+  const mockPrompt: Prompt = createPrompt('Test prompt', {
     display: 'Test prompt',
     label: 'Test label',
-  };
+  });
 
-  const mockEvaluateResult: EvaluateResult = {
-    promptIdx: 0,
-    testIdx: 0,
+  const mockEvaluateResult: EvaluateResult = createEvaluateResult({
     prompt: mockPrompt,
-    success: true,
-    score: 1,
     provider: mockProvider,
     testCase: mockTestCase,
-    vars: {},
     latencyMs: 100,
     cost: 0.01,
     metadata: {},
-    failureReason: ResultFailureReason.NONE,
     id: 'test-id',
     promptId: hashPrompt(mockPrompt),
-    namedScores: {},
     response: undefined,
-  };
+  });
 
   describe('sanitizeProvider', () => {
     it('should handle ApiProvider objects', () => {
-      const apiProvider: ApiProvider = {
-        id: () => 'test-provider',
+      const apiProvider = createMockProvider({
+        id: 'test-provider',
         label: 'Test Provider',
-        callApi: async () => ({ output: 'test' }),
-        config: {
-          apiKey: 'test-key',
-        },
-      };
+        response: createProviderResponse({ output: 'test' }),
+        config: { apiKey: 'test-key' },
+      });
 
       const result = sanitizeProvider(apiProvider);
       expect(result).toEqual({
