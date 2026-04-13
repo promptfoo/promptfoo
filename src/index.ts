@@ -23,7 +23,13 @@ import { maybeLoadFromExternalFile } from './util/file';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util/index';
 import { readTests } from './util/testCaseReader';
 
-import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types/index';
+import type {
+  EvaluateOptions,
+  EvaluateTestSuite,
+  Scenario,
+  TestCase,
+  TestSuite,
+} from './types/index';
 import type { ApiProvider } from './types/providers';
 
 export { generateTable } from './table';
@@ -37,6 +43,25 @@ export type {
   BeforeEachExtensionHookContext,
   ExtensionHookContextMap,
 } from './evaluatorHelpers';
+
+/**
+ * Shallow-clone a test case and its `options` and `assert[]` entries so that the
+ * caller can freely mutate `test.options.provider` / `assertion.provider` with
+ * resolved ApiProvider instances without leaking those mutations back to the
+ * input (inline test case objects in `testSuite.tests` alias through
+ * `readTests()`'s shallow copy). See the defaultTest block in `evaluate()` for
+ * the full rationale — this is the same pattern for individual test cases.
+ */
+function cloneTestForResolve(test: TestCase): TestCase {
+  const cloned: TestCase = { ...test };
+  if (test.options) {
+    cloned.options = { ...test.options };
+  }
+  if (Array.isArray(test.assert)) {
+    cloned.assert = test.assert.map((assertion) => ({ ...assertion }));
+  }
+  return cloned;
+}
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   if (testSuite.writeLatestResults) {
@@ -74,10 +99,21 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   };
 
   // Resolve nested providers
-  if (typeof constructedTestSuite.defaultTest === 'object') {
+  if (typeof constructedTestSuite.defaultTest === 'object' && constructedTestSuite.defaultTest) {
+    // Shallow-clone defaultTest (and options) before mutating so resolved ApiProvider
+    // instances don't leak back into testSuite.defaultTest via the shared reference.
+    // testSuite is reused below to build the unified config written to the Eval record;
+    // an instantiated SDK client (e.g. Bedrock's BedrockRuntime, Anthropic's client) holds
+    // circular references that break drizzle's JSON serialization on `evalRecord.save()`.
+    // Fixes #8687.
+    constructedTestSuite.defaultTest = { ...constructedTestSuite.defaultTest };
+    if (constructedTestSuite.defaultTest.options) {
+      constructedTestSuite.defaultTest.options = { ...constructedTestSuite.defaultTest.options };
+    }
+
     // Resolve defaultTest.provider (only if it's not already an ApiProvider instance)
     if (
-      constructedTestSuite.defaultTest?.provider &&
+      constructedTestSuite.defaultTest.provider &&
       !isApiProvider(constructedTestSuite.defaultTest.provider)
     ) {
       constructedTestSuite.defaultTest.provider = await resolveProvider(
@@ -88,7 +124,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
     // Resolve defaultTest.options.provider (only if it's not already an ApiProvider instance)
     if (
-      constructedTestSuite.defaultTest?.options?.provider &&
+      constructedTestSuite.defaultTest.options?.provider &&
       !isApiProvider(constructedTestSuite.defaultTest.options.provider)
     ) {
       constructedTestSuite.defaultTest.options.provider = await resolveProvider(
@@ -99,25 +135,29 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
   }
 
-  for (const test of constructedTestSuite.tests || []) {
+  // readTests() shallow-copies inline test cases, so test.options and test.assert[]
+  // still alias the originals in testSuite.tests. Shallow-clone here before swapping
+  // in resolved ApiProvider instances so the originals (and thus the unified config
+  // written to the Eval record) stay free of live SDK clients with circular references.
+  // Same rationale as the defaultTest block above. Fixes #8687.
+  constructedTestSuite.tests = (constructedTestSuite.tests || []).map(cloneTestForResolve);
+
+  for (const test of constructedTestSuite.tests) {
     if (test.options?.provider && !isApiProvider(test.options.provider)) {
       test.options.provider = await resolveProvider(test.options.provider, providerMap, {
         env: testSuite.env,
         basePath: cliState.basePath,
       });
     }
-    if (test.assert) {
-      for (const assertion of test.assert) {
-        if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
-          continue;
-        }
-
-        if (assertion.provider && !isApiProvider(assertion.provider)) {
-          assertion.provider = await resolveProvider(assertion.provider, providerMap, {
-            env: testSuite.env,
-            basePath: cliState.basePath,
-          });
-        }
+    for (const assertion of test.assert || []) {
+      if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
+        continue;
+      }
+      if (assertion.provider && !isApiProvider(assertion.provider)) {
+        assertion.provider = await resolveProvider(assertion.provider, providerMap, {
+          env: testSuite.env,
+          basePath: cliState.basePath,
+        });
       }
     }
   }
