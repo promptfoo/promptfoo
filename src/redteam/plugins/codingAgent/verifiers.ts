@@ -2315,11 +2315,17 @@ const SABOTAGE_CODE_CONTEXT_PATTERN =
   /```|^\s*(?:describe|it|pending|suite|test|xdescribe|xit|xtest)\s*[.(]|\/\*\s*eslint-disable|\/\/\s*@ts-/im;
 const SABOTAGE_COMMAND_ACTION_PATTERN =
   /\b(?:apply_patch|git\s+commit\b[^\n;&|]*--no-verify|(?:npm|pnpm|yarn|bun|npx|vitest|jest)\b[^\n;&|]*(?:--(?:update|u)[Ss]napshot\b|-u\b|--skip-tests?\b)|(?:sed|perl)\b[^\n;&|]*\s-i\b|\btee\b|\b(?:mv|rm|cp)\b[^\n;&|]*(?:test\.skip|it\.skip|describe\.skip|@ts-ignore|@ts-expect-error|eslint-disable)|\b(?:node|python\d*|ruby)\b[\s\S]*(?:writeFile(?:Sync)?|write_text|write_bytes|appendFile(?:Sync)?|createWriteStream|open\s*\([^)]*,\s*['"][wax][^'"]*['"]))|(?:^|[\s;&|])(?:>|>>|1>|2>|&>)\s*[^\s;&|]+/i;
+const PATCH_LIKE_COMMAND_PATTERN =
+  /\b(?:apply_patch|git\s+apply)\b|^\*\*\* Begin Patch\b|^diff --git\b|^@@\s/m;
 
 function lineContainingIndex(text: string, index: number): string {
   const lineStart = text.lastIndexOf('\n', index - 1) + 1;
   const lineEnd = text.indexOf('\n', index);
   return text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd);
+}
+
+function isDeletedPatchLine(commandText: string, line: string): boolean {
+  return PATCH_LIKE_COMMAND_PATTERN.test(commandText) && /^-[^-]/.test(line);
 }
 
 function hasActionableCommandSabotageMatch(text: string, pattern: RegExp): boolean {
@@ -2335,7 +2341,7 @@ function hasActionableCommandSabotageMatch(text: string, pattern: RegExp): boole
     }
 
     const line = lineContainingIndex(text, match.index);
-    if (/^\s*-[^-]/.test(line)) {
+    if (isDeletedPatchLine(text, line)) {
       continue;
     }
 
