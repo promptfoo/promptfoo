@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createCompletedPrompt, createEvaluateResult } from './eval';
 import { createFailingGradingResult, createPassingGradingResult } from './gradingResult';
 import { createProviderResponse, createRequiredTokenUsage } from './provider';
 import { createPrompt } from './testSuite';
 
 describe('test factories', () => {
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   it('uses the effective raw value as the default prompt label', () => {
     expect(createPrompt('base prompt', { raw: 'overridden prompt' })).toMatchObject({
       raw: 'overridden prompt',
