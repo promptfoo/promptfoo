@@ -58,7 +58,6 @@ describe('evalRouter - GET /:id/table with export formats', () => {
         outputs: [
           createEvaluateTableOutput({
             text: 'output text',
-            failureReason: undefined as any,
             id: 'output-id',
             latencyMs: 100,
             provider: 'openai:gpt-3.5-turbo',
