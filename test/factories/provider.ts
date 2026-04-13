@@ -99,12 +99,22 @@ export function createMockProvider(options: MockProviderOptions = {}): MockApiPr
   return provider;
 }
 
+export type ResetMockProviderOptions = {
+  id?: string | (() => string);
+  response?: ProviderResponse;
+  cleanup?: ApiProvider['cleanup'] | boolean;
+};
+
 export function resetMockProvider(
   provider: MockApiProvider,
-  options: { id?: string | (() => string); response?: ProviderResponse } = {},
+  options: ResetMockProviderOptions = {},
 ): void {
-  const { id, response = createProviderResponse() } = options;
+  const { id, response = createProviderResponse(), cleanup } = options;
   provider.id.mockReset().mockImplementation(resolveIdImpl(id));
   provider.callApi.mockReset().mockResolvedValue(response);
-  provider.cleanup?.mockReset().mockResolvedValue(undefined);
+  if (provider.cleanup) {
+    provider.cleanup
+      .mockReset()
+      .mockImplementation(!cleanup || cleanup === true ? async () => undefined : cleanup);
+  }
 }
