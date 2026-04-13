@@ -339,9 +339,15 @@ describe('CustomIntentPluginSection', () => {
         await user.paste('New intent');
 
         const runLatestTimerCallback = async (delay: number) => {
-          const callback = setTimeoutSpy.mock.calls.findLast(
-            ([, timerDelay]) => timerDelay === delay,
-          )?.[0];
+          let callback: unknown;
+          for (let index = setTimeoutSpy.mock.calls.length - 1; index >= 0; index--) {
+            const [timerCallback, timerDelay] = setTimeoutSpy.mock.calls[index];
+            if (timerDelay === delay) {
+              callback = timerCallback;
+              break;
+            }
+          }
+
           if (typeof callback === 'function') {
             await act(async () => {
               callback();
