@@ -44,8 +44,10 @@ The provider config sets `apiKeyRequired: false`, which tells Promptfoo to:
   (`"You are Claude Code, Anthropic's official CLI for Claude."`) before your
   own system prompt.
 
-Usage counts against your Claude subscription the same way it does when
-calling the model from the `claude` CLI.
+Requests made this way are expected to count against your Claude
+subscription the same way calls from the `claude` CLI do. Check
+[Anthropic's documentation](https://docs.claude.com/en/docs/claude-code/overview)
+for current billing behavior.
 
 ## Run it
 
@@ -57,5 +59,5 @@ promptfoo view
 ## Configuration
 
 See `promptfooconfig.yaml` — both the main provider and the `llm-rubric`
-grader point at `anthropic:messages:claude-sonnet-4-20250514` with
+grader point at `anthropic:messages:claude-sonnet-4-6` with
 `apiKeyRequired: false` so the entire eval runs on your Claude subscription.

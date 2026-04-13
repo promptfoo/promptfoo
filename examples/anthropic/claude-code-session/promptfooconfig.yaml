@@ -12,7 +12,7 @@ prompts:
     "{{sentence}}"
 
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
+  - id: anthropic:messages:claude-sonnet-4-6
     config:
       # Skip the API key preflight and authenticate via the local Claude Code
       # OAuth credential (macOS keychain or ~/.claude/.credentials.json).
@@ -25,7 +25,7 @@ providers:
 defaultTest:
   options:
     provider:
-      id: anthropic:messages:claude-sonnet-4-20250514
+      id: anthropic:messages:claude-sonnet-4-6
       config:
         apiKeyRequired: false
 
