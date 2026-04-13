@@ -23,7 +23,7 @@ export class OpenAiGenericProvider implements ApiProvider {
     const { config, id, env } = options;
     this.env = env;
     this.modelName = modelName;
-    this.config = config || {};
+    this.config = config ? { ...config } : {};
     this.id = id ? () => id : this.id;
   }
 

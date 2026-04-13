@@ -6,9 +6,13 @@ import {
   generateTraceparent,
   isOtlpReceiverStarted,
   isTracingEnabled,
+  resetTracingState,
+  startOtlpReceiverIfNeeded,
 } from '../../src/tracing/evaluatorTracing';
 
 import type { TestCase, TestSuite } from '../../src/types/index';
+
+const mockStartOTLPReceiver = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 // Mock the logger
 vi.mock('../../src/logger', () => ({
@@ -27,9 +31,15 @@ vi.mock('../../src/tracing/store', () => ({
   })),
 }));
 
+vi.mock('../../src/tracing/otlpReceiver', () => ({
+  startOTLPReceiver: mockStartOTLPReceiver,
+  stopOTLPReceiver: vi.fn().mockResolvedValue(undefined),
+}));
+
 describe('evaluatorTracing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetTracingState();
     // Reset environment variables
     delete process.env.PROMPTFOO_TRACING_ENABLED;
   });
@@ -203,6 +213,51 @@ describe('evaluatorTracing', () => {
   describe('isOtlpReceiverStarted', () => {
     it('should return false initially', () => {
       expect(isOtlpReceiverStarted()).toBe(false);
+    });
+  });
+
+  describe('startOtlpReceiverIfNeeded', () => {
+    it('should pass configured acceptFormats to the OTLP receiver', async () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              port: 4318,
+              host: '0.0.0.0',
+              acceptFormats: ['protobuf'],
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      await startOtlpReceiverIfNeeded(testSuite);
+
+      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '0.0.0.0', ['protobuf']);
+    });
+
+    it('should default acceptFormats to both when omitted', async () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              port: 4318,
+              host: '0.0.0.0',
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      await startOtlpReceiverIfNeeded(testSuite);
+
+      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '0.0.0.0', ['json', 'protobuf']);
     });
   });
 });

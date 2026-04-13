@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SimulatedUser } from '../../src/providers/simulatedUser';
 import * as timeUtils from '../../src/util/time';
@@ -371,6 +372,33 @@ describe('SimulatedUser', () => {
   });
 
   describe('prompt handling', () => {
+    it('should use the rendered prompt for prompt functions', async () => {
+      const renderedPrompt = 'Always respond in 10 words or less';
+      const sourcePrompt = dedent`
+        from system_prompt import my_prompt
+
+        def create_prompt(context):
+            return my_prompt
+      `;
+
+      await simulatedUser.callApi(renderedPrompt, {
+        originalProvider,
+        vars: { instructions: 'test user instructions' },
+        prompt: {
+          raw: sourcePrompt,
+          display: sourcePrompt,
+          label: 'generate_prompt.py:create_prompt',
+          function: async () => renderedPrompt,
+        },
+      });
+
+      const firstCall = vi.mocked(originalProvider.callApi).mock.calls[0];
+      const promptArg = firstCall[0] as string;
+
+      expect(promptArg).toContain(renderedPrompt);
+      expect(promptArg).not.toContain('from system_prompt import my_prompt');
+    });
+
     it('should include the assistant prompt/instructions when calling the agent', async () => {
       const assistantPrompt =
         'You are a helpful assistant. You must follow these specific instructions.';

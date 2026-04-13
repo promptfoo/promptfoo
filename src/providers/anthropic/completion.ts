@@ -93,7 +93,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
     try {
       return {
         output: response.completion,
-        tokenUsage: createEmptyTokenUsage(), // TODO: add token usage once Anthropic API supports it
+        tokenUsage: createEmptyTokenUsage(), // Legacy Completion API doesn't expose token usage in its response type
       };
     } catch (err) {
       return {

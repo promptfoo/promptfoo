@@ -532,9 +532,17 @@ describe('GoogleVideoProvider', () => {
         },
       });
 
-      const result = await provider.callApi('Test prompt');
+      vi.useFakeTimers();
+      try {
+        const resultPromise = provider.callApi('Test prompt');
 
-      expect(result.error).toContain('timed out');
+        await vi.runAllTimersAsync();
+        const result = await resultPromise;
+
+        expect(result.error).toContain('timed out');
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should handle video generation error', async () => {

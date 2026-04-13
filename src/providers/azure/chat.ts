@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../../cache';
-import { getEnvFloat, getEnvInt } from '../../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
   type GenAISpanContext,
@@ -27,13 +27,19 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
+  declare config: AzureChatResponsesOptions;
+
   private mcpClient: MCPClient | null = null;
   private functionCallbackHandler: FunctionCallbackHandler;
 
-  constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
-    super(...args);
+  constructor(
+    deploymentName: string,
+    options: AzureProviderOptions<AzureChatResponsesOptions> = {},
+  ) {
+    super(deploymentName, options);
 
     // Initialize callback handler immediately (will be replaced if MCP is enabled)
     this.functionCallbackHandler = new FunctionCallbackHandler();
@@ -146,11 +152,34 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     const isReasoningModel = this.isReasoningModel();
 
     // Get max tokens based on model type
-    const maxTokens = config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024);
-    const maxCompletionTokens = config.max_completion_tokens;
+    const maxTokensDefault = config.omitDefaults
+      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
+        ? undefined
+        : getEnvInt('OPENAI_MAX_TOKENS')
+      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
+    const maxTokens = config.max_tokens ?? maxTokensDefault;
+    const maxCompletionTokens =
+      config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? maxTokens;
+
+    const temperatureDefault = config.omitDefaults
+      ? getEnvString('OPENAI_TEMPERATURE') === undefined
+        ? undefined
+        : getEnvFloat('OPENAI_TEMPERATURE')
+      : getEnvFloat('OPENAI_TEMPERATURE', 0);
+    const temperature = config.temperature ?? temperatureDefault;
+
+    const topP = config.omitDefaults
+      ? (config.top_p ?? getEnvFloat('OPENAI_TOP_P'))
+      : (config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1));
+    const presencePenalty = config.omitDefaults
+      ? (config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY'))
+      : (config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0));
+    const frequencyPenalty = config.omitDefaults
+      ? (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY'))
+      : (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0));
 
     // Get reasoning effort for reasoning models
-    const reasoningEffort = config.reasoning_effort ?? 'medium';
+    const reasoningEffort = config.reasoning_effort ?? (config.omitDefaults ? undefined : 'medium');
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
@@ -168,16 +197,20 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       messages,
       ...(isReasoningModel
         ? {
-            max_completion_tokens: maxCompletionTokens ?? maxTokens,
-            reasoning_effort: renderVarsInObject(reasoningEffort, context?.vars),
+            ...(reasoningEffort === undefined
+              ? {}
+              : { reasoning_effort: renderVarsInObject(reasoningEffort, context?.vars) }),
+            ...(maxCompletionTokens === undefined
+              ? {}
+              : { max_completion_tokens: maxCompletionTokens }),
           }
         : {
-            max_tokens: maxTokens,
-            temperature: config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
+            ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
+            ...(temperature === undefined ? {} : { temperature }),
           }),
-      top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
-      presence_penalty: config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
-      frequency_penalty: config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
+      ...(topP === undefined ? {} : { top_p: topP }),
+      ...(presencePenalty === undefined ? {} : { presence_penalty: presencePenalty }),
+      ...(frequencyPenalty === undefined ? {} : { frequency_penalty: frequencyPenalty }),
       ...(config.seed === undefined ? {} : { seed: config.seed }),
       ...(config.functions
         ? {

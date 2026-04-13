@@ -362,7 +362,15 @@ describe('GoogleProvider', () => {
       });
 
       it('should call API using Google client for OAuth mode', async () => {
-        await provider.callApi('test prompt');
+        const getProjectIdSpy = vi
+          .spyOn(provider as any, 'getProjectId')
+          .mockResolvedValue('my-project');
+
+        try {
+          await provider.callApi('test prompt');
+        } finally {
+          getProjectIdSpy.mockRestore();
+        }
 
         expect(vi.mocked(util.getGoogleClient)).toHaveBeenCalled();
       });

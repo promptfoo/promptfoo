@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleSearchRubric } from '../../src/assertions/searchRubric';
-import { matchesSearchRubric } from '../../src/matchers';
+import { matchesSearchRubric } from '../../src/matchers/search';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
-vi.mock('../../src/matchers');
+vi.mock('../../src/matchers/search');
 
 describe('handleSearchRubric', () => {
   beforeEach(() => {

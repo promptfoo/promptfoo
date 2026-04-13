@@ -717,7 +717,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
 
       <div className="mx-auto max-w-7xl px-4 pb-8 pt-4 print:max-w-none print:px-0 print:pt-0 print:pb-0">
         <div className="flex flex-col gap-6">
-          {!embedded && evalData.config.redteam && <EnterpriseBanner evalId={evalId || ''} />}
+          {!embedded && <EnterpriseBanner evalId={evalId} />}
 
           {!embedded && (
             <>

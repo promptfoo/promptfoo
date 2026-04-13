@@ -1850,15 +1850,16 @@ ${prompt}
         const promptTokens = coerceStrToNum(responseJson.prompt_tokens);
         const completionTokens = coerceStrToNum(responseJson.completion_tokens);
 
-        let totalTokens = responseJson.total_tokens;
-        if (!totalTokens && promptTokens !== undefined && completionTokens !== undefined) {
-          totalTokens = promptTokens + completionTokens;
-        }
+        const totalTokens =
+          coerceStrToNum(responseJson.total_tokens) ??
+          (promptTokens !== undefined && completionTokens !== undefined
+            ? promptTokens + completionTokens
+            : undefined);
 
         return {
           prompt: promptTokens,
           completion: completionTokens,
-          total: (promptTokens ?? 0) + (completionTokens ?? 0),
+          total: totalTokens,
           numRequests: 1,
         };
       }
@@ -1930,15 +1931,16 @@ ${prompt}
         const promptTokens = coerceStrToNum(responseJson.usage.prompt_tokens);
         const completionTokens = coerceStrToNum(responseJson.usage.completion_tokens);
 
-        let totalTokens = responseJson.usage.total_tokens;
-        if (!totalTokens && promptTokens !== undefined && completionTokens !== undefined) {
-          totalTokens = promptTokens + completionTokens;
-        }
+        const totalTokens =
+          coerceStrToNum(responseJson.usage.total_tokens) ??
+          (promptTokens !== undefined && completionTokens !== undefined
+            ? promptTokens + completionTokens
+            : undefined);
 
         return {
           prompt: promptTokens,
           completion: completionTokens,
-          total: (promptTokens ?? 0) + (completionTokens ?? 0),
+          total: totalTokens,
           numRequests: 1,
         };
       }
@@ -2524,16 +2526,18 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         const completionTokensNum = coerceStrToNum(completionTokens);
 
         // Get total tokens from API or calculate it
-        let totalTokens =
-          output.usage?.totalTokens ?? output.usage?.total_tokens ?? output.total_tokens;
-        if (!totalTokens && promptTokensNum !== undefined && completionTokensNum !== undefined) {
-          totalTokens = promptTokensNum + completionTokensNum;
-        }
+        const totalTokens =
+          coerceStrToNum(
+            output.usage?.totalTokens ?? output.usage?.total_tokens ?? output.total_tokens,
+          ) ??
+          (promptTokensNum !== undefined && completionTokensNum !== undefined
+            ? promptTokensNum + completionTokensNum
+            : undefined);
 
         tokenUsage = {
           prompt: promptTokensNum,
           completion: completionTokensNum,
-          total: (promptTokensNum ?? 0) + (completionTokensNum ?? 0),
+          total: totalTokens,
           numRequests: 1,
         };
 

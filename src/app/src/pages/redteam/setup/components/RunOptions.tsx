@@ -15,6 +15,11 @@ export const RUNOPTIONS_TEXT = {
     helper: 'Number of test cases to generate for each plugin',
     error: 'Number of test cases must be greater than 0',
   },
+  maxCharsPerMessage: {
+    helper:
+      'Optional character cap for each generated user message and final prompt sent to the target. Leave blank for no limit.',
+    error: 'Max chars per message must be greater than 0',
+  },
   delayBetweenApiCalls: {
     helper:
       'Add a delay between API calls to avoid rate limits. This will not override a delay set on the target.',
@@ -34,6 +39,7 @@ export const RUNOPTIONS_TEXT = {
 
 interface RunOptionsProps {
   numTests: number | undefined;
+  maxCharsPerMessage?: number;
   runOptions?: Partial<RedteamRunOptions>;
   updateConfig: (section: keyof Config, value: Config[keyof Config]) => void;
   updateRunOption: (
@@ -115,6 +121,55 @@ export interface DelayBetweenAPICallsInputProps {
   canSetDelay?: boolean;
   setMaxConcurrencyValue: (value: string) => void;
 }
+
+export interface MaxCharsPerMessageInputProps {
+  value: string;
+  setValue: (value: string) => void;
+  updateConfig: (section: keyof Config, value: Config[keyof Config]) => void;
+  readOnly?: boolean;
+}
+
+export const MaxCharsPerMessageInput = ({
+  value,
+  setValue,
+  updateConfig,
+  readOnly,
+}: MaxCharsPerMessageInputProps) => {
+  const error = isBelowMin(value, 1) ? RUNOPTIONS_TEXT.maxCharsPerMessage.error : undefined;
+
+  return (
+    <NumberInput
+      fullWidth
+      label="Max chars per message"
+      value={value}
+      min={1}
+      onChange={(v) => {
+        setValue(v?.toString() || '');
+      }}
+      onBlur={() => {
+        if (readOnly) {
+          return;
+        }
+        if (value.trim() === '') {
+          updateConfig('maxCharsPerMessage', undefined);
+          setValue('');
+          return;
+        }
+        const parsed = Number(value);
+        if (Number.isNaN(parsed) || parsed < 1) {
+          updateConfig('maxCharsPerMessage', undefined);
+          setValue('');
+          return;
+        }
+        updateConfig('maxCharsPerMessage', parsed);
+        setValue(String(parsed));
+      }}
+      readOnly={readOnly}
+      helperText={error ? error : RUNOPTIONS_TEXT.maxCharsPerMessage.helper}
+      error={Boolean(error)}
+    />
+  );
+};
 
 /**
  * Delay between API calls (ms)
@@ -252,6 +307,7 @@ export const MaxNumberOfConcurrentRequestsInput = ({
 
 export const RunOptionsContent = ({
   numTests,
+  maxCharsPerMessage,
   runOptions,
   updateConfig,
   updateRunOption,
@@ -264,6 +320,9 @@ export const RunOptionsContent = ({
 
   const [numTestsInput, setNumTestsInput] = useState<string>(
     numTests === undefined ? '0' : String(numTests),
+  );
+  const [maxCharsPerMessageInput, setMaxCharsPerMessageInput] = useState<string>(
+    maxCharsPerMessage === undefined ? '' : String(maxCharsPerMessage),
   );
   const [delayInput, setDelayInput] = useState<string>(
     runOptions?.delay === undefined ? '0' : String(runOptions.delay),
@@ -290,6 +349,12 @@ export const RunOptionsContent = ({
       <NumberOfTestCasesInput
         value={numTestsInput}
         setValue={setNumTestsInput}
+        updateConfig={updateConfig}
+      />
+
+      <MaxCharsPerMessageInput
+        value={maxCharsPerMessageInput}
+        setValue={setMaxCharsPerMessageInput}
         updateConfig={updateConfig}
       />
 

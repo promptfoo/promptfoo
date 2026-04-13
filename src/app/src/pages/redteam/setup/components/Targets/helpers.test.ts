@@ -50,4 +50,64 @@ describe('getProviderType', () => {
 
     expect(result).toBe(expected);
   });
+
+  describe('file:// path handling', () => {
+    it.each([
+      ['file://path/to/script.js', 'javascript'],
+      ['file://script.js', 'javascript'],
+      ['file:///absolute/path/script.js', 'javascript'],
+      ['file://path/to/script.ts', 'javascript'],
+      ['file://script.ts', 'javascript'],
+      ['file:///absolute/path/script.ts', 'javascript'],
+      ['file://./provider.js:myFunc', 'javascript'],
+      ['file://path/to/script.py', 'python'],
+      ['file://script.py', 'python'],
+      ['file:///absolute/path/script.py', 'python'],
+      ['file:///path/to/script.py:custom_func', 'python'],
+      ['file://path/to/main.go', 'go'],
+      ['file://main.go', 'go'],
+      ['file:///absolute/path/main.go', 'go'],
+      ['file://path/to/script.sh', 'shell'],
+      ['file://script.sh', 'shell'],
+      ['file:///absolute/path/script.sh', 'shell'],
+      ['file://path/to/script.bat', 'shell'],
+      ['file://script.bat', 'shell'],
+      ['file:///C:/path/script.bat', 'shell'],
+      ['file://path/to/script.cmd', 'shell'],
+      ['file://script.cmd', 'shell'],
+      ['file://path/to/script.ps1', 'shell'],
+      ['file://script.ps1', 'shell'],
+    ])('should infer %s as %s', (providerId, expected) => {
+      expect(getProviderType(providerId)).toBe(expected);
+    });
+
+    it('should return "file" for file:// paths without recognized extensions', () => {
+      expect(getProviderType('file://path/to/file.txt')).toBe('file');
+      expect(getProviderType('file://path/to/file')).toBe('file');
+      expect(getProviderType('file://path/to/file.unknown')).toBe('file');
+    });
+
+    it('should return "file" for file:// paths with complex nested directories', () => {
+      expect(getProviderType('file://deeply/nested/path/with/many/dirs/script.py')).toBe('python');
+      expect(getProviderType('file:///var/www/app/scripts/handler.js')).toBe('javascript');
+    });
+  });
+
+  describe('edge cases', () => {
+    it('should return undefined for undefined input', () => {
+      expect(getProviderType(undefined)).toBe(undefined);
+    });
+
+    it('should return undefined for empty string', () => {
+      expect(getProviderType('')).toBe(undefined);
+    });
+
+    it('should handle provider IDs with only a colon', () => {
+      expect(getProviderType(':')).toBe('');
+    });
+
+    it('should handle provider IDs starting with colon', () => {
+      expect(getProviderType(':model')).toBe('');
+    });
+  });
 });

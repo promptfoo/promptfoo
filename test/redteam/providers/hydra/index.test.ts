@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, Mock, Mocked, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, Mock, Mocked, vi } from 'vitest';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
@@ -47,12 +47,9 @@ vi.mock('../../../../src/providers/promptfoo', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../../src/redteam/graders', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    getGraderById: mockGetGraderById,
-  };
-});
+vi.mock('../../../../src/redteam/graders', () => ({
+  getGraderById: mockGetGraderById,
+}));
 
 vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => {
   return {
@@ -99,15 +96,15 @@ describe('HydraProvider', () => {
   let mockTargetProvider: Mocked<ApiProvider>;
   let mockGrader: any;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
+    const hydraModule = await import('../../../../src/redteam/providers/hydra/index');
+    HydraProvider = hydraModule.HydraProvider;
+  });
+
+  beforeEach(() => {
     vi.clearAllMocks();
     // Reset the hoisted mock to ensure clean state
     mockGetGraderById.mockReset();
-
-    // Reset modules and dynamically import HydraProvider so it gets the mocked graders
-    vi.resetModules();
-    const hydraModule = await import('../../../../src/redteam/providers/hydra/index');
-    HydraProvider = hydraModule.HydraProvider;
 
     // Mock agent provider (cloud provider)
     mockAgentProvider = {
@@ -1179,6 +1176,40 @@ describe('HydraProvider', () => {
         ...graderResult,
         assertion: { type: 'harmful:test', value: testRubric },
       });
+    });
+
+    it('passes target provider raw response into the grader', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      await provider.callApi('', context);
+
+      const gradingContext = mockGrader.getResult.mock.calls[0][7] as {
+        providerResponse?: { raw?: unknown };
+      };
+      expect(gradingContext.providerResponse?.raw).toContain('finalResponse');
     });
   });
 

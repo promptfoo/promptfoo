@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { handleSimilar } from '../../src/assertions/similar';
-import { matchesSimilarity } from '../../src/matchers';
+import { matchesSimilarity } from '../../src/matchers/similarity';
 
-vi.mock('../../src/matchers', () => ({
+vi.mock('../../src/matchers/similarity', () => ({
   matchesSimilarity: vi.fn().mockImplementation(async (expected, output, _threshold, inverse) => {
     if (inverse) {
       return {

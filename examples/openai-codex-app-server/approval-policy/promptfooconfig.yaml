@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Codex app-server approval handling
+
+prompts:
+  - 'Explain what command you would run to list files. Do not run it.'
+
+providers:
+  - id: openai:codex-app-server:gpt-5.4
+    config:
+      sandbox_mode: read-only
+      approval_policy: on-request
+      skip_git_repo_check: true
+      server_request_policy:
+        command_execution: decline
+        file_change: decline
+        mcp_elicitation: decline
+
+defaultTest:
+  assert:
+    - type: contains-any
+      value:
+        - ls
+        - find
+        - directory
+
+tests:
+  - vars: {}

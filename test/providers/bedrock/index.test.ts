@@ -55,7 +55,7 @@ const nodeHttpHandlerFactory = vi.hoisted(() => {
 });
 
 const credentialProviderSsoFactory = vi.hoisted(() => ({
-  mockSSOProvider: vi.fn(),
+  fromSSO: vi.fn(() => 'sso-provider'),
 }));
 
 vi.mock('@aws-sdk/client-bedrock-runtime', async (importOriginal) => {
@@ -74,6 +74,10 @@ vi.mock('@smithy/node-http-handler', () => ({
 }));
 
 const NodeHttpHandlerMock = vi.mocked(NodeHttpHandler);
+
+vi.mock('@aws-sdk/credential-provider-sso', () => ({
+  fromSSO: credentialProviderSsoFactory.fromSSO,
+}));
 
 // Preserve proxy variables so they can be restored after each test. These are
 // set in the container environment and can influence proxy-related logic in the
@@ -118,6 +122,8 @@ class TestBedrockProvider extends AwsBedrockGenericProvider {
 describe('AwsBedrockGenericProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    credentialProviderSsoFactory.fromSSO.mockReset();
+    credentialProviderSsoFactory.fromSSO.mockReturnValue('sso-provider');
     delete process.env.AWS_BEDROCK_MAX_RETRIES;
     delete process.env.AWS_BEARER_TOKEN_BEDROCK;
     // Ensure proxy environment variables do not force proxy-specific code paths
@@ -763,24 +769,14 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should return SSO credential provider when profile is specified', async () => {
-      vi.mock('@aws-sdk/credential-provider-sso', async (importOriginal) => {
-        return {
-          ...(await importOriginal()),
-
-          fromSSO: (config: any) => {
-            credentialProviderSsoFactory.mockSSOProvider();
-            expect(config).toEqual({ profile: 'test-profile' });
-            return 'sso-provider';
-          },
-        };
-      });
-
       const provider = new TestBedrockProvider({
         profile: 'test-profile',
       });
 
       const credentials = await provider.getCredentials();
-      expect(credentialProviderSsoFactory.mockSSOProvider).toHaveBeenCalledWith();
+      expect(credentialProviderSsoFactory.fromSSO).toHaveBeenCalledWith({
+        profile: 'test-profile',
+      });
       expect(credentials).toBe('sso-provider');
     });
 
@@ -2456,6 +2452,24 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
+    it('should prefer API-reported total_tokens when it differs from prompt + completion', async () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 25,
+          completion_tokens: 50,
+          total_tokens: 99,
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 25,
+        completion: 50,
+        total: 99,
+        numRequests: 1,
+      });
+    });
+
     it('should return undefined token counts when not provided by the API', async () => {
       const mockResponse = {
         outputs: [{ text: 'This is a generated response' }],
@@ -2512,6 +2526,24 @@ describe('BEDROCK_MODEL token counting functionality', () => {
         prompt: 30,
         completion: 45,
         total: 75, // 30 + 45 = 75, not "3045"
+        numRequests: 1,
+      });
+    });
+
+    it('should prefer API-reported total_tokens when chat completion totals differ', async () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 30,
+          completion_tokens: 45,
+          total_tokens: 101,
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 30,
+        completion: 45,
+        total: 101,
         numRequests: 1,
       });
     });

@@ -429,6 +429,20 @@ describe('Redteam Routes', () => {
       expect(mockedDoRedteamRun).toHaveBeenCalled();
     });
 
+    it('should not force runtime defaults when delay and maxConcurrency are omitted', async () => {
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: { purpose: 'test' },
+        });
+
+      expect(response.status).toBe(200);
+      const runArgs = mockedDoRedteamRun.mock.calls[0][0];
+      expect(runArgs.liveRedteamConfig).toEqual({ purpose: 'test' });
+      expect(runArgs).not.toHaveProperty('delay');
+      expect(runArgs).not.toHaveProperty('maxConcurrency');
+    });
+
     it('should return 400 when config is missing', async () => {
       const response = await request(app).post('/api/redteam/run').send({});
 

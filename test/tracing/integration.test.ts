@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { sleep } from '../../src/util/time';
 
 import type { EvaluateTestSuite } from '../../src/types/index';
 
@@ -11,6 +12,11 @@ vi.mock('../../src/tracing/store', () => ({
     getTrace: vi.fn().mockResolvedValue(null),
   })),
   TraceStore: vi.fn(),
+}));
+
+vi.mock('../../src/util/time', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/time')>()),
+  sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Define the mock provider class
@@ -73,6 +79,7 @@ describe('OpenTelemetry Tracing Integration', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {

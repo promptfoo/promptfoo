@@ -79,6 +79,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
 
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@v6
@@ -87,16 +89,10 @@ jobs:
           node-version: ${{ matrix.node == '20.20' && '20.20.1' || matrix.node }}
           cache: 'npm'
 
-      # Node 24.x ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      # Upgrade to npm@latest (>= 11.6.4) to fix this. Node 20.20/22.22 use npm 10.x which is unaffected.
-      - name: Upgrade npm for Node 24.x
-        if: matrix.node == '24.x'
-        run: npm install -g npm@latest
-
       - name: Use Python 3.14
         uses: actions/setup-python@v6
         with:
-          python-version: 3.14.2
+          python-version: 3.14.4
 
       # Ruby 4.0.1 is not yet available on Windows via setup-ruby, use 4.0.0 on Windows
       - name: Use Ruby
@@ -115,10 +111,14 @@ jobs:
 
       - name: Install Dependencies
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: npm ci
+        run: npx -y npm@11.11.0 ci
 
       - name: Test
         run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard && ' -- --coverage' || '' }}
+
+      - name: Check Backend Coverage Ratchets
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
+        run: npm run test:coverage:ratchet -- --report backend
 
       - name: Upload Backend Coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
@@ -152,14 +152,8 @@ jobs:
           node-version: ${{ matrix.node == '20.20' && '20.20.1' || matrix.node }}
           cache: 'npm'
 
-      # Node 24.x ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      # Upgrade to npm@latest (>= 11.6.4) to fix this. Node 20.20/22.22 use npm 10.x which is unaffected.
-      - name: Upgrade npm for Node 24.x
-        if: matrix.node == '24.x'
-        run: npm install -g npm@latest
-
       - name: Install Dependencies
-        run: npm ci
+        run: npx -y npm@11.11.0 ci
 
       - name: Build
         run: npm run build
@@ -298,7 +292,7 @@ jobs:
 
       - name: Check Formatting
         run: |
-          ruff check --select I --fix
+          ruff check --select F401,F841,I --fix
           ruff format
           git diff --exit-code || (echo "Files were modified by ruff. Please commit these changes." && exit 1)
 
@@ -392,9 +386,18 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run Site Tests
+      - name: Run Site Tests with Coverage
         working-directory: site
-        run: npm test
+        run: npm run test:coverage
+
+      - name: Upload Site Coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          files: ./site/coverage/coverage-final.json
+          flags: site
+          name: site-coverage
+          fail_ci_if_error: true
+          use_oidc: true
 
   webui:
     name: webui tests
@@ -403,6 +406,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
 
       - name: Use Node
         uses: actions/setup-node@v6
@@ -417,8 +422,14 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      - name: Run App Browser Tests
+        run: npm run test:app:browser
+
       - name: Run App Tests with Coverage
         run: npm run test:coverage --prefix src/app
+
+      - name: Check Frontend Coverage Ratchets
+        run: npm run test:coverage:ratchet -- --report frontend
 
       - name: Upload Frontend Coverage to Codecov
         uses: codecov/codecov-action@v6
@@ -450,7 +461,7 @@ jobs:
       - name: Use Python 3.14
         uses: actions/setup-python@v6
         with:
-          python-version: 3.14.2
+          python-version: 3.14.4
 
       - name: Use Ruby
         uses: ruby/setup-ruby@v1
@@ -485,7 +496,7 @@ jobs:
       - name: Use Python 3.14
         uses: actions/setup-python@v6
         with:
-          python-version: 3.14.2
+          python-version: 3.14.4
 
       - name: Use Ruby
         uses: ruby/setup-ruby@v1

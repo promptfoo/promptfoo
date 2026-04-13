@@ -15,7 +15,9 @@ import {
   disableCache,
   enableCache,
   fetchWithCache,
+  getCache,
   isCacheEnabled,
+  withCacheNamespace,
 } from '../src/cache';
 import { fetchWithRetries } from '../src/util/fetch/index';
 
@@ -33,37 +35,61 @@ vi.mock('../src/util/time', () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
-// Mock cacheMigration
-vi.mock('../src/cacheMigration', () => ({
-  shouldRunMigration: vi.fn().mockReturnValue(false), // Don't run migration by default in tests
-  runMigration: vi.fn().mockReturnValue({
-    success: true,
-    stats: { successCount: 0, skippedExpired: 0, failureCount: 0, errors: [] },
-  }),
-}));
-
 const mockFetchWithRetries = vi.mocked(fetchWithRetries);
 
 // Mock cache-manager v7
 vi.mock('cache-manager', () => ({
   createCache: vi.fn().mockImplementation(({ stores }) => {
-    const cache = new Map();
+    const cache = new Map<string, unknown>();
+    const expiresAt = new Map<string, number>();
     const inflight = new Map();
+    const memoryStore = {
+      iterator: vi.fn().mockImplementation(async function* (_namespace?: string) {
+        for (const [key, value] of cache.entries()) {
+          yield [key, value];
+        }
+      }),
+      delete: vi.fn().mockImplementation((key: string) => {
+        cache.delete(key);
+        expiresAt.delete(key);
+        return Promise.resolve(true);
+      }),
+      deleteMany: vi.fn().mockImplementation((keys: string[]) => {
+        for (const key of keys) {
+          cache.delete(key);
+          expiresAt.delete(key);
+        }
+        return Promise.resolve(true);
+      }),
+      clear: vi.fn().mockImplementation(() => {
+        cache.clear();
+        expiresAt.clear();
+        return Promise.resolve();
+      }),
+    };
+
     return {
-      stores: stores || [],
+      stores: stores?.length ? stores : [memoryStore],
       get: vi.fn().mockImplementation((key) => cache.get(key)),
-      set: vi.fn().mockImplementation((key, value) => {
+      set: vi.fn().mockImplementation((key, value, ttl) => {
         cache.set(key, value);
+        if (ttl === undefined) {
+          expiresAt.delete(key);
+        } else {
+          expiresAt.set(key, Date.now() + ttl);
+        }
         return Promise.resolve();
       }),
       del: vi.fn().mockImplementation((key) => {
         cache.delete(key);
+        expiresAt.delete(key);
         return Promise.resolve();
       }),
       clear: vi.fn().mockImplementation(() => {
         cache.clear();
+        expiresAt.clear();
         inflight.clear();
-        return Promise.resolve();
+        return Promise.resolve(true);
       }),
       wrap: vi.fn().mockImplementation(async (key, fn) => {
         if (cache.has(key)) {
@@ -87,11 +113,37 @@ vi.mock('cache-manager', () => ({
         return pending;
       }),
       // Add required Cache interface methods
-      mget: vi.fn(),
-      mset: vi.fn(),
-      mdel: vi.fn(),
+      mget: vi.fn().mockImplementation((keys: string[]) => {
+        return Promise.resolve(keys.map((key) => cache.get(key)));
+      }),
+      mset: vi
+        .fn()
+        .mockImplementation((list: Array<{ key: string; value: unknown; ttl?: number }>) => {
+          for (const { key, value, ttl } of list) {
+            cache.set(key, value);
+            if (ttl === undefined) {
+              expiresAt.delete(key);
+            } else {
+              expiresAt.set(key, Date.now() + ttl);
+            }
+          }
+          return Promise.resolve(list);
+        }),
+      mdel: vi.fn().mockImplementation((keys: string[]) => {
+        for (const key of keys) {
+          cache.delete(key);
+          expiresAt.delete(key);
+        }
+        return Promise.resolve(true);
+      }),
       reset: vi.fn(),
-      ttl: vi.fn(),
+      ttl: vi.fn().mockImplementation((key: string) => {
+        const expiry = expiresAt.get(key);
+        if (expiry === undefined) {
+          return Promise.resolve(undefined);
+        }
+        return Promise.resolve(Math.max(0, expiry - Date.now()));
+      }),
       on: vi.fn(),
       removeAllListeners: vi.fn(),
     } as any;
@@ -124,7 +176,13 @@ const mockFetchWithRetriesResponse = (
     status: ok ? 200 : 400,
     statusText: ok ? 'OK' : 'Bad Request',
     text: () => Promise.resolve(responseText),
-    json: () => (ok ? Promise.resolve(response) : Promise.reject(new Error('Invalid JSON'))),
+    json: () => {
+      try {
+        return Promise.resolve(JSON.parse(responseText));
+      } catch (err) {
+        return Promise.reject(err);
+      }
+    },
     headers: new Headers({
       'content-type': contentType,
       'x-session-id': '45',
@@ -156,8 +214,8 @@ describe('cache configuration', () => {
     process.env.NODE_ENV = 'test';
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
-    // In test environment, stores array should be empty (memory cache)
-    expect(cache.stores).toEqual([]);
+    // In test environment, promptfoo falls back to an in-memory store instead of disk.
+    expect(cache.stores.length).toBeGreaterThan(0);
   });
 
   it('should use disk cache in non-test environment', async () => {
@@ -218,6 +276,61 @@ describe('fetchWithCache', () => {
   });
 
   describe('with cache enabled', () => {
+    it('should isolate direct cache access by namespace', async () => {
+      const cache = getCache();
+
+      await cache.set('shared-key', 'global-value');
+
+      await withCacheNamespace('repeat:0', async () => {
+        const scopedCache = getCache();
+        await scopedCache.set('shared-key', 'repeat-0-value');
+
+        expect(await scopedCache.get('shared-key')).toBe('repeat-0-value');
+      });
+
+      await withCacheNamespace('repeat:1', async () => {
+        const scopedCache = getCache();
+
+        expect(await scopedCache.get('shared-key')).toBeUndefined();
+      });
+
+      expect(await cache.get('shared-key')).toBe('global-value');
+    });
+
+    it('should isolate bulk cache access and namespace-local clear operations', async () => {
+      const cache = getCache();
+      await cache.mset([{ key: 'bulk-key', value: 'global-value' }]);
+
+      await withCacheNamespace('repeat:0', async () => {
+        const scopedCache = getCache();
+        const savedEntries = await scopedCache.mset([
+          { key: 'bulk-key', value: 'repeat-0-value', ttl: 5000 },
+        ]);
+
+        expect(savedEntries).toEqual([{ key: 'bulk-key', value: 'repeat-0-value', ttl: 5000 }]);
+        expect(await scopedCache.mget(['bulk-key'])).toEqual(['repeat-0-value']);
+        expect(await scopedCache.ttl('bulk-key')).toEqual(expect.any(Number));
+      });
+
+      await withCacheNamespace('repeat:1', async () => {
+        const scopedCache = getCache();
+
+        expect(await scopedCache.mget(['bulk-key'])).toEqual([undefined]);
+        expect(await scopedCache.ttl('bulk-key')).toBeUndefined();
+        expect(await scopedCache.clear()).toBe(true);
+      });
+
+      expect(await cache.mget(['bulk-key'])).toEqual(['global-value']);
+
+      await withCacheNamespace('repeat:0', async () => {
+        const scopedCache = getCache();
+
+        expect(await scopedCache.mget(['bulk-key'])).toEqual(['repeat-0-value']);
+        expect(await scopedCache.mdel(['bulk-key'])).toBe(true);
+        expect(await scopedCache.mget(['bulk-key'])).toEqual([undefined]);
+      });
+    });
+
     it('should fetch and cache successful requests', async () => {
       const mockResponse = mockFetchWithRetriesResponse(true, response);
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
@@ -272,6 +385,38 @@ describe('fetchWithCache', () => {
       expect(cachedResult.cached).toBe(true);
       expect(cachedResult.data).toEqual(response);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
+    it('should isolate in-flight fetch deduping by namespace', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'repeat 0' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'repeat 1' }));
+
+      const [repeat0Result, repeat1Result] = await Promise.all([
+        withCacheNamespace('repeat:0', () => fetchWithCache(url, {}, 1000)),
+        withCacheNamespace('repeat:1', () => fetchWithCache(url, {}, 1000)),
+      ]);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(repeat0Result.data).toEqual({ data: 'repeat 0' });
+      expect(repeat1Result.data).toEqual({ data: 'repeat 1' });
+
+      const repeat0CachedResult = await withCacheNamespace('repeat:0', () =>
+        fetchWithCache(url, {}, 1000),
+      );
+      const repeat1CachedResult = await withCacheNamespace('repeat:1', () =>
+        fetchWithCache(url, {}, 1000),
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(repeat0CachedResult).toMatchObject({
+        cached: true,
+        data: { data: 'repeat 0' },
+      });
+      expect(repeat1CachedResult).toMatchObject({
+        cached: true,
+        data: { data: 'repeat 1' },
+      });
     });
 
     it('should not cache failed requests', async () => {
@@ -484,6 +629,8 @@ describe('fetchWithCache', () => {
   });
 
   describe('with cache disabled', () => {
+    const BODY_READ_TOTAL_ATTEMPTS = 3; // 1 initial attempt + 2 retries
+
     beforeEach(() => {
       disableCache();
     });
@@ -518,17 +665,17 @@ describe('fetchWithCache', () => {
     });
 
     it('should retry on transient body-read error then succeed', async () => {
-      let textCallCount = 0;
       const responseText = JSON.stringify(response);
-      // First fetch: text() fails with transient error
+      const textMockFail = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValue(new Error('ECONNRESET during body read'));
+      const textMockSuccess = vi.fn<() => Promise<string>>().mockResolvedValue(responseText);
+
       mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         status: 200,
         statusText: 'OK',
-        text: () => {
-          textCallCount++;
-          return Promise.reject(new Error('ECONNRESET during body read'));
-        },
+        text: textMockFail,
         headers: new Headers({ 'content-type': 'application/json' }),
       } as unknown as Response);
       // Second fetch (after body retry): succeeds
@@ -536,24 +683,22 @@ describe('fetchWithCache', () => {
         ok: true,
         status: 200,
         statusText: 'OK',
-        text: () => {
-          textCallCount++;
-          return Promise.resolve(responseText);
-        },
+        text: textMockSuccess,
         headers: new Headers({ 'content-type': 'application/json' }),
       } as unknown as Response);
 
       const result = await fetchWithCache(url, {}, 1000);
 
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
-      expect(textCallCount).toBe(2);
+      expect(textMockFail).toHaveBeenCalledTimes(1);
+      expect(textMockSuccess).toHaveBeenCalledTimes(1);
       expect(result.data).toEqual(response);
       expect(result.cached).toBe(false);
     });
 
     it('should throw after exhausting body-read retries', async () => {
       // All fetches return responses whose text() fails with transient error
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < BODY_READ_TOTAL_ATTEMPTS; i++) {
         mockFetchWithRetries.mockResolvedValueOnce({
           ok: true,
           status: 200,
@@ -564,7 +709,7 @@ describe('fetchWithCache', () => {
       }
 
       await expect(fetchWithCache(url, {}, 1000)).rejects.toThrow('ECONNRESET');
-      expect(mockFetchWithRetries).toHaveBeenCalledTimes(3); // 1 initial + 2 retries
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(BODY_READ_TOTAL_ATTEMPTS);
     });
 
     it('should not retry body-read for non-transient errors', async () => {

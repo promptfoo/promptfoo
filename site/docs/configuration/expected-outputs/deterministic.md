@@ -1,5 +1,6 @@
 ---
 sidebar_position: 6
+sidebar_label: Deterministic metrics
 title: Deterministic Metrics for LLM Output Validation
 description: Learn how to validate LLM outputs using deterministic logical tests including exact matching, regex patterns, JSON/XML validation, and text similarity metrics
 keywords:

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesFactuality } from '../../src/matchers';
+import { matchesFactuality } from '../../src/matchers/llmGrading';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
 import type { GradingConfig } from '../../src/types/index';

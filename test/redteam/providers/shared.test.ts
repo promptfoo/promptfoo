@@ -6,7 +6,10 @@ import {
   TEMPERATURE,
 } from '../../../src/redteam/providers/constants';
 import {
+  BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
+  buildGraderResultAssertion,
   formatRedteamHistoryAsTranscript,
+  getGraderAssertionValue,
   getTargetResponse,
   type Message,
   messagesToRedteamHistory,
@@ -17,6 +20,8 @@ import { sleep } from '../../../src/util/time';
 
 import type {
   ApiProvider,
+  Assertion,
+  AssertionSet,
   CallApiContextParams,
   CallApiFunction,
   CallApiOptionsParams,
@@ -87,9 +92,16 @@ vi.mock('../../../src/util/server', () => ({
 const mockedSleep = vi.mocked(sleep);
 const mockedLoadApiProviders = mockLoadApiProviders;
 const mockedCheckServerFeatureSupport = mockCheckServerFeatureSupport;
-const _mockedOpenAiProvider = MockOpenAiChatCompletionProvider;
+
+function setCliStateConfig(config: typeof cliState.config) {
+  cliState.config = config;
+}
 
 describe('shared redteam provider utilities', () => {
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   beforeEach(() => {
     // Clear all mocks thoroughly
     vi.clearAllMocks();
@@ -106,11 +118,11 @@ describe('shared redteam provider utilities', () => {
     redteamProviderManager.clearProvider();
 
     // Reset cliState to default
-    cliState.config = {
+    setCliStateConfig({
       redteam: {
         provider: undefined,
       },
-    };
+    });
   });
 
   describe('RedteamProviderManager', () => {
@@ -196,18 +208,15 @@ describe('shared redteam provider utilities', () => {
       };
 
       // Clear and set up cliState for this test
-      cliState.config = {
+      setCliStateConfig({
         redteam: {
           provider: mockStateProvider,
         },
-      };
+      });
 
       const result = await redteamProviderManager.getProvider({});
 
       expect(result).toBe(mockStateProvider);
-
-      // Clean up for next test
-      cliState.config!.redteam!.provider = undefined;
     });
 
     it('sets and reuses providers', async () => {
@@ -226,7 +235,9 @@ describe('shared redteam provider utilities', () => {
 
       expect(result).toBe(mockProvider);
       expect(jsonResult).toBe(mockProvider);
-      expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2); // Once for regular, once for jsonOnly
+      expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2); // Preloads regular and jsonOnly caches
+      expect(mockedLoadApiProviders).toHaveBeenNthCalledWith(1, ['test-provider']);
+      expect(mockedLoadApiProviders).toHaveBeenNthCalledWith(2, ['test-provider']);
     });
 
     describe('getGradingProvider', () => {
@@ -252,11 +263,11 @@ describe('shared redteam provider utilities', () => {
         mockedLoadApiProviders.mockResolvedValue([mockProvider]);
 
         // Inject defaultTest provider config
-        (cliState as any).config = {
+        setCliStateConfig({
           defaultTest: {
             provider: 'from-defaultTest-provider',
           },
-        };
+        });
 
         const got = await redteamProviderManager.getGradingProvider();
         expect(got).toBe(mockProvider);
@@ -265,7 +276,7 @@ describe('shared redteam provider utilities', () => {
 
       it('falls back to redteam provider when grading not set', async () => {
         redteamProviderManager.clearProvider();
-        (cliState as any).config = {}; // no defaultTest
+        setCliStateConfig({}); // no defaultTest
 
         // Expect fallback to default OpenAI redteam provider
         const got = await redteamProviderManager.getGradingProvider({ jsonOnly: true });
@@ -287,7 +298,7 @@ describe('shared redteam provider utilities', () => {
         mockedLoadApiProviders.mockResolvedValue([mockProvider]);
 
         // Set defaultTest.options.provider but not redteam.provider
-        (cliState as any).config = {
+        setCliStateConfig({
           redteam: {
             provider: undefined,
           },
@@ -296,7 +307,7 @@ describe('shared redteam provider utilities', () => {
               provider: 'defaultTest-provider',
             },
           },
-        };
+        });
 
         const got = await redteamProviderManager.getProvider({});
         expect(got).toBe(mockProvider);
@@ -312,14 +323,14 @@ describe('shared redteam provider utilities', () => {
         mockedLoadApiProviders.mockResolvedValue([mockProvider]);
 
         // Set defaultTest.provider directly
-        (cliState as any).config = {
+        setCliStateConfig({
           redteam: {
             provider: undefined,
           },
           defaultTest: {
             provider: 'defaultTest-direct-provider',
           },
-        };
+        });
 
         const got = await redteamProviderManager.getProvider({});
         expect(got).toBe(mockProvider);
@@ -335,7 +346,7 @@ describe('shared redteam provider utilities', () => {
         mockedLoadApiProviders.mockResolvedValue([redteamProvider]);
 
         // Set both redteam.provider and defaultTest.options.provider
-        (cliState as any).config = {
+        setCliStateConfig({
           redteam: {
             provider: 'redteam-explicit-provider',
           },
@@ -344,7 +355,7 @@ describe('shared redteam provider utilities', () => {
               provider: 'defaultTest-provider',
             },
           },
-        };
+        });
 
         const got = await redteamProviderManager.getProvider({});
         expect(got).toBe(redteamProvider);
@@ -355,12 +366,12 @@ describe('shared redteam provider utilities', () => {
         redteamProviderManager.clearProvider();
         mockOpenAiInstances.length = 0;
 
-        (cliState as any).config = {
+        setCliStateConfig({
           redteam: {
             provider: undefined,
           },
           // No defaultTest
-        };
+        });
 
         const got = await redteamProviderManager.getProvider({});
         expect(got.id()).toContain('openai:');
@@ -449,6 +460,163 @@ describe('shared redteam provider utilities', () => {
   });
 
   describe('getTargetResponse', () => {
+    it('returns an error before calling the target when the prompt exceeds maxCharsPerMessage', async () => {
+      setCliStateConfig({
+        redteam: {
+          maxCharsPerMessage: 5,
+        },
+      });
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'test response',
+          tokenUsage: { numRequests: 1 },
+        }),
+      };
+
+      const result = await getTargetResponse(mockProvider, 'too long');
+
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        output: '',
+        error: 'Target prompt message at prompt exceeds maxCharsPerMessage=5: 8 characters.',
+        tokenUsage: { numRequests: 0 },
+      });
+    });
+
+    it('only enforces maxCharsPerMessage for user messages in chat arrays', async () => {
+      setCliStateConfig({
+        redteam: {
+          maxCharsPerMessage: 5,
+        },
+      });
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'ok',
+          tokenUsage: { numRequests: 1 },
+        }),
+      };
+      const prompt = JSON.stringify([
+        { role: 'system', content: 'this system message is long' },
+        { role: 'user', content: 'short' },
+      ]);
+
+      const result = await getTargetResponse(mockProvider, prompt);
+
+      expect(mockProvider.callApi).toHaveBeenCalledWith(prompt, undefined, undefined);
+      expect(result.output).toBe('ok');
+    });
+
+    it('uses maxCharsPerMessage from test metadata when cliState is unset', async () => {
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'test response',
+          tokenUsage: { numRequests: 1 },
+        }),
+      };
+      const context = {
+        prompt: { raw: '', label: '' },
+        vars: {},
+        test: {
+          metadata: {
+            pluginConfig: {
+              maxCharsPerMessage: 5,
+            },
+          },
+        },
+      } as CallApiContextParams;
+
+      const result = await getTargetResponse(mockProvider, 'too long', context);
+
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+      expect(result.error).toBe(
+        'Target prompt message at prompt exceeds maxCharsPerMessage=5: 8 characters.',
+      );
+    });
+
+    it('checks GOAT audio/image hybrid payload transcript text without counting base64 blobs', async () => {
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'ok',
+          tokenUsage: { numRequests: 1 },
+        }),
+      };
+      const context = {
+        prompt: { raw: '', label: '' },
+        vars: {},
+        test: {
+          metadata: {
+            pluginConfig: {
+              maxCharsPerMessage: 5,
+            },
+          },
+        },
+      } as CallApiContextParams;
+      const prompt = JSON.stringify({
+        _promptfoo_audio_hybrid: true,
+        history: [
+          { role: 'user', content: 'tiny' },
+          { role: 'assistant', content: 'this assistant response is long and should be ignored' },
+        ],
+        currentTurn: {
+          role: 'user',
+          transcript: 'short',
+          image: {
+            data: 'a'.repeat(500),
+            format: 'png',
+          },
+        },
+      });
+
+      const result = await getTargetResponse(mockProvider, prompt, context);
+
+      expect(mockProvider.callApi).toHaveBeenCalledWith(prompt, context, undefined);
+      expect(result.output).toBe('ok');
+    });
+
+    it('rejects GOAT audio/image hybrid payloads when currentTurn transcript exceeds maxCharsPerMessage', async () => {
+      const mockProvider: ApiProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'ok',
+          tokenUsage: { numRequests: 1 },
+        }),
+      };
+      const context = {
+        prompt: { raw: '', label: '' },
+        vars: {},
+        test: {
+          metadata: {
+            pluginConfig: {
+              maxCharsPerMessage: 5,
+            },
+          },
+        },
+      } as CallApiContextParams;
+      const prompt = JSON.stringify({
+        _promptfoo_audio_hybrid: true,
+        history: [],
+        currentTurn: {
+          role: 'user',
+          transcript: 'too long',
+          audio: {
+            data: 'a'.repeat(500),
+            format: 'mp3',
+          },
+        },
+      });
+
+      const result = await getTargetResponse(mockProvider, prompt, context);
+
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+      expect(result.error).toBe(
+        'Target prompt message at currentTurn.transcript exceeds maxCharsPerMessage=5: 8 characters.',
+      );
+    });
+
     it('returns successful response with string output', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
@@ -836,8 +1004,51 @@ describe('shared redteam provider utilities', () => {
       expect(result.success).toBe(false);
       expect(mockedCheckServerFeatureSupport).toHaveBeenCalledWith(
         'blocking-question-analysis',
-        '2025-06-16T14:49:11-07:00',
+        BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
       );
+    });
+  });
+
+  describe('grader assertion helpers', () => {
+    const singleAssertion: Assertion = {
+      type: 'llm-rubric',
+      value: 'original rubric',
+    };
+    const assertionSet: AssertionSet = {
+      type: 'assert-set',
+      assert: [singleAssertion],
+    };
+
+    it('uses grade assertion when present', () => {
+      expect(
+        buildGraderResultAssertion(
+          { type: 'javascript', pass: true, score: 1, reason: 'ok' } as Assertion,
+          singleAssertion,
+          'rendered rubric',
+        ),
+      ).toEqual({
+        type: 'javascript',
+        pass: true,
+        score: 1,
+        reason: 'ok',
+        value: 'rendered rubric',
+      });
+    });
+
+    it('falls back to a single assertion and exposes its value', () => {
+      expect(buildGraderResultAssertion(undefined, singleAssertion, 'rendered rubric')).toEqual({
+        type: 'llm-rubric',
+        value: 'rendered rubric',
+      });
+      expect(getGraderAssertionValue(singleAssertion)).toBe('original rubric');
+    });
+
+    it('ignores assert-set assertions and undefined values', () => {
+      expect(
+        buildGraderResultAssertion(undefined, assertionSet, 'rendered rubric'),
+      ).toBeUndefined();
+      expect(getGraderAssertionValue(assertionSet)).toBeUndefined();
+      expect(getGraderAssertionValue(undefined)).toBeUndefined();
     });
   });
 });

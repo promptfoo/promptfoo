@@ -123,6 +123,21 @@ describe('RedteamGoatProvider', () => {
     });
   });
 
+  it('should enforce maxCharsPerMessage from provider config without cliState', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxCharsPerMessage: 5,
+      maxTurns: 1,
+      stateful: true,
+    });
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider);
+
+    await provider.callApi('test prompt', context);
+
+    expect(targetProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it('should preserve an explicit maxTurns value of 0', async () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',

@@ -29,6 +29,12 @@
       "enabled": false
     },
     {
+      "description": "Group example directory updates as a fallback so package-specific groups still win",
+      "matchFileNames": ["examples/**/package.json"],
+      "groupName": "Example dependencies",
+      "schedule": ["before 6am on the first day of the month"]
+    },
+    {
       "description": "Group @inquirer packages together",
       "matchPackagePatterns": ["^@inquirer/"],
       "groupName": "@inquirer packages"
@@ -226,13 +232,7 @@
       "schedule": ["before 6am on Monday"]
     },
     {
-      "description": "Group example directory updates to reduce noise",
-      "matchFileNames": ["examples/**/package.json"],
-      "groupName": "Example dependencies",
-      "schedule": ["before 6am on the first day of the month"]
-    },
-    {
-      "description": "LLM provider packages: frequent updates, minimal stabilization",
+      "description": "LLM provider packages: frequent updates with a short stabilization window",
       "matchPackagePatterns": [
         "^@anthropic-ai/",
         "^@aws-sdk/client-bedrock",
@@ -250,7 +250,7 @@
       ],
       "schedule": ["every weekday"],
       "rangeStrategy": "bump",
-      "minimumReleaseAge": "0 days"
+      "minimumReleaseAge": "2 days"
     },
     {
       "description": "Runtime npm deps: wait 5 days before updates",
@@ -310,6 +310,7 @@
     {
       "description": "Vercel AI SDK: monthly updates to reduce noise from frequent patch releases",
       "matchPackageNames": ["ai"],
+      "groupName": "Vercel AI SDK",
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
       "minimumReleaseAge": "7 days"

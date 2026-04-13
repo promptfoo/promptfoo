@@ -80,6 +80,16 @@ describe('ElevenLabsAgentsProvider', () => {
       expect(provider.config.maxTurns).toBe(0);
     });
 
+    it('should preserve explicit zero retries', () => {
+      const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
+        config: {
+          retries: 0,
+        },
+      });
+
+      expect(provider.config.retries).toBe(0);
+    });
+
     it('should use custom label if provided', () => {
       const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
         label: 'Custom Agent Label',

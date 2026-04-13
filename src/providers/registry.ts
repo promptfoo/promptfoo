@@ -272,28 +272,34 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) =>
-      providerPath.startsWith('azure:') ||
-      providerPath.startsWith('azureopenai:') ||
-      providerPath === 'azure:moderation',
+      providerPath.startsWith('azure:') || providerPath.startsWith('azureopenai:'),
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      // Handle azure:moderation directly
-      if (providerPath === 'azure:moderation') {
-        const { deploymentName, modelName } = providerOptions.config || {};
-        return new AzureModerationProvider(
-          deploymentName || modelName || 'text-content-safety',
-          providerOptions,
-        );
-      }
-
-      // Handle other Azure providers
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const deploymentName = splits[2];
 
+      if (modelType === 'moderation') {
+        if (providerPath.startsWith('azureopenai:')) {
+          throw new Error(
+            'Azure OpenAI does not support moderation. Use azure:moderation instead, which routes to Azure Content Safety.',
+          );
+        }
+        const resolvedDeployment =
+          deploymentName ||
+          providerOptions.config?.deploymentName ||
+          providerOptions.config?.modelName ||
+          'text-content-safety';
+        if (!AzureModerationProvider.MODERATION_MODEL_IDS.includes(resolvedDeployment)) {
+          throw new Error(
+            `Unknown Azure moderation model: ${resolvedDeployment}. Supported models: ${AzureModerationProvider.MODERATION_MODEL_IDS.join(', ')}`,
+          );
+        }
+        return new AzureModerationProvider(resolvedDeployment, providerOptions);
+      }
       if (modelType === 'chat') {
         return new AzureChatCompletionProvider(deploymentName, providerOptions);
       }
@@ -888,6 +894,27 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
       const configuredModel = getConfiguredOpenAiModel(providerOptions);
+
+      // Codex app-server providers (openai:codex-app-server or openai:codex-desktop)
+      if (modelType === 'codex-app-server' || modelType === 'codex-desktop') {
+        const { OpenAICodexAppServerProvider } = await import('./openai/codex-app-server');
+        const codexModel = modelName || configuredModel;
+        const codexProviderId = providerOptions.id ?? providerPath;
+        return new OpenAICodexAppServerProvider({
+          ...providerOptions,
+          id: codexProviderId,
+          config: codexModel
+            ? {
+                ...providerOptions.config,
+                model: codexModel,
+              }
+            : providerOptions.config,
+          env: {
+            ...context.env,
+            ...providerOptions.env,
+          },
+        });
+      }
 
       // Codex SDK providers (openai:codex-sdk or openai:codex)
       if (modelType === 'codex-sdk' || modelType === 'codex') {

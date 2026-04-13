@@ -18,9 +18,22 @@ const setAuthHeaders = (
   (provider as any).initialized = true;
 };
 
+const originalOpenAiTemperature = process.env.OPENAI_TEMPERATURE;
+const originalOpenAiMaxTokens = process.env.OPENAI_MAX_TOKENS;
+const originalOpenAiMaxCompletionTokens = process.env.OPENAI_MAX_COMPLETION_TOKENS;
+const originalOpenAiTopP = process.env.OPENAI_TOP_P;
+const originalOpenAiPresencePenalty = process.env.OPENAI_PRESENCE_PENALTY;
+const originalOpenAiFrequencyPenalty = process.env.OPENAI_FREQUENCY_PENALTY;
+
 describe('AzureChatCompletionProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.OPENAI_TEMPERATURE;
+    delete process.env.OPENAI_MAX_TOKENS;
+    delete process.env.OPENAI_MAX_COMPLETION_TOKENS;
+    delete process.env.OPENAI_TOP_P;
+    delete process.env.OPENAI_PRESENCE_PENALTY;
+    delete process.env.OPENAI_FREQUENCY_PENALTY;
     vi.spyOn(AzureChatCompletionProvider.prototype as any, 'getAuthHeaders').mockResolvedValue({
       'api-key': 'test-key',
     });
@@ -28,6 +41,36 @@ describe('AzureChatCompletionProvider', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    if (originalOpenAiTemperature === undefined) {
+      delete process.env.OPENAI_TEMPERATURE;
+    } else {
+      process.env.OPENAI_TEMPERATURE = originalOpenAiTemperature;
+    }
+    if (originalOpenAiMaxTokens === undefined) {
+      delete process.env.OPENAI_MAX_TOKENS;
+    } else {
+      process.env.OPENAI_MAX_TOKENS = originalOpenAiMaxTokens;
+    }
+    if (originalOpenAiMaxCompletionTokens === undefined) {
+      delete process.env.OPENAI_MAX_COMPLETION_TOKENS;
+    } else {
+      process.env.OPENAI_MAX_COMPLETION_TOKENS = originalOpenAiMaxCompletionTokens;
+    }
+    if (originalOpenAiTopP === undefined) {
+      delete process.env.OPENAI_TOP_P;
+    } else {
+      process.env.OPENAI_TOP_P = originalOpenAiTopP;
+    }
+    if (originalOpenAiPresencePenalty === undefined) {
+      delete process.env.OPENAI_PRESENCE_PENALTY;
+    } else {
+      process.env.OPENAI_PRESENCE_PENALTY = originalOpenAiPresencePenalty;
+    }
+    if (originalOpenAiFrequencyPenalty === undefined) {
+      delete process.env.OPENAI_FREQUENCY_PENALTY;
+    } else {
+      process.env.OPENAI_FREQUENCY_PENALTY = originalOpenAiFrequencyPenalty;
+    }
   });
 
   describe('config merging', () => {
@@ -197,6 +240,55 @@ describe('AzureChatCompletionProvider', () => {
       };
       const { body } = await (provider as any).getOpenAiBody('test prompt', context);
       expect(body.response_format.json_schema.name).toBe('dynamic_schema');
+    });
+
+    it('should omit default parameters when omitDefaults is true', async () => {
+      provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          omitDefaults: true,
+        },
+      });
+      setAuthHeaders(provider);
+
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+
+      expect(body.max_tokens).toBeUndefined();
+      expect('max_tokens' in body).toBe(false);
+      expect(body.temperature).toBeUndefined();
+      expect('temperature' in body).toBe(false);
+      expect(body.top_p).toBeUndefined();
+      expect('top_p' in body).toBe(false);
+      expect(body.presence_penalty).toBeUndefined();
+      expect('presence_penalty' in body).toBe(false);
+      expect(body.frequency_penalty).toBeUndefined();
+      expect('frequency_penalty' in body).toBe(false);
+    });
+
+    it('should use env defaults with omitDefaults when OPENAI env vars are set', async () => {
+      process.env.OPENAI_TEMPERATURE = '0.5';
+      process.env.OPENAI_MAX_TOKENS = '2048';
+      process.env.OPENAI_TOP_P = '0.9';
+      process.env.OPENAI_PRESENCE_PENALTY = '0.1';
+      process.env.OPENAI_FREQUENCY_PENALTY = '0.2';
+
+      provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          omitDefaults: true,
+        },
+      });
+      setAuthHeaders(provider);
+
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+
+      expect(body.max_tokens).toBe(2048);
+      expect(body.temperature).toBe(0.5);
+      expect(body.top_p).toBe(0.9);
+      expect(body.presence_penalty).toBe(0.1);
+      expect(body.frequency_penalty).toBe(0.2);
     });
   });
 
@@ -618,6 +710,51 @@ describe('AzureChatCompletionProvider', () => {
       expect(body).not.toHaveProperty('max_tokens');
     });
 
+    it('should omit default max_completion_tokens when omitDefaults is true for reasoning models', async () => {
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          isReasoningModel: true,
+          omitDefaults: true,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+      expect(body.max_completion_tokens).toBeUndefined();
+      expect('max_completion_tokens' in body).toBe(false);
+    });
+
+    it('should prefer OPENAI_MAX_COMPLETION_TOKENS over OPENAI_MAX_TOKENS for reasoning models', async () => {
+      process.env.OPENAI_MAX_COMPLETION_TOKENS = '4096';
+      process.env.OPENAI_MAX_TOKENS = '2048';
+
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          isReasoningModel: true,
+          omitDefaults: true,
+        },
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+
+      expect(body).toHaveProperty('max_completion_tokens', 4096);
+      expect(body).not.toHaveProperty('max_tokens');
+    });
+
+    it('should fall back to OPENAI_MAX_TOKENS for reasoning models when OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
+      process.env.OPENAI_MAX_TOKENS = '2048';
+
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          isReasoningModel: true,
+          omitDefaults: true,
+        },
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+
+      expect(body).toHaveProperty('max_completion_tokens', 2048);
+      expect(body).not.toHaveProperty('max_tokens');
+    });
+
     it('should use reasoning_effort for reasoning models', async () => {
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
@@ -627,6 +764,20 @@ describe('AzureChatCompletionProvider', () => {
       });
       const { body } = await (provider as any).getOpenAiBody('test prompt');
       expect(body).toHaveProperty('reasoning_effort', 'high');
+    });
+
+    it('should omit default reasoning_effort when omitDefaults is true for reasoning models', async () => {
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          isReasoningModel: true,
+          omitDefaults: true,
+        },
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+
+      expect(body.reasoning_effort).toBeUndefined();
+      expect('reasoning_effort' in body).toBe(false);
     });
 
     it('should not include temperature for reasoning models', async () => {

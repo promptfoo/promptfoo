@@ -1,3 +1,4 @@
+import { mockWindowOpen } from '@app/tests/browserMocks';
 import { callApi } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
@@ -175,6 +176,37 @@ const renderWithRouter = (component: React.ReactElement) => {
   return renderWithProviders(<MemoryRouter>{component}</MemoryRouter>);
 };
 
+function createCopyEvalResponse(): Response {
+  return {
+    ok: true,
+    json: () => Promise.resolve({ id: 'new-eval-id', distinctTestCount: 1234 }),
+    status: 200,
+    statusText: 'OK',
+    headers: new Headers(),
+    redirected: false,
+    type: 'basic',
+    url: 'http://example.com',
+    bodyUsed: false,
+    arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    blob: () => Promise.resolve(new Blob()),
+    formData: () => Promise.resolve(new FormData()),
+    text: () => Promise.resolve(''),
+    body: null,
+    bytes: () => Promise.resolve(new Uint8Array()),
+    clone: () => createCopyEvalResponse(),
+  };
+}
+
+beforeEach(() => {
+  mockUseFilterMode.mockReturnValue({
+    filterMode: 'all',
+    setFilterMode: vi.fn(),
+  });
+  vi.mocked(callApi).mockReset();
+  vi.mocked(callApi).mockResolvedValue(createCopyEvalResponse());
+  mockWindowOpen();
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -318,50 +350,12 @@ describe('ResultsView Share Button', () => {
 });
 describe('ResultsView Copy Eval', () => {
   const mockOnRecentEvalSelected = vi.fn();
-  const mockCallApi = vi.mocked(callApi);
-  let mockWindowOpen: ReturnType<typeof vi.spyOn>;
+  let mockedWindowOpen: ReturnType<typeof mockWindowOpen>;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockWindowOpen = vi.spyOn(window, 'open');
-    mockWindowOpen.mockImplementation(() => null);
-
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ id: 'new-eval-id', distinctTestCount: 1234 }),
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers(),
-      redirected: false,
-      type: 'basic',
-      url: 'http://example.com',
-      bodyUsed: false,
-      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
-      blob: () => Promise.resolve(new Blob()),
-      formData: () => Promise.resolve(new FormData()),
-      text: () => Promise.resolve(''),
-      body: null,
-      bytes: () => Promise.resolve(new Uint8Array()),
-      clone: () => ({
-        ok: true,
-        json: () => Promise.resolve({ id: 'new-eval-id', distinctTestCount: 1234 }),
-        status: 200,
-        statusText: 'OK',
-        headers: new Headers(),
-        redirected: false,
-        type: 'basic',
-        url: 'http://example.com',
-        bodyUsed: false,
-        arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
-        blob: () => Promise.resolve(new Blob()),
-        formData: () => Promise.resolve(new FormData()),
-        text: () => Promise.resolve(''),
-        body: null,
-        bytes: () => Promise.resolve(new Uint8Array()),
-        clone: () => ({ ...mockCallApi.mock.results[0].value }),
-      }),
-    });
+    mockedWindowOpen = mockWindowOpen();
 
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
@@ -441,7 +435,7 @@ describe('ResultsView Copy Eval', () => {
     await userEvent.click(createCopyButton);
 
     await waitFor(() => {
-      expect(mockWindowOpen).toHaveBeenCalledWith(`/eval/${newEvalId}`, '_blank');
+      expect(mockedWindowOpen).toHaveBeenCalledWith(`/eval/${newEvalId}`, '_blank');
     });
 
     await waitFor(() => {
@@ -544,6 +538,11 @@ describe('ResultsView', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
 
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
