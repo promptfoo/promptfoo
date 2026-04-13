@@ -176,6 +176,17 @@ const renderWithRouter = (component: React.ReactElement) => {
   return renderWithProviders(<MemoryRouter>{component}</MemoryRouter>);
 };
 
+function expectChartsUnavailable(...reasonTexts: string[]) {
+  expect(screen.queryByText('Show Charts')).toBeNull();
+  expect(screen.queryByText('Hide Charts')).toBeNull();
+  expect(screen.queryByTestId('results-charts')).toBeNull();
+  expect(screen.getByText('Charts are unavailable for this evaluation')).toBeInTheDocument();
+
+  for (const reasonText of reasonTexts) {
+    expect(screen.getByText(reasonText)).toBeInTheDocument();
+  }
+}
+
 function createCopyEvalResponse(): Response {
   return {
     ok: true,
@@ -896,9 +907,7 @@ describe('ResultsView', () => {
       />,
     );
 
-    expect(screen.queryByTestId('results-charts')).toBeNull();
-    expect(screen.getByText('Show Charts')).toBeInTheDocument();
-    expect(screen.getByText('Charts are unavailable for this evaluation')).not.toBeVisible();
+    expectChartsUnavailable();
   });
 
   it('shows an explanatory message when scores are all the same binary edge value', async () => {
@@ -967,19 +976,9 @@ describe('ResultsView', () => {
       />,
     );
 
-    const showChartsButton = screen.getByText('Show Charts');
-    expect(showChartsButton).toBeInTheDocument();
-    expect(screen.queryByTestId('results-charts')).toBeNull();
-    expect(screen.getByText('Charts are unavailable for this evaluation')).not.toBeVisible();
-
-    await userEvent.click(showChartsButton);
-
-    expect(screen.getByText('Charts are unavailable for this evaluation')).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'All scores are the same binary edge value (0 or 1), so there is no meaningful distribution to visualize.',
-      ),
-    ).toBeInTheDocument();
+    expectChartsUnavailable(
+      'All scores are the same binary edge value (0 or 1), so there is no meaningful distribution to visualize.',
+    );
   });
 });
 describe('ResultsView Chart Rendering', () => {
@@ -1074,18 +1073,7 @@ describe('ResultsView Chart Rendering', () => {
       />,
     );
 
-    const showChartsButton = screen.queryByText('Show Charts');
-    if (showChartsButton) {
-      await userEvent.click(showChartsButton);
-    } else {
-      expect(screen.getByText('Hide Charts')).toBeInTheDocument();
-    }
-
-    expect(screen.queryByTestId('results-charts')).toBeNull();
-    expect(screen.getByText('Charts are unavailable for this evaluation')).toBeInTheDocument();
-    expect(
-      screen.getByText('Charts require at least two prompts to compare side by side.'),
-    ).toBeInTheDocument();
+    expectChartsUnavailable('Charts require at least two prompts to compare side by side.');
   });
 
   it('shows an explanatory message if all scores are binary edge values (all 1s)', async () => {
@@ -1137,20 +1125,9 @@ describe('ResultsView Chart Rendering', () => {
       );
     });
 
-    const showChartsButton = screen.queryByText('Show Charts');
-    if (showChartsButton) {
-      await userEvent.click(showChartsButton);
-    } else {
-      expect(screen.getByText('Hide Charts')).toBeInTheDocument();
-    }
-
-    expect(screen.queryByTestId('results-charts')).toBeNull();
-    expect(screen.getByText('Charts are unavailable for this evaluation')).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'All scores are the same binary edge value (0 or 1), so there is no meaningful distribution to visualize.',
-      ),
-    ).toBeInTheDocument();
+    expectChartsUnavailable(
+      'All scores are the same binary edge value (0 or 1), so there is no meaningful distribution to visualize.',
+    );
   });
 
   it('shows an explanatory message if all scores are binary edge values (all 0s)', async () => {
@@ -1202,20 +1179,9 @@ describe('ResultsView Chart Rendering', () => {
       );
     });
 
-    const showChartsButton = screen.queryByText('Show Charts');
-    if (showChartsButton) {
-      await userEvent.click(showChartsButton);
-    } else {
-      expect(screen.getByText('Hide Charts')).toBeInTheDocument();
-    }
-
-    expect(screen.queryByTestId('results-charts')).toBeNull();
-    expect(screen.getByText('Charts are unavailable for this evaluation')).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'All scores are the same binary edge value (0 or 1), so there is no meaningful distribution to visualize.',
-      ),
-    ).toBeInTheDocument();
+    expectChartsUnavailable(
+      'All scores are the same binary edge value (0 or 1), so there is no meaningful distribution to visualize.',
+    );
   });
 
   it('should render ResultsCharts if all scores are uniform but not binary edge values', async () => {
@@ -1322,8 +1288,7 @@ describe('ResultsView Chart Rendering', () => {
       />,
     );
 
-    expect(screen.getByText('Show Charts')).toBeInTheDocument();
-    expect(screen.queryByTestId('results-charts')).toBeNull();
+    expectChartsUnavailable();
 
     tableStoreValue = {
       ...tableStoreValue,
@@ -1478,9 +1443,7 @@ describe('ResultsView Chart Rendering', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('Show Charts')).toBeInTheDocument();
-    expect(screen.queryByTestId('results-charts')).toBeNull();
-    expect(screen.getByText('Charts are unavailable for this evaluation')).not.toBeVisible();
+    expectChartsUnavailable();
   });
 
   it('shows an explanatory message if there are no valid scores', async () => {
@@ -1532,18 +1495,7 @@ describe('ResultsView Chart Rendering', () => {
       />,
     );
 
-    const showChartsButton = screen.queryByText('Show Charts');
-    if (showChartsButton) {
-      await userEvent.click(showChartsButton);
-    } else {
-      expect(screen.getByText('Hide Charts')).toBeInTheDocument();
-    }
-
-    expect(screen.queryByTestId('results-charts')).toBeNull();
-    expect(screen.getByText('Charts are unavailable for this evaluation')).toBeInTheDocument();
-    expect(
-      screen.getByText('Charts require at least one valid numeric score.'),
-    ).toBeInTheDocument();
+    expectChartsUnavailable('Charts require at least one valid numeric score.');
   });
 
   it('hides chart controls entirely for redteam evals', () => {
