@@ -143,7 +143,9 @@ describe('evaluator trace integration', () => {
     expect(evaluatorTracing.generateTraceContextIfNeeded).toHaveBeenCalled();
 
     // Verify trace was fetched for assertion
-    expect(mockTraceStore.getTrace).toHaveBeenCalledWith(testTraceId);
+    expect(mockTraceStore.getTrace).toHaveBeenCalledWith(testTraceId, {
+      sanitizeAttributes: false,
+    });
     expect(mockFlushOtel).toHaveBeenCalled();
 
     // Verify result was added with passing assertion
@@ -272,7 +274,9 @@ describe('evaluator trace integration', () => {
     await evaluate(testSuite, mockEval, options);
 
     // Verify trace was fetched with the correct traceId
-    expect(mockTraceStore.getTrace).toHaveBeenCalledWith(testTraceId);
+    expect(mockTraceStore.getTrace).toHaveBeenCalledWith(testTraceId, {
+      sanitizeAttributes: false,
+    });
 
     // Verify result was added with passing assertion
     expect(mockEval.addResult).toHaveBeenCalledWith(
