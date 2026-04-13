@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithCache, getCache, isCacheEnabled } from '../../src/cache';
+import { fetchWithCache, getCache, isCacheEnabled, withCacheNamespace } from '../../src/cache';
 import logger from '../../src/logger';
 import {
   MistralChatCompletionProvider,
@@ -491,6 +491,55 @@ describe('Mistral', () => {
       ]);
     });
 
+    it('should isolate in-flight chat request dedupe by cache namespace', async () => {
+      const resolveFetches: Array<(value: any) => void> = [];
+      vi.mocked(fetchWithCache)
+        .mockReturnValueOnce(
+          new Promise<any>((resolve) => {
+            resolveFetches.push(resolve);
+          }) as ReturnType<typeof fetchWithCache>,
+        )
+        .mockReturnValueOnce(
+          new Promise<any>((resolve) => {
+            resolveFetches.push(resolve);
+          }) as ReturnType<typeof fetchWithCache>,
+        );
+
+      const first = withCacheNamespace('scope-a', () =>
+        provider.callApi('Concurrent sensitive prompt'),
+      );
+      const second = withCacheNamespace('scope-b', () =>
+        provider.callApi('Concurrent sensitive prompt'),
+      );
+
+      await Promise.resolve();
+      expect(fetchWithCache).toHaveBeenCalledTimes(2);
+
+      resolveFetches[0]({
+        data: {
+          choices: [{ message: { content: 'Scoped output A' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      resolveFetches[1]({
+        data: {
+          choices: [{ message: { content: 'Scoped output B' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await expect(Promise.all([first, second])).resolves.toEqual([
+        expect.objectContaining({ output: 'Scoped output A' }),
+        expect.objectContaining({ output: 'Scoped output B' }),
+      ]);
+    });
+
     it('should avoid logging prompts and generated outputs in debug metadata', async () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
@@ -782,6 +831,7 @@ describe('Mistral', () => {
           numRequests: 1,
         },
         cost: expect.closeTo(0.0000005, 0.0000001),
+        cached: true,
       });
       expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
         expect.stringContaining('/embeddings'),
@@ -928,9 +978,53 @@ describe('Mistral', () => {
           numRequests: 1,
         },
         cost: expect.closeTo(0.0000005, 0.0000001),
+        cached: true,
       });
       const cacheKey = cacheGet.mock.calls[0]?.[0] as string;
       expect(cacheKey).not.toContain('Cached sensitive input');
+    });
+
+    it('should propagate cached embeddings through callApi', async () => {
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockReturnValue({
+        get: vi.fn().mockResolvedValue({
+          model: 'mistral-embed',
+          data: [{ embedding: [0.1, 0.2, 0.3] }],
+          usage: { total_tokens: 5, prompt_tokens: 5 },
+        }),
+        set: vi.fn(),
+        wrap: vi.fn(),
+        del: vi.fn(),
+        clear: vi.fn(),
+        stores: [
+          {
+            get: vi.fn(),
+            set: vi.fn(),
+          },
+        ] as any,
+        mget: vi.fn(),
+        mset: vi.fn(),
+        mdel: vi.fn(),
+        reset: vi.fn(),
+        ttl: vi.fn(),
+        on: vi.fn(),
+        removeAllListeners: vi.fn(),
+      } as any);
+
+      const result = await provider.callApi('Cached sensitive input');
+
+      expect(fetchWithCache).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        output: JSON.stringify([0.1, 0.2, 0.3]),
+        tokenUsage: {
+          total: 5,
+          cached: 5,
+          completion: 0,
+          numRequests: 1,
+        },
+        cost: expect.closeTo(0.0000005, 0.0000001),
+        cached: true,
+      });
     });
 
     it('should handle API errors', async () => {

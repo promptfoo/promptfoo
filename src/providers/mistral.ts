@@ -1,6 +1,6 @@
 import { createHmac } from 'crypto';
 
-import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
+import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
@@ -185,12 +185,13 @@ function fetchMistralWithDedupe(
   cacheKey: string,
   fetcher: () => Promise<MistralFetchResult>,
 ): Promise<MistralFetchResult> {
-  let inflightRequest = MISTRAL_INFLIGHT_REQUESTS.get(cacheKey);
+  const inflightCacheKey = getScopedCacheKey(cacheKey);
+  let inflightRequest = MISTRAL_INFLIGHT_REQUESTS.get(inflightCacheKey);
   if (!inflightRequest) {
     inflightRequest = fetcher().finally(() => {
-      MISTRAL_INFLIGHT_REQUESTS.delete(cacheKey);
+      MISTRAL_INFLIGHT_REQUESTS.delete(inflightCacheKey);
     });
-    MISTRAL_INFLIGHT_REQUESTS.set(cacheKey, inflightRequest);
+    MISTRAL_INFLIGHT_REQUESTS.set(inflightCacheKey, inflightRequest);
   }
   return inflightRequest;
 }
@@ -634,6 +635,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
         output: JSON.stringify(embeddingResponse.embedding),
         tokenUsage: embeddingResponse.tokenUsage,
         cost: embeddingResponse.cost,
+        ...(embeddingResponse.cached ? { cached: true } : {}),
       };
     } catch (err) {
       return {
@@ -725,6 +727,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
           completion: completionTokens,
         },
         cost: calculateMistralCost(this.modelName, this.config, promptTokens, completionTokens),
+        ...(cached ? { cached: true } : {}),
       };
       if (!cached && cache) {
         try {
