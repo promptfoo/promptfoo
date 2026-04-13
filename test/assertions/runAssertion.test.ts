@@ -1893,6 +1893,11 @@ describe('runAssertion', () => {
     value: 'This is the expected output.',
     threshold: 0.75,
   };
+  const notRougeNAssertion: Assertion = {
+    type: 'not-rouge-n',
+    value: 'This is the expected output.',
+    threshold: 0.75,
+  };
 
   it('should pass when the rouge-n assertion passes', async () => {
     const output = 'This is the expected output.';
@@ -1924,6 +1929,40 @@ describe('runAssertion', () => {
       pass: false,
       reason: 'ROUGE-N score 0.22 is less than threshold 0.75',
     });
+  });
+
+  it('should pass when the not-rouge-n assertion score is below threshold', async () => {
+    const output = 'some different output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: notRougeNAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'ROUGE-N score 0.22 is less than threshold 0.75',
+    });
+    expect(result.score).toBeCloseTo(0.78, 2);
+  });
+
+  it('should fail when the not-rouge-n assertion score is above threshold', async () => {
+    const output = 'This is the expected output.';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: notRougeNAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'ROUGE-N score 1.00 is greater than or equal to threshold 0.75',
+    });
+    expect(result.score).toBe(0);
   });
 
   // Test for starts-with assertion
