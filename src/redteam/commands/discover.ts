@@ -192,9 +192,17 @@ export async function doTargetPurposeDiscovery(
       });
 
       if (!response.ok) {
-        const error = await response.text();
-        logger.error(`${LOG_PREFIX} Error getting the next question from remote server: ${error}`);
-        continue;
+        const errorText = await response.text();
+        let errorDetail: string;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorDetail = errorJson.message || errorJson.error || errorText;
+        } catch {
+          errorDetail = errorText;
+        }
+        throw new Error(
+          `Remote server returned HTTP ${response.status}: ${errorDetail}`,
+        );
       }
 
       const responseData = await response.json();
