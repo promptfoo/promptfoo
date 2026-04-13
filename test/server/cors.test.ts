@@ -1,11 +1,48 @@
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp, isSocketIoOriginAllowed } from '../../src/server/server';
+
+vi.mock('../../src/envars', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/envars')>()),
+  getEnvString: vi.fn(
+    (key: string, defaultValue?: string) => process.env[key] ?? defaultValue ?? '',
+  ),
+}));
+
+import {
+  createApp,
+  isSocketIoOriginAllowed,
+  localCorsOptionsDelegate,
+} from '../../src/server/server';
+import type { Request } from 'express';
+
+const PROXY_ENV_VARS = [
+  'ALL_PROXY',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'all_proxy',
+  'http_proxy',
+  'https_proxy',
+];
+
+async function getCorsOriginForHeaders(headers: Request['headers']): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    localCorsOptionsDelegate({ headers } as Request, (error, options) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(options?.origin);
+    });
+  });
+}
 
 describe('server CORS', () => {
   let app: ReturnType<typeof createApp>;
 
   beforeEach(() => {
+    for (const key of PROXY_ENV_VARS) {
+      vi.stubEnv(key, '');
+    }
     vi.stubEnv('PROMPTFOO_CSRF_ALLOWED_ORIGINS', '');
     app = createApp();
   });
@@ -22,13 +59,12 @@ describe('server CORS', () => {
   });
 
   it('does not trust arbitrary same-host browser origins', async () => {
-    const response = await request(app)
-      .get('/health')
-      .set('Origin', 'https://evil.example')
-      .set('Host', 'evil.example:15500');
-
-    expect(response.status).toBe(200);
-    expect(response.headers['access-control-allow-origin']).toBeUndefined();
+    await expect(
+      getCorsOriginForHeaders({
+        origin: 'https://evil.example',
+        host: 'evil.example:15500',
+      }),
+    ).resolves.toBe(false);
   });
 
   it('allows localhost browser origins', async () => {
