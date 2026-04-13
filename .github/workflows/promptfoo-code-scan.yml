@@ -22,17 +22,17 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
 
       - name: Use Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version-file: '.nvmrc'
 
       - name: Run Promptfoo Code Scan
-        uses: promptfoo/code-scan-action@v0
+        uses: promptfoo/code-scan-action@c4839dcb8623ca031ee6d271c7850dc71d994dd3 # v0
         env:
           # Keep the global CLI install on the first promptfoo release that retries
           # transient repository MCP timeouts, while avoiding future dependency drift.

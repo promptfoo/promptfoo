@@ -12,6 +12,8 @@ import {
   safeJsonStringify,
   summarizeEvaluateResultForLogging,
 } from '../../src/util/json';
+import { createEvaluateResult } from '../factories/eval';
+import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
 
 import type { EvaluateResult } from '../../src/types/index';
 
@@ -649,56 +651,41 @@ describe('json utilities', () => {
 
   describe('summarizeEvaluateResultForLogging', () => {
     // Create test EvaluateResult with reasonable data size
-    const createTestEvaluateResult = (): EvaluateResult => {
-      return {
+    const createTestEvaluateResult = (): EvaluateResult =>
+      createEvaluateResult({
         id: 'test-eval-result',
-        testIdx: 0,
-        promptIdx: 0,
         success: false,
         score: 0.5,
         error: 'Test error',
         failureReason: ResultFailureReason.ERROR,
         latencyMs: 100,
         promptId: 'test-prompt-id',
-        provider: {
-          id: 'test-provider',
-          label: 'Test Provider',
-        },
+        provider: { id: 'test-provider', label: 'Test Provider' },
         response: {
           output: 'This is a test output that is reasonably sized for testing purposes.',
           error: undefined,
           cached: false,
           cost: 0.01,
-          tokenUsage: {
-            total: 1000,
-            prompt: 500,
-            completion: 500,
-          },
+          tokenUsage: { total: 1000, prompt: 500, completion: 500 },
           metadata: {
             model: 'gpt-4',
             timestamp: '2024-01-01T00:00:00Z',
             additionalData: 'Some additional metadata for testing',
           },
         },
-        testCase: {
+        testCase: createAtomicTestCase({
           description: 'Test case with regular data',
-          vars: {
-            input: 'test input',
-            context: 'test context',
-          },
-        },
-        prompt: {
-          raw: 'Test prompt',
+          vars: { input: 'test input', context: 'test context' },
+        }),
+        prompt: createPrompt('Test prompt', {
           display: 'Test Prompt Display',
           label: 'Test Prompt Label',
-        },
+        }),
         vars: {
           userInput: 'test user input',
           systemPrompt: 'test system prompt',
         },
-        namedScores: {},
-      };
-    };
+      });
 
     it('should throw TypeError for null or undefined input', () => {
       expect(() => summarizeEvaluateResultForLogging(null as any)).toThrow(TypeError);
@@ -747,24 +734,16 @@ describe('json utilities', () => {
     });
 
     it('should handle EvaluateResult with minimal data', () => {
-      const minimalResult: EvaluateResult = {
+      const minimalResult: EvaluateResult = createEvaluateResult({
         id: 'minimal-result',
         testIdx: 1,
         promptIdx: 2,
-        success: true,
         score: 1.0,
-        failureReason: ResultFailureReason.NONE,
         latencyMs: 50,
         promptId: 'minimal-prompt-id',
         provider: { id: 'minimal-provider' },
-        prompt: {
-          raw: 'test prompt',
-          label: 'Test Prompt',
-        },
-        vars: {},
-        testCase: { vars: {} },
-        namedScores: {},
-      };
+        prompt: createPrompt('test prompt', { label: 'Test Prompt' }),
+      });
 
       const summary = summarizeEvaluateResultForLogging(minimalResult);
 

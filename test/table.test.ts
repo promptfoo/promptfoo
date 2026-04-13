@@ -3,6 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TERMINAL_MAX_WIDTH } from '../src/constants';
 import { generateTable, wrapTable } from '../src/table';
 import { type EvaluateTable, ResultFailureReason } from '../src/types/index';
+import {
+  createCompletedPrompt,
+  createEvaluateTable,
+  createEvaluateTableOutput,
+  createEvaluateTableRow,
+} from './factories/eval';
 
 // Track all created instances and constructor calls
 const mockTableInstances: any[] = [];
@@ -43,67 +49,40 @@ describe('table', () => {
   });
 
   describe('generateTable', () => {
-    const mockEvaluateTable: EvaluateTable = {
+    const mockEvaluateTable: EvaluateTable = createEvaluateTable({
       head: {
         vars: ['var1', 'var2'],
         prompts: [
-          {
+          createCompletedPrompt('test prompt', {
             provider: 'test-provider',
             label: 'test-label',
-            raw: 'test prompt',
             id: 'test-id',
             display: 'test display',
             config: {},
-            // @ts-ignore
-            metrics: {},
-          },
+            metrics: undefined,
+          }),
         ],
       },
       body: [
-        {
+        createEvaluateTableRow({
           vars: ['value1', 'value2'],
-          outputs: [
-            {
-              pass: true,
-              score: 1,
-              text: 'passing test',
-              failureReason: ResultFailureReason.NONE,
-              cost: 0,
-              id: 'test',
-              latencyMs: 0,
-              namedScores: {},
-              tokenUsage: {},
-              metadata: {},
-              prompt: 'test prompt',
-              testCase: {},
-            },
-          ],
-          test: {},
+          outputs: [createEvaluateTableOutput({ text: 'passing test' })],
           testIdx: 0,
-        },
-        {
+        }),
+        createEvaluateTableRow({
           vars: ['value3', 'value4'],
           outputs: [
-            {
+            createEvaluateTableOutput({
               pass: false,
               score: 0,
               text: 'failing test',
               failureReason: ResultFailureReason.ASSERT,
-              cost: 0,
-              id: 'test',
-              latencyMs: 0,
-              namedScores: {},
-              tokenUsage: {},
-              metadata: {},
-              prompt: 'test prompt',
-              testCase: {},
-            },
+            }),
           ],
-          test: {},
           testIdx: 1,
-        },
+        }),
       ],
-    };
+    });
 
     it('should generate table with correct headers', () => {
       generateTable(mockEvaluateTable);
@@ -145,35 +124,15 @@ describe('table', () => {
       const longText = 'a'.repeat(300);
       const shortMaxLength = 10;
 
-      const testTable: EvaluateTable = {
-        head: {
-          vars: [longText],
-          prompts: [],
-        },
+      const testTable: EvaluateTable = createEvaluateTable({
+        head: { vars: [longText], prompts: [] },
         body: [
-          {
+          createEvaluateTableRow({
             vars: [longText],
-            outputs: [
-              {
-                pass: true,
-                score: 1,
-                text: 'test',
-                failureReason: ResultFailureReason.NONE,
-                cost: 0,
-                id: 'test',
-                latencyMs: 0,
-                namedScores: {},
-                tokenUsage: {},
-                metadata: {},
-                prompt: 'test prompt',
-                testCase: {},
-              },
-            ],
-            test: {},
-            testIdx: 0,
-          },
+            outputs: [createEvaluateTableOutput({ text: 'test' })],
+          }),
         ],
-      };
+      });
 
       generateTable(testTable, shortMaxLength);
 

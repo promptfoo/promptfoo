@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { handleContainsHtml, handleIsHtml } from '../../src/assertions/html';
+import { createMockProvider, createProviderResponse } from '../factories/provider';
 
-import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
+import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 
-const mockProvider: ApiProvider = {
-  id: () => 'mock',
-  callApi: async () => ({ output: 'mock' }),
-};
+const mockProvider = createMockProvider({
+  id: 'mock',
+  response: createProviderResponse({ output: 'mock' }),
+});
 
 const defaultParams = {
   baseType: 'contains-html' as const,

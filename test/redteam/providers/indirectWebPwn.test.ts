@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import IndirectWebPwnProvider from '../../../src/redteam/providers/indirectWebPwn';
+import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../../src/types/index';
+import type { CallApiContextParams } from '../../../src/types/index';
 
 const mockFetchWithRetries = vi.hoisted(() => vi.fn());
 
@@ -49,19 +50,21 @@ describe('IndirectWebPwnProvider', () => {
       // tracking for attempt 2
       .mockResolvedValueOnce(mockJsonResponse({ wasFetched: true, fetchCount: 1 }));
 
-    const targetProvider: ApiProvider = {
-      id: () => 'mock-target',
-      callApi: vi
-        .fn<() => Promise<ProviderResponse>>()
-        .mockResolvedValueOnce({
+    const targetProvider = createMockProvider({ id: 'mock-target' });
+    targetProvider.callApi
+      .mockReset()
+      .mockResolvedValueOnce(
+        createProviderResponse({
           output: 'Attempt 1 output',
           tokenUsage: { total: 10, prompt: 4, completion: 6 },
-        })
-        .mockResolvedValueOnce({
+        }),
+      )
+      .mockResolvedValueOnce(
+        createProviderResponse({
           output: 'Attempt 2 output',
           tokenUsage: { total: 20, prompt: 8, completion: 12 },
         }),
-    };
+      );
 
     const provider = new IndirectWebPwnProvider({
       injectVar: 'query',
@@ -102,13 +105,13 @@ describe('IndirectWebPwnProvider', () => {
       }),
     );
 
-    const targetProvider: ApiProvider = {
-      id: () => 'mock-target',
-      callApi: vi.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
+    const targetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({
         output: 'error output',
         error: 'Target failed',
       }),
-    };
+    });
 
     const provider = new IndirectWebPwnProvider({
       injectVar: 'query',

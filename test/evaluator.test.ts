@@ -28,6 +28,18 @@ import {
 import { processConfigFileReferences } from '../src/util/fileReference';
 import { sleep } from '../src/util/time';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
+import {
+  createFailingGradingResult,
+  createGradingProviderResponse,
+  createPassingGradingResult,
+} from './factories/gradingResult';
+import {
+  createMockProvider,
+  createProviderResponse,
+  createTokenUsage,
+  resetMockProvider,
+} from './factories/provider';
+import { createPrompt } from './factories/testSuite';
 
 const exactTransformHandlers = new Map<string, (input: any) => any>([
   ['output + " postprocessed"', (input) => input + ' postprocessed'],
@@ -265,52 +277,35 @@ vi.mock('../src/util/functions/loadFunction', async () => {
   };
 });
 
-const mockApiProvider: ApiProvider = {
-  id: vi.fn().mockReturnValue('test-provider'),
-  callApi: vi.fn().mockResolvedValue({
-    output: 'Test output',
-    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-  }),
-};
-
-const mockApiProvider2: ApiProvider = {
-  id: vi.fn().mockReturnValue('test-provider-2'),
-  callApi: vi.fn().mockResolvedValue({
-    output: 'Test output',
-    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-  }),
-};
-
-const mockReasoningApiProvider: ApiProvider = {
-  id: vi.fn().mockReturnValue('test-reasoning-provider'),
-  callApi: vi.fn().mockResolvedValue({
-    output: 'Test output',
-    tokenUsage: {
+function createReasoningProviderResponse(): ProviderResponse {
+  return createProviderResponse({
+    tokenUsage: createTokenUsage({
       total: 21,
       prompt: 9,
       completion: 12,
-      cached: 0,
-      numRequests: 1,
       completionDetails: { reasoning: 11, acceptedPrediction: 12, rejectedPrediction: 13 },
-    },
-  }),
-};
+    }),
+  });
+}
 
-const mockGradingApiProviderPasses: ApiProvider = {
-  id: vi.fn().mockReturnValue('test-grading-provider'),
-  callApi: vi.fn().mockResolvedValue({
-    output: JSON.stringify({ pass: true, reason: 'Test grading output' }),
-    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-  }),
-};
+const mockApiProvider = createMockProvider();
 
-const mockGradingApiProviderFails: ApiProvider = {
-  id: vi.fn().mockReturnValue('test-grading-provider'),
-  callApi: vi.fn().mockResolvedValue({
-    output: JSON.stringify({ pass: false, reason: 'Grading failed reason' }),
-    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-  }),
-};
+const mockApiProvider2 = createMockProvider({ id: 'test-provider-2' });
+
+const mockReasoningApiProvider = createMockProvider({
+  id: 'test-reasoning-provider',
+  response: createReasoningProviderResponse(),
+});
+
+const mockGradingApiProviderPasses = createMockProvider({
+  id: 'test-grading-provider',
+  response: createGradingProviderResponse(createPassingGradingResult()),
+});
+
+const mockGradingApiProviderFails = createMockProvider({
+  id: 'test-grading-provider',
+  response: createGradingProviderResponse(createFailingGradingResult()),
+});
 
 function toPrompt(text: string): Prompt {
   return { raw: text, label: text };
@@ -323,6 +318,20 @@ describe('evaluator', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetMockProvider(mockApiProvider);
+    resetMockProvider(mockApiProvider2, { id: 'test-provider-2' });
+    resetMockProvider(mockReasoningApiProvider, {
+      id: 'test-reasoning-provider',
+      response: createReasoningProviderResponse(),
+    });
+    resetMockProvider(mockGradingApiProviderPasses, {
+      id: 'test-grading-provider',
+      response: createGradingProviderResponse(createPassingGradingResult()),
+    });
+    resetMockProvider(mockGradingApiProviderFails, {
+      id: 'test-grading-provider',
+      response: createGradingProviderResponse(createFailingGradingResult()),
+    });
     // Reset runExtensionHook to default implementation (other tests may have overridden it)
     vi.mocked(runExtensionHook).mockReset();
     vi.mocked(runExtensionHook).mockImplementation(
@@ -1067,13 +1076,10 @@ describe('evaluator', () => {
   });
 
   it('evaluate with transform option - json provider', async () => {
-    const mockApiJsonProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider-json'),
-      callApi: vi.fn().mockResolvedValue({
-        output: '{"output": "testing", "value": 123}',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    const mockApiJsonProvider = createMockProvider({
+      id: 'test-provider-json',
+      response: createProviderResponse({ output: '{"output": "testing", "value": 123}' }),
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiJsonProvider],
@@ -1103,14 +1109,11 @@ describe('evaluator', () => {
   });
 
   it('evaluate with provider transform', async () => {
-    const mockApiProviderWithTransform: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+    const mockApiProviderWithTransform = createMockProvider({
+      id: 'test-provider-transform',
+      response: createProviderResponse({ output: 'Original output' }),
       transform: '`Transformed: ${output}`',
-    };
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProviderWithTransform],
@@ -1198,14 +1201,12 @@ describe('evaluator', () => {
   });
 
   it('evaluate with metadata passed to test transform', async () => {
-    const mockApiProviderWithMetadata: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider-metadata'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
+    const mockApiProviderWithMetadata = createMockProvider({
+      id: 'test-provider-metadata',
+      response: createProviderResponse({
         metadata: { responseTime: 123, modelVersion: 'v1.0' },
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
-    };
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProviderWithMetadata],
@@ -1238,13 +1239,7 @@ describe('evaluator', () => {
   });
 
   it('evaluate with metadata passed to test transform - no metadata case', async () => {
-    const mockApiProviderNoMetadata: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider-no-metadata'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    const mockApiProviderNoMetadata = createMockProvider({ id: 'test-provider-no-metadata' });
 
     const testSuite: TestSuite = {
       providers: [mockApiProviderNoMetadata],
@@ -1274,14 +1269,10 @@ describe('evaluator', () => {
   });
 
   it('evaluate with metadata passed to test transform - empty metadata', async () => {
-    const mockApiProviderEmptyMetadata: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider-empty-metadata'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        metadata: {},
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    const mockApiProviderEmptyMetadata = createMockProvider({
+      id: 'test-provider-empty-metadata',
+      response: createProviderResponse({ metadata: {} }),
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProviderEmptyMetadata],
@@ -1312,14 +1303,10 @@ describe('evaluator', () => {
   });
 
   it('evaluate with metadata preserved alongside other context properties', async () => {
-    const mockApiProviderWithMetadata: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider-metadata-context'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        metadata: { modelInfo: 'gpt-4' },
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    const mockApiProviderWithMetadata = createMockProvider({
+      id: 'test-provider-metadata-context',
+      response: createProviderResponse({ metadata: { modelInfo: 'gpt-4' } }),
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProviderWithMetadata],
@@ -1351,13 +1338,7 @@ describe('evaluator', () => {
   });
 
   it('evaluate with context in vars transform in defaultTest', async () => {
-    const mockApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    const mockApiProvider = createMockProvider();
 
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -1410,14 +1391,11 @@ describe('evaluator', () => {
   });
 
   it('evaluate with provider transform and test transform', async () => {
-    const mockApiProviderWithTransform: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+    const mockApiProviderWithTransform = createMockProvider({
+      id: 'test-provider-transform',
+      response: createProviderResponse({ output: 'Original output' }),
       transform: '`ProviderTransformed: ${output}`',
-    };
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProviderWithTransform],
@@ -1519,13 +1497,7 @@ describe('evaluator', () => {
   });
 
   it('evaluate with allowed prompts filtering', async () => {
-    const mockApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    const mockApiProvider = createMockProvider();
 
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -1558,19 +1530,11 @@ describe('evaluator', () => {
   });
 
   it('evaluate with scenarios', async () => {
-    const mockApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi
-        .fn()
-        .mockResolvedValueOnce({
-          output: 'Hola mundo',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        })
-        .mockResolvedValueOnce({
-          output: 'Bonjour le monde',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        }),
-    };
+    const mockApiProvider = createMockProvider();
+    mockApiProvider.callApi
+      .mockReset()
+      .mockResolvedValueOnce(createProviderResponse({ output: 'Hola mundo' }))
+      .mockResolvedValueOnce(createProviderResponse({ output: 'Bonjour le monde' }));
 
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -1616,27 +1580,13 @@ describe('evaluator', () => {
   });
 
   it('evaluate with scenarios and multiple vars', async () => {
-    const mockApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi
-        .fn()
-        .mockResolvedValueOnce({
-          output: 'Spanish Hola',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        })
-        .mockResolvedValueOnce({
-          output: 'Spanish Bonjour',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        })
-        .mockResolvedValueOnce({
-          output: 'French Hola',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        })
-        .mockResolvedValueOnce({
-          output: 'French Bonjour',
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        }),
-    };
+    const mockApiProvider = createMockProvider();
+    mockApiProvider.callApi
+      .mockReset()
+      .mockResolvedValueOnce(createProviderResponse({ output: 'Spanish Hola' }))
+      .mockResolvedValueOnce(createProviderResponse({ output: 'Spanish Bonjour' }))
+      .mockResolvedValueOnce(createProviderResponse({ output: 'French Hola' }))
+      .mockResolvedValueOnce(createProviderResponse({ output: 'French Bonjour' }));
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt {{ language }} {{ greeting }}')],
@@ -1677,13 +1627,9 @@ describe('evaluator', () => {
   });
 
   it('evaluate with scenarios and defaultTest', async () => {
-    const mockApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Hello, World',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    const mockApiProvider = createMockProvider({
+      response: createProviderResponse({ output: 'Hello, World' }),
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -2083,14 +2029,14 @@ describe('evaluator', () => {
   it('evaluator should calculate __count per-prompt with multiple providers', async () => {
     // With 1 prompt and 2 providers, there are 2 prompt entries (one per provider).
     // Each prompt entry gets 2 test evaluations, so __count = 2 for each.
-    const mockProvider1: ApiProvider = {
-      id: () => 'provider1',
-      callApi: async () => ({ output: 'response1' }),
-    };
-    const mockProvider2: ApiProvider = {
-      id: () => 'provider2',
-      callApi: async () => ({ output: 'response2' }),
-    };
+    const mockProvider1 = createMockProvider({
+      id: 'provider1',
+      response: createProviderResponse({ output: 'response1' }),
+    });
+    const mockProvider2 = createMockProvider({
+      id: 'provider2',
+      response: createProviderResponse({ output: 'response2' }),
+    });
     const testSuite: TestSuite = {
       providers: [mockProvider1, mockProvider2],
       prompts: [toPrompt('Test prompt')],
@@ -2153,14 +2099,10 @@ describe('evaluator', () => {
   });
 
   it('merges response metadata with test metadata', async () => {
-    const mockProviderWithMetadata: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider-with-metadata'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        metadata: { responseKey: 'responseValue' },
-      }),
-    };
+    const mockProviderWithMetadata = createMockProvider({
+      id: 'test-provider-with-metadata',
+      response: createProviderResponse({ metadata: { responseKey: 'responseValue' } }),
+    });
 
     const testSuite: TestSuite = {
       providers: [mockProviderWithMetadata],
@@ -2184,15 +2126,13 @@ describe('evaluator', () => {
   });
 
   it('evaluate with _conversation variable', async () => {
-    const mockApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockImplementation((prompt) =>
-        Promise.resolve({
-          output: prompt,
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        }),
-      ),
-    };
+    const mockApiProvider = createMockProvider({
+      callApi: vi
+        .fn<ApiProvider['callApi']>()
+        .mockImplementation((prompt) =>
+          Promise.resolve(createProviderResponse({ output: prompt as string })),
+        ),
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -2218,22 +2158,16 @@ describe('evaluator', () => {
   });
 
   it('evaluate with labeled and unlabeled providers and providerPromptMap', async () => {
-    const mockLabeledProvider: ApiProvider = {
-      id: () => 'labeled-provider-id',
+    const mockLabeledProvider = createMockProvider({
+      id: 'labeled-provider-id',
       label: 'Labeled Provider',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Labeled Provider Output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+      response: createProviderResponse({ output: 'Labeled Provider Output' }),
+    });
 
-    const mockUnlabeledProvider: ApiProvider = {
-      id: () => 'unlabeled-provider-id',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Unlabeled Provider Output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    const mockUnlabeledProvider = createMockProvider({
+      id: 'unlabeled-provider-id',
+      response: createProviderResponse({ output: 'Unlabeled Provider Output' }),
+    });
 
     const testSuite: TestSuite = {
       providers: [mockLabeledProvider, mockUnlabeledProvider],
@@ -2297,23 +2231,20 @@ describe('evaluator', () => {
   });
 
   it('evaluate with test-level providers filter', async () => {
-    const mockProvider1: ApiProvider = {
-      id: () => 'provider-1',
+    const mockProvider1 = createMockProvider({
+      id: 'provider-1',
       label: 'fast-model',
-      callApi: vi.fn().mockResolvedValue({
+      response: createProviderResponse({
         output: 'Fast Output',
-        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
+        tokenUsage: createTokenUsage({ total: 5, prompt: 2, completion: 3 }),
       }),
-    };
+    });
 
-    const mockProvider2: ApiProvider = {
-      id: () => 'provider-2',
+    const mockProvider2 = createMockProvider({
+      id: 'provider-2',
       label: 'smart-model',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Smart Output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+      response: createProviderResponse({ output: 'Smart Output' }),
+    });
 
     const testSuite: TestSuite = {
       providers: [mockProvider1, mockProvider2],
@@ -2348,21 +2279,15 @@ describe('evaluator', () => {
   });
 
   it('evaluate with test-level providers filter using wildcard', async () => {
-    const openaiProvider: ApiProvider = {
-      id: () => 'openai:gpt-4',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'OpenAI Output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    const openaiProvider = createMockProvider({
+      id: 'openai:gpt-4',
+      response: createProviderResponse({ output: 'OpenAI Output' }),
+    });
 
-    const anthropicProvider: ApiProvider = {
-      id: () => 'anthropic:claude-3',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Anthropic Output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    const anthropicProvider = createMockProvider({
+      id: 'anthropic:claude-3',
+      response: createProviderResponse({ output: 'Anthropic Output' }),
+    });
 
     const testSuite: TestSuite = {
       providers: [openaiProvider, anthropicProvider],
@@ -2385,23 +2310,23 @@ describe('evaluator', () => {
   });
 
   it('evaluate inherits providers filter from defaultTest', async () => {
-    const provider1: ApiProvider = {
-      id: () => 'provider-1',
+    const provider1 = createMockProvider({
+      id: 'provider-1',
       label: 'default-provider',
-      callApi: vi.fn().mockResolvedValue({
+      response: createProviderResponse({
         output: 'Output 1',
-        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
+        tokenUsage: createTokenUsage({ total: 5, prompt: 2, completion: 3 }),
       }),
-    };
+    });
 
-    const provider2: ApiProvider = {
-      id: () => 'provider-2',
+    const provider2 = createMockProvider({
+      id: 'provider-2',
       label: 'other-provider',
-      callApi: vi.fn().mockResolvedValue({
+      response: createProviderResponse({
         output: 'Output 2',
-        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
+        tokenUsage: createTokenUsage({ total: 5, prompt: 2, completion: 3 }),
       }),
-    };
+    });
 
     const testSuite: TestSuite = {
       providers: [provider1, provider2],
@@ -2431,13 +2356,12 @@ describe('evaluator', () => {
   });
 
   it('evaluate with empty providers array blocks all providers', async () => {
-    const mockProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({
+    const mockProvider = createMockProvider({
+      response: createProviderResponse({
         output: 'Output',
-        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
+        tokenUsage: createTokenUsage({ total: 5, prompt: 2, completion: 3 }),
       }),
-    };
+    });
 
     const testSuite: TestSuite = {
       providers: [mockProvider],
@@ -2459,23 +2383,23 @@ describe('evaluator', () => {
   });
 
   it('evaluate with providers filter and providerPromptMap combined', async () => {
-    const provider1: ApiProvider = {
-      id: () => 'provider-1',
+    const provider1 = createMockProvider({
+      id: 'provider-1',
       label: 'provider-one',
-      callApi: vi.fn().mockResolvedValue({
+      response: createProviderResponse({
         output: 'Output 1',
-        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
+        tokenUsage: createTokenUsage({ total: 5, prompt: 2, completion: 3 }),
       }),
-    };
+    });
 
-    const provider2: ApiProvider = {
-      id: () => 'provider-2',
+    const provider2 = createMockProvider({
+      id: 'provider-2',
       label: 'provider-two',
-      callApi: vi.fn().mockResolvedValue({
+      response: createProviderResponse({
         output: 'Output 2',
-        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
+        tokenUsage: createTokenUsage({ total: 5, prompt: 2, completion: 3 }),
       }),
-    };
+    });
 
     const testSuite: TestSuite = {
       providers: [provider1, provider2],
@@ -2512,23 +2436,20 @@ describe('evaluator', () => {
     // even when test-level provider filtering causes some providers to be skipped.
     // Before the fix, promptIdx was a sequential counter that could misalign with
     // the prompts array when filters caused gaps.
-    const provider1: ApiProvider = {
-      id: () => 'provider-1',
+    const provider1 = createMockProvider({
+      id: 'provider-1',
       label: 'model-a',
-      callApi: vi.fn().mockResolvedValue({
+      response: createProviderResponse({
         output: 'Output from model-a',
-        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
+        tokenUsage: createTokenUsage({ total: 5, prompt: 2, completion: 3 }),
       }),
-    };
+    });
 
-    const provider2: ApiProvider = {
-      id: () => 'provider-2',
+    const provider2 = createMockProvider({
+      id: 'provider-2',
       label: 'model-b',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Output from model-b',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+      response: createProviderResponse({ output: 'Output from model-b' }),
+    });
 
     const testSuite: TestSuite = {
       providers: [provider1, provider2],
@@ -2562,23 +2483,20 @@ describe('evaluator', () => {
   });
 
   it('promptIdx aligns with prompts array when test-level prompts filter skips prompts', async () => {
-    const provider1: ApiProvider = {
-      id: () => 'provider-1',
+    const provider1 = createMockProvider({
+      id: 'provider-1',
       label: 'model-a',
-      callApi: vi.fn().mockResolvedValue({
+      response: createProviderResponse({
         output: 'Output from model-a',
-        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
+        tokenUsage: createTokenUsage({ total: 5, prompt: 2, completion: 3 }),
       }),
-    };
+    });
 
-    const provider2: ApiProvider = {
-      id: () => 'provider-2',
+    const provider2 = createMockProvider({
+      id: 'provider-2',
       label: 'model-b',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Output from model-b',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+      response: createProviderResponse({ output: 'Output from model-b' }),
+    });
 
     const testSuite: TestSuite = {
       providers: [provider1, provider2],
@@ -2636,14 +2554,11 @@ describe('evaluator', () => {
   });
 
   it('evaluate with multiple transforms', async () => {
-    const mockApiProviderWithTransform: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+    const mockApiProviderWithTransform = createMockProvider({
+      id: 'test-provider-transform',
+      response: createProviderResponse({ output: 'Original output' }),
       transform: '`Provider: ${output}`',
-    };
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProviderWithTransform],
@@ -2673,14 +2588,11 @@ describe('evaluator', () => {
   });
 
   it('evaluate with provider transform and test postprocess (deprecated)', async () => {
-    const mockApiProviderWithTransform: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+    const mockApiProviderWithTransform = createMockProvider({
+      id: 'test-provider-transform',
+      response: createProviderResponse({ output: 'Original output' }),
       transform: '`Provider: ${output}`',
-    };
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProviderWithTransform],
@@ -2714,14 +2626,11 @@ describe('evaluator', () => {
   });
 
   it('evaluate with provider transform, test transform, and test postprocess (deprecated)', async () => {
-    const mockApiProviderWithTransform: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+    const mockApiProviderWithTransform = createMockProvider({
+      id: 'test-provider-transform',
+      response: createProviderResponse({ output: 'Original output' }),
       transform: '`Provider: ${output}`',
-    };
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProviderWithTransform],
@@ -2761,13 +2670,13 @@ describe('evaluator', () => {
   });
 
   it('evaluate with no output', async () => {
-    const mockApiProviderNoOutput: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider-no-output'),
-      callApi: vi.fn().mockResolvedValue({
+    const mockApiProviderNoOutput = createMockProvider({
+      id: 'test-provider-no-output',
+      response: createProviderResponse({
         output: null,
-        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 1 },
+        tokenUsage: createTokenUsage({ total: 5, prompt: 5, completion: 0 }),
       }),
-    };
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProviderNoOutput],
@@ -2787,13 +2696,13 @@ describe('evaluator', () => {
   });
 
   it('evaluate with false output', async () => {
-    const mockApiProviderNoOutput: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider-no-output'),
-      callApi: vi.fn().mockResolvedValue({
+    const mockApiProviderNoOutput = createMockProvider({
+      id: 'test-provider-no-output',
+      response: createProviderResponse({
         output: false,
-        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 1 },
+        tokenUsage: createTokenUsage({ total: 5, prompt: 5, completion: 0 }),
       }),
-    };
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProviderNoOutput],
@@ -2812,13 +2721,13 @@ describe('evaluator', () => {
   });
 
   it('should apply max-score to overall pass/fail and stats', async () => {
-    const maxScoreProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('max-score-provider'),
-      callApi: vi.fn().mockResolvedValue({
+    const maxScoreProvider = createMockProvider({
+      id: 'max-score-provider',
+      response: createProviderResponse({
         output: 'hello world',
-        tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+        tokenUsage: createTokenUsage({ total: 1, prompt: 1, completion: 0 }),
       }),
-    };
+    });
 
     const testSuite: TestSuite = {
       providers: [maxScoreProvider],
@@ -2855,13 +2764,13 @@ describe('evaluator', () => {
     ]);
 
     try {
-      const selectBestProvider: ApiProvider = {
-        id: vi.fn().mockReturnValue('select-best-provider'),
-        callApi: vi.fn().mockResolvedValue({
+      const selectBestProvider = createMockProvider({
+        id: 'select-best-provider',
+        response: createProviderResponse({
           output: 'hello world',
-          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+          tokenUsage: createTokenUsage({ total: 1, prompt: 1, completion: 0 }),
         }),
-      };
+      });
 
       const testSuite: TestSuite = {
         providers: [selectBestProvider],
@@ -2896,13 +2805,9 @@ describe('evaluator', () => {
   });
 
   it('should apply prompt config to provider call', async () => {
-    const mockApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test response',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    const mockApiProvider = createMockProvider({
+      response: createProviderResponse({ output: 'Test response' }),
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -2964,13 +2869,9 @@ describe('evaluator', () => {
   });
 
   it('should apply dynamic prompt function config to provider call', async () => {
-    const mockDynamicConfigProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test response',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    const mockDynamicConfigProvider = createMockProvider({
+      response: createProviderResponse({ output: 'Test response' }),
+    });
 
     const testSuite: TestSuite = {
       providers: [mockDynamicConfigProvider],
@@ -3170,12 +3071,9 @@ describe('evaluator', () => {
   });
 
   it('should maintain separate conversation histories based on metadata.conversationId', async () => {
-    const mockApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockImplementation((_prompt) => ({
-        output: 'Test output',
-      })),
-    };
+    const mockApiProvider = createMockProvider({
+      response: createProviderResponse({ output: 'Test output' }),
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -3249,12 +3147,9 @@ describe('evaluator', () => {
   it('should maintain separate conversation histories between scenarios without explicit conversationId', async () => {
     // This test verifies the fix for GitHub issue #384:
     // Scenarios should have isolated _conversation state by default
-    const mockApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockImplementation((_prompt) => ({
-        output: 'Test output',
-      })),
-    };
+    const mockApiProvider = createMockProvider({
+      response: createProviderResponse({ output: 'Test output' }),
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -3319,12 +3214,9 @@ describe('evaluator', () => {
 
   it('should allow scenarios to share conversation history with explicit conversationId', async () => {
     // This test verifies that users can still explicitly share conversations across scenarios
-    const mockApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockImplementation((_prompt) => ({
-        output: 'Test output',
-      })),
-    };
+    const mockApiProvider = createMockProvider({
+      response: createProviderResponse({ output: 'Test output' }),
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -3372,14 +3264,7 @@ describe('evaluator', () => {
   });
 
   it('evaluates with provider delay', async () => {
-    const mockApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider'),
-      delay: 100,
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    const mockApiProvider = createMockProvider({ delay: 100 });
 
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -3395,13 +3280,7 @@ describe('evaluator', () => {
   });
 
   it('evaluates with no provider delay', async () => {
-    const mockApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    const mockApiProvider = createMockProvider();
 
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -3418,15 +3297,10 @@ describe('evaluator', () => {
   });
 
   it('skips delay for cached responses', async () => {
-    const mockApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider'),
+    const mockApiProvider = createMockProvider({
       delay: 100,
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        cached: true,
-      }),
-    };
+      response: createProviderResponse({ cached: true }),
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -3447,13 +3321,7 @@ describe('evaluator', () => {
     const circularObj: CircularType = { prop: 'value' };
     circularObj.self = circularObj;
 
-    const mockApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    const mockApiProvider = createMockProvider();
 
     // Mock Eval.prototype.addResult to throw an error
     const mockAddResult = vi.fn().mockRejectedValue(new Error('Mock save error'));
@@ -3525,14 +3393,14 @@ describe('evaluator', () => {
   });
 
   it('evaluate with provider error response', async () => {
-    const mockApiProviderWithError: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider-error'),
-      callApi: vi.fn().mockResolvedValue({
+    const mockApiProviderWithError = createMockProvider({
+      id: 'test-provider-error',
+      response: createProviderResponse({
         output: 'Some output',
         error: 'API error occurred',
-        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 1 },
+        tokenUsage: createTokenUsage({ total: 5, prompt: 5, completion: 0 }),
       }),
-    };
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProviderWithError],
@@ -3570,20 +3438,17 @@ describe('evaluator', () => {
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let longTimer: NodeJS.Timeout | null = null;
 
-    const slowApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('slow-provider'),
-      callApi: vi.fn().mockImplementation(() => {
+    const slowApiProvider = createMockProvider({
+      id: 'slow-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(() => {
         return new Promise((resolve) => {
           longTimer = setTimeout(() => {
-            resolve({
-              output: 'Slow response',
-              tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-            });
+            resolve(createProviderResponse({ output: 'Slow response' }));
           }, 5000);
         });
       }),
-      cleanup: vi.fn(),
-    };
+      cleanup: true,
+    });
 
     const mockEval = {
       id: 'mock-eval-id',
@@ -3650,16 +3515,16 @@ describe('evaluator', () => {
 
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
 
-    const hangingProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('hanging-provider'),
-      callApi: vi.fn().mockImplementation(
+    const hangingProvider = createMockProvider({
+      id: 'hanging-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(
         () =>
           new Promise(() => {
             // Intentionally never resolves; timeout handling must still emit a row.
           }),
       ),
-      cleanup: vi.fn(),
-    };
+      cleanup: true,
+    });
 
     const mockEval = {
       id: 'mock-eval-id',
@@ -3712,16 +3577,16 @@ describe('evaluator', () => {
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let resolveLateResponse!: (value: ProviderResponse) => void;
 
-    const slowApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('slow-provider'),
-      callApi: vi.fn().mockImplementation(
+    const slowApiProvider = createMockProvider({
+      id: 'slow-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(
         () =>
           new Promise((resolve) => {
             resolveLateResponse = resolve;
           }),
       ),
-      cleanup: vi.fn(),
-    };
+      cleanup: true,
+    });
 
     const mockEval = {
       id: 'mock-eval-id',
@@ -3785,15 +3650,12 @@ describe('evaluator', () => {
     let abortTimer: NodeJS.Timeout | null = null;
     const abortController = new AbortController();
 
-    const slowApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('slow-provider'),
-      callApi: vi.fn().mockImplementation((_, __, opts) => {
+    const slowApiProvider = createMockProvider({
+      id: 'slow-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation((_, __, opts) => {
         return new Promise((resolve, reject) => {
           longTimer = setTimeout(() => {
-            resolve({
-              output: 'Slow response',
-              tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-            });
+            resolve(createProviderResponse({ output: 'Slow response' }));
           }, 200);
 
           abortTimer = setTimeout(() => {
@@ -3811,8 +3673,8 @@ describe('evaluator', () => {
           });
         });
       }),
-      cleanup: vi.fn(),
-    };
+      cleanup: true,
+    });
 
     const mockEval = {
       id: 'mock-eval-id',
@@ -3876,15 +3738,17 @@ describe('evaluator', () => {
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let longTimer: NodeJS.Timeout | null = null;
 
-    const slowApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('slow-provider'),
-      callApi: vi.fn().mockImplementation((_, __, opts) => {
+    const slowApiProvider = createMockProvider({
+      id: 'slow-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation((_, __, opts) => {
         return new Promise((resolve, reject) => {
           longTimer = setTimeout(() => {
-            resolve({
-              output: 'Slow response',
-              tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 1 },
-            });
+            resolve(
+              createProviderResponse({
+                output: 'Slow response',
+                tokenUsage: createTokenUsage({ total: 0, prompt: 0, completion: 0 }),
+              }),
+            );
           }, 1000);
 
           opts?.abortSignal?.addEventListener('abort', () => {
@@ -3895,8 +3759,8 @@ describe('evaluator', () => {
           });
         });
       }),
-      cleanup: vi.fn(),
-    };
+      cleanup: true,
+    });
 
     const mockEval = {
       id: 'mock-eval-id',
@@ -4013,20 +3877,20 @@ describe('evaluator', () => {
       execute,
       dispose: vi.fn(),
     } as RateLimitRegistryRef;
-    const targetProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('target-provider'),
-      callApi: vi.fn().mockResolvedValue({
+    const targetProvider = createMockProvider({
+      id: 'target-provider',
+      response: createProviderResponse({
         output: 'Test response',
         tokenUsage: createEmptyTokenUsage(),
       }),
-    };
-    const gradingProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('grading-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: JSON.stringify({ pass: true, reason: 'Scheduled grading passed' }),
-        tokenUsage: createEmptyTokenUsage(),
-      }),
-    };
+    });
+    const gradingProvider = createMockProvider({
+      id: 'grading-provider',
+      response: createGradingProviderResponse(
+        createPassingGradingResult({ reason: 'Scheduled grading passed' }),
+        { tokenUsage: createEmptyTokenUsage() },
+      ),
+    });
 
     const results = await runEval({
       delay: 0,
@@ -4072,33 +3936,35 @@ describe('evaluator', () => {
 
   it('groups model-graded assertion calls by provider id when maxConcurrency is 1', async () => {
     const callOrder: string[] = [];
-    const provider: ApiProvider = {
-      id: vi.fn().mockReturnValue('target-provider'),
-      callApi: vi.fn(async (prompt: string) => ({
-        output: `Target output for ${prompt}`,
-        tokenUsage: createEmptyTokenUsage(),
-      })),
-    };
-    const judgeOne: ApiProvider = {
-      id: vi.fn().mockReturnValue('judge-one'),
-      callApi: vi.fn(async () => {
+    const provider = createMockProvider({
+      id: 'target-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (prompt) =>
+        createProviderResponse({
+          output: `Target output for ${prompt}`,
+          tokenUsage: createEmptyTokenUsage(),
+        }),
+      ),
+    });
+    const judgeOne = createMockProvider({
+      id: 'judge-one',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
         callOrder.push('judge-one');
-        return {
-          output: JSON.stringify({ pass: true, score: 1, reason: 'judge one passed' }),
-          tokenUsage: createEmptyTokenUsage(),
-        };
+        return createGradingProviderResponse(
+          createPassingGradingResult({ reason: 'judge one passed' }),
+          { tokenUsage: createEmptyTokenUsage() },
+        );
       }),
-    };
-    const judgeTwo: ApiProvider = {
-      id: vi.fn().mockReturnValue('judge-two'),
-      callApi: vi.fn(async () => {
+    });
+    const judgeTwo = createMockProvider({
+      id: 'judge-two',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
         callOrder.push('judge-two');
-        return {
-          output: JSON.stringify({ pass: true, score: 1, reason: 'judge two passed' }),
-          tokenUsage: createEmptyTokenUsage(),
-        };
+        return createGradingProviderResponse(
+          createPassingGradingResult({ reason: 'judge two passed' }),
+          { tokenUsage: createEmptyTokenUsage() },
+        );
       }),
-    };
+    });
     const testSuite: TestSuite = {
       providers: [provider],
       prompts: [toPrompt('Test prompt {{topic}}')],
@@ -4130,27 +3996,27 @@ describe('evaluator', () => {
 
   it('keeps model-graded assertions row-first when prompts use _conversation', async () => {
     const callOrder: string[] = [];
-    const provider: ApiProvider = {
-      id: vi.fn().mockReturnValue('target-provider'),
-      callApi: vi.fn(async (prompt: string) => {
-        const topic = prompt.endsWith('Current: alpha') ? 'alpha' : 'beta';
+    const provider = createMockProvider({
+      id: 'target-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (prompt) => {
+        const topic = (prompt as string).endsWith('Current: alpha') ? 'alpha' : 'beta';
         callOrder.push(`target:${topic}`);
-        return {
+        return createProviderResponse({
           output: `Target output for ${topic}`,
           tokenUsage: createEmptyTokenUsage(),
-        };
+        });
       }),
-    };
-    const judge: ApiProvider = {
-      id: vi.fn().mockReturnValue('judge'),
-      callApi: vi.fn(async () => {
+    });
+    const judge = createMockProvider({
+      id: 'judge',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
         callOrder.push('judge');
-        return {
-          output: JSON.stringify({ pass: true, score: 1, reason: 'judge passed' }),
-          tokenUsage: createEmptyTokenUsage(),
-        };
+        return createGradingProviderResponse(
+          createPassingGradingResult({ reason: 'judge passed' }),
+          { tokenUsage: createEmptyTokenUsage() },
+        );
       }),
-    };
+    });
     const testSuite: TestSuite = {
       providers: [provider],
       prompts: [
@@ -4179,25 +4045,27 @@ describe('evaluator', () => {
   });
 
   it('records deferred model-graded provider failures as row errors when maxConcurrency is 1', async () => {
-    const provider: ApiProvider = {
-      id: vi.fn().mockReturnValue('target-provider'),
-      callApi: vi.fn(async (prompt: string) => ({
-        output: `Target output for ${prompt}`,
-        tokenUsage: createEmptyTokenUsage(),
-      })),
-    };
-    const judge: ApiProvider = {
-      id: vi.fn().mockReturnValue('judge'),
-      callApi: vi.fn(async (prompt: string) => {
-        if (prompt.includes('Judge alpha')) {
+    const provider = createMockProvider({
+      id: 'target-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (prompt) =>
+        createProviderResponse({
+          output: `Target output for ${prompt}`,
+          tokenUsage: createEmptyTokenUsage(),
+        }),
+      ),
+    });
+    const judge = createMockProvider({
+      id: 'judge',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (prompt) => {
+        if ((prompt as string).includes('Judge alpha')) {
           throw new Error('grader exploded');
         }
-        return {
-          output: JSON.stringify({ pass: true, score: 1, reason: 'judge passed' }),
-          tokenUsage: createEmptyTokenUsage(),
-        };
+        return createGradingProviderResponse(
+          createPassingGradingResult({ reason: 'judge passed' }),
+          { tokenUsage: createEmptyTokenUsage() },
+        );
       }),
-    };
+    });
     const testSuite: TestSuite = {
       providers: [provider],
       prompts: [toPrompt('Test prompt {{topic}}')],
@@ -4226,26 +4094,28 @@ describe('evaluator', () => {
   });
 
   it('stops grouped serial evals after a non-transient target status', async () => {
-    const provider: ApiProvider = {
-      id: vi.fn().mockReturnValue('target-provider'),
-      callApi: vi.fn(async (prompt: string) => ({
-        output: `Target output for ${prompt}`,
-        metadata: {
-          http: {
-            status: 403,
-            statusText: 'Forbidden',
+    const provider = createMockProvider({
+      id: 'target-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (prompt) =>
+        createProviderResponse({
+          output: `Target output for ${prompt}`,
+          metadata: {
+            http: {
+              status: 403,
+              statusText: 'Forbidden',
+            },
           },
-        },
-        tokenUsage: createEmptyTokenUsage(),
-      })),
-    };
-    const judge: ApiProvider = {
-      id: vi.fn().mockReturnValue('judge'),
-      callApi: vi.fn(async () => ({
-        output: JSON.stringify({ pass: true, score: 1, reason: 'judge passed' }),
-        tokenUsage: createEmptyTokenUsage(),
-      })),
-    };
+          tokenUsage: createEmptyTokenUsage(),
+        }),
+      ),
+    });
+    const judge = createMockProvider({
+      id: 'judge',
+      response: createGradingProviderResponse(
+        createPassingGradingResult({ reason: 'judge passed' }),
+        { tokenUsage: createEmptyTokenUsage() },
+      ),
+    });
     const testSuite: TestSuite = {
       providers: [provider],
       prompts: [toPrompt('Test prompt {{topic}}')],
@@ -4287,23 +4157,25 @@ describe('evaluator', () => {
           { once: true },
         );
       });
-    const provider: ApiProvider = {
-      id: vi.fn().mockReturnValue('target-provider'),
-      callApi: vi.fn(async (prompt: string, _context, options) => {
-        await waitForTarget(40, options?.abortSignal);
-        return {
-          output: `Target output for ${prompt}`,
-          tokenUsage: createEmptyTokenUsage(),
-        };
-      }),
-    };
-    const judge: ApiProvider = {
-      id: vi.fn().mockReturnValue('judge'),
-      callApi: vi.fn(async () => ({
-        output: JSON.stringify({ pass: true, score: 1, reason: 'judge passed' }),
-        tokenUsage: createEmptyTokenUsage(),
-      })),
-    };
+    const provider = createMockProvider({
+      id: 'target-provider',
+      callApi: vi
+        .fn<ApiProvider['callApi']>()
+        .mockImplementation(async (prompt, _context, options) => {
+          await waitForTarget(40, options?.abortSignal);
+          return createProviderResponse({
+            output: `Target output for ${prompt}`,
+            tokenUsage: createEmptyTokenUsage(),
+          });
+        }),
+    });
+    const judge = createMockProvider({
+      id: 'judge',
+      response: createGradingProviderResponse(
+        createPassingGradingResult({ reason: 'judge passed' }),
+        { tokenUsage: createEmptyTokenUsage() },
+      ),
+    });
     const evalRecord = {
       id: 'grouped-timeout-eval',
       results,
@@ -4359,33 +4231,35 @@ describe('evaluator', () => {
 
   it('groups model-graded assert-set children by provider id when maxConcurrency is 1', async () => {
     const callOrder: string[] = [];
-    const provider: ApiProvider = {
-      id: vi.fn().mockReturnValue('target-provider'),
-      callApi: vi.fn(async (prompt: string) => ({
-        output: `Target output for ${prompt}`,
-        tokenUsage: createEmptyTokenUsage(),
-      })),
-    };
-    const judgeOne: ApiProvider = {
-      id: vi.fn().mockReturnValue('judge-one'),
-      callApi: vi.fn(async () => {
+    const provider = createMockProvider({
+      id: 'target-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (prompt) =>
+        createProviderResponse({
+          output: `Target output for ${prompt}`,
+          tokenUsage: createEmptyTokenUsage(),
+        }),
+      ),
+    });
+    const judgeOne = createMockProvider({
+      id: 'judge-one',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
         callOrder.push('judge-one');
-        return {
-          output: JSON.stringify({ pass: true, score: 1, reason: 'judge one passed' }),
-          tokenUsage: createEmptyTokenUsage(),
-        };
+        return createGradingProviderResponse(
+          createPassingGradingResult({ reason: 'judge one passed' }),
+          { tokenUsage: createEmptyTokenUsage() },
+        );
       }),
-    };
-    const judgeTwo: ApiProvider = {
-      id: vi.fn().mockReturnValue('judge-two'),
-      callApi: vi.fn(async () => {
+    });
+    const judgeTwo = createMockProvider({
+      id: 'judge-two',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
         callOrder.push('judge-two');
-        return {
-          output: JSON.stringify({ pass: true, score: 1, reason: 'judge two passed' }),
-          tokenUsage: createEmptyTokenUsage(),
-        };
+        return createGradingProviderResponse(
+          createPassingGradingResult({ reason: 'judge two passed' }),
+          { tokenUsage: createEmptyTokenUsage() },
+        );
       }),
-    };
+    });
     const testSuite: TestSuite = {
       providers: [provider],
       prompts: [toPrompt('Test prompt {{topic}}')],
@@ -4427,28 +4301,31 @@ describe('evaluator', () => {
 
   it('keeps multi-call model-graded assertions grouped by provider id when maxConcurrency is 1', async () => {
     const callOrder: string[] = [];
-    const provider: ApiProvider = {
-      id: vi.fn().mockReturnValue('target-provider'),
-      callApi: vi.fn(async (prompt: string) => ({
-        output: `Target output for ${prompt}`,
-        tokenUsage: createEmptyTokenUsage(),
-      })),
-    };
-    const createJudge = (id: string): ApiProvider => ({
-      id: vi.fn().mockReturnValue(id),
-      callApi: vi.fn(async (_prompt: string, context?: { prompt?: { label?: string } }) => {
-        const label = context?.prompt?.label ?? 'unknown';
-        callOrder.push(`${id}:${label}`);
-
-        return {
-          output:
-            label === 'g-eval-steps'
-              ? JSON.stringify({ steps: ['Check the answer'] })
-              : JSON.stringify({ score: 10, reason: 'passed' }),
+    const provider = createMockProvider({
+      id: 'target-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (prompt) =>
+        createProviderResponse({
+          output: `Target output for ${prompt}`,
           tokenUsage: createEmptyTokenUsage(),
-        };
-      }),
+        }),
+      ),
     });
+    const createJudge = (id: string) =>
+      createMockProvider({
+        id,
+        callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (_prompt, context) => {
+          const label = context?.prompt?.label ?? 'unknown';
+          callOrder.push(`${id}:${label}`);
+
+          return createProviderResponse({
+            output:
+              label === 'g-eval-steps'
+                ? JSON.stringify({ steps: ['Check the answer'] })
+                : JSON.stringify({ score: 10, reason: 'passed' }),
+            tokenUsage: createEmptyTokenUsage(),
+          });
+        }),
+      });
     const judgeOne = createJudge('judge-one');
     const judgeTwo = createJudge('judge-two');
     const testSuite: TestSuite = {
@@ -4491,18 +4368,16 @@ describe('evaluator', () => {
 
   it('preserves provider cache settings for repeat iterations', async () => {
     const contexts: Array<Record<string, any> | undefined> = [];
-    const provider: ApiProvider = {
-      id: () => 'mock-provider',
-      callApi: vi
-        .fn()
-        .mockImplementation(async (_prompt: string, context?: Record<string, any>) => {
-          contexts.push(context);
-          return {
-            output: 'result',
-            tokenUsage: createEmptyTokenUsage(),
-          };
-        }),
-    };
+    const provider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (_prompt, context) => {
+        contexts.push(context as Record<string, any>);
+        return createProviderResponse({
+          output: 'result',
+          tokenUsage: createEmptyTokenUsage(),
+        });
+      }),
+    });
 
     const baseOptions = {
       provider,
@@ -4540,30 +4415,29 @@ describe('evaluator', () => {
     await clearCache();
 
     let cacheMissCount = 0;
-    const provider: ApiProvider = {
-      id: () => 'mock-provider',
-      callApi: vi
-        .fn()
-        .mockImplementation(async (_prompt: string, context?: Record<string, any>) => {
-          const cache = await context?.getCache();
-          const cachedResponse = await cache?.get('manual-provider-key');
-          if (cachedResponse) {
-            return {
-              ...(cachedResponse as ProviderResponse),
-              cached: true,
-            };
-          }
-
-          cacheMissCount += 1;
-          const response = {
-            cached: false,
-            output: `result-repeat-${context?.repeatIndex}-miss-${cacheMissCount}`,
-            tokenUsage: createEmptyTokenUsage(),
+    const provider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (_prompt, context) => {
+        const ctx = context as Record<string, any> | undefined;
+        const cache = await ctx?.getCache();
+        const cachedResponse = await cache?.get('manual-provider-key');
+        if (cachedResponse) {
+          return {
+            ...(cachedResponse as ProviderResponse),
+            cached: true,
           };
-          await cache?.set('manual-provider-key', response);
-          return response;
-        }),
-    };
+        }
+
+        cacheMissCount += 1;
+        const response = {
+          cached: false,
+          output: `result-repeat-${ctx?.repeatIndex}-miss-${cacheMissCount}`,
+          tokenUsage: createEmptyTokenUsage(),
+        };
+        await cache?.set('manual-provider-key', response);
+        return response;
+      }),
+    });
 
     const testSuite: TestSuite = {
       providers: [provider],
@@ -4640,16 +4514,14 @@ describe('evaluator', () => {
       };
     });
 
-    const provider: ApiProvider = {
-      id: () => 'mock-provider',
-      callApi: vi
-        .fn()
-        .mockImplementation(async (_prompt: string, context?: Record<string, any>) => ({
-          cached: false,
-          output: context?.vars?.hookValue,
-          tokenUsage: createEmptyTokenUsage(),
-        })),
-    };
+    const provider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (_prompt, context) => ({
+        cached: false,
+        output: (context as Record<string, any>)?.vars?.hookValue,
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    });
 
     const testSuite: TestSuite = {
       providers: [provider],
@@ -4701,14 +4573,14 @@ describe('evaluator', () => {
       return context;
     });
 
-    const provider: ApiProvider = {
-      id: () => 'mock-provider',
-      callApi: vi.fn().mockResolvedValue({
+    const provider = createMockProvider({
+      id: 'mock-provider',
+      response: createProviderResponse({
         cached: false,
         output: 'provider-output',
         tokenUsage: createEmptyTokenUsage(),
       }),
-    };
+    });
 
     const testSuite: TestSuite = {
       providers: [provider],
@@ -4735,19 +4607,19 @@ describe('evaluator', () => {
   it('isolates deferred grading cache entries by repeat index', async () => {
     await clearCache();
 
-    const provider: ApiProvider = {
-      id: () => 'mock-provider',
-      callApi: vi.fn().mockResolvedValue({
+    const provider = createMockProvider({
+      id: 'mock-provider',
+      response: createProviderResponse({
         cached: false,
         output: 'target output',
         tokenUsage: createEmptyTokenUsage(),
       }),
-    };
+    });
 
     let gradingCacheMissCount = 0;
-    const gradingProvider: ApiProvider = {
-      id: () => 'grading-provider',
-      callApi: vi.fn().mockImplementation(async () => {
+    const gradingProvider = createMockProvider({
+      id: 'grading-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
         const cache = getCache();
         const cachedOutput = await cache.get<string>('deferred-grading-key');
         if (cachedOutput) {
@@ -4771,7 +4643,7 @@ describe('evaluator', () => {
           tokenUsage: createEmptyTokenUsage(),
         };
       }),
-    };
+    });
 
     const testSuite: TestSuite = {
       providers: [provider],
@@ -4819,16 +4691,14 @@ describe('evaluator', () => {
         }));
       });
 
-    const provider: ApiProvider = {
-      id: () => 'mock-provider',
-      callApi: vi
-        .fn()
-        .mockImplementation(async (prompt: string, context?: Record<string, any>) => ({
-          cached: false,
-          output: `${prompt}-repeat-${context?.repeatIndex}`,
-          tokenUsage: createEmptyTokenUsage(),
-        })),
-    };
+    const provider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (prompt, context) => ({
+        cached: false,
+        output: `${prompt}-repeat-${(context as Record<string, any>)?.repeatIndex}`,
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    });
 
     const testSuite: TestSuite = {
       providers: [provider],
@@ -4894,14 +4764,14 @@ describe('evaluator', () => {
         }));
       });
 
-    const provider: ApiProvider = {
-      id: () => 'mock-provider',
-      callApi: vi.fn().mockResolvedValue({
+    const provider = createMockProvider({
+      id: 'mock-provider',
+      response: createProviderResponse({
         cached: false,
         output: 'should be skipped by resume',
         tokenUsage: createEmptyTokenUsage(),
       }),
-    };
+    });
 
     const testSuite: TestSuite = {
       providers: [provider],
@@ -4972,39 +4842,33 @@ describe('evaluator', () => {
   });
 
   it('should NOT include assertion tokens in main token totals', async () => {
-    // Mock provider that returns fixed token usage
-    const providerWithTokens: ApiProvider = {
-      id: vi.fn().mockReturnValue('provider-with-tokens'),
-      callApi: vi.fn().mockResolvedValue({
+    const providerWithTokens = createMockProvider({
+      id: 'provider-with-tokens',
+      response: createProviderResponse({
         output: 'Test response',
-        tokenUsage: {
+        tokenUsage: createTokenUsage({
           total: 100,
           prompt: 60,
           completion: 40,
           cached: 10,
-          numRequests: 1,
-        },
-      }),
-    };
-
-    // Mock grading provider that also returns token usage
-    const gradingProviderWithTokens: ApiProvider = {
-      id: vi.fn().mockReturnValue('grading-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: JSON.stringify({
-          pass: true,
-          score: 1,
-          reason: 'Test passed',
         }),
-        tokenUsage: {
-          total: 50,
-          prompt: 30,
-          completion: 20,
-          cached: 5,
-          numRequests: 1,
-        },
       }),
-    };
+    });
+
+    const gradingProviderWithTokens = createMockProvider({
+      id: 'grading-provider',
+      response: createGradingProviderResponse(
+        createPassingGradingResult({ reason: 'Test passed' }),
+        {
+          tokenUsage: createTokenUsage({
+            total: 50,
+            prompt: 30,
+            completion: 20,
+            cached: 5,
+          }),
+        },
+      ),
+    });
 
     const testSuite: TestSuite = {
       providers: [providerWithTokens],
@@ -5066,13 +4930,12 @@ describe('evaluator', () => {
   });
 
   it('should include sessionId in metadata for afterEach hook', async () => {
-    const mockApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({
+    const mockApiProvider = createMockProvider({
+      response: createProviderResponse({
         output: 'Test output',
         sessionId: 'test-session-123',
       }),
-    };
+    });
 
     const mockExtension = 'file://test-extension.js';
     let capturedContext: any;
@@ -5104,13 +4967,9 @@ describe('evaluator', () => {
   });
 
   it('should use sessionId from vars if not in response', async () => {
-    const mockApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        // No sessionId in response
-      }),
-    };
+    const mockApiProvider = createMockProvider({
+      response: createProviderResponse({ output: 'Test output' }),
+    });
 
     const mockExtension = 'file://test-extension.js';
     let capturedContext: any;
@@ -5142,13 +5001,12 @@ describe('evaluator', () => {
   });
 
   it('should prioritize response sessionId over vars sessionId', async () => {
-    const mockApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({
+    const mockApiProvider = createMockProvider({
+      response: createProviderResponse({
         output: 'Test output',
         sessionId: 'response-session-priority',
       }),
-    };
+    });
 
     const mockExtension = 'file://test-extension.js';
     let capturedContext: any;
@@ -5181,12 +5039,9 @@ describe('evaluator', () => {
   });
 
   it('should include sessionIds array from test metadata for iterative providers', async () => {
-    const mockApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-      }),
-    };
+    const mockApiProvider = createMockProvider({
+      response: createProviderResponse({ output: 'Test output' }),
+    });
 
     const mockExtension = 'file://test-extension.js';
     let capturedContext: any;
@@ -5226,12 +5081,9 @@ describe('evaluator', () => {
   });
 
   it('should handle empty sessionIds array', async () => {
-    const mockApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-      }),
-    };
+    const mockApiProvider = createMockProvider({
+      response: createProviderResponse({ output: 'Test output' }),
+    });
 
     const mockExtension = 'file://test-extension.js';
     let capturedContext: any;
@@ -5318,18 +5170,9 @@ describe('generateVarCombinations', () => {
 });
 
 describe('isAllowedPrompt', () => {
-  const prompt1: Prompt = {
-    label: 'prompt1',
-    raw: '',
-  };
-  const prompt2: Prompt = {
-    label: 'group1:prompt2',
-    raw: '',
-  };
-  const prompt3: Prompt = {
-    label: 'group2:prompt3',
-    raw: '',
-  };
+  const prompt1: Prompt = createPrompt('', { label: 'prompt1' });
+  const prompt2: Prompt = createPrompt('', { label: 'group1:prompt2' });
+  const prompt3: Prompt = createPrompt('', { label: 'group2:prompt3' });
 
   it('should return true if allowedPrompts is undefined', () => {
     expect(isAllowedPrompt(prompt1, undefined)).toBe(true);
@@ -5365,13 +5208,7 @@ describe('runEval', () => {
     vi.clearAllMocks();
   });
 
-  const mockProvider: ApiProvider = {
-    id: vi.fn().mockReturnValue('test-provider'),
-    callApi: vi.fn().mockResolvedValue({
-      output: 'Test output',
-      tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-    }),
-  };
+  const mockProvider = createMockProvider();
 
   const defaultOptions = {
     delay: 0,
@@ -5597,15 +5434,20 @@ describe('runEval', () => {
   it('should include sessionId from response in result metadata', async () => {
     const conversations: Record<string, any[]> = {};
 
-    const providerWithSession: ApiProvider = {
-      id: vi.fn().mockReturnValue('session-provider'),
-      callApi: vi.fn().mockResolvedValue({
+    const providerWithSession = createMockProvider({
+      id: 'session-provider',
+      response: createProviderResponse({
         output: 'Test output',
         sessionId: 'response-session-123',
         metadata: { existing: 'value' },
-        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+        tokenUsage: createTokenUsage({
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          numRequests: 0,
+        }),
       }),
-    };
+    });
 
     const results = await runEval({
       ...defaultOptions,
@@ -5626,13 +5468,18 @@ describe('runEval', () => {
   it('should include sessionId from vars in result metadata when response lacks sessionId', async () => {
     const conversations: Record<string, any[]> = {};
 
-    const providerWithoutSession: ApiProvider = {
-      id: vi.fn().mockReturnValue('vars-session-provider'),
-      callApi: vi.fn().mockResolvedValue({
+    const providerWithoutSession = createMockProvider({
+      id: 'vars-session-provider',
+      response: createProviderResponse({
         output: 'Test output',
-        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+        tokenUsage: createTokenUsage({
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          numRequests: 0,
+        }),
       }),
-    };
+    });
 
     const results = await runEval({
       ...defaultOptions,
@@ -5651,14 +5498,19 @@ describe('runEval', () => {
   it('should include sessionId from response metadata when top-level sessionId is absent', async () => {
     const conversations: Record<string, any[]> = {};
 
-    const providerWithMetadataSession: ApiProvider = {
-      id: vi.fn().mockReturnValue('metadata-session-provider'),
-      callApi: vi.fn().mockResolvedValue({
+    const providerWithMetadataSession = createMockProvider({
+      id: 'metadata-session-provider',
+      response: createProviderResponse({
         output: 'Test output',
         metadata: { sessionId: 'metadata-session-789', existing: 'keep-me' },
-        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+        tokenUsage: createTokenUsage({
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          numRequests: 0,
+        }),
       }),
-    };
+    });
 
     const [result] = await runEval({
       ...defaultOptions,
@@ -5678,14 +5530,19 @@ describe('runEval', () => {
   it('should prioritize response metadata sessionId over vars sessionId', async () => {
     const conversations: Record<string, any[]> = {};
 
-    const providerWithMetadataSession: ApiProvider = {
-      id: vi.fn().mockReturnValue('metadata-session-provider'),
-      callApi: vi.fn().mockResolvedValue({
+    const providerWithMetadataSession = createMockProvider({
+      id: 'metadata-session-provider',
+      response: createProviderResponse({
         output: 'Test output',
         metadata: { sessionId: 'metadata-session-priority' },
-        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+        tokenUsage: createTokenUsage({
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          numRequests: 0,
+        }),
       }),
-    };
+    });
 
     const [result] = await runEval({
       ...defaultOptions,
@@ -5702,14 +5559,19 @@ describe('runEval', () => {
   it('should include sessionIds from response metadata without adding sessionId fallback', async () => {
     const conversations: Record<string, any[]> = {};
 
-    const providerWithSessionIds: ApiProvider = {
-      id: vi.fn().mockReturnValue('metadata-session-ids-provider'),
-      callApi: vi.fn().mockResolvedValue({
+    const providerWithSessionIds = createMockProvider({
+      id: 'metadata-session-ids-provider',
+      response: createProviderResponse({
         output: 'Test output',
         metadata: { sessionIds: ['session-a', 'session-b'] },
-        tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+        tokenUsage: createTokenUsage({
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          numRequests: 0,
+        }),
       }),
-    };
+    });
 
     const [result] = await runEval({
       ...defaultOptions,
@@ -5747,11 +5609,11 @@ describe('runEval', () => {
       data: 'Invalid payload',
     };
 
-    const failingProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('failing-provider'),
+    const failingProvider = createMockProvider({
+      id: 'failing-provider',
       label: 'Azure GPT 5',
-      callApi: vi.fn().mockRejectedValue(apiError),
-    };
+      callApi: vi.fn<ApiProvider['callApi']>().mockRejectedValue(apiError),
+    });
 
     const [result] = await runEval({
       ...defaultOptions,
@@ -5814,10 +5676,10 @@ describe('runEval', () => {
   });
 
   it('should handle provider errors', async () => {
-    const errorProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('error-provider'),
-      callApi: vi.fn().mockRejectedValue(new Error('API Error')),
-    };
+    const errorProvider = createMockProvider({
+      id: 'error-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockRejectedValue(new Error('API Error')),
+    });
 
     // Define defaultOptions locally for this test
     const defaultOptions = {
@@ -5843,13 +5705,13 @@ describe('runEval', () => {
   });
 
   it('should handle null output differently for red team tests', async () => {
-    const nullOutputProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('null-provider'),
-      callApi: vi.fn().mockResolvedValue({
+    const nullOutputProvider = createMockProvider({
+      id: 'null-provider',
+      response: createProviderResponse({
         output: null,
-        tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 1 },
+        tokenUsage: createTokenUsage({ total: 5, prompt: 5, completion: 0 }),
       }),
-    };
+    });
 
     // Regular test
     const regularResults = await runEval({
@@ -5881,14 +5743,11 @@ describe('runEval', () => {
   });
 
   it('should apply transforms in correct order', async () => {
-    const providerWithTransform: ApiProvider = {
-      id: vi.fn().mockReturnValue('transform-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'original',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+    const providerWithTransform = createMockProvider({
+      id: 'transform-provider',
+      response: createProviderResponse({ output: 'original' }),
       transform: 'output + "-provider"',
-    };
+    });
 
     const results = await runEval({
       ...defaultOptions,
@@ -6283,14 +6142,10 @@ describe('runEval', () => {
 
   describe('latencyMs handling', () => {
     it('should use provider-supplied latencyMs when available', async () => {
-      const providerWithLatency: ApiProvider = {
-        id: vi.fn().mockReturnValue('latency-provider'),
-        callApi: vi.fn().mockResolvedValue({
-          output: 'Test output',
-          latencyMs: 5000,
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        }),
-      };
+      const providerWithLatency = createMockProvider({
+        id: 'latency-provider',
+        response: createProviderResponse({ latencyMs: 5000 }),
+      });
 
       const results = await runEval({
         ...defaultOptions,
@@ -6305,15 +6160,14 @@ describe('runEval', () => {
     });
 
     it('should use provider-supplied latencyMs for cached responses', async () => {
-      const cachedProvider: ApiProvider = {
-        id: vi.fn().mockReturnValue('cached-provider'),
-        callApi: vi.fn().mockResolvedValue({
+      const cachedProvider = createMockProvider({
+        id: 'cached-provider',
+        response: createProviderResponse({
           output: 'Cached output',
           cached: true,
           latencyMs: 3500,
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
         }),
-      };
+      });
 
       const results = await runEval({
         ...defaultOptions,
@@ -6331,16 +6185,13 @@ describe('runEval', () => {
     it('should fall back to measured latency when provider does not supply latencyMs', async () => {
       vi.useFakeTimers();
 
-      const providerWithoutLatency: ApiProvider = {
-        id: vi.fn().mockReturnValue('no-latency-provider'),
-        callApi: vi.fn().mockImplementation(async () => {
+      const providerWithoutLatency = createMockProvider({
+        id: 'no-latency-provider',
+        callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
           await new Promise((resolve) => setTimeout(resolve, 50));
-          return {
-            output: 'Test output',
-            tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-          };
+          return createProviderResponse();
         }),
-      };
+      });
 
       const resultPromise = runEval({
         ...defaultOptions,
@@ -6358,14 +6209,10 @@ describe('runEval', () => {
     });
 
     it('should respect provider latencyMs of 0', async () => {
-      const providerWithZeroLatency: ApiProvider = {
-        id: vi.fn().mockReturnValue('zero-latency-provider'),
-        callApi: vi.fn().mockResolvedValue({
-          output: 'Test output',
-          latencyMs: 0,
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        }),
-      };
+      const providerWithZeroLatency = createMockProvider({
+        id: 'zero-latency-provider',
+        response: createProviderResponse({ latencyMs: 0 }),
+      });
 
       const results = await runEval({
         ...defaultOptions,
@@ -6514,13 +6361,7 @@ describe('evaluator defaultTest merging', () => {
   });
 
   it('should merge defaultTest.options.provider with test case options', async () => {
-    const mockProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('mock-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    const mockProvider = createMockProvider({ id: 'mock-provider' });
 
     const testSuite: TestSuite = {
       prompts: [toPrompt('Test prompt {{text}}')],
@@ -6571,13 +6412,7 @@ describe('evaluator defaultTest merging', () => {
   });
 
   it('should allow test case options to override defaultTest options', async () => {
-    const mockProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('mock-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    const mockProvider = createMockProvider({ id: 'mock-provider' });
 
     const testSuite: TestSuite = {
       prompts: [toPrompt('Test prompt {{text}}')],

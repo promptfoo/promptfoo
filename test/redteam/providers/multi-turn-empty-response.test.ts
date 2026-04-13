@@ -2,14 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CrescendoProvider } from '../../../src/redteam/providers/crescendo/index';
 import { CustomProvider } from '../../../src/redteam/providers/custom/index';
 import RedteamIterativeProvider from '../../../src/redteam/providers/iterative';
+import { createMockProvider } from '../../factories/provider';
 
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiFunction,
-  ProviderResponse,
-} from '../../../src/types/index';
+import type { ApiProvider, AtomicTestCase, CallApiContextParams } from '../../../src/types/index';
 
 // Use vi.hoisted for proper mock isolation
 const mockGetProvider = vi.hoisted(() => vi.fn());
@@ -63,10 +58,7 @@ vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
 
 describe('Multi-turn strategies empty response handling', () => {
   const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
-  const createMockTargetProvider = (): ApiProvider => ({
-    id: () => 'mock-target',
-    callApi: vi.fn() as CallApiFunction,
-  });
+  const createMockTargetProvider = () => createMockProvider({ id: 'mock-target' });
 
   const createTestContext = (targetProvider: ApiProvider): CallApiContextParams => ({
     originalProvider: targetProvider,
@@ -79,11 +71,10 @@ describe('Multi-turn strategies empty response handling', () => {
   });
 
   // Create a mock redteam provider that returns appropriate responses
-  const createMockRedteamProvider = () => ({
-    id: () => 'mock-redteam-provider',
-    callApi: vi
-      .fn<(prompt: string, context?: any) => Promise<ProviderResponse>>()
-      .mockImplementation(async (_prompt: string, context?: any) => {
+  const createMockRedteamProvider = () =>
+    createMockProvider({
+      id: 'mock-redteam-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (_prompt, context) => {
         // Prefer prompt labels when available: they are explicit and avoid false matches
         // against attack-generation system prompts that may also mention "conversation objective".
         const label = context?.prompt?.label;
@@ -118,8 +109,8 @@ describe('Multi-turn strategies empty response handling', () => {
           }),
         };
       }),
-    delay: 0,
-  });
+      delay: 0,
+    });
 
   beforeEach(() => {
     vi.clearAllMocks();

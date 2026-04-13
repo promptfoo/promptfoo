@@ -10,8 +10,11 @@ import {
   RedTeamGenerationResponse,
 } from '../../../src/redteam/extraction/util';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
-
-import type { ApiProvider } from '../../../src/types/index';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -208,13 +211,12 @@ describe('RedTeamGenerationResponse', () => {
 });
 
 describe('Extraction Utils', () => {
-  let provider: ApiProvider;
+  let provider: MockApiProvider;
 
   beforeEach(() => {
-    provider = {
-      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
-      id: vi.fn().mockReturnValue('test-provider'),
-    };
+    provider = createMockProvider({
+      response: createProviderResponse({ output: 'test output' }),
+    });
     vi.clearAllMocks();
   });
 
