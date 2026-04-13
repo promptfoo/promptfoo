@@ -186,7 +186,8 @@
       },
       "nursery": {
         "noFloatingPromises": "error",
-        "noMisusedPromises": "error"
+        "noMisusedPromises": "error",
+        "noUselessTypeConversion": "error"
       }
     }
   },

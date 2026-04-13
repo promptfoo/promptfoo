@@ -64,7 +64,7 @@ function extractSandwich(str: string, tag: string): string | null {
  * Extract all <comment> blocks from <comments> wrapper
  */
 export function extractComments(xmlish: string): ParsedCommentXml[] {
-  const s = String(xmlish);
+  const s = xmlish;
 
   // Extract content within <comments> wrapper (or use full string if no wrapper)
   const scope = /<comments\b[^>]*>([\s\S]*?)<\/comments>/i.exec(s)?.[1] ?? s;

@@ -69,7 +69,7 @@ const mockItems = [makeItem('aaa111', 'First item'), makeItem('bbb222', 'Second 
 
 function mockApiResponses(items: MediaItem[] = mockItems) {
   vi.mocked(callApi).mockImplementation(async (url: string, _opts?: any) => {
-    const urlStr = String(url);
+    const urlStr = url;
 
     if (urlStr.includes('/blobs/library/evals')) {
       return {
@@ -165,7 +165,7 @@ describe('Media page URL state machine', () => {
     const deepLinkedItem = makeItem('ccc333', 'Deep linked item');
 
     vi.mocked(callApi).mockImplementation(async (url: string, _opts?: any) => {
-      const urlStr = String(url);
+      const urlStr = url;
 
       if (urlStr.includes('/blobs/library/evals')) {
         return {
@@ -219,7 +219,7 @@ describe('Media page URL state machine', () => {
 
   it('deep-link error: shows error for non-existent hash', async () => {
     vi.mocked(callApi).mockImplementation(async (url: string, _opts?: any) => {
-      const urlStr = String(url);
+      const urlStr = url;
 
       if (urlStr.includes('/blobs/library/evals')) {
         return {
@@ -312,7 +312,7 @@ describe('Media page URL state machine', () => {
 
   it('shows error when library API returns non-OK response', async () => {
     vi.mocked(callApi).mockImplementation(async (url: string, _opts?: any) => {
-      const urlStr = String(url);
+      const urlStr = url;
 
       if (urlStr.includes('/blobs/library/evals')) {
         return { ok: true, json: async () => ({ success: true, data: [] }) } as Response;
@@ -334,7 +334,7 @@ describe('Media page URL state machine', () => {
 
   it('shows error when evals API returns non-OK response', async () => {
     vi.mocked(callApi).mockImplementation(async (url: string, _opts?: any) => {
-      const urlStr = String(url);
+      const urlStr = url;
 
       if (urlStr.includes('/blobs/library/evals')) {
         return { ok: false, status: 500, json: async () => ({}) } as Response;

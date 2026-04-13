@@ -224,9 +224,7 @@ describe('createDummyFiles', () => {
   });
 
   it('should prompt for confirmation when files exist', async () => {
-    mockFs.existsSync.mockImplementation((path: string) =>
-      path.toString().includes('promptfooconfig.yaml'),
-    );
+    mockFs.existsSync.mockImplementation((path: string) => path.includes('promptfooconfig.yaml'));
 
     mockConfirm.mockResolvedValueOnce(true);
     mockSelect.mockResolvedValueOnce('compare').mockResolvedValueOnce('openai:gpt-4o');
