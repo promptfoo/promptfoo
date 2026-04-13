@@ -79,22 +79,17 @@ export function createMockProvider(options: MockProviderOptions = {}): MockApiPr
     response = createProviderResponse(),
     ...providerOverrides
   } = options;
-  const idMock = vi.fn<() => string>().mockImplementation(typeof id === 'function' ? id : () => id);
-  const callApiMock = callApi
-    ? vi.fn<ApiProvider['callApi']>().mockImplementation(callApi)
-    : vi.fn<ApiProvider['callApi']>().mockResolvedValue(response);
 
   const provider: MockApiProvider = {
-    id: idMock,
-    callApi: callApiMock,
+    id: vi.fn<() => string>().mockImplementation(typeof id === 'function' ? id : () => id),
+    callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(callApi ?? (async () => response)),
     ...providerOverrides,
   };
 
   if (cleanup) {
-    provider.cleanup =
-      cleanup === true
-        ? vi.fn<NonNullable<ApiProvider['cleanup']>>().mockResolvedValue(undefined)
-        : vi.fn<NonNullable<ApiProvider['cleanup']>>().mockImplementation(cleanup);
+    provider.cleanup = vi
+      .fn<NonNullable<ApiProvider['cleanup']>>()
+      .mockImplementation(cleanup === true ? async () => undefined : cleanup);
   }
 
   return provider;
