@@ -71,17 +71,21 @@ export function createProviderResponse(
   };
 }
 
+function resolveIdImpl(id: string | (() => string) = 'test-provider'): () => string {
+  return typeof id === 'function' ? id : () => id;
+}
+
 export function createMockProvider(options: MockProviderOptions = {}): MockApiProvider {
   const {
     callApi,
     cleanup,
-    id = 'test-provider',
+    id,
     response = createProviderResponse(),
     ...providerOverrides
   } = options;
 
   const provider: MockApiProvider = {
-    id: vi.fn<() => string>().mockImplementation(typeof id === 'function' ? id : () => id),
+    id: vi.fn<() => string>().mockImplementation(resolveIdImpl(id)),
     callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(callApi ?? (async () => response)),
     ...providerOverrides,
   };
@@ -99,11 +103,8 @@ export function resetMockProvider(
   provider: MockApiProvider,
   options: { id?: string | (() => string); response?: ProviderResponse } = {},
 ): void {
-  const { id = 'test-provider', response = createProviderResponse() } = options;
-  provider.id.mockReset();
-  provider.id.mockImplementation(typeof id === 'function' ? id : () => id);
-  provider.callApi.mockReset();
-  provider.callApi.mockResolvedValue(response);
-  provider.cleanup?.mockReset();
-  provider.cleanup?.mockResolvedValue(undefined);
+  const { id, response = createProviderResponse() } = options;
+  provider.id.mockReset().mockImplementation(resolveIdImpl(id));
+  provider.callApi.mockReset().mockResolvedValue(response);
+  provider.cleanup?.mockReset().mockResolvedValue(undefined);
 }
