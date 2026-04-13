@@ -127,6 +127,26 @@ export function normalizeTargetPurposeDiscoveryResult(
   };
 }
 
+async function getRemoteResponseErrorDetail(response: Response): Promise<string> {
+  const errorText = await response.text();
+  const fallbackDetail = errorText.trim() || response.statusText || 'Unknown error';
+
+  try {
+    const errorJson = JSON.parse(errorText) as unknown;
+    if (errorJson && typeof errorJson === 'object') {
+      const { message, error } = errorJson as Record<string, unknown>;
+      if (typeof message === 'string' && message.trim()) {
+        return message;
+      }
+      if (typeof error === 'string' && error.trim()) {
+        return error;
+      }
+    }
+  } catch {}
+
+  return fallbackDetail;
+}
+
 /**
  * Queries Cloud for the purpose-discovery logic, sends each logic to the target,
  * and summarizes the results.
@@ -192,17 +212,8 @@ export async function doTargetPurposeDiscovery(
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        let errorDetail: string;
-        try {
-          const errorJson = JSON.parse(errorText);
-          errorDetail = errorJson.message || errorJson.error || errorText;
-        } catch {
-          errorDetail = errorText;
-        }
-        throw new Error(
-          `Remote server returned HTTP ${response.status}: ${errorDetail}`,
-        );
+        const errorDetail = await getRemoteResponseErrorDetail(response);
+        throw new Error(`Remote server returned HTTP ${response.status}: ${errorDetail}`);
       }
 
       const responseData = await response.json();

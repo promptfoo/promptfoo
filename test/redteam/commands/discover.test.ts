@@ -337,6 +337,27 @@ describe('doTargetPurposeDiscovery', () => {
       'Remote server returned HTTP 503: Service Unavailable',
     );
     expect(mockedFetchWithProxy).toHaveBeenCalledTimes(1);
+    expect(target.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should fall back to status text on non-OK response with empty body', async () => {
+    mockedFetchWithProxy.mockResolvedValue(
+      new Response('', {
+        status: 418,
+        statusText: "I'm a teapot",
+      }),
+    );
+
+    const target = {
+      id: () => 'test',
+      callApi: vi.fn(),
+    };
+
+    await expect(doTargetPurposeDiscovery(target, undefined, false)).rejects.toThrow(
+      "Remote server returned HTTP 418: I'm a teapot",
+    );
+    expect(mockedFetchWithProxy).toHaveBeenCalledTimes(1);
+    expect(target.callApi).not.toHaveBeenCalled();
   });
 
   it('should handle mixed valid/invalid tools from server', async () => {
