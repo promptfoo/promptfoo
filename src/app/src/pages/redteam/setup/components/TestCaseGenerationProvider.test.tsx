@@ -373,6 +373,59 @@ describe('TestCaseGenerationProvider', () => {
       });
     });
 
+    it('should preserve configured plugin payloads when switching strategy preview plugins', async () => {
+      const user = userEvent.setup();
+      const policyConfig = {
+        policy: {
+          id: 'refund-policy',
+          name: 'Refund Policy',
+          text: 'Do not promise refunds without approval.',
+        },
+      };
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              plugins: [
+                { id: 'pii', config: { name: 'email' } },
+                { id: 'policy', config: policyConfig },
+              ],
+            }}
+            allowPluginChange
+          >
+            <TestConsumer
+              testPlugin="pii"
+              pluginConfig={{ name: 'email' }}
+              testStrategy="basic"
+              isPluginStatic
+            />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+
+      const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
+      await user.click(within(testCaseDialogComponent).getByTestId('plugin-dropdown'));
+      await user.click(screen.getByRole('option', { name: 'Refund Policy' }));
+
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(2));
+
+      const generationCalls = callApiMock.mock.calls.filter(
+        (call) => call[0] === '/redteam/generate-test',
+      );
+      const requestBody = JSON.parse(generationCalls.at(-1)?.[1]?.body as string);
+
+      expect(requestBody.plugin).toMatchObject({
+        id: 'policy',
+        config: policyConfig,
+        isStatic: false,
+      });
+    });
+
     it('should generate images (strategy: image)', async () => {
       const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
