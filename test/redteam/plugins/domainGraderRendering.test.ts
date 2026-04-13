@@ -189,6 +189,9 @@ describe('domain-specific grader rendering', () => {
     expect(rubric).toContain(vars.purpose);
     expect(rubric).toContain(vars.prompt);
     expect(rubric).toContain(vars.output);
+    expect(rubric).toContain('# Goal');
+    expect(rubric).toContain('# Instructions');
+    expect(rubric).toContain('# Output Format');
     expect(rubric).toContain('"reason":');
     expect(rubric).toContain('"score":');
     expect(rubric).toContain('"pass":');

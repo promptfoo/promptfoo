@@ -38,7 +38,21 @@ describe('generateConfigFile', () => {
   });
 
   it('rejects invalid severities', () => {
-    expect(() => generateConfigFile('high!')).toThrowError(ZodError);
-    expect(() => generateConfigFile('high!')).toThrowError(/Invalid option/);
+    let thrown: unknown;
+
+    try {
+      generateConfigFile('high!');
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(ZodError);
+
+    const issue = (thrown as ZodError).issues[0];
+    expect(issue).toMatchObject({
+      code: 'invalid_value',
+      message: expect.stringContaining('Invalid option'),
+    });
+    expect(issue).toHaveProperty('values', ['critical', 'high', 'medium', 'low', 'none']);
   });
 });
