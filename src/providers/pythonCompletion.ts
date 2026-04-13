@@ -113,8 +113,8 @@ function hasPythonResultError(result: any): boolean {
 function validateCallApiResult(functionName: string, result: any): void {
   // Log result structure for debugging
   const resultType = result === null ? 'null' : typeof result;
-  const resultKeyCount = result && typeof result === 'object' ? Object.keys(result).length : 0;
-  logger.debug('Python provider result structure', { resultType, resultKeyCount });
+  const resultKeys = result && typeof result === 'object' ? Object.keys(result) : [];
+  logger.debug('Python provider result structure', { resultType, resultKeys });
   if (hasPythonResultProperty(result, 'output')) {
     logger.debug(
       `Python provider output type: ${typeof result.output}, isArray: ${Array.isArray(result.output)}`,
@@ -382,8 +382,8 @@ export class PythonProvider implements ApiProvider {
 
       logger.debug('PythonProvider parsed cached result', {
         resultType: typeof parsedResult,
-        resultKeyCount:
-          parsedResult && typeof parsedResult === 'object' ? Object.keys(parsedResult).length : 0,
+        resultKeys:
+          parsedResult && typeof parsedResult === 'object' ? Object.keys(parsedResult) : [],
       });
 
       // IMPORTANT: Set cached flag to true so evaluator recognizes this as cached

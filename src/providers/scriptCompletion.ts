@@ -114,7 +114,7 @@ export class ScriptCompletionProvider implements ApiProvider {
         if (error) {
           logger.debug('Error running script', {
             scriptPath: this.scriptPath,
-            hasErrorMessage: Boolean(error.message),
+            errorMessage: error.message,
           });
           reject(error);
           return;
@@ -124,7 +124,7 @@ export class ScriptCompletionProvider implements ApiProvider {
         if (errorOutput) {
           logger.debug('Script produced stderr output', {
             scriptPath: this.scriptPath,
-            stderrLength: errorOutput.length,
+            stderr: errorOutput,
           });
           if (!standardOutput) {
             reject(new Error(errorOutput));
@@ -133,7 +133,7 @@ export class ScriptCompletionProvider implements ApiProvider {
         }
         logger.debug('Script produced stdout output', {
           scriptPath: this.scriptPath,
-          stdoutLength: standardOutput.length,
+          stdout: standardOutput,
         });
         const result = { output: standardOutput };
         if (fileHashes.length > 0 && isCacheEnabled()) {

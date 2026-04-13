@@ -160,9 +160,9 @@ export class GolangProvider implements ApiProvider {
           jsonArgs,
         ]);
         if (stderr) {
-          logger.error('Golang script stderr output', { stderrLength: String(stderr).length });
+          logger.error('Golang script stderr output', { stderr: String(stderr) });
         }
-        logger.debug('Golang script stdout output', { stdoutLength: String(stdout).length });
+        logger.debug('Golang script stdout output', { stdout: String(stdout) });
 
         const result = JSON.parse(stdout);
 
@@ -171,10 +171,12 @@ export class GolangProvider implements ApiProvider {
         }
         return result;
       } catch (error) {
+        const err = error as Error;
         logger.error('Error running Golang script', {
-          hasErrorMessage: Boolean((error as Error).message),
+          errorMessage: err.message,
+          errorName: err.name,
         });
-        throw new Error(`Error running Golang script: ${(error as Error).message}`);
+        throw new Error(`Error running Golang script: ${err.message}`);
       } finally {
         // Clean up temporary directory
         if (tempDir) {
