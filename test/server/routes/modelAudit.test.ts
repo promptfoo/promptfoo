@@ -17,6 +17,7 @@ vi.mock('../../../src/commands/modelScan', () => ({
 // Import after mocking
 import { checkModelAuditInstalled } from '../../../src/commands/modelScan';
 import { getDb } from '../../../src/database/index';
+import { modelAuditsTable } from '../../../src/database/tables';
 import { runDbMigrations } from '../../../src/migrate';
 import ModelAudit from '../../../src/models/modelAudit';
 import {
@@ -553,6 +554,60 @@ describe('Model Audit Routes - DB-backed', () => {
       expect(response.status).toBe(200);
       expect(response.body.scans[0].name).toBe('Apple');
       expect(response.body.scans[1].name).toBe('Zebra');
+    });
+
+    it('should use scan id as a stable tie-breaker for non-unique sort fields', async () => {
+      const db = getDb();
+      const scanResults = {
+        total_checks: 5,
+        passed_checks: 5,
+        failed_checks: 0,
+        has_errors: false,
+        issues: [],
+        checks: [],
+      };
+      db.insert(modelAuditsTable)
+        .values([
+          {
+            id: 'scan-b',
+            createdAt: 1,
+            updatedAt: 1,
+            name: 'Same name',
+            modelPath: '/path/b.pkl',
+            results: scanResults,
+            hasErrors: false,
+            totalChecks: 5,
+            passedChecks: 5,
+            failedChecks: 0,
+          },
+          {
+            id: 'scan-a',
+            createdAt: 2,
+            updatedAt: 2,
+            name: 'Same name',
+            modelPath: '/path/a.pkl',
+            results: scanResults,
+            hasErrors: false,
+            totalChecks: 5,
+            passedChecks: 5,
+            failedChecks: 0,
+          },
+        ])
+        .run();
+
+      const ascResponse = await request(app).get('/api/model-audit/scans?sort=name&order=asc');
+      const descResponse = await request(app).get('/api/model-audit/scans?sort=name&order=desc');
+
+      expect(ascResponse.status).toBe(200);
+      expect(ascResponse.body.scans.map((scan: { id: string }) => scan.id)).toEqual([
+        'scan-a',
+        'scan-b',
+      ]);
+      expect(descResponse.status).toBe(200);
+      expect(descResponse.body.scans.map((scan: { id: string }) => scan.id)).toEqual([
+        'scan-b',
+        'scan-a',
+      ]);
     });
 
     it('should sort by id ascending', async () => {

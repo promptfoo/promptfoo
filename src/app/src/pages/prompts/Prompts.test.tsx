@@ -132,7 +132,7 @@ describe('Prompts', () => {
     const user = userEvent.setup();
     renderWithProviders({ data: mockPromptsLarge });
 
-    const laterPromptCells = screen.getAllByText('This is prompt number 26.');
+    const laterPromptCells = await screen.findAllByText('This is prompt number 26.');
     expect(laterPromptCells.length).toBeGreaterThan(0);
 
     await user.click(laterPromptCells[0]);

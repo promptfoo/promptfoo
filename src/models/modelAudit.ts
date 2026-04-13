@@ -296,11 +296,19 @@ export default class ModelAudit {
     // Determine the sort column using explicit allowlist mapping
     const sortColumn = getModelAuditSortColumn(sortField);
 
-    // Apply ordering
+    // Apply ordering with a unique tie-breaker so offset-based virtualized loads stay stable.
     if (sortOrder === 'asc') {
-      query = query.orderBy(asc(sortColumn)) as typeof query;
+      query = (
+        sortField === 'id'
+          ? query.orderBy(asc(sortColumn))
+          : query.orderBy(asc(sortColumn), asc(modelAuditsTable.id))
+      ) as typeof query;
     } else {
-      query = query.orderBy(desc(sortColumn)) as typeof query;
+      query = (
+        sortField === 'id'
+          ? query.orderBy(desc(sortColumn))
+          : query.orderBy(desc(sortColumn), desc(modelAuditsTable.id))
+      ) as typeof query;
     }
 
     // Apply pagination

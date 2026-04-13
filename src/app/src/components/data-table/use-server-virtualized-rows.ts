@@ -13,6 +13,8 @@ type ServerVirtualizedRowsResult<TData> = {
   offset?: number;
 };
 
+const EMPTY_INITIAL_ROWS: never[] = [];
+
 interface UseServerVirtualizedRowsOptions<TData> {
   initialRows?: TData[];
   rowCount: number;
@@ -46,7 +48,7 @@ function indexedRowsEqual<TData>(indexedRows: Map<number, TData>, rows: TData[] 
 }
 
 export function useServerVirtualizedRows<TData>({
-  initialRows = [],
+  initialRows = EMPTY_INITIAL_ROWS,
   rowCount,
   pageSize,
   fetchRows,
@@ -56,7 +58,7 @@ export function useServerVirtualizedRows<TData>({
   const [rowsByIndex, setRowsByIndex] = React.useState<Map<number, TData>>(() =>
     indexRows(initialRows),
   );
-  const [loadingIndexes, setLoadingIndexes] = React.useState<Set<number>>(new Set());
+  const [loadingIndexes, setLoadingIndexes] = React.useState<Map<number, number>>(new Map());
 
   const rowsByIndexRef = React.useRef(rowsByIndex);
   rowsByIndexRef.current = rowsByIndex;
@@ -64,6 +66,8 @@ export function useServerVirtualizedRows<TData>({
   loadingIndexesRef.current = loadingIndexes;
   const hasMountedRef = React.useRef(false);
   const resetKeyRef = React.useRef(resetKey);
+  const requestIdRef = React.useRef(0);
+  const resetGenerationRef = React.useRef(0);
 
   React.useEffect(() => {
     if (!hasMountedRef.current) {
@@ -77,8 +81,9 @@ export function useServerVirtualizedRows<TData>({
     }
 
     resetKeyRef.current = resetKey;
+    resetGenerationRef.current += 1;
     setRowsByIndex(new Map());
-    setLoadingIndexes(new Set());
+    setLoadingIndexes(new Map());
   }, [resetKey]);
 
   React.useLayoutEffect(() => {
@@ -87,7 +92,7 @@ export function useServerVirtualizedRows<TData>({
 
   const loadRows = React.useCallback(
     async ({ startIndex, endIndex, signal }: ServerVirtualizedRowsRange) => {
-      if (rowCount <= 0 || pageSize <= 0) {
+      if (rowCount <= 0 || pageSize <= 0 || signal.aborted) {
         return;
       }
 
@@ -109,10 +114,13 @@ export function useServerVirtualizedRows<TData>({
         return;
       }
 
+      const requestId = (requestIdRef.current += 1);
+      const requestGeneration = resetGenerationRef.current;
+
       setLoadingIndexes((prev) => {
-        const next = new Set(prev);
+        const next = new Map(prev);
         for (let index = alignedStart; index <= cappedEnd; index += 1) {
-          next.add(index);
+          next.set(index, requestId);
         }
         return next;
       });
@@ -123,6 +131,10 @@ export function useServerVirtualizedRows<TData>({
           endIndex: cappedEnd,
           signal,
         });
+
+        if (signal.aborted || requestGeneration !== resetGenerationRef.current) {
+          return;
+        }
 
         setRowsByIndex((prev) => {
           const next = new Map(prev);
@@ -141,11 +153,15 @@ export function useServerVirtualizedRows<TData>({
         });
       } finally {
         setLoadingIndexes((prev) => {
-          const next = new Set(prev);
+          const next = new Map(prev);
+          let changed = false;
           for (let index = alignedStart; index <= cappedEnd; index += 1) {
-            next.delete(index);
+            if (next.get(index) === requestId) {
+              next.delete(index);
+              changed = true;
+            }
           }
-          return next;
+          return changed ? next : prev;
         });
       }
     },

@@ -54,12 +54,11 @@ export default function ModelAuditHistory() {
   const [scanToDelete, setScanToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const abortController = new AbortController();
     fetchHistoricalScans(abortController.signal);
     return () => abortController.abort();
-  }, [fetchHistoricalScans, pageSize, sortModel]);
+  }, [fetchHistoricalScans]);
 
   const { sorting: tableSorting, onSortingChange: handleSortingChange } = useDataTableServerSorting<
     NonNullable<ListScansQuery['sort']>

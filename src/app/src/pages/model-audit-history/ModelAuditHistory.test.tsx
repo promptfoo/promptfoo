@@ -240,4 +240,28 @@ describe('ModelAuditHistory', () => {
       { field: 'totalChecks', sort: expect.stringMatching(/^(asc|desc)$/) },
     ]);
   });
+
+  it('should let server virtualization reload rows after sorting without duplicate bootstrap fetches', async () => {
+    const user = userEvent.setup();
+    const mockScans = [
+      createMockScan('1', 'Clean Scan', false),
+      createMockScan('2', 'Issues Scan', true),
+    ];
+
+    mockUseHistoryStore.mockReturnValue({
+      ...getDefaultHistoryState(),
+      historicalScans: mockScans,
+      totalCount: 2,
+    } as any);
+
+    renderComponent();
+
+    await waitFor(() => expect(mockFetchHistoricalScans).toHaveBeenCalledTimes(1));
+    mockFetchHistoricalScans.mockClear();
+
+    await user.click(screen.getByRole('columnheader', { name: 'Status' }));
+
+    expect(mockSetSortModel).toHaveBeenLastCalledWith([{ field: 'hasErrors', sort: 'asc' }]);
+    expect(mockFetchHistoricalScans).not.toHaveBeenCalled();
+  });
 });

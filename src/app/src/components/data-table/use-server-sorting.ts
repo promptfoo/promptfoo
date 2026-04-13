@@ -1,5 +1,3 @@
-import * as React from 'react';
-
 import type { SortingState } from '@tanstack/react-table';
 
 export type DataTableServerSort<TSortField extends string> = {
@@ -18,6 +16,7 @@ function isAllowedSortField<TSortField extends string>(
   field: string,
   allowedFields?: ReadonlySet<TSortField>,
 ): field is TSortField {
+  // Undefined means "allow all"; an explicitly empty allowlist intentionally blocks all fields.
   if (!allowedFields) {
     return true;
   }
@@ -31,33 +30,26 @@ export function useDataTableServerSorting<TSortField extends string>({
   defaultSortField,
   allowedFields,
 }: UseDataTableServerSortingOptions<TSortField>) {
-  const allowedFieldSet = React.useMemo(
-    () => (allowedFields ? new Set<TSortField>(allowedFields) : undefined),
-    [allowedFields],
-  );
+  const allowedFieldSet = allowedFields ? new Set<TSortField>(allowedFields) : undefined;
+  const sorting: SortingState = sortModel.map((sort) => ({
+    id: sort.field,
+    desc: sort.sort === 'desc',
+  }));
 
-  const sorting = React.useMemo<SortingState>(
-    () => sortModel.map((sort) => ({ id: sort.field, desc: sort.sort === 'desc' })),
-    [sortModel],
-  );
+  const onSortingChange = (nextSorting: SortingState) => {
+    const nextSort = nextSorting[0];
+    const nextSortField = nextSort?.id ?? defaultSortField;
+    if (!isAllowedSortField(nextSortField, allowedFieldSet)) {
+      return;
+    }
 
-  const onSortingChange = React.useCallback(
-    (nextSorting: SortingState) => {
-      const nextSort = nextSorting[0];
-      const nextSortField = nextSort?.id ?? defaultSortField;
-      if (!isAllowedSortField(nextSortField, allowedFieldSet)) {
-        return;
-      }
-
-      setSortModel([
-        {
-          field: nextSortField,
-          sort: nextSort?.desc === false ? 'asc' : 'desc',
-        },
-      ]);
-    },
-    [allowedFieldSet, defaultSortField, setSortModel],
-  );
+    setSortModel([
+      {
+        field: nextSortField,
+        sort: nextSort?.desc === false ? 'asc' : 'desc',
+      },
+    ]);
+  };
 
   return { sorting, onSortingChange };
 }

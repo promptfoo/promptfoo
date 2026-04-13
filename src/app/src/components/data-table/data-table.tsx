@@ -502,15 +502,27 @@ export function DataTable<TData, TValue = unknown>({
   const activeVirtualItems = fallbackVirtualItems;
   const firstVirtualIndex = activeVirtualItems[0]?.index;
   const lastVirtualIndex = activeVirtualItems[activeVirtualItems.length - 1]?.index;
+  const virtualScrollResetKey = React.useMemo(
+    () => JSON.stringify({ columnFilters, globalFilter, sorting }),
+    [columnFilters, globalFilter, sorting],
+  );
+  const loadServerRows = React.useCallback(
+    (range: { startIndex: number; endIndex: number; signal: AbortSignal }) =>
+      serverLoadRows?.(range),
+    [serverLoadRows],
+  );
 
   React.useEffect(() => {
     if (!isServerVirtualized || firstVirtualIndex === undefined || lastVirtualIndex === undefined) {
       return;
     }
 
+    // Rerun on row-order changes so stale range loads are aborted and replaced.
+    void virtualScrollResetKey;
+
     const abortController = new AbortController();
     Promise.resolve(
-      serverLoadRows?.({
+      loadServerRows({
         startIndex: firstVirtualIndex,
         endIndex: lastVirtualIndex,
         signal: abortController.signal,
@@ -523,12 +535,13 @@ export function DataTable<TData, TValue = unknown>({
     });
 
     return () => abortController.abort();
-  }, [firstVirtualIndex, isServerVirtualized, lastVirtualIndex, serverLoadRows]);
-
-  const virtualScrollResetKey = React.useMemo(
-    () => JSON.stringify({ columnFilters, globalFilter, sorting }),
-    [columnFilters, globalFilter, sorting],
-  );
+  }, [
+    firstVirtualIndex,
+    isServerVirtualized,
+    lastVirtualIndex,
+    loadServerRows,
+    virtualScrollResetKey,
+  ]);
   const previousVirtualScrollResetKeyRef = React.useRef(virtualScrollResetKey);
 
   // Reset virtual scroll when row order or filters change.
@@ -605,13 +618,16 @@ export function DataTable<TData, TValue = unknown>({
     ...(renderSubComponent ? { getExpandedRowModel: getExpandedRowModel() } : {}),
   });
 
-  const serverRowsByIndex = new Map<number, Row<TData>>();
-  serverTable.getRowModel().rows.forEach((row, index) => {
-    const virtualIndex = serverVisibleRows[index]?.index;
-    if (virtualIndex !== undefined) {
-      serverRowsByIndex.set(virtualIndex, row);
-    }
-  });
+  const serverRowsByIndex = React.useMemo(() => {
+    const next = new Map<number, Row<TData>>();
+    serverTable.getRowModel().rows.forEach((row, index) => {
+      const virtualIndex = serverVisibleRows[index]?.index;
+      if (virtualIndex !== undefined) {
+        next.set(virtualIndex, row);
+      }
+    });
+    return next;
+  }, [serverTable, serverVisibleRows]);
 
   // When printing, show all rows instead of just the current page
   const rows = isPrinting ? table.getPrePaginationRowModel().rows : table.getRowModel().rows;
