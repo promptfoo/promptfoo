@@ -93,6 +93,36 @@ describe('test factories', () => {
     });
   });
 
+  // Regression guard for the ...overrides.assertions merge order in
+  // createRequiredTokenUsage. An earlier revision spread overrides.assertions
+  // *after* the literal completionDetails key, which silently clobbered the
+  // fully-populated nested defaults. The spread must happen before the
+  // literal so the object-literal key wins — this test locks that ordering.
+  it('merges scalar and nested assertion overrides without clobbering completionDetails', () => {
+    const result = createRequiredTokenUsage({
+      assertions: {
+        total: 5,
+        prompt: 3,
+        completionDetails: { reasoning: 7 },
+      },
+    });
+
+    expect(result.assertions).toEqual({
+      total: 5,
+      prompt: 3,
+      completion: 0,
+      cached: 0,
+      numRequests: 0,
+      completionDetails: {
+        reasoning: 7,
+        acceptedPrediction: 0,
+        rejectedPrediction: 0,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+      },
+    });
+  });
+
   describe('createMockProvider', () => {
     it('resolves the default callApi to createProviderResponse', async () => {
       const provider = createMockProvider();
