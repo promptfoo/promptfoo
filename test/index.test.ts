@@ -1237,7 +1237,7 @@ describe('evaluate with external defaultTest', () => {
               : typeof provider === 'object' && provider && 'id' in provider
                 ? (provider as { id: string }).id
                 : 'resolved-provider';
-          return { id: () => id, callApi: vi.fn() };
+          return { id: () => id, callApi: vi.fn() as any };
         });
     });
 
@@ -1402,7 +1402,11 @@ describe('evaluate with external defaultTest', () => {
       await evaluate(testSuite);
 
       // Force the lazy-init path the real provider takes on first callApi.
-      await resolvedProvider.callApi('anything', {} as never, {} as never);
+      await (resolvedProvider.callApi as unknown as (...args: unknown[]) => Promise<unknown>)(
+        'anything',
+        {},
+        {},
+      );
       expect(resolvedProvider.sdkClient).toBeDefined();
 
       // The unified config persisted to the Eval record must remain JSON-serializable

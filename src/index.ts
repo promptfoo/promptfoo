@@ -45,15 +45,15 @@ export type {
 } from './evaluatorHelpers';
 
 /**
- * Shallow-clone a test case and its `options` and `assert[]` entries so that the
- * caller can freely mutate `test.options.provider` / `assertion.provider` with
- * resolved ApiProvider instances without leaking those mutations back to the
- * input (inline test case objects in `testSuite.tests` alias through
- * `readTests()`'s shallow copy). See the defaultTest block in `evaluate()` for
- * the full rationale — this is the same pattern for individual test cases.
+ * Shallow-clone a test case so the caller can swap in resolved ApiProvider
+ * instances on `options.provider` / `assert[].provider` without leaking those
+ * mutations back to the input. The input may alias the unified config written
+ * to the Eval record, and a live SDK client (e.g. Bedrock's BedrockRuntime,
+ * Anthropic's client) holds circular references that break drizzle's JSON
+ * serialization on `evalRecord.save()`. Fixes #8687.
  */
-function cloneTestForResolve(test: TestCase): TestCase {
-  const cloned: TestCase = { ...test };
+function cloneTestForResolve<T extends Pick<TestCase, 'options' | 'assert'>>(test: T): T {
+  const cloned: T = { ...test };
   if (test.options) {
     cloned.options = { ...test.options };
   }
@@ -98,20 +98,13 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     prompts: await processPrompts(testSuite.prompts),
   };
 
-  // Resolve nested providers
+  // Resolve nested providers. `constructedTestSuite` shallow-shares `defaultTest` and
+  // its `options` with the input, and `readTests()` shallow-copies inline test cases —
+  // so we clone before mutating to keep resolved ApiProvider instances out of the
+  // unified config persisted to the Eval record. See `cloneTestForResolve()`.
   if (typeof constructedTestSuite.defaultTest === 'object' && constructedTestSuite.defaultTest) {
-    // Shallow-clone defaultTest (and options) before mutating so resolved ApiProvider
-    // instances don't leak back into testSuite.defaultTest via the shared reference.
-    // testSuite is reused below to build the unified config written to the Eval record;
-    // an instantiated SDK client (e.g. Bedrock's BedrockRuntime, Anthropic's client) holds
-    // circular references that break drizzle's JSON serialization on `evalRecord.save()`.
-    // Fixes #8687.
-    constructedTestSuite.defaultTest = { ...constructedTestSuite.defaultTest };
-    if (constructedTestSuite.defaultTest.options) {
-      constructedTestSuite.defaultTest.options = { ...constructedTestSuite.defaultTest.options };
-    }
+    constructedTestSuite.defaultTest = cloneTestForResolve(constructedTestSuite.defaultTest);
 
-    // Resolve defaultTest.provider (only if it's not already an ApiProvider instance)
     if (
       constructedTestSuite.defaultTest.provider &&
       !isApiProvider(constructedTestSuite.defaultTest.provider)
@@ -122,7 +115,6 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
         { env: testSuite.env, basePath: cliState.basePath },
       );
     }
-    // Resolve defaultTest.options.provider (only if it's not already an ApiProvider instance)
     if (
       constructedTestSuite.defaultTest.options?.provider &&
       !isApiProvider(constructedTestSuite.defaultTest.options.provider)
@@ -135,11 +127,6 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
   }
 
-  // readTests() shallow-copies inline test cases, so test.options and test.assert[]
-  // still alias the originals in testSuite.tests. Shallow-clone here before swapping
-  // in resolved ApiProvider instances so the originals (and thus the unified config
-  // written to the Eval record) stay free of live SDK clients with circular references.
-  // Same rationale as the defaultTest block above. Fixes #8687.
   constructedTestSuite.tests = (constructedTestSuite.tests || []).map(cloneTestForResolve);
 
   for (const test of constructedTestSuite.tests) {
