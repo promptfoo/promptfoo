@@ -595,6 +595,48 @@ describe('AnthropicMessagesProvider', () => {
       expect(providerB.anthropic.messages.create).toHaveBeenCalledTimes(1);
     });
 
+    it('should preserve duplicate-case request headers in cache keys', async () => {
+      const providerA = createProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          headers: {
+            'X-API-Key': 'sk-ant-header-a',
+            'x-api-key': 'sk-ant-header-b',
+          },
+        },
+      });
+      const providerB = createProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          headers: {
+            'X-API-Key': 'sk-ant-header-a',
+            'x-api-key': 'sk-ant-header-c',
+          },
+        },
+      });
+      const cache = await getCache();
+      const getSpy = vi.spyOn(cache, 'get').mockResolvedValue(undefined);
+      vi.spyOn(cache, 'set').mockResolvedValue(undefined);
+      vi.spyOn(providerA.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant A response' }],
+      } as Anthropic.Messages.Message);
+      vi.spyOn(providerB.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant B response' }],
+      } as Anthropic.Messages.Message);
+
+      await providerA.callApi('Shared sensitive prompt');
+      await providerB.callApi('Shared sensitive prompt');
+
+      const [cacheKeyA, cacheKeyB] = getSpy.mock.calls.map(([key]) => key as string);
+      expect(cacheKeyA).not.toBe(cacheKeyB);
+      for (const cacheKey of [cacheKeyA, cacheKeyB]) {
+        expect(cacheKey).not.toContain('Shared sensitive prompt');
+        expect(cacheKey).not.toContain('sk-ant-header-a');
+        expect(cacheKey).not.toContain('sk-ant-header-b');
+        expect(cacheKey).not.toContain('sk-ant-header-c');
+      }
+      expect(providerA.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(providerB.anthropic.messages.create).toHaveBeenCalledTimes(1);
+    });
+
     it('should avoid logging prompts and generated outputs in debug metadata', async () => {
       const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
       vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({

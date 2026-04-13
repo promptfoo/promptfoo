@@ -50,21 +50,21 @@ function isThinkingEnabled(thinking: Anthropic.Messages.ThinkingConfigParam | un
 }
 
 function normalizeHeadersForCacheKey(headers: Record<string, string>) {
-  return Object.keys(headers).length > 0
-    ? Object.fromEntries(
-        Object.entries(headers)
-          .map(([name, value]): [string, string] => {
-            const normalizedName = name.toLowerCase();
-            return [normalizedName, hashAnthropicCacheValue(value)];
-          })
-          .sort(([nameA, valueA], [nameB, valueB]) => {
-            const nameComparison = nameA.localeCompare(nameB);
-            return nameComparison === 0
-              ? JSON.stringify(valueA).localeCompare(JSON.stringify(valueB))
-              : nameComparison;
-          }),
-      )
-    : undefined;
+  if (Object.keys(headers).length === 0) {
+    return undefined;
+  }
+
+  return Object.entries(headers)
+    .map(([name, value]) => ({
+      name: name.toLowerCase(),
+      valueHash: hashAnthropicCacheValue(value),
+    }))
+    .sort((headerA, headerB) => {
+      const nameComparison = headerA.name.localeCompare(headerB.name);
+      return nameComparison === 0
+        ? headerA.valueHash.localeCompare(headerB.valueHash)
+        : nameComparison;
+    });
 }
 
 function getMessagesRequestMetadata(params: Anthropic.Messages.MessageCreateParams) {
