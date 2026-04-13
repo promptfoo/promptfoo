@@ -66,9 +66,7 @@ function getAuthCacheNamespace(apiKey: string | undefined): string {
     return 'no-api-key';
   }
 
-  return createHmac('sha256', FAL_CACHE_KEY_HMAC_KEY)
-    .update(JSON.stringify(['auth', apiKey]))
-    .digest('hex');
+  return createHmac('sha256', apiKey).update(`${FAL_CACHE_KEY_HMAC_KEY}:auth`).digest('hex');
 }
 
 function generateInputHash(input: unknown): string {
