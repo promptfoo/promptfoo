@@ -5,6 +5,7 @@ import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert'
 import { Card } from '@app/components/ui/card';
 import { GlobeIcon, TerminalIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { cn } from '@app/lib/utils';
@@ -60,7 +61,7 @@ export default function LauncherPage() {
       if (isInitialConnection) {
         setTimeout(() => {
           setIsInitialConnection(false);
-          navigate('/eval');
+          navigate(EVAL_ROUTES.ROOT);
         }, 1000);
       }
     } else if (healthStatus === 'blocked' || healthStatus === 'disabled') {
@@ -100,7 +101,7 @@ export default function LauncherPage() {
         </Alert>
       </div>
 
-      {/* Dark mode toggle */}
+      {/* Theme selector */}
       <div className="absolute right-4 top-4">
         <ThemeSelector />
       </div>
