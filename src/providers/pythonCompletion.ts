@@ -9,7 +9,7 @@ import { PythonWorkerPool } from '../python/workerPool';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
-import { safeJsonStringify } from '../util/json';
+import { stableJsonStringify } from '../util/json';
 import { providerRegistry } from './providerRegistry';
 import { buildCacheableScriptContext, sanitizeScriptContext } from './scriptContext';
 
@@ -350,6 +350,8 @@ export class PythonProvider implements ApiProvider {
     // Build a separate arg set for cache-key hashing that excludes per-run
     // non-deterministic fields (`evaluationId`, `traceparent`, etc.). The
     // full `args` (with tracing metadata) are still forwarded to the worker.
+    // Stable (sorted) JSON ensures callers that clone/reshape options or
+    // context with a different key order still hit the same cache entry.
     const cacheKeyArgs = buildPythonScriptArgs(
       apiType,
       prompt,
@@ -360,7 +362,7 @@ export class PythonProvider implements ApiProvider {
     // Create cache key including the resolved function and exact worker args to ensure
     // different invocation payloads don't share caches.
     const cacheKey = `python:${this.scriptPath}:${functionName}:${apiType}:${fileHash}:${sha256(
-      safeJsonStringify(cacheKeyArgs) ?? 'undefined',
+      stableJsonStringify(cacheKeyArgs) ?? 'undefined',
     )}`;
     logger.debug(`PythonProvider cache key: ${cacheKey}`);
 

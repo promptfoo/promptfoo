@@ -4,7 +4,7 @@ import path from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GolangProvider } from '../../src/providers/golangCompletion';
 import { sha256 } from '../../src/util/createHash';
-import { safeJsonStringify } from '../../src/util/json';
+import { stableJsonStringify } from '../../src/util/json';
 
 // Hoisted mock functions
 const mockExecFile = vi.hoisted(() => vi.fn());
@@ -304,7 +304,7 @@ describe('GolangProvider', () => {
       const expectedCacheKey = mockCache.get.mock.calls[0][0] as string;
       const expectedFileHash = sha256('package main\n// Mock script.go content');
       const expectedArgsHash = sha256(
-        safeJsonStringify(['test prompt', options, context]) ?? 'undefined',
+        stableJsonStringify(['test prompt', options, context]) ?? 'undefined',
       );
 
       expect(expectedCacheKey).toContain('golang:');
@@ -340,7 +340,7 @@ describe('GolangProvider', () => {
       const expectedCacheKey = mockCache.set.mock.calls[0][0] as string;
       const expectedFileHash = sha256('package main\n// Mock script.go content');
       const expectedArgsHash = sha256(
-        safeJsonStringify(['test prompt', options, context]) ?? 'undefined',
+        stableJsonStringify(['test prompt', options, context]) ?? 'undefined',
       );
 
       expect(expectedCacheKey).toContain('golang:');

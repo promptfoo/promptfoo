@@ -9,7 +9,7 @@ import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { parsePathOrGlob } from '../util/index';
-import { safeJsonStringify } from '../util/json';
+import { safeJsonStringify, stableJsonStringify } from '../util/json';
 import { buildCacheableScriptContext, sanitizeScriptContext } from './scriptContext';
 
 import type {
@@ -82,11 +82,13 @@ export class GolangProvider implements ApiProvider {
     // Build a separate arg set for cache-key hashing that excludes per-run
     // non-deterministic fields (`evaluationId`, `traceparent`, etc.). The
     // full `args` (with tracing metadata) are still forwarded to the Go binary.
+    // Stable (sorted) JSON ensures callers that clone/reshape options or
+    // context with a different key order still hit the same cache entry.
     const cacheableContext = buildCacheableScriptContext(context);
     const cacheKeyArgs =
       apiType === 'call_api' ? [prompt, this.options, cacheableContext] : [prompt, this.options];
     const cacheKey = `golang:${this.scriptPath}:${functionName}:${apiType}:${fileHash}:${sha256(
-      safeJsonStringify(cacheKeyArgs) || '[]',
+      stableJsonStringify(cacheKeyArgs) || '[]',
     )}`;
     const cache = await getCache();
     let cachedResult;

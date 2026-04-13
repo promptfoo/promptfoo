@@ -129,6 +129,47 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
   }
 }
 
+/**
+ * Stably stringify a value to JSON by sorting object keys recursively.
+ * Intended for cache-key hashing: two semantically identical payloads
+ * whose keys happen to be inserted in different orders will produce the
+ * same output string and therefore hash to the same cache key. Handles
+ * circular references the same way as `safeJsonStringify`.
+ *
+ * Arrays are NOT sorted — only object key order is normalized — because
+ * array order is semantically meaningful.
+ *
+ * @param value - The value to stringify
+ * @returns JSON string representation, or `undefined` if serialization fails
+ */
+export function stableJsonStringify<T>(value: T): string | undefined {
+  const seen = new WeakSet<object>();
+
+  const normalize = (val: any): any => {
+    if (val === null || typeof val !== 'object') {
+      return val;
+    }
+    if (seen.has(val)) {
+      return undefined;
+    }
+    seen.add(val);
+    if (Array.isArray(val)) {
+      return val.map(normalize);
+    }
+    const sorted: Record<string, any> = {};
+    for (const key of Object.keys(val).sort()) {
+      sorted[key] = normalize(val[key]);
+    }
+    return sorted;
+  };
+
+  try {
+    return JSON.stringify(normalize(value)) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function convertSlashCommentsToHash(str: string): string {
   // Split into lines, process each line, then join back
   return str

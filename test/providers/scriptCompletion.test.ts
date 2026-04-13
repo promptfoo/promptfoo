@@ -10,6 +10,7 @@ import {
   parseScriptParts,
   ScriptCompletionProvider,
 } from '../../src/providers/scriptCompletion';
+import { stableJsonStringify } from '../../src/util/json';
 import type { MockedFunction } from 'vitest';
 
 let createActualHash: typeof crypto.createHash;
@@ -264,8 +265,8 @@ describe('ScriptCompletionProvider', () => {
     const result = await provider.callApi('test prompt', context);
     const fileHash = realSha256('file content');
     const expectedCacheKey = `exec:node script.js:${fileHash}:${fileHash}:${realSha256('test prompt')}:${realSha256(
-      JSON.stringify(options) ?? 'undefined',
-    )}:${realSha256(JSON.stringify(context) ?? 'undefined')}`;
+      stableJsonStringify(options) ?? 'undefined',
+    )}:${realSha256(stableJsonStringify(context) ?? 'undefined')}`;
 
     expect(result.cached).toBe(true);
     expect(result).toEqual({ ...cachedResult, cached: true });
@@ -322,8 +323,8 @@ describe('ScriptCompletionProvider', () => {
     const result = await provider.callApi('test prompt', context);
     const fileHash = realSha256('file content');
     const expectedCacheKey = `exec:node script.js:${fileHash}:${fileHash}:${realSha256('test prompt')}:${realSha256(
-      JSON.stringify(options) ?? 'undefined',
-    )}:${realSha256(JSON.stringify(context) ?? 'undefined')}`;
+      stableJsonStringify(options) ?? 'undefined',
+    )}:${realSha256(stableJsonStringify(context) ?? 'undefined')}`;
 
     expect(result.output).toBe('fresh result');
     expect(mockCache.set).toHaveBeenCalledWith(

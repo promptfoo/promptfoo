@@ -8,7 +8,7 @@ import * as rubyUtils from '../../src/ruby/rubyUtils';
 import { runRuby } from '../../src/ruby/rubyUtils';
 import { sha256 } from '../../src/util/createHash';
 import * as fileReference from '../../src/util/fileReference';
-import { safeJsonStringify } from '../../src/util/json';
+import { stableJsonStringify } from '../../src/util/json';
 
 const fsMocks = vi.hoisted(() => ({
   readFileSync: vi.fn(),
@@ -341,7 +341,7 @@ describe('RubyProvider', () => {
       const expectedCacheKey = mockCache.get.mock.calls[0][0] as string;
       const expectedOptions = { ...options, config: { ...options.config } };
       const expectedArgsHash = sha256(
-        safeJsonStringify(['test prompt', expectedOptions, context]) ?? 'undefined',
+        stableJsonStringify(['test prompt', expectedOptions, context]) ?? 'undefined',
       );
 
       expect(expectedCacheKey).toContain('ruby:');
@@ -377,7 +377,7 @@ describe('RubyProvider', () => {
       const expectedCacheKey = mockCache.set.mock.calls[0][0] as string;
       const expectedOptions = { ...options, config: { ...options.config } };
       const expectedArgsHash = sha256(
-        safeJsonStringify(['test prompt', expectedOptions, context]) ?? 'undefined',
+        stableJsonStringify(['test prompt', expectedOptions, context]) ?? 'undefined',
       );
 
       expect(expectedCacheKey).toContain('ruby:');
@@ -540,7 +540,7 @@ describe('RubyProvider', () => {
       });
       const cacheKey = mockCache.set.mock.calls[0][0] as string;
       const expectedArgsHash = sha256(
-        safeJsonStringify(['test prompt', { config: {} }, undefined]) ?? 'undefined',
+        stableJsonStringify(['test prompt', { config: {} }, undefined]) ?? 'undefined',
       );
       expect(cacheKey).toMatch(/^ruby:script\.rb:call_api:call_api:[a-f0-9]{64}:/);
       expect(cacheKey).toContain(expectedArgsHash);

@@ -11,7 +11,7 @@ import * as pythonUtils from '../../src/python/pythonUtils';
 import { getConfiguredPythonPath, getEnvInt } from '../../src/python/pythonUtils';
 import { PythonWorkerPool } from '../../src/python/workerPool';
 import { sha256 } from '../../src/util/createHash';
-import { safeJsonStringify } from '../../src/util/json';
+import { stableJsonStringify } from '../../src/util/json';
 import type { Mock } from 'vitest';
 
 vi.mock('../../src/logger', () => ({
@@ -232,7 +232,7 @@ describe('PythonProvider', () => {
       const expectedCacheKey = mockCache.get.mock.calls[0][0] as string;
       const expectedOptions = { ...options, config: { ...options.config } };
       const expectedArgsHash = sha256(
-        safeJsonStringify(['test prompt', expectedOptions, context]) ?? 'undefined',
+        stableJsonStringify(['test prompt', expectedOptions, context]) ?? 'undefined',
       );
 
       expect(expectedCacheKey).toContain('python:');
@@ -386,7 +386,7 @@ describe('PythonProvider', () => {
 
       const cacheKey = mockCache.get.mock.calls[0][0] as string;
       const expectedArgsHash = sha256(
-        safeJsonStringify(['test prompt', { config: {} }, undefined]) ?? 'undefined',
+        stableJsonStringify(['test prompt', { config: {} }, undefined]) ?? 'undefined',
       );
       expect(cacheKey).toContain('python:');
       expect(cacheKey).toContain(':call_api:call_api:');
@@ -409,7 +409,7 @@ describe('PythonProvider', () => {
 
       const cacheKey = mockCache.set.mock.calls[0][0] as string;
       const expectedArgsHash = sha256(
-        safeJsonStringify(['test prompt', { config: {} }, undefined]) ?? 'undefined',
+        stableJsonStringify(['test prompt', { config: {} }, undefined]) ?? 'undefined',
       );
       expect(cacheKey).toContain('python:');
       expect(cacheKey).toContain(':call_api:call_api:');
@@ -566,7 +566,7 @@ describe('PythonProvider', () => {
       });
       const cacheKey = mockCache.set.mock.calls[0][0] as string;
       const expectedArgsHash = sha256(
-        safeJsonStringify(['test prompt', { config: {} }, undefined]) ?? 'undefined',
+        stableJsonStringify(['test prompt', { config: {} }, undefined]) ?? 'undefined',
       );
       expect(cacheKey).toContain('python:undefined:call_api:call_api:');
       expect(cacheKey).toContain(expectedArgsHash);

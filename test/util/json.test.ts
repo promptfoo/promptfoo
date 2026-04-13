@@ -10,6 +10,7 @@ import {
   orderKeys,
   resetAjv,
   safeJsonStringify,
+  stableJsonStringify,
   summarizeEvaluateResultForLogging,
 } from '../../src/util/json';
 
@@ -183,6 +184,49 @@ describe('json utilities', () => {
     it('preserves non-circular nested structures', () => {
       const nested = { a: { b: { c: 1 } }, d: [1, 2, { e: 3 }] };
       expect(JSON.parse(safeJsonStringify(nested) as string)).toEqual(nested);
+    });
+  });
+
+  describe('stableJsonStringify', () => {
+    it('sorts top-level keys regardless of insertion order', () => {
+      const a = { b: 2, a: 1, c: 3 };
+      const b = { a: 1, c: 3, b: 2 };
+      expect(stableJsonStringify(a)).toBe(stableJsonStringify(b));
+      expect(stableJsonStringify(a)).toBe('{"a":1,"b":2,"c":3}');
+    });
+
+    it('sorts nested object keys', () => {
+      const a = { outer: { z: 'last', a: 'first' }, list: [{ y: 2, x: 1 }] };
+      const b = { list: [{ x: 1, y: 2 }], outer: { a: 'first', z: 'last' } };
+      expect(stableJsonStringify(a)).toBe(stableJsonStringify(b));
+    });
+
+    it('does not sort arrays (order is semantically meaningful)', () => {
+      expect(stableJsonStringify([3, 1, 2])).toBe('[3,1,2]');
+      expect(stableJsonStringify([1, 2, 3])).toBe('[1,2,3]');
+      expect(stableJsonStringify([3, 1, 2])).not.toBe(stableJsonStringify([1, 2, 3]));
+    });
+
+    it('returns undefined for circular references rather than throwing', () => {
+      const circular: any = { a: 1 };
+      circular.self = circular;
+      // Second reference to the cycle parent is silently dropped.
+      expect(stableJsonStringify(circular)).toBe('{"a":1}');
+    });
+
+    it('handles primitives and null', () => {
+      expect(stableJsonStringify(42)).toBe('42');
+      expect(stableJsonStringify('hi')).toBe('"hi"');
+      expect(stableJsonStringify(null)).toBe('null');
+      expect(stableJsonStringify(true)).toBe('true');
+    });
+
+    it('omits functions and undefined like JSON.stringify', () => {
+      expect(stableJsonStringify({ a: 1, f: () => 0, u: undefined })).toBe('{"a":1}');
+    });
+
+    it('returns undefined for top-level undefined', () => {
+      expect(stableJsonStringify(undefined)).toBeUndefined();
     });
   });
 
