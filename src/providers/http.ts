@@ -1285,30 +1285,52 @@ function getMultipartBoundary(contentType: string): string | undefined {
   return boundaryMatch?.[1] ?? boundaryMatch?.[2]?.trim();
 }
 
+function sanitizeMultipartFallbackBody(body: string): string {
+  const trimmedBody = body.trim();
+  if (!trimmedBody) {
+    return body;
+  }
+
+  const sanitizedTrimmedBody = sanitizeUrlEncodedBody(trimmedBody);
+  return sanitizedTrimmedBody === trimmedBody
+    ? body
+    : body.replace(trimmedBody, sanitizedTrimmedBody);
+}
+
+function getMultipartPartFieldName(headerBlock: string): string | undefined {
+  const fieldNameMatch = headerBlock.match(
+    /content-disposition:[^\r\n]*\bname=(?:"([^"]*)"|([^;\r\n]+))/i,
+  );
+  const fieldName = fieldNameMatch?.[1] ?? fieldNameMatch?.[2]?.trim();
+  return fieldName || undefined;
+}
+
 function sanitizeMultipartPartBody(part: string): string {
   const separator = part.includes('\r\n\r\n') ? '\r\n\r\n' : '\n\n';
   const separatorIndex = part.indexOf(separator);
   if (separatorIndex === -1) {
-    return part;
+    return sanitizeMultipartFallbackBody(part);
   }
 
   const headerBlock = part.slice(0, separatorIndex);
   const bodyStartIndex = separatorIndex + separator.length;
   const body = part.slice(bodyStartIndex);
-  const fieldName = headerBlock.match(/content-disposition:[^\r\n]*\bname="([^"]+)"/i)?.[1];
-  const shouldRedact = Boolean(fieldName && isSecretField(fieldName)) || looksLikeSecret(body);
+  const fieldName = getMultipartPartFieldName(headerBlock);
+  const trailingNewline = body.match(/(\r?\n)$/)?.[1] ?? '';
+  const bodyWithoutTerminator = trailingNewline ? body.slice(0, -trailingNewline.length) : body;
+  const shouldRedact =
+    Boolean(fieldName && isSecretField(fieldName)) || looksLikeSecret(bodyWithoutTerminator);
   if (!shouldRedact) {
     return part;
   }
 
-  const trailingNewline = body.match(/(\r?\n)$/)?.[1] ?? '';
   return `${part.slice(0, bodyStartIndex)}${REDACTED}${trailingNewline}`;
 }
 
 function sanitizeMultipartBody(body: string, contentType: string): string {
   const boundary = getMultipartBoundary(contentType);
   if (!boundary) {
-    return body;
+    return sanitizeMultipartFallbackBody(body);
   }
 
   return body

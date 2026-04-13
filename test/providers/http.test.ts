@@ -2112,6 +2112,7 @@ describe('HttpProvider', () => {
 
     it('should redact multipart raw request bodies in debug metadata', async () => {
       const boundary = '----WebKitFormBoundaryPromptFooABC123';
+      const opaqueToken = 'A'.repeat(64);
       const rawRequest = dedent`
         POST /upload HTTP/1.1
         Host: example.com
@@ -2122,13 +2123,17 @@ describe('HttpProvider', () => {
 
         alice
         --${boundary}
-        Content-Disposition: form-data; name="password"
+        Content-Disposition: form-data; name=password
 
         plain-secret
         --${boundary}
         Content-Disposition: form-data; name="apiKey"
 
         sk-123456789012345678901234567890
+        --${boundary}
+        Content-Disposition: form-data; name="note"
+
+        ${opaqueToken}
         --${boundary}--
       `;
       const provider = new HttpProvider('http', {
@@ -2155,12 +2160,56 @@ describe('HttpProvider', () => {
       expect(result.metadata?.transformedRequest).toContain(boundary);
       expect(result.metadata?.transformedRequest).toContain('name="username"');
       expect(result.metadata?.transformedRequest).toContain('alice');
-      expect(result.metadata?.transformedRequest).toContain('name="password"');
+      expect(result.metadata?.transformedRequest).toContain('name=password');
       expect(result.metadata?.transformedRequest).toContain('[REDACTED]');
       expect(result.metadata?.transformedRequest).not.toContain('plain-secret');
       expect(result.metadata?.transformedRequest).not.toContain(
         'sk-123456789012345678901234567890',
       );
+      expect(result.metadata?.transformedRequest).not.toContain(opaqueToken);
+      expect(result.metadata?.finalRequestBody).not.toContain('plain-secret');
+      expect(result.metadata?.finalRequestBody).not.toContain('sk-123456789012345678901234567890');
+      expect(result.metadata?.finalRequestBody).not.toContain(opaqueToken);
+    });
+
+    it('should redact malformed multipart raw request bodies without throwing', async () => {
+      const rawRequest = dedent`
+        POST /upload HTTP/1.1
+        Host: example.com
+        Content-Type: multipart/form-data; boundary=MissingBoundary
+
+        username=alice&password=plain-secret&api_key=sk-123456789012345678901234567890
+      `;
+      const provider = new HttpProvider('http', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const result = await provider.callApi('test prompt', {
+        debug: true,
+        vars: {},
+        prompt: { raw: 'test prompt', label: 'test' },
+      });
+
+      expect(result.metadata?.transformedRequest).toContain('username=alice');
+      expect(result.metadata?.transformedRequest).toContain('password=%5BREDACTED%5D');
+      expect(result.metadata?.transformedRequest).toContain('api_key=%5BREDACTED%5D');
+      expect(result.metadata?.transformedRequest).not.toContain('plain-secret');
+      expect(result.metadata?.transformedRequest).not.toContain(
+        'sk-123456789012345678901234567890',
+      );
+      expect(result.metadata?.finalRequestBody).toContain('password=%5BREDACTED%5D');
+      expect(result.metadata?.finalRequestBody).toContain('api_key=%5BREDACTED%5D');
       expect(result.metadata?.finalRequestBody).not.toContain('plain-secret');
       expect(result.metadata?.finalRequestBody).not.toContain('sk-123456789012345678901234567890');
     });
@@ -2219,6 +2268,47 @@ describe('HttpProvider', () => {
       expect(result.metadata?.finalRequestBody).toContain('"apiKey":"[REDACTED]"');
       expect(result.metadata?.finalRequestBody).toContain('"password":"[REDACTED]"');
       expect(result.metadata?.finalRequestBody).not.toContain('raw-transform-token');
+      expect(result.metadata?.finalRequestBody).not.toContain('plain-secret');
+      expect(result.metadata?.finalRequestBody).not.toContain('sk-123456789012345678901234567890');
+    });
+
+    it('should redact form-urlencoded transformed requests in debug metadata', async () => {
+      const formBody =
+        'username=alice&password=plain-secret&api_key=sk-123456789012345678901234567890';
+      const provider = new HttpProvider('http://example.com/api', {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: '{{ prompt }}',
+          transformRequest: () => formBody,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const result = await provider.callApi('test prompt', {
+        debug: true,
+        vars: {},
+        prompt: { raw: 'test prompt', label: 'test' },
+      });
+
+      expect(result.metadata?.transformedRequest).toContain('username=alice');
+      expect(result.metadata?.transformedRequest).toContain('password=%5BREDACTED%5D');
+      expect(result.metadata?.transformedRequest).toContain('api_key=%5BREDACTED%5D');
+      expect(result.metadata?.transformedRequest).not.toContain('plain-secret');
+      expect(result.metadata?.transformedRequest).not.toContain(
+        'sk-123456789012345678901234567890',
+      );
+      expect(result.metadata?.finalRequestBody).toContain('username=alice');
+      expect(result.metadata?.finalRequestBody).toContain('password=%5BREDACTED%5D');
+      expect(result.metadata?.finalRequestBody).toContain('api_key=%5BREDACTED%5D');
       expect(result.metadata?.finalRequestBody).not.toContain('plain-secret');
       expect(result.metadata?.finalRequestBody).not.toContain('sk-123456789012345678901234567890');
     });
