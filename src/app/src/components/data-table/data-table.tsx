@@ -34,6 +34,8 @@ import type { DataTableProps } from './types';
 
 const UTILITY_COLUMN_IDS = new Set(['select', 'expand']);
 
+type RowDisplayMode = 'client-virtualized' | 'server-virtualized';
+
 type DataTableHeaderActionsProps<TData, TValue> = {
   canFilter: boolean;
   canSort: boolean;
@@ -192,6 +194,23 @@ function shouldShowEmptyDataState(
   return !hasData && !(globalFilter || columnFilters.length > 0);
 }
 
+function resolveRowDisplayMode(
+  rowDisplayMode: RowDisplayMode | undefined,
+  hasServerVirtualization: boolean,
+) {
+  const requestedRowDisplayMode = rowDisplayMode ?? 'client-virtualized';
+  const isInvalidServerVirtualizationConfig =
+    requestedRowDisplayMode === 'server-virtualized' && !hasServerVirtualization;
+  const resolvedRowDisplayMode = isInvalidServerVirtualizationConfig
+    ? 'client-virtualized'
+    : requestedRowDisplayMode;
+
+  return {
+    isInvalidServerVirtualizationConfig,
+    isServerVirtualized: resolvedRowDisplayMode === 'server-virtualized',
+  };
+}
+
 export function DataTable<TData, TValue = unknown>({
   columns,
   data,
@@ -235,8 +254,20 @@ export function DataTable<TData, TValue = unknown>({
   const sorting = controlledSorting ?? internalSorting;
   const sortingRef = React.useRef(sorting);
   sortingRef.current = sorting;
-  const resolvedRowDisplayMode = rowDisplayMode ?? 'client-virtualized';
-  const isServerVirtualized = resolvedRowDisplayMode === 'server-virtualized';
+  const { isInvalidServerVirtualizationConfig, isServerVirtualized } = resolveRowDisplayMode(
+    rowDisplayMode,
+    serverVirtualization != null,
+  );
+  const showColumnFilterControls = showFilter && (!isServerVirtualized || manualFiltering);
+  const showGlobalFilterControl = !isServerVirtualized;
+
+  React.useEffect(() => {
+    if (isInvalidServerVirtualizationConfig) {
+      console.warn(
+        'DataTable: rowDisplayMode="server-virtualized" requires serverVirtualization. Falling back to client virtualization.',
+      );
+    }
+  }, [isInvalidServerVirtualizationConfig]);
   const handleSortingChange = React.useCallback(
     (updater: SortingState | ((old: SortingState) => SortingState)) => {
       const nextValue = typeof updater === 'function' ? updater(sortingRef.current) : updater;
@@ -841,7 +872,8 @@ export function DataTable<TData, TValue = unknown>({
               globalFilter={globalFilter}
               setGlobalFilter={setGlobalFilter}
               showColumnToggle={showColumnToggle}
-              showFilter={showFilter}
+              showFilter={showColumnFilterControls}
+              showGlobalFilter={showGlobalFilterControl}
               showExport={showExport}
               onExportCSV={onExportCSV}
               onExportJSON={onExportJSON}
@@ -869,7 +901,7 @@ export function DataTable<TData, TValue = unknown>({
                   className="border-b border-zinc-200 dark:border-zinc-800 print:border-gray-300"
                 >
                   {headerGroup.headers.map((header) =>
-                    renderDataTableHeaderCell(header, showFilter),
+                    renderDataTableHeaderCell(header, showColumnFilterControls),
                   )}
                 </tr>
               ))}

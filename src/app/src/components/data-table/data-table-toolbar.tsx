@@ -21,6 +21,7 @@ export function DataTableToolbar<TData>({
   setGlobalFilter,
   showColumnToggle = true,
   showFilter = true,
+  showGlobalFilter = true,
   showExport = true,
   onExportCSV,
   onExportJSON,
@@ -59,15 +60,17 @@ export function DataTableToolbar<TData>({
         {toolbarActions}
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-gray-500 dark:text-gray-400" />
-        <Input
-          placeholder="Search..."
-          value={globalFilter ?? ''}
-          onChange={(e) => setGlobalFilter(e.target.value)}
-          className="pl-8 rounded-lg bg-white dark:bg-gray-900"
-        />
-      </div>
+      {showGlobalFilter && (
+        <div className="relative max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-gray-500 dark:text-gray-400" />
+          <Input
+            placeholder="Search..."
+            value={globalFilter ?? ''}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            className="pl-8 rounded-lg bg-white dark:bg-gray-900"
+          />
+        </div>
+      )}
     </div>
   );
 }

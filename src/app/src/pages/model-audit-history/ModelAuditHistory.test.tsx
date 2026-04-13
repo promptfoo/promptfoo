@@ -2,7 +2,7 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useModelAuditHistoryStore } from '../model-audit/stores';
 import ModelAuditHistory from './ModelAuditHistory';
 
@@ -42,6 +42,10 @@ describe('ModelAuditHistory', () => {
   const mockSetPageSize = vi.fn();
   const mockSetCurrentPage = vi.fn();
   const mockSetSortModel = vi.fn();
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
 
   const getDefaultHistoryState = () => ({
     historicalScans: [],
@@ -132,6 +136,21 @@ describe('ModelAuditHistory', () => {
 
     expect(screen.getByText('Scan 1')).toBeInTheDocument();
     expect(screen.getByText('Scan 2')).toBeInTheDocument();
+  });
+
+  it('should not render stale scans when the API reports zero total scans', () => {
+    const staleScans = [createMockScan('stale', 'Stale Scan')];
+
+    mockUseHistoryStore.mockReturnValue({
+      ...getDefaultHistoryState(),
+      historicalScans: staleScans,
+      totalCount: 0,
+    } as any);
+
+    renderComponent();
+
+    expect(screen.queryByText('Stale Scan')).not.toBeInTheDocument();
+    expect(screen.getByText('No data found')).toBeInTheDocument();
   });
 
   it('should have New Scan button in toolbar', async () => {

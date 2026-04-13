@@ -88,7 +88,7 @@ export default function ModelAuditHistory() {
 
   const { serverVirtualization, loadedRowCount } = useServerVirtualizedRows<HistoricalScan>({
     initialRows: historicalScans,
-    rowCount: totalCount || historicalScans.length,
+    rowCount: totalCount,
     pageSize,
     fetchRows: fetchVirtualRows,
     resetKey: sortModel,

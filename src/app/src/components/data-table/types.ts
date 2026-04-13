@@ -137,6 +137,7 @@ export interface DataTableToolbarProps<TData> {
   setGlobalFilter: (value: string) => void;
   showColumnToggle?: boolean;
   showFilter?: boolean;
+  showGlobalFilter?: boolean;
   showExport?: boolean;
   onExportCSV?: () => void;
   onExportJSON?: () => void;
