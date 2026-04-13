@@ -1246,6 +1246,9 @@ When a request is made, the provider:
 4. Adds the token to API requests as an `Authorization: Bearer <token>` header
 
 Tokens are refreshed proactively with a 60-second buffer before expiry.
+When OAuth config values use templates, tokens are cached per rendered auth
+context so different client IDs, secrets, scopes, token URLs, or user credentials
+do not share cached access tokens.
 
 #### Client Credentials Grant
 
@@ -1319,6 +1322,7 @@ The auth function receives the standard HTTP provider `callApi` context and must
 - `expiration` is optional and should be an absolute Unix timestamp in milliseconds
 - If `expiration` is omitted or `null`, the token is cached for the lifetime of the provider instance
 - If `expiration` is provided, the function is called again when the token is within the same 60-second refresh buffer used by OAuth
+- Cached file-auth tokens are scoped to the rendered file-auth config and call context, so templated credentials do not reuse tokens across different test cases.
 
 The auth function receives the same `callApi` context object that providers receive at runtime, including `vars`, `prompt`, `test`, `originalProvider`, `evaluationId`, `testCaseId`, `traceparent`, `tracestate`, and `repeatIndex`.
 
