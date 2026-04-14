@@ -463,6 +463,29 @@ describe('handleIsHtml', () => {
     });
   });
 
+  it('should reject incomplete or ignored wrapper tags', () => {
+    const invalidWrappers = [
+      { input: '<html', reason: 'Output does not contain recognized HTML elements' },
+      { input: '<head', reason: 'Output does not contain recognized HTML elements' },
+      { input: '<body', reason: 'Output does not contain recognized HTML elements' },
+      { input: 'plain <body>', reason: 'Output must be wrapped in HTML tags' },
+      { input: 'plain <body', reason: 'Output must be wrapped in HTML tags' },
+    ];
+
+    invalidWrappers.forEach(({ input, reason }) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'is-html' },
+        outputString: input,
+        inverse: false,
+      };
+
+      const result = handleIsHtml(params);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe(reason);
+    });
+  });
+
   it('should handle pathologically deep nesting without stack overflow', () => {
     // Nesting 15k unknown elements forces the iterative walker to actually
     // traverse the full depth: unknown tags fail `isUserProvidedElement`, so

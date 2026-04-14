@@ -9,13 +9,13 @@ type HtmlElement = DefaultTreeAdapterMap['element'];
 type HtmlParentNode = DefaultTreeAdapterMap['parentNode'];
 
 // Matches a literal opening tag for html/head/body — the next character must
-// terminate the tag name (whitespace, `>`, `/`, or end of input). Without this
+// terminate the tag name (whitespace, `>`, or `/`). Without this
 // guard a substring check like `input.includes('<head')` would false-positive
 // on tags that merely share a prefix, e.g. `<headphones>` or `<bodyguard>`.
 const LITERAL_WRAPPER_PATTERNS = {
-  html: /<html(?=[\s>/]|$)/,
-  head: /<head(?=[\s>/]|$)/,
-  body: /<body(?=[\s>/]|$)/,
+  html: /<html(?=[\s>/])/,
+  head: /<head(?=[\s>/])/,
+  body: /<body(?=[\s>/])/,
 } as const;
 
 type WrapperTagName = keyof typeof LITERAL_WRAPPER_PATTERNS;
@@ -30,6 +30,14 @@ function isTextNode(node: HtmlNode): node is DefaultTreeAdapterMap['textNode'] {
 
 function isElementNode(node: HtmlNode): node is HtmlElement {
   return 'tagName' in node;
+}
+
+function hasSourceCodeLocation(element: HtmlElement): boolean {
+  return (
+    'sourceCodeLocation' in element &&
+    element.sourceCodeLocation !== null &&
+    element.sourceCodeLocation !== undefined
+  );
 }
 
 function getChildNodes(node: HtmlNode): HtmlChildNode[] {
@@ -63,8 +71,8 @@ function hasTopLevelText(parentNode: HtmlParentNode): boolean {
 
 function isUserProvidedElement(element: HtmlElement, inputLowercase: string): boolean {
   const tagName = element.tagName.toLowerCase();
-  if (isWrapperTagName(tagName) && !LITERAL_WRAPPER_PATTERNS[tagName].test(inputLowercase)) {
-    return false;
+  if (isWrapperTagName(tagName)) {
+    return LITERAL_WRAPPER_PATTERNS[tagName].test(inputLowercase) && hasSourceCodeLocation(element);
   }
   return VALID_HTML_ELEMENTS.has(tagName) || tagName.includes('-');
 }
@@ -296,16 +304,19 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
     return { isValid: false, reason: 'Output appears to be XML, not HTML' };
   }
 
-  const document = parse(trimmed);
+  const document = parse(trimmed, { sourceCodeLocationInfo: true });
   const inputLowercase = trimmed.toLowerCase();
+  const body = findFirstElement(document, (element) => element.tagName === 'body');
 
   // parse5 auto-wraps fragments and plain text in <html><head><body>, so if the
   // input didn't include <body> itself, treat top-level body text as invalid.
-  if (!LITERAL_WRAPPER_PATTERNS.body.test(inputLowercase)) {
-    const body = findFirstElement(document, (element) => element.tagName === 'body');
-    if (body && hasTopLevelText(body)) {
-      return { isValid: false, reason: 'Output must be wrapped in HTML tags' };
-    }
+  const hasUserProvidedBody =
+    body !== undefined &&
+    LITERAL_WRAPPER_PATTERNS.body.test(inputLowercase) &&
+    hasSourceCodeLocation(body);
+
+  if (!hasUserProvidedBody && body && hasTopLevelText(body)) {
+    return { isValid: false, reason: 'Output must be wrapped in HTML tags' };
   }
 
   const userProvidedElement = findFirstElement(document, (element) =>
