@@ -6,6 +6,7 @@ import guardrails from './guardrails';
 import logger from './logger';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
+import { sanitizeProvider } from './models/evalResult';
 import { processPrompts, readProviderPromptMap } from './prompts/index';
 import { loadApiProvider, loadApiProviders, resolveProvider } from './providers/index';
 import { doGenerateRedteam } from './redteam/commands/generate';
@@ -72,6 +73,113 @@ function cloneTestForResolve<T extends Pick<TestCase, 'options' | 'assert'>>(tes
     cloned.assert = test.assert.map((assertion) => ({ ...assertion }));
   }
   return cloned;
+}
+
+function toSerializableProviderRef(provider: unknown): unknown {
+  if (isApiProvider(provider)) {
+    return sanitizeProvider(provider);
+  }
+  if (Array.isArray(provider)) {
+    return provider.map(toSerializableProviderRef);
+  }
+  return provider;
+}
+
+function toSerializableAssertion(assertion: unknown): unknown {
+  if (!assertion || typeof assertion !== 'object') {
+    return assertion;
+  }
+
+  const assertionRecord = assertion as Record<string, unknown>;
+  let sanitizedAssertion = assertionRecord;
+
+  if (isApiProvider(assertionRecord.provider)) {
+    sanitizedAssertion = {
+      ...sanitizedAssertion,
+      provider: sanitizeProvider(assertionRecord.provider),
+    };
+  }
+
+  if (Array.isArray(assertionRecord.assert)) {
+    sanitizedAssertion = {
+      ...sanitizedAssertion,
+      assert: assertionRecord.assert.map(toSerializableAssertion),
+    };
+  }
+
+  return sanitizedAssertion;
+}
+
+function toSerializableTestCase(test: unknown): unknown {
+  if (!test || typeof test !== 'object') {
+    return test;
+  }
+
+  const testRecord = test as Record<string, unknown>;
+  let sanitizedTest = testRecord;
+
+  if (isApiProvider(testRecord.provider)) {
+    sanitizedTest = {
+      ...sanitizedTest,
+      provider: sanitizeProvider(testRecord.provider),
+    };
+  }
+
+  if (testRecord.options && typeof testRecord.options === 'object') {
+    const options = testRecord.options as Record<string, unknown>;
+    if (isApiProvider(options.provider)) {
+      sanitizedTest = {
+        ...sanitizedTest,
+        options: {
+          ...options,
+          provider: sanitizeProvider(options.provider),
+        },
+      };
+    }
+  }
+
+  if (Array.isArray(testRecord.assert)) {
+    sanitizedTest = {
+      ...sanitizedTest,
+      assert: testRecord.assert.map(toSerializableAssertion),
+    };
+  }
+
+  return sanitizedTest;
+}
+
+function toSerializableScenario(scenario: unknown): unknown {
+  if (!scenario || typeof scenario !== 'object') {
+    return scenario;
+  }
+
+  const scenarioRecord = scenario as Record<string, unknown>;
+  if (!Array.isArray(scenarioRecord.tests)) {
+    return scenario;
+  }
+
+  return {
+    ...scenarioRecord,
+    tests: scenarioRecord.tests.map(toSerializableTestCase),
+  };
+}
+
+function createSerializableUnifiedConfig(
+  testSuite: EvaluateTestSuite,
+  prompts: TestSuite['prompts'],
+): Partial<UnifiedConfig> {
+  return {
+    ...testSuite,
+    providers: toSerializableProviderRef(testSuite.providers),
+    defaultTest: toSerializableTestCase(testSuite.defaultTest),
+    tests: Array.isArray(testSuite.tests)
+      ? testSuite.tests.map(toSerializableTestCase)
+      : testSuite.tests,
+    scenarios: Array.isArray(testSuite.scenarios)
+      ? testSuite.scenarios.map(toSerializableScenario)
+      : testSuite.scenarios,
+    prompts,
+  } as Partial<UnifiedConfig>;
 }
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
@@ -169,10 +277,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   // object mutated above with a resolved ApiProvider (see `cloneTestForResolve()`).
   // Live SDK clients hold circular refs and break drizzle JSON serialization on
   // `evalRecord.save()`. Fixes #8687.
-  const unifiedConfig = {
-    ...testSuite,
-    prompts: constructedTestSuite.prompts,
-  } as Partial<UnifiedConfig>;
+  const unifiedConfig = createSerializableUnifiedConfig(testSuite, constructedTestSuite.prompts);
   const evalRecord = testSuite.writeLatestResults
     ? await Eval.create(unifiedConfig, constructedTestSuite.prompts)
     : new Eval(unifiedConfig);
