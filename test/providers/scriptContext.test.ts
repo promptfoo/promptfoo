@@ -4,6 +4,7 @@ import {
   buildCacheableScriptContext,
   sanitizeScriptContext,
 } from '../../src/providers/scriptContext';
+import { createMockProvider } from '../factories/provider';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
@@ -27,7 +28,7 @@ describe('sanitizeScriptContext', () => {
   });
 
   it('strips non-serializable keys and logs them', () => {
-    const originalProvider = { id: () => 'x', callApi: vi.fn() };
+    const originalProvider = createMockProvider({ id: 'x' });
     const context = {
       vars: { foo: 'bar' },
       getCache: vi.fn(),
@@ -52,7 +53,7 @@ describe('sanitizeScriptContext', () => {
   });
 
   it('does not mutate the caller-owned context', () => {
-    const originalProvider = { id: () => 'x', callApi: vi.fn() };
+    const originalProvider = createMockProvider({ id: 'x' });
     const context = {
       vars: { foo: 'bar' },
       getCache: vi.fn(),
@@ -144,7 +145,7 @@ describe('buildCacheableScriptContext', () => {
       getCache: vi.fn(),
       logger: { debug: vi.fn() },
       filters: { uppercase: () => '' },
-      originalProvider: { id: () => 'x', callApi: vi.fn() },
+      originalProvider: createMockProvider({ id: 'x' }),
     } as unknown as CallApiContextParams;
 
     const cacheable = buildCacheableScriptContext(context);

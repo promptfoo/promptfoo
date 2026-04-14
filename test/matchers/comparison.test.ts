@@ -1,16 +1,17 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { matchesSelectBest } from '../../src/matchers/comparison';
+import { createMockProvider } from '../factories/provider';
 
 import type { ApiProvider, GradingConfig } from '../../src/types/index';
 
 function createSelectBestProvider(output: string): ApiProvider {
-  return {
-    id: () => 'select-best-test-provider',
-    callApi: vi.fn().mockResolvedValue({
+  return createMockProvider({
+    id: 'select-best-test-provider',
+    response: {
       output,
       tokenUsage: { total: 7, prompt: 3, completion: 4 },
-    }),
-  };
+    },
+  });
 }
 
 describe('matchesSelectBest', () => {

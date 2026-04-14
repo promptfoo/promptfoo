@@ -3,8 +3,9 @@ import {
   CrossSessionLeakGrader,
   CrossSessionLeakPlugin,
 } from '../../../src/redteam/plugins/crossSessionLeak';
+import { createMockProvider, type MockApiProvider } from '../../factories/provider';
 
-import type { ApiProvider, AtomicTestCase, CallApiFunction } from '../../../src/types/index';
+import type { AtomicTestCase } from '../../../src/types/index';
 
 vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
   return {
@@ -19,13 +20,10 @@ afterEach(() => {
 
 describe('CrossSessionLeakPlugin', () => {
   let plugin: CrossSessionLeakPlugin;
-  let mockProvider: ApiProvider;
+  let mockProvider: MockApiProvider;
 
   beforeEach(() => {
-    mockProvider = {
-      callApi: vi.fn() as CallApiFunction,
-      id: vi.fn().mockReturnValue('test-provider'),
-    };
+    mockProvider = createMockProvider();
     plugin = new CrossSessionLeakPlugin(mockProvider, 'test-purpose', 'testVar');
   });
 
