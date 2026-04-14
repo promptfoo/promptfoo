@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
 
 function readPackageJson<T>(relativePath: string): T {
@@ -9,6 +10,7 @@ function readPackageJson<T>(relativePath: string): T {
 }
 
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
+const EXPECTED_SHARP_VERSION = '^0.34.5';
 
 function collectSourceFiles(rootDir: string, excluded: Set<string>): string[] {
   const results: string[] = [];
@@ -37,7 +39,7 @@ describe('package manifests', () => {
     }>('package.json');
 
     expect(packageJson.devDependencies?.sharp).toBeUndefined();
-    expect(packageJson.optionalDependencies?.sharp).toBe('^0.34.5');
+    expect(packageJson.optionalDependencies?.sharp).toBe(EXPECTED_SHARP_VERSION);
   });
 
   it('keeps jsdom out of root runtime dependencies', () => {
@@ -49,7 +51,7 @@ describe('package manifests', () => {
     // as its replacement" — not "parse5 must be exactly version X". Accept any
     // semver range so future major bumps don't re-fail this regression test.
     expect(packageJson.dependencies?.jsdom).toBeUndefined();
-    expect(packageJson.dependencies?.parse5).toMatch(/^[\^~]?\d+\.\d+\.\d+/);
+    expect(validRange(packageJson.dependencies?.parse5)).not.toBeNull();
   });
 
   it('does not import jsdom from root src/', () => {
@@ -76,6 +78,6 @@ describe('package manifests', () => {
     }>('site/package.json');
 
     expect(sitePackageJson.devDependencies?.sharp).toBeUndefined();
-    expect(sitePackageJson.optionalDependencies?.sharp).toBe('^0.34.5');
+    expect(sitePackageJson.optionalDependencies?.sharp).toBe(EXPECTED_SHARP_VERSION);
   });
 });

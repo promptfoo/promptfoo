@@ -22,7 +22,14 @@ import { safeJsonStringify } from '../util/json';
 import { sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 
-// Removes circular references from the provider object and ensures consistent format
+function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
+  return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
+    context: 'provider config',
+    maxDepth: Number.POSITIVE_INFINITY,
+  }) as ProviderConfig;
+}
+
+// Removes circular references and credentials from the provider object and ensures consistent format.
 export function sanitizeProvider(
   provider: ApiProvider | ProviderOptions | string,
 ): ProviderOptions {
@@ -32,7 +39,7 @@ export function sanitizeProvider(
         id: provider.id(),
         label: provider.label,
         ...(provider.config && {
-          config: JSON.parse(safeJsonStringify(provider.config) as string),
+          config: sanitizeProviderConfig(provider.config),
         }),
       };
     }
@@ -41,7 +48,7 @@ export function sanitizeProvider(
         id: provider.id,
         label: provider.label,
         ...(provider.config && {
-          config: JSON.parse(safeJsonStringify(provider.config) as string),
+          config: sanitizeProviderConfig(provider.config),
         }),
       };
     }
@@ -55,7 +62,7 @@ export function sanitizeProvider(
         id: typeof providerObj.id === 'function' ? providerObj.id() : providerObj.id,
         label: providerObj.label,
         ...(providerObj.config && {
-          config: JSON.parse(safeJsonStringify(providerObj.config) as string),
+          config: sanitizeProviderConfig(providerObj.config),
         }),
       };
     }
@@ -71,6 +78,10 @@ export function sanitizeProvider(
  * This prevents "Converting circular structure to JSON" errors that can occur
  * when Node.js Timeout objects or other non-serializable data leaks into results.
  * See: https://github.com/promptfoo/promptfoo/issues/7266
+ *
+ * Fallback behavior: if serialization returns `undefined` (for example, certain
+ * non-JSON-serializable values) or parsing throws, this function preserves JSON
+ * shape by returning `[]` for array inputs and `null` for non-array inputs.
  */
 function sanitizeForDb<T>(obj: T): T {
   if (obj === null || obj === undefined) {
@@ -106,6 +117,12 @@ function sanitizeForDb<T>(obj: T): T {
  * client) flows in from the evaluator. Without this, credentials configured on
  * the judge provider end up in the Eval results both in the DB and in the
  * polling response served by `/api/eval/job/:id`.
+ *
+ * Note: this sanitizer intentionally uses `maxDepth: Number.POSITIVE_INFINITY`.
+ * Provider configs in eval results are not depth-bounded in practice (they can
+ * contain arbitrarily deep nested objects from resolved runtime provider/client
+ * state). A finite depth could stop traversal early and miss secret-bearing
+ * fields at deeper levels.
  */
 function sanitizeForDbWithSecrets<T>(obj: T): T {
   if (obj === null || obj === undefined) {

@@ -52,11 +52,17 @@ export type {
  * Anthropic's client) holds circular references that break drizzle's JSON
  * serialization on `evalRecord.save()`. Fixes #8687.
  *
- * Detaches only `options` and `assert[]`. Other reference fields (`provider`,
- * `vars`, `metadata`, `providerOutput`) remain aliased — callers must reassign
- * those by reference rather than mutating in place. `assert-set` children are
- * not deep-cloned because the resolve loop skips `assert-set`; if that ever
- * changes, extend this helper.
+ * Detaches only `options` and top-level `assert[]`. Other reference fields
+ * (`provider`, `vars`, `metadata`, `providerOutput`) remain aliased — callers
+ * must reassign those by reference rather than mutating in place.
+ *
+ * `assert-set` is a grouping assertion whose nested children are not visited by
+ * the provider-resolution loop in `evaluate`; only top-level assertions have
+ * `provider` swapped. Example: for
+ * `{ type: 'assert-set', assert: [{ type: 'equals', ... }] }`, the nested
+ * `equals` entry is not mutated during resolve, so deep-cloning `assert-set`
+ * children is unnecessary today. If resolution is later extended to traverse
+ * nested `assert-set` children, this helper must be updated to deep-clone them.
  */
 function cloneTestForResolve<T extends Pick<TestCase, 'options' | 'assert'>>(test: T): T {
   const cloned: T = { ...test };
