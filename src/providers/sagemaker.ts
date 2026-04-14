@@ -241,7 +241,11 @@ abstract class SageMakerGenericProvider {
 
       logger.debug(`Applying transform to prompt for SageMaker endpoint ${this.getEndpointName()}`);
 
-      // For inline transform functions, do direct evaluation
+      // Inline string expressions are evaluated directly here (SageMaker predates the
+      // shared transform utility and uses `prompt` as the inline identifier rather than
+      // `output`, so we can't route them through src/util/transform without breaking
+      // existing configs). Direct TransformFunction values and file:// references are
+      // delegated to the shared utility below.
       if (typeof transformFn === 'string' && !transformFn.startsWith('file://')) {
         try {
           // SECURITY WARNING: Using new Function() with dynamic content can be risky
@@ -304,7 +308,7 @@ abstract class SageMakerGenericProvider {
           logger.error(`Error executing inline transform: ${transformError}`);
         }
       } else {
-        // Use the transform utility for file transforms
+        // Delegate file:// references and TransformFunction values to the shared utility.
         try {
           const { TransformInputType } = await import('../util/transform');
           const transformed = await transform(

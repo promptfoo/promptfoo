@@ -122,6 +122,20 @@ describe('SageMakerCompletionProvider', () => {
       warnSpy.mockRestore();
     });
 
+    it('applies a direct TransformFunction to the prompt via applyTransformation', async () => {
+      const transformFn = (prompt: unknown) => `TRANSFORMED:${String(prompt).trim()}`;
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'custom',
+          transform: transformFn,
+        },
+      });
+
+      const transformed = await provider.applyTransformation('  hello  ');
+      expect(transformed).toBe('TRANSFORMED:hello');
+    });
+
     it('preserves an explicit maxTokens value of 0', () => {
       vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '1024');
 
