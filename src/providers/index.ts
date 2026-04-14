@@ -26,7 +26,8 @@ import type {
   ProviderOptionsMap,
 } from '../types/providers';
 
-type ProviderFunctionWithMetadata = ProviderFunction & Pick<ApiProvider, 'label' | 'transform'>;
+type ProviderFunctionWithMetadata = ProviderFunction &
+  Pick<ApiProvider, 'label' | 'transform' | 'delay' | 'inputs' | 'config'>;
 
 function createProviderFromFunction(
   provider: ProviderFunctionWithMetadata,
@@ -35,7 +36,11 @@ function createProviderFromFunction(
   return {
     id: () => provider.label ?? id,
     callApi: provider,
+    label: provider.label,
     transform: provider.transform,
+    delay: provider.delay,
+    inputs: provider.inputs,
+    config: provider.config,
   };
 }
 

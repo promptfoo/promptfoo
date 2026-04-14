@@ -902,6 +902,30 @@ describe('loadApiProvider', () => {
     expect(response.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
   });
 
+  it('loadApiProviders with ProviderFunction preserves metadata properties', async () => {
+    const providerFunction: ProviderFunction & {
+      label?: string;
+      transform?: (output: string) => string;
+      delay?: number;
+      inputs?: any;
+      config?: any;
+    } = async (prompt) => ({ output: `Output for ${prompt}` });
+    providerFunction.label = 'My Function';
+    providerFunction.transform = (output) => output.toUpperCase();
+    providerFunction.delay = 500;
+    providerFunction.inputs = [{ role: 'user', content: 'hi' }];
+    providerFunction.config = { custom: 'value' };
+
+    const providers = await loadApiProviders([providerFunction] as any);
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('My Function');
+    expect(providers[0].label).toBe('My Function');
+    expect(providers[0].transform).toBe(providerFunction.transform);
+    expect(providers[0].delay).toBe(500);
+    expect(providers[0].inputs).toBe(providerFunction.inputs);
+    expect(providers[0].config).toEqual({ custom: 'value' });
+  });
+
   it('loadApiProviders with ApiProvider object preserves the provider instance', async () => {
     const apiProvider = {
       id: () => 'custom-api-provider',
