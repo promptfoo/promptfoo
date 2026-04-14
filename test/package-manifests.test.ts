@@ -8,19 +8,25 @@ function readPackageJson<T>(relativePath: string): T {
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as T;
 }
 
-function collectSourceFiles(dir: string, acc: string[] = []): string[] {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === 'node_modules' || entry.name === 'app') {
-      continue;
+const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
+
+function collectSourceFiles(rootDir: string, excluded: Set<string>): string[] {
+  const results: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (excluded.has(full) || entry.name === 'node_modules') {
+        continue;
+      }
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (SOURCE_FILE_EXTENSIONS.test(entry.name)) {
+        results.push(full);
+      }
     }
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      collectSourceFiles(full, acc);
-    } else if (/\.(ts|tsx|mts|cts|js|mjs|cjs)$/.test(entry.name)) {
-      acc.push(full);
-    }
-  }
-  return acc;
+  };
+  walk(rootDir);
+  return results;
 }
 
 describe('package manifests', () => {
@@ -46,10 +52,10 @@ describe('package manifests', () => {
   it('does not import jsdom from root src/', () => {
     // Guards against re-introducing jsdom into the CLI startup graph, which
     // previously broke `npx promptfoo` on Node 24 via ERR_REQUIRE_ASYNC_MODULE.
-    // src/app is excluded because it's a separate workspace where jsdom is
-    // legitimately used as a browser test environment.
+    // The src/app workspace is excluded because it legitimately uses jsdom
+    // as a browser test environment.
     const srcDir = path.join(process.cwd(), 'src');
-    const files = collectSourceFiles(srcDir);
+    const files = collectSourceFiles(srcDir, new Set([path.join(srcDir, 'app')]));
     const jsdomImportPattern = /(?:from|require\()\s*['"]jsdom['"]/;
     const offenders = files.filter((file) =>
       jsdomImportPattern.test(fs.readFileSync(file, 'utf8')),

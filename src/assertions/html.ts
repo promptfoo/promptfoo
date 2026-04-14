@@ -40,11 +40,13 @@ function hasTopLevelText(parentNode: HtmlParentNode): boolean {
   return parentNode.childNodes.some((node) => isTextNode(node) && Boolean(node.value.trim()));
 }
 
+const AUTO_INJECTED_WRAPPERS = new Set(['html', 'head', 'body']);
+
 function findUserProvidedElement(node: HtmlNode, inputLowercase: string): HtmlElement | undefined {
   if (isElementNode(node)) {
     const tagName = node.tagName.toLowerCase();
     const isAutoInjectedWrapper =
-      ['html', 'head', 'body'].includes(tagName) && !inputLowercase.includes(`<${tagName}`);
+      AUTO_INJECTED_WRAPPERS.has(tagName) && !inputLowercase.includes(`<${tagName}`);
 
     if (!isAutoInjectedWrapper && (VALID_HTML_ELEMENTS.has(tagName) || tagName.includes('-'))) {
       return node;
