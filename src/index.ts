@@ -28,6 +28,9 @@ import type { ApiProvider } from './types/providers';
 
 export { generateTable } from './table';
 export * from './types/index';
+// Transform types and runtime guard for users passing inline transform functions
+// via the Node.js package.
+export { isTransformFunction } from './types/transform';
 
 // Extension hook context types for users writing custom extensions
 export type {
@@ -37,8 +40,7 @@ export type {
   BeforeEachExtensionHookContext,
   ExtensionHookContextMap,
 } from './evaluatorHelpers';
-// Transform types for users passing inline transform functions via the Node.js package
-export type { TransformContext, TransformFunction } from './types/transform';
+export type { TransformContext, TransformFunction, TransformPrompt } from './types/transform';
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   if (testSuite.writeLatestResults) {
