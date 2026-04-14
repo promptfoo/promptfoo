@@ -3378,6 +3378,46 @@ describe('runAssertion', () => {
 
       expect(result.pass).toBe(true);
     });
+
+    it('should surface synchronous errors thrown by an inline function transform', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'anything',
+        transform: () => {
+          throw new Error('inline transform boom');
+        },
+      };
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion,
+          test: {} as AtomicTestCase,
+          providerResponse: { output: 'hello world' },
+        }),
+      ).rejects.toThrow('inline transform boom');
+    });
+
+    it('should surface async rejections from an inline function transform', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'anything',
+        transform: async () => {
+          throw new Error('async transform boom');
+        },
+      };
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion,
+          test: {} as AtomicTestCase,
+          providerResponse: { output: 'hello world' },
+        }),
+      ).rejects.toThrow('async transform boom');
+    });
   });
 
   describe('file references', () => {

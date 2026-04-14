@@ -462,6 +462,19 @@ describe('util', () => {
           expect.stringContaining('Error in transform function'),
         );
       });
+
+      it('resolves thenables returned by inline functions', async () => {
+        // Bare thenable built via Object.defineProperty to dodge the `noThenProperty`
+        // lint rule; verifies `transform()` awaits anything Promise-like.
+        const thenable = Object.defineProperty({}, 'then', {
+          value: (resolve: (value: unknown) => void) => resolve('thenable-resolved'),
+          enumerable: true,
+        }) as unknown as Promise<string>;
+        const fn: TransformFunction = () => thenable;
+
+        const result = await transform(fn, 'ignored', { vars: {}, prompt: {} });
+        expect(result).toBe('thenable-resolved');
+      });
     });
 
     describe('getTransformLabel', () => {
