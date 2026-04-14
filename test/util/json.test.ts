@@ -230,6 +230,25 @@ describe('json utilities', () => {
     it('returns undefined for top-level undefined', () => {
       expect(stableJsonStringify(undefined)).toBeUndefined();
     });
+
+    it('respects Date.toJSON so different dates produce different cache keys', () => {
+      const earlier = new Date('2024-01-01T00:00:00Z');
+      const later = new Date('2024-06-01T00:00:00Z');
+
+      // Matches JSON.stringify's serialization (ISO string), not `{}`.
+      expect(stableJsonStringify({ at: earlier })).toBe('{"at":"2024-01-01T00:00:00.000Z"}');
+      expect(stableJsonStringify({ at: earlier })).not.toBe(stableJsonStringify({ at: later }));
+    });
+
+    it('respects arbitrary toJSON implementations and then sorts the result', () => {
+      const custom = {
+        toJSON() {
+          return { z: 2, a: 1 };
+        },
+      };
+
+      expect(stableJsonStringify(custom)).toBe('{"a":1,"z":2}');
+    });
   });
 
   describe('extractJsonObjects', () => {

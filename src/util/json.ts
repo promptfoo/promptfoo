@@ -136,6 +136,10 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
  * same output string and therefore hash to the same cache key. Handles
  * circular references the same way as `safeJsonStringify`.
  *
+ * Respects the `toJSON()` convention the same way `JSON.stringify` does,
+ * so values like `Date` serialize to their ISO string instead of `{}` and
+ * two different dates hash to different cache keys.
+ *
  * Arrays are NOT sorted — only object key order is normalized — because
  * array order is semantically meaningful.
  *
@@ -153,6 +157,13 @@ export function stableJsonStringify<T>(value: T): string | undefined {
       return undefined;
     }
     seen.add(val);
+    // Respect the `toJSON` convention (used by `Date`, Moment, etc.) the
+    // same way `JSON.stringify` does. Without this, `new Date('2024-01-01')`
+    // would normalize to `{}` and any two distinct Date values would
+    // collide in the cache key.
+    if (typeof val.toJSON === 'function') {
+      return normalize(val.toJSON());
+    }
     if (Array.isArray(val)) {
       return val.map(normalize);
     }
