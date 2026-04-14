@@ -2,6 +2,7 @@ import { act } from 'react';
 
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
+import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -60,6 +61,13 @@ vi.mock('./EvalOutputCell', () => {
         <div data-testid="eval-output-cell" data-searchtext={searchText}>
           <button onClick={() => onRating(true, 0.75, 'test comment')} className="action">
             Rate
+          </button>
+          <button
+            onClick={() => onRating(null, undefined, 'test comment')}
+            className="clear"
+            tabIndex={-1}
+          >
+            Clear rating
           </button>
         </div>
       );
@@ -266,6 +274,66 @@ describe('ResultsTable Metrics Display', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('Tokens/Sec:')).toBeInTheDocument();
     expect(screen.getByText('250')).toBeInTheDocument();
+  });
+
+  it('renders object provider IDs and request/assert metrics in the prompt header', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        body: [
+          {
+            outputs: [{ pass: true, score: 1, text: 'test output' }],
+            test: {
+              assert: [{ type: 'contains', value: 'test' }],
+            },
+            vars: [],
+          },
+        ],
+        head: {
+          prompts: [
+            {
+              metrics: {
+                assertFailCount: 1,
+                assertPassCount: 2,
+                namedScores: {},
+                testPassCount: 1,
+                testFailCount: 0,
+                tokenUsage: {
+                  completion: 50,
+                  total: 100,
+                  numRequests: 7,
+                },
+              },
+              provider: {
+                id: 'openai:gpt-4o',
+              },
+            },
+          ],
+          vars: [],
+        },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('gpt-4o')).toBeInTheDocument();
+    expect(screen.getByText('Requests:')).toBeInTheDocument();
+    expect(screen.getByText('7')).toBeInTheDocument();
+    expect(screen.getByText('Asserts:')).toBeInTheDocument();
+    expect(screen.getByText('2/3 passed')).toBeInTheDocument();
   });
 
   describe('Keyboard Navigation', () => {
@@ -505,6 +573,311 @@ describe('ResultsTable Metrics Display', () => {
       expect(imageElement).toBeInTheDocument();
       expect(imageElement).toHaveStyle({ maxHeight: '200px', objectFit: 'contain' });
       expect(imageElement.closest('div')).not.toHaveTextContent('TruncatedText');
+    });
+
+    it('renders variable audio from file metadata and shows the original path', () => {
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [
+                {
+                  pass: true,
+                  score: 1,
+                  text: 'test output',
+                  metadata: {
+                    [FILE_METADATA_KEY]: {
+                      audioVar: {
+                        path: '/path/to/input.wav',
+                        type: 'audio',
+                        format: 'wav',
+                      },
+                    },
+                  },
+                },
+              ],
+              test: {},
+              vars: ['base64-audio'],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['audioVar'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      const audioSource = container.querySelector('audio source');
+      expect(audioSource).toHaveAttribute('src', 'data:audio/wav;base64,base64-audio');
+      expect(audioSource).toHaveAttribute('type', 'audio/wav');
+      expect(screen.getByText('/path/to/input.wav (audio/wav)')).toBeInTheDocument();
+    });
+
+    it('renders variable images from file metadata with lightbox support', async () => {
+      const user = userEvent.setup();
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [
+                {
+                  pass: true,
+                  score: 1,
+                  text: 'test output',
+                  metadata: {
+                    [FILE_METADATA_KEY]: {
+                      imageVar: {
+                        path: '/path/to/input.png',
+                        type: 'image',
+                        format: 'png',
+                      },
+                    },
+                  },
+                },
+              ],
+              test: {},
+              vars: ['data:image/png;base64,encodedImage'],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['imageVar'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      const imageElement = screen.getByRole('img', { name: 'Input image' });
+      expect(imageElement).toHaveAttribute('src', 'data:image/png;base64,encodedImage');
+      expect(screen.getByText('/path/to/input.png (image/png)')).toBeInTheDocument();
+
+      await user.click(imageElement);
+
+      expect(screen.getByRole('img', { name: 'Lightbox' })).toHaveAttribute(
+        'src',
+        'data:image/png;base64,encodedImage',
+      );
+    });
+
+    it('renders variable video from file metadata', () => {
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [
+                {
+                  pass: true,
+                  score: 1,
+                  text: 'test output',
+                  metadata: {
+                    [FILE_METADATA_KEY]: {
+                      videoVar: {
+                        path: '/path/to/input.mp4',
+                        type: 'video',
+                        format: 'mp4',
+                      },
+                    },
+                  },
+                },
+              ],
+              test: {},
+              vars: ['https://example.com/input.mp4'],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['videoVar'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      const videoSource = container.querySelector('video source');
+      expect(videoSource).toHaveAttribute('src', 'https://example.com/input.mp4');
+      expect(videoSource).toHaveAttribute('type', 'video/mp4');
+      expect(screen.getByText('/path/to/input.mp4 (video/mp4)')).toBeInTheDocument();
+    });
+
+    it('shows original image text for the injected prompt variable when image cells are rendered', () => {
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {
+          redteam: {
+            injectVar: 'image_prompt',
+          },
+        },
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [{ pass: true, score: 1, text: 'test output' }],
+              test: {
+                metadata: {
+                  originalText: 'decoded OCR prompt',
+                },
+              },
+              vars: ['data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['image_prompt'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(screen.getByText('Original (image text):')).toBeInTheDocument();
+      expect(screen.getByText('decoded OCR prompt')).toBeInTheDocument();
+    });
+
+    it('does not replace a provider-reported text prompt with the raw injected image variable', () => {
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {
+          redteam: {
+            injectVar: 'prompt',
+          },
+        },
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [
+                {
+                  pass: true,
+                  score: 1,
+                  text: 'test output',
+                  response: {
+                    prompt: 'provider rewritten prompt',
+                  },
+                },
+              ],
+              test: {},
+              vars: ['data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['prompt'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(screen.getByText('provider rewritten prompt')).toBeInTheDocument();
+      expect(screen.queryByRole('img', { name: 'Base64 encoded image' })).not.toBeInTheDocument();
+    });
+
+    it('renders a provider-reported image prompt when the raw injected variable is not an image', () => {
+      const providerImagePrompt = 'data:image/png;base64,providerImagePrompt';
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {
+          redteam: {
+            injectVar: 'prompt',
+          },
+        },
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [
+                {
+                  pass: true,
+                  score: 1,
+                  text: 'test output',
+                  response: {
+                    prompt: providerImagePrompt,
+                  },
+                },
+              ],
+              test: {},
+              vars: ['{{prompt}}'],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['prompt'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(screen.getByRole('img', { name: 'Base64 encoded image' })).toHaveAttribute(
+        'src',
+        providerImagePrompt,
+      );
     });
   });
 });
@@ -3193,6 +3566,52 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     expect(componentResults[0].assertion?.type).toBe('contains');
     expect(finalPass).toBe(false);
     expect(finalScore).toBe(0.5);
+  });
+
+  it('persists a cleared human rating without manual override fields', async () => {
+    const user = userEvent.setup();
+    const mockTable = createMockTableWithHumanAssertion();
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: mockSetTable,
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+
+    await waitFor(() => {
+      expect(mockCallApi).toHaveBeenCalledWith(
+        '/eval/123/results/test-output-1/rating',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    const [, request] = mockCallApi.mock.calls[0];
+    const payload = JSON.parse(request.body);
+
+    expect(payload.pass).toBe(false);
+    expect(payload.score).toBe(0.5);
+    expect(payload.reason).toBe('Automated assertion');
+    expect(payload.assertion?.type).not.toBe('human');
+    expect(payload.componentResults).toHaveLength(1);
+    expect(payload.componentResults[0].assertion.type).toBe('contains');
   });
 
   it('should recalculate pass as true when all remaining assertions pass', () => {

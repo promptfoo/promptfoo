@@ -13,7 +13,8 @@ type TestControlUsage = {
   file: string;
   kind: TestControlKind;
   line: number;
-  lineText: string;
+  fullLineText: string;
+  trimmedLineText: string;
 };
 
 type AllowedSkip = {
@@ -265,11 +266,24 @@ const legacyDirectProcessEnvMutationFiles = new Set([
 ]);
 
 const hoistedMockPattern = /\bvi\.hoisted\s*\(/;
-const persistentMockImplementationPattern =
-  /\.(?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)\s*\(/;
+const persistentMockMethods = [
+  'mockImplementation',
+  'mockRejectedValue',
+  'mockResolvedValue',
+  'mockReturnValue',
+] as const;
+const persistentMockImplementationPattern = new RegExp(
+  `\\.(?:${persistentMockMethods.join('|')})\\s*\\(`,
+);
 const mockImplementationResetPattern = /(?:\.mockReset\s*\(|\bvi\.resetAllMocks\s*\()/;
-const directProcessEnvMutationPattern =
-  /(?:\bprocess\.env\s*=|\bprocess\.env(?:\.[A-Za-z_][A-Za-z0-9_]*|\[['"][A-Za-z_][A-Za-z0-9_]*['"]\])\s*=|\bdelete\s+process\.env(?:\.[A-Za-z_][A-Za-z0-9_]*|\[['"][A-Za-z_][A-Za-z0-9_]*['"]\]))/;
+const envKeyPattern = String.raw`[A-Za-z_][A-Za-z0-9_]*`;
+const processEnvPropertyAccessPattern = String.raw`\bprocess\.env(?:\.${envKeyPattern}|\[['"]${envKeyPattern}['"]\])`;
+const processEnvObjectAssignmentPattern = String.raw`\bprocess\.env\s*=`;
+const processEnvPropertyAssignmentPattern = String.raw`${processEnvPropertyAccessPattern}\s*=`;
+const processEnvPropertyDeletePattern = String.raw`\bdelete\s+${processEnvPropertyAccessPattern}`;
+const directProcessEnvMutationPattern = new RegExp(
+  `(?:${processEnvObjectAssignmentPattern}|${processEnvPropertyAssignmentPattern}|${processEnvPropertyDeletePattern})`,
+);
 
 function findTestFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -374,7 +388,8 @@ function findTestControlUsages(file: string, source: string): TestControlUsage[]
       hasTestApiBase(node.expression)
     ) {
       const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-      const lineText = sourceLines[position.line]?.trim() ?? '';
+      const fullLineText = sourceLines[position.line] ?? '';
+      const trimmedLineText = fullLineText.trim();
 
       usages.push({
         column: position.character + 1,
@@ -382,7 +397,8 @@ function findTestControlUsages(file: string, source: string): TestControlUsage[]
         file,
         kind: node.name.text,
         line: position.line + 1,
-        lineText,
+        fullLineText,
+        trimmedLineText,
       });
     }
 
@@ -400,7 +416,7 @@ function findRootTestControlUsages(): TestControlUsage[] {
 }
 
 function formatUsage(usage: TestControlUsage) {
-  return `${usage.file}:${usage.line}:${usage.column}: ${usage.kind} is not allowed: ${usage.lineText || usage.expression}`;
+  return `${usage.file}:${usage.line}:${usage.column}: ${usage.kind} is not allowed: ${usage.trimmedLineText || usage.expression}`;
 }
 
 function isAllowedSkip(usage: TestControlUsage) {
@@ -408,7 +424,7 @@ function isAllowedSkip(usage: TestControlUsage) {
     (allowed) =>
       allowed.file === usage.file &&
       allowed.kind === usage.kind &&
-      allowed.linePattern.test(usage.lineText),
+      allowed.linePattern.test(usage.trimmedLineText),
   );
 }
 
@@ -465,7 +481,7 @@ describe('root test hygiene', () => {
             (usage) =>
               usage.file === allowed.file &&
               usage.kind === allowed.kind &&
-              allowed.linePattern.test(usage.lineText),
+              allowed.linePattern.test(usage.trimmedLineText),
           ),
       )
       .map((allowed) => `${allowed.file}: ${allowed.kind} allowlist is stale: ${allowed.reason}`);

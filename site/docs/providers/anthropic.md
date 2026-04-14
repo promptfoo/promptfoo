@@ -787,7 +787,7 @@ We provide several example implementations demonstrating Claude's capabilities:
 
 #### Model Comparisons & Evaluations
 
-- [Claude vs GPT](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-claude-vs-gpt) - Compares Claude with GPT-4 on various tasks
+- [Claude vs GPT](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-claude-vs-gpt) - Compares Claude with GPT-5.4 on various tasks
 - [Claude vs GPT Image Analysis](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-claude-vs-gpt-image) - Compares Claude's and GPT's image analysis capabilities
 
 #### Cloud Platform Integrations

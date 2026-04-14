@@ -152,6 +152,42 @@ describe('Shared Provider Functions', () => {
       expect(cost).toBe(7.5);
     });
 
+    it('should use long-context rates when prompt tokens exceed the model threshold', () => {
+      const cost = calculateCost('model1', {}, 1_001, 500, [
+        {
+          id: 'model1',
+          cost: {
+            input: 0.001,
+            output: 0.002,
+            longContext: {
+              threshold: 1_000,
+              input: 0.003,
+              output: 0.004,
+            },
+          },
+        },
+      ]);
+      expect(cost).toBeCloseTo(5.003);
+    });
+
+    it('should prefer config cost over model long-context rates', () => {
+      const cost = calculateCost('model1', { cost: 0.005 }, 1_001, 500, [
+        {
+          id: 'model1',
+          cost: {
+            input: 0.001,
+            output: 0.002,
+            longContext: {
+              threshold: 1_000,
+              input: 0.003,
+              output: 0.004,
+            },
+          },
+        },
+      ]);
+      expect(cost).toBeCloseTo(7.505);
+    });
+
     it('should return undefined if model not found', () => {
       const cost = calculateCost('nonexistent', {}, 1000, 500, models);
       expect(cost).toBeUndefined();

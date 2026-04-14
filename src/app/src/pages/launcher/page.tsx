@@ -37,7 +37,7 @@ export default function LauncherPage() {
 
   useEffect(() => {
     // Simple delay to allow server startup, then start health checks
-    let interval: NodeJS.Timeout;
+    let interval: NodeJS.Timeout | undefined;
     const timeout = setTimeout(() => {
       checkHealth();
       interval = setInterval(() => {
@@ -189,7 +189,7 @@ export default function LauncherPage() {
           </div>
           <p className="mb-4 leading-relaxed text-muted-foreground">
             Safari and Brave block access to localhost by default. You need to install mkcert and
-            generate self-signed certificate:
+            generate a self-signed certificate:
           </p>
           <ol className="list-decimal space-y-4 pl-5">
             <li className="leading-relaxed">

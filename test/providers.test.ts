@@ -10,6 +10,7 @@ import { loadApiProvider, loadApiProviders } from '../src/providers/index';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
 import { OpenAICodexSDKProvider } from '../src/providers/openai/codex-sdk';
 import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding';
+import { OpenAiResponsesProvider } from '../src/providers/openai/responses';
 import { PythonProvider } from '../src/providers/pythonCompletion';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
@@ -24,6 +25,7 @@ vi.mock('../src/util/fetch/index.ts');
 vi.mock('../src/providers/http');
 vi.mock('../src/providers/openai/chat');
 vi.mock('../src/providers/openai/embedding');
+vi.mock('../src/providers/openai/responses');
 vi.mock('../src/providers/pythonCompletion');
 vi.mock('../src/providers/scriptCompletion');
 vi.mock('../src/providers/websocket');
@@ -563,6 +565,22 @@ describe('loadApiProvider', () => {
       expect(provider).toBeDefined();
     } finally {
       (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalModelNames;
+    }
+  });
+
+  it('should auto-route OpenAI GPT-5.4 Pro shorthand to responses', async () => {
+    const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
+    const originalResponsesModelNames = (OpenAiResponsesProvider as any)
+      .OPENAI_RESPONSES_MODEL_NAMES;
+    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = [];
+    (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = ['gpt-5.4-pro'];
+    try {
+      const provider = await loadApiProvider('openai:gpt-5.4-pro');
+      expect(OpenAiResponsesProvider).toHaveBeenCalledWith('gpt-5.4-pro', expect.any(Object));
+      expect(provider).toBeDefined();
+    } finally {
+      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
+      (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = originalResponsesModelNames;
     }
   });
 

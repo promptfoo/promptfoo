@@ -77,6 +77,14 @@ beforeAll(async () => {
   createActualHash = actualCrypto.createHash;
 });
 
+function normalizeFsPath(path: fs.PathOrFileDescriptor): string {
+  if (path instanceof URL) {
+    return path.pathname;
+  }
+
+  return String(path);
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -112,7 +120,7 @@ describe('getFileHashes', () => {
     const mockHash2 = 'hash2';
 
     existsSyncMock.mockImplementation(function (path: fs.PathLike) {
-      return path !== 'nonexistent.js';
+      return normalizeFsPath(path) !== 'nonexistent.js';
     });
     statSyncMock.mockReturnValue({
       isFile: () => true,
@@ -124,10 +132,11 @@ describe('getFileHashes', () => {
       isSocket: () => false,
     } as fs.Stats);
     readFileSyncMock.mockImplementation(function (path: fs.PathOrFileDescriptor) {
-      if (path === 'file1.js') {
+      const normalizedPath = normalizeFsPath(path);
+      if (normalizedPath === 'file1.js') {
         return mockFileContent1;
       }
-      if (path === 'file2.js') {
+      if (normalizedPath === 'file2.js') {
         return mockFileContent2;
       }
       throw new Error('File not found');

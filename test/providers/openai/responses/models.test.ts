@@ -5,6 +5,8 @@ import './setup';
 import { describe, expect, it } from 'vitest';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 
+const expectedAudioModels = ['gpt-audio-1.5', 'gpt-audio-mini-2025-12-15'] as const;
+
 describe('OpenAiResponsesProvider model registry', () => {
   it('should support various model names', async () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-pro');
@@ -34,6 +36,9 @@ describe('OpenAiResponsesProvider model registry', () => {
     );
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5-nano');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5-mini');
+    for (const model of expectedAudioModels) {
+      expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(model);
+    }
     // GPT-4.5 models deprecated as of 2025-07-14, removed from API
   });
 
@@ -118,6 +123,10 @@ describe('OpenAiResponsesProvider model registry', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
       'gpt-5.4-pro-2026-03-05',
     );
+    // Audio models
+    for (const model of expectedAudioModels) {
+      expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(model);
+    }
     // Deep research models
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-deep-research');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
