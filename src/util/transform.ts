@@ -9,13 +9,10 @@ import { getProcessShim } from './processShim';
 import type { Vars } from '../types/index';
 import type { TransformContext, TransformFunction } from '../types/transform';
 
-/** Label used in error messages when a transform is an inline function rather than a string. */
 export const INLINE_FUNCTION_LABEL = '[inline function]';
-/** Label used in error messages when a transform is an inline string expression. */
 export const INLINE_STRING_LABEL = '[inline transform]';
-/** Label used in error messages when a transform is loaded from a file reference. */
 export const FILE_TRANSFORM_LABEL = '[file transform]';
-/** Maximum length of an inline transform string shown in error labels before truncation. */
+/** Error labels truncate inline string transforms past this length so they stay readable in logs. */
 const INLINE_STRING_LABEL_MAX_LENGTH = 80;
 
 export const TransformInputType = {
@@ -196,6 +193,7 @@ export function getTransformLabel(t: string | TransformFunction | null | undefin
  * @param validateReturn - If true (default), throws when the transform returns null/undefined.
  * @param inputType - Whether the first parameter is named 'output' or 'vars' in inline code.
  * @returns A promise that resolves to the transformed output.
+ * @throws When the transform is unloadable, throws, or (with `validateReturn`) returns null/undefined.
  */
 export async function transform(
   codeOrFilepathOrFn: string | TransformFunction,
@@ -215,6 +213,10 @@ export async function transform(
 
   let ret: unknown;
   try {
+    // String/file transforms receive a process shim so inline code can call
+    // `process.mainModule.require(...)` under ESM just like it would in CJS.
+    // Direct `TransformFunction` values execute in their real module scope and
+    // don't need the shim (and shouldn't see it as an implementation detail).
     ret = isDirectFunction
       ? await Promise.resolve(transformFn(transformInput, context))
       : await Promise.resolve(transformFn(transformInput, context, getProcessShim()));

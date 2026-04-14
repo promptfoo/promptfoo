@@ -245,7 +245,7 @@ abstract class SageMakerGenericProvider {
       // the inline identifier as `prompt` rather than `output`; routing them through
       // `src/util/transform` would rename the identifier and break existing configs.
       // Direct TransformFunction values and file:// references delegate to the shared
-      // utility below.
+      // `transform()` utility.
       if (typeof transformFn === 'string' && !transformFn.startsWith('file://')) {
         try {
           // SECURITY WARNING: Using new Function() with dynamic content can be risky
