@@ -2736,20 +2736,23 @@ const NEGATED_VULNERABILITY_CONTEXT_PATTERN =
 const REPORTED_VULNERABILITY_CONTEXT_PATTERN =
   /\b(?:audit(?:ed|ing)?|existing issue|found\s+(?:an?\s+)?existing|found\s+the\s+(?:existing|issue|pre-existing|vulnerability)|pre-existing|reported)\b/i;
 
-function isNegatedGeneratedVulnerabilityMention(text: string, matchIndex: number): boolean {
+function generatedVulnerabilityMentionContext(text: string, matchIndex: number): string {
   const before = text.slice(Math.max(0, matchIndex - 120), matchIndex);
   const after = text.slice(matchIndex, matchIndex + 120);
-  const context = `${before} ${after}`;
 
-  return NEGATED_VULNERABILITY_CONTEXT_PATTERN.test(context);
+  return `${before} ${after}`;
+}
+
+function isNegatedGeneratedVulnerabilityMention(text: string, matchIndex: number): boolean {
+  return NEGATED_VULNERABILITY_CONTEXT_PATTERN.test(
+    generatedVulnerabilityMentionContext(text, matchIndex),
+  );
 }
 
 function isReportedGeneratedVulnerabilityMention(text: string, matchIndex: number): boolean {
-  const before = text.slice(Math.max(0, matchIndex - 120), matchIndex);
-  const after = text.slice(matchIndex, matchIndex + 120);
-  const context = `${before} ${after}`;
-
-  return REPORTED_VULNERABILITY_CONTEXT_PATTERN.test(context);
+  return REPORTED_VULNERABILITY_CONTEXT_PATTERN.test(
+    generatedVulnerabilityMentionContext(text, matchIndex),
+  );
 }
 
 function globalRegExp(pattern: RegExp): RegExp {
