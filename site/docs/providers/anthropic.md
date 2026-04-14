@@ -29,7 +29,7 @@ export ANTHROPIC_API_KEY=your_api_key_here
 
 If you already have an active Claude Code session (for example as a Claude Pro or Max subscriber), you can reuse its OAuth credential instead of creating a separate Anthropic Console API key. Set `apiKeyRequired: false` on the provider config:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-6
     config:
@@ -718,7 +718,7 @@ If both API keys are present, OpenAI will be used by default. You can explicitly
 
 Claude Pro/Max subscribers without a separate Anthropic Console key can wire up `llm-rubric` through a local Claude Code session by pointing the grader at `anthropic:messages:<model>` with `apiKeyRequired: false`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
