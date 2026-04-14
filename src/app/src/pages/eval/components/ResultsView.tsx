@@ -11,7 +11,6 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { DropdownMenuItem } from '@app/components/ui/dropdown-menu';
-import { Popover, PopoverContent, PopoverTrigger } from '@app/components/ui/popover';
 import { SearchInput } from '@app/components/ui/search-input';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@app/components/ui/select';
 import { Separator } from '@app/components/ui/separator';
@@ -65,7 +64,6 @@ interface ResultsChartsSectionProps {
   canRenderResultsCharts: boolean;
   isRedteamEval: boolean;
   resultsChartsScores: number[];
-  resultsChartsUnavailableReasons: string[];
   children: (toggleButton: React.ReactNode) => React.ReactNode;
 }
 
@@ -171,7 +169,6 @@ function ResultsChartsSection({
   canRenderResultsCharts,
   isRedteamEval,
   resultsChartsScores,
-  resultsChartsUnavailableReasons,
   children,
 }: ResultsChartsSectionProps) {
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(
@@ -183,33 +180,7 @@ function ResultsChartsSection({
   }
 
   if (!canRenderResultsCharts) {
-    const unavailableButton = (
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="ghost" size="sm">
-            <BarChart className="size-4 mr-2" />
-            Why no charts?
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-80" align="end">
-          <div className="space-y-3 text-sm">
-            <div className="space-y-1">
-              <h3 className="font-medium leading-none">Charts are unavailable</h3>
-              <p className="text-muted-foreground">
-                Charts appear when the results include comparable prompts and chartable scores.
-              </p>
-            </div>
-            <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
-              {resultsChartsUnavailableReasons.map((reason) => (
-                <li key={reason}>{reason}</li>
-              ))}
-            </ul>
-          </div>
-        </PopoverContent>
-      </Popover>
-    );
-
-    return <>{children(unavailableButton)}</>;
+    return <>{children(null)}</>;
   }
 
   const toggleButton = (
@@ -817,7 +788,6 @@ export default function ResultsView({
               canRenderResultsCharts={canRenderResultsCharts}
               isRedteamEval={isRedteamEval}
               resultsChartsScores={resultsChartsScores}
-              resultsChartsUnavailableReasons={resultsChartsUnavailableReasons}
             >
               {(chartsToggleButton) => (
                 <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-border/50">

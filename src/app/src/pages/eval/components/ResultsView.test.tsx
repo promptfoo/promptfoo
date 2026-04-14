@@ -176,31 +176,21 @@ const renderWithRouter = (component: React.ReactElement) => {
   return renderWithProviders(<MemoryRouter>{component}</MemoryRouter>);
 };
 
-async function expectChartsUnavailable(...reasonTexts: string[]) {
+function expectChartsUnavailable(...reasonTexts: string[]) {
   expect(screen.queryByText('Show Charts')).toBeNull();
   expect(screen.queryByText('Hide Charts')).toBeNull();
   expect(screen.queryByTestId('results-charts')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Why no charts?' })).toBeNull();
   expect(screen.queryByText('Charts are unavailable for this evaluation')).toBeNull();
   expect(screen.queryByText('Charts are unavailable')).toBeNull();
-
-  const unavailableButton = screen.getByRole('button', { name: 'Why no charts?' });
-  expect(unavailableButton).toBeInTheDocument();
+  expect(
+    screen.queryByText(
+      'Charts appear when the results include comparable prompts and chartable scores.',
+    ),
+  ).toBeNull();
 
   for (const reasonText of reasonTexts) {
     expect(screen.queryByText(reasonText)).toBeNull();
-  }
-
-  await userEvent.click(unavailableButton);
-
-  expect(screen.getByText('Charts are unavailable')).toBeInTheDocument();
-  expect(
-    screen.getByText(
-      'Charts appear when the results include comparable prompts and chartable scores.',
-    ),
-  ).toBeInTheDocument();
-
-  for (const reasonText of reasonTexts) {
-    expect(screen.getByText(reasonText)).toBeInTheDocument();
   }
 }
 
@@ -886,7 +876,7 @@ describe('ResultsView', () => {
 
     expect(screen.getByTestId('results-charts')).toBeInTheDocument();
   });
-  it('does not render ResultsCharts when table data is in a loading state', async () => {
+  it('does not render ResultsCharts when table data is in a loading state', () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -924,10 +914,10 @@ describe('ResultsView', () => {
       />,
     );
 
-    await expectChartsUnavailable();
+    expectChartsUnavailable();
   });
 
-  it('offers an explanation when scores are all the same binary edge value', async () => {
+  it('hides chart controls when scores are all the same binary edge value', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -993,7 +983,7 @@ describe('ResultsView', () => {
       />,
     );
 
-    await expectChartsUnavailable(
+    expectChartsUnavailable(
       'All scores are the same binary edge value (0 or 1), so there is no meaningful distribution to visualize.',
     );
   });
@@ -1046,7 +1036,7 @@ describe('ResultsView Chart Rendering', () => {
       setFilterMode: vi.fn(),
     });
   });
-  it('offers an explanation if there is only one prompt', async () => {
+  it('hides chart controls if there is only one prompt', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -1090,10 +1080,10 @@ describe('ResultsView Chart Rendering', () => {
       />,
     );
 
-    await expectChartsUnavailable('Charts require at least two prompts to compare side by side.');
+    expectChartsUnavailable('Charts require at least two prompts to compare side by side.');
   });
 
-  it('offers an explanation if all scores are binary edge values (all 1s)', async () => {
+  it('hides chart controls if all scores are binary edge values (all 1s)', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -1142,12 +1132,12 @@ describe('ResultsView Chart Rendering', () => {
       );
     });
 
-    await expectChartsUnavailable(
+    expectChartsUnavailable(
       'All scores are the same binary edge value (0 or 1), so there is no meaningful distribution to visualize.',
     );
   });
 
-  it('offers an explanation if all scores are binary edge values (all 0s)', async () => {
+  it('hides chart controls if all scores are binary edge values (all 0s)', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -1196,7 +1186,7 @@ describe('ResultsView Chart Rendering', () => {
       );
     });
 
-    await expectChartsUnavailable(
+    expectChartsUnavailable(
       'All scores are the same binary edge value (0 or 1), so there is no meaningful distribution to visualize.',
     );
   });
@@ -1305,7 +1295,7 @@ describe('ResultsView Chart Rendering', () => {
       />,
     );
 
-    await expectChartsUnavailable();
+    expectChartsUnavailable();
 
     tableStoreValue = {
       ...tableStoreValue,
@@ -1460,10 +1450,10 @@ describe('ResultsView Chart Rendering', () => {
       </MemoryRouter>,
     );
 
-    await expectChartsUnavailable();
+    expectChartsUnavailable();
   });
 
-  it('offers an explanation if there are no valid scores', async () => {
+  it('hides chart controls if there are no valid scores', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -1512,7 +1502,7 @@ describe('ResultsView Chart Rendering', () => {
       />,
     );
 
-    await expectChartsUnavailable('Charts require at least one valid numeric score.');
+    expectChartsUnavailable('Charts require at least one valid numeric score.');
   });
 
   it('hides chart controls entirely for redteam evals', () => {
