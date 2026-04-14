@@ -33,15 +33,28 @@ function createProviderFromFunction(
   provider: ProviderFunctionWithMetadata,
   id: string,
 ): ApiProvider {
-  return {
+  const apiProvider: ApiProvider = {
     id: () => provider.label ?? id,
     callApi: provider,
-    label: provider.label,
-    transform: provider.transform,
-    delay: provider.delay,
-    inputs: provider.inputs,
-    config: provider.config,
   };
+  // Only forward defined metadata so we don't overwrite downstream defaults
+  // (e.g. a `config ?? {}` merge) with an explicit `undefined` key.
+  if (provider.label !== undefined) {
+    apiProvider.label = provider.label;
+  }
+  if (provider.transform !== undefined) {
+    apiProvider.transform = provider.transform;
+  }
+  if (provider.delay !== undefined) {
+    apiProvider.delay = provider.delay;
+  }
+  if (provider.inputs !== undefined) {
+    apiProvider.inputs = provider.inputs;
+  }
+  if (provider.config !== undefined) {
+    apiProvider.config = provider.config;
+  }
+  return apiProvider;
 }
 
 function isApiProviderObject(provider: unknown): provider is ApiProvider {
