@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import {
@@ -64,6 +64,7 @@ interface ResultsChartsSectionProps {
   canRenderResultsCharts: boolean;
   isRedteamEval: boolean;
   resultsChartsScores: number[];
+  resultsChartsUnavailableReasons: string[];
   children: (toggleButton: React.ReactNode) => React.ReactNode;
 }
 
@@ -169,6 +170,7 @@ function ResultsChartsSection({
   canRenderResultsCharts,
   isRedteamEval,
   resultsChartsScores,
+  resultsChartsUnavailableReasons,
   children,
 }: ResultsChartsSectionProps) {
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(
@@ -177,10 +179,6 @@ function ResultsChartsSection({
 
   if (isRedteamEval) {
     return null;
-  }
-
-  if (!canRenderResultsCharts) {
-    return <>{children(null)}</>;
   }
 
   const toggleButton = (
@@ -203,7 +201,28 @@ function ResultsChartsSection({
           pointerEvents: renderResultsCharts ? 'auto' : 'none',
         }}
       >
-        <ResultsCharts scores={resultsChartsScores} />
+        {renderResultsCharts &&
+          (canRenderResultsCharts ? (
+            <ResultsCharts scores={resultsChartsScores} />
+          ) : (
+            <Alert variant="info" className="mt-4 items-start">
+              <BarChart className="size-4 mt-0.5" />
+              <AlertContent>
+                <AlertTitle>Charts are unavailable for this evaluation</AlertTitle>
+                <AlertDescription className="space-y-3">
+                  <p>
+                    We can show charts when the results include comparable prompts and chartable
+                    scores.
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    {resultsChartsUnavailableReasons.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </AlertContent>
+            </Alert>
+          ))}
       </div>
     </>
   );
@@ -788,6 +807,7 @@ export default function ResultsView({
               canRenderResultsCharts={canRenderResultsCharts}
               isRedteamEval={isRedteamEval}
               resultsChartsScores={resultsChartsScores}
+              resultsChartsUnavailableReasons={resultsChartsUnavailableReasons}
             >
               {(chartsToggleButton) => (
                 <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-border/50">
