@@ -294,7 +294,7 @@ describe('doTargetPurposeDiscovery', () => {
     });
   });
 
-  it('should throw immediately on non-OK HTTP response from remote server', async () => {
+  it('should throw immediately on non-OK HTTP response with an actionable hint', async () => {
     const errorBody = JSON.stringify({
       error: 'Invalid task',
       message: 'Unknown task: target-purpose-discovery',
@@ -312,10 +312,34 @@ describe('doTargetPurposeDiscovery', () => {
       callApi: vi.fn(),
     };
 
-    await expect(doTargetPurposeDiscovery(target, undefined, false)).rejects.toThrow(
+    const error = await doTargetPurposeDiscovery(target, undefined, false).catch((e) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain(
       'Remote server returned HTTP 400: Unknown task: target-purpose-discovery',
     );
+    expect(error.message).toContain('promptfoo@latest');
     // Should not retry — fetch should only be called once
+    expect(mockedFetchWithProxy).toHaveBeenCalledTimes(1);
+    expect(target.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should surface an auth hint on 401 responses', async () => {
+    mockedFetchWithProxy.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const target = {
+      id: () => 'test',
+      callApi: vi.fn(),
+    };
+
+    const error = await doTargetPurposeDiscovery(target, undefined, false).catch((e) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain('Remote server returned HTTP 401: Unauthorized');
+    expect(error.message).toContain('promptfoo auth login');
     expect(mockedFetchWithProxy).toHaveBeenCalledTimes(1);
     expect(target.callApi).not.toHaveBeenCalled();
   });

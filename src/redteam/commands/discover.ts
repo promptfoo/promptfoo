@@ -127,24 +127,53 @@ export function normalizeTargetPurposeDiscoveryResult(
   };
 }
 
+function extractStringField(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
 async function getRemoteResponseErrorDetail(response: Response): Promise<string> {
-  const errorText = await response.text();
-  const fallbackDetail = errorText.trim() || response.statusText || 'Unknown error';
-
+  const rawText = (await response.text()).trim();
+  const fallback = rawText || response.statusText || 'Unknown error';
+  if (!rawText) {
+    return fallback;
+  }
   try {
-    const errorJson = JSON.parse(errorText) as unknown;
-    if (errorJson && typeof errorJson === 'object') {
-      const { message, error } = errorJson as Record<string, unknown>;
-      if (typeof message === 'string' && message.trim()) {
-        return message;
-      }
-      if (typeof error === 'string' && error.trim()) {
-        return error;
-      }
-    }
-  } catch {}
+    const parsed = JSON.parse(rawText) as { message?: unknown; error?: unknown } | null;
+    const detail = extractStringField(parsed?.message) ?? extractStringField(parsed?.error);
+    return detail ?? fallback;
+  } catch {
+    // Not JSON — fall through to raw text.
+    return fallback;
+  }
+}
 
-  return fallbackDetail;
+const REMOTE_ERROR_HINTS: Record<number, string> = {
+  400: 'This usually means your promptfoo client is out of date. Try `npm install -g promptfoo@latest` and rerun.',
+  401: 'Check that you are logged in (`promptfoo auth login`) and that your account has access to target discovery.',
+  403: 'Check that you are logged in (`promptfoo auth login`) and that your account has access to target discovery.',
+  404: 'This usually means your promptfoo client is out of date. Try `npm install -g promptfoo@latest` and rerun.',
+  429: 'You are being rate limited. Wait a moment and try again.',
+};
+
+function getRemoteErrorHint(status: number): string | undefined {
+  if (REMOTE_ERROR_HINTS[status]) {
+    return REMOTE_ERROR_HINTS[status];
+  }
+  if (status >= 500) {
+    return 'The remote generation service may be temporarily unavailable. Retry in a few minutes or contact support if the issue persists.';
+  }
+  return undefined;
+}
+
+async function buildRemoteErrorFromResponse(response: Response): Promise<Error> {
+  const detail = await getRemoteResponseErrorDetail(response);
+  const hint = getRemoteErrorHint(response.status);
+  const base = `Remote server returned HTTP ${response.status}: ${detail}`;
+  return new Error(hint ? `${base}\n${hint}` : base);
 }
 
 /**
@@ -212,8 +241,7 @@ export async function doTargetPurposeDiscovery(
       });
 
       if (!response.ok) {
-        const errorDetail = await getRemoteResponseErrorDetail(response);
-        throw new Error(`Remote server returned HTTP ${response.status}: ${errorDetail}`);
+        throw await buildRemoteErrorFromResponse(response);
       }
 
       const responseData = await response.json();
