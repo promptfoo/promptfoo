@@ -37,13 +37,28 @@ interface AnthropicBaseOptions {
 /**
  * Generic provider class for Anthropic APIs.
  *
- * Serves as a base class with shared functionality for all Anthropic providers
- * (messages, completions). Handles API key resolution and, when
- * `apiKeyRequired: false` is set on the provider config, falls back to an
- * OAuth token loaded from a local Claude Code session so Claude.ai
- * subscribers can run evals without a separate console API key.
+ * Serves as a base class with shared functionality for all Anthropic
+ * subclass providers. Handles API key resolution and, for subclasses that
+ * opt in via {@link AnthropicGenericProvider.SUPPORTS_CLAUDE_CODE_OAUTH},
+ * falls back to an OAuth token loaded from a local Claude Code session so
+ * Claude.ai subscribers can run evals without a separate console API key.
+ *
+ * The OAuth fallback is opt-in so it only affects
+ * `AnthropicMessagesProvider`. Claude Code OAuth tokens are gated to the
+ * Messages API (`/v1/messages`) — forwarding them to the legacy
+ * text-completion endpoint would fail at request time, which would cause
+ * `anthropic:completion:*` configs to bypass promptfoo's upfront preflight
+ * check and then produce a less useful error for every test case.
  */
 export class AnthropicGenericProvider implements ApiProvider {
+  /**
+   * Subclasses that can authenticate via a Claude Code OAuth session
+   * should override this to `true`. The base class's constructor reads the
+   * flag from `this.constructor` so only OAuth-capable subclasses attempt
+   * the credential lookup (and only they honor `apiKeyRequired: false`).
+   */
+  static readonly SUPPORTS_CLAUDE_CODE_OAUTH: boolean = false;
+
   modelName: string;
   config: AnthropicBaseOptions;
   env?: EnvOverrides;
@@ -82,7 +97,12 @@ export class AnthropicGenericProvider implements ApiProvider {
     let authToken: string | undefined;
     const defaultHeaders: Record<string, string> = {};
 
-    if (!this.apiKey && this.config.apiKeyRequired === false) {
+    const subclass = this.constructor as typeof AnthropicGenericProvider;
+    if (
+      !this.apiKey &&
+      this.config.apiKeyRequired === false &&
+      subclass.SUPPORTS_CLAUDE_CODE_OAUTH
+    ) {
       const credential = loadClaudeCodeCredential();
       if (credential) {
         if (isCredentialExpired(credential)) {
@@ -133,12 +153,15 @@ export class AnthropicGenericProvider implements ApiProvider {
 
   /**
    * Whether promptfoo's preflight check should require an API key before
-   * dispatching requests to this provider. Callers that set
-   * `apiKeyRequired: false` opt into authenticating via a local Claude Code
-   * session instead, so the preflight check is skipped.
+   * dispatching requests to this provider. Returns `false` only for
+   * OAuth-capable subclasses (see {@link SUPPORTS_CLAUDE_CODE_OAUTH}) when
+   * the user has opted in via `apiKeyRequired: false`. All other subclasses
+   * keep the preflight check so missing-credential errors surface upfront
+   * rather than at per-request call time.
    */
   requiresApiKey(): boolean {
-    if (this.config.apiKeyRequired === false) {
+    const subclass = this.constructor as typeof AnthropicGenericProvider;
+    if (subclass.SUPPORTS_CLAUDE_CODE_OAUTH && this.config.apiKeyRequired === false) {
       return false;
     }
     return true;

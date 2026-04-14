@@ -61,6 +61,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   private mcpClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
 
+  // Messages is the only Anthropic subclass wired to Claude Code OAuth —
+  // the legacy text-completion endpoint does not accept OAuth tokens.
+  static override readonly SUPPORTS_CLAUDE_CODE_OAUTH = true;
+
   static ANTHROPIC_MODELS = ANTHROPIC_MODELS;
 
   static ANTHROPIC_MODELS_NAMES = ANTHROPIC_MODELS.map((model) => model.id);

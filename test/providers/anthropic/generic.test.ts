@@ -2,6 +2,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { AnthropicGenericProvider } from '../../../src/providers/anthropic/generic';
+import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
+import { mockProcessEnv } from '../../util/utils';
 
 const claudeCodeAuthMocks = vi.hoisted(() => ({
   loadClaudeCodeCredential: vi.fn(),
@@ -139,19 +141,21 @@ describe('AnthropicGenericProvider', () => {
   });
 
   describe('Claude Code OAuth authentication', () => {
-    const originalEnv = process.env;
+    // Exercised via `AnthropicMessagesProvider` because only OAuth-capable
+    // subclasses (those that opt in via `SUPPORTS_CLAUDE_CODE_OAUTH`) honor
+    // the `apiKeyRequired: false` fallback.
+    let restoreEnv: (() => void) | undefined;
 
     beforeEach(() => {
-      vi.clearAllMocks();
-      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReset();
-      claudeCodeAuthMocks.isCredentialExpired.mockReset();
-      process.env = { ...originalEnv };
-      delete process.env.ANTHROPIC_API_KEY;
-      delete process.env.ANTHROPIC_AUTH_TOKEN;
+      restoreEnv = mockProcessEnv({
+        ANTHROPIC_API_KEY: undefined,
+        ANTHROPIC_AUTH_TOKEN: undefined,
+      });
     });
 
     afterEach(() => {
-      process.env = originalEnv;
+      restoreEnv?.();
+      vi.resetAllMocks();
     });
 
     it('loads the Claude Code credential and configures the SDK when apiKeyRequired is false', () => {
@@ -161,7 +165,7 @@ describe('AnthropicGenericProvider', () => {
       });
       claudeCodeAuthMocks.isCredentialExpired.mockReturnValue(false);
 
-      const provider = new AnthropicGenericProvider('claude-sonnet-4-20250514', {
+      const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
         config: { apiKeyRequired: false },
       });
 
@@ -175,8 +179,9 @@ describe('AnthropicGenericProvider', () => {
     });
 
     it('does not attempt to load a Claude Code credential when apiKeyRequired defaults to true', () => {
-      process.env.ANTHROPIC_API_KEY = 'env-key';
-      const provider = new AnthropicGenericProvider('claude-sonnet-4-20250514');
+      restoreEnv?.();
+      restoreEnv = mockProcessEnv({ ANTHROPIC_API_KEY: 'env-key' });
+      const provider = new AnthropicMessagesProvider('claude-sonnet-4-6');
 
       expect(claudeCodeAuthMocks.loadClaudeCodeCredential).not.toHaveBeenCalled();
       expect(provider.usingClaudeCodeOAuth).toBe(false);
@@ -190,7 +195,7 @@ describe('AnthropicGenericProvider', () => {
         expiresAt: Date.now() + 60_000,
       });
 
-      const provider = new AnthropicGenericProvider('claude-sonnet-4-20250514', {
+      const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
         config: { apiKey: 'config-key', apiKeyRequired: false },
       });
 
@@ -203,7 +208,7 @@ describe('AnthropicGenericProvider', () => {
     it('leaves usingClaudeCodeOAuth false when no credential is found', () => {
       claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(null);
 
-      const provider = new AnthropicGenericProvider('claude-sonnet-4-20250514', {
+      const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
         config: { apiKeyRequired: false },
       });
 
@@ -220,7 +225,7 @@ describe('AnthropicGenericProvider', () => {
       });
       claudeCodeAuthMocks.isCredentialExpired.mockReturnValue(true);
 
-      const provider = new AnthropicGenericProvider('claude-sonnet-4-6', {
+      const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
         config: { apiKeyRequired: false },
       });
 
@@ -237,6 +242,25 @@ describe('AnthropicGenericProvider', () => {
         expiresAt: expect.any(Number),
       });
     });
+
+    it('does not load a Claude Code credential on non-OAuth subclasses even when apiKeyRequired: false', () => {
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue({
+        accessToken: 'sk-ant-oat-test',
+        expiresAt: Date.now() + 60_000,
+      });
+
+      // `AnthropicGenericProvider` does not opt into OAuth. Setting
+      // apiKeyRequired: false on the base class must NOT load a credential
+      // and MUST still require an API key upfront (so preflight catches
+      // misconfiguration instead of letting the request fail at call time).
+      const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKeyRequired: false },
+      });
+
+      expect(claudeCodeAuthMocks.loadClaudeCodeCredential).not.toHaveBeenCalled();
+      expect(provider.usingClaudeCodeOAuth).toBe(false);
+      expect(provider.requiresApiKey()).toBe(true);
+    });
   });
 
   describe('requiresApiKey', () => {
@@ -245,12 +269,14 @@ describe('AnthropicGenericProvider', () => {
       expect(provider.requiresApiKey()).toBe(true);
     });
 
-    it('returns false when apiKeyRequired is explicitly false', () => {
+    it('ignores apiKeyRequired: false on non-OAuth subclasses (base class)', () => {
+      // Scoping guard: only OAuth-capable subclasses like
+      // `AnthropicMessagesProvider` may honor `apiKeyRequired: false`.
       claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(null);
       const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022', {
         config: { apiKeyRequired: false },
       });
-      expect(provider.requiresApiKey()).toBe(false);
+      expect(provider.requiresApiKey()).toBe(true);
     });
   });
 });
