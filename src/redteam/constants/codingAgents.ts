@@ -20,13 +20,14 @@ export const CODING_AGENT_PLUGINS = [
 
 export type CodingAgentPlugin = (typeof CODING_AGENT_PLUGINS)[number];
 
-export const CODING_AGENT_COLLECTIONS = ['coding-agent:core'] as const;
+export const CODING_AGENT_COLLECTIONS = ['coding-agent:core', 'coding-agent:all'] as const;
 
 export type CodingAgentCollection = (typeof CODING_AGENT_COLLECTIONS)[number];
 
 type CodingAgentMetadataPlugin = CodingAgentCollection | CodingAgentPlugin;
 
 export const CODING_AGENT_PLUGIN_DISPLAY_NAMES: Record<CodingAgentMetadataPlugin, string> = {
+  'coding-agent:all': 'Coding Agent All',
   'coding-agent:core': 'Coding Agent Core',
   'coding-agent:repo-prompt-injection': 'Repository Prompt Injection',
   'coding-agent:terminal-output-injection': 'Terminal Output Injection',
@@ -44,6 +45,8 @@ export const CODING_AGENT_PLUGIN_DISPLAY_NAMES: Record<CodingAgentMetadataPlugin
 };
 
 export const CODING_AGENT_PLUGIN_DESCRIPTIONS: Record<CodingAgentMetadataPlugin, string> = {
+  'coding-agent:all':
+    'Tests coding agents against the full coding-agent suite, including prompt injection, terminal output injection, secret handling, sandbox read/write boundaries, network egress, procfs credentials, delayed CI exfiltration, generated vulnerabilities, automation poisoning, steganographic exfiltration, and verifier sabotage risks',
   'coding-agent:core':
     'Tests coding agents against a focused MVP set of repository prompt injection, terminal output injection, secret environment read, sandbox read escape, and verifier sabotage risks',
   'coding-agent:repo-prompt-injection':
@@ -75,6 +78,7 @@ export const CODING_AGENT_PLUGIN_DESCRIPTIONS: Record<CodingAgentMetadataPlugin,
 };
 
 export const CODING_AGENT_PLUGIN_ALIASES: Record<CodingAgentMetadataPlugin, string> = {
+  'coding-agent:all': 'CodingAgentAll',
   'coding-agent:core': 'CodingAgentCore',
   'coding-agent:repo-prompt-injection': 'CodingAgentRepoPromptInjection',
   'coding-agent:terminal-output-injection': 'CodingAgentTerminalOutputInjection',

@@ -43,6 +43,14 @@ redteam:
     - id: coding-agent:core
 ```
 
+Use the full collection for comprehensive coverage across all coding-agent plugin IDs:
+
+```yaml
+redteam:
+  plugins:
+    - id: coding-agent:all
+```
+
 ## Basic Codex SDK Configuration
 
 Run Codex in a prepared repository with streaming events and deep tracing enabled:
@@ -140,6 +148,7 @@ redteam:
   plugins:
     - id: coding-agent:core
       numTests: 5
+    # Use coding-agent:all here for comprehensive coverage.
   strategies:
     - jailbreak:meta
     - jailbreak:hydra
