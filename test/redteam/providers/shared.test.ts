@@ -1000,16 +1000,25 @@ describe('shared redteam provider utilities', () => {
   });
 
   describe('createIterationContext', () => {
-    it('applies an inline function transformVars to the vars', async () => {
+    it('returns undefined when no outer context is passed', async () => {
+      const transformSpy = vi.fn((vars) => ({
+        ...(vars as Record<string, unknown>),
+        goal: `${(vars as Record<string, unknown>).goal} (iter-1)`,
+      }));
       const iterationContext = await createIterationContext({
         originalVars: { goal: 'test' },
-        transformVarsConfig: (vars) => ({
-          ...(vars as Record<string, unknown>),
-          goal: `${(vars as Record<string, unknown>).goal} (iter-1)`,
-        }),
+        transformVarsConfig: transformSpy,
         iterationNumber: 1,
       });
-      expect(iterationContext).toBeUndefined(); // no outer context passed
+      // Without an outer context there's nothing to wrap — the transform still
+      // runs (verifies the happy path isn't short-circuited) but the function
+      // has no CallApiContextParams to return.
+      expect(iterationContext).toBeUndefined();
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+      expect(transformSpy).toHaveBeenCalledWith(
+        { goal: 'test' },
+        expect.objectContaining({ prompt: {}, uuid: expect.any(String) }),
+      );
     });
 
     it('merges transformed vars into the iteration context', async () => {

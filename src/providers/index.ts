@@ -33,6 +33,14 @@ import type {
 type ProviderFunctionWithMetadata = ProviderFunction &
   Pick<ApiProvider, 'label' | 'transform' | 'delay' | 'inputs' | 'config'>;
 
+const FORWARDED_PROVIDER_METADATA_KEYS = [
+  'label',
+  'transform',
+  'delay',
+  'inputs',
+  'config',
+] as const satisfies ReadonlyArray<keyof ProviderFunctionWithMetadata>;
+
 function createProviderFromFunction(
   provider: ProviderFunctionWithMetadata,
   id: string,
@@ -43,20 +51,12 @@ function createProviderFromFunction(
   };
   // Only forward defined metadata so we don't overwrite downstream defaults
   // (e.g. a `config ?? {}` merge) with an explicit `undefined` key.
-  if (provider.label !== undefined) {
-    apiProvider.label = provider.label;
-  }
-  if (provider.transform !== undefined) {
-    apiProvider.transform = provider.transform;
-  }
-  if (provider.delay !== undefined) {
-    apiProvider.delay = provider.delay;
-  }
-  if (provider.inputs !== undefined) {
-    apiProvider.inputs = provider.inputs;
-  }
-  if (provider.config !== undefined) {
-    apiProvider.config = provider.config;
+  const target = apiProvider as unknown as Record<string, unknown>;
+  for (const key of FORWARDED_PROVIDER_METADATA_KEYS) {
+    const value = provider[key];
+    if (value !== undefined) {
+      target[key] = value;
+    }
   }
   return apiProvider;
 }
@@ -377,8 +377,11 @@ export async function loadApiProviders(
     }
     return [await loadApiProvider(providerPaths, { basePath, env })];
   } else if (typeof providerPaths === 'function') {
+    // Reuse `normalizeProviderRef` so a function with `.label = 'foo'` gets a
+    // label-derived id here too, matching the array-element branch below.
+    const descriptor = normalizeProviderRef(providerPaths);
     return [
-      createProviderFromFunction(providerPaths as ProviderFunctionWithMetadata, 'custom-function'),
+      createProviderFromFunction(providerPaths as ProviderFunctionWithMetadata, descriptor.id),
     ];
   } else if (Array.isArray(providerPaths)) {
     const providersArrays = await Promise.all(
@@ -450,7 +453,7 @@ export function getProviderIds(providerPaths: TestSuiteConfig['providers']): str
     }
     return [providerPaths];
   } else if (typeof providerPaths === 'function') {
-    return ['custom-function'];
+    return [normalizeProviderRef(providerPaths).id];
   } else if (Array.isArray(providerPaths)) {
     return providerPaths.flatMap((provider, idx) => {
       if (isApiProvider(provider)) {

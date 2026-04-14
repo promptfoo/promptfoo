@@ -46,6 +46,23 @@ const transformSchemaKeys = new Set([
   'transformVars',
 ]);
 
+/**
+ * Strips every key from `target` and reassigns it to `{ type: 'string', description? }`,
+ * preserving an optional description so generated docs stay useful. Used by both the
+ * `override` hook (for inline `StringOrFunctionSchema` nodes) and the post-pass walker
+ * (for nodes Zod rewrites after `override` runs).
+ */
+function rewriteNodeToStringSchema(target: Record<string, unknown>): void {
+  const description = target.description;
+  for (const key of Object.keys(target)) {
+    delete target[key];
+  }
+  if (typeof description === 'string') {
+    target.description = description;
+  }
+  target.type = 'string';
+}
+
 function forceStringTransformSchemas(node: unknown): void {
   if (!node || typeof node !== 'object') {
     return;
@@ -67,16 +84,10 @@ function forceStringTransformSchemas(node: unknown): void {
       typeof value === 'object' &&
       !Array.isArray(value)
     ) {
-      const description = (value as Record<string, unknown>).description;
-
-      for (const schemaKey of Object.keys(value)) {
-        delete (value as Record<string, unknown>)[schemaKey];
-      }
-
-      Object.assign(value as Record<string, unknown>, {
-        ...(typeof description === 'string' ? { description } : {}),
-        type: 'string',
-      });
+      rewriteNodeToStringSchema(value as Record<string, unknown>);
+      // Recursing into the just-rewritten `{type, description}` stub is pointless
+      // and could accidentally re-match if a future rewrite leaves nested junk.
+      continue;
     }
 
     forceStringTransformSchemas(value);
@@ -106,10 +117,7 @@ const schemaContent = z.toJSONSchema(innerSchema, {
     // Config files can only represent string transforms. Preserve runtime support for function
     // transforms in the Zod schema, but keep generated JSON Schema string-only for editor/Ajv use.
     if (baseSchema === StringOrFunctionSchema) {
-      for (const key of Object.keys(ctx.jsonSchema)) {
-        delete ctx.jsonSchema[key];
-      }
-      Object.assign(ctx.jsonSchema, { type: 'string' });
+      rewriteNodeToStringSchema(ctx.jsonSchema as Record<string, unknown>);
       return;
     }
 
