@@ -85,25 +85,31 @@ function toSerializableProviderRef(provider: unknown): unknown {
   return provider;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function withSerializableProvider<T extends Record<string, unknown>>(record: T): T {
+  if (!isApiProvider(record.provider)) {
+    return record;
+  }
+  return {
+    ...record,
+    provider: sanitizeProvider(record.provider),
+  };
+}
+
 function toSerializableAssertion(assertion: unknown): unknown {
-  if (!assertion || typeof assertion !== 'object') {
+  if (!isRecord(assertion)) {
     return assertion;
   }
 
-  const assertionRecord = assertion as Record<string, unknown>;
-  let sanitizedAssertion = assertionRecord;
+  let sanitizedAssertion = withSerializableProvider(assertion);
 
-  if (isApiProvider(assertionRecord.provider)) {
+  if (Array.isArray(assertion.assert)) {
     sanitizedAssertion = {
       ...sanitizedAssertion,
-      provider: sanitizeProvider(assertionRecord.provider),
-    };
-  }
-
-  if (Array.isArray(assertionRecord.assert)) {
-    sanitizedAssertion = {
-      ...sanitizedAssertion,
-      assert: assertionRecord.assert.map(toSerializableAssertion),
+      assert: assertion.assert.map(toSerializableAssertion),
     };
   }
 
@@ -111,37 +117,26 @@ function toSerializableAssertion(assertion: unknown): unknown {
 }
 
 function toSerializableTestCase(test: unknown): unknown {
-  if (!test || typeof test !== 'object') {
+  if (!isRecord(test)) {
     return test;
   }
 
-  const testRecord = test as Record<string, unknown>;
-  let sanitizedTest = testRecord;
+  let sanitizedTest = withSerializableProvider(test);
 
-  if (isApiProvider(testRecord.provider)) {
-    sanitizedTest = {
-      ...sanitizedTest,
-      provider: sanitizeProvider(testRecord.provider),
-    };
-  }
-
-  if (testRecord.options && typeof testRecord.options === 'object') {
-    const options = testRecord.options as Record<string, unknown>;
-    if (isApiProvider(options.provider)) {
+  if (isRecord(test.options)) {
+    const options = withSerializableProvider(test.options);
+    if (options !== test.options) {
       sanitizedTest = {
         ...sanitizedTest,
-        options: {
-          ...options,
-          provider: sanitizeProvider(options.provider),
-        },
+        options,
       };
     }
   }
 
-  if (Array.isArray(testRecord.assert)) {
+  if (Array.isArray(test.assert)) {
     sanitizedTest = {
       ...sanitizedTest,
-      assert: testRecord.assert.map(toSerializableAssertion),
+      assert: test.assert.map(toSerializableAssertion),
     };
   }
 
@@ -149,18 +144,17 @@ function toSerializableTestCase(test: unknown): unknown {
 }
 
 function toSerializableScenario(scenario: unknown): unknown {
-  if (!scenario || typeof scenario !== 'object') {
+  if (!isRecord(scenario)) {
     return scenario;
   }
 
-  const scenarioRecord = scenario as Record<string, unknown>;
-  if (!Array.isArray(scenarioRecord.tests)) {
+  if (!Array.isArray(scenario.tests)) {
     return scenario;
   }
 
   return {
-    ...scenarioRecord,
-    tests: scenarioRecord.tests.map(toSerializableTestCase),
+    ...scenario,
+    tests: scenario.tests.map(toSerializableTestCase),
   };
 }
 

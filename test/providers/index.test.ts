@@ -1994,6 +1994,8 @@ describe('resolveProvider', () => {
       return { output: `Response for: ${prompt}` };
     });
     mockFunctionProvider.label = 'My Custom Provider';
+    mockFunctionProvider.transform = (output: string) => output.toUpperCase();
+    mockFunctionProvider.delay = 250;
 
     const result = await resolveProvider(mockFunctionProvider, mockProviderMap);
 
@@ -2001,6 +2003,8 @@ describe('resolveProvider', () => {
     expect(typeof result.id).toBe('function');
     expect(result.id()).toBe('My Custom Provider');
     expect(result.callApi).toBe(mockFunctionProvider);
+    expect(result.transform).toBe(mockFunctionProvider.transform);
+    expect(result.delay).toBe(250);
   });
 
   it('should handle function provider without label', async () => {

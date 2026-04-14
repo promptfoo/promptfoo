@@ -48,10 +48,13 @@ export function readProviderPromptMap(
     return ret;
   }
 
-  const allPrompts = [];
-  for (const prompt of parsedPrompts) {
-    allPrompts.push(prompt.label);
-  }
+  const allPrompts = parsedPrompts.map((prompt) => prompt.label);
+  const addProviderPrompts = (id: string, label?: string, prompts = allPrompts) => {
+    ret[id] = prompts;
+    if (label) {
+      ret[label] = prompts;
+    }
+  };
 
   if (typeof config.providers === 'string') {
     return { [config.providers]: allPrompts };
@@ -62,16 +65,13 @@ export function readProviderPromptMap(
   }
 
   if (isApiProvider(config.providers)) {
-    return { [config.providers.id()]: allPrompts };
+    addProviderPrompts(config.providers.id());
+    return ret;
   }
 
   for (const provider of config.providers) {
     if (isApiProvider(provider)) {
-      const providerId = provider.id();
-      ret[providerId] = allPrompts;
-      if (provider.label) {
-        ret[provider.label] = allPrompts;
-      }
+      addProviderPrompts(provider.id(), provider.label);
       continue;
     }
 
@@ -83,10 +83,7 @@ export function readProviderPromptMap(
           rawProvider.id,
           'You must specify an `id` on the Provider when you override options.prompts',
         );
-        ret[rawProvider.id] = rawProvider.prompts || allPrompts;
-        if (rawProvider.label) {
-          ret[rawProvider.label] = rawProvider.prompts || allPrompts;
-        }
+        addProviderPrompts(rawProvider.id, rawProvider.label, rawProvider.prompts || allPrompts);
       } else {
         const rawProvider = provider as ProviderOptionsMap;
         const originalId = Object.keys(rawProvider)[0];

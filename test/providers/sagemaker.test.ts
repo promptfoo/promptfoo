@@ -151,6 +151,18 @@ describe('SageMakerCompletionProvider', () => {
       expect(transformed).toBe('HELLO WORLD');
     });
 
+    it('awaits async inline string arrow transforms', async () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'custom',
+          transform: 'async (prompt) => `${prompt}!`',
+        },
+      });
+
+      await expect(provider.applyTransformation('hello')).resolves.toBe('hello!');
+    });
+
     it('preserves an explicit maxTokens value of 0', () => {
       vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '1024');
 

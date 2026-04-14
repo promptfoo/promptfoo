@@ -229,6 +229,17 @@ interface LoadApiProviderOptions {
   basePath?: string;
 }
 
+function loadOptionsFromResolveContext(
+  context: { env?: any; basePath?: string },
+  options?: ProviderOptions,
+): LoadApiProviderOptions {
+  return {
+    ...(options && { options }),
+    ...(context.env && { env: context.env }),
+    ...(context.basePath && { basePath: context.basePath }),
+  };
+}
+
 /**
  * Helper function to resolve provider from various formats (string, object, function).
  * Checks the resolved provider cache first and falls back to loadApiProvider for uncached providers.
@@ -247,35 +258,20 @@ export async function resolveProvider(
     if (resolvedProviders[provider]) {
       return resolvedProviders[provider];
     }
-    const loadOptions: LoadApiProviderOptions = {};
-    if (context.env) {
-      loadOptions.env = context.env;
-    }
-    if (context.basePath) {
-      loadOptions.basePath = context.basePath;
-    }
-    return await loadApiProvider(provider, loadOptions);
+    return await loadApiProvider(provider, loadOptionsFromResolveContext(context));
   } else if (typeof provider === 'object') {
     const descriptor = normalizeProviderRef(provider);
     invariant(
       descriptor.kind === 'options' || descriptor.kind === 'map',
       `Provider object must have an 'id' field or be a ProviderOptionsMap (e.g. { "openai:responses:gpt-5.4": { config: ... } }). Got: ${describeInvalidProvider(provider)}`,
     );
-    const loadOptions: LoadApiProviderOptions = { options: descriptor.loadOptions };
-    if (context.env) {
-      loadOptions.env = context.env;
-    }
-    if (context.basePath) {
-      loadOptions.basePath = context.basePath;
-    }
-    return await loadApiProvider(descriptor.loadProviderPath, loadOptions);
+    return await loadApiProvider(
+      descriptor.loadProviderPath,
+      loadOptionsFromResolveContext(context, descriptor.loadOptions),
+    );
   } else if (typeof provider === 'function') {
     const descriptor = normalizeProviderRef(provider);
-    // Handle function providers directly instead of passing to loadApiProvider
-    return {
-      id: () => descriptor.id,
-      callApi: provider,
-    };
+    return createProviderFromFunction(provider as ProviderFunctionWithMetadata, descriptor.id);
   } else {
     throw new Error('Invalid provider type');
   }

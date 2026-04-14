@@ -132,11 +132,10 @@ function getInlineTransformFunction(code: string, inputType: TransformInputType)
 async function getTransformFunction(
   codeOrFilepath: string,
   inputType: TransformInputType,
-): Promise<Function | null> {
-  let transformFn: Function | null = null;
+): Promise<Function> {
   if (codeOrFilepath.startsWith('file://')) {
     try {
-      transformFn = await getFileTransformFunction(codeOrFilepath);
+      return await getFileTransformFunction(codeOrFilepath);
     } catch (error) {
       logger.error('Error loading transform function from file', {
         error,
@@ -147,7 +146,7 @@ async function getTransformFunction(
     }
   } else {
     try {
-      transformFn = getInlineTransformFunction(codeOrFilepath, inputType);
+      return getInlineTransformFunction(codeOrFilepath, inputType);
     } catch (error) {
       logger.error('Error creating inline transform function', {
         error,
@@ -157,7 +156,6 @@ async function getTransformFunction(
       throw error;
     }
   }
-  return transformFn;
 }
 
 /**
@@ -210,10 +208,6 @@ export async function transform(
   const transformFn = isDirectFunction
     ? codeOrFilepathOrFn
     : await getTransformFunction(codeOrFilepathOrFn, inputType);
-
-  if (!transformFn) {
-    throw new Error(`Invalid transform function for ${getTransformLabel(codeOrFilepathOrFn)}`);
-  }
 
   let ret: unknown;
   try {

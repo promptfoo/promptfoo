@@ -7,16 +7,6 @@ import { StringOrFunctionSchema } from '../src/validators/shared';
 // .pipe() for transforms, and we need the input schema for JSON Schema generation.
 // This may need updating if Zod's internal structure changes.
 
-// UnifiedConfigSchema is wrapped in a .pipe() transform, so we need to extract
-// the inner schema to generate JSON schema properly
-function getInnerSchema(schema: ZodType): ZodType {
-  const def = schema._def as { in?: ZodType };
-  if (def?.in) {
-    return def.in;
-  }
-  return schema;
-}
-
 // Recursively unwrap to get the base schema (unwrapping optional, nullable, pipe, transform)
 function getBaseSchema(schema: ZodType): ZodType {
   const def = schema._def as { type?: string; in?: ZodType; innerType?: ZodType };
@@ -37,7 +27,8 @@ function getBaseSchema(schema: ZodType): ZodType {
   return schema;
 }
 
-const innerSchema = getInnerSchema(UnifiedConfigSchema);
+// UnifiedConfigSchema is wrapped in a .pipe() transform, so generate JSON Schema from its input.
+const innerSchema = getBaseSchema(UnifiedConfigSchema);
 
 const transformSchemaKeys = new Set([
   'contextTransform',
