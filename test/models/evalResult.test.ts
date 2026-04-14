@@ -253,6 +253,134 @@ describe('EvalResult', () => {
       expect(retrieved?.response?.output).toBe('test output');
     });
 
+    describe('credential redaction (regression for PR #8688 review)', () => {
+      it('redacts apiKey in testCase.options.provider.config', async () => {
+        const evalId = 'test-eval-redact-options-provider';
+        const result = await EvalResult.createFromEvaluateResult(
+          evalId,
+          {
+            ...mockEvaluateResult,
+            testCase: {
+              vars: {},
+              options: {
+                provider: {
+                  id: 'anthropic:messages:claude-3-haiku',
+                  config: { apiKey: 'sk-ant-api03-SHOULD-BE-REDACTED' },
+                },
+              },
+            } as AtomicTestCase,
+          },
+          { persist: true },
+        );
+
+        const serialized = JSON.stringify(result.testCase);
+        expect(serialized).not.toContain('sk-ant-api03-SHOULD-BE-REDACTED');
+        expect(serialized).toContain('[REDACTED]');
+
+        // Also verify the DB-persisted row is clean.
+        const retrieved = await EvalResult.findById(result.id);
+        expect(JSON.stringify(retrieved?.testCase)).not.toContain(
+          'sk-ant-api03-SHOULD-BE-REDACTED',
+        );
+      });
+
+      it('redacts apiKey in prompt.config.provider.config', async () => {
+        const evalId = 'test-eval-redact-prompt-provider';
+        const result = await EvalResult.createFromEvaluateResult(
+          evalId,
+          {
+            ...mockEvaluateResult,
+            prompt: {
+              ...mockPrompt,
+              config: {
+                provider: {
+                  id: 'anthropic:messages:claude-3-haiku',
+                  config: { apiKey: 'sk-ant-api03-PROMPT-SHOULD-BE-REDACTED' },
+                },
+              },
+            } as unknown as Prompt,
+          },
+          { persist: true },
+        );
+
+        const serialized = JSON.stringify(result.prompt);
+        expect(serialized).not.toContain('sk-ant-api03-PROMPT-SHOULD-BE-REDACTED');
+        expect(serialized).toContain('[REDACTED]');
+
+        const retrieved = await EvalResult.findById(result.id);
+        expect(JSON.stringify(retrieved?.prompt)).not.toContain(
+          'sk-ant-api03-PROMPT-SHOULD-BE-REDACTED',
+        );
+      });
+
+      it('redacts credentials from an instantiated provider object embedded in testCase.options.provider', async () => {
+        // Mimic the real Anthropic / Bedrock shape: the resolved judge provider is an
+        // ApiProvider instance whose internal SDK client carries `apiKey`, `_options`,
+        // `authToken`, and circular `_client` back-references. Before the fix, all of
+        // these survived sanitizeForDb (which only strips circular refs) and persisted
+        // through the eval results API.
+        const sdkClientA: { _client?: unknown; apiKey: string; _options: { apiKey: string } } = {
+          apiKey: 'sk-ant-api03-INSTANCE-KEY',
+          _options: { apiKey: 'sk-ant-api03-INSTANCE-KEY' },
+        };
+        sdkClientA._client = sdkClientA;
+        const instantiatedProvider = {
+          id: () => 'anthropic:messages:claude-3-haiku',
+          label: 'Judge',
+          config: { apiKey: 'sk-ant-api03-CONFIG-KEY' },
+          apiKey: 'sk-ant-api03-TOPLEVEL-KEY',
+          anthropic: sdkClientA,
+          callApi: async () => ({ output: 'ok' }),
+        };
+
+        const evalId = 'test-eval-redact-instantiated';
+        const result = await EvalResult.createFromEvaluateResult(
+          evalId,
+          {
+            ...mockEvaluateResult,
+            testCase: {
+              vars: {},
+              options: {
+                provider: instantiatedProvider as unknown as ApiProvider,
+              },
+            } as AtomicTestCase,
+          },
+          { persist: true },
+        );
+
+        const serialized = JSON.stringify(result.testCase);
+        expect(serialized).not.toContain('sk-ant-api03-INSTANCE-KEY');
+        expect(serialized).not.toContain('sk-ant-api03-CONFIG-KEY');
+        expect(serialized).not.toContain('sk-ant-api03-TOPLEVEL-KEY');
+        expect(serialized).toContain('[REDACTED]');
+      });
+
+      it('does not crash when redacting a provider with a live circular SDK client', async () => {
+        const sdkClient: { _client?: unknown; apiKey: string } = { apiKey: 'sk-live-leak' };
+        sdkClient._client = sdkClient;
+        const cyclicProvider = {
+          id: 'anthropic:messages:claude-3-haiku',
+          config: { apiKey: 'sk-live-leak', sdk: sdkClient },
+        };
+
+        const evalId = 'test-eval-redact-cyclic';
+        const result = await EvalResult.createFromEvaluateResult(
+          evalId,
+          {
+            ...mockEvaluateResult,
+            testCase: {
+              vars: {},
+              options: { provider: cyclicProvider },
+            } as AtomicTestCase,
+          },
+          { persist: true },
+        );
+
+        expect(result.persisted).toBe(true);
+        expect(JSON.stringify(result.testCase)).not.toContain('sk-live-leak');
+      });
+    });
+
     it('should preserve non-circular provider properties', async () => {
       const evalId = 'test-eval-id';
 
