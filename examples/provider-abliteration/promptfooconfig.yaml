@@ -13,3 +13,6 @@ providers:
 tests:
   - vars:
       question: "What's in this image?"
+    assert:
+      - type: icontains
+        value: stonehenge

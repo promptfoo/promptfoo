@@ -20,6 +20,8 @@ function mockAbliterationEnv(overrides: Record<string, string | undefined> = {})
   restoreEnv = mockProcessEnv({
     ABLIT_API_BASE_URL: undefined,
     ABLIT_KEY: 'test-ablit-key',
+    OPENAI_API_KEY: undefined,
+    OPENAI_ORGANIZATION: undefined,
     ...overrides,
   });
 }
@@ -44,6 +46,7 @@ describe('AbliterationProvider', () => {
     expect(provider.toString()).toBe('[Abliteration Provider abliterated-model]');
     expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
     expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
+    expect(provider.config.showThinking).toBe(false);
   });
 
   it('allows overriding the API base URL', () => {
@@ -101,11 +104,59 @@ describe('AbliterationProvider', () => {
         apiBaseUrl: 'https://api.abliteration.ai/v1',
         apiKey: undefined,
         apiKeyEnvar: 'ABLIT_KEY',
+        showThinking: false,
       },
     });
   });
 
+  it('uses config API keys before environment keys', () => {
+    mockAbliterationEnv({
+      ABLIT_KEY: 'env-key',
+    });
+
+    const provider = new AbliterationProvider('abliterated-model', {
+      config: {
+        apiKey: 'config-key',
+      },
+    });
+
+    expect(provider.getApiKey()).toBe('config-key');
+  });
+
+  it('uses provider env API keys before process env keys', () => {
+    mockAbliterationEnv({
+      ABLIT_KEY: 'process-key',
+    });
+
+    const provider = new AbliterationProvider('abliterated-model', {
+      env: {
+        ABLIT_KEY: 'provider-key',
+      },
+    });
+
+    expect(provider.getApiKey()).toBe('provider-key');
+  });
+
+  it('does not fall back to OpenAI credentials', async () => {
+    mockAbliterationEnv({
+      ABLIT_KEY: undefined,
+      OPENAI_API_KEY: 'openai-key',
+    });
+
+    const provider = new AbliterationProvider('abliterated-model');
+
+    expect(provider.getApiKey()).toBeUndefined();
+    await expect(provider.callApi('Test prompt')).rejects.toThrow(
+      'API key is not set. Set the ABLIT_KEY environment variable or add `apiKey` to the provider config.',
+    );
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
   it('calls the API successfully', async () => {
+    mockAbliterationEnv({
+      OPENAI_ORGANIZATION: 'org-secret',
+    });
+
     mockFetchWithCache.mockResolvedValue({
       data: {
         choices: [{ message: { content: 'Abliterated output' } }],
@@ -135,8 +186,62 @@ describe('AbliterationProvider', () => {
       undefined,
       undefined,
     );
+    const requestHeaders = mockFetchWithCache.mock.calls[0]![1]!.headers;
+    expect(requestHeaders).not.toHaveProperty('OpenAI-Organization');
     expect(result.output).toBe('Abliterated output');
     expect(result.tokenUsage).toEqual({ total: 12, prompt: 7, completion: 5, numRequests: 1 });
+  });
+
+  it('hides reasoning content by default', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: 'Final answer',
+              reasoning_content: 'Hidden reasoning',
+            },
+          },
+        ],
+        usage: { total_tokens: 12, prompt_tokens: 7, completion_tokens: 5 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new AbliterationProvider('abliterated-model');
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.output).toBe('Final answer');
+  });
+
+  it('can include reasoning content when showThinking is enabled', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: 'Final answer',
+              reasoning_content: 'Visible reasoning',
+            },
+          },
+        ],
+        usage: { total_tokens: 12, prompt_tokens: 7, completion_tokens: 5 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new AbliterationProvider('abliterated-model', {
+      config: {
+        showThinking: true,
+      },
+    });
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.output).toBe('Thinking: Visible reasoning\n\nFinal answer');
   });
 
   it('surfaces client errors', async () => {

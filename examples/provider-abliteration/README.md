@@ -9,7 +9,7 @@ cd provider-abliteration
 
 ## Usage
 
-Set your `ABLIT_KEY` environment variable and replace `abliterated-model` in `promptfooconfig.yaml` with your Abliteration model ID.
+Set your `ABLIT_KEY` environment variable. This example uses `abliterated-model`; replace it in `promptfooconfig.yaml` if your account exposes a different model ID.
 
 Then run:
 

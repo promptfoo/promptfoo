@@ -1,7 +1,7 @@
 ---
 title: Abliteration Provider
 sidebar_label: Abliteration
-description: "Configure Abliteration's OpenAI-compatible chat completions API in Promptfoo for text and multimodal evals, including standard chat and image prompts."
+description: "Configure Abliteration's OpenAI-compatible chat API in Promptfoo for text, vision, and structured-output evals."
 sidebar_position: 5
 ---
 
@@ -13,6 +13,8 @@ sidebar_position: 5
 
 1. Get an API key from Abliteration.
 2. Set the `ABLIT_KEY` environment variable or provide `apiKey` in your provider config.
+
+You can override the API base URL with `ABLIT_API_BASE_URL` or `config.apiBaseUrl`.
 
 ## Basic Configuration
 
@@ -29,7 +31,9 @@ providers:
 
 ## OpenAI Compatibility
 
-Abliteration uses the same request shape as OpenAI chat completions. Most options from the [OpenAI provider](/docs/providers/openai/) work here too, including tools, structured output, and multimodal messages.
+Abliteration uses the same request shape as OpenAI chat completions. Common options from the [OpenAI provider](/docs/providers/openai/) work here too, including `temperature`, `max_tokens`, `response_format`, and multimodal message content.
+
+Abliteration responses can include `reasoning_content`. Promptfoo hides this by default so eval outputs contain only the final answer. Set `showThinking: true` in the provider config if you want to include reasoning content in outputs.
 
 ## Multimodal Example
 
@@ -59,4 +63,7 @@ providers:
 tests:
   - vars:
       question: "What's in this image?"
+    assert:
+      - type: icontains
+        value: stonehenge
 ```
