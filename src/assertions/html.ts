@@ -22,14 +22,17 @@ function getChildNodes(node: HtmlNode): HtmlChildNode[] {
   return 'childNodes' in node ? node.childNodes : [];
 }
 
-// Iterative to avoid stack overflow on adversarially deep inputs; parse5
-// imposes no tree-depth limit and MAX_INPUT_SIZE allows 10MB.
-function* walkElements(root: HtmlNode): Generator<HtmlElement> {
+// Iterative pre-order DFS. Avoids the ~10-15k V8 stack-frame limit on
+// adversarially deep inputs (parse5 imposes no tree-depth cap).
+function findFirstElement(
+  root: HtmlNode,
+  predicate: (element: HtmlElement) => boolean,
+): HtmlElement | undefined {
   const stack: HtmlNode[] = [root];
   while (stack.length > 0) {
     const current = stack.pop() as HtmlNode;
-    if (isElementNode(current)) {
-      yield current;
+    if (isElementNode(current) && predicate(current)) {
+      return current;
     }
     const children = getChildNodes(current);
     // Push in reverse so pop() yields document order.
@@ -37,6 +40,7 @@ function* walkElements(root: HtmlNode): Generator<HtmlElement> {
       stack.push(children[i]);
     }
   }
+  return undefined;
 }
 
 function hasTopLevelText(parentNode: HtmlParentNode): boolean {
@@ -279,28 +283,19 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
 
   const document = parse(trimmed);
   const inputLowercase = trimmed.toLowerCase();
-  const inputHasExplicitBody = inputLowercase.includes('<body');
-
-  let body: HtmlElement | undefined;
-  let userProvidedElement: HtmlElement | undefined;
-
-  for (const element of walkElements(document)) {
-    if (!body && element.tagName === 'body') {
-      body = element;
-    }
-    if (!userProvidedElement && isUserProvidedElement(element, inputLowercase)) {
-      userProvidedElement = element;
-    }
-    if ((inputHasExplicitBody || body) && userProvidedElement) {
-      break;
-    }
-  }
 
   // parse5 auto-wraps fragments and plain text in <html><head><body>, so if the
   // input didn't include <body> itself, treat top-level body text as invalid.
-  if (body && !inputHasExplicitBody && hasTopLevelText(body)) {
-    return { isValid: false, reason: 'Output must be wrapped in HTML tags' };
+  if (!inputLowercase.includes('<body')) {
+    const body = findFirstElement(document, (element) => element.tagName === 'body');
+    if (body && hasTopLevelText(body)) {
+      return { isValid: false, reason: 'Output must be wrapped in HTML tags' };
+    }
   }
+
+  const userProvidedElement = findFirstElement(document, (element) =>
+    isUserProvidedElement(element, inputLowercase),
+  );
 
   if (!userProvidedElement) {
     return { isValid: false, reason: 'Output does not contain recognized HTML elements' };
