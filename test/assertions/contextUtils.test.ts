@@ -149,7 +149,7 @@ describe('resolveContext', () => {
       const test: AtomicTestCase = { vars: {}, options: {} };
 
       await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
-        `contextTransform must return a string or array of strings. Got number. Check your transform expression: ${transformUtil.INLINE_STRING_LABEL}`,
+        `contextTransform must return a string or array of strings. Got number. Check your transform expression: ${transformUtil.INLINE_STRING_LABEL}: output.invalid`,
       );
     });
 
@@ -163,7 +163,7 @@ describe('resolveContext', () => {
       const test: AtomicTestCase = { vars: {}, options: {} };
 
       await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
-        `contextTransform must return a string or array of strings. Got object. Check your transform expression: ${transformUtil.INLINE_STRING_LABEL}`,
+        `contextTransform must return a string or array of strings. Got object. Check your transform expression: ${transformUtil.INLINE_STRING_LABEL}: output.invalid`,
       );
     });
 
@@ -177,7 +177,7 @@ describe('resolveContext', () => {
       const test: AtomicTestCase = { vars: {}, options: {} };
 
       await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
-        `Failed to transform context using expression '${transformUtil.INLINE_STRING_LABEL}': Transform failed`,
+        `Failed to transform context using expression '${transformUtil.INLINE_STRING_LABEL}: output.invalid': Transform failed`,
       );
     });
 

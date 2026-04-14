@@ -465,18 +465,37 @@ describe('util', () => {
     });
 
     describe('getTransformLabel', () => {
-      it('redacts inline string transforms', () => {
-        expect(getTransformLabel('output.toUpperCase()')).toBe(INLINE_STRING_LABEL);
+      it('shows inline string transforms verbatim', () => {
+        expect(getTransformLabel('output.toUpperCase()')).toBe(
+          `${INLINE_STRING_LABEL}: output.toUpperCase()`,
+        );
+      });
+
+      it('collapses whitespace in multi-line inline strings', () => {
+        expect(getTransformLabel('const x = output;\n  return x.trim();')).toBe(
+          `${INLINE_STRING_LABEL}: const x = output; return x.trim();`,
+        );
+      });
+
+      it('truncates long inline string transforms', () => {
+        const longExpr = 'output.' + 'a'.repeat(200);
+        const label = getTransformLabel(longExpr);
+        expect(label.startsWith(`${INLINE_STRING_LABEL}: `)).toBe(true);
+        expect(label.endsWith('…')).toBe(true);
+        expect(label.length).toBeLessThan(longExpr.length);
       });
 
       it('redacts file transform paths', () => {
         expect(getTransformLabel('file://transform.js')).toBe(FILE_TRANSFORM_LABEL);
       });
 
-      it('does not leak inline transform source in thrown errors', async () => {
-        await expect(
-          transform('process.env.SECRET_SHOULD_NOT_APPEAR', 'test', { vars: {}, prompt: {} }),
-        ).rejects.toThrow(`Transform function did not return a value\n\n${INLINE_STRING_LABEL}`);
+      it('does not render function source in error labels', async () => {
+        const secretFn = function SECRET_SHOULD_NOT_APPEAR_IN_LABEL() {
+          return undefined;
+        };
+        await expect(transform(secretFn as any, 'test', { vars: {}, prompt: {} })).rejects.toThrow(
+          `Transform function did not return a value\n\n${INLINE_FUNCTION_LABEL}: SECRET_SHOULD_NOT_APPEAR_IN_LABEL`,
+        );
       });
 
       it('returns [inline function] for anonymous functions', () => {
@@ -488,6 +507,12 @@ describe('util', () => {
           return 'x';
         }
         expect(getTransformLabel(myTransform)).toBe(`${INLINE_FUNCTION_LABEL}: myTransform`);
+      });
+
+      it('falls back to inline label for non-string, non-function inputs', () => {
+        expect(getTransformLabel(undefined)).toBe(INLINE_STRING_LABEL);
+        expect(getTransformLabel(null)).toBe(INLINE_STRING_LABEL);
+        expect(getTransformLabel(42)).toBe(INLINE_STRING_LABEL);
       });
     });
   });

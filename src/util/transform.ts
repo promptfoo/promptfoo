@@ -15,6 +15,8 @@ export const INLINE_FUNCTION_LABEL = '[inline function]';
 export const INLINE_STRING_LABEL = '[inline transform]';
 /** Label used in error messages when a transform is loaded from a file reference. */
 export const FILE_TRANSFORM_LABEL = '[file transform]';
+/** Maximum length of an inline transform string shown in error labels before truncation. */
+const INLINE_STRING_LABEL_MAX_LENGTH = 80;
 
 export const TransformInputType = {
   OUTPUT: 'output',
@@ -157,12 +159,30 @@ async function getTransformFunction(
   return transformFn;
 }
 
-/** Returns a human-readable label for a transform value, suitable for error messages. */
-export function getTransformLabel(t: string | Function): string {
+/**
+ * Returns a human-readable label for a transform value, suitable for error messages.
+ *
+ * Inline string transforms are shown verbatim (single-line, truncated to
+ * {@link INLINE_STRING_LABEL_MAX_LENGTH}) so users can see which expression failed.
+ * Inline functions are shown by name only — their source is never rendered, to avoid
+ * leaking implementation details via `Function.toString()` into logs and persisted errors.
+ */
+export function getTransformLabel(t: unknown): string {
   if (typeof t === 'function') {
     return t.name ? `${INLINE_FUNCTION_LABEL}: ${t.name}` : INLINE_FUNCTION_LABEL;
   }
-  return t.startsWith('file://') ? FILE_TRANSFORM_LABEL : INLINE_STRING_LABEL;
+  if (typeof t !== 'string') {
+    return INLINE_STRING_LABEL;
+  }
+  if (t.startsWith('file://')) {
+    return FILE_TRANSFORM_LABEL;
+  }
+  const singleLine = t.replace(/\s+/g, ' ').trim();
+  const truncated =
+    singleLine.length > INLINE_STRING_LABEL_MAX_LENGTH
+      ? `${singleLine.slice(0, INLINE_STRING_LABEL_MAX_LENGTH - 1)}…`
+      : singleLine;
+  return `${INLINE_STRING_LABEL}: ${truncated}`;
 }
 
 /**
