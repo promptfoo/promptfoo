@@ -19,6 +19,15 @@ describe('package manifests', () => {
     expect(packageJson.optionalDependencies?.sharp).toBe('^0.34.5');
   });
 
+  it('keeps jsdom out of root runtime dependencies', () => {
+    const packageJson = readPackageJson<{
+      dependencies?: Record<string, string>;
+    }>('package.json');
+
+    expect(packageJson.dependencies?.jsdom).toBeUndefined();
+    expect(packageJson.dependencies?.parse5).toBe('^7.3.0');
+  });
+
   it('keeps sharp optional for the docs workspace', () => {
     const sitePackageJson = readPackageJson<{
       devDependencies?: Record<string, string>;

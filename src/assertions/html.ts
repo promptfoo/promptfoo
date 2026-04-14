@@ -1,6 +1,61 @@
-import { JSDOM } from 'jsdom';
+import { parse } from 'parse5';
+import type { DefaultTreeAdapterMap } from 'parse5';
 
 import type { AssertionParams, GradingResult } from '../types/index';
+
+type HtmlNode = DefaultTreeAdapterMap['node'];
+type HtmlChildNode = DefaultTreeAdapterMap['childNode'];
+type HtmlElement = DefaultTreeAdapterMap['element'];
+type HtmlParentNode = DefaultTreeAdapterMap['parentNode'];
+
+function isTextNode(node: HtmlNode): node is DefaultTreeAdapterMap['textNode'] {
+  return node.nodeName === '#text';
+}
+
+function isElementNode(node: HtmlNode): node is HtmlElement {
+  return 'tagName' in node;
+}
+
+function getChildNodes(node: HtmlNode): HtmlChildNode[] {
+  return 'childNodes' in node ? node.childNodes : [];
+}
+
+function findFirstElementByTagName(node: HtmlNode, tagName: string): HtmlElement | undefined {
+  if (isElementNode(node) && node.tagName === tagName) {
+    return node;
+  }
+
+  for (const childNode of getChildNodes(node)) {
+    const match = findFirstElementByTagName(childNode, tagName);
+    if (match) {
+      return match;
+    }
+  }
+}
+
+function hasTopLevelText(parentNode: HtmlParentNode): boolean {
+  return parentNode.childNodes.some((node) => isTextNode(node) && Boolean(node.value.trim()));
+}
+
+function findUserProvidedElement(node: HtmlNode, inputLowercase: string): HtmlElement | undefined {
+  if (isElementNode(node)) {
+    const tagName = node.tagName.toLowerCase();
+
+    if (
+      !(['html', 'head', 'body'].includes(tagName) && !inputLowercase.includes(`<${tagName}`)) &&
+      (VALID_HTML_ELEMENTS.has(tagName) || tagName.includes('-'))
+    ) {
+      return node;
+    }
+  }
+
+  for (const childNode of getChildNodes(node)) {
+    const match = findUserProvidedElement(childNode, inputLowercase);
+    if (match) {
+      return match;
+    }
+  }
+}
 
 // Patterns that indicate HTML content
 const HTML_PATTERNS = {
@@ -230,42 +285,23 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
   }
 
   try {
-    // Parse with jsdom
-    const dom = new JSDOM(trimmed, {
-      contentType: 'text/html',
-    });
+    const document = parse(trimmed);
+    const inputLowercase = trimmed.toLowerCase();
+    const body = findFirstElementByTagName(document, 'body');
 
-    const { document } = dom.window;
-
-    // Check if JSDOM wrapped our content (indicates a fragment or plain text)
-    const isWrapped = document.body && !trimmed.toLowerCase().includes('<body');
+    // Check if the parser wrapped our content (indicates a fragment or plain text)
+    const isWrapped = body && !inputLowercase.includes('<body');
 
     if (isWrapped) {
-      // Check what's in the body that JSDOM created
-      const hasText = Array.from(document.body.childNodes).some(
-        (node) => node.nodeType === 3 /* TEXT_NODE */ && node.textContent?.trim(),
-      );
-
-      if (hasText) {
+      // Check what's in the body that the parser created
+      if (hasTopLevelText(body)) {
         // Either plain text or mixed content - both invalid
         return { isValid: false, reason: 'Output must be wrapped in HTML tags' };
       }
     }
 
     // Find all elements that are actually in the user's input
-    const allElements = document.querySelectorAll('*');
-    const userProvidedElement = Array.from(allElements).find((element) => {
-      const tagName = element.tagName.toLowerCase();
-      // Skip JSDOM's auto-added elements unless user explicitly included them
-      if (
-        ['html', 'head', 'body'].includes(tagName) &&
-        !trimmed.toLowerCase().includes(`<${tagName}`)
-      ) {
-        return false;
-      }
-      // Check if it's a valid HTML element or custom element (with hyphen)
-      return VALID_HTML_ELEMENTS.has(tagName) || tagName.includes('-');
-    });
+    const userProvidedElement = findUserProvidedElement(document, inputLowercase);
 
     if (!userProvidedElement) {
       return { isValid: false, reason: 'Output does not contain recognized HTML elements' };
