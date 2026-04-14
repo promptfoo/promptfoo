@@ -21,6 +21,7 @@ function getChildNodes(node: HtmlNode): HtmlChildNode[] {
 }
 
 function findFirstElementByTagName(node: HtmlNode, tagName: string): HtmlElement | undefined {
+  // parse5 lowercases tagName for HTML-namespaced elements, so callers pass lowercase.
   if (isElementNode(node) && node.tagName === tagName) {
     return node;
   }
@@ -31,6 +32,8 @@ function findFirstElementByTagName(node: HtmlNode, tagName: string): HtmlElement
       return match;
     }
   }
+
+  return undefined;
 }
 
 function hasTopLevelText(parentNode: HtmlParentNode): boolean {
@@ -40,11 +43,10 @@ function hasTopLevelText(parentNode: HtmlParentNode): boolean {
 function findUserProvidedElement(node: HtmlNode, inputLowercase: string): HtmlElement | undefined {
   if (isElementNode(node)) {
     const tagName = node.tagName.toLowerCase();
+    const isAutoInjectedWrapper =
+      ['html', 'head', 'body'].includes(tagName) && !inputLowercase.includes(`<${tagName}`);
 
-    if (
-      !(['html', 'head', 'body'].includes(tagName) && !inputLowercase.includes(`<${tagName}`)) &&
-      (VALID_HTML_ELEMENTS.has(tagName) || tagName.includes('-'))
-    ) {
+    if (!isAutoInjectedWrapper && (VALID_HTML_ELEMENTS.has(tagName) || tagName.includes('-'))) {
       return node;
     }
   }
@@ -55,6 +57,8 @@ function findUserProvidedElement(node: HtmlNode, inputLowercase: string): HtmlEl
       return match;
     }
   }
+
+  return undefined;
 }
 
 // Patterns that indicate HTML content
@@ -133,8 +137,8 @@ function containsHtml(text: string): boolean {
     return true;
   }
 
-  // For edge cases, don't use jsdom as it's too permissive
-  // The pattern-based approach is sufficient for contains-html
+  // The pattern-based approach is intentionally strict for contains-html to avoid
+  // false positives on prose containing stray angle brackets.
   return false;
 }
 
@@ -284,36 +288,23 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
     return { isValid: false, reason: 'Output appears to be XML, not HTML' };
   }
 
-  try {
-    const document = parse(trimmed);
-    const inputLowercase = trimmed.toLowerCase();
-    const body = findFirstElementByTagName(document, 'body');
+  const document = parse(trimmed);
+  const inputLowercase = trimmed.toLowerCase();
+  const body = findFirstElementByTagName(document, 'body');
 
-    // Check if the parser wrapped our content (indicates a fragment or plain text)
-    const isWrapped = body && !inputLowercase.includes('<body');
-
-    if (isWrapped) {
-      // Check what's in the body that the parser created
-      if (hasTopLevelText(body)) {
-        // Either plain text or mixed content - both invalid
-        return { isValid: false, reason: 'Output must be wrapped in HTML tags' };
-      }
-    }
-
-    // Find all elements that are actually in the user's input
-    const userProvidedElement = findUserProvidedElement(document, inputLowercase);
-
-    if (!userProvidedElement) {
-      return { isValid: false, reason: 'Output does not contain recognized HTML elements' };
-    }
-
-    return { isValid: true, reason: 'Output is valid HTML' };
-  } catch (error) {
-    return {
-      isValid: false,
-      reason: `HTML parsing failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-    };
+  // parse5 auto-wraps fragments and plain text in <html><head><body>, so if the
+  // input didn't include <body> itself, treat top-level body text as invalid.
+  if (body && !inputLowercase.includes('<body') && hasTopLevelText(body)) {
+    return { isValid: false, reason: 'Output must be wrapped in HTML tags' };
   }
+
+  const userProvidedElement = findUserProvidedElement(document, inputLowercase);
+
+  if (!userProvidedElement) {
+    return { isValid: false, reason: 'Output does not contain recognized HTML elements' };
+  }
+
+  return { isValid: true, reason: 'Output is valid HTML' };
 }
 
 export const handleContainsHtml = ({

@@ -8,6 +8,21 @@ function readPackageJson<T>(relativePath: string): T {
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as T;
 }
 
+function collectSourceFiles(dir: string, acc: string[] = []): string[] {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name === 'app') {
+      continue;
+    }
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      collectSourceFiles(full, acc);
+    } else if (/\.(ts|tsx|mts|cts|js|mjs|cjs)$/.test(entry.name)) {
+      acc.push(full);
+    }
+  }
+  return acc;
+}
+
 describe('package manifests', () => {
   it('keeps sharp out of the root install path', () => {
     const packageJson = readPackageJson<{
@@ -26,6 +41,21 @@ describe('package manifests', () => {
 
     expect(packageJson.dependencies?.jsdom).toBeUndefined();
     expect(packageJson.dependencies?.parse5).toBe('^7.3.0');
+  });
+
+  it('does not import jsdom from root src/', () => {
+    // Guards against re-introducing jsdom into the CLI startup graph, which
+    // previously broke `npx promptfoo` on Node 24 via ERR_REQUIRE_ASYNC_MODULE.
+    // src/app is excluded because it's a separate workspace where jsdom is
+    // legitimately used as a browser test environment.
+    const srcDir = path.join(process.cwd(), 'src');
+    const files = collectSourceFiles(srcDir);
+    const jsdomImportPattern = /(?:from|require\()\s*['"]jsdom['"]/;
+    const offenders = files.filter((file) =>
+      jsdomImportPattern.test(fs.readFileSync(file, 'utf8')),
+    );
+
+    expect(offenders).toEqual([]);
   });
 
   it('keeps sharp optional for the docs workspace', () => {
