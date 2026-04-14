@@ -103,10 +103,7 @@ export function buildCacheableScriptContext(
   }
 
   const cacheable = { ...context };
-  for (const key of NON_SERIALIZABLE_CONTEXT_KEYS) {
-    delete cacheable[key];
-  }
-  for (const key of NON_CACHEABLE_CONTEXT_KEYS) {
+  for (const key of [...NON_SERIALIZABLE_CONTEXT_KEYS, ...NON_CACHEABLE_CONTEXT_KEYS]) {
     delete cacheable[key];
   }
   return cacheable;

@@ -77,9 +77,9 @@ export class ScriptCompletionProvider implements ApiProvider {
     // runs hit the same cache entry. Stable (sorted) JSON ensures upstream
     // callers that clone/reshape options or context with a different key
     // order still hit the same cache entry.
-    const cacheableContext = buildCacheableScriptContext(context) ?? {};
     const stableOptions = stableJsonStringify(this.options ?? {}) ?? '{}';
-    const stableCacheableContext = stableJsonStringify(cacheableContext) ?? '{}';
+    const stableCacheableContext =
+      stableJsonStringify(buildCacheableScriptContext(context)) ?? '{}';
 
     if (fileHashes.length === 0) {
       logger.warn(`Could not find any valid files in the command: ${this.scriptPath}`);
