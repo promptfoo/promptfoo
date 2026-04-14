@@ -271,6 +271,45 @@ describe('json utilities', () => {
 
       expect(stableJsonStringify(custom)).toBe('{"a":1,"z":2}');
     });
+
+    it('handles self-returning toJSON without infinite recursion', () => {
+      // Matches JSON.stringify semantics: toJSON is called once per
+      // position, and its result is processed normally. When toJSON
+      // returns `this`, the object's non-function properties are
+      // serialized but toJSON is not re-invoked.
+      const selfReturning: any = { a: 1 };
+      selfReturning.toJSON = function () {
+        return this;
+      };
+
+      expect(() => stableJsonStringify(selfReturning)).not.toThrow();
+      expect(stableJsonStringify(selfReturning)).toBe('{"a":1}');
+    });
+
+    it('produces different cache keys for two self-returning toJSON objects with different payloads', () => {
+      const first: any = { a: 1 };
+      first.toJSON = function () {
+        return this;
+      };
+      const second: any = { a: 2 };
+      second.toJSON = function () {
+        return this;
+      };
+
+      expect(stableJsonStringify(first)).not.toBe(stableJsonStringify(second));
+    });
+
+    it('passes the current property key to toJSON (matching JSON.stringify)', () => {
+      const keyAware = {
+        toJSON(key: string) {
+          return `serialized-as:${key}`;
+        },
+      };
+      // At the top level, JSON.stringify passes an empty-string key.
+      expect(stableJsonStringify(keyAware)).toBe(JSON.stringify(keyAware));
+      // Inside a parent object, the property key is passed through.
+      expect(stableJsonStringify({ nested: keyAware })).toBe('{"nested":"serialized-as:nested"}');
+    });
   });
 
   describe('extractJsonObjects', () => {

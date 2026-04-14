@@ -130,65 +130,55 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
 }
 
 /**
- * Stably stringify a value to JSON by sorting object keys recursively.
+ * Stably stringify a value to JSON with deterministic object-key order.
  * Intended for cache-key hashing: two semantically identical payloads
- * whose keys happen to be inserted in different orders will produce the
- * same output string and therefore hash to the same cache key. Handles
- * circular references the same way as `safeJsonStringify`.
+ * whose keys happen to be inserted in different orders produce the same
+ * output string and therefore hash to the same cache key.
  *
- * Respects the `toJSON()` convention the same way `JSON.stringify` does,
- * so values like `Date` serialize to their ISO string instead of `{}` and
- * two different dates hash to different cache keys.
+ * Delegates all JSON semantics to `safeJsonStringify` and then
+ * canonicalizes object-key order on the parsed result. That means it
+ * inherits `JSON.stringify`'s correct handling of:
  *
- * Arrays are NOT sorted — only object key order is normalized — because
+ * - `toJSON(key)` — called once per position with the current property
+ *   key, so `Date` serializes to its ISO string, key-aware `toJSON`
+ *   implementations see the real key, and self-returning `toJSON`
+ *   implementations don't infinite-recurse.
+ * - Circular references — stripped via `safeJsonStringify`'s
+ *   ancestor-path tracking rather than a blanket "already visited" set,
+ *   so sibling-shared references like `{ a: shared, b: shared }` are
+ *   serialized in full on every occurrence.
+ * - `undefined`, functions, and other non-JSON values — omitted.
+ *
+ * Arrays are NOT sorted — only object-key order is normalized — because
  * array order is semantically meaningful.
  *
  * @param value - The value to stringify
  * @returns JSON string representation, or `undefined` if serialization fails
  */
 export function stableJsonStringify<T>(value: T): string | undefined {
-  // Track the current ancestor path, not every object ever visited. This
-  // matches `JSON.stringify`'s own cycle detection: only a reference to
-  // an ancestor is circular. Two fields that happen to reference the
-  // same object (e.g. `{ a: shared, b: shared }`) must still both
-  // serialize their contents, otherwise the second reference would
-  // collapse to `undefined` and collide in the cache-key hash.
-  const ancestors: object[] = [];
-
-  const normalize = (val: any): any => {
-    if (val === null || typeof val !== 'object') {
-      return val;
-    }
-    // Respect the `toJSON` convention (used by `Date`, Moment, etc.) the
-    // same way `JSON.stringify` does. Without this, `new Date('2024-01-01')`
-    // would normalize to `{}` and any two distinct Date values would
-    // collide in the cache key.
-    if (typeof val.toJSON === 'function') {
-      return normalize(val.toJSON());
-    }
-    if (ancestors.includes(val)) {
-      return undefined;
-    }
-    ancestors.push(val);
-    try {
-      if (Array.isArray(val)) {
-        return val.map(normalize);
-      }
-      const sorted: Record<string, any> = {};
-      for (const key of Object.keys(val).sort()) {
-        sorted[key] = normalize(val[key]);
-      }
-      return sorted;
-    } finally {
-      ancestors.pop();
-    }
-  };
-
+  const raw = safeJsonStringify(value);
+  if (raw === undefined) {
+    return undefined;
+  }
   try {
-    return JSON.stringify(normalize(value)) || undefined;
+    return canonicalizeJsonKeys(JSON.parse(raw));
   } catch {
     return undefined;
   }
+}
+
+function canonicalizeJsonKeys(val: unknown): string {
+  if (val === null || typeof val !== 'object') {
+    return JSON.stringify(val);
+  }
+  if (Array.isArray(val)) {
+    return `[${val.map(canonicalizeJsonKeys).join(',')}]`;
+  }
+  const obj = val as Record<string, unknown>;
+  const entries = Object.keys(obj)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalizeJsonKeys(obj[key])}`);
+  return `{${entries.join(',')}}`;
 }
 
 export function convertSlashCommentsToHash(str: string): string {
