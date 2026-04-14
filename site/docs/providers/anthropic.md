@@ -25,6 +25,28 @@ Example of setting the environment variable:
 export ANTHROPIC_API_KEY=your_api_key_here
 ```
 
+### Authenticating via a Claude Code session
+
+If you already have an active Claude Code session (for example as a Claude Pro or Max subscriber), you can reuse its OAuth credential instead of creating a separate Anthropic Console API key. Set `apiKeyRequired: false` on the provider config:
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-sonnet-4-6
+    config:
+      apiKeyRequired: false
+```
+
+When `apiKeyRequired` is `false` and no `ANTHROPIC_API_KEY` is available, Promptfoo loads the Claude Code OAuth credential from:
+
+1. The macOS keychain entry `Claude Code-credentials` (darwin only), then
+2. `$HOME/.claude/.credentials.json` on Linux and macOS, or `%USERPROFILE%\.claude\.credentials.json` on Windows.
+
+Promptfoo authenticates requests with a Bearer token, sends the `claude-code-20250219,oauth-2025-04-20` beta headers, and prepends the required Claude Code identity system block (`"You are Claude Code, Anthropic's official CLI for Claude."`) to every Messages request. Your own system prompt is still forwarded as the next system block.
+
+If you haven't logged in yet, run `claude /login` to create a credential. Re-run it if Promptfoo warns that the credential has expired. Requests made this way are expected to count against your Claude subscription the same way calls from the Claude Code CLI do — check [Anthropic's documentation](https://docs.claude.com/en/docs/claude-code/overview) for current billing behavior.
+
+This also enables [model-graded assertions](#model-graded-tests) such as `llm-rubric` to run without a separate Anthropic Console key — see [the example below](#model-graded-tests).
+
 ## Models
 
 The `anthropic` provider supports the following models via the messages API:
@@ -71,6 +93,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | Config Property | Environment Variable  | Description                                                                         |
 | --------------- | --------------------- | ----------------------------------------------------------------------------------- |
 | apiKey          | ANTHROPIC_API_KEY     | Your API key from Anthropic                                                         |
+| apiKeyRequired  | -                     | Skip the API key preflight and authenticate via a local Claude Code session         |
 | apiBaseUrl      | ANTHROPIC_BASE_URL    | The base URL for requests to the Anthropic API                                      |
 | temperature     | ANTHROPIC_TEMPERATURE | Controls the randomness of the output (default: 0). Omitted when `top_p` is set.    |
 | max_tokens      | ANTHROPIC_MAX_TOKENS  | The maximum length of the generated text (default: 1024)                            |
@@ -692,6 +715,19 @@ See [Anthropic's guide](https://docs.anthropic.com/en/docs/build-with-claude/str
 [Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` will automatically use Anthropic as the grading provider if `ANTHROPIC_API_KEY` is set and `OPENAI_API_KEY` is not set.
 
 If both API keys are present, OpenAI will be used by default. You can explicitly override the grading provider in your configuration.
+
+Claude Pro/Max subscribers without a separate Anthropic Console key can wire up `llm-rubric` through a local Claude Code session by pointing the grader at `anthropic:messages:<model>` with `apiKeyRequired: false`:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      id: anthropic:messages:claude-sonnet-4-6
+      config:
+        apiKeyRequired: false
+```
+
+See [Authenticating via a Claude Code session](#authenticating-via-a-claude-code-session) above for how the credential is loaded and what beta headers Promptfoo sets.
 
 Because of how model-graded evals are implemented, **the model must support chat-formatted prompts** (except for embedding or classification models).
 

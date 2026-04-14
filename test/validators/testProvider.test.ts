@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMockProvider as createFactoryProvider } from '../factories/provider';
 
 import type { ApiProvider } from '../../src/types/providers';
 
@@ -137,15 +138,16 @@ afterEach(() => {
 });
 
 function createMockProvider(overrides?: Record<string, unknown>): ApiProvider {
-  return {
-    id: () => 'test-provider',
-    callApi: vi.fn().mockResolvedValue({
-      output: 'Hello! How can I help you?',
-      sessionId: 'session-123',
+  return Object.assign(
+    createFactoryProvider({
+      response: {
+        output: 'Hello! How can I help you?',
+        sessionId: 'session-123',
+      },
+      config: {},
     }),
-    config: {},
-    ...overrides,
-  } as unknown as ApiProvider;
+    overrides,
+  ) as unknown as ApiProvider;
 }
 
 describe('testProviderConnectivity', () => {

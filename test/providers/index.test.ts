@@ -52,6 +52,7 @@ import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
 import { checkProviderApiKeys } from '../../src/util/provider';
+import { createMockProvider } from '../factories/provider';
 
 import type { ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
 
@@ -1757,16 +1758,8 @@ describe('resolveProvider', () => {
   let mockProvider2: any;
 
   beforeEach(async () => {
-    mockProvider1 = {
-      id: () => 'provider-1',
-      label: 'Provider One',
-      callApi: vi.fn(),
-    };
-
-    mockProvider2 = {
-      id: () => 'provider-2',
-      callApi: vi.fn(),
-    };
+    mockProvider1 = createMockProvider({ id: 'provider-1', label: 'Provider One' });
+    mockProvider2 = createMockProvider({ id: 'provider-2' });
 
     mockProviderMap = {
       'provider-1': mockProvider1,
@@ -1860,10 +1853,7 @@ describe('resolveProvider', () => {
     const { resolveProvider } = await import('../../src/providers');
 
     // Test that 'echo' gets resolved from providerMap instead of loadApiProvider
-    const mockEchoProvider = {
-      id: () => 'echo-from-map',
-      callApi: vi.fn(),
-    };
+    const mockEchoProvider = createMockProvider({ id: 'echo-from-map' });
 
     const mapWithEcho = {
       ...mockProviderMap,

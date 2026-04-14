@@ -5,8 +5,9 @@ import {
   DefaultEmbeddingProvider,
   DefaultGradingProvider,
 } from '../../src/providers/openai/defaults';
+import { createMockProvider } from '../factories/provider';
 
-import type { ApiProvider, ProviderTypeMap } from '../../src/types/index';
+import type { ProviderTypeMap } from '../../src/types/index';
 
 describe('getGradingProvider', () => {
   it('should return the correct provider when provider is a string', async () => {
@@ -90,10 +91,7 @@ describe('getAndCheckProvider', () => {
   });
 
   it('should return a provider from ApiProvider when specified', async () => {
-    const providerOptions: ApiProvider = {
-      id: () => 'custom-provider',
-      callApi: async () => ({}),
-    };
+    const providerOptions = createMockProvider({ id: 'custom-provider', response: {} });
     const provider = await getGradingProvider('text', providerOptions, DefaultGradingProvider);
     expect(provider?.id()).toBe('custom-provider');
   });

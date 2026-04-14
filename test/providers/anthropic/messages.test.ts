@@ -28,6 +28,18 @@ const mcpMocks = vi.hoisted(() => {
   return { cleanup, getAllTools, initialize, instances, MockMCPClient };
 });
 
+const claudeCodeAuthMocks = vi.hoisted(() => ({
+  loadClaudeCodeCredential: vi.fn(),
+}));
+
+vi.mock('../../../src/providers/anthropic/claudeCodeAuth', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    loadClaudeCodeCredential: claudeCodeAuthMocks.loadClaudeCodeCredential,
+  };
+});
+
 vi.mock('proxy-agent', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -86,6 +98,7 @@ describe('AnthropicMessagesProvider', () => {
     mcpMocks.cleanup.mockReset();
     mcpMocks.getAllTools.mockReset();
     mcpMocks.getAllTools.mockReturnValue([]);
+    claudeCodeAuthMocks.loadClaudeCodeCredential.mockReset();
   });
 
   afterEach(async () => {
@@ -2026,6 +2039,235 @@ describe('AnthropicMessagesProvider', () => {
       expect(warnSpy).not.toHaveBeenCalledWith(
         expect.stringContaining('Using unknown Anthropic model'),
       );
+    });
+  });
+
+  describe('Claude Code OAuth authentication', () => {
+    const validCredential = () => ({
+      accessToken: 'sk-ant-oat-test',
+      expiresAt: Date.now() + 60_000,
+    });
+
+    const mockMessageResponse = (model = 'claude-sonnet-4-6') =>
+      ({
+        content: [{ type: 'text', text: 'ok' }],
+        model,
+        id: 'id',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_details: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 1, output_tokens: 2 },
+      }) as Anthropic.Messages.Message;
+
+    it('throws with guidance when no API key and no Claude Code credential are available', async () => {
+      delete process.env.ANTHROPIC_API_KEY;
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(null);
+      const oauthProvider = createProvider('claude-sonnet-4-6');
+
+      await expect(oauthProvider.callApi('hello')).rejects.toThrow(
+        /Anthropic API key is not set.*apiKeyRequired: false/s,
+      );
+    });
+
+    it('injects the Claude Code identity block and beta headers when constructed with apiKeyRequired: false', async () => {
+      delete process.env.ANTHROPIC_API_KEY;
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+      const oauthProvider = createProvider('claude-sonnet-4-6', {
+        config: { apiKeyRequired: false },
+      });
+
+      expect(oauthProvider.usingClaudeCodeOAuth).toBe(true);
+
+      const createSpy = vi
+        .spyOn(oauthProvider.anthropic.messages, 'create')
+        .mockResolvedValue(mockMessageResponse());
+
+      await oauthProvider.callApi('system: Grade this response\nuser: the response');
+
+      expect(createSpy).toHaveBeenCalledTimes(1);
+      const [params, requestOptions] = createSpy.mock.calls[0];
+      expect(params.system).toEqual([
+        { type: 'text', text: "You are Claude Code, Anthropic's official CLI for Claude." },
+        { type: 'text', text: 'Grade this response' },
+      ]);
+      const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
+      expect(headers['anthropic-beta']).toContain('claude-code-20250219');
+      expect(headers['anthropic-beta']).toContain('oauth-2025-04-20');
+      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['x-app']).toBe('cli');
+    });
+
+    it('adds the Claude Code identity block even when no user system prompt is provided', async () => {
+      delete process.env.ANTHROPIC_API_KEY;
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+      const oauthProvider = createProvider('claude-sonnet-4-6', {
+        config: { apiKeyRequired: false },
+      });
+
+      const createSpy = vi
+        .spyOn(oauthProvider.anthropic.messages, 'create')
+        .mockResolvedValue(mockMessageResponse());
+
+      await oauthProvider.callApi('hello world');
+
+      const [params] = createSpy.mock.calls[0];
+      expect(params.system).toEqual([
+        { type: 'text', text: "You are Claude Code, Anthropic's official CLI for Claude." },
+      ]);
+    });
+
+    it('does not inject the Claude Code identity block for API-key authenticated calls', async () => {
+      process.env.ANTHROPIC_API_KEY = TEST_API_KEY;
+      const apiKeyProvider = createProvider('claude-sonnet-4-6');
+      expect(apiKeyProvider.usingClaudeCodeOAuth).toBe(false);
+
+      const createSpy = vi
+        .spyOn(apiKeyProvider.anthropic.messages, 'create')
+        .mockResolvedValue(mockMessageResponse());
+
+      await apiKeyProvider.callApi('system: Grade this\nuser: hi');
+
+      const [params, requestOptions] = createSpy.mock.calls[0];
+      expect(params.system).toEqual([{ type: 'text', text: 'Grade this' }]);
+      const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
+      expect(headers['anthropic-beta'] ?? '').not.toContain('oauth-2025-04-20');
+      expect(headers['user-agent']).toBeUndefined();
+      expect(headers['x-app']).toBeUndefined();
+    });
+
+    it('throws at request time when the Claude Code credential is expired', async () => {
+      delete process.env.ANTHROPIC_API_KEY;
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue({
+        accessToken: 'sk-ant-oat-expired',
+        expiresAt: Date.now() - 1000,
+      });
+      const oauthProvider = createProvider('claude-sonnet-4-6', {
+        config: { apiKeyRequired: false },
+      });
+
+      await expect(oauthProvider.callApi('hello')).rejects.toThrow(
+        /Claude Code OAuth credential is expired.*claude \/login/s,
+      );
+    });
+
+    it('preserves user config.beta entries alongside the Claude Code beta features', async () => {
+      delete process.env.ANTHROPIC_API_KEY;
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+      const oauthProvider = createProvider('claude-sonnet-4-6', {
+        config: {
+          apiKeyRequired: false,
+          beta: ['prompt-caching-2024-07-31'],
+        },
+      });
+
+      const createSpy = vi
+        .spyOn(oauthProvider.anthropic.messages, 'create')
+        .mockResolvedValue(mockMessageResponse());
+
+      await oauthProvider.callApi('hello');
+
+      const [, requestOptions] = createSpy.mock.calls[0];
+      const betaHeader = (requestOptions?.headers as Record<string, string>)['anthropic-beta'];
+      expect(betaHeader).toContain('prompt-caching-2024-07-31');
+      expect(betaHeader).toContain('claude-code-20250219');
+      expect(betaHeader).toContain('oauth-2025-04-20');
+    });
+
+    it('merges user-supplied config.headers[anthropic-beta] with OAuth beta flags', async () => {
+      delete process.env.ANTHROPIC_API_KEY;
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+      const oauthProvider = createProvider('claude-sonnet-4-6', {
+        config: {
+          apiKeyRequired: false,
+          headers: { 'anthropic-beta': 'user-supplied-beta, another-beta' },
+        },
+      });
+
+      const createSpy = vi
+        .spyOn(oauthProvider.anthropic.messages, 'create')
+        .mockResolvedValue(mockMessageResponse());
+
+      await oauthProvider.callApi('hello');
+
+      const [, requestOptions] = createSpy.mock.calls[0];
+      const betaHeader = (requestOptions?.headers as Record<string, string>)['anthropic-beta'];
+      expect(betaHeader).toContain('user-supplied-beta');
+      expect(betaHeader).toContain('another-beta');
+      expect(betaHeader).toContain('claude-code-20250219');
+      expect(betaHeader).toContain('oauth-2025-04-20');
+    });
+
+    it('deduplicates Claude Code beta features when the user also supplies them', async () => {
+      delete process.env.ANTHROPIC_API_KEY;
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+      const oauthProvider = createProvider('claude-sonnet-4-6', {
+        config: {
+          apiKeyRequired: false,
+          beta: ['oauth-2025-04-20'],
+        },
+      });
+
+      const createSpy = vi
+        .spyOn(oauthProvider.anthropic.messages, 'create')
+        .mockResolvedValue(mockMessageResponse());
+
+      await oauthProvider.callApi('hello');
+
+      const [, requestOptions] = createSpy.mock.calls[0];
+      const betaHeader = (requestOptions?.headers as Record<string, string>)['anthropic-beta'];
+      const occurrences = betaHeader.split(',').filter((f) => f.trim() === 'oauth-2025-04-20');
+      expect(occurrences).toHaveLength(1);
+    });
+
+    it('forces the Claude Code user-agent even when config.headers tries to override it', async () => {
+      delete process.env.ANTHROPIC_API_KEY;
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+      const oauthProvider = createProvider('claude-sonnet-4-6', {
+        config: {
+          apiKeyRequired: false,
+          headers: { 'user-agent': 'custom/1.2.3', 'x-app': 'custom-app' },
+        },
+      });
+
+      const createSpy = vi
+        .spyOn(oauthProvider.anthropic.messages, 'create')
+        .mockResolvedValue(mockMessageResponse());
+
+      await oauthProvider.callApi('hello');
+
+      const [, requestOptions] = createSpy.mock.calls[0];
+      const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
+      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['x-app']).toBe('cli');
+    });
+
+    it('injects the Claude Code identity block and beta headers on the streaming path', async () => {
+      delete process.env.ANTHROPIC_API_KEY;
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+      const oauthProvider = createProvider('claude-sonnet-4-6', {
+        config: { apiKeyRequired: false, stream: true },
+      });
+
+      const finalMessage = mockMessageResponse();
+      const streamSpy = vi.spyOn(oauthProvider.anthropic.messages, 'stream').mockReturnValue({
+        finalMessage: () => Promise.resolve(finalMessage),
+      } as any);
+
+      await oauthProvider.callApi('system: Grade\nuser: hi');
+
+      expect(streamSpy).toHaveBeenCalledTimes(1);
+      const [params, requestOptions] = streamSpy.mock.calls[0];
+      expect(params.system).toEqual([
+        { type: 'text', text: "You are Claude Code, Anthropic's official CLI for Claude." },
+        { type: 'text', text: 'Grade' },
+      ]);
+      const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
+      expect(headers['anthropic-beta']).toContain('claude-code-20250219');
+      expect(headers['anthropic-beta']).toContain('oauth-2025-04-20');
+      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['x-app']).toBe('cli');
     });
   });
 });
