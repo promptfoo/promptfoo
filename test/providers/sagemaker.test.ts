@@ -136,6 +136,21 @@ describe('SageMakerCompletionProvider', () => {
       expect(transformed).toBe('TRANSFORMED:hello');
     });
 
+    it('evaluates inline string arrow transforms with `prompt` as the identifier', async () => {
+      // Pins down why the inline-string branch stays local to sagemaker.ts:
+      // the shared util would rename `prompt` to `output` and break user configs.
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'custom',
+          transform: '(prompt) => prompt.toUpperCase()',
+        },
+      });
+
+      const transformed = await provider.applyTransformation('hello world');
+      expect(transformed).toBe('HELLO WORLD');
+    });
+
     it('preserves an explicit maxTokens value of 0', () => {
       vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '1024');
 

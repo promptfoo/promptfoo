@@ -485,6 +485,18 @@ describe('util', () => {
         expect(label.length).toBeLessThan(longExpr.length);
       });
 
+      it('does not truncate an inline string exactly at the max length', () => {
+        const exprAtLimit = 'a'.repeat(80);
+        expect(getTransformLabel(exprAtLimit)).toBe(`${INLINE_STRING_LABEL}: ${exprAtLimit}`);
+      });
+
+      it('truncates an inline string one character over the max length', () => {
+        const exprOverLimit = 'a'.repeat(81);
+        const label = getTransformLabel(exprOverLimit);
+        // Label body is 79 chars + ellipsis → total 80 chars after the prefix.
+        expect(label).toBe(`${INLINE_STRING_LABEL}: ${'a'.repeat(79)}…`);
+      });
+
       it('redacts file transform paths', () => {
         expect(getTransformLabel('file://transform.js')).toBe(FILE_TRANSFORM_LABEL);
       });

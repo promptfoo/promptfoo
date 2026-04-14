@@ -902,6 +902,23 @@ describe('loadApiProvider', () => {
     expect(response.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
   });
 
+  it('loadApiProviders with bare ProviderFunction leaves metadata properties unset', async () => {
+    const bareProviderFunction: ProviderFunction = async (prompt) => ({
+      output: `Output for ${prompt}`,
+    });
+
+    const providers = await loadApiProviders([bareProviderFunction] as any);
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('custom-function-0');
+    // Metadata fields should be absent on the resulting ApiProvider (not set to undefined)
+    // so downstream merges like `config ?? {}` aren't clobbered.
+    expect('label' in providers[0]).toBe(false);
+    expect('transform' in providers[0]).toBe(false);
+    expect('delay' in providers[0]).toBe(false);
+    expect('inputs' in providers[0]).toBe(false);
+    expect('config' in providers[0]).toBe(false);
+  });
+
   it('loadApiProviders with ProviderFunction preserves metadata properties', async () => {
     const providerFunction: ProviderFunction & {
       label?: string;
