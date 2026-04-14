@@ -216,6 +216,28 @@ describe('json utilities', () => {
       expect(stableJsonStringify(circular)).toBe('{"a":1}');
     });
 
+    it('duplicates shared non-circular references instead of treating them as cycles', () => {
+      // A repeated reference in sibling positions is NOT a cycle — it's a
+      // shared value. Both occurrences must serialize in full, otherwise
+      // `{ a: shared, b: shared }` and `{ a: shared, b: {} }` would hash
+      // to the same cache key.
+      const shared = { x: 1 };
+      const obj = { a: shared, b: shared };
+      expect(stableJsonStringify(obj)).toBe('{"a":{"x":1},"b":{"x":1}}');
+    });
+
+    it('duplicates shared references inside arrays', () => {
+      const shared = { x: 1 };
+      expect(stableJsonStringify([shared, shared])).toBe('[{"x":1},{"x":1}]');
+    });
+
+    it('produces different hashes for semantically different payloads that share a reference', () => {
+      const shared = { x: 1 };
+      const twoFields = { a: shared, b: shared };
+      const oneField = { a: shared };
+      expect(stableJsonStringify(twoFields)).not.toBe(stableJsonStringify(oneField));
+    });
+
     it('handles primitives and null', () => {
       expect(stableJsonStringify(42)).toBe('42');
       expect(stableJsonStringify('hi')).toBe('"hi"');

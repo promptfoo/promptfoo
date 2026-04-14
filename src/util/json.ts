@@ -147,16 +147,18 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
  * @returns JSON string representation, or `undefined` if serialization fails
  */
 export function stableJsonStringify<T>(value: T): string | undefined {
-  const seen = new WeakSet<object>();
+  // Track the current ancestor path, not every object ever visited. This
+  // matches `JSON.stringify`'s own cycle detection: only a reference to
+  // an ancestor is circular. Two fields that happen to reference the
+  // same object (e.g. `{ a: shared, b: shared }`) must still both
+  // serialize their contents, otherwise the second reference would
+  // collapse to `undefined` and collide in the cache-key hash.
+  const ancestors: object[] = [];
 
   const normalize = (val: any): any => {
     if (val === null || typeof val !== 'object') {
       return val;
     }
-    if (seen.has(val)) {
-      return undefined;
-    }
-    seen.add(val);
     // Respect the `toJSON` convention (used by `Date`, Moment, etc.) the
     // same way `JSON.stringify` does. Without this, `new Date('2024-01-01')`
     // would normalize to `{}` and any two distinct Date values would
@@ -164,14 +166,22 @@ export function stableJsonStringify<T>(value: T): string | undefined {
     if (typeof val.toJSON === 'function') {
       return normalize(val.toJSON());
     }
-    if (Array.isArray(val)) {
-      return val.map(normalize);
+    if (ancestors.includes(val)) {
+      return undefined;
     }
-    const sorted: Record<string, any> = {};
-    for (const key of Object.keys(val).sort()) {
-      sorted[key] = normalize(val[key]);
+    ancestors.push(val);
+    try {
+      if (Array.isArray(val)) {
+        return val.map(normalize);
+      }
+      const sorted: Record<string, any> = {};
+      for (const key of Object.keys(val).sort()) {
+        sorted[key] = normalize(val[key]);
+      }
+      return sorted;
+    } finally {
+      ancestors.pop();
     }
-    return sorted;
   };
 
   try {
