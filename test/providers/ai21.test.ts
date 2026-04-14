@@ -118,6 +118,30 @@ describe('AI21ChatCompletionProvider', () => {
     });
   });
 
+  it('should preserve explicit zero for top_p', async () => {
+    const mockResponse = {
+      data: {
+        choices: [{ message: { content: 'test response' } }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    };
+
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new AI21ChatCompletionProvider('jamba-1.5-mini', {
+      config: { apiKey: 'test-key', top_p: 0 },
+    });
+
+    await provider.callApi('test prompt');
+
+    const callArgs = vi.mocked(fetchWithCache).mock.calls[0]!;
+    const body = JSON.parse((callArgs[1] as RequestInit).body as string);
+    expect(body.top_p).toBe(0);
+  });
+
   it('should handle API error response', async () => {
     const mockResponse = {
       data: {

@@ -49,10 +49,7 @@ describe('config-schema.json', () => {
 
   it('should be a valid JSON Schema', () => {
     const valid = ajv.validateSchema(schema);
-    if (!valid) {
-      console.error('Schema validation errors:', ajv.errors);
-    }
-    expect(valid).toBe(true);
+    expect(valid, `Schema validation errors: ${JSON.stringify(ajv.errors, null, 2)}`).toBe(true);
   });
 
   it('should have required top-level properties', () => {
@@ -93,11 +90,9 @@ describe('config-schema.json', () => {
         const uniqueValues = [...new Set(values)];
         const duplicates = values.filter((item, index) => values.indexOf(item) !== index);
 
-        if (duplicates.length > 0) {
-          console.error(`Duplicates found at ${path}:`, duplicates);
-        }
-
-        expect(values).toHaveLength(uniqueValues.length);
+        expect(values, `Duplicates found at ${path}: ${duplicates.join(', ')}`).toHaveLength(
+          uniqueValues.length,
+        );
       });
     });
 

@@ -459,13 +459,16 @@ function truncateJudgeTrajectorySteps(
 }
 
 export function summarizeTrajectoryForJudge(trace: TraceData): string {
-  const rawSteps = extractTrajectorySteps(trace).map((step, index) => ({
-    index: index + 1,
-    type: step.type,
-    name: step.name,
-    ...(step.spanName === step.name ? {} : { spanName: step.spanName }),
-    ...(getTrajectoryStepStatus(step) ? { status: getTrajectoryStepStatus(step) } : {}),
-  }));
+  const rawSteps = extractTrajectorySteps(trace).map((step, index) => {
+    const status = getTrajectoryStepStatus(step);
+    return {
+      index: index + 1,
+      type: step.type,
+      name: step.name,
+      ...(step.spanName === step.name ? {} : { spanName: step.spanName }),
+      ...(status ? { status } : {}),
+    };
+  });
   const compactedSteps = compactJudgeTrajectorySteps(rawSteps);
   const steps = truncateJudgeTrajectorySteps(compactedSteps);
 

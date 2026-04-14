@@ -190,11 +190,7 @@ describe('findProviderConfig', () => {
   it('handles negative fallbackIndex', () => {
     const providers = [{ id: 'openai:gpt-4o' }];
     const result = findProviderConfig('unknown', providers, -1);
-    // Note: The implementation has a bug - it checks fallbackIndex < length but doesn't check >= 0
-    // -1 < 1 is true, so it tries providers[-1] which returns undefined
-    // This should ideally return 'none', but currently returns 'index' with undefined config
-    expect(result.matchType).toBe('index');
-    // providers[-1] is undefined in JavaScript
+    expect(result.matchType).toBe('none');
     expect(result.config).toBeUndefined();
   });
 

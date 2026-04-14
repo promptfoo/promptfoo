@@ -105,7 +105,7 @@ export class ScriptCompletionProvider implements ApiProvider {
       ]);
       const options = this.options?.config.basePath ? { cwd: this.options.config.basePath } : {};
 
-      execFile(command, scriptArgs, options, async (error, stdout, stderr) => {
+      const child = execFile(command, scriptArgs, options, async (error, stdout, stderr) => {
         if (error) {
           logger.debug(`Error running script ${this.scriptPath}: ${error.message}`);
           reject(error);
@@ -128,6 +128,10 @@ export class ScriptCompletionProvider implements ApiProvider {
         }
         resolve(result);
       });
+      // Close stdin immediately so child processes that read stdin don't hang.
+      // execFile pipes stdin by default but never writes to it, causing tools
+      // like opencode to block forever waiting for input.
+      child.stdin?.end();
     });
   }
 }

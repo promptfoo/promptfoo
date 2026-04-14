@@ -3,6 +3,7 @@ import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
+import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 
 import type { Message } from '../../../../src/redteam/providers/shared';
 
@@ -51,6 +52,15 @@ vi.mock('../../../../src/redteam/providers/shared', async () => ({
 
 vi.mock('../../../../src/redteam/graders', () => ({
   getGraderById: mockGetGraderById,
+}));
+
+vi.mock('../../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
 }));
 
 vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => {
@@ -117,28 +127,20 @@ describe('MemorySystem', () => {
 
 describe('CrescendoProvider', () => {
   let crescendoProvider: CrescendoProvider;
-  let mockRedTeamProvider: any;
-  let mockScoringProvider: any;
-  let mockTargetProvider: any;
+  let mockRedTeamProvider: MockApiProvider;
+  let mockScoringProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
     // Create fresh mocks for each test
-    mockRedTeamProvider = {
-      id: () => 'mock-redteam',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockScoringProvider = {
-      id: () => 'mock-scoring',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockTargetProvider = {
-      id: () => 'mock-target',
-      callApi: vi.fn(),
-    };
+    mockRedTeamProvider = createMockProvider({ id: 'mock-redteam', delay: 0 });
+    mockRedTeamProvider.callApi.mockReset();
+    mockScoringProvider = createMockProvider({ id: 'mock-scoring', delay: 0 });
+    mockScoringProvider.callApi.mockReset();
+    mockTargetProvider = createMockProvider({ id: 'mock-target' });
+    mockTargetProvider.callApi.mockReset();
 
     crescendoProvider = new CrescendoProvider({
       injectVar: 'objective',
@@ -1910,27 +1912,19 @@ describe('CrescendoProvider', () => {
 });
 
 describe('CrescendoProvider - Abort Signal Handling', () => {
-  let mockRedTeamProvider: any;
-  let mockScoringProvider: any;
-  let mockTargetProvider: any;
+  let mockRedTeamProvider: MockApiProvider;
+  let mockScoringProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockRedTeamProvider = {
-      id: () => 'mock-redteam',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockScoringProvider = {
-      id: () => 'mock-scoring',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockTargetProvider = {
-      id: () => 'mock-target',
-      callApi: vi.fn(),
-    };
+    mockRedTeamProvider = createMockProvider({ id: 'mock-redteam', delay: 0 });
+    mockRedTeamProvider.callApi.mockReset();
+    mockScoringProvider = createMockProvider({ id: 'mock-scoring', delay: 0 });
+    mockScoringProvider.callApi.mockReset();
+    mockTargetProvider = createMockProvider({ id: 'mock-target' });
+    mockTargetProvider.callApi.mockReset();
 
     vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (
       options: any,
@@ -2179,27 +2173,19 @@ describe('CrescendoProvider - Abort Signal Handling', () => {
 
 describe('CrescendoProvider - Chat Template Support', () => {
   let crescendoProvider: CrescendoProvider;
-  let mockRedTeamProvider: any;
-  let mockScoringProvider: any;
-  let mockTargetProvider: any;
+  let mockRedTeamProvider: MockApiProvider;
+  let mockScoringProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockRedTeamProvider = {
-      id: () => 'mock-redteam',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockScoringProvider = {
-      id: () => 'mock-scoring',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockTargetProvider = {
-      id: () => 'mock-target',
-      callApi: vi.fn(),
-    };
+    mockRedTeamProvider = createMockProvider({ id: 'mock-redteam', delay: 0 });
+    mockRedTeamProvider.callApi.mockReset();
+    mockScoringProvider = createMockProvider({ id: 'mock-scoring', delay: 0 });
+    mockScoringProvider.callApi.mockReset();
+    mockTargetProvider = createMockProvider({ id: 'mock-target' });
+    mockTargetProvider.callApi.mockReset();
 
     crescendoProvider = new CrescendoProvider({
       injectVar: 'user_input',
@@ -2525,27 +2511,19 @@ describe('CrescendoProvider - Chat Template Support', () => {
 });
 
 describe('CrescendoProvider - perTurnLayers configuration', () => {
-  let mockRedTeamProvider: any;
-  let mockScoringProvider: any;
-  let mockTargetProvider: any;
+  let mockRedTeamProvider: MockApiProvider;
+  let mockScoringProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockRedTeamProvider = {
-      id: () => 'mock-redteam',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockScoringProvider = {
-      id: () => 'mock-scoring',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockTargetProvider = {
-      id: () => 'mock-target',
-      callApi: vi.fn(),
-    };
+    mockRedTeamProvider = createMockProvider({ id: 'mock-redteam', delay: 0 });
+    mockRedTeamProvider.callApi.mockReset();
+    mockScoringProvider = createMockProvider({ id: 'mock-scoring', delay: 0 });
+    mockScoringProvider.callApi.mockReset();
+    mockTargetProvider = createMockProvider({ id: 'mock-target' });
+    mockTargetProvider.callApi.mockReset();
 
     vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (
       options: any,

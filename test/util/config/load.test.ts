@@ -22,6 +22,7 @@ import {
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
 import { readTests } from '../../../src/util/testCaseReader';
+import { createMockProvider } from '../../factories/provider';
 
 vi.mock('../../../src/database', () => ({
   getDb: vi.fn(),
@@ -1457,11 +1458,9 @@ describe('resolveConfigs', () => {
 
     // Mock loadApiProviders to return the expected format
     vi.mocked(loadApiProviders).mockResolvedValue([
-      {
-        id: () => 'openai:gpt-4',
-        label: 'openai:gpt-4',
+      Object.assign(createMockProvider({ id: 'openai:gpt-4', label: 'openai:gpt-4' }), {
         modelName: 'gpt-4',
-      } as any,
+      }),
     ]);
 
     const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
@@ -1704,10 +1703,10 @@ describe('resolveConfigs', () => {
         { raw: 'Tell me about {{topic}}', label: 'Tell me about {{topic}}', config: {} },
       ]);
       vi.mocked(loadApiProviders).mockResolvedValue([
-        {
-          id: () => 'ollama:llama3.1:8b-instruct-fp16',
+        createMockProvider({
+          id: 'ollama:llama3.1:8b-instruct-fp16',
           label: 'ollama:llama3.1:8b-instruct-fp16',
-        } as any,
+        }),
       ]);
 
       return (cliProviders: string[]) =>
@@ -1779,10 +1778,10 @@ describe('resolveConfigs', () => {
         { raw: 'Tell me about {{topic}}', label: 'Tell me about {{topic}}', config: {} },
       ]);
       vi.mocked(loadApiProviders).mockResolvedValue([
-        {
-          id: () => 'ollama:llama3.1:8b-instruct-fp16',
+        createMockProvider({
+          id: 'ollama:llama3.1:8b-instruct-fp16',
           label: 'ollama:llama3.1:8b-instruct-fp16',
-        } as any,
+        }),
       ]);
 
       await resolveConfigs(
@@ -1932,6 +1931,90 @@ describe('readConfig', () => {
       ...mockConfig,
       prompts: ['{{prompt}}'],
     });
+  });
+
+  it('should not warn for multi-input targets without prompts', async () => {
+    const mockConfig = {
+      description: 'Multi-input config',
+      targets: [
+        {
+          id: 'http',
+          inputs: {
+            document: 'Uploaded document content',
+            query: 'User question about the document',
+          },
+          config: {
+            url: 'https://example.com/chat',
+          },
+        },
+      ],
+      redteam: {
+        purpose: 'Answer questions about documents',
+      },
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result).toEqual({
+      description: 'Multi-input config',
+      providers: [
+        {
+          id: 'http',
+          inputs: {
+            document: 'Uploaded document content',
+            query: 'User question about the document',
+          },
+          config: {
+            url: 'https://example.com/chat',
+          },
+        },
+      ],
+      redteam: {
+        purpose: 'Answer questions about documents',
+      },
+      prompts: ['{{prompt}}'],
+    });
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      'Warning: Expected top-level "prompts" property in config or a test variable named "prompt"',
+    );
+  });
+
+  it('should still warn when only a later target defines multi-input inputs', async () => {
+    const mockConfig = {
+      description: 'Multi-target config',
+      targets: [
+        {
+          id: 'http',
+          config: {
+            url: 'https://example.com/first',
+          },
+        },
+        {
+          id: 'http',
+          inputs: {
+            document: 'Uploaded document content',
+            query: 'User question about the document',
+          },
+          config: {
+            url: 'https://example.com/second',
+          },
+        },
+      ],
+      tests: [],
+      redteam: {
+        purpose: 'Answer questions about documents',
+      },
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    await readConfig('config.json');
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Warning: Expected top-level "prompts" property in config or a test variable named "prompt"',
+    );
   });
 
   it('should resolve YAML references before validation', async () => {

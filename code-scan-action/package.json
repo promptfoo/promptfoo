@@ -20,14 +20,14 @@
   "dependencies": {
     "@actions/core": "^3.0.0",
     "@actions/exec": "^3.0.0",
-    "@actions/github": "^9.0.0",
+    "@actions/github": "^9.1.0",
     "@octokit/auth-app": "^8.2.0",
     "@octokit/rest": "^22.0.1"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "^24.12.0",
-    "esbuild": "^0.27.4",
+    "esbuild": "^0.28.0",
     "typescript": "^6.0.2"
   },
   "overrides": {

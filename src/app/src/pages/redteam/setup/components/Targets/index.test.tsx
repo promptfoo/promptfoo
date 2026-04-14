@@ -3,7 +3,8 @@ import React from 'react';
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
@@ -207,7 +208,8 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
     mockSetRawConfigJson = vi.fn();
   });
 
-  it('should call updateCustomTarget with "config" field when JSON is edited', () => {
+  it('should call updateCustomTarget with "config" field when JSON is edited', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <CustomTargetConfiguration
         {...defaultProps}
@@ -226,9 +228,9 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
     const newConfig = { temperature: 0.7, max_tokens: 100 };
     const newConfigJson = JSON.stringify(newConfig, null, 2);
 
-    fireEvent.change(configTextarea!, {
-      target: { value: newConfigJson },
-    });
+    await user.click(configTextarea!);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(newConfigJson);
 
     // Verify that setRawConfigJson is called with the new JSON string
     expect(mockSetRawConfigJson).toHaveBeenCalledWith(newConfigJson);
@@ -237,7 +239,8 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', newConfig);
   });
 
-  it('should handle invalid JSON without calling updateCustomTarget', () => {
+  it('should handle invalid JSON without calling updateCustomTarget', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <CustomTargetConfiguration
         {...defaultProps}
@@ -254,9 +257,9 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
 
     const invalidJson = '{ invalid json }';
 
-    fireEvent.change(configTextarea!, {
-      target: { value: invalidJson },
-    });
+    await user.click(configTextarea!);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(invalidJson);
 
     // Should still call setRawConfigJson to update the display
     expect(mockSetRawConfigJson).toHaveBeenCalledWith(invalidJson);
@@ -285,7 +288,8 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
     expect(editorContainer).toBeTruthy();
   });
 
-  it('should update target ID when changed', () => {
+  it('should update target ID when changed', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <CustomTargetConfiguration
         {...defaultProps}
@@ -297,9 +301,9 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
     const targetIdInput = screen.getByRole('textbox', { name: /Target ID/i });
     const newId = 'openai:chat:gpt-4o';
 
-    fireEvent.change(targetIdInput, {
-      target: { value: newId },
-    });
+    await user.click(targetIdInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(newId);
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', newId);
   });
@@ -371,6 +375,7 @@ describe('Targets Component', () => {
 
   describe('HTTP Target Configuration', () => {
     it('should enable the Next button only when HTTP target has valid URL and both tests pass', async () => {
+      const user = userEvent.setup();
       (useRedTeamConfig as any).mockReturnValue({
         config: {
           target: {
@@ -406,7 +411,7 @@ describe('Targets Component', () => {
 
       // Test the target configuration
       const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
-      fireEvent.click(testTargetButton);
+      await user.click(testTargetButton);
 
       await waitFor(() => {
         expect(screen.getByText('Test passed!')).toBeInTheDocument();
@@ -426,7 +431,7 @@ describe('Targets Component', () => {
 
       // Test the session configuration
       const testSessionButton = screen.getByRole('button', { name: /Test Session/i });
-      fireEvent.click(testSessionButton);
+      await user.click(testSessionButton);
 
       await waitFor(() => {
         expect(screen.getByText('Session test passed!')).toBeInTheDocument();
@@ -437,7 +442,7 @@ describe('Targets Component', () => {
         expect(nextButton).not.toBeDisabled();
       });
 
-      fireEvent.click(nextButton);
+      await user.click(nextButton);
       expect(mockOnNext).toHaveBeenCalledTimes(1);
     });
 
@@ -495,6 +500,7 @@ describe('Targets Component', () => {
     });
 
     it('should handle HTTP target with raw request mode', async () => {
+      const user = userEvent.setup();
       (useRedTeamConfig as any).mockReturnValue({
         config: {
           target: {
@@ -532,7 +538,7 @@ Content-Type: application/json
       const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
       expect(testTargetButton).not.toBeDisabled();
 
-      fireEvent.click(testTargetButton);
+      await user.click(testTargetButton);
 
       await waitFor(() => {
         expect(screen.getByText('Test passed!')).toBeInTheDocument();
@@ -542,6 +548,7 @@ Content-Type: application/json
 
   describe('WebSocket Target Configuration', () => {
     it("should allow the user to select the 'websocket' target, enter a valid WebSocket URL, and enable the Next button when all required fields are present", async () => {
+      const user = userEvent.setup();
       (useRedTeamConfig as any).mockReturnValue({
         config: {
           target: {
@@ -559,20 +566,24 @@ Content-Type: application/json
 
       // Provider list is always expanded - select WebSocket
       const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
-      fireEvent.click(websocketProviderCard!);
+      await user.click(websocketProviderCard!);
 
       const webSocketURLInput = screen.getByLabelText(/WebSocket URL/i);
-      fireEvent.change(webSocketURLInput, { target: { value: 'wss://example.com/ws' } });
+      await user.click(webSocketURLInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('wss://example.com/ws');
 
       const targetNameInput = screen.getByLabelText(/Provider Name/i);
-      fireEvent.change(targetNameInput, { target: { value: 'My WebSocket Target' } });
+      await user.click(targetNameInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('My WebSocket Target');
 
       const nextButton = screen.getAllByRole('button', { name: /Next/i })[0];
       await waitFor(() => {
         expect(nextButton).not.toBeDisabled();
       });
 
-      fireEvent.click(nextButton);
+      await user.click(nextButton);
       expect(mockOnNext).toHaveBeenCalledTimes(1);
     });
 
@@ -601,6 +612,7 @@ Content-Type: application/json
 
   describe('Test Result Handling', () => {
     it('should call handleTestTarget and display a success message when the user tests a valid HTTP target configuration', async () => {
+      const user = userEvent.setup();
       const validHttpTarget = {
         ...DEFAULT_HTTP_TARGET,
         label: 'My Valid HTTP Target',
@@ -635,7 +647,7 @@ Content-Type: application/json
       renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
-      fireEvent.click(testTargetButton);
+      await user.click(testTargetButton);
 
       // Wait for the API call to complete
       await waitFor(() => {
@@ -656,6 +668,7 @@ Content-Type: application/json
 
   describe('Provider Switching', () => {
     it('should reset error states when switching from an HTTP target with validation errors to another target type', async () => {
+      const user = userEvent.setup();
       (useRedTeamConfig as any).mockReturnValue({
         config: {
           target: {
@@ -675,7 +688,7 @@ Content-Type: application/json
 
       // Provider list is always expanded - select WebSocket
       const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
-      fireEvent.click(websocketProviderCard!);
+      await user.click(websocketProviderCard!);
 
       await waitFor(() => {
         expect(mockUpdateConfig).toHaveBeenCalledWith(
@@ -691,6 +704,7 @@ Content-Type: application/json
     });
 
     it('should enable Next button for WebSocket provider when it has valid URL', async () => {
+      const user = userEvent.setup();
       // Start with WebSocket provider that has valid URL
       (useRedTeamConfig as any).mockReturnValue({
         config: {
@@ -715,7 +729,7 @@ Content-Type: application/json
 
       // Provider list is always expanded - switch to HTTP provider
       const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]');
-      fireEvent.click(httpProviderCard!);
+      await user.click(httpProviderCard!);
 
       // For HTTP, Next button should be disabled until tests pass
       await waitFor(() => {
@@ -726,7 +740,8 @@ Content-Type: application/json
   });
 
   describe('Navigation', () => {
-    it('should preserve configuration when navigating back and forth', () => {
+    it('should preserve configuration when navigating back and forth', async () => {
+      const user = userEvent.setup();
       const targetConfig = {
         ...DEFAULT_HTTP_TARGET,
         label: 'My API',
@@ -748,7 +763,7 @@ Content-Type: application/json
 
       // Click Back button
       const backButton = screen.getAllByRole('button', { name: /Back/i })[0];
-      fireEvent.click(backButton);
+      await user.click(backButton);
       expect(mockOnBack).toHaveBeenCalledTimes(1);
 
       // Verify that updateConfig was called to preserve the target

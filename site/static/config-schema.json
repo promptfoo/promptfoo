@@ -398,6 +398,9 @@
         "OPENCLAW_GATEWAY_PASSWORD": {
           "type": "string"
         },
+        "OPENCLAW_GATEWAY_PORT": {
+          "type": "string"
+        },
         "OPENCLAW_GATEWAY_TOKEN": {
           "type": "string"
         },
@@ -1080,6 +1083,9 @@
         "disableConversationVar": {
           "type": "boolean"
         },
+        "disableDefaultAsserts": {
+          "type": "boolean"
+        },
         "runSerially": {
           "type": "boolean"
         }
@@ -1716,6 +1722,9 @@
                     "OPENCLAW_GATEWAY_PASSWORD": {
                       "type": "string"
                     },
+                    "OPENCLAW_GATEWAY_PORT": {
+                      "type": "string"
+                    },
                     "OPENCLAW_GATEWAY_TOKEN": {
                       "type": "string"
                     },
@@ -1966,6 +1975,15 @@
                       "bias:race",
                       "bola",
                       "cca",
+                      "coding-agent:core",
+                      "coding-agent:network-egress-bypass",
+                      "coding-agent:repo-prompt-injection",
+                      "coding-agent:sandbox-read-escape",
+                      "coding-agent:sandbox-write-escape",
+                      "coding-agent:secret-env-read",
+                      "coding-agent:secret-file-read",
+                      "coding-agent:terminal-output-injection",
+                      "coding-agent:verifier-sabotage",
                       "competitors",
                       "contracts",
                       "coppa",
@@ -2078,6 +2096,9 @@
                       "mcp",
                       "medical",
                       "medical:anchoring-bias",
+                      "medical:fda:ai-disclosure",
+                      "medical:fda:cyber-access-control",
+                      "medical:fda:cyber-audit-tampering",
                       "medical:hallucination",
                       "medical:incorrect-knowledge",
                       "medical:off-label-use",
@@ -2085,10 +2106,21 @@
                       "medical:sycophancy",
                       "misinformation",
                       "mitre:atlas",
+                      "mitre:atlas:ai-attack-staging",
+                      "mitre:atlas:ai-model-access",
+                      "mitre:atlas:collection",
+                      "mitre:atlas:command-and-control",
+                      "mitre:atlas:credential-access",
+                      "mitre:atlas:defense-evasion",
+                      "mitre:atlas:discovery",
+                      "mitre:atlas:execution",
                       "mitre:atlas:exfiltration",
                       "mitre:atlas:impact",
                       "mitre:atlas:initial-access",
+                      "mitre:atlas:lateral-movement",
                       "mitre:atlas:ml-attack-staging",
+                      "mitre:atlas:persistence",
+                      "mitre:atlas:privilege-escalation",
                       "mitre:atlas:reconnaissance",
                       "mitre:atlas:resource-development",
                       "model-identification",
@@ -2188,6 +2220,11 @@
                       "sql-injection",
                       "ssrf",
                       "system-prompt-override",
+                      "teen-safety",
+                      "teen-safety:age-restricted-goods-and-services",
+                      "teen-safety:dangerous-content",
+                      "teen-safety:dangerous-roleplay",
+                      "teen-safety:harmful-body-ideals",
                       "telecom",
                       "telecom:accessibility-violation",
                       "telecom:account-takeover",
@@ -2239,6 +2276,15 @@
                           "bias:race",
                           "bola",
                           "cca",
+                          "coding-agent:core",
+                          "coding-agent:network-egress-bypass",
+                          "coding-agent:repo-prompt-injection",
+                          "coding-agent:sandbox-read-escape",
+                          "coding-agent:sandbox-write-escape",
+                          "coding-agent:secret-env-read",
+                          "coding-agent:secret-file-read",
+                          "coding-agent:terminal-output-injection",
+                          "coding-agent:verifier-sabotage",
                           "competitors",
                           "contracts",
                           "coppa",
@@ -2351,6 +2397,9 @@
                           "mcp",
                           "medical",
                           "medical:anchoring-bias",
+                          "medical:fda:ai-disclosure",
+                          "medical:fda:cyber-access-control",
+                          "medical:fda:cyber-audit-tampering",
                           "medical:hallucination",
                           "medical:incorrect-knowledge",
                           "medical:off-label-use",
@@ -2358,10 +2407,21 @@
                           "medical:sycophancy",
                           "misinformation",
                           "mitre:atlas",
+                          "mitre:atlas:ai-attack-staging",
+                          "mitre:atlas:ai-model-access",
+                          "mitre:atlas:collection",
+                          "mitre:atlas:command-and-control",
+                          "mitre:atlas:credential-access",
+                          "mitre:atlas:defense-evasion",
+                          "mitre:atlas:discovery",
+                          "mitre:atlas:execution",
                           "mitre:atlas:exfiltration",
                           "mitre:atlas:impact",
                           "mitre:atlas:initial-access",
+                          "mitre:atlas:lateral-movement",
                           "mitre:atlas:ml-attack-staging",
+                          "mitre:atlas:persistence",
+                          "mitre:atlas:privilege-escalation",
                           "mitre:atlas:reconnaissance",
                           "mitre:atlas:resource-development",
                           "model-identification",
@@ -2461,6 +2521,11 @@
                           "sql-injection",
                           "ssrf",
                           "system-prompt-override",
+                          "teen-safety",
+                          "teen-safety:age-restricted-goods-and-services",
+                          "teen-safety:dangerous-content",
+                          "teen-safety:dangerous-roleplay",
+                          "teen-safety:harmful-body-ideals",
                           "telecom",
                           "telecom:accessibility-violation",
                           "telecom:account-takeover",
@@ -2646,6 +2711,12 @@
         },
         "maxConcurrency": {
           "description": "Maximum number of concurrent API calls",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxCharsPerMessage": {
+          "description": "Maximum number of characters allowed per generated user message",
           "type": "integer",
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991

@@ -28,11 +28,14 @@ import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { TransformInputType, transform } from '../../util/transform';
+import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { TransformContext, TransformFunction } from '../../types/transform';
 import type { RedteamHistoryEntry } from '../types';
+
+export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
 
 async function loadRedteamProvider({
   provider,
@@ -259,6 +262,24 @@ export function isConversationEndedResponse(
   return Boolean(response?.conversationEnded);
 }
 
+function getTargetPromptMaxCharsPerMessage(context?: CallApiContextParams): number | undefined {
+  const configuredLimit =
+    (context?.test?.metadata?.strategyConfig as { maxCharsPerMessage?: unknown } | undefined)
+      ?.maxCharsPerMessage ??
+    (context?.test?.metadata?.pluginConfig as { maxCharsPerMessage?: unknown } | undefined)
+      ?.maxCharsPerMessage;
+
+  if (
+    typeof configuredLimit !== 'number' ||
+    !Number.isInteger(configuredLimit) ||
+    configuredLimit <= 0
+  ) {
+    return undefined;
+  }
+
+  return configuredLimit;
+}
+
 /**
  * Gets the response from the target provider for a given prompt.
  * @param targetProvider - The API provider to get the response from.
@@ -274,13 +295,21 @@ export async function getTargetResponse(
   let targetRespRaw;
 
   try {
+    throwIfTargetPromptExceedsMaxChars(targetPrompt, getTargetPromptMaxCharsPerMessage(context));
     targetRespRaw = await targetProvider.callApi(targetPrompt, context, options);
   } catch (error) {
     // Re-throw abort errors to properly cancel the operation
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;
     }
-    return { output: '', error: (error as Error).message, tokenUsage: { numRequests: 1 } };
+    return {
+      output: '',
+      error: (error as Error).message,
+      tokenUsage: {
+        numRequests:
+          error instanceof Error && error.message.includes('maxCharsPerMessage=') ? 0 : 1,
+      },
+    };
   }
   if (!targetRespRaw.cached && targetProvider.delay && targetProvider.delay > 0) {
     logger.debug(`Sleeping for ${targetProvider.delay}ms`);
@@ -569,7 +598,7 @@ export async function tryUnblocking({
     const { checkServerFeatureSupport } = await import('../../util/server');
     const supportsUnblocking = await checkServerFeatureSupport(
       'blocking-question-analysis',
-      '2025-06-16T14:49:11-07:00',
+      BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
     );
 
     if (!supportsUnblocking) {
@@ -640,6 +669,10 @@ export async function tryUnblocking({
   }
 }
 
+function isSingleAssertion(assertToUse: AssertionOrSet | undefined): assertToUse is Assertion {
+  return Boolean(assertToUse && assertToUse.type !== 'assert-set');
+}
+
 /**
  * Builds the assertion object for storedGraderResult with the rubric value.
  * This ensures the grading template is preserved for display in the UI.
@@ -652,8 +685,18 @@ export function buildGraderResultAssertion(
   if (gradeAssertion) {
     return { ...gradeAssertion, value: rubric };
   }
-  if (assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set') {
+  if (isSingleAssertion(assertToUse)) {
     return { ...assertToUse, value: rubric };
   }
   return undefined;
+}
+
+export function getGraderAssertionValue(
+  assertToUse: AssertionOrSet | undefined,
+): Assertion['value'] | undefined {
+  if (!isSingleAssertion(assertToUse)) {
+    return undefined;
+  }
+
+  return assertToUse.value;
 }

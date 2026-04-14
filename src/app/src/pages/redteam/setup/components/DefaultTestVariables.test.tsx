@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { type TestTimers, useTestTimers } from '@app/tests/timers';
+import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DefaultTestVariables from './DefaultTestVariables';
 
@@ -11,6 +12,8 @@ vi.mock('../hooks/useRedTeamConfig', () => ({
 }));
 
 describe('DefaultTestVariables Component', () => {
+  let timers: TestTimers;
+
   const defaultConfig = {
     description: 'Test Configuration',
     plugins: [],
@@ -35,7 +38,7 @@ describe('DefaultTestVariables Component', () => {
   };
 
   beforeEach(() => {
-    vi.useFakeTimers();
+    timers = useTestTimers();
     vi.clearAllMocks();
     mockUseRedTeamConfig.mockReturnValue({
       config: defaultConfig,
@@ -44,12 +47,29 @@ describe('DefaultTestVariables Component', () => {
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    timers.restore();
   });
 
   async function flushDebouncedUpdate() {
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(300);
+      await timers.advanceByAsync(300);
+    });
+  }
+
+  function clickElement(element: Element) {
+    act(() => {
+      element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+  }
+
+  function replaceInputValue(element: Element, value: string) {
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        element,
+        value,
+      );
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
     });
   }
 
@@ -98,7 +118,7 @@ describe('DefaultTestVariables Component', () => {
       render(<DefaultTestVariables />);
 
       const addButton = screen.getByText('Add Variable');
-      fireEvent.click(addButton);
+      clickElement(addButton);
 
       await flushDebouncedUpdate();
 
@@ -119,7 +139,7 @@ describe('DefaultTestVariables Component', () => {
       render(<DefaultTestVariables />);
 
       const addButton = screen.getByText('Add Variable');
-      fireEvent.click(addButton);
+      clickElement(addButton);
 
       await flushDebouncedUpdate();
 
@@ -141,7 +161,7 @@ describe('DefaultTestVariables Component', () => {
       render(<DefaultTestVariables />);
 
       const nameField = screen.getByDisplayValue('apiKey');
-      fireEvent.change(nameField, { target: { value: 'newApiKey' } });
+      replaceInputValue(nameField, 'newApiKey');
 
       await flushDebouncedUpdate();
 
@@ -158,7 +178,7 @@ describe('DefaultTestVariables Component', () => {
       render(<DefaultTestVariables />);
 
       const valueField = screen.getByDisplayValue('test-key');
-      fireEvent.change(valueField, { target: { value: 'new-test-key' } });
+      replaceInputValue(valueField, 'new-test-key');
 
       await flushDebouncedUpdate();
 
@@ -178,7 +198,7 @@ describe('DefaultTestVariables Component', () => {
       const deleteButtons = screen.getAllByRole('button', { name: /delete variable/i });
       expect(deleteButtons).toHaveLength(3);
 
-      fireEvent.click(deleteButtons[0]);
+      clickElement(deleteButtons[0]);
 
       await flushDebouncedUpdate();
 
@@ -194,7 +214,7 @@ describe('DefaultTestVariables Component', () => {
       render(<DefaultTestVariables />);
 
       const nameField = screen.getByDisplayValue('apiKey');
-      fireEvent.change(nameField, { target: { value: 'language' } });
+      replaceInputValue(nameField, 'language');
 
       // Should show validation error for duplicate names
       const errors = screen.getAllByText('Duplicate variable name');
@@ -304,7 +324,7 @@ describe('DefaultTestVariables Component', () => {
       render(<DefaultTestVariables />);
 
       const addButton = screen.getByText('Add Variable');
-      fireEvent.click(addButton);
+      clickElement(addButton);
 
       await flushDebouncedUpdate();
 
@@ -338,7 +358,7 @@ describe('DefaultTestVariables Component', () => {
       render(<DefaultTestVariables />);
 
       const nameField = screen.getByDisplayValue('apiKey');
-      fireEvent.change(nameField, { target: { value: 'invalid@#$ name' } });
+      replaceInputValue(nameField, 'invalid@#$ name');
 
       await flushDebouncedUpdate();
 
@@ -360,7 +380,7 @@ describe('DefaultTestVariables Component', () => {
       render(<DefaultTestVariables />);
 
       const nameField = screen.getByDisplayValue('apiKey');
-      fireEvent.change(nameField, { target: { value: '' } });
+      replaceInputValue(nameField, '');
 
       // Variables with empty names should be filtered out from global state
       await flushDebouncedUpdate();
@@ -391,8 +411,8 @@ describe('DefaultTestVariables Component', () => {
       expect(nameField).toBeInTheDocument();
       expect(valueField).toBeInTheDocument();
 
-      fireEvent.change(nameField, { target: { value: longString } });
-      fireEvent.change(valueField, { target: { value: longString } });
+      replaceInputValue(nameField, String(longString));
+      replaceInputValue(valueField, String(longString));
 
       await flushDebouncedUpdate();
 
@@ -417,7 +437,7 @@ describe('DefaultTestVariables Component', () => {
 
       const apiKeyField = screen.getByDisplayValue('test-key');
 
-      fireEvent.change(apiKeyField, { target: { value: 'edited-key' } });
+      replaceInputValue(apiKeyField, 'edited-key');
 
       const newConfig = {
         ...configWithVariables,
@@ -442,17 +462,16 @@ describe('DefaultTestVariables Component', () => {
     render(<DefaultTestVariables />);
 
     const addButton = screen.getByText('Add Variable');
-    fireEvent.click(addButton);
+    clickElement(addButton);
 
     let variableInputs = screen.getAllByPlaceholderText('Variable name');
     expect(variableInputs.length).toBe(1);
-    fireEvent.change(variableInputs[0], { target: { value: ' var' } });
-
-    fireEvent.click(addButton);
+    replaceInputValue(variableInputs[0], ' var');
+    clickElement(addButton);
 
     variableInputs = screen.getAllByPlaceholderText('Variable name');
     expect(variableInputs.length).toBe(2);
-    fireEvent.change(variableInputs[1], { target: { value: 'var ' } });
+    replaceInputValue(variableInputs[1], 'var ');
 
     expect(screen.getAllByText('Duplicate variable name')).toHaveLength(2);
   });
@@ -460,37 +479,33 @@ describe('DefaultTestVariables Component', () => {
   describe('ID Generation', () => {
     it('generates unique IDs even when multiple variables are created in the same millisecond', async () => {
       const timestamp = Date.now();
-      const originalDateNow = Date.now;
-      Date.now = vi.fn(() => timestamp);
-      try {
-        mockUseRedTeamConfig.mockReturnValue({
-          config: {
-            ...defaultConfig,
-            defaultTest: { vars: {} },
-          },
-          updateConfig: mockUpdateConfig,
-        });
+      timers.setSystemTime(timestamp);
 
-        render(<DefaultTestVariables />);
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          ...defaultConfig,
+          defaultTest: { vars: {} },
+        },
+        updateConfig: mockUpdateConfig,
+      });
 
-        const addButton = screen.getByText('Add Variable');
-        fireEvent.click(addButton);
-        fireEvent.click(addButton);
-        fireEvent.click(addButton);
+      render(<DefaultTestVariables />);
 
-        await flushDebouncedUpdate();
+      const addButton = screen.getByText('Add Variable');
+      clickElement(addButton);
+      clickElement(addButton);
+      clickElement(addButton);
 
-        expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
+      await flushDebouncedUpdate();
 
-        const vars = mockUpdateConfig.mock.calls[0][1].vars;
-        const ids = Object.keys(vars);
+      expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
 
-        expect(ids[0]).not.toBe(ids[1]);
-        expect(ids[0]).not.toBe(ids[2]);
-        expect(ids[1]).not.toBe(ids[2]);
-      } finally {
-        Date.now = originalDateNow;
-      }
+      const vars = mockUpdateConfig.mock.calls[0][1].vars;
+      const ids = Object.keys(vars);
+
+      expect(ids[0]).not.toBe(ids[1]);
+      expect(ids[0]).not.toBe(ids[2]);
+      expect(ids[1]).not.toBe(ids[2]);
     });
   });
 
@@ -511,7 +526,7 @@ describe('DefaultTestVariables Component', () => {
 
     const valueField = screen.getByDisplayValue('initial value');
 
-    fireEvent.change(valueField, { target: { value: '123' } });
+    replaceInputValue(valueField, '123');
 
     await flushDebouncedUpdate();
 
@@ -521,7 +536,7 @@ describe('DefaultTestVariables Component', () => {
       },
     });
 
-    fireEvent.change(valueField, { target: { value: 'true' } });
+    replaceInputValue(valueField, 'true');
 
     await flushDebouncedUpdate();
 

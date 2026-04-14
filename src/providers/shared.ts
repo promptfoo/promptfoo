@@ -19,6 +19,11 @@ interface ModelCost {
   output: number;
   audioInput?: number;
   audioOutput?: number;
+  longContext?: {
+    input: number;
+    output: number;
+    threshold: number;
+  };
 }
 
 interface ProviderModel {
@@ -62,8 +67,12 @@ export function calculateCost(
     return undefined;
   }
 
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
+  const longContextCost =
+    model.cost.longContext && promptTokens > model.cost.longContext.threshold
+      ? model.cost.longContext
+      : undefined;
+  const inputCost = config.cost ?? longContextCost?.input ?? model.cost.input;
+  const outputCost = config.cost ?? longContextCost?.output ?? model.cost.output;
   return inputCost * promptTokens + outputCost * completionTokens;
 }
 
@@ -202,8 +211,7 @@ export function openaiToolChoiceToAnthropic(choice: OpenAIToolChoice): {
       case 'auto':
         return { type: 'auto' };
       case 'none':
-        // Anthropic doesn't have 'none', closest is not sending tool_choice
-        return { type: 'auto' };
+        return { type: 'none' };
       case 'required':
         return { type: 'any' };
     }
