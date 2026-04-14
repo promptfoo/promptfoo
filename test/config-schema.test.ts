@@ -326,5 +326,30 @@ describe('config-schema.json', () => {
         ]),
       );
     });
+
+    it('emits string-only types for every transform field in the JSON schema', () => {
+      // Guard against the StringOrFunctionSchema leaking into the generated
+      // config-schema.json via a `z.custom` → `{}` (any) branch. Every transform
+      // property anywhere in the schema tree must declare `type: string` so
+      // external YAML/JSON validators reject objects, numbers, and functions.
+      const schemaJson = JSON.stringify(schema);
+      const transformOccurrences = schemaJson.match(/"transform":\s*\{[^}]*\}/g) ?? [];
+      const transformVarsOccurrences = schemaJson.match(/"transformVars":\s*\{[^}]*\}/g) ?? [];
+      const contextTransformOccurrences =
+        schemaJson.match(/"contextTransform":\s*\{[^}]*\}/g) ?? [];
+      const postprocessOccurrences = schemaJson.match(/"postprocess":\s*\{[^}]*\}/g) ?? [];
+
+      const allTransformFields = [
+        ...transformOccurrences,
+        ...transformVarsOccurrences,
+        ...contextTransformOccurrences,
+        ...postprocessOccurrences,
+      ];
+
+      expect(allTransformFields.length).toBeGreaterThan(0);
+      for (const field of allTransformFields) {
+        expect(field).toContain('"type":"string"');
+      }
+    });
   });
 });
