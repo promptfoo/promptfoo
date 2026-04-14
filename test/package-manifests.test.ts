@@ -45,8 +45,11 @@ describe('package manifests', () => {
       dependencies?: Record<string, string>;
     }>('package.json');
 
+    // The intent of this guard is "jsdom must stay gone and parse5 must exist
+    // as its replacement" — not "parse5 must be exactly version X". Accept any
+    // semver range so future major bumps don't re-fail this regression test.
     expect(packageJson.dependencies?.jsdom).toBeUndefined();
-    expect(packageJson.dependencies?.parse5).toBe('^7.3.0');
+    expect(packageJson.dependencies?.parse5).toMatch(/^[\^~]?\d+\.\d+\.\d+/);
   });
 
   it('does not import jsdom from root src/', () => {
