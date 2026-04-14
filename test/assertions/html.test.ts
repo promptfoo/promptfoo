@@ -420,12 +420,56 @@ describe('handleIsHtml', () => {
     expect(result.reason).toBe('Output must be wrapped in HTML tags');
   });
 
+  it('should reject unknown tags that merely share a prefix with html/head/body', () => {
+    // Regression: a substring check like input.includes('<head') false-positives
+    // on `<headphones>`, causing the auto-injected <head> to be treated as
+    // user-provided and the assertion to incorrectly pass.
+    const prefixCollisions = [
+      { input: '<headphones>plain text</headphones>', tag: 'headphones' },
+      { input: '<bodyguard>x</bodyguard>', tag: 'bodyguard' },
+      { input: '<htmlworld>x</htmlworld>', tag: 'htmlworld' },
+      { input: '<headd>x</headd>', tag: 'headd' },
+    ];
+
+    prefixCollisions.forEach(({ input }) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'is-html' },
+        outputString: input,
+        inverse: false,
+      };
+
+      const result = handleIsHtml(params);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe('Output does not contain recognized HTML elements');
+    });
+  });
+
+  it('should still accept body variants regardless of trailing chars', () => {
+    // Control cases for the wrapper detection fix — body followed by `>`,
+    // whitespace, or `/` must continue to count as user-declared body.
+    const bodyVariants = ['<body>x</body>', '<body attr="val">x</body>', '<body/>'];
+
+    bodyVariants.forEach((input) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'is-html' },
+        outputString: input,
+        inverse: false,
+      };
+
+      const result = handleIsHtml(params);
+      expect(result.pass).toBe(true);
+    });
+  });
+
   it('should handle pathologically deep nesting without stack overflow', () => {
-    // Iterative walker must handle depths that would blow the recursion limit.
-    // V8's default recursion limit is roughly 10-15k frames, so 20k is a
-    // conservative test of the iterative path.
-    const depth = 20_000;
-    const deeplyNested = `${'<div>'.repeat(depth)}leaf${'</div>'.repeat(depth)}`;
+    // Nesting 15k unknown elements forces the iterative walker to actually
+    // traverse the full depth: unknown tags fail `isUserProvidedElement`, so
+    // `findFirstElement` cannot short-circuit until it reaches the <div> at
+    // the leaf. A recursive walker blows V8's ~10-15k stack-frame limit here.
+    const depth = 15_000;
+    const deeplyNested = `${'<notatag>'.repeat(depth)}<div>leaf</div>${'</notatag>'.repeat(depth)}`;
 
     const params: AssertionParams = {
       ...defaultParams,

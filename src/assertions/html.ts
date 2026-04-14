@@ -8,7 +8,21 @@ type HtmlChildNode = DefaultTreeAdapterMap['childNode'];
 type HtmlElement = DefaultTreeAdapterMap['element'];
 type HtmlParentNode = DefaultTreeAdapterMap['parentNode'];
 
-const AUTO_INJECTED_WRAPPERS = new Set(['html', 'head', 'body']);
+// Matches a literal opening tag for html/head/body — the next character must
+// terminate the tag name (whitespace, `>`, `/`, or end of input). Without this
+// guard a substring check like `input.includes('<head')` would false-positive
+// on tags that merely share a prefix, e.g. `<headphones>` or `<bodyguard>`.
+const LITERAL_WRAPPER_PATTERNS = {
+  html: /<html(?=[\s>/]|$)/,
+  head: /<head(?=[\s>/]|$)/,
+  body: /<body(?=[\s>/]|$)/,
+} as const;
+
+type WrapperTagName = keyof typeof LITERAL_WRAPPER_PATTERNS;
+
+function isWrapperTagName(tagName: string): tagName is WrapperTagName {
+  return tagName === 'html' || tagName === 'head' || tagName === 'body';
+}
 
 function isTextNode(node: HtmlNode): node is DefaultTreeAdapterMap['textNode'] {
   return node.nodeName === '#text';
@@ -49,9 +63,10 @@ function hasTopLevelText(parentNode: HtmlParentNode): boolean {
 
 function isUserProvidedElement(element: HtmlElement, inputLowercase: string): boolean {
   const tagName = element.tagName.toLowerCase();
-  const isAutoInjectedWrapper =
-    AUTO_INJECTED_WRAPPERS.has(tagName) && !inputLowercase.includes(`<${tagName}`);
-  return !isAutoInjectedWrapper && (VALID_HTML_ELEMENTS.has(tagName) || tagName.includes('-'));
+  if (isWrapperTagName(tagName) && !LITERAL_WRAPPER_PATTERNS[tagName].test(inputLowercase)) {
+    return false;
+  }
+  return VALID_HTML_ELEMENTS.has(tagName) || tagName.includes('-');
 }
 
 // Patterns that indicate HTML content
@@ -286,7 +301,7 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
 
   // parse5 auto-wraps fragments and plain text in <html><head><body>, so if the
   // input didn't include <body> itself, treat top-level body text as invalid.
-  if (!inputLowercase.includes('<body')) {
+  if (!LITERAL_WRAPPER_PATTERNS.body.test(inputLowercase)) {
     const body = findFirstElement(document, (element) => element.tagName === 'body');
     if (body && hasTopLevelText(body)) {
       return { isValid: false, reason: 'Output must be wrapped in HTML tags' };

@@ -56,7 +56,9 @@ describe('package manifests', () => {
     // as a browser test environment.
     const srcDir = path.join(process.cwd(), 'src');
     const files = collectSourceFiles(srcDir, new Set([path.join(srcDir, 'app')]));
-    const jsdomImportPattern = /(?:from|require\()\s*['"]jsdom['"]/;
+    // Match static `from 'jsdom'`, CJS `require('jsdom')`, and dynamic
+    // `import('jsdom')` — including whitespace around the parenthesis.
+    const jsdomImportPattern = /(?:\bfrom|\brequire\s*\(|\bimport\s*\()\s*['"]jsdom['"]/;
     const offenders = files.filter((file) =>
       jsdomImportPattern.test(fs.readFileSync(file, 'utf8')),
     );
