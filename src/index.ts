@@ -23,7 +23,13 @@ import { maybeLoadFromExternalFile } from './util/file';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util/index';
 import { readTests } from './util/testCaseReader';
 
-import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types/index';
+import type {
+  EvaluateOptions,
+  EvaluateTestSuite,
+  Scenario,
+  TestCase,
+  TestSuite,
+} from './types/index';
 import type { ApiProvider } from './types/providers';
 
 export { generateTable } from './table';
@@ -37,6 +43,31 @@ export type {
   BeforeEachExtensionHookContext,
   ExtensionHookContextMap,
 } from './evaluatorHelpers';
+
+/**
+ * Shallow-clone a test case so the caller can swap in resolved ApiProvider
+ * instances on `options.provider` / `assert[].provider` without leaking those
+ * mutations back to the input. The input may alias the unified config written
+ * to the Eval record, and a live SDK client (e.g. Bedrock's BedrockRuntime,
+ * Anthropic's client) holds circular references that break drizzle's JSON
+ * serialization on `evalRecord.save()`. Fixes #8687.
+ *
+ * Detaches only `options` and `assert[]`. Other reference fields (`provider`,
+ * `vars`, `metadata`, `providerOutput`) remain aliased — callers must reassign
+ * those by reference rather than mutating in place. `assert-set` children are
+ * not deep-cloned because the resolve loop skips `assert-set`; if that ever
+ * changes, extend this helper.
+ */
+function cloneTestForResolve<T extends Pick<TestCase, 'options' | 'assert'>>(test: T): T {
+  const cloned: T = { ...test };
+  if (test.options) {
+    cloned.options = { ...test.options };
+  }
+  if (test.assert) {
+    cloned.assert = test.assert.map((assertion) => ({ ...assertion }));
+  }
+  return cloned;
+}
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   if (testSuite.writeLatestResults) {
@@ -73,11 +104,14 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     prompts: await processPrompts(testSuite.prompts),
   };
 
-  // Resolve nested providers
-  if (typeof constructedTestSuite.defaultTest === 'object') {
-    // Resolve defaultTest.provider (only if it's not already an ApiProvider instance)
+  // Resolve nested providers. `constructedTestSuite` shallow-shares `defaultTest`
+  // and `readTests()` shallow-copies inline test cases, so detach via
+  // `cloneTestForResolve()` before mutating — see helper docstring for the why.
+  if (typeof constructedTestSuite.defaultTest === 'object' && constructedTestSuite.defaultTest) {
+    constructedTestSuite.defaultTest = cloneTestForResolve(constructedTestSuite.defaultTest);
+
     if (
-      constructedTestSuite.defaultTest?.provider &&
+      constructedTestSuite.defaultTest.provider &&
       !isApiProvider(constructedTestSuite.defaultTest.provider)
     ) {
       constructedTestSuite.defaultTest.provider = await resolveProvider(
@@ -86,9 +120,8 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
         { env: testSuite.env, basePath: cliState.basePath },
       );
     }
-    // Resolve defaultTest.options.provider (only if it's not already an ApiProvider instance)
     if (
-      constructedTestSuite.defaultTest?.options?.provider &&
+      constructedTestSuite.defaultTest.options?.provider &&
       !isApiProvider(constructedTestSuite.defaultTest.options.provider)
     ) {
       constructedTestSuite.defaultTest.options.provider = await resolveProvider(
@@ -99,25 +132,24 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
   }
 
-  for (const test of constructedTestSuite.tests || []) {
+  constructedTestSuite.tests = (constructedTestSuite.tests || []).map(cloneTestForResolve);
+
+  for (const test of constructedTestSuite.tests) {
     if (test.options?.provider && !isApiProvider(test.options.provider)) {
       test.options.provider = await resolveProvider(test.options.provider, providerMap, {
         env: testSuite.env,
         basePath: cliState.basePath,
       });
     }
-    if (test.assert) {
-      for (const assertion of test.assert) {
-        if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
-          continue;
-        }
-
-        if (assertion.provider && !isApiProvider(assertion.provider)) {
-          assertion.provider = await resolveProvider(assertion.provider, providerMap, {
-            env: testSuite.env,
-            basePath: cliState.basePath,
-          });
-        }
+    for (const assertion of test.assert || []) {
+      if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
+        continue;
+      }
+      if (assertion.provider && !isApiProvider(assertion.provider)) {
+        assertion.provider = await resolveProvider(assertion.provider, providerMap, {
+          env: testSuite.env,
+          basePath: cliState.basePath,
+        });
       }
     }
   }
@@ -128,6 +160,10 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   }
 
   const parsedProviderPromptMap = readProviderPromptMap(testSuite, constructedTestSuite.prompts);
+  // INVARIANT: the unified config persisted to the Eval record must not alias any
+  // object mutated above with a resolved ApiProvider (see `cloneTestForResolve()`).
+  // Live SDK clients hold circular refs and break drizzle JSON serialization on
+  // `evalRecord.save()`. Fixes #8687.
   const unifiedConfig = { ...testSuite, prompts: constructedTestSuite.prompts };
   const evalRecord = testSuite.writeLatestResults
     ? await Eval.create(unifiedConfig, constructedTestSuite.prompts)

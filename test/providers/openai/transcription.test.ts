@@ -206,6 +206,16 @@ describe('OpenAiTranscriptionProvider', () => {
       expect(result.cost).toBe(0.006); // 2 minutes * $0.003/min
     });
 
+    it('should calculate cost correctly for gpt-4o-mini-transcribe-2025-12-15', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-mini-transcribe-2025-12-15', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('/path/to/audio.mp3');
+
+      expect(result.cost).toBe(0.006); // 2 minutes * $0.003/min
+    });
+
     it('should calculate cost correctly for whisper-1', async () => {
       const provider = new OpenAiTranscriptionProvider('whisper-1', {
         config: { apiKey: 'test-key' },
@@ -231,6 +241,14 @@ describe('OpenAiTranscriptionProvider', () => {
       });
 
       expect(provider.id()).toBe('openai:transcription:gpt-4o-transcribe');
+    });
+
+    it('should generate correct default ID for dated diarization snapshots', () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe-diarize-2025-10-15', {
+        config: { apiKey: 'test-key' },
+      });
+
+      expect(provider.id()).toBe('openai:transcription:gpt-4o-transcribe-diarize-2025-10-15');
     });
 
     it('should throw an error if API key is not set', async () => {
@@ -603,7 +621,9 @@ describe('OpenAiTranscriptionProvider', () => {
       const models = [
         'gpt-4o-transcribe',
         'gpt-4o-mini-transcribe',
+        'gpt-4o-mini-transcribe-2025-12-15',
         'gpt-4o-transcribe-diarize',
+        'gpt-4o-transcribe-diarize-2025-10-15',
         'whisper-1',
       ];
 

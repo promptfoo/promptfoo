@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.121.5](https://github.com/promptfoo/promptfoo/compare/0.121.4...0.121.5) (2026-04-14)
+
+### Features
+
+- **providers:** add Abliteration provider ([b29fa9a](https://github.com/promptfoo/promptfoo/commit/b29fa9a475315cc97d57a5616d08e9b099d8f66b))
+- **providers:** add OpenAI Codex app-server provider ([#8578](https://github.com/promptfoo/promptfoo/issues/8578)) ([a403dd1](https://github.com/promptfoo/promptfoo/commit/a403dd17b012029bbd4323e3d95e44e5366d08a3))
+- **providers:** let anthropic:messages auth via Claude Code session ([#8692](https://github.com/promptfoo/promptfoo/issues/8692)) ([642af70](https://github.com/promptfoo/promptfoo/commit/642af7060cce97885133c8729672c2ec5eed42ac))
+- **webui:** add system theme selector ([#8538](https://github.com/promptfoo/promptfoo/issues/8538)) ([2ed5e5b](https://github.com/promptfoo/promptfoo/commit/2ed5e5b263049daad98b0ddc45674e2d29c194ee))
+
+### Bug Fixes
+
+- **app:** chart toggle visibility ([#8439](https://github.com/promptfoo/promptfoo/issues/8439)) ([f9d448d](https://github.com/promptfoo/promptfoo/commit/f9d448dd74dbe6542a9c4ce7282dc0f85df42159))
+- **assertions:** avoid jsdom in HTML assertions ([979aee4](https://github.com/promptfoo/promptfoo/commit/979aee484b2bba62fc9aed821f00dcb44e0ca8c7))
+- correct rouge assertion reason messages when inverse: true ([#8682](https://github.com/promptfoo/promptfoo/issues/8682)) ([7d64d8d](https://github.com/promptfoo/promptfoo/commit/7d64d8daedaaac7c84b421046cdc3d85959870e8))
+- **deps:** update anthropic packages ([#8670](https://github.com/promptfoo/promptfoo/issues/8670)) ([0a4a7e0](https://github.com/promptfoo/promptfoo/commit/0a4a7e08075eaaa9f3605018da01fd7a41216f2f))
+- **deps:** update dependency openai to ^6.34.0 ([#8701](https://github.com/promptfoo/promptfoo/issues/8701)) ([73f6ba1](https://github.com/promptfoo/promptfoo/commit/73f6ba19bccae06aeafd6b702df26d4f9f6dc4bd))
+- **deps:** update dependency parse5 to v8 ([#8710](https://github.com/promptfoo/promptfoo/issues/8710)) ([759391d](https://github.com/promptfoo/promptfoo/commit/759391d6ea3e3639071e257c55e65105c077935d))
+- **deps:** update openai packages ([#8672](https://github.com/promptfoo/promptfoo/issues/8672)) ([1ae735c](https://github.com/promptfoo/promptfoo/commit/1ae735c8a9f2d7b7d62453f9c195cd691ff561b5))
+- **providers:** close stdin on exec provider to prevent child process hanging ([#8686](https://github.com/promptfoo/promptfoo/issues/8686)) ([9cd7709](https://github.com/promptfoo/promptfoo/commit/9cd7709d19fa8c85c97a402400d0f7cbb8a1762e))
+- **providers:** resolve settings file path for claude-agent-sdk ([#8606](https://github.com/promptfoo/promptfoo/issues/8606)) ([d575bd1](https://github.com/promptfoo/promptfoo/commit/d575bd1fc13809428216d1c2de1ea59249c19005))
+- **providers:** send reasoning config for Azure responses deployments ([#8255](https://github.com/promptfoo/promptfoo/issues/8255)) ([67437f3](https://github.com/promptfoo/promptfoo/commit/67437f3fc02c320dc3ea29c99ea69e6334cb3b2b))
+- **redteam:** throw immediately on non-OK HTTP responses in redteam discover ([#8677](https://github.com/promptfoo/promptfoo/issues/8677)) ([770a557](https://github.com/promptfoo/promptfoo/commit/770a557b2687a0ba10384d64420257d18677086e))
+- **server:** prevent circular JSON when Bedrock/Anthropic provider is used as llm-rubric judge from web UI ([#8688](https://github.com/promptfoo/promptfoo/issues/8688)) ([f26e54b](https://github.com/promptfoo/promptfoo/commit/f26e54b99a6c002a819e13cf6738f9c748062da5))
+
 ## [0.121.4](https://github.com/promptfoo/promptfoo/compare/0.121.3...0.121.4) (2026-04-10)
 
 ### Features

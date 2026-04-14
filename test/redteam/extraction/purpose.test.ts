@@ -3,8 +3,11 @@ import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import { DEFAULT_PURPOSE, extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
-
-import type { ApiProvider } from '../../../src/types/index';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
 
 vi.mock('../../../src/logger', () => ({
   default: {
@@ -26,7 +29,7 @@ vi.mock('../../../src/redteam/remoteGeneration', async () => ({
 }));
 
 describe('System Purpose Extractor', () => {
-  let provider: ApiProvider;
+  let provider: MockApiProvider;
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeAll(() => {
@@ -36,10 +39,11 @@ describe('System Purpose Extractor', () => {
   beforeEach(() => {
     process.env = { ...originalEnv };
     delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
-    provider = {
-      callApi: vi.fn().mockResolvedValue({ output: '<Purpose>Extracted system purpose</Purpose>' }),
-      id: vi.fn().mockReturnValue('test-provider'),
-    };
+    provider = createMockProvider({
+      response: createProviderResponse({
+        output: '<Purpose>Extracted system purpose</Purpose>',
+      }),
+    });
     vi.clearAllMocks();
     vi.mocked(getRemoteGenerationUrl).mockImplementation(function () {
       return 'https://api.promptfoo.app/api/v1/task';

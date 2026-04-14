@@ -164,6 +164,12 @@
     "__schema6": {
       "type": "object",
       "properties": {
+        "ABLIT_API_BASE_URL": {
+          "type": "string"
+        },
+        "ABLIT_KEY": {
+          "type": "string"
+        },
         "AI21_API_BASE_URL": {
           "type": "string"
         },
@@ -1488,6 +1494,12 @@
                 "env": {
                   "type": "object",
                   "properties": {
+                    "ABLIT_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "ABLIT_KEY": {
+                      "type": "string"
+                    },
                     "AI21_API_BASE_URL": {
                       "type": "string"
                     },
