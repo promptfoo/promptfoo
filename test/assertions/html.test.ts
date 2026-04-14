@@ -392,6 +392,25 @@ describe('handleIsHtml', () => {
     });
   });
 
+  it('should accept custom elements', () => {
+    const fragments = [
+      '<custom-element data-id="123">Web component</custom-element>',
+      '<CUSTOM-ELEMENT>Uppercase custom element</CUSTOM-ELEMENT>',
+    ];
+
+    fragments.forEach((html) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'is-html' },
+        outputString: html,
+        inverse: false,
+      };
+
+      const result = handleIsHtml(params);
+      expect(result.pass).toBe(true);
+    });
+  });
+
   it('should reject doctype-only input', () => {
     const params: AssertionParams = {
       ...defaultParams,
