@@ -506,7 +506,14 @@ export async function createIterationContext({
       });
     } catch (error) {
       logger.error(`${loggerTag} Error transforming vars`, { error });
-      // Continue with original vars if transform fails
+      // A user-supplied TransformFunction that throws is a programming error we
+      // must surface — continuing with the original vars would run the iteration
+      // against un-transformed inputs without any visible failure. Inline string
+      // transforms retain the legacy best-effort behavior to avoid breaking
+      // existing redteam configs that tolerated intermittent transform errors.
+      if (typeof transformVarsConfig === 'function') {
+        throw error;
+      }
     }
   }
 

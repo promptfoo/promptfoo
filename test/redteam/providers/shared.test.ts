@@ -8,6 +8,7 @@ import {
 import {
   BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
   buildGraderResultAssertion,
+  createIterationContext,
   formatRedteamHistoryAsTranscript,
   getGraderAssertionValue,
   getTargetResponse,
@@ -995,6 +996,66 @@ describe('shared redteam provider utilities', () => {
       ).toBeUndefined();
       expect(getGraderAssertionValue(assertionSet)).toBeUndefined();
       expect(getGraderAssertionValue(undefined)).toBeUndefined();
+    });
+  });
+
+  describe('createIterationContext', () => {
+    it('applies an inline function transformVars to the vars', async () => {
+      const iterationContext = await createIterationContext({
+        originalVars: { goal: 'test' },
+        transformVarsConfig: (vars) => ({
+          ...(vars as Record<string, unknown>),
+          goal: `${(vars as Record<string, unknown>).goal} (iter-1)`,
+        }),
+        iterationNumber: 1,
+      });
+      expect(iterationContext).toBeUndefined(); // no outer context passed
+    });
+
+    it('merges transformed vars into the iteration context', async () => {
+      const outer: CallApiContextParams = {
+        prompt: { raw: 'x', label: 'x' },
+        vars: {},
+      };
+      const iterationContext = await createIterationContext({
+        originalVars: { goal: 'test' },
+        transformVarsConfig: (vars) => ({
+          ...(vars as Record<string, unknown>),
+          goal: `${(vars as Record<string, unknown>).goal}!!`,
+        }),
+        context: outer,
+        iterationNumber: 2,
+      });
+      expect(iterationContext?.vars).toEqual({ goal: 'test!!' });
+    });
+
+    it('rethrows errors from a TransformFunction so iterations surface user bugs', async () => {
+      const throwingTransform = () => {
+        throw new Error('user function boom');
+      };
+      await expect(
+        createIterationContext({
+          originalVars: { goal: 'test' },
+          transformVarsConfig: throwingTransform,
+          iterationNumber: 1,
+        }),
+      ).rejects.toThrow('user function boom');
+    });
+
+    it('keeps legacy best-effort behavior for inline string transforms', async () => {
+      const outer: CallApiContextParams = {
+        prompt: { raw: 'x', label: 'x' },
+        vars: {},
+      };
+      // This inline expression throws because `vars.missing` is undefined.
+      // The legacy behavior is to log and continue with the original vars.
+      const iterationContext = await createIterationContext({
+        originalVars: { goal: 'test' },
+        transformVarsConfig: 'vars.missing.field',
+        context: outer,
+        iterationNumber: 1,
+      });
+      expect(iterationContext?.vars).toEqual({ goal: 'test' });
     });
   });
 });
