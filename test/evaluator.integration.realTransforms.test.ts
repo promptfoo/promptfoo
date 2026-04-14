@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { evaluate } from '../src/evaluator';
 import Eval from '../src/models/eval';
 
@@ -74,6 +74,10 @@ const makeSuite = (overrides: Partial<TestSuite>): TestSuite => ({
 
 describe('Transformation integration (real transform)', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
     vi.clearAllMocks();
   });
 

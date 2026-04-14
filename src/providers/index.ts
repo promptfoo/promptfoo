@@ -25,9 +25,10 @@ import type { EnvOverrides } from '../types/env';
 import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
 import type {
   ApiProvider,
+  ProviderConfig,
   ProviderFunction,
   ProviderOptions,
-  ProviderOptionsMap,
+  ProvidersConfig,
 } from '../types/providers';
 
 type ProviderFunctionWithMetadata = ProviderFunction &
@@ -292,8 +293,16 @@ export async function resolveProvider(
  */
 export function resolveProviderConfigs(
   providerPaths: TestSuiteConfig['providers'],
+  options?: { basePath?: string },
+): TestSuiteConfig['providers'];
+export function resolveProviderConfigs(
+  providerPaths: ProvidersConfig,
+  options?: { basePath?: string },
+): ProvidersConfig;
+export function resolveProviderConfigs(
+  providerPaths: ProvidersConfig,
   options: { basePath?: string } = {},
-): TestSuiteConfig['providers'] {
+): ProvidersConfig {
   const { basePath } = options;
 
   if (typeof providerPaths === 'string') {
@@ -309,11 +318,15 @@ export function resolveProviderConfigs(
     return providerPaths;
   }
 
+  if (isApiProvider(providerPaths)) {
+    return providerPaths;
+  }
+
   if (!Array.isArray(providerPaths)) {
     return providerPaths;
   }
 
-  const results: (string | ProviderFunction | ProviderOptions | ProviderOptionsMap)[] = [];
+  const results: ProviderConfig[] = [];
 
   for (const provider of providerPaths) {
     const descriptor = normalizeProviderRef(provider);
@@ -357,7 +370,7 @@ async function loadProvidersFromFile(
 }
 
 export async function loadApiProviders(
-  providerPaths: TestSuiteConfig['providers'],
+  providerPaths: ProvidersConfig,
   options: {
     basePath?: string;
     env?: EnvOverrides;
@@ -383,6 +396,8 @@ export async function loadApiProviders(
     return [
       createProviderFromFunction(providerPaths as ProviderFunctionWithMetadata, descriptor.id),
     ];
+  } else if (isApiProvider(providerPaths)) {
+    return [providerPaths];
   } else if (Array.isArray(providerPaths)) {
     const providersArrays = await Promise.all(
       providerPaths.map(async (provider, idx) => {
@@ -446,7 +461,7 @@ function getProviderIdsFromFile(providerPath: string): string[] {
  * Handles strings, functions, and arrays of mixed provider types.
  * For file:// references, reads the config file to extract IDs.
  */
-export function getProviderIds(providerPaths: TestSuiteConfig['providers']): string[] {
+export function getProviderIds(providerPaths: ProvidersConfig): string[] {
   if (typeof providerPaths === 'string') {
     if (isProviderConfigFileReference(providerPaths)) {
       return getProviderIdsFromFile(providerPaths);
@@ -454,6 +469,8 @@ export function getProviderIds(providerPaths: TestSuiteConfig['providers']): str
     return [providerPaths];
   } else if (typeof providerPaths === 'function') {
     return [normalizeProviderRef(providerPaths).id];
+  } else if (isApiProvider(providerPaths)) {
+    return [providerPaths.id()];
   } else if (Array.isArray(providerPaths)) {
     return providerPaths.flatMap((provider, idx) => {
       if (isApiProvider(provider)) {

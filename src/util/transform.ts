@@ -138,18 +138,22 @@ async function getTransformFunction(
     try {
       transformFn = await getFileTransformFunction(codeOrFilepath);
     } catch (error) {
-      logger.error(
-        `Error loading transform function from file: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      logger.error('Error loading transform function from file', {
+        error,
+        message: error instanceof Error ? error.message : String(error),
+        transform: getTransformLabel(codeOrFilepath),
+      });
       throw error;
     }
   } else {
     try {
       transformFn = getInlineTransformFunction(codeOrFilepath, inputType);
     } catch (error) {
-      logger.error(
-        `Error creating inline transform function: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      logger.error('Error creating inline transform function', {
+        error,
+        message: error instanceof Error ? error.message : String(error),
+        transform: getTransformLabel(codeOrFilepath),
+      });
       throw error;
     }
   }
@@ -222,9 +226,11 @@ export async function transform(
       : await Promise.resolve(transformFn(transformInput, context, getProcessShim()));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    logger.error(
-      `Error in transform function (${getTransformLabel(codeOrFilepathOrFn)}): ${message}`,
-    );
+    logger.error('Error in transform function', {
+      error,
+      message,
+      transform: getTransformLabel(codeOrFilepathOrFn),
+    });
     throw error;
   }
 

@@ -127,7 +127,10 @@ describe('util', () => {
         'Transform transform.js must export a function, have a default export as a function, or export the specified function "undefined"',
       );
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Error loading transform function from file:'),
+        'Error loading transform function from file',
+        expect.objectContaining({
+          transform: FILE_TRANSFORM_LABEL,
+        }),
       );
     });
 
@@ -149,7 +152,11 @@ describe('util', () => {
         'Unsupported transform file format: file://transform.txt',
       );
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Error loading transform function from file:'),
+        'Error loading transform function from file',
+        expect.objectContaining({
+          message: 'Unsupported transform file format: file://transform.txt',
+          transform: FILE_TRANSFORM_LABEL,
+        }),
       );
     });
 
@@ -260,7 +267,11 @@ describe('util', () => {
       const transformFunctionPath = 'file://transform.js';
       await expect(transform(transformFunctionPath, output, context)).rejects.toThrow(errorMessage);
       expect(logger.error).toHaveBeenCalledWith(
-        `Error loading transform function from file: ${errorMessage}`,
+        'Error loading transform function from file',
+        expect.objectContaining({
+          message: errorMessage,
+          transform: FILE_TRANSFORM_LABEL,
+        }),
       );
     });
 
@@ -273,7 +284,10 @@ describe('util', () => {
         'Unexpected identifier',
       );
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Error creating inline transform function:'),
+        'Error creating inline transform function',
+        expect.objectContaining({
+          transform: expect.stringContaining(INLINE_STRING_LABEL),
+        }),
       );
     });
 
@@ -459,7 +473,11 @@ describe('util', () => {
           'user transform error',
         );
         expect(logger.error).toHaveBeenCalledWith(
-          expect.stringContaining('Error in transform function'),
+          'Error in transform function',
+          expect.objectContaining({
+            message: 'user transform error',
+            transform: expect.stringContaining(INLINE_FUNCTION_LABEL),
+          }),
         );
       });
 

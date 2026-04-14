@@ -29,6 +29,7 @@ import type {
   Scenario,
   TestCase,
   TestSuite,
+  UnifiedConfig,
 } from './types/index';
 import type { ApiProvider } from './types/providers';
 
@@ -168,7 +169,10 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   // object mutated above with a resolved ApiProvider (see `cloneTestForResolve()`).
   // Live SDK clients hold circular refs and break drizzle JSON serialization on
   // `evalRecord.save()`. Fixes #8687.
-  const unifiedConfig = { ...testSuite, prompts: constructedTestSuite.prompts };
+  const unifiedConfig = {
+    ...testSuite,
+    prompts: constructedTestSuite.prompts,
+  } as Partial<UnifiedConfig>;
   const evalRecord = testSuite.writeLatestResults
     ? await Eval.create(unifiedConfig, constructedTestSuite.prompts)
     : new Eval(unifiedConfig);

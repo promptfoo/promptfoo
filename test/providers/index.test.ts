@@ -992,6 +992,23 @@ describe('loadApiProvider', () => {
     });
   });
 
+  it('loadApiProviders with top-level ApiProvider object preserves the provider instance', async () => {
+    const apiProvider = {
+      id: () => 'custom-api-provider',
+      callApi: async (prompt: string) => ({ output: `Output for ${prompt}` }),
+    };
+
+    const providers = await loadApiProviders(apiProvider);
+    expect(providers).toHaveLength(1);
+    expect(providers[0]).toBe(apiProvider);
+  });
+
+  it('loadApiProviders rejects id-only objects instead of treating them as ApiProvider instances', async () => {
+    await expect(loadApiProviders([{ id: () => 'missing-call-api' }] as any)).rejects.toThrow(
+      'Invalid provider at index 0',
+    );
+  });
+
   it('loadApiProviders with CustomApiProvider', async () => {
     const providerPath = 'file://path/to/file.js';
 

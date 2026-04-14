@@ -81,6 +81,7 @@ describe('index.ts exports', () => {
     'isGradingResult',
     'isProviderOptions',
     'isResultFailureReason',
+    'isTransformFunction',
     'loadApiProvider',
     'redteam',
   ];

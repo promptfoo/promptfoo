@@ -2,6 +2,7 @@ import { stat } from 'fs/promises';
 
 import { globSync } from 'glob';
 import logger from '../logger';
+import { isApiProvider } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parsePathOrGlob } from '../util/index';
 import invariant from '../util/invariant';
@@ -26,7 +27,6 @@ import type {
   ProviderOptions,
   ProviderOptionsMap,
   TestSuite,
-  UnifiedConfig,
 } from '../types/index';
 
 export * from './grading';
@@ -39,7 +39,7 @@ export { DEFAULT_WEB_SEARCH_PROMPT } from './grading';
  * @returns A map of provider IDs to their respective prompts.
  */
 export function readProviderPromptMap(
-  config: Pick<Partial<UnifiedConfig>, 'providers'>,
+  config: Pick<Partial<EvaluateTestSuite>, 'providers'>,
   parsedPrompts: Prompt[],
 ): TestSuite['providerPromptMap'] {
   const ret: Record<string, string[]> = {};
@@ -61,7 +61,20 @@ export function readProviderPromptMap(
     return { 'Custom function': allPrompts };
   }
 
+  if (isApiProvider(config.providers)) {
+    return { [config.providers.id()]: allPrompts };
+  }
+
   for (const provider of config.providers) {
+    if (isApiProvider(provider)) {
+      const providerId = provider.id();
+      ret[providerId] = allPrompts;
+      if (provider.label) {
+        ret[provider.label] = allPrompts;
+      }
+      continue;
+    }
+
     if (typeof provider === 'object') {
       // It's either a ProviderOptionsMap or a ProviderOptions
       if (provider.id) {

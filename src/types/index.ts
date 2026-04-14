@@ -27,6 +27,7 @@ import type {
   ImageOutput,
   ProviderOptions,
   ProviderResponse,
+  ProvidersConfig,
 } from './providers';
 import type { NunjucksFilterMap, TokenUsage, VarValue } from './shared';
 
@@ -1280,8 +1281,9 @@ export interface EvalWithMetadata {
 // node.js package interface
 export type EvaluateTestSuite = {
   prompts: (string | object | PromptFunction)[];
+  providers: ProvidersConfig;
   writeLatestResults?: boolean;
-} & Omit<TestSuiteConfig, 'prompts'>;
+} & Omit<TestSuiteConfig, 'prompts' | 'providers'>;
 
 export type EvaluateTestSuiteWithEvaluateOptions = EvaluateTestSuite & {
   evaluateOptions: EvaluateOptions;

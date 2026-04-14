@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveContext } from '../../src/assertions/contextUtils';
 import * as transformUtil from '../../src/util/transform';
 
@@ -18,6 +18,11 @@ describe('resolveContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockTransform.mockReset();
+  });
+
+  afterEach(() => {
+    mockTransform.mockReset();
+    vi.clearAllMocks();
   });
 
   describe('with context variable', () => {
