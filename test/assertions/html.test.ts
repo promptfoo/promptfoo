@@ -353,4 +353,88 @@ describe('handleIsHtml', () => {
       expect(result.pass).toBe(false);
     });
   });
+
+  it('should accept bare elements that parse5 hoists into head', () => {
+    // parse5 places top-level <script>, <style>, <title> into an auto-created
+    // <head>. The walker should still find them as user-provided elements.
+    const headOnlyExamples = [
+      '<script>const x = 1;</script>',
+      '<style>body { color: red; }</style>',
+      '<title>Page</title>',
+    ];
+
+    headOnlyExamples.forEach((html) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'is-html' },
+        outputString: html,
+        inverse: false,
+      };
+
+      const result = handleIsHtml(params);
+      expect(result.pass).toBe(true);
+    });
+  });
+
+  it('should accept SVG and template wrappers', () => {
+    const fragments = ['<svg><circle /></svg>', '<template><div>x</div></template>'];
+
+    fragments.forEach((html) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'is-html' },
+        outputString: html,
+        inverse: false,
+      };
+
+      const result = handleIsHtml(params);
+      expect(result.pass).toBe(true);
+    });
+  });
+
+  it('should reject doctype-only input', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'is-html' },
+      outputString: '<!DOCTYPE html>',
+      inverse: false,
+    };
+
+    const result = handleIsHtml(params);
+    expect(result.pass).toBe(false);
+    expect(result.reason).toBe('Output does not contain recognized HTML elements');
+  });
+
+  it('should reject table foster-parented text', () => {
+    // parse5 hoists stray text inside <table> out to <body> per HTML5 spec,
+    // so the wrapper check must still catch it.
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'is-html' },
+      outputString: '<table>stray text<tr><td>x</td></tr></table>',
+      inverse: false,
+    };
+
+    const result = handleIsHtml(params);
+    expect(result.pass).toBe(false);
+    expect(result.reason).toBe('Output must be wrapped in HTML tags');
+  });
+
+  it('should handle pathologically deep nesting without stack overflow', () => {
+    // Iterative walker must handle depths that would blow the recursion limit.
+    // V8's default recursion limit is roughly 10-15k frames, so 20k is a
+    // conservative test of the iterative path.
+    const depth = 20_000;
+    const deeplyNested = `${'<div>'.repeat(depth)}leaf${'</div>'.repeat(depth)}`;
+
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'is-html' },
+      outputString: deeplyNested,
+      inverse: false,
+    };
+
+    const result = handleIsHtml(params);
+    expect(result.pass).toBe(true);
+  });
 });

@@ -8,6 +8,8 @@ type HtmlChildNode = DefaultTreeAdapterMap['childNode'];
 type HtmlElement = DefaultTreeAdapterMap['element'];
 type HtmlParentNode = DefaultTreeAdapterMap['parentNode'];
 
+const AUTO_INJECTED_WRAPPERS = new Set(['html', 'head', 'body']);
+
 function isTextNode(node: HtmlNode): node is DefaultTreeAdapterMap['textNode'] {
   return node.nodeName === '#text';
 }
@@ -20,47 +22,32 @@ function getChildNodes(node: HtmlNode): HtmlChildNode[] {
   return 'childNodes' in node ? node.childNodes : [];
 }
 
-function findFirstElementByTagName(node: HtmlNode, tagName: string): HtmlElement | undefined {
-  // parse5 lowercases tagName for HTML-namespaced elements, so callers pass lowercase.
-  if (isElementNode(node) && node.tagName === tagName) {
-    return node;
-  }
-
-  for (const childNode of getChildNodes(node)) {
-    const match = findFirstElementByTagName(childNode, tagName);
-    if (match) {
-      return match;
+// Iterative to avoid stack overflow on adversarially deep inputs; parse5
+// imposes no tree-depth limit and MAX_INPUT_SIZE allows 10MB.
+function* walkElements(root: HtmlNode): Generator<HtmlElement> {
+  const stack: HtmlNode[] = [root];
+  while (stack.length > 0) {
+    const current = stack.pop() as HtmlNode;
+    if (isElementNode(current)) {
+      yield current;
+    }
+    const children = getChildNodes(current);
+    // Push in reverse so pop() yields document order.
+    for (let i = children.length - 1; i >= 0; i--) {
+      stack.push(children[i]);
     }
   }
-
-  return undefined;
 }
 
 function hasTopLevelText(parentNode: HtmlParentNode): boolean {
   return parentNode.childNodes.some((node) => isTextNode(node) && Boolean(node.value.trim()));
 }
 
-const AUTO_INJECTED_WRAPPERS = new Set(['html', 'head', 'body']);
-
-function findUserProvidedElement(node: HtmlNode, inputLowercase: string): HtmlElement | undefined {
-  if (isElementNode(node)) {
-    const tagName = node.tagName.toLowerCase();
-    const isAutoInjectedWrapper =
-      AUTO_INJECTED_WRAPPERS.has(tagName) && !inputLowercase.includes(`<${tagName}`);
-
-    if (!isAutoInjectedWrapper && (VALID_HTML_ELEMENTS.has(tagName) || tagName.includes('-'))) {
-      return node;
-    }
-  }
-
-  for (const childNode of getChildNodes(node)) {
-    const match = findUserProvidedElement(childNode, inputLowercase);
-    if (match) {
-      return match;
-    }
-  }
-
-  return undefined;
+function isUserProvidedElement(element: HtmlElement, inputLowercase: string): boolean {
+  const tagName = element.tagName.toLowerCase();
+  const isAutoInjectedWrapper =
+    AUTO_INJECTED_WRAPPERS.has(tagName) && !inputLowercase.includes(`<${tagName}`);
+  return !isAutoInjectedWrapper && (VALID_HTML_ELEMENTS.has(tagName) || tagName.includes('-'));
 }
 
 // Patterns that indicate HTML content
@@ -292,15 +279,28 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
 
   const document = parse(trimmed);
   const inputLowercase = trimmed.toLowerCase();
-  const body = findFirstElementByTagName(document, 'body');
+  const inputHasExplicitBody = inputLowercase.includes('<body');
+
+  let body: HtmlElement | undefined;
+  let userProvidedElement: HtmlElement | undefined;
+
+  for (const element of walkElements(document)) {
+    if (!body && element.tagName === 'body') {
+      body = element;
+    }
+    if (!userProvidedElement && isUserProvidedElement(element, inputLowercase)) {
+      userProvidedElement = element;
+    }
+    if ((inputHasExplicitBody || body) && userProvidedElement) {
+      break;
+    }
+  }
 
   // parse5 auto-wraps fragments and plain text in <html><head><body>, so if the
   // input didn't include <body> itself, treat top-level body text as invalid.
-  if (body && !inputLowercase.includes('<body') && hasTopLevelText(body)) {
+  if (body && !inputHasExplicitBody && hasTopLevelText(body)) {
     return { isValid: false, reason: 'Output must be wrapped in HTML tags' };
   }
-
-  const userProvidedElement = findUserProvidedElement(document, inputLowercase);
 
   if (!userProvidedElement) {
     return { isValid: false, reason: 'Output does not contain recognized HTML elements' };
