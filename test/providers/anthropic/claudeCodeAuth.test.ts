@@ -122,8 +122,10 @@ describe('claudeCodeAuth', () => {
         refreshToken: 'refresh-file',
         expiresAt: 1_999_000_000_000,
       });
+      // Use a platform-agnostic matcher so the test passes on Windows, where
+      // the path separator is `\` rather than `/`.
       expect(mocks.readFileSync).toHaveBeenCalledWith(
-        expect.stringContaining('/.claude/.credentials.json'),
+        expect.stringMatching(/[/\\]\.claude[/\\]\.credentials\.json$/),
         'utf-8',
       );
       expect(warnSpy).toHaveBeenCalledWith(
