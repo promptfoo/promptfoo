@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import {
@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { DropdownMenuItem } from '@app/components/ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverTrigger } from '@app/components/ui/popover';
 import { SearchInput } from '@app/components/ui/search-input';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@app/components/ui/select';
 import { Separator } from '@app/components/ui/separator';
@@ -182,27 +183,33 @@ function ResultsChartsSection({
   }
 
   if (!canRenderResultsCharts) {
-    return (
-      <>
-        {children(null)}
-        <Alert variant="info" className="mt-4 items-start">
-          <BarChart className="size-4 mt-0.5" />
-          <AlertContent>
-            <AlertTitle>Charts are unavailable for this evaluation</AlertTitle>
-            <AlertDescription className="space-y-3">
-              <p>
-                We can show charts when the results include comparable prompts and chartable scores.
+    const unavailableButton = (
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="ghost" size="sm">
+            <BarChart className="size-4 mr-2" />
+            Why no charts?
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-80" align="end">
+          <div className="space-y-3 text-sm">
+            <div className="space-y-1">
+              <h3 className="font-medium leading-none">Charts are unavailable</h3>
+              <p className="text-muted-foreground">
+                Charts appear when the results include comparable prompts and chartable scores.
               </p>
-              <ul className="list-disc pl-5 space-y-1">
-                {resultsChartsUnavailableReasons.map((reason) => (
-                  <li key={reason}>{reason}</li>
-                ))}
-              </ul>
-            </AlertDescription>
-          </AlertContent>
-        </Alert>
-      </>
+            </div>
+            <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+              {resultsChartsUnavailableReasons.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+          </div>
+        </PopoverContent>
+      </Popover>
     );
+
+    return <>{children(unavailableButton)}</>;
   }
 
   const toggleButton = (
