@@ -256,6 +256,11 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 15) / 1e6, 6);
   });
 
+  it('should calculate long-context cost correctly for gpt-5.4', () => {
+    const cost = calculateOpenAICost('gpt-5.4', {}, 300_000, 1_000);
+    expect(cost).toBeCloseTo((300_000 * 5 + 1_000 * 22.5) / 1e6, 6);
+  });
+
   it('should calculate cost correctly for gpt-5.4-2026-03-05', () => {
     const cost = calculateOpenAICost('gpt-5.4-2026-03-05', {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 15) / 1e6, 6);
@@ -294,6 +299,11 @@ describe('calculateOpenAICost', () => {
   it('should calculate cost correctly for gpt-5.4-pro', () => {
     const cost = calculateOpenAICost('gpt-5.4-pro', {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * 30 + 500 * 180) / 1e6, 6);
+  });
+
+  it('should calculate long-context cost correctly for gpt-5.4-pro', () => {
+    const cost = calculateOpenAICost('gpt-5.4-pro', {}, 300_000, 1_000);
+    expect(cost).toBeCloseTo((300_000 * 60 + 1_000 * 270) / 1e6, 6);
   });
 
   it('should calculate cost correctly for gpt-5.4-pro-2026-03-05', () => {

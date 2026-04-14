@@ -526,6 +526,7 @@ GPT-5.4 is a GPT-5 family model for complex professional work, agentic coding, a
 #### Key Specifications
 
 - **Context window**: `gpt-5.4` and `gpt-5.4-pro` support 1,050,000 tokens. `gpt-5.4-mini` and `gpt-5.4-nano` support 400,000 tokens.
+- **Long-context pricing**: `gpt-5.4` and `gpt-5.4-pro` use higher long-context rates when prompts exceed 272,000 input tokens.
 - **Max output tokens**: 128,000 tokens
 - **Reasoning effort**: `gpt-5.4`, `gpt-5.4-mini`, and `gpt-5.4-nano` support `none`, `low`, `medium`, `high`, `xhigh`. `gpt-5.4-pro` supports `medium`, `high`, `xhigh`.
 - **Endpoint support**: `gpt-5.4`, `gpt-5.4-mini`, and `gpt-5.4-nano` support Chat Completions and Responses API. `gpt-5.4-pro` is Responses API only. Promptfoo's Codex SDK provider currently supports `gpt-5.4` and `gpt-5.4-pro`.
@@ -1498,12 +1499,14 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
 
 ## Audio capabilities
 
-OpenAI models with audio support (like `gpt-audio`, `gpt-audio-mini`, `gpt-4o-audio-preview` and `gpt-4o-mini-audio-preview`) can process audio inputs and generate audio outputs. This enables testing speech-to-text, text-to-speech, and speech-to-speech capabilities.
+OpenAI models with audio support (like `gpt-audio-1.5`, `gpt-audio`, `gpt-audio-mini`, `gpt-4o-audio-preview` and `gpt-4o-mini-audio-preview`) can process audio inputs and generate audio outputs. This enables testing speech-to-text, text-to-speech, and speech-to-speech capabilities.
 
 **Available audio models:**
 
-- `gpt-audio` - Latest audio model ($2.50/$10 per 1M text tokens, $40/$80 per 1M audio tokens)
+- `gpt-audio-1.5` - Flagship audio model ($2.50/$10 per 1M text tokens, $32/$64 per 1M audio tokens)
+- `gpt-audio` - General audio model ($2.50/$10 per 1M text tokens, $40/$80 per 1M audio tokens)
 - `gpt-audio-mini` - Cost-efficient audio model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
+- `gpt-audio-mini-2025-12-15` - Dated snapshot of `gpt-audio-mini`
 - `gpt-4o-audio-preview` - Preview audio model
 - `gpt-4o-mini-audio-preview` - Preview mini audio model
 
@@ -1577,12 +1580,14 @@ OpenAI provides dedicated transcription models for converting speech to text. Th
 
 **Available transcription models:**
 
-| Model                       | Description                          | Cost per minute |
-| --------------------------- | ------------------------------------ | --------------- |
-| `whisper-1`                 | Original Whisper transcription model | $0.006          |
-| `gpt-4o-transcribe`         | GPT-4o optimized for transcription   | $0.006          |
-| `gpt-4o-mini-transcribe`    | Faster, more cost-effective option   | $0.003          |
-| `gpt-4o-transcribe-diarize` | Identifies different speakers        | $0.006          |
+| Model                                  | Description                          | Cost per minute |
+| -------------------------------------- | ------------------------------------ | --------------- |
+| `whisper-1`                            | Original Whisper transcription model | $0.006          |
+| `gpt-4o-transcribe`                    | GPT-4o optimized for transcription   | $0.006          |
+| `gpt-4o-mini-transcribe`               | Faster, more cost-effective option   | $0.003          |
+| `gpt-4o-mini-transcribe-2025-12-15`    | Dated mini transcription snapshot    | $0.003          |
+| `gpt-4o-transcribe-diarize`            | Identifies different speakers        | $0.006          |
+| `gpt-4o-transcribe-diarize-2025-10-15` | Dated diarization snapshot           | $0.006          |
 
 To use transcription models, specify the provider format `openai:transcription:<model name>`:
 

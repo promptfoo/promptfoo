@@ -8,6 +8,8 @@ import type { ProviderConfig } from '../shared';
 
 const ajv = getAjv();
 
+const GPT_5_4_LONG_CONTEXT_THRESHOLD = 272_000;
+
 // see https://platform.openai.com/docs/models
 export const OPENAI_CHAT_MODELS = [
   // TTS model (text input + audio output costs)
@@ -344,6 +346,11 @@ export const OPENAI_CHAT_MODELS = [
     cost: {
       input: 2.5 / 1e6,
       output: 15 / 1e6,
+      longContext: {
+        threshold: GPT_5_4_LONG_CONTEXT_THRESHOLD,
+        input: 5 / 1e6,
+        output: 22.5 / 1e6,
+      },
     },
   })),
   ...['gpt-5.4-mini', 'gpt-5.4-mini-2026-03-17'].map((model) => ({
@@ -396,6 +403,11 @@ export const OPENAI_RESPONSES_ONLY_MODELS = [
     cost: {
       input: 30 / 1e6,
       output: 180 / 1e6,
+      longContext: {
+        threshold: GPT_5_4_LONG_CONTEXT_THRESHOLD,
+        input: 60 / 1e6,
+        output: 270 / 1e6,
+      },
     },
   })),
 ];
