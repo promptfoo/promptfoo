@@ -78,6 +78,14 @@ export interface OutputFormat {
 export interface AnthropicMessageOptions {
   apiBaseUrl?: string;
   apiKey?: string;
+  /**
+   * When `false`, skip promptfoo's upfront API key check and authenticate
+   * through a local Claude Code session (OAuth credential from the macOS
+   * keychain or `$HOME/.claude/.credentials.json`). Lets Claude.ai Max /
+   * Pro subscribers run evals — including `llm-rubric` grading — without a
+   * separate Anthropic Console API key. Defaults to `true`.
+   */
+  apiKeyRequired?: boolean;
   cache_control?: Anthropic.Messages.CacheControlEphemeral | null; // Top-level cache control - auto-applies to last cacheable block
   cost?: number;
   effort?: 'low' | 'medium' | 'high' | 'max'; // Controls output quality/speed tradeoff

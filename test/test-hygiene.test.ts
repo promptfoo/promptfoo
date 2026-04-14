@@ -223,7 +223,6 @@ const legacyDirectProcessEnvMutationFiles = new Set([
   'providers/openai/image.test.ts',
   'providers/openai/index.test.ts',
   'providers/openai/realtime.test.ts',
-  'providers/openai/responses.test.ts',
   'providers/openai/transcription.test.ts',
   'providers/openai/video.test.ts',
   'providers/openclaw.test.ts',

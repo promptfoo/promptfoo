@@ -374,7 +374,6 @@
         "!!test/providers/openai/image.test.ts",
         "!!test/providers/openai/index.test.ts",
         "!!test/providers/openai/realtime.test.ts",
-        "!!test/providers/openai/responses.test.ts",
         "!!test/providers/openai/transcription.test.ts",
         "!!test/providers/openai/video.test.ts",
         "!!test/providers/openclaw.test.ts",
