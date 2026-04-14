@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import cliState from '../cliState';
 import logger from '../logger';
+import { isApiProvider } from '../types/providers';
 import {
   getCloudDatabaseId,
   getProviderFromCloud,
@@ -58,15 +59,6 @@ function createProviderFromFunction(
     apiProvider.config = provider.config;
   }
   return apiProvider;
-}
-
-function isApiProviderObject(provider: unknown): provider is ApiProvider {
-  return (
-    Boolean(provider) &&
-    typeof provider === 'object' &&
-    typeof (provider as Partial<ApiProvider>).id === 'function' &&
-    typeof (provider as Partial<ApiProvider>).callApi === 'function'
-  );
 }
 
 function describeInvalidProvider(provider: unknown): string {
@@ -391,9 +383,7 @@ export async function loadApiProviders(
   } else if (Array.isArray(providerPaths)) {
     const providersArrays = await Promise.all(
       providerPaths.map(async (provider, idx) => {
-        // Pre-instantiated ApiProvider objects are passed through as-is so
-        // callers can share a stateful provider across tests.
-        if (isApiProviderObject(provider)) {
+        if (isApiProvider(provider)) {
           return [provider];
         }
         const descriptor = normalizeProviderRef(provider, { index: idx });
@@ -463,7 +453,7 @@ export function getProviderIds(providerPaths: TestSuiteConfig['providers']): str
     return ['custom-function'];
   } else if (Array.isArray(providerPaths)) {
     return providerPaths.flatMap((provider, idx) => {
-      if (isApiProviderObject(provider)) {
+      if (isApiProvider(provider)) {
         return provider.id();
       }
       const descriptor = normalizeProviderRef(provider, { index: idx });

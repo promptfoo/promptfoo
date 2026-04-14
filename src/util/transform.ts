@@ -167,12 +167,12 @@ async function getTransformFunction(
  * Inline functions are shown by name only — their source is never rendered, to avoid
  * leaking implementation details via `Function.toString()` into logs and persisted errors.
  */
-export function getTransformLabel(t: unknown): string {
+export function getTransformLabel(t: string | TransformFunction | null | undefined): string {
+  if (t == null) {
+    return INLINE_STRING_LABEL;
+  }
   if (typeof t === 'function') {
     return t.name ? `${INLINE_FUNCTION_LABEL}: ${t.name}` : INLINE_FUNCTION_LABEL;
-  }
-  if (typeof t !== 'string') {
-    return INLINE_STRING_LABEL;
   }
   if (t.startsWith('file://')) {
     return FILE_TRANSFORM_LABEL;

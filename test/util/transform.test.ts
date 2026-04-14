@@ -521,10 +521,9 @@ describe('util', () => {
         expect(getTransformLabel(myTransform)).toBe(`${INLINE_FUNCTION_LABEL}: myTransform`);
       });
 
-      it('falls back to inline label for non-string, non-function inputs', () => {
+      it('falls back to inline label for null or undefined inputs', () => {
         expect(getTransformLabel(undefined)).toBe(INLINE_STRING_LABEL);
         expect(getTransformLabel(null)).toBe(INLINE_STRING_LABEL);
-        expect(getTransformLabel(42)).toBe(INLINE_STRING_LABEL);
       });
     });
   });

@@ -48,7 +48,6 @@ export async function resolveContext(
   }
 
   if (assertion.contextTransform) {
-    const transformLabel = getTransformLabel(assertion.contextTransform);
     try {
       // Use providerTransformedOutput if available
       // Otherwise fall back to output for backwards compatibility
@@ -64,14 +63,15 @@ export async function resolveContext(
       invariant(
         typeof transformed === 'string' ||
           (Array.isArray(transformed) && transformed.every((item) => typeof item === 'string')),
-        `contextTransform must return a string or array of strings. Got ${typeof transformed}. ` +
-          `Check your transform expression: ${transformLabel}`,
+        () =>
+          `contextTransform must return a string or array of strings. Got ${typeof transformed}. ` +
+          `Check your transform expression: ${getTransformLabel(assertion.contextTransform)}`,
       );
 
       contextValue = transformed;
     } catch (error) {
       throw new Error(
-        `Failed to transform context using expression '${transformLabel}': ${
+        `Failed to transform context using expression '${getTransformLabel(assertion.contextTransform)}': ${
           error instanceof Error ? error.message : String(error)
         }`,
       );

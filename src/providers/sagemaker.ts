@@ -308,7 +308,6 @@ abstract class SageMakerGenericProvider {
           logger.error(`Error executing inline transform: ${transformError}`);
         }
       } else {
-        // Delegate file:// references and TransformFunction values to the shared utility.
         try {
           const { TransformInputType } = await import('../util/transform');
           const transformed = await transform(
