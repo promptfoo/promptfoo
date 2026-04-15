@@ -14,6 +14,8 @@ import {
   type Message,
   messagesToRedteamHistory,
   redteamProviderManager,
+  resetRedteamProviderLoader,
+  setRedteamProviderLoader,
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
 import { sleep } from '../../../src/util/time';
@@ -99,6 +101,7 @@ function setCliStateConfig(config: typeof cliState.config) {
 
 describe('shared redteam provider utilities', () => {
   afterEach(() => {
+    resetRedteamProviderLoader();
     vi.resetAllMocks();
   });
 
@@ -116,6 +119,7 @@ describe('shared redteam provider utilities', () => {
 
     // Clear the redteam provider manager cache
     redteamProviderManager.clearProvider();
+    resetRedteamProviderLoader();
 
     // Reset cliState to default
     setCliStateConfig({
@@ -162,6 +166,17 @@ describe('shared redteam provider utilities', () => {
 
       expect(result).toBe(mockApiProvider);
       expect(mockedLoadApiProviders).toHaveBeenCalledWith(['test-provider']);
+    });
+
+    it('loads configured providers through an injected provider loader', async () => {
+      const injectedLoader = vi.fn().mockResolvedValue([mockApiProvider]);
+      setRedteamProviderLoader(injectedLoader);
+
+      const result = await redteamProviderManager.getProvider({ provider: 'test-provider' });
+
+      expect(result).toBe(mockApiProvider);
+      expect(injectedLoader).toHaveBeenCalledWith(['test-provider']);
+      expect(mockedLoadApiProviders).not.toHaveBeenCalled();
     });
 
     it('loads provider from provider options', async () => {

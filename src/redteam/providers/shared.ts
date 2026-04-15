@@ -36,6 +36,25 @@ import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
 
+export type RedteamProviderLoader = (
+  providers: NonNullable<RedteamFileConfig['provider']>[],
+) => Promise<ApiProvider[]>;
+
+const defaultRedteamProviderLoader: RedteamProviderLoader = async (providers) => {
+  const { loadApiProviders } = await import('../../providers');
+  return loadApiProviders(providers);
+};
+
+let redteamProviderLoader = defaultRedteamProviderLoader;
+
+export function setRedteamProviderLoader(loader: RedteamProviderLoader): void {
+  redteamProviderLoader = loader;
+}
+
+export function resetRedteamProviderLoader(): void {
+  redteamProviderLoader = defaultRedteamProviderLoader;
+}
+
 async function loadRedteamProvider({
   provider,
   jsonOnly = false,
@@ -54,9 +73,7 @@ async function loadRedteamProvider({
     ret = redteamProvider;
   } else if (typeof redteamProvider === 'string' || isProviderOptions(redteamProvider)) {
     logger.debug(`Loading ${purpose} provider`, { provider: redteamProvider });
-    const loadApiProvidersModule = await import('../../providers');
-    // Async import to avoid circular dependency
-    ret = (await loadApiProvidersModule.loadApiProviders([redteamProvider]))[0];
+    ret = (await redteamProviderLoader([redteamProvider]))[0];
   } else {
     const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
     logger.debug(`Using default ${purpose} provider: ${defaultModel}`);
