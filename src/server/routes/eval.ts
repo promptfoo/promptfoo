@@ -13,6 +13,7 @@ import { convertEvalResultToTableCell } from '../../util/exportToFile/index';
 import invariant from '../../util/invariant';
 import { shouldShareResults } from '../../util/sharing';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
+import { sendError } from '../utils/errors';
 import { trimEvalConfigForTableApi, trimEvalTableForApi } from '../utils/evalTablePayload';
 import {
   ComparisonEvalNotFoundError,
@@ -239,7 +240,7 @@ evalRouter.get('/:id/config', async (req: Request, res: Response): Promise<void>
     });
   } catch (error) {
     logger.error('[GET /:id/config] Failed to fetch eval config', { error, evalId: id });
-    res.status(500).json({ error: 'Failed to fetch eval config' });
+    sendError(res, 500, 'Failed to fetch eval config');
   }
 });
 
@@ -470,7 +471,7 @@ evalRouter.get(
         evalId,
         resultId,
       });
-      res.status(500).json({ error: 'Failed to fetch result detail' });
+      sendError(res, 500, 'Failed to fetch result detail');
     }
   },
 );

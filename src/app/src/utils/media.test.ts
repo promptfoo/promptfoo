@@ -6,6 +6,7 @@ import {
   generateMediaFilename,
   getExtensionFromMimeType,
   hashToNumber,
+  resolveAudioSource,
   resolveBlobUri,
   resolveImageSource,
   resolveVideoSource,
@@ -712,5 +713,55 @@ describe('resolveImageSource security', () => {
   it('should return undefined for short strings that could be session IDs', () => {
     expect(resolveImageSource('abc123')).toBeUndefined();
     expect(resolveImageSource('short-string')).toBeUndefined();
+  });
+
+  it('should resolve structured storage references in image data', () => {
+    expect(
+      resolveImageSource({
+        data: 'storageRef:images/test.png',
+        format: 'png',
+      }),
+    ).toBe('/api/media/images/test.png');
+  });
+
+  it('should ignore unsupported structured image placeholders', () => {
+    expect(
+      resolveImageSource({
+        data: 'blobref:qa-small-1',
+        format: 'png',
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe('resolveAudioSource', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
+  });
+
+  it('should resolve structured storage references in audio data', () => {
+    expect(
+      resolveAudioSource({
+        data: 'storageRef:audio/test.wav',
+        format: 'wav',
+      }),
+    ).toEqual({
+      src: '/api/media/audio/test.wav',
+      type: 'audio/wav',
+    });
+  });
+
+  it('should ignore unsupported structured audio placeholders', () => {
+    expect(
+      resolveAudioSource({
+        data: 'blobref:qa-small-1',
+        format: 'wav',
+      }),
+    ).toBeNull();
+  });
+
+  it('should not treat plain text fallback content as base64 audio', () => {
+    expect(resolveAudioSource(undefined, 'not actually audio data')).toBeNull();
   });
 });

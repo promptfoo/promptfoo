@@ -50,6 +50,40 @@ function withApiBase(apiPath: string): string {
   return base ? `${base}${apiPath}` : apiPath;
 }
 
+function isLikelyBase64Payload(value: string, minimumLength = 1): boolean {
+  return value.length >= minimumLength && /^[A-Za-z0-9+/=_-]+$/.test(value);
+}
+
+function resolveInlineMediaSource(
+  data: string | undefined,
+  {
+    kind,
+    format,
+    minimumBase64Length = 1,
+    allowExternalUrls = false,
+  }: {
+    kind: 'audio' | 'image';
+    format: string;
+    minimumBase64Length?: number;
+    allowExternalUrls?: boolean;
+  },
+): string | undefined {
+  if (!data) {
+    return undefined;
+  }
+
+  const resolvedUrl = allowExternalUrls ? resolveMediaUrl(data) : resolveBlobUri(data);
+  if (resolvedUrl) {
+    return resolvedUrl;
+  }
+
+  if (!isLikelyBase64Payload(data, minimumBase64Length)) {
+    return undefined;
+  }
+
+  return data.startsWith('data:') ? data : `data:${kind}/${format};base64,${data}`;
+}
+
 /**
  * Resolves a URL that could be a storage ref, blob URI, legacy API path, or external URL.
  * Returns the resolved URL or undefined if unrecognized.
@@ -128,13 +162,32 @@ export function resolveAudioSource(
     };
   }
 
-  const data = audio?.data || fallbackContent;
+  const data = audio?.data ?? fallbackContent;
   if (!data) {
     return null;
   }
 
+  const resolvedUrl = resolveBlobUri(data);
+  if (resolvedUrl) {
+    return {
+      src: resolvedUrl,
+      type: `audio/${audio?.format || 'mpeg'}`,
+    };
+  }
+
+  if (!isLikelyBase64Payload(data)) {
+    return null;
+  }
+
   const format = audio?.format || 'mp3';
-  const src = data.startsWith('data:audio') ? data : `data:audio/${format};base64,${data}`;
+  const src = resolveInlineMediaSource(data, {
+    kind: 'audio',
+    format,
+  });
+
+  if (!src) {
+    return null;
+  }
 
   return {
     src,
@@ -146,19 +199,11 @@ export function resolveImageSource(
   image?: { data?: string; format?: string; blobRef?: BlobLike } | string | null,
 ): string | undefined {
   if (typeof image === 'string') {
-    const blobUrl = resolveBlobUri(image);
-    if (blobUrl) {
-      return blobUrl;
-    }
-    if (image.startsWith('data:')) {
-      return image;
-    }
-    // Allow base64-ish payloads that are purely non-whitespace and use common base64/url-safe chars
-    // Require a minimum length to avoid misclassifying short strings (e.g., session IDs) as images.
-    if (image.length >= 60 && /^[A-Za-z0-9+/=_-]+$/.test(image)) {
-      return `data:image/png;base64,${image}`;
-    }
-    return undefined;
+    return resolveInlineMediaSource(image, {
+      kind: 'image',
+      format: 'png',
+      minimumBase64Length: 60,
+    });
   }
 
   const blobUrl = resolveBlobRef(image?.blobRef);
@@ -166,14 +211,11 @@ export function resolveImageSource(
     return blobUrl;
   }
 
-  if (image?.data) {
-    const format = image.format || 'png';
-    return image.data.startsWith('data:')
-      ? image.data
-      : `data:image/${format};base64,${image.data}`;
-  }
-
-  return undefined;
+  return resolveInlineMediaSource(image?.data, {
+    kind: 'image',
+    format: image?.format || 'png',
+    allowExternalUrls: true,
+  });
 }
 
 /**
