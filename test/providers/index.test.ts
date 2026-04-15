@@ -174,6 +174,14 @@ const defaultMockResponse = {
   },
 };
 
+beforeEach(() => {
+  mockExecFile.mockReset();
+  mockFsReadFileSync.mockReset();
+  mockFsExistsSync.mockReset();
+  mockFsMkdirSync.mockReset();
+  mockFsWriteFileSync.mockReset();
+});
+
 describe('call provider apis', () => {
   beforeEach(() => {
     // Set Azure environment variables for Azure provider tests
