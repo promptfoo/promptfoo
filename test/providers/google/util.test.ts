@@ -50,6 +50,25 @@ const googleAuthMock = vi.hoisted(() => {
   };
 });
 
+function resetGoogleAuthMock() {
+  const { GoogleAuth, mockAuthInstance } = googleAuthMock;
+
+  mockAuthInstance.getClient.mockReset();
+  mockAuthInstance.fromJSON.mockReset();
+  mockAuthInstance.getProjectId.mockReset();
+  GoogleAuth.mockReset();
+
+  mockAuthInstance.getClient.mockResolvedValue({ name: 'mockClient' });
+  mockAuthInstance.fromJSON.mockImplementation((credentials: any) => {
+    return Promise.resolve({ name: 'mockCredentialClient', credentials });
+  });
+  mockAuthInstance.getProjectId.mockResolvedValue('google-auth-project');
+  GoogleAuth.mockImplementation(function (this: any) {
+    Object.assign(this, mockAuthInstance);
+    return this;
+  });
+}
+
 // Mock both the module and dynamic imports
 vi.mock('google-auth-library', () => googleAuthMock);
 
@@ -106,16 +125,8 @@ vi.mock('fs', async (importOriginal) => {
 
 describe('util', () => {
   beforeEach(() => {
-    // Clear all mocks
     vi.clearAllMocks();
-
-    // Reset the Google Auth mock to default state
-    const { mockAuthInstance } = googleAuthMock;
-    mockAuthInstance.getClient.mockResolvedValue({ name: 'mockClient' });
-    mockAuthInstance.fromJSON.mockImplementation((credentials: any) => {
-      return Promise.resolve({ name: 'mockCredentialClient', credentials });
-    });
-    mockAuthInstance.getProjectId.mockResolvedValue('google-auth-project');
+    resetGoogleAuthMock();
   });
 
   describe('parseStringObject', () => {

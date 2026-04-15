@@ -118,32 +118,7 @@ const allowedSkippedTests: AllowedSkip[] = [
   },
 ];
 
-const legacyHoistedPersistentMockFiles = new Set([
-  'commands/mcp/server.test.ts',
-  'onboarding.test.ts',
-  'providers/azure/chat-mcp-integration.test.ts',
-  'providers/bedrock/knowledgeBase.test.ts',
-  'providers/elevenlabs/alignment/index.test.ts',
-  'providers/elevenlabs/isolation/index.test.ts',
-  'providers/golangCompletion.test.ts',
-  'providers/google/gemini-mcp-integration.test.ts',
-  'providers/google/util.test.ts',
-  'providers/http-pfx-signature.test.ts',
-  'providers/http-tls.test.ts',
-  'providers/index.test.ts',
-  'providers/llamaApi.test.ts',
-  'providers/openai/agents.test.ts',
-  'providers/openai/chatkit-pool.test.ts',
-  'redteam/commands/poison.test.ts',
-  'redteam/strategies/simpleVideo.test.ts',
-  'sagemaker.test.ts',
-  'table.test.ts',
-  'tracing/evaluatorTracing.test.ts',
-  'util/agent/agentClient.test.ts',
-  'util/apiHealth.test.ts',
-  'util/functions/loadFunction.test.ts',
-  'util/oauth.test.ts',
-]);
+const legacyHoistedPersistentMockFiles = new Set<string>();
 
 const legacyDirectProcessEnvMutationFiles = new Set([
   'assertions/assertionResult.test.ts',

@@ -70,6 +70,16 @@ vi.mock('../src/envars', () => ({
   getEnvInt: vi.fn((_key: string, defaultValue: number) => defaultValue),
 }));
 
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockSelect.mockReset();
+  mockCheckbox.mockReset();
+  mockConfirm.mockReset();
+  mockFs.existsSync.mockReset();
+  mockFs.writeFileSync.mockReset();
+  mockFs.mkdirSync.mockReset();
+});
+
 describe('reportProviderAPIKeyWarnings', () => {
   const openaiID = 'openai:gpt-4o';
   const anthropicID = 'anthropic:messages:claude-3-5-sonnet-20241022';
@@ -131,7 +141,6 @@ describe('createDummyFiles', () => {
 
   beforeEach(() => {
     tempDir = '/fake/temp/dir';
-    vi.clearAllMocks();
     mockConfirm.mockResolvedValue(true);
     mockFs.existsSync.mockReturnValue(false);
     mockFs.writeFileSync.mockImplementation(() => undefined);
