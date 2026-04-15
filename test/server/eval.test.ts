@@ -4,6 +4,7 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
+import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/server/utils/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 
@@ -281,7 +282,7 @@ describe('eval routes', () => {
         (row: { outputs: Array<{ prompt?: string }> }) =>
           row.outputs.map((output) => output?.prompt),
       );
-      expect(prompts.filter((prompt) => prompt === '[content too large]')).toHaveLength(1);
+      expect(prompts.filter((prompt) => prompt === STRIPPED_TABLE_CELL_PROMPT)).toHaveLength(1);
       expect(prompts).toContain('small prompt');
       expect(prompts).toContain('x'.repeat(50));
     });
@@ -303,7 +304,7 @@ describe('eval routes', () => {
         (row: { outputs: Array<{ prompt?: string }> }) =>
           row.outputs.map((output) => output?.prompt),
       );
-      expect(prompts.filter((prompt) => prompt === '[content too large]')).toHaveLength(2);
+      expect(prompts.filter((prompt) => prompt === STRIPPED_TABLE_CELL_PROMPT)).toHaveLength(2);
       expect(prompts).toContain('small prompt');
     });
 

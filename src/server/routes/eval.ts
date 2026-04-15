@@ -16,7 +16,7 @@ import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
   generateEvalCsv,
-  getEvalTableOutputPromptCount,
+  getEvalTableOutputPromptLocationsBySize,
   getEvalTablePromptStrippedPayload,
   mergeComparisonTables,
 } from '../utils/evalTableUtils';
@@ -51,20 +51,65 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
       evalId,
     });
 
-    const promptCount = getEvalTableOutputPromptCount(responsePayload);
-    for (let promptCountToStrip = 1; promptCountToStrip <= promptCount; promptCountToStrip += 1) {
+    const promptLocations = getEvalTableOutputPromptLocationsBySize(responsePayload);
+    if (promptLocations.length === 0) {
+      logger.error('[GET /:id/table] Response too large and has no prompts to strip', {
+        evalId,
+      });
+      res.status(413).json({ error: 'Eval too large to display. Try reducing the page size.' });
+      return;
+    }
+
+    const tryStringifyWithStrippedPrompts = (promptCountToStrip: number): string | null => {
+      const responseWithoutPrompts = getEvalTablePromptStrippedPayload(
+        responsePayload,
+        promptLocations,
+        promptCountToStrip,
+      );
       try {
-        const responseWithoutPrompts = getEvalTablePromptStrippedPayload(
-          responsePayload,
-          promptCountToStrip,
-        );
-        res.json(responseWithoutPrompts);
-        return;
+        const responseBody = JSON.stringify(responseWithoutPrompts);
+        invariant(typeof responseBody === 'string', 'Eval table response must serialize to JSON');
+        return responseBody;
       } catch (retryError) {
         if (!(retryError instanceof RangeError)) {
           throw retryError;
         }
+        return null;
       }
+    };
+
+    let lowerBound = 0;
+    let upperBound = 1;
+    let responseBody: string | null = null;
+
+    while (upperBound < promptLocations.length) {
+      responseBody = tryStringifyWithStrippedPrompts(upperBound);
+      if (responseBody) {
+        break;
+      }
+      lowerBound = upperBound;
+      upperBound *= 2;
+    }
+
+    if (!responseBody) {
+      upperBound = promptLocations.length;
+      responseBody = tryStringifyWithStrippedPrompts(upperBound);
+    }
+
+    if (responseBody) {
+      while (upperBound - lowerBound > 1) {
+        const midPoint = lowerBound + Math.floor((upperBound - lowerBound) / 2);
+        const midpointResponseBody = tryStringifyWithStrippedPrompts(midPoint);
+        if (midpointResponseBody) {
+          upperBound = midPoint;
+          responseBody = midpointResponseBody;
+        } else {
+          lowerBound = midPoint;
+        }
+      }
+
+      res.type('json').send(responseBody);
+      return;
     }
 
     logger.error('[GET /:id/table] Response still too large after stripping prompts', {

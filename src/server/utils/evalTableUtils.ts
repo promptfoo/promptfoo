@@ -73,9 +73,9 @@ export const REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES = {
 
 const REDTEAM_METADATA_COLUMNS = Object.values(REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES);
 
-export const LARGE_TABLE_CELL_PROMPT_PLACEHOLDER = '[content too large]';
+export const STRIPPED_TABLE_CELL_PROMPT = '';
 
-type EvalTableOutputPromptLocation = {
+export type EvalTableOutputPromptLocation = {
   rowIndex: number;
   outputIndex: number;
   length: number;
@@ -252,7 +252,7 @@ export function evalTableToJson(table: {
   return table;
 }
 
-function getEvalTableOutputPromptLocationsBySize(
+export function getEvalTableOutputPromptLocationsBySize(
   payload: EvalTableDTO,
 ): EvalTableOutputPromptLocation[] {
   return payload.table.body
@@ -286,23 +286,20 @@ function stripEvalTableOutputPrompts(
           if (!output || !locationsToStrip.has(`${rowIndex}:${outputIndex}`)) {
             return output;
           }
-          return { ...output, prompt: LARGE_TABLE_CELL_PROMPT_PLACEHOLDER };
+          return { ...output, prompt: STRIPPED_TABLE_CELL_PROMPT };
         }),
       })),
     },
   } as EvalTableDTO;
 }
 
-export function getEvalTableOutputPromptCount(payload: EvalTableDTO): number {
-  return getEvalTableOutputPromptLocationsBySize(payload).length;
-}
-
 export function getEvalTablePromptStrippedPayload(
   payload: EvalTableDTO,
+  promptLocations: EvalTableOutputPromptLocation[],
   promptCountToStrip: number,
 ): EvalTableDTO {
   const locationsToStrip = new Set(
-    getEvalTableOutputPromptLocationsBySize(payload)
+    promptLocations
       .slice(0, promptCountToStrip)
       .map(({ rowIndex, outputIndex }) => `${rowIndex}:${outputIndex}`),
   );

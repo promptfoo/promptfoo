@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   evalTableToCsv,
   evalTableToJson,
-  getEvalTableOutputPromptCount,
+  getEvalTableOutputPromptLocationsBySize,
   getEvalTablePromptStrippedPayload,
-  LARGE_TABLE_CELL_PROMPT_PLACEHOLDER,
+  STRIPPED_TABLE_CELL_PROMPT,
   streamEvalCsv,
 } from '../../../src/server/utils/evalTableUtils';
 import { ResultFailureReason } from '../../../src/types/index';
@@ -1033,20 +1033,20 @@ describe('evalTableUtils', () => {
         id: 'eval-id',
       };
 
-      expect(getEvalTableOutputPromptCount(payload)).toBe(2);
+      const promptLocations = getEvalTableOutputPromptLocationsBySize(payload);
 
-      const firstFallback = getEvalTablePromptStrippedPayload(payload, 1);
-      const secondFallback = getEvalTablePromptStrippedPayload(payload, 2);
+      expect(promptLocations).toHaveLength(2);
+
+      const firstFallback = getEvalTablePromptStrippedPayload(payload, promptLocations, 1);
+      const secondFallback = getEvalTablePromptStrippedPayload(payload, promptLocations, 2);
 
       expect(firstFallback.table.body[0].outputs[0].prompt).toBe('short prompt');
-      expect(firstFallback.table.body[0].outputs[1].prompt).toBe(
-        LARGE_TABLE_CELL_PROMPT_PLACEHOLDER,
-      );
-      expect(secondFallback.table.body[0].outputs[0].prompt).toBe(
-        LARGE_TABLE_CELL_PROMPT_PLACEHOLDER,
-      );
-      expect(secondFallback.table.body[0].outputs[1].prompt).toBe(
-        LARGE_TABLE_CELL_PROMPT_PLACEHOLDER,
+      expect(firstFallback.table.body[0].outputs[1].prompt).toBe(STRIPPED_TABLE_CELL_PROMPT);
+      expect(secondFallback.table.body[0].outputs[0].prompt).toBe(STRIPPED_TABLE_CELL_PROMPT);
+      expect(secondFallback.table.body[0].outputs[1].prompt).toBe(STRIPPED_TABLE_CELL_PROMPT);
+      expect(JSON.stringify(firstFallback).length).toBeLessThan(JSON.stringify(payload).length);
+      expect(JSON.stringify(secondFallback).length).toBeLessThan(
+        JSON.stringify(firstFallback).length,
       );
     });
   });
