@@ -1696,16 +1696,25 @@ export async function getProviderFactories(
   // providerPath and the family boundary identified — without this, a
   // regression in the lazy-load path looks like a raw ERR_MODULE_NOT_FOUND
   // pointing at an internal file with no connection to the user's config.
+  //
+  // `cause` is assigned as a property rather than passed through the
+  // two-argument Error constructor so this file type-checks under both the
+  // root (ES2022) and the app (ES2020) tsconfig libs — the app build pulls
+  // backend files in via path aliases and the ES2020 lib does not declare
+  // the two-argument Error overload.
   const extraFactorySets = await Promise.all(
     matchingFamilies.map(async (family) => {
       try {
         return await family.factories();
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        throw new Error(
+        const wrapped = new Error(
           `Failed to load provider family for '${providerPath}': ${message}`,
-          err instanceof Error ? { cause: err } : undefined,
         );
+        if (err instanceof Error) {
+          (wrapped as Error & { cause?: unknown }).cause = err;
+        }
+        throw wrapped;
       }
     }),
   );

@@ -5,6 +5,11 @@ import type { ProviderFactory } from '../../providers/registryTypes';
  * constructor errors carry the originally-requested provider path. Without
  * this, a rename or broken install surfaces as a raw `ERR_MODULE_NOT_FOUND`
  * pointing at an internal file path with no connection to the user's config.
+ *
+ * `cause` is assigned as a property rather than passed through the
+ * two-argument Error constructor so the file type-checks under both the
+ * root (ES2022) and the app (ES2020) tsconfig libs — the app build pulls
+ * backend files in through path aliases and fails otherwise.
  */
 export function withErrorContext(factory: ProviderFactory): ProviderFactory {
   return {
@@ -14,10 +19,11 @@ export function withErrorContext(factory: ProviderFactory): ProviderFactory {
         return await factory.create(providerPath, providerOptions, context);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        throw new Error(
-          `Failed to load redteam provider '${providerPath}': ${message}`,
-          err instanceof Error ? { cause: err } : undefined,
-        );
+        const wrapped = new Error(`Failed to load redteam provider '${providerPath}': ${message}`);
+        if (err instanceof Error) {
+          (wrapped as Error & { cause?: unknown }).cause = err;
+        }
+        throw wrapped;
       }
     },
   };
