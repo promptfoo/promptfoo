@@ -513,6 +513,57 @@ function getString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
+// Tool-use / tool-result payloads on real provider wrappers (Anthropic
+// Messages, Bedrock, OpenAI tool calls, MCP servers) are commonly object- or
+// array-shaped — Anthropic keeps `input` as a parsed object, OpenAI sends
+// arguments as a JSON string, MCP results carry arrays of `{type, text}`
+// blocks, etc. Accept all of those shapes so deterministic verifiers can
+// still scan the payload text for vulnerable code instead of silently
+// falling back to LLM grading.
+//
+// Strategy:
+//   - already a non-empty string: keep as-is.
+//   - array of content blocks (`{type, text}` or similar): join the text
+//     fields plus any leftover serialization, since that's what Anthropic
+//     and MCP tool results look like.
+//   - object: JSON.stringify so heuristic regexes can still match on the
+//     serialized form.
+//   - anything else: undefined.
+function coerceToolPayload(value: unknown): string | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (typeof value === 'string') {
+    return value.trim() ? value : undefined;
+  }
+  if (Array.isArray(value)) {
+    const parts: string[] = [];
+    for (const item of value) {
+      const text = coerceToolPayload(item);
+      if (text) {
+        parts.push(text);
+      }
+    }
+    const joined = parts.join('\n').trim();
+    return joined ? joined : undefined;
+  }
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    // Common content-block shape: { type: 'text', text: '...' }.
+    const inlineText = getString(obj.text);
+    if (inlineText) {
+      return inlineText;
+    }
+    try {
+      const serialized = JSON.stringify(value);
+      return serialized && serialized !== '{}' && serialized !== '[]' ? serialized : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -709,8 +760,9 @@ function evidenceFromProviderRaw(raw: unknown): TargetEvidence[] {
       // without this, deterministic verifiers only see the final assistant
       // text and miss vulnerable code delivered through tool inputs.
       const toolName = getString(itemObject.tool) ?? getString(itemObject.name) ?? 'tool';
-      const toolInput =
-        getString(itemObject.input) ?? getString(itemObject.content) ?? getString(itemObject.text);
+      const toolInput = coerceToolPayload(
+        itemObject.input ?? itemObject.content ?? itemObject.text,
+      );
       if (toolInput) {
         evidence.push({
           evidenceSource: 'artifact-file',
@@ -722,8 +774,9 @@ function evidenceFromProviderRaw(raw: unknown): TargetEvidence[] {
 
     if (type === 'tool_result' || type === 'tool_output') {
       const toolName = getString(itemObject.tool) ?? getString(itemObject.name) ?? 'tool';
-      const toolOutput =
-        getString(itemObject.output) ?? getString(itemObject.text) ?? getString(itemObject.content);
+      const toolOutput = coerceToolPayload(
+        itemObject.output ?? itemObject.text ?? itemObject.content,
+      );
       if (toolOutput) {
         evidence.push({
           evidenceSource: 'command-output',
