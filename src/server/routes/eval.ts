@@ -16,9 +16,8 @@ import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
   generateEvalCsv,
-  getEvalTableOutputPromptLocationsBySize,
+  getEvalTablePromptStrippingFallbacks,
   mergeComparisonTables,
-  stripEvalTableOutputPrompts,
 } from '../utils/evalTableUtils';
 import type { Request, Response } from 'express';
 
@@ -47,21 +46,11 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
       throw error;
     }
 
-    const promptLocations = getEvalTableOutputPromptLocationsBySize(responsePayload);
     logger.warn('[GET /:id/table] Response too large, stripping per-cell prompts by size', {
       evalId,
-      promptCount: promptLocations.length,
     });
 
-    for (
-      let numPromptsToStrip = 1;
-      numPromptsToStrip <= promptLocations.length;
-      numPromptsToStrip += 1
-    ) {
-      const responseWithoutPrompts = stripEvalTableOutputPrompts(
-        responsePayload,
-        promptLocations.slice(0, numPromptsToStrip),
-      );
+    for (const responseWithoutPrompts of getEvalTablePromptStrippingFallbacks(responsePayload)) {
       try {
         res.json(responseWithoutPrompts);
         return;

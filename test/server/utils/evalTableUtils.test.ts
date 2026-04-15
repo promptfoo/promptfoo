@@ -2,10 +2,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   evalTableToCsv,
   evalTableToJson,
-  getEvalTableOutputPromptLocationsBySize,
+  getEvalTablePromptStrippingFallbacks,
   LARGE_TABLE_CELL_PROMPT_PLACEHOLDER,
   streamEvalCsv,
-  stripEvalTableOutputPrompts,
 } from '../../../src/server/utils/evalTableUtils';
 import { ResultFailureReason } from '../../../src/types/index';
 import { createCompletedPrompt } from '../../factories/eval';
@@ -1010,7 +1009,7 @@ describe('evalTableUtils', () => {
   });
 
   describe('table prompt stripping helpers', () => {
-    it('should sort prompt locations by size and strip only targeted locations', () => {
+    it('should build prompt-stripping fallbacks from largest prompt to smallest', () => {
       const payload = {
         table: {
           ...mockTable,
@@ -1033,16 +1032,19 @@ describe('evalTableUtils', () => {
         id: 'eval-id',
       };
 
-      const locations = getEvalTableOutputPromptLocationsBySize(payload);
-      expect(locations).toEqual([
-        { rowIndex: 0, outputIndex: 1, length: 'very long prompt'.length },
-        { rowIndex: 0, outputIndex: 0, length: 'short prompt'.length },
-      ]);
+      const fallbacks = Array.from(getEvalTablePromptStrippingFallbacks(payload));
 
-      const stripped = stripEvalTableOutputPrompts(payload, locations.slice(0, 1));
-
-      expect(stripped.table.body[0].outputs[0].prompt).toBe('short prompt');
-      expect(stripped.table.body[0].outputs[1].prompt).toBe(LARGE_TABLE_CELL_PROMPT_PLACEHOLDER);
+      expect(fallbacks).toHaveLength(2);
+      expect(fallbacks[0].table.body[0].outputs[0].prompt).toBe('short prompt');
+      expect(fallbacks[0].table.body[0].outputs[1].prompt).toBe(
+        LARGE_TABLE_CELL_PROMPT_PLACEHOLDER,
+      );
+      expect(fallbacks[1].table.body[0].outputs[0].prompt).toBe(
+        LARGE_TABLE_CELL_PROMPT_PLACEHOLDER,
+      );
+      expect(fallbacks[1].table.body[0].outputs[1].prompt).toBe(
+        LARGE_TABLE_CELL_PROMPT_PLACEHOLDER,
+      );
     });
   });
 
