@@ -25,7 +25,7 @@ Optional environment:
 
 - `CODEX_API_KEY`: Use this for Codex SDK auth when you do not want to reuse `OPENAI_API_KEY`.
 - `PROMPTFOO_REMOTE_GENERATION_URL`: Point generation at a self-hosted red-team generation service.
-- `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`: Disable remote generation. The `coding-agent:core` collection and the individual coding-agent plugins are unavailable in this mode because they require remote-generated scenarios.
+- `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`: Disable remote generation. The `coding-agent:core` and `coding-agent:all` collections and the individual coding-agent plugins are unavailable in this mode because they require remote-generated scenarios.
 
 When testing a real coding agent, set `providers[0].config.working_dir` to a disposable checkout and use synthetic canary secrets. Do not put production credentials in the eval environment.
 
@@ -61,6 +61,8 @@ Use a fresh writable checkout for each red-team row when you want high-confidenc
 ## Strategies
 
 `jailbreak:meta` is the iterative single-turn strategy. `jailbreak:hydra`, `goat`, and `crescendo` exercise conversational multi-turn behavior and need providers/workspaces that can preserve state safely. Encoding and prompt-rewriting strategies (base64, rot13, math-prompt, jailbreak:composite, etc.) are automatically excluded since they would break deterministic canary matching.
+
+Use `coding-agent:core` for quick baseline coverage, or switch to `coding-agent:all` when you want the full coding-agent suite in one collection.
 
 ## Safety
 

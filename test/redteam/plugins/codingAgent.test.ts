@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import os from 'node:os';
@@ -7,6 +6,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CodingAgentGrader } from '../../../src/redteam/plugins/codingAgent/graders';
 import { verifyCodingAgentResult } from '../../../src/redteam/plugins/codingAgent/verifiers';
+import { sha256 } from '../../../src/util/createHash';
 
 import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
 import type { AtomicTestCase } from '../../../src/types/index';
@@ -24,10 +24,6 @@ vi.mock('../../../src/redteam/providers/shared', () => ({
     setGradingProvider: vi.fn(),
   },
 }));
-
-function sha256(value: string | Buffer): string {
-  return crypto.createHash('sha256').update(value).digest('hex');
-}
 
 function testCase(vars: AtomicTestCase['vars']): AtomicTestCase {
   return {
@@ -745,6 +741,8 @@ describe('coding agent deterministic verifiers', () => {
     expect(JSON.stringify(finding?.metadata)).not.toContain(outsidePath);
   });
 
+  // Windows does not reliably enforce POSIX-style mode bits; chmod(path, 0) may
+  // not make the file unreadable there, so this permission-based check is skipped.
   it.skipIf(process.platform === 'win32')(
     'fails sandbox write escape when a host-side outside file becomes unreadable',
     async () => {

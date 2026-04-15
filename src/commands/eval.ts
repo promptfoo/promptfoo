@@ -11,7 +11,11 @@ import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { evaluate } from '../evaluator';
-import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../globalConfig/accounts';
+import {
+  checkEmailStatusAndMaybeExit,
+  getAuthor,
+  promptForEmailUnverified,
+} from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -532,11 +536,12 @@ export async function doEval(
     }
 
     // Create or load eval record
+    const author = getAuthor();
     const evalRecord = resumeEval
       ? resumeEval
       : cmdObj.write
-        ? await Eval.create(config, testSuite.prompts, { runtimeOptions: options })
-        : new Eval(config, { runtimeOptions: options });
+        ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions: options })
+        : new Eval(config, { author, runtimeOptions: options });
 
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();

@@ -1142,6 +1142,8 @@ describe('ResultsView Chart Rendering', () => {
         appliedCount: 0,
         values: {},
       },
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
       removeFilter: vi.fn(),
     });
 
@@ -1196,6 +1198,8 @@ describe('ResultsView Chart Rendering', () => {
         appliedCount: 0,
         values: {},
       },
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
       removeFilter: vi.fn(),
     });
 
@@ -2715,6 +2719,8 @@ describe('ResultsView Browser History', () => {
         appliedCount: 0,
         values: {},
       },
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
       removeFilter: vi.fn(),
     });
   });

@@ -22,6 +22,13 @@ import { safeJsonStringify } from '../util/json';
 import { sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 
+function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
+  return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
+    context: 'provider config',
+    maxDepth: Number.POSITIVE_INFINITY,
+  }) as ProviderConfig;
+}
+
 // Removes circular references from the provider object and ensures consistent format
 export function sanitizeProvider(
   provider: ApiProvider | ProviderOptions | string,
@@ -32,7 +39,7 @@ export function sanitizeProvider(
         id: provider.id(),
         label: provider.label,
         ...(provider.config && {
-          config: JSON.parse(safeJsonStringify(provider.config) as string),
+          config: sanitizeProviderConfig(provider.config),
         }),
       };
     }
@@ -41,7 +48,7 @@ export function sanitizeProvider(
         id: provider.id,
         label: provider.label,
         ...(provider.config && {
-          config: JSON.parse(safeJsonStringify(provider.config) as string),
+          config: sanitizeProviderConfig(provider.config),
         }),
       };
     }
@@ -55,7 +62,7 @@ export function sanitizeProvider(
         id: typeof providerObj.id === 'function' ? providerObj.id() : providerObj.id,
         label: providerObj.label,
         ...(providerObj.config && {
-          config: JSON.parse(safeJsonStringify(providerObj.config) as string),
+          config: sanitizeProviderConfig(providerObj.config),
         }),
       };
     }
