@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
 import type { LoadApiProviderContext } from '../../src/types/index';
@@ -84,9 +84,22 @@ describe('Provider Registry', () => {
     });
 
     describe('getProviderFactories boundary contract', () => {
-      it('returns exactly providerMap for a non-redteam path (no redteam factories leaked)', async () => {
+      it('returns the providerMap reference itself for the no-family fast path', async () => {
+        // Pin identity (toBe, not toEqual) so an accidental `return [...providerMap]`
+        // on the hot path regresses loudly instead of silently doubling the
+        // per-lookup allocation for every non-redteam provider call.
         const factories = await getProviderFactories('openai:gpt-4');
-        expect(factories).toEqual(providerMap);
+        expect(factories).toBe(providerMap);
+      });
+
+      it('does not mutate providerMap when a redteam family appends factories', async () => {
+        // The merged redteam path must return a fresh array so a caller that
+        // accidentally mutates the returned factories cannot corrupt the
+        // shared module-scoped providerMap.
+        const before = providerMap.length;
+        const withRedteam = await getProviderFactories('promptfoo:redteam:crescendo');
+        expect(withRedteam).not.toBe(providerMap);
+        expect(providerMap.length).toBe(before);
       });
 
       it('appends redteam factories for a redteam path', async () => {
@@ -103,6 +116,24 @@ describe('Provider Registry', () => {
 
         expect(factories.length).toBeGreaterThan(providerMap.length);
         expect(factories.some((f) => f.test('agentic:memory-poisoning'))).toBe(true);
+      });
+
+      it('resolves consistently under concurrent lookups', async () => {
+        // Two concurrent redteam lookups both `await import` the family
+        // module. Node's ESM cache should deduplicate the load so every call
+        // sees the same factory references and there are no duplicates.
+        const [a, b, c] = await Promise.all([
+          getProviderFactories('promptfoo:redteam:crescendo'),
+          getProviderFactories('promptfoo:redteam:crescendo'),
+          getProviderFactories('promptfoo:redteam:crescendo'),
+        ]);
+        const aCres = a.find((f) => f.test('promptfoo:redteam:crescendo'));
+        const bCres = b.find((f) => f.test('promptfoo:redteam:crescendo'));
+        const cCres = c.find((f) => f.test('promptfoo:redteam:crescendo'));
+        expect(aCres).toBeDefined();
+        expect(aCres).toBe(bCres);
+        expect(bCres).toBe(cCres);
+        expect(a.filter((f) => f.test('promptfoo:redteam:crescendo')).length).toBe(1);
       });
     });
 
@@ -611,6 +642,49 @@ describe('Provider Registry', () => {
       await expect(factory!.create('groq:responses:', groqOptions, mockContext)).rejects.toThrow(
         'Invalid groq:responses provider path',
       );
+    });
+  });
+
+  // Kept at the very end of the file because it uses vi.doMock + resetModules
+  // to simulate a broken redteam family dynamic import. Running last avoids
+  // polluting earlier tests that share the original module graph.
+  describe('getProviderFactories family load error wrapping', () => {
+    afterEach(() => {
+      vi.doUnmock('../../src/redteam/providers/registry');
+      vi.resetModules();
+    });
+
+    it('wraps family factories() rejections with the requested provider path and preserves cause', async () => {
+      // vi.doMock factory throws are caught by vitest and rewrapped with its
+      // own diagnostic message, which would lose the cause identity the
+      // wrapper is trying to preserve. Defining `redteamProviderFactories`
+      // as a throwing getter lets the import succeed while the destructure
+      // inside `family.factories()` triggers the throw — which is the
+      // realistic failure shape (module loads, export access fails) and
+      // round-trips cleanly through the async rejection.
+      const cause = new Error('simulated registry load failure');
+      vi.doMock('../../src/redteam/providers/registry', () => ({
+        get redteamProviderFactories() {
+          throw cause;
+        },
+      }));
+      vi.resetModules();
+      const { getProviderFactories: reloadedGetProviderFactories } = await import(
+        '../../src/providers/registry'
+      );
+
+      let caught: unknown;
+      try {
+        await reloadedGetProviderFactories('promptfoo:redteam:crescendo');
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(Error);
+      expect((caught as Error).message).toContain(
+        "Failed to load provider family for 'promptfoo:redteam:crescendo'",
+      );
+      expect((caught as Error).message).toContain('simulated registry load failure');
+      expect((caught as Error).cause).toBe(cause);
     });
   });
 });

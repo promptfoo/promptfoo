@@ -22,24 +22,38 @@ const providerLoadingFiles = [
 // clause backtracks incorrectly across multi-line imports (the lazy body
 // happily hops to the next `from` on the next line), so the two shapes are
 // matched with separate patterns and merged.
-function getStaticImportSpecifiers(source: string): string[] {
+//
+// Type-only imports (`import type`, `export type`) are tagged so the caller
+// can skip them in the violation check — TypeScript erases them at build
+// time, so they cannot cause runtime eager loading and therefore do not
+// defeat the lazy-loading boundary this test exists to enforce.
+interface ImportSpecifier {
+  specifier: string;
+  typeOnly: boolean;
+}
+
+function getStaticImportSpecifiers(source: string): ImportSpecifier[] {
   const fromPattern =
-    /(?:^|\n)\s*(?:import|export)\s+(?:type\s+)?[\s\S]*?\s+from\s+['"]([^'"]+)['"]/g;
+    /(?:^|\n)\s*(?:import|export)\s+(type\s+)?[\s\S]*?\s+from\s+['"]([^'"]+)['"]/g;
   // Bare side-effect imports like `import '../redteam/side-effects';` — they
   // have no `from` clause, so the `fromPattern` never sees them. They are
   // still load-bearing at module eval time and would defeat the boundary this
-  // test exists to enforce.
+  // test exists to enforce. Side-effect imports are never type-only.
   const sideEffectPattern = /(?:^|\n)\s*import\s+['"]([^'"]+)['"]\s*;?/g;
-  const specifiers: string[] = [];
+  const specifiers: ImportSpecifier[] = [];
 
   for (const match of source.matchAll(fromPattern)) {
-    specifiers.push(match[1]);
+    specifiers.push({ specifier: match[2], typeOnly: Boolean(match[1]) });
   }
   for (const match of source.matchAll(sideEffectPattern)) {
-    specifiers.push(match[1]);
+    specifiers.push({ specifier: match[1], typeOnly: false });
   }
 
   return specifiers;
+}
+
+function isRedteamSpecifier(specifier: string): boolean {
+  return specifier.includes('/redteam') || specifier.startsWith('../redteam');
 }
 
 describe('provider/redteam module boundary', () => {
@@ -54,14 +68,43 @@ describe('provider/redteam module boundary', () => {
     expect(specifiers.length, `${relativePath} produced no import specifiers`).toBeGreaterThan(0);
   });
 
-  it('keeps provider loading modules free of static redteam imports', () => {
+  it('keeps provider loading modules free of runtime redteam imports', () => {
+    // Only runtime imports count as violations. Type-only imports
+    // (`import type { X } from '../redteam/...'`) are erased at build time
+    // and cannot cause eager module loading, so they are intentionally
+    // allowed.
     const violations = providerLoadingFiles.flatMap((relativePath) => {
       const source = readFileSync(path.join(repoRoot, relativePath), 'utf8');
       return getStaticImportSpecifiers(source)
-        .filter((specifier) => specifier.includes('/redteam') || specifier.startsWith('../redteam'))
-        .map((specifier) => `${relativePath} imports ${specifier}`);
+        .filter((entry) => !entry.typeOnly && isRedteamSpecifier(entry.specifier))
+        .map((entry) => `${relativePath} imports ${entry.specifier}`);
     });
 
+    expect(violations).toEqual([]);
+  });
+
+  it('violation filter catches a synthetic runtime redteam import', () => {
+    // Positive control: prove the filter + regex pipeline actually fires on
+    // a known violator. A future refactor that accidentally disabled the
+    // violation check (e.g. by filtering everything out) would be caught
+    // here instead of silently passing the production-file scan above.
+    const fixture = `
+      import { SomeClass } from '../redteam/runtime-violator';
+    `;
+    const violations = getStaticImportSpecifiers(fixture)
+      .filter((entry) => !entry.typeOnly && isRedteamSpecifier(entry.specifier))
+      .map((entry) => entry.specifier);
+    expect(violations).toEqual(['../redteam/runtime-violator']);
+  });
+
+  it('violation filter ignores type-only redteam imports', () => {
+    const fixture = `
+      import type { RedteamFoo } from '../redteam/types';
+      export type { RedteamBar } from '../redteam/other-types';
+    `;
+    const violations = getStaticImportSpecifiers(fixture)
+      .filter((entry) => !entry.typeOnly && isRedteamSpecifier(entry.specifier))
+      .map((entry) => entry.specifier);
     expect(violations).toEqual([]);
   });
 
@@ -77,12 +120,30 @@ describe('provider/redteam module boundary', () => {
       import '../redteam/side-effect';
       export { foo } from 'reexport';
     `;
-    const specifiers = getStaticImportSpecifiers(fixture);
+    const specifiers = getStaticImportSpecifiers(fixture).map((entry) => entry.specifier);
     // Order comes from running the two-regex passes sequentially (from-style
     // first, then side-effect imports). Sort before asserting so the test is
     // order-independent.
     expect([...specifiers].sort()).toEqual(
       ['../redteam/side-effect', 'named', 'normal', 'reexport', 'side-effect-only'].sort(),
     );
+  });
+
+  it('getStaticImportSpecifiers tags type-only imports as typeOnly', () => {
+    // Pin the type-only tagging so a future edit that breaks the
+    // `(type\s+)?` capture group fails this test instead of silently
+    // reclassifying runtime imports as type-only (which would let them
+    // bypass the violation check above).
+    const fixture = `
+      import type { X } from 'x';
+      export type { Y } from 'y';
+      import { Z } from 'z';
+    `;
+    const byName = new Map(
+      getStaticImportSpecifiers(fixture).map((entry) => [entry.specifier, entry.typeOnly]),
+    );
+    expect(byName.get('x')).toBe(true);
+    expect(byName.get('y')).toBe(true);
+    expect(byName.get('z')).toBe(false);
   });
 });

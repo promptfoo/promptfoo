@@ -34,7 +34,7 @@ delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
  * Global cleanup after each test to prevent memory leaks.
  * This runs in every worker process after every test.
  */
-afterEach(() => {
+afterEach(async () => {
   // Clear all mocks to prevent state leakage between tests
   // Note: We use clearAllMocks() instead of restoreAllMocks() because
   // restoreAllMocks() would break tests that set up spies at module/describe
@@ -46,6 +46,20 @@ afterEach(() => {
 
   // Restore real timers if fake timers were used
   vi.useRealTimers();
+
+  // Belt-and-braces reset for the module-scoped redteam provider loader
+  // seam. Individual test files that call setRedteamProviderLoader are
+  // responsible for restoring via the returned disposer, but a crash between
+  // install and disposal would otherwise leak the mutated loader across
+  // files under random ordering. Dynamic import keeps the redteam module
+  // graph out of tests that never exercise it; after the first load Node's
+  // ESM cache makes this a microtask.
+  try {
+    const shared = await import('./src/redteam/providers/shared');
+    shared.resetRedteamProviderLoader();
+  } catch {
+    // Module not loadable in this test environment — nothing to reset.
+  }
 });
 
 /**

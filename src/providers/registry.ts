@@ -1679,15 +1679,35 @@ const providerFamilies: ProviderFamily[] = [
   },
 ];
 
-export async function getProviderFactories(providerPath: string): Promise<ProviderFactory[]> {
+export async function getProviderFactories(
+  providerPath: string,
+): Promise<readonly ProviderFactory[]> {
   const matchingFamilies = providerFamilies.filter((family) => family.canHandle(providerPath));
 
   // Hot path: return the module-scoped providerMap directly for the common
   // no-family-match case instead of copying ~100 entries into a fresh array.
+  // The return type is readonly so callers cannot mutate the shared array.
   if (matchingFamilies.length === 0) {
     return providerMap;
   }
 
-  const extraFactorySets = await Promise.all(matchingFamilies.map((family) => family.factories()));
+  // Wrap each family load so a broken dynamic import (renamed file, circular
+  // cycle, downstream ESM resolution error) surfaces with the requested
+  // providerPath and the family boundary identified — without this, a
+  // regression in the lazy-load path looks like a raw ERR_MODULE_NOT_FOUND
+  // pointing at an internal file with no connection to the user's config.
+  const extraFactorySets = await Promise.all(
+    matchingFamilies.map(async (family) => {
+      try {
+        return await family.factories();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `Failed to load provider family for '${providerPath}': ${message}`,
+          err instanceof Error ? { cause: err } : undefined,
+        );
+      }
+    }),
+  );
   return [...providerMap, ...extraFactorySets.flat()];
 }
