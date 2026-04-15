@@ -1,7 +1,7 @@
 import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { providerMap } from '../../src/providers/registry';
+import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
 import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
@@ -163,7 +163,7 @@ describe('Provider Registry', () => {
       };
 
       for (const path of redteamPaths) {
-        const factory = providerMap.find((f) => f.test(path));
+        const factory = (await getProviderFactories(path)).find((f) => f.test(path));
         expect(factory).toBeDefined();
 
         const provider = await factory!.create(path, redteamConfig, mockContext);

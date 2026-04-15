@@ -3,19 +3,6 @@ import path from 'path';
 import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
-import RedteamAuthoritativeMarkupInjectionProvider from '../redteam/providers/authoritativeMarkupInjection';
-import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
-import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/providers/crescendo/index';
-import RedteamCustomProvider from '../redteam/providers/custom/index';
-import RedteamGoatProvider from '../redteam/providers/goat';
-import { HydraProvider as RedteamHydraProvider } from '../redteam/providers/hydra/index';
-import RedteamIndirectWebPwnProvider from '../redteam/providers/indirectWebPwn';
-import RedteamIterativeProvider from '../redteam/providers/iterative';
-import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
-import RedteamIterativeMetaProvider from '../redteam/providers/iterativeMeta';
-import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
-import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { createAbliterationProvider } from './abliteration';
 import { AI21ChatCompletionProvider } from './ai21';
@@ -123,16 +110,8 @@ import { createXAIVideoProvider } from './xai/video';
 import { createXAIVoiceProvider } from './xai/voice';
 
 import type { LoadApiProviderContext } from '../types/index';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
-
-interface ProviderFactory {
-  test: (providerPath: string) => boolean;
-  create: (
-    providerPath: string,
-    providerOptions: ProviderOptions,
-    context: LoadApiProviderContext,
-  ) => Promise<ApiProvider>;
-}
+import type { ProviderOptions } from '../types/providers';
+import type { ProviderFactory, ProviderFamily } from './registryTypes';
 
 function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | undefined {
   const configuredModel = providerOptions.config?.model;
@@ -157,16 +136,6 @@ export const providerMap: ProviderFactory[] = [
         config: providerOptions,
         env: context.env,
       });
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'agentic:memory-poisoning',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new MemoryPoisoningProvider(providerOptions);
     },
   },
   {
@@ -1495,129 +1464,6 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:best-of-n',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamBestOfNProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:crescendo',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamCrescendoProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) =>
-      providerPath === 'promptfoo:redteam:custom' ||
-      providerPath.startsWith('promptfoo:redteam:custom:'),
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamCustomProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:goat',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamGoatProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) =>
-      providerPath === 'promptfoo:redteam:authoritative-markup-injection',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamAuthoritativeMarkupInjectionProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:mischievous-user',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamMischievousUserProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamIterativeProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative:image',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamImageIterativeProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative:tree',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamIterativeTreeProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative:meta',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamIterativeMetaProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:hydra',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamHydraProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:indirect-web-pwn',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamIndirectWebPwnProvider(providerOptions.config);
-    },
-  },
-  {
     test: (providerPath: string) => providerPath === 'promptfoo:simulated-user',
     create: async (
       _providerPath: string,
@@ -1816,3 +1662,30 @@ export const providerMap: ProviderFactory[] = [
     },
   },
 ];
+
+function isRedteamProviderPath(providerPath: string): boolean {
+  return (
+    providerPath === 'agentic:memory-poisoning' || providerPath.startsWith('promptfoo:redteam:')
+  );
+}
+
+const providerFamilies: ProviderFamily[] = [
+  {
+    name: 'redteam',
+    canHandle: isRedteamProviderPath,
+    factories: async () => {
+      const { redteamProviderFactories } = await import('../redteam/providers/registry');
+      return redteamProviderFactories;
+    },
+  },
+];
+
+export async function getProviderFactories(providerPath: string): Promise<ProviderFactory[]> {
+  const extraFactorySets = await Promise.all(
+    providerFamilies
+      .filter((family) => family.canHandle(providerPath))
+      .map((family) => family.factories()),
+  );
+
+  return [...providerMap, ...extraFactorySets.flat()];
+}
