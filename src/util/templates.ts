@@ -55,35 +55,157 @@ function isNonReferenceSymbol(parent?: NunjucksParentContext): boolean {
   );
 }
 
+function collectSymbolValues(node: unknown): string[] {
+  if (Array.isArray(node)) {
+    return node.flatMap((item) => collectSymbolValues(item));
+  }
+  if (!isNunjucksAstNode(node)) {
+    return [];
+  }
+  if (node.typename === 'Symbol' && typeof node.value === 'string') {
+    return [node.value];
+  }
+
+  const values: string[] = [];
+  for (const field of node.fields ?? []) {
+    const child = node[field];
+    if (Array.isArray(child)) {
+      for (const item of child) {
+        values.push(...collectSymbolValues(item));
+      }
+    } else {
+      values.push(...collectSymbolValues(child));
+    }
+  }
+  return values;
+}
+
+function addBoundSymbols(scope: ReadonlySet<string>, node: unknown): Set<string> {
+  const nextScope = new Set(scope);
+  for (const value of collectSymbolValues(node)) {
+    nextScope.add(value);
+  }
+  return nextScope;
+}
+
+function astNodeListReferencesVariable(
+  nodes: readonly unknown[],
+  variableName: string,
+  parent: NunjucksParentContext,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  let scope = new Set(boundSymbols);
+  for (const item of nodes) {
+    if (!isNunjucksAstNode(item)) {
+      continue;
+    }
+    if (astReferencesVariable(item, variableName, parent, scope)) {
+      return true;
+    }
+    if (item.typename === 'Set') {
+      scope = addBoundSymbols(scope, item.targets);
+    } else if (item.typename === 'Macro') {
+      scope = addBoundSymbols(scope, item.name);
+    }
+  }
+  return false;
+}
+
+function astChildReferencesVariable(
+  node: NunjucksAstNode,
+  field: string,
+  variableName: string,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  const child = node[field];
+  if (Array.isArray(child)) {
+    return child.some(
+      (item) =>
+        isNunjucksAstNode(item) &&
+        astReferencesVariable(item, variableName, { field, node }, boundSymbols),
+    );
+  }
+  return (
+    isNunjucksAstNode(child) &&
+    astReferencesVariable(child, variableName, { field, node }, boundSymbols)
+  );
+}
+
+function forNodeReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: string,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  const loopScope = addBoundSymbols(boundSymbols, node.name);
+  return (
+    astChildReferencesVariable(node, 'arr', variableName, boundSymbols) ||
+    astChildReferencesVariable(node, 'body', variableName, loopScope) ||
+    astChildReferencesVariable(node, 'else_', variableName, boundSymbols)
+  );
+}
+
+function macroNodeReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: string,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  const macroScope = addBoundSymbols(addBoundSymbols(boundSymbols, node.name), node.args);
+  return astChildReferencesVariable(node, 'body', variableName, macroScope);
+}
+
+function setNodeReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: string,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  return (
+    astChildReferencesVariable(node, 'value', variableName, boundSymbols) ||
+    astChildReferencesVariable(node, 'body', variableName, boundSymbols)
+  );
+}
+
+function astFieldsReferenceVariable(
+  node: NunjucksAstNode,
+  variableName: string,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  return (node.fields ?? []).some((field) =>
+    astChildReferencesVariable(node, field, variableName, boundSymbols),
+  );
+}
+
 function astReferencesVariable(
   node: NunjucksAstNode,
   variableName: string,
   parent?: NunjucksParentContext,
+  boundSymbols: ReadonlySet<string> = new Set(),
 ): boolean {
   if (node.typename === 'Symbol' && node.value === variableName) {
-    return !isNonReferenceSymbol(parent);
+    return !boundSymbols.has(variableName) && !isNonReferenceSymbol(parent);
   }
 
-  for (const field of node.fields ?? []) {
-    const child = node[field];
-    if (Array.isArray(child)) {
-      if (
-        child.some(
-          (item) =>
-            isNunjucksAstNode(item) && astReferencesVariable(item, variableName, { field, node }),
-        )
-      ) {
-        return true;
-      }
-    } else if (
-      isNunjucksAstNode(child) &&
-      astReferencesVariable(child, variableName, { field, node })
-    ) {
-      return true;
-    }
+  if ((node.typename === 'Root' || node.typename === 'NodeList') && Array.isArray(node.children)) {
+    return astNodeListReferencesVariable(
+      node.children,
+      variableName,
+      { field: 'children', node },
+      boundSymbols,
+    );
   }
 
-  return false;
+  if (node.typename === 'For') {
+    return forNodeReferencesVariable(node, variableName, boundSymbols);
+  }
+
+  if (node.typename === 'Macro') {
+    return macroNodeReferencesVariable(node, variableName, boundSymbols);
+  }
+
+  if (node.typename === 'Set') {
+    return setNodeReferencesVariable(node, variableName, boundSymbols);
+  }
+
+  return astFieldsReferenceVariable(node, variableName, boundSymbols);
 }
 
 /**

@@ -122,6 +122,15 @@ describe('templateReferencesVariable', () => {
         '_conversation',
       ),
     ).toBe(true);
+    expect(
+      templateReferencesVariable('{% set history = _conversation %}{{ history }}', '_conversation'),
+    ).toBe(true);
+    expect(
+      templateReferencesVariable(
+        '{% set history %}{{ _conversation }}{% endset %}{{ history }}',
+        '_conversation',
+      ),
+    ).toBe(true);
   });
 
   it('ignores text, strings, comments, keys, filters, tests, and other object properties', () => {
@@ -143,6 +152,30 @@ describe('templateReferencesVariable', () => {
     expect(templateReferencesVariable('{{ {_conversation: input} }}', '_conversation')).toBe(false);
     expect(templateReferencesVariable('{{ input | _conversation }}', '_conversation')).toBe(false);
     expect(templateReferencesVariable('{{ input is _conversation }}', '_conversation')).toBe(false);
+    expect(
+      templateReferencesVariable(
+        '{% for _conversation in items %}{{ _conversation }}{% endfor %}',
+        '_conversation',
+      ),
+    ).toBe(false);
+    expect(
+      templateReferencesVariable(
+        '{% macro render(_conversation) %}{{ _conversation }}{% endmacro %}',
+        '_conversation',
+      ),
+    ).toBe(false);
+    expect(
+      templateReferencesVariable(
+        '{% set _conversation = [] %}{{ _conversation }}',
+        '_conversation',
+      ),
+    ).toBe(false);
+    expect(
+      templateReferencesVariable(
+        '{% set _conversation %}local{% endset %}{{ _conversation }}',
+        '_conversation',
+      ),
+    ).toBe(false);
   });
 
   it('returns false for empty variable names and invalid templates', () => {

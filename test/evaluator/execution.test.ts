@@ -2,7 +2,7 @@ import './setup';
 
 import { randomUUID } from 'crypto';
 
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, type MockInstance, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
@@ -17,7 +17,22 @@ import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
+let loggerInfoSpy: MockInstance | undefined;
+
+function sawConversationConcurrencyLog(): boolean {
+  return (
+    loggerInfoSpy?.mock.calls.some(
+      ([message]) =>
+        typeof message === 'string' &&
+        message.includes('Setting concurrency to 1 because the') &&
+        message.includes('_conversation'),
+    ) ?? false
+  );
+}
+
 afterEach(() => {
+  loggerInfoSpy?.mockRestore();
+  loggerInfoSpy = undefined;
   vi.useRealTimers();
 });
 
@@ -69,7 +84,7 @@ describeEvaluator('evaluator execution control', () => {
   });
 
   it('does not force concurrency to 1 for _conversation substrings', async () => {
-    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+    loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
       callApi: vi.fn().mockResolvedValue({
@@ -85,23 +100,13 @@ describeEvaluator('evaluator execution control', () => {
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
-    try {
-      await evaluate(testSuite, evalRecord, { maxConcurrency: 3 });
-      expect(
-        infoSpy.mock.calls.some(
-          ([message]) =>
-            typeof message === 'string' &&
-            message.includes('Setting concurrency to 1 because the') &&
-            message.includes('_conversation'),
-        ),
-      ).toBe(false);
-    } finally {
-      infoSpy.mockRestore();
-    }
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 3 });
+
+    expect(sawConversationConcurrencyLog()).toBe(false);
   });
 
   it('forces concurrency to 1 for real _conversation template references', async () => {
-    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+    loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
       callApi: vi.fn().mockResolvedValue({
@@ -117,19 +122,9 @@ describeEvaluator('evaluator execution control', () => {
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
-    try {
-      await evaluate(testSuite, evalRecord, { maxConcurrency: 3 });
-      expect(
-        infoSpy.mock.calls.some(
-          ([message]) =>
-            typeof message === 'string' &&
-            message.includes('Setting concurrency to 1 because the') &&
-            message.includes('_conversation'),
-        ),
-      ).toBe(true);
-    } finally {
-      infoSpy.mockRestore();
-    }
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 3 });
+
+    expect(sawConversationConcurrencyLog()).toBe(true);
   });
 
   it('skips delay for cached responses', async () => {
