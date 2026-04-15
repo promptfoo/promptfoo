@@ -337,6 +337,7 @@ describe('createShareableUrl', () => {
 
     const result = await createShareableUrl(mockEval as Eval);
     expect(result).toBe(`https://app.example.com/eval/mock-eval-id`);
+    expect(mockEval.useOldResults).toHaveBeenCalled();
   });
 
   it('Cloud: creates correct URL (uses server-assigned ID for idempotency)', async () => {
