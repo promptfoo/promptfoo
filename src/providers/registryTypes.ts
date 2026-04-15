@@ -11,7 +11,6 @@ export interface ProviderFactory {
 }
 
 export interface ProviderFamily {
-  name: string;
   canHandle: (providerPath: string) => boolean;
   factories: () => Promise<ProviderFactory[]>;
 }

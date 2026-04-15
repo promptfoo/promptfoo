@@ -1671,7 +1671,6 @@ function isRedteamProviderPath(providerPath: string): boolean {
 
 const providerFamilies: ProviderFamily[] = [
   {
-    name: 'redteam',
     canHandle: isRedteamProviderPath,
     factories: async () => {
       const { redteamProviderFactories } = await import('../redteam/providers/registry');
