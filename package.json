@@ -136,7 +136,7 @@
       "@chevrotain/gast": "11.2.0",
       "@chevrotain/regexp-to-ast": "11.2.0",
       "@chevrotain/types": "11.2.0",
-      "@chevrotain/utils": "11.2.0"
+      "@chevrotain/utils": "12.0.0"
     },
     "@chevrotain/cst-dts-gen": {
       ".": "12.0.0",
