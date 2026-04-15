@@ -1681,11 +1681,16 @@ const providerFamilies: ProviderFamily[] = [
 ];
 
 export async function getProviderFactories(providerPath: string): Promise<ProviderFactory[]> {
-  const extraFactorySets = await Promise.all(
-    providerFamilies
-      .filter((family) => family.canHandle(providerPath))
-      .map((family) => family.factories()),
-  );
+  const matchingFamilies = providerFamilies.filter((family) => family.canHandle(providerPath));
 
+  // Hot path: loadApiProvider calls this once per resolution. For the common
+  // case where no family matches (every non-redteam provider), return the
+  // module-scoped providerMap directly instead of copying ~100 entries into a
+  // fresh array.
+  if (matchingFamilies.length === 0) {
+    return providerMap;
+  }
+
+  const extraFactorySets = await Promise.all(matchingFamilies.map((family) => family.factories()));
   return [...providerMap, ...extraFactorySets.flat()];
 }
