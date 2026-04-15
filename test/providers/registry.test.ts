@@ -83,6 +83,33 @@ describe('Provider Registry', () => {
       vi.clearAllMocks();
     });
 
+    describe('getProviderFactories boundary contract', () => {
+      it('returns exactly providerMap for a non-redteam path (no redteam factories leaked)', async () => {
+        const factories = await getProviderFactories('openai:gpt-4');
+
+        expect(factories).toEqual(providerMap);
+        expect(factories).toHaveLength(providerMap.length);
+        expect(factories.some((f) => f.test('promptfoo:redteam:crescendo'))).toBe(false);
+        expect(factories.some((f) => f.test('agentic:memory-poisoning'))).toBe(false);
+      });
+
+      it('appends redteam factories for a redteam path', async () => {
+        const factories = await getProviderFactories('promptfoo:redteam:crescendo');
+
+        expect(factories.length).toBeGreaterThan(providerMap.length);
+        expect(factories.some((f) => f.test('promptfoo:redteam:crescendo'))).toBe(true);
+        // Base provider factories are still present
+        expect(factories.some((f) => f.test('echo'))).toBe(true);
+      });
+
+      it('appends redteam factories for the agentic:memory-poisoning path', async () => {
+        const factories = await getProviderFactories('agentic:memory-poisoning');
+
+        expect(factories.length).toBeGreaterThan(providerMap.length);
+        expect(factories.some((f) => f.test('agentic:memory-poisoning'))).toBe(true);
+      });
+    });
+
     it('should handle echo provider correctly', async () => {
       const factory = providerMap.find((f) => f.test('echo'));
       expect(factory).toBeDefined();
