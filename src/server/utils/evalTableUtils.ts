@@ -78,7 +78,6 @@ export const LARGE_TABLE_CELL_PROMPT_PLACEHOLDER = '[content too large]';
 type EvalTableOutputPromptLocation = {
   rowIndex: number;
   outputIndex: number;
-  key: string;
   length: number;
 };
 
@@ -264,7 +263,6 @@ function getEvalTableOutputPromptLocationsBySize(
               {
                 rowIndex,
                 outputIndex,
-                key: `${rowIndex}:${outputIndex}`,
                 length: output.prompt.length,
               },
             ]
@@ -295,14 +293,20 @@ function stripEvalTableOutputPrompts(
   } as EvalTableDTO;
 }
 
-export function* getEvalTablePromptStrippingFallbacks(
+export function getEvalTableOutputPromptCount(payload: EvalTableDTO): number {
+  return getEvalTableOutputPromptLocationsBySize(payload).length;
+}
+
+export function getEvalTablePromptStrippedPayload(
   payload: EvalTableDTO,
-): Generator<EvalTableDTO> {
-  const locationsToStrip = new Set<string>();
-  for (const location of getEvalTableOutputPromptLocationsBySize(payload)) {
-    locationsToStrip.add(location.key);
-    yield stripEvalTableOutputPrompts(payload, locationsToStrip);
-  }
+  promptCountToStrip: number,
+): EvalTableDTO {
+  const locationsToStrip = new Set(
+    getEvalTableOutputPromptLocationsBySize(payload)
+      .slice(0, promptCountToStrip)
+      .map(({ rowIndex, outputIndex }) => `${rowIndex}:${outputIndex}`),
+  );
+  return stripEvalTableOutputPrompts(payload, locationsToStrip);
 }
 
 /**

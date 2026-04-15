@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   evalTableToCsv,
   evalTableToJson,
-  getEvalTablePromptStrippingFallbacks,
+  getEvalTableOutputPromptCount,
+  getEvalTablePromptStrippedPayload,
   LARGE_TABLE_CELL_PROMPT_PLACEHOLDER,
   streamEvalCsv,
 } from '../../../src/server/utils/evalTableUtils';
@@ -1009,7 +1010,7 @@ describe('evalTableUtils', () => {
   });
 
   describe('table prompt stripping helpers', () => {
-    it('should build prompt-stripping fallbacks from largest prompt to smallest', () => {
+    it('should strip prompts from largest to smallest by requested count', () => {
       const payload = {
         table: {
           ...mockTable,
@@ -1032,17 +1033,19 @@ describe('evalTableUtils', () => {
         id: 'eval-id',
       };
 
-      const fallbacks = Array.from(getEvalTablePromptStrippingFallbacks(payload));
+      expect(getEvalTableOutputPromptCount(payload)).toBe(2);
 
-      expect(fallbacks).toHaveLength(2);
-      expect(fallbacks[0].table.body[0].outputs[0].prompt).toBe('short prompt');
-      expect(fallbacks[0].table.body[0].outputs[1].prompt).toBe(
+      const firstFallback = getEvalTablePromptStrippedPayload(payload, 1);
+      const secondFallback = getEvalTablePromptStrippedPayload(payload, 2);
+
+      expect(firstFallback.table.body[0].outputs[0].prompt).toBe('short prompt');
+      expect(firstFallback.table.body[0].outputs[1].prompt).toBe(
         LARGE_TABLE_CELL_PROMPT_PLACEHOLDER,
       );
-      expect(fallbacks[1].table.body[0].outputs[0].prompt).toBe(
+      expect(secondFallback.table.body[0].outputs[0].prompt).toBe(
         LARGE_TABLE_CELL_PROMPT_PLACEHOLDER,
       );
-      expect(fallbacks[1].table.body[0].outputs[1].prompt).toBe(
+      expect(secondFallback.table.body[0].outputs[1].prompt).toBe(
         LARGE_TABLE_CELL_PROMPT_PLACEHOLDER,
       );
     });

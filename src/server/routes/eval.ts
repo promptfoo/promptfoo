@@ -16,7 +16,8 @@ import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
   generateEvalCsv,
-  getEvalTablePromptStrippingFallbacks,
+  getEvalTableOutputPromptCount,
+  getEvalTablePromptStrippedPayload,
   mergeComparisonTables,
 } from '../utils/evalTableUtils';
 import type { Request, Response } from 'express';
@@ -50,8 +51,13 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
       evalId,
     });
 
-    for (const responseWithoutPrompts of getEvalTablePromptStrippingFallbacks(responsePayload)) {
+    const promptCount = getEvalTableOutputPromptCount(responsePayload);
+    for (let promptCountToStrip = 1; promptCountToStrip <= promptCount; promptCountToStrip += 1) {
       try {
+        const responseWithoutPrompts = getEvalTablePromptStrippedPayload(
+          responsePayload,
+          promptCountToStrip,
+        );
         res.json(responseWithoutPrompts);
         return;
       } catch (retryError) {
