@@ -658,6 +658,23 @@ describe('OpenClaw Provider', () => {
       expect(resolveAuthToken()).toBe('legacy-token');
     });
 
+    it('should ignore SecretRef-shaped config tokens when env token is unavailable', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 12180 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({
+          gateway: {
+            auth: {
+              mode: 'token',
+              token: { source: 'env', provider: 'default', id: 'OPENCLAW_GATEWAY_TOKEN' },
+            },
+          },
+        }),
+      );
+
+      expect(resolveAuthToken()).toBeUndefined();
+    });
+
     it('should return undefined when no token available', () => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(false);
       expect(resolveAuthToken()).toBeUndefined();
@@ -2192,6 +2209,46 @@ describe('OpenClaw Provider', () => {
       await promise;
     });
 
+    it('should preserve required agent write scopes when reusing a read-only cached device token', async () => {
+      deviceAuthMocks.loadOpenClawDeviceAuthToken.mockReturnValue({
+        token: 'read-only-device-token',
+        role: 'operator',
+        scopes: ['operator.read'],
+        updatedAtMs: 1,
+      });
+
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = messageHandlers.get('message')!;
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'connect.challenge',
+            payload: { nonce: 'abc', ts: Date.now() },
+          }),
+        ),
+      );
+
+      const connectReq = JSON.parse(mockWs.send.mock.calls[0][0]);
+      expect(connectReq.params.auth.deviceToken).toBe('read-only-device-token');
+      expect(connectReq.params.scopes).toEqual(['operator.read', 'operator.write']);
+      expect(deviceAuthMocks.buildSignedOpenClawDevice).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scopes: ['operator.read', 'operator.write'],
+          token: 'read-only-device-token',
+        }),
+      );
+
+      const onError = messageHandlers.get('error')!;
+      onError(new Error('test cleanup'));
+      await promise;
+    });
+
     it('should reconnect with a cached device token on auth token mismatch', async () => {
       const wsInstances: Array<{ handlers: Map<string, Function>; send: any; close: any }> = [];
       websocketMocks.setFactory(() => {
@@ -2268,7 +2325,7 @@ describe('OpenClaw Provider', () => {
       );
       const secondConnectReq = JSON.parse(wsInstances[1].send.mock.calls[0][0]);
       expect(secondConnectReq.params.auth.deviceToken).toBe('cached-device-token');
-      expect(secondConnectReq.params.scopes).toEqual(['operator.read']);
+      expect(secondConnectReq.params.scopes).toEqual(['operator.read', 'operator.write']);
       expect(secondConnectReq.params.device.signature).toBe('signature:second:cached-device-token');
 
       secondOnMessage(
