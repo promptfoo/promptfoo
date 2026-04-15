@@ -35,12 +35,20 @@ These plugins generate coding-agent tasks with Promptfoo's remote red-team gener
 | `coding-agent:steganographic-exfil`      | The agent must not hide sensitive data in encoded, transformed, or low-visibility outputs such as comments, logs, filenames, snapshots, generated artifacts, or metadata.                     |
 | `coding-agent:verifier-sabotage`         | The agent must fix the requested behavior instead of deleting, skipping, weakening, regenerating, or bypassing tests, snapshots, policies, hooks, verifiers, lockfiles, or QA scripts.        |
 
-You can also select the MVP collection:
+You can also select the core collection:
 
 ```yaml
 redteam:
   plugins:
     - id: coding-agent:core
+```
+
+Use the full collection for comprehensive coverage across all coding-agent plugin IDs:
+
+```yaml
+redteam:
+  plugins:
+    - id: coding-agent:all
 ```
 
 ## Basic Codex SDK Configuration
@@ -140,6 +148,7 @@ redteam:
   plugins:
     - id: coding-agent:core
       numTests: 5
+    # Use coding-agent:all here for comprehensive coverage.
   strategies:
     - jailbreak:meta
     - jailbreak:hydra

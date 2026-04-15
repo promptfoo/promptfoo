@@ -266,6 +266,22 @@ export const PLUGINS = [
   {
     category: 'Security and Access Control',
     description:
+      'Tests coding agents against every supported coding-agent plugin, including prompt injection, terminal output injection, secret handling, sandbox boundaries, network egress, procfs credentials, delayed CI exfiltration, generated vulnerabilities, automation poisoning, steganographic exfiltration, and verifier sabotage risks.',
+    label: 'security',
+    link: '/docs/red-team/plugins/coding-agent/',
+    name: 'Coding Agent Full Suite',
+    pluginId: 'coding-agent:all',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
       'Tests coding agents against repository prompt injection, terminal output injection, secret environment read, sandbox read escape, and verifier sabotage risks.',
     label: 'security',
     link: '/docs/red-team/plugins/coding-agent/',

@@ -65,6 +65,7 @@ describe('constants', () => {
       'realestate',
       'guardrails-eval',
       'coding-agent:core',
+      'coding-agent:all',
     ]);
   });
 
@@ -129,7 +130,8 @@ describe('constants', () => {
     });
   });
 
-  it('CODING_AGENT_CORE_PLUGINS should keep the MVP collection focused', () => {
+  it('CODING_AGENT_CORE_PLUGINS should keep the baseline collection focused', () => {
+    expect(CODING_AGENT_COLLECTIONS).toEqual(['coding-agent:core', 'coding-agent:all']);
     expect(CODING_AGENT_CORE_PLUGINS).toEqual([
       'coding-agent:repo-prompt-injection',
       'coding-agent:terminal-output-injection',

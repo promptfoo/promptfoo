@@ -7,6 +7,7 @@ import {
   createProviderResponse,
   type MockApiProvider,
 } from '../../factories/provider';
+import { mockProcessEnv } from '../../util/utils';
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
@@ -135,10 +136,13 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should use environment variable for numIterations if set', () => {
-      process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS = '15';
-      const provider = new RedteamIterativeProvider({ injectVar: 'test' });
-      expect(provider['numIterations']).toBe(15);
-      delete process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS;
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_NUM_JAILBREAK_ITERATIONS: '15' });
+      try {
+        const provider = new RedteamIterativeProvider({ injectVar: 'test' });
+        expect(provider['numIterations']).toBe(15);
+      } finally {
+        restoreEnv();
+      }
     });
   });
 
