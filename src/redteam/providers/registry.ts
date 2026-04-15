@@ -1,10 +1,15 @@
 import type { ProviderFactory } from '../../providers/registryTypes';
 
-// Wrap a redteam factory's create() so dynamic-import failures and
-// constructor errors carry the originally-requested provider path. Without
-// this, a rename or broken install surfaces as a raw `ERR_MODULE_NOT_FOUND`
-// pointing at an internal file path with no connection to the user's config.
-function withErrorContext(factory: ProviderFactory): ProviderFactory {
+/**
+ * Wrap a redteam factory's create() so dynamic-import failures and
+ * constructor errors carry the originally-requested provider path. Without
+ * this, a rename or broken install surfaces as a raw `ERR_MODULE_NOT_FOUND`
+ * pointing at an internal file path with no connection to the user's config.
+ *
+ * Exported so tests can exercise both branches of the non-Error fallback
+ * without monkey-patching the full factory list.
+ */
+export function withErrorContext(factory: ProviderFactory): ProviderFactory {
   return {
     test: factory.test,
     create: async (providerPath, providerOptions, context) => {

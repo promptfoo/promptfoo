@@ -176,44 +176,14 @@ describe('Provider Registry', () => {
       expect(wsProvider.id()).toBe('ws://example.com');
     });
 
-    it('should handle redteam providers correctly', async () => {
-      const redteamCases: Array<{ path: string; expectedId: string }> = [
-        {
-          path: 'agentic:memory-poisoning',
-          expectedId: 'promptfoo:redteam:agentic:memory-poisoning',
-        },
-        {
-          path: 'promptfoo:redteam:authoritative-markup-injection',
-          expectedId: 'promptfoo:redteam:authoritative-markup-injection',
-        },
-        { path: 'promptfoo:redteam:best-of-n', expectedId: 'promptfoo:redteam:best-of-n' },
-        { path: 'promptfoo:redteam:crescendo', expectedId: 'promptfoo:redteam:crescendo' },
-        { path: 'promptfoo:redteam:custom', expectedId: 'promptfoo:redteam:custom' },
-        { path: 'promptfoo:redteam:custom:my-strategy', expectedId: 'promptfoo:redteam:custom' },
-        { path: 'promptfoo:redteam:goat', expectedId: 'promptfoo:redteam:goat' },
-        { path: 'promptfoo:redteam:hydra', expectedId: 'promptfoo:redteam:hydra' },
-        {
-          path: 'promptfoo:redteam:indirect-web-pwn',
-          expectedId: 'promptfoo:redteam:indirect-web-pwn',
-        },
-        { path: 'promptfoo:redteam:iterative', expectedId: 'promptfoo:redteam:iterative' },
-        {
-          path: 'promptfoo:redteam:iterative:image',
-          expectedId: 'promptfoo:redteam:iterative:image',
-        },
-        {
-          path: 'promptfoo:redteam:iterative:meta',
-          expectedId: 'promptfoo:redteam:iterative:meta',
-        },
-        {
-          path: 'promptfoo:redteam:iterative:tree',
-          expectedId: 'promptfoo:redteam:iterative:tree',
-        },
-        {
-          path: 'promptfoo:redteam:mischievous-user',
-          expectedId: 'promptfoo:redteam:mischievous-user',
-        },
-      ];
+    it('dispatches a representative redteam path through getProviderFactories', async () => {
+      // Exhaustive per-factory coverage lives in test/redteam/providers/registry.test.ts.
+      // This test only smoke-tests the getProviderFactories → redteam family
+      // → factory.test → factory.create chain so a regression at the registry
+      // boundary (e.g. the family is wired up but never loaded) fails here.
+      const path = 'promptfoo:redteam:crescendo';
+      const factory = (await getProviderFactories(path)).find((f) => f.test(path));
+      expect(factory).toBeDefined();
 
       const redteamConfig = {
         ...mockProviderOptions,
@@ -223,40 +193,11 @@ describe('Provider Registry', () => {
           maxTurns: 3,
           maxBacktracks: 2,
           redteamProvider: 'test-provider',
-          // CustomProvider requires strategyText
-          strategyText: 'test-strategy',
         },
       };
 
-      for (const { path, expectedId } of redteamCases) {
-        const factory = (await getProviderFactories(path)).find((f) => f.test(path));
-        expect(factory, `Missing factory for ${path}`).toBeDefined();
-
-        const provider = await factory!.create(path, redteamConfig, mockContext);
-        expect(provider).toBeDefined();
-        expect(provider.id()).toEqual(expectedId);
-      }
-    });
-
-    it('wraps redteam factory failures with the requested provider path', async () => {
-      // CustomProvider requires config.strategyText; constructing without it
-      // should surface the original invariant message plus the provider path
-      // the user typed, not a bare "requires strategyText" error from deep in
-      // the redteam module tree.
-      const customPath = 'promptfoo:redteam:custom';
-      const factory = (await getProviderFactories(customPath)).find((f) => f.test(customPath));
-      expect(factory).toBeDefined();
-
-      const brokenConfig: ProviderOptions = {
-        id: 'test-provider',
-        config: {
-          // intentionally missing strategyText
-        },
-      };
-
-      await expect(factory!.create(customPath, brokenConfig, mockContext)).rejects.toThrow(
-        /Failed to load redteam provider 'promptfoo:redteam:custom'.*strategyText/,
-      );
+      const provider = await factory!.create(path, redteamConfig, mockContext);
+      expect(provider.id()).toBe(path);
     });
 
     it('should handle anthropic providers correctly', async () => {
