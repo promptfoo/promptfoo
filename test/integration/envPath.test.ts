@@ -378,5 +378,41 @@ tests:
       expect(mockSetupEnv).toHaveBeenCalledTimes(1);
       expect(mockSetupEnv).toHaveBeenCalledWith([envFile1, envFile2]);
     });
+
+    it('should load config envPath when CLI envPath defaults to an empty array', async () => {
+      const envFile1 = path.join(tempDir, '.env.empty-cli1');
+      const envFile2 = path.join(tempDir, '.env.empty-cli2');
+
+      fs.writeFileSync(envFile1, 'CONFIG_VAR1=config1');
+      fs.writeFileSync(envFile2, 'CONFIG_VAR2=config2');
+
+      fs.writeFileSync(
+        tempConfigFile,
+        `
+commandLineOptions:
+  envPath:
+    - ${envFile1}
+    - ${envFile2}
+
+prompts:
+  - "Test prompt"
+
+providers:
+  - echo
+
+tests:
+  - vars:
+      input: "test"
+`,
+      );
+
+      try {
+        await doEval({ config: [tempConfigFile], envPath: [] }, {}, undefined, {});
+      } catch {}
+
+      expect(mockSetupEnv).toHaveBeenCalledTimes(2);
+      expect(mockSetupEnv).toHaveBeenNthCalledWith(1, []);
+      expect(mockSetupEnv).toHaveBeenNthCalledWith(2, [envFile1, envFile2]);
+    });
   });
 });
