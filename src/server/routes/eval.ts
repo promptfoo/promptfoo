@@ -370,8 +370,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     }
   }
 
-  // Default response for table view
-  res.json({
+  const responsePayload = {
     table: returnTable,
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
@@ -381,7 +380,41 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     version: eval_.version(),
     id,
     stats: eval_.getStats(),
-  } as EvalTableDTO);
+  } as EvalTableDTO;
+
+  try {
+    res.json(responsePayload);
+  } catch (error) {
+    if (!(error instanceof RangeError)) {
+      throw error;
+    }
+
+    logger.warn('[GET /:id/table] Response too large, retrying without per-cell prompt content', {
+      evalId: id,
+    });
+
+    const responseWithoutCellPrompts = {
+      ...responsePayload,
+      table: {
+        ...responsePayload.table,
+        body: responsePayload.table.body.map((row) => ({
+          ...row,
+          outputs: row.outputs.map((output) =>
+            output ? { ...output, prompt: '[content too large]' } : output,
+          ),
+        })),
+      },
+    } as EvalTableDTO;
+
+    try {
+      res.json(responseWithoutCellPrompts);
+    } catch {
+      logger.error('[GET /:id/table] Response still too large after stripping prompts', {
+        evalId: id,
+      });
+      res.status(413).json({ error: 'Eval too large to display. Try reducing the page size.' });
+    }
+  }
 });
 
 evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
