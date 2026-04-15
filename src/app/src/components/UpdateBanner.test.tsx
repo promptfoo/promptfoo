@@ -1,6 +1,8 @@
 import { useVersionCheck } from '@app/hooks/useVersionCheck';
+import { mockClipboard } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import UpdateBanner from './UpdateBanner';
 
@@ -51,6 +53,7 @@ describe('UpdateBanner', () => {
   });
 
   it('should copy the update command to the clipboard and show check icon when the copy command button is clicked', async () => {
+    const user = userEvent.setup();
     const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
       versionInfo: {
         updateAvailable: true,
@@ -71,17 +74,13 @@ describe('UpdateBanner', () => {
     mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
 
     const mockWriteText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, {
-      clipboard: {
-        writeText: mockWriteText,
-      },
-    });
+    mockClipboard({ writeText: mockWriteText as Clipboard['writeText'] });
 
     renderWithProviders(<UpdateBanner />);
 
     const copyCommandButton = screen.getByRole('button', { name: /Copy Update Command/i });
 
-    await fireEvent.click(copyCommandButton);
+    await user.click(copyCommandButton);
 
     expect(mockWriteText).toHaveBeenCalledWith('npm i -g promptfoo@latest');
 

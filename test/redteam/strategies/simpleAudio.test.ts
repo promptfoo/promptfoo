@@ -4,6 +4,7 @@ import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addAudioToBase64, textToAudio } from '../../../src/redteam/strategies/simpleAudio';
+import { mockConsole } from '../../util/utils';
 
 import type { TestCase } from '../../../src/types/index';
 
@@ -43,13 +44,13 @@ vi.mock('cli-progress', async (importOriginal) => {
   };
 });
 
-const originalConsoleLog = console.log;
 const mockFetchWithCache = vi.mocked(fetchWithCache);
 const mockNeverGenerateRemote = vi.mocked(neverGenerateRemote);
+let consoleLogSpy: ReturnType<typeof mockConsole>;
 
 describe('audio strategy', () => {
   beforeAll(() => {
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleLogSpy = mockConsole('log');
   });
 
   beforeEach(() => {
@@ -64,7 +65,7 @@ describe('audio strategy', () => {
   });
 
   afterAll(() => {
-    console.log = originalConsoleLog;
+    consoleLogSpy.mockRestore();
   });
 
   describe('textToAudio', () => {

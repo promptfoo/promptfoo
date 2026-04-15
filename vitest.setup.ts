@@ -13,6 +13,7 @@ const TEST_CONFIG_DIR = path.join('.local', 'vitest', 'config', `worker-${proces
 
 // Set up test environment variables
 process.env.NODE_ENV = 'test';
+process.env.CODEX_HOME = './.local/vitest/codex-home';
 process.env.PROMPTFOO_CACHE_TYPE = 'memory';
 process.env.IS_TESTING = 'true';
 process.env.PROMPTFOO_CONFIG_DIR = TEST_CONFIG_DIR;

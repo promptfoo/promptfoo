@@ -8,6 +8,7 @@ import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
+import { sanitizeScriptContext } from './scriptContext';
 
 import type {
   ApiProvider,
@@ -20,6 +21,139 @@ import type {
 
 interface RubyProviderConfig {
   rubyExecutable?: string;
+}
+
+type RubyApiType = 'call_api' | 'call_embedding_api' | 'call_classification_api';
+
+function buildRubyScriptArgs(
+  apiType: RubyApiType,
+  prompt: string,
+  optionsWithProcessedConfig: ProviderOptions,
+  sanitizedContext: CallApiContextParams | undefined,
+) {
+  return apiType === 'call_api'
+    ? [prompt, optionsWithProcessedConfig, sanitizedContext]
+    : [prompt, optionsWithProcessedConfig];
+}
+
+function hasRubyResultProperty(
+  result: any,
+  propertyName: 'output' | 'error' | 'embedding' | 'classification',
+): boolean {
+  return (
+    Boolean(result) &&
+    typeof result === 'object' &&
+    Object.prototype.hasOwnProperty.call(result, propertyName)
+  );
+}
+
+function applyCachedRubyCallApiMetadata(apiType: RubyApiType, parsedResult: any) {
+  if (apiType !== 'call_api' || typeof parsedResult !== 'object' || parsedResult === null) {
+    return parsedResult;
+  }
+
+  logger.debug(`RubyProvider setting cached=true for cached ${apiType} result`);
+  parsedResult.cached = true;
+
+  // Update token usage format for cached results
+  if (parsedResult.tokenUsage) {
+    const total = parsedResult.tokenUsage.total || 0;
+    parsedResult.tokenUsage = {
+      cached: total,
+      total,
+      numRequests: parsedResult.tokenUsage.numRequests ?? 1,
+    };
+    logger.debug(
+      `Updated token usage for cached result: ${JSON.stringify(parsedResult.tokenUsage)}`,
+    );
+  }
+
+  return parsedResult;
+}
+
+function applyFreshRubyCallApiMetadata(apiType: RubyApiType, result: any) {
+  if (apiType !== 'call_api' || typeof result !== 'object' || result === null) {
+    return result;
+  }
+
+  logger.debug(`RubyProvider explicitly setting cached=false for fresh result`);
+  result.cached = false;
+
+  // Unlike Python's applyFreshCallApiMetadata, Ruby does not backfill
+  // tokenUsage.numRequests on fresh results. This preserves the historical
+  // fresh-result shape that Ruby scripts and downstream consumers already
+  // depend on — changing it would break backward compatibility.
+  return result;
+}
+
+function hasRubyResultError(result: any): boolean {
+  // Must stay consistent with validateRubyCallApiResult's own-property check:
+  // loosening this to `'error' in result` without also loosening validation
+  // would let a script return an error on the prototype chain, pass validation
+  // via an own `output`, and then be cached as a successful result — a
+  // cache-poisoning vector.
+  return (
+    hasRubyResultProperty(result, 'error') &&
+    result.error !== null &&
+    result.error !== undefined &&
+    result.error !== ''
+  );
+}
+
+function validateRubyCallApiResult(functionName: string, result: any): void {
+  // Log result structure for debugging
+  const resultType = result === null ? 'null' : typeof result;
+  const resultKeys = result && typeof result === 'object' ? Object.keys(result).join(',') : 'none';
+  logger.debug(`Ruby provider result structure: ${resultType}, keys: ${resultKeys}`);
+  if (hasRubyResultProperty(result, 'output')) {
+    logger.debug(
+      `Ruby provider output type: ${typeof result.output}, isArray: ${Array.isArray(result.output)}`,
+    );
+  }
+
+  if (!hasRubyResultProperty(result, 'output') && !hasRubyResultProperty(result, 'error')) {
+    throw new Error(
+      `The Ruby script \`${functionName}\` function must return a hash with an own \`output\` string/object or \`error\` string (inherited prototype properties are rejected), instead got: ${JSON.stringify(
+        result,
+      )}`,
+    );
+  }
+}
+
+function validateRubyEmbeddingResult(functionName: string, result: any): void {
+  if (!hasRubyResultProperty(result, 'embedding') && !hasRubyResultProperty(result, 'error')) {
+    throw new Error(
+      `The Ruby script \`${functionName}\` function must return a hash with an own \`embedding\` array or \`error\` string (inherited prototype properties are rejected), instead got ${JSON.stringify(
+        result,
+      )}`,
+    );
+  }
+}
+
+function validateRubyClassificationResult(functionName: string, result: any): void {
+  if (!hasRubyResultProperty(result, 'classification') && !hasRubyResultProperty(result, 'error')) {
+    throw new Error(
+      `The Ruby script \`${functionName}\` function must return a hash with an own \`classification\` object or \`error\` string (inherited prototype properties are rejected), instead of ${JSON.stringify(
+        result,
+      )}`,
+    );
+  }
+}
+
+function validateRubyScriptResult(apiType: RubyApiType, functionName: string, result: any): void {
+  switch (apiType) {
+    case 'call_api':
+      validateRubyCallApiResult(functionName, result);
+      return;
+    case 'call_embedding_api':
+      validateRubyEmbeddingResult(functionName, result);
+      return;
+    case 'call_classification_api':
+      validateRubyClassificationResult(functionName, result);
+      return;
+    default:
+      throw new Error(`Unsupported apiType: ${apiType}`);
+  }
 }
 
 /**
@@ -103,7 +237,7 @@ export class RubyProvider implements ApiProvider {
   private async executeRubyScript(
     prompt: string,
     context: CallApiContextParams | undefined,
-    apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
+    apiType: RubyApiType,
   ): Promise<any> {
     if (!this.isInitialized) {
       await this.initialize();
@@ -138,35 +272,9 @@ export class RubyProvider implements ApiProvider {
       );
 
       // IMPORTANT: Set cached flag to true so evaluator recognizes this as cached
-      if (apiType === 'call_api' && typeof parsedResult === 'object' && parsedResult !== null) {
-        logger.debug(`RubyProvider setting cached=true for cached ${apiType} result`);
-        parsedResult.cached = true;
-
-        // Update token usage format for cached results
-        if (parsedResult.tokenUsage) {
-          const total = parsedResult.tokenUsage.total || 0;
-          parsedResult.tokenUsage = {
-            cached: total,
-            total,
-            numRequests: parsedResult.tokenUsage.numRequests ?? 1,
-          };
-          logger.debug(
-            `Updated token usage for cached result: ${JSON.stringify(parsedResult.tokenUsage)}`,
-          );
-        }
-      }
-      return parsedResult;
+      return applyCachedRubyCallApiMetadata(apiType, parsedResult);
     } else {
-      // Create a sanitized copy of context for Ruby
-      // Remove properties not useful in Ruby and non-serializable objects
-      // These can contain circular references (e.g., Timeout objects) that break JSON serialization
-      const sanitizedContext = context ? { ...context } : undefined;
-      if (sanitizedContext) {
-        delete sanitizedContext.getCache;
-        delete sanitizedContext.logger;
-        delete sanitizedContext.filters; // NunjucksFilterMap contains functions
-        delete sanitizedContext.originalProvider; // ApiProvider object with methods
-      }
+      const sanitizedContext = sanitizeScriptContext('RubyProvider', context);
 
       // Create a new options object with processed file references included in the config
       // This ensures any file:// references are replaced with their actual content
@@ -178,91 +286,26 @@ export class RubyProvider implements ApiProvider {
         },
       };
 
-      // Prepare arguments for the Ruby script based on API type
-      const args =
-        apiType === 'call_api'
-          ? [prompt, optionsWithProcessedConfig, sanitizedContext]
-          : [prompt, optionsWithProcessedConfig];
+      const args = buildRubyScriptArgs(
+        apiType,
+        prompt,
+        optionsWithProcessedConfig,
+        sanitizedContext,
+      );
 
       logger.debug(
         `Running ruby script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
       );
 
       const functionName = this.functionName || apiType;
-      let result: any;
+      const result = await runRuby(absPath, functionName, args, {
+        rubyExecutable: this.config.rubyExecutable,
+      });
 
-      switch (apiType) {
-        case 'call_api':
-          result = await runRuby(absPath, functionName, args, {
-            rubyExecutable: this.config.rubyExecutable,
-          });
-
-          // Log result structure for debugging
-          logger.debug(
-            `Ruby provider result structure: ${result ? typeof result : 'undefined'}, keys: ${result && typeof result === 'object' ? Object.keys(result).join(',') : 'none'}`,
-          );
-          if (result && typeof result === 'object' && 'output' in result) {
-            logger.debug(
-              `Ruby provider output type: ${typeof result.output}, isArray: ${Array.isArray(result.output)}`,
-            );
-          }
-
-          if (
-            !result ||
-            typeof result !== 'object' ||
-            (!('output' in result) && !('error' in result))
-          ) {
-            throw new Error(
-              `The Ruby script \`${functionName}\` function must return a hash with an \`output\` string/object or \`error\` string, instead got: ${JSON.stringify(
-                result,
-              )}`,
-            );
-          }
-          break;
-        case 'call_embedding_api':
-          result = await runRuby(absPath, functionName, args, {
-            rubyExecutable: this.config.rubyExecutable,
-          });
-
-          if (
-            !result ||
-            typeof result !== 'object' ||
-            (!('embedding' in result) && !('error' in result))
-          ) {
-            throw new Error(
-              `The Ruby script \`${functionName}\` function must return a hash with an \`embedding\` array or \`error\` string, instead got ${JSON.stringify(
-                result,
-              )}`,
-            );
-          }
-          break;
-        case 'call_classification_api':
-          result = await runRuby(absPath, functionName, args, {
-            rubyExecutable: this.config.rubyExecutable,
-          });
-
-          if (
-            !result ||
-            typeof result !== 'object' ||
-            (!('classification' in result) && !('error' in result))
-          ) {
-            throw new Error(
-              `The Ruby script \`${functionName}\` function must return a hash with a \`classification\` object or \`error\` string, instead of ${JSON.stringify(
-                result,
-              )}`,
-            );
-          }
-          break;
-        default:
-          throw new Error(`Unsupported apiType: ${apiType}`);
-      }
+      validateRubyScriptResult(apiType, functionName, result);
 
       // Store result in cache if enabled and no errors
-      const hasError =
-        'error' in result &&
-        result.error !== null &&
-        result.error !== undefined &&
-        result.error !== '';
+      const hasError = hasRubyResultError(result);
 
       if (isCacheEnabled() && !hasError) {
         logger.debug(`RubyProvider caching result: ${cacheKey}`);
@@ -274,12 +317,7 @@ export class RubyProvider implements ApiProvider {
       }
 
       // Set cached=false on fresh results
-      if (apiType === 'call_api') {
-        logger.debug(`RubyProvider explicitly setting cached=false for fresh result`);
-        result.cached = false;
-      }
-
-      return result;
+      return applyFreshRubyCallApiMetadata(apiType, result);
     }
   }
 

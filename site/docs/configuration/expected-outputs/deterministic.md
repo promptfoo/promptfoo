@@ -1,5 +1,6 @@
 ---
 sidebar_position: 6
+sidebar_label: Deterministic metrics
 title: Deterministic Metrics for LLM Output Validation
 description: Learn how to validate LLM outputs using deterministic logical tests including exact matching, regex patterns, JSON/XML validation, and text similarity metrics
 keywords:
@@ -1114,6 +1115,11 @@ assert:
   # With custom threshold
   - type: rouge-n
     threshold: 0.6
+    value: hello world
+
+  # Ensure Rouge-N score is below a threshold
+  - type: not-rouge-n
+    threshold: 0.75
     value: hello world
 ```
 

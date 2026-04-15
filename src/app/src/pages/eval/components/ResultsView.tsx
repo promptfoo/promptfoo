@@ -201,27 +201,28 @@ function ResultsChartsSection({
           pointerEvents: renderResultsCharts ? 'auto' : 'none',
         }}
       >
-        {canRenderResultsCharts ? (
-          <ResultsCharts scores={resultsChartsScores} />
-        ) : (
-          <Alert variant="info" className="mt-4 items-start">
-            <BarChart className="size-4 mt-0.5" />
-            <AlertContent>
-              <AlertTitle>Charts are unavailable for this evaluation</AlertTitle>
-              <AlertDescription className="space-y-3">
-                <p>
-                  We can show charts when the results include comparable prompts and chartable
-                  scores.
-                </p>
-                <ul className="list-disc pl-5 space-y-1">
-                  {resultsChartsUnavailableReasons.map((reason) => (
-                    <li key={reason}>{reason}</li>
-                  ))}
-                </ul>
-              </AlertDescription>
-            </AlertContent>
-          </Alert>
-        )}
+        {renderResultsCharts &&
+          (canRenderResultsCharts ? (
+            <ResultsCharts scores={resultsChartsScores} />
+          ) : (
+            <Alert variant="info" className="mt-4 items-start">
+              <BarChart className="size-4 mt-0.5" />
+              <AlertContent>
+                <AlertTitle>Charts are unavailable for this evaluation</AlertTitle>
+                <AlertDescription className="space-y-3">
+                  <p>
+                    We can show charts when the results include comparable prompts and chartable
+                    scores.
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    {resultsChartsUnavailableReasons.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </AlertContent>
+            </Alert>
+          ))}
       </div>
     </>
   );

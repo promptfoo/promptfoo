@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
+import { updateSignalFile } from '../../src/database/signal';
 import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, {
@@ -23,6 +24,14 @@ vi.mock('../../src/globalConfig/accounts', async () => {
   };
 });
 
+vi.mock('../../src/database/signal', async () => {
+  const actual = await vi.importActual('../../src/database/signal');
+  return {
+    ...actual,
+    updateSignalFile: vi.fn(),
+  };
+});
+
 describe('evaluator', () => {
   beforeAll(async () => {
     await runDbMigrations();
@@ -30,6 +39,7 @@ describe('evaluator', () => {
 
   beforeEach(async () => {
     vi.mocked(getAuthor).mockReset();
+    vi.mocked(updateSignalFile).mockClear();
 
     // Clear all tables before each test
     const db = getDb();
@@ -44,6 +54,46 @@ describe('evaluator', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  describe('addPrompts', () => {
+    it('should notify watchers when persisted prompt metadata changes', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      vi.mocked(updateSignalFile).mockClear();
+
+      await eval_.addPrompts([
+        {
+          raw: 'Summarize the latest changelog entry',
+          label: 'Summarize the latest changelog entry',
+          provider: 'test-provider',
+        },
+      ]);
+
+      expect(updateSignalFile).toHaveBeenCalledWith(eval_.id);
+
+      const reloaded = await Eval.findById(eval_.id);
+      expect(reloaded?.prompts).toEqual([
+        expect.objectContaining({
+          raw: 'Summarize the latest changelog entry',
+          label: 'Summarize the latest changelog entry',
+          provider: 'test-provider',
+        }),
+      ]);
+    });
+
+    it('should not notify watchers for in-memory evals', async () => {
+      const eval_ = new Eval({});
+
+      await eval_.addPrompts([
+        {
+          raw: 'In-memory prompt',
+          label: 'In-memory prompt',
+          provider: 'test-provider',
+        },
+      ]);
+
+      expect(updateSignalFile).not.toHaveBeenCalled();
+    });
   });
 
   describe('summaryResults', () => {

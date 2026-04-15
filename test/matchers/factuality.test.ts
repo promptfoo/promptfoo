@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesFactuality } from '../../src/matchers';
+import { matchesFactuality } from '../../src/matchers/llmGrading';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
+import { createMockProvider } from '../factories/provider';
 
 import type { GradingConfig } from '../../src/types/index';
 
@@ -273,10 +274,7 @@ The submitted answer may either be a subset or superset of the expert answer, or
 
     const grading = {
       rubricPrompt: customPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: mockCallApi,
-      },
+      provider: createMockProvider({ callApi: mockCallApi }),
     };
 
     const result = await matchesFactuality(input, expected, output, grading);
@@ -366,10 +364,7 @@ Choose: (A) subset, (B) superset, (C) same, (D) disagree, (E) differ but factual
 
     const grading = {
       rubricPrompt: customPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: mockCallApi,
-      },
+      provider: createMockProvider({ callApi: mockCallApi }),
     };
 
     const result = await matchesFactuality(input, expected, output, grading);

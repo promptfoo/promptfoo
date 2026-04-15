@@ -10,6 +10,22 @@ import { isAbsolute, resolve } from 'path';
 import logger from '../../logger';
 import { FilesystemMcpError } from '../../types/codeScan';
 
+const FILESYSTEM_MCP_READY_MARKER = 'running on stdio';
+const FILESYSTEM_MCP_READY_TIMEOUT_MS = 30000;
+
+function formatFilesystemMcpExitReason(code: number | null, signal: NodeJS.Signals | null): string {
+  return code === null ? (signal ? `signal ${signal}` : 'unknown reason') : `code ${code}`;
+}
+
+function createFilesystemMcpEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+
+  delete env.NPM_CONFIG_BEFORE;
+  delete env.npm_config_before;
+
+  return env;
+}
+
 /**
  * Start the filesystem MCP server as a child process
  * @param rootDir Absolute path to root directory for filesystem access
@@ -36,6 +52,7 @@ export function startFilesystemMcpServer(rootDir: string): ChildProcess {
       {
         stdio: ['pipe', 'pipe', 'pipe'], // stdin/stdout/stderr all piped
         cwd: absoluteRootDir,
+        env: createFilesystemMcpEnv(),
       },
     );
 
@@ -77,11 +94,103 @@ export function startFilesystemMcpServer(rootDir: string): ChildProcess {
 }
 
 /**
+ * Wait until the filesystem MCP server is ready to accept JSON-RPC messages.
+ *
+ * The child process is started through npx, which can spend time resolving or
+ * installing the package before the MCP server takes over stdin. Announcing the
+ * runner before that point lets the cloud side send initialize too early.
+ */
+export function waitForFilesystemMcpServerReady(
+  mcpProcess: ChildProcess,
+  timeoutMs = FILESYSTEM_MCP_READY_TIMEOUT_MS,
+): Promise<void> {
+  if (mcpProcess.exitCode !== null || mcpProcess.signalCode !== null || mcpProcess.killed) {
+    return Promise.reject(
+      new FilesystemMcpError(
+        `Filesystem MCP server exited before ready: ${formatFilesystemMcpExitReason(
+          mcpProcess.exitCode,
+          mcpProcess.signalCode,
+        )}`,
+      ),
+    );
+  }
+
+  const stderr = mcpProcess.stderr;
+
+  if (!stderr) {
+    return Promise.reject(new FilesystemMcpError('Filesystem MCP server stderr pipe unavailable'));
+  }
+
+  return new Promise((resolve, reject) => {
+    let stderrBuffer = '';
+    let settled = false;
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      stderr.off('data', onStderr);
+      mcpProcess.off('error', onError);
+      mcpProcess.off('exit', onExit);
+    };
+
+    const settle = (callback: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      callback();
+    };
+
+    const onStderr = (chunk: Buffer) => {
+      stderrBuffer += chunk.toString('utf8');
+
+      if (stderrBuffer.includes(FILESYSTEM_MCP_READY_MARKER)) {
+        settle(resolve);
+        return;
+      }
+
+      if (stderrBuffer.length > 4096) {
+        stderrBuffer = stderrBuffer.slice(-4096);
+      }
+    };
+
+    const onError = (error: Error) => {
+      settle(() => {
+        reject(
+          new FilesystemMcpError(`Filesystem MCP server error before ready: ${error.message}`),
+        );
+      });
+    };
+
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      settle(() => {
+        const reason = formatFilesystemMcpExitReason(code, signal);
+        reject(new FilesystemMcpError(`Filesystem MCP server exited before ready: ${reason}`));
+      });
+    };
+
+    const timeout = setTimeout(() => {
+      settle(() => {
+        reject(
+          new FilesystemMcpError(
+            `Timed out waiting for filesystem MCP server to be ready after ${timeoutMs}ms`,
+          ),
+        );
+      });
+    }, timeoutMs);
+
+    stderr.on('data', onStderr);
+    mcpProcess.once('error', onError);
+    mcpProcess.once('exit', onExit);
+  });
+}
+
+/**
  * Stop the filesystem MCP server process
  * @param process Child process to terminate
  */
 export async function stopFilesystemMcpServer(process: ChildProcess): Promise<void> {
-  if (!process.pid) {
+  if (!process.pid || process.exitCode !== null || process.signalCode !== null) {
     logger.debug('MCP server already stopped');
     return;
   }

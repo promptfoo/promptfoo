@@ -7,7 +7,7 @@ type AnthropicServerToolCaller = 'direct' | 'code_execution_20250825' | 'code_ex
 
 interface BaseAnthropicServerToolConfig {
   allowed_callers?: AnthropicServerToolCaller[];
-  cache_control?: Anthropic.Beta.Messages.BetaCacheControlEphemeral;
+  cache_control?: Anthropic.Messages.CacheControlEphemeral;
   defer_loading?: boolean;
   max_uses?: number;
   strict?: boolean;
@@ -78,6 +78,14 @@ export interface OutputFormat {
 export interface AnthropicMessageOptions {
   apiBaseUrl?: string;
   apiKey?: string;
+  /**
+   * When `false`, skip promptfoo's upfront API key check and authenticate
+   * through a local Claude Code session (OAuth credential from the macOS
+   * keychain or `$HOME/.claude/.credentials.json`). Lets Claude.ai Max /
+   * Pro subscribers run evals — including `llm-rubric` grading — without a
+   * separate Anthropic Console API key. Defaults to `true`.
+   */
+  apiKeyRequired?: boolean;
   cache_control?: Anthropic.Messages.CacheControlEphemeral | null; // Top-level cache control - auto-applies to last cacheable block
   cost?: number;
   effort?: 'low' | 'medium' | 'high' | 'max'; // Controls output quality/speed tradeoff

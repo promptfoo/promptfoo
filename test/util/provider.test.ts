@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   checkProviderApiKeys,
   doesProviderRefMatch,
@@ -12,8 +12,227 @@ import {
   isProviderAllowed,
   providerToIdentifier,
 } from '../../src/util/provider';
+import {
+  canonicalizeProviderId,
+  isProviderConfigFileReference,
+  normalizeProviderRef,
+} from '../../src/util/providerRef';
+import { createMockProvider } from '../factories/provider';
 
 import type { ApiProvider } from '../../src/types/index';
+
+describe('normalizeProviderRef', () => {
+  it('identifies provider config file references without treating script providers as config', () => {
+    expect(isProviderConfigFileReference('file://providers.yaml')).toBe(true);
+    expect(isProviderConfigFileReference('file://providers.yml')).toBe(true);
+    expect(isProviderConfigFileReference('file://providers.json')).toBe(true);
+    expect(isProviderConfigFileReference('file://provider.js')).toBe(false);
+  });
+
+  it('normalizes ProviderOptionsMap refs with explicit id overrides', () => {
+    const descriptor = normalizeProviderRef({
+      'openai:responses:gpt-5.4': {
+        id: 'custom-openai',
+        label: 'Fast OpenAI',
+        config: { temperature: 0.2 },
+      },
+    });
+
+    expect(descriptor).toMatchObject({
+      kind: 'map',
+      id: 'custom-openai',
+      label: 'Fast OpenAI',
+      loadProviderPath: 'openai:responses:gpt-5.4',
+      loadOptions: {
+        id: 'custom-openai',
+        label: 'Fast OpenAI',
+        config: { temperature: 0.2 },
+      },
+    });
+  });
+
+  it('does not treat ProviderOptions-shaped objects as ProviderOptionsMap refs', () => {
+    expect(normalizeProviderRef({ config: { temperature: 0.2 } })).toMatchObject({
+      kind: 'unknown',
+      id: 'unknown',
+    });
+    expect(normalizeProviderRef({ prompts: ['prompt1'] })).toMatchObject({
+      kind: 'unknown',
+      id: 'unknown',
+    });
+    expect(normalizeProviderRef({ config: { id: 'openai:gpt-4' } })).toMatchObject({
+      kind: 'unknown',
+      id: 'unknown',
+    });
+  });
+
+  it('requires ProviderOptionsMap refs to use a single provider id key', () => {
+    expect(
+      normalizeProviderRef({
+        'openai:gpt-4': { config: { temperature: 0.2 } },
+        'anthropic:messages:claude-sonnet-4-5': { config: { temperature: 0.1 } },
+      }),
+    ).toMatchObject({
+      kind: 'unknown',
+      id: 'unknown',
+    });
+  });
+
+  it('guards every ProviderOptions key against ProviderOptionsMap misclassification', () => {
+    // Each key from the ProviderOptions interface must be guarded so that
+    // objects like { transform: "..." } are not mistaken for { "transform": { ...providerOpts } }.
+    // If you add a key to ProviderOptions, add it here too.
+    const providerOptionKeys = [
+      'id',
+      'label',
+      'config',
+      'prompts',
+      'transform',
+      'delay',
+      'env',
+      'inputs',
+    ];
+    for (const key of providerOptionKeys) {
+      const obj = { [key]: { nested: true } };
+      const descriptor = normalizeProviderRef(obj);
+      expect(descriptor.kind, `key "${key}" should not produce kind 'map'`).not.toBe('map');
+    }
+  });
+
+  it('uses function labels before positional custom-function fallbacks', () => {
+    const labeled = Object.assign(async () => ({ output: 'ok' }), { label: 'custom-label' });
+    const unlabeled = async () => ({ output: 'ok' });
+
+    expect(normalizeProviderRef(labeled, { index: 3 })).toMatchObject({
+      kind: 'function',
+      id: 'custom-label',
+      label: 'custom-label',
+    });
+    expect(normalizeProviderRef(unlabeled, { index: 3 })).toMatchObject({
+      kind: 'function',
+      id: 'custom-function-3',
+    });
+  });
+
+  it('falls back to labels for malformed provider configs used by filtering', () => {
+    expect(normalizeProviderRef({ id: '', label: 'Provider2' }, { index: 1 })).toMatchObject({
+      kind: 'unknown',
+      id: 'Provider2',
+      label: 'Provider2',
+    });
+  });
+
+  it('classifies string providers as named vs file based on extension', () => {
+    expect(normalizeProviderRef('openai:responses:gpt-5.4')).toMatchObject({
+      kind: 'named',
+      id: 'openai:responses:gpt-5.4',
+      loadProviderPath: 'openai:responses:gpt-5.4',
+    });
+    expect(normalizeProviderRef('file://providers.yaml')).toMatchObject({
+      kind: 'file',
+      id: 'file://providers.yaml',
+      loadProviderPath: 'file://providers.yaml',
+    });
+    expect(normalizeProviderRef('file://provider.js')).toMatchObject({
+      kind: 'named',
+      id: 'file://provider.js',
+      loadProviderPath: 'file://provider.js',
+    });
+  });
+
+  it('normalizes ProviderOptionsMap without nested id override (key becomes id)', () => {
+    const descriptor = normalizeProviderRef({
+      'openai:responses:gpt-5.4': {
+        config: { temperature: 0.2 },
+      },
+    });
+
+    expect(descriptor).toMatchObject({
+      kind: 'map',
+      id: 'openai:responses:gpt-5.4',
+      loadProviderPath: 'openai:responses:gpt-5.4',
+      loadOptions: {
+        id: 'openai:responses:gpt-5.4',
+        config: { temperature: 0.2 },
+      },
+    });
+  });
+
+  it('returns kind unknown for empty string provider IDs', () => {
+    expect(normalizeProviderRef('')).toMatchObject({ kind: 'unknown', id: 'unknown' });
+    expect(normalizeProviderRef('', { index: 2 })).toMatchObject({
+      kind: 'unknown',
+      id: 'unknown-2',
+    });
+  });
+
+  it('returns kind unknown for null, undefined, and non-provider types', () => {
+    expect(normalizeProviderRef(null)).toMatchObject({ kind: 'unknown', id: 'unknown' });
+    expect(normalizeProviderRef(undefined)).toMatchObject({ kind: 'unknown', id: 'unknown' });
+    expect(normalizeProviderRef(42)).toMatchObject({ kind: 'unknown', id: 'unknown' });
+    expect(normalizeProviderRef([])).toMatchObject({ kind: 'unknown', id: 'unknown' });
+    expect(normalizeProviderRef([{ id: 'openai:gpt-4' }])).toMatchObject({
+      kind: 'unknown',
+      id: 'unknown',
+    });
+  });
+});
+
+describe('canonicalizeProviderId', () => {
+  it('resolves relative file:// paths to absolute', () => {
+    const cwd = process.cwd();
+    expect(canonicalizeProviderId('file://./provider.js')).toBe(
+      `file://${path.join(cwd, 'provider.js')}`,
+    );
+  });
+
+  it('preserves absolute file:// paths', () => {
+    expect(canonicalizeProviderId('file:///absolute/path.js')).toBe('file:///absolute/path.js');
+  });
+
+  it('resolves exec: paths with slashes', () => {
+    const cwd = process.cwd();
+    expect(canonicalizeProviderId('exec:./script.py')).toBe(`exec:${path.join(cwd, 'script.py')}`);
+  });
+
+  it('preserves exec: paths without slashes', () => {
+    expect(canonicalizeProviderId('exec:my-script')).toBe('exec:my-script');
+  });
+
+  it('resolves python: paths with slashes', () => {
+    const cwd = process.cwd();
+    expect(canonicalizeProviderId('python:./provider.py')).toBe(
+      `python:${path.join(cwd, 'provider.py')}`,
+    );
+  });
+
+  it('resolves golang: paths with slashes', () => {
+    const cwd = process.cwd();
+    expect(canonicalizeProviderId('golang:./main.go')).toBe(`golang:${path.join(cwd, 'main.go')}`);
+  });
+
+  it('preserves golang: paths without slashes', () => {
+    expect(canonicalizeProviderId('golang:my-binary')).toBe('golang:my-binary');
+  });
+
+  it('wraps bare .js/.ts/.mjs paths with file://', () => {
+    const cwd = process.cwd();
+    expect(canonicalizeProviderId('./provider.js')).toBe(`file://${path.join(cwd, 'provider.js')}`);
+    expect(canonicalizeProviderId('./provider.ts')).toBe(`file://${path.join(cwd, 'provider.ts')}`);
+    expect(canonicalizeProviderId('./provider.mjs')).toBe(
+      `file://${path.join(cwd, 'provider.mjs')}`,
+    );
+  });
+
+  it('does not wrap bare .js/.ts/.mjs without path separators', () => {
+    expect(canonicalizeProviderId('provider.js')).toBe('provider.js');
+  });
+
+  it('passes through plain provider IDs unchanged', () => {
+    expect(canonicalizeProviderId('openai:responses:gpt-5.4')).toBe('openai:responses:gpt-5.4');
+    expect(canonicalizeProviderId('echo')).toBe('echo');
+  });
+});
 
 describe('providerToIdentifier', () => {
   it('works with provider string', () => {
@@ -90,52 +309,36 @@ describe('providerToIdentifier', () => {
 
 describe('getProviderIdentifier', () => {
   it('returns label when present', () => {
-    const provider = {
-      id: () => 'openai:gpt-4',
-      label: 'my-custom-label',
-    } as ApiProvider;
+    const provider = createMockProvider({ id: 'openai:gpt-4', label: 'my-custom-label' });
     expect(getProviderIdentifier(provider)).toBe('my-custom-label');
   });
 
   it('returns id when no label', () => {
-    const provider = {
-      id: () => 'openai:gpt-4',
-    } as ApiProvider;
+    const provider = createMockProvider({ id: 'openai:gpt-4' });
     expect(getProviderIdentifier(provider)).toBe('openai:gpt-4');
   });
 });
 
 describe('getProviderDescription', () => {
   it('returns both label and id when both present', () => {
-    const provider = {
-      id: () => 'openai:gpt-4',
-      label: 'my-custom-label',
-    } as ApiProvider;
+    const provider = createMockProvider({ id: 'openai:gpt-4', label: 'my-custom-label' });
     expect(getProviderDescription(provider)).toBe('my-custom-label (openai:gpt-4)');
   });
 
   it('returns only id when no label', () => {
-    const provider = {
-      id: () => 'openai:gpt-4',
-    } as ApiProvider;
+    const provider = createMockProvider({ id: 'openai:gpt-4' });
     expect(getProviderDescription(provider)).toBe('openai:gpt-4');
   });
 
   it('returns only id when label equals id', () => {
-    const provider = {
-      id: () => 'openai:gpt-4',
-      label: 'openai:gpt-4',
-    } as ApiProvider;
+    const provider = createMockProvider({ id: 'openai:gpt-4', label: 'openai:gpt-4' });
     expect(getProviderDescription(provider)).toBe('openai:gpt-4');
   });
 });
 
 describe('doesProviderRefMatch', () => {
   const createProvider = (id: string, label?: string): ApiProvider =>
-    ({
-      id: () => id,
-      label,
-    }) as ApiProvider;
+    createMockProvider({ id, label });
 
   it('matches exact label', () => {
     const provider = createProvider('openai:gpt-4', 'fast-model');
@@ -189,10 +392,7 @@ describe('doesProviderRefMatch', () => {
 
 describe('isProviderAllowed', () => {
   const createProvider = (id: string, label?: string): ApiProvider =>
-    ({
-      id: () => id,
-      label,
-    }) as ApiProvider;
+    createMockProvider({ id, label });
 
   it('allows all providers when no filter', () => {
     const provider = createProvider('openai:gpt-4');
@@ -332,14 +532,15 @@ describe('isGoogleProvider', () => {
 });
 
 describe('checkProviderApiKeys', () => {
-  it('detects missing API key and maps to correct env var', () => {
-    const provider = {
-      id: () => 'openai:gpt-4',
-      callApi: vi.fn(),
-      config: {},
+  const providerWithKey = (id: string, extras: Record<string, unknown> = {}): ApiProvider =>
+    Object.assign(createMockProvider({ id, config: {} }), {
       getApiKey: () => undefined,
       requiresApiKey: () => true,
-    } as unknown as ApiProvider;
+      ...extras,
+    }) as unknown as ApiProvider;
+
+  it('detects missing API key and maps to correct env var', () => {
+    const provider = providerWithKey('openai:gpt-4');
 
     const result = checkProviderApiKeys([provider]);
     expect(result.size).toBe(1);
@@ -347,70 +548,36 @@ describe('checkProviderApiKeys', () => {
   });
 
   it('skips providers with valid key, no getApiKey method, or requiresApiKey false', () => {
-    const providers = [
-      {
-        id: () => 'openai:gpt-4',
-        callApi: vi.fn(),
-        config: {},
-        getApiKey: () => 'sk-1234',
-        requiresApiKey: () => true,
-      },
-      { id: () => 'http:custom', callApi: vi.fn() },
-      {
-        id: () => 'openai:gpt-4',
-        callApi: vi.fn(),
-        config: {},
-        getApiKey: () => undefined,
-        requiresApiKey: () => false,
-      },
-      {
-        id: () => 'litellm:gpt-4',
-        callApi: vi.fn(),
-        config: { apiKeyRequired: false },
-        getApiKey: () => undefined,
-      },
-    ] as unknown as ApiProvider[];
+    const providers: ApiProvider[] = [
+      providerWithKey('openai:gpt-4', { getApiKey: () => 'sk-1234' }),
+      createMockProvider({ id: 'http:custom' }),
+      providerWithKey('openai:gpt-4', { requiresApiKey: () => false }),
+      Object.assign(
+        createMockProvider({ id: 'litellm:gpt-4', config: { apiKeyRequired: false } }),
+        { getApiKey: () => undefined },
+      ) as unknown as ApiProvider,
+    ];
 
     const result = checkProviderApiKeys(providers);
     expect(result.size).toBe(0);
   });
 
   it('skips azure providers (Azure AD token auth)', () => {
-    const provider = {
-      id: () => 'azure:gpt-4',
-      callApi: vi.fn(),
-      config: {},
-      getApiKey: () => undefined,
-      requiresApiKey: () => true,
-    } as unknown as ApiProvider;
+    const provider = providerWithKey('azure:gpt-4');
 
     const result = checkProviderApiKeys([provider]);
     expect(result.size).toBe(0);
   });
 
   it('deduplicates multiple providers sharing the same env var', () => {
-    const providers = [
-      {
-        id: () => 'openai:gpt-4',
-        callApi: vi.fn(),
-        config: {},
-        getApiKey: () => undefined,
-        requiresApiKey: () => true,
-      },
-      {
-        id: () => 'openai:gpt-5-mini',
-        callApi: vi.fn(),
-        config: {},
-        getApiKey: () => undefined,
-        requiresApiKey: () => true,
-      },
-      {
-        id: () => 'anthropic:claude-sonnet-4-5-20250514',
-        callApi: vi.fn(),
-        config: {},
-        getApiKey: () => undefined,
-      },
-    ] as unknown as ApiProvider[];
+    const providers: ApiProvider[] = [
+      providerWithKey('openai:gpt-4'),
+      providerWithKey('openai:gpt-5-mini'),
+      Object.assign(
+        createMockProvider({ id: 'anthropic:claude-sonnet-4-5-20250514', config: {} }),
+        { getApiKey: () => undefined },
+      ) as unknown as ApiProvider,
+    ];
 
     const result = checkProviderApiKeys(providers);
     expect(result.size).toBe(2);

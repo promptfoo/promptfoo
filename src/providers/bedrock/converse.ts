@@ -292,9 +292,18 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
  * Convert tool choice to Converse API format.
  * Supports OpenAI tool choice format and native Bedrock format.
  */
-function convertToolChoiceToConverseFormat(
-  toolChoice: 'auto' | 'any' | { tool: { name: string } } | unknown,
-): ToolChoice | undefined {
+function isNamedConverseToolChoice(toolChoice: unknown): toolChoice is { tool: { name: string } } {
+  if (!toolChoice || typeof toolChoice !== 'object' || !('tool' in toolChoice)) {
+    return false;
+  }
+
+  const tool = (toolChoice as { tool?: unknown }).tool;
+  return Boolean(
+    tool && typeof tool === 'object' && typeof (tool as { name?: unknown }).name === 'string',
+  );
+}
+
+function convertToolChoiceToConverseFormat(toolChoice: unknown): ToolChoice | undefined {
   // Handle OpenAI tool choice format (strings 'auto'/'none'/'required' and object form)
   if (isOpenAIToolChoice(toolChoice)) {
     return openaiToolChoiceToBedrock(toolChoice);
@@ -304,9 +313,8 @@ function convertToolChoiceToConverseFormat(
   if (toolChoice === 'any') {
     return { any: {} };
   }
-  if (typeof toolChoice === 'object' && toolChoice && 'tool' in toolChoice) {
-    const tc = toolChoice as { tool: { name: string } };
-    return { tool: { name: tc.tool.name } };
+  if (isNamedConverseToolChoice(toolChoice)) {
+    return { tool: { name: toolChoice.tool.name } };
   }
   return { auto: {} };
 }

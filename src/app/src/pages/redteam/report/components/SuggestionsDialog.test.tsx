@@ -1,4 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { mockClipboard } from '@app/tests/browserMocks';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import SuggestionsDialog from './SuggestionsDialog';
 import type { GradingResult } from '@promptfoo/types';
@@ -59,13 +61,14 @@ describe('SuggestionsDialog', () => {
     expect(screen.getByText('This is a recommendation note.')).toBeInTheDocument();
   });
 
-  it('should call onClose when the close button is clicked', () => {
+  it('should call onClose when the close button is clicked', async () => {
+    const user = userEvent.setup();
     const onClose = vi.fn();
     renderSuggestionsDialog({ onClose });
 
     // Dialog has built-in close button with sr-only "Close" text
     const closeButton = screen.getByRole('button', { name: 'Close' });
-    fireEvent.click(closeButton);
+    await user.click(closeButton);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -113,14 +116,10 @@ describe('SuggestionsDialog', () => {
   });
 
   it('should show copy button when suggestion is expanded', async () => {
+    const user = userEvent.setup();
     const mockWriteText = vi.fn().mockResolvedValue(undefined);
 
-    Object.defineProperty(global.navigator, 'clipboard', {
-      value: {
-        writeText: mockWriteText,
-      },
-      writable: true,
-    });
+    mockClipboard({ writeText: mockWriteText as Clipboard['writeText'] });
 
     const mockGradingResult: GradingResult = {
       score: 1,
@@ -138,7 +137,7 @@ describe('SuggestionsDialog', () => {
     renderSuggestionsDialog({ gradingResult: mockGradingResult });
 
     const accordionSummary = screen.getByText('View suggested prompt');
-    fireEvent.click(accordionSummary);
+    await user.click(accordionSummary);
 
     // Wait for content to appear
     await waitFor(() => {
@@ -151,7 +150,7 @@ describe('SuggestionsDialog', () => {
 
     // Click the copy button
     const copyButton = copyIcon?.closest('button') as HTMLButtonElement;
-    fireEvent.click(copyButton);
+    await user.click(copyButton);
 
     // Verify clipboard was called
     expect(mockWriteText).toHaveBeenCalledWith('This is a suggested prompt.');
@@ -160,12 +159,7 @@ describe('SuggestionsDialog', () => {
   it('should handle navigator.clipboard.writeText failure gracefully', async () => {
     const mockWriteText = vi.fn().mockRejectedValue(new Error('Clipboard write failed'));
 
-    Object.defineProperty(global.navigator, 'clipboard', {
-      value: {
-        writeText: mockWriteText,
-      },
-      writable: true,
-    });
+    mockClipboard({ writeText: mockWriteText as Clipboard['writeText'] });
 
     const gradingResult: GradingResult = {
       score: 0,

@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { describe, expect, it } from 'vitest';
 import {
   calculateAnthropicCost,
+  getRefusalDetails,
   getTokenUsage,
   outputFromMessage,
   parseMessages,
@@ -1430,6 +1431,102 @@ describe('Anthropic utilities', () => {
       const data = { usage: { input_tokens: 100, output_tokens: 50 } };
       const result = getTokenUsage(data, false);
       expect(result.completionDetails).toBeUndefined();
+    });
+  });
+
+  describe('getRefusalDetails', () => {
+    it('should return undefined for non-refusal responses', () => {
+      const message = {
+        id: 'msg_1',
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Hello' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'end_turn',
+        stop_details: null,
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as unknown as Anthropic.Messages.Message;
+      expect(getRefusalDetails(message)).toBeUndefined();
+    });
+
+    it('should return details for refusal with category and explanation', () => {
+      const message = {
+        id: 'msg_1',
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: '' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'refusal',
+        stop_details: {
+          type: 'refusal',
+          category: 'cyber',
+          explanation: 'This request involves prohibited cyber activities',
+        },
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 0 },
+      } as unknown as Anthropic.Messages.Message;
+      const result = getRefusalDetails(message);
+      expect(result).toContain('Content refused by Anthropic safety filters');
+      expect(result).toContain('category: cyber');
+      expect(result).toContain('explanation: This request involves prohibited cyber activities');
+    });
+
+    it('should handle refusal with null category and explanation', () => {
+      const message = {
+        id: 'msg_1',
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: '' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'refusal',
+        stop_details: {
+          type: 'refusal',
+          category: null,
+          explanation: null,
+        },
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 0 },
+      } as unknown as Anthropic.Messages.Message;
+      const result = getRefusalDetails(message);
+      expect(result).toBe('Content refused by Anthropic safety filters');
+    });
+
+    it('should handle refusal with bio category', () => {
+      const message = {
+        id: 'msg_1',
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: '' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'refusal',
+        stop_details: {
+          type: 'refusal',
+          category: 'bio',
+          explanation: null,
+        },
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 0 },
+      } as unknown as Anthropic.Messages.Message;
+      const result = getRefusalDetails(message);
+      expect(result).toContain('category: bio');
+    });
+  });
+
+  describe('calculateAnthropicCost for claude-mythos-preview', () => {
+    it('should calculate cost for claude-mythos-preview', () => {
+      const cost = calculateAnthropicCost('claude-mythos-preview', {}, 1000, 500);
+      // $25/MTok input, $125/MTok output
+      expect(cost).toBeCloseTo(0.025 + 0.0625, 6); // 0.000025 * 1000 + 0.000125 * 500
+    });
+
+    it('should calculate cost with cache tokens for claude-mythos-preview', () => {
+      const cost = calculateAnthropicCost('claude-mythos-preview', {}, 1000, 500, 200, 100);
+      // uncached: 1000 * 25/1e6 = 0.025
+      // cache read: 200 * 25/1e6 * 0.1 = 0.0005
+      // cache creation: 100 * 25/1e6 * 1.25 = 0.003125
+      // output: 500 * 125/1e6 = 0.0625
+      expect(cost).toBeCloseTo(0.025 + 0.0005 + 0.003125 + 0.0625, 6);
     });
   });
 });

@@ -78,23 +78,25 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 2
 
       - name: Use Node ${{ matrix.node }}
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           # Keep matrix label at 20.20 for stable check names, but install 20.20.1 to satisfy engines.
           node-version: ${{ matrix.node == '20.20' && '20.20.1' || matrix.node }}
           cache: 'npm'
 
       - name: Use Python 3.14
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
-          python-version: 3.14.2
+          python-version: 3.14.4
 
       # Ruby 4.0.1 is not yet available on Windows via setup-ruby, use 4.0.0 on Windows
       - name: Use Ruby
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
         with:
           ruby-version: ${{ matrix.os == 'windows-latest' && '4.0.0' || '4.0.1' }}
 
@@ -102,7 +104,7 @@ jobs:
       # Key includes OS and Node version since native modules are platform/version specific
       - name: Cache node_modules
         id: cache-node-modules
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: node_modules
           key: node-modules-${{ runner.os }}-node${{ matrix.node }}-${{ hashFiles('package-lock.json') }}
@@ -114,9 +116,13 @@ jobs:
       - name: Test
         run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard && ' -- --coverage' || '' }}
 
+      - name: Check Backend Coverage Ratchets
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
+        run: npm run test:coverage:ratchet -- --report backend
+
       - name: Upload Backend Coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
         with:
           files: ./coverage/coverage-final.json
           flags: backend
@@ -137,10 +143,10 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Use Node ${{ matrix.node }}
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           # Keep matrix label at 20.20 for stable check names, but install 20.20.1 to satisfy engines.
           node-version: ${{ matrix.node == '20.20' && '20.20.1' || matrix.node }}
@@ -177,10 +183,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Use Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -223,7 +229,7 @@ jobs:
     timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - uses: luizm/action-sh-checker@883217215b11c1fabbf00eb1a9a041f62d74c744
         env:
           SHFMT_OPTS: '-i 2' # 2 space indent
@@ -236,10 +242,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Use Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -273,10 +279,10 @@ jobs:
         python-version: [3.9, 3.14]
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Use Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -300,10 +306,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Use Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -331,10 +337,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Use Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -365,10 +371,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Use Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -380,9 +386,18 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run Site Tests
+      - name: Run Site Tests with Coverage
         working-directory: site
-        run: npm test
+        run: npm run test:coverage
+
+      - name: Upload Site Coverage to Codecov
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
+        with:
+          files: ./site/coverage/coverage-final.json
+          flags: site
+          name: site-coverage
+          fail_ci_if_error: true
+          use_oidc: true
 
   webui:
     name: webui tests
@@ -390,10 +405,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 2
 
       - name: Use Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -405,11 +422,17 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      - name: Run App Browser Tests
+        run: npm run test:app:browser
+
       - name: Run App Tests with Coverage
         run: npm run test:coverage --prefix src/app
 
+      - name: Check Frontend Coverage Ratchets
+        run: npm run test:coverage:ratchet -- --report frontend
+
       - name: Upload Frontend Coverage to Codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
         with:
           files: ./src/app/coverage/coverage-final.json
           flags: frontend
@@ -423,10 +446,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Use Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -436,12 +459,12 @@ jobs:
         run: npm install -g npm@latest
 
       - name: Use Python 3.14
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
-          python-version: 3.14.2
+          python-version: 3.14.4
 
       - name: Use Ruby
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
         with:
           ruby-version: 4.0.1
 
@@ -458,10 +481,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Use Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -471,12 +494,12 @@ jobs:
         run: npm install -g npm@latest
 
       - name: Use Python 3.14
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
-          python-version: 3.14.2
+          python-version: 3.14.4
 
       - name: Use Ruby
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
         with:
           ruby-version: 4.0.1
 
@@ -498,10 +521,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Use Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -593,10 +616,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Use Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -621,10 +644,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Use Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -661,7 +684,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Install and run actionlint
         run: |
@@ -677,10 +700,10 @@ jobs:
         ruby-version: ['3.0', '3.4']
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Use Ruby ${{ matrix.ruby-version }}
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
         with:
           ruby-version: ${{ matrix.ruby-version }}
 
@@ -722,10 +745,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: src/golang/go.mod
           check-latest: true

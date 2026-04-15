@@ -28,6 +28,7 @@ import {
   loadCredentials,
   mergeParts,
   normalizeSafetySettings,
+  parseConfigSystemInstruction,
   resolveProjectId,
 } from './util';
 
@@ -220,7 +221,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     return this.callPalm2Api(prompt);
   }
 
-  async callClaudeApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callClaudeApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Support YAML chat prompts (legacy format used by parseChatPrompt)
     let normalizedPrompt = prompt;
     if (prompt.trim().startsWith('- role:')) {
@@ -234,6 +235,24 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     const { system, extractedMessages, thinking } = parseMessages(normalizedPrompt);
+
+    // Merge config.systemInstruction (if set) with the system instruction extracted from the prompt.
+    let mergedSystem = system;
+    const parsedConfigInstruction = parseConfigSystemInstruction(
+      this.config.systemInstruction,
+      context?.vars,
+    );
+    if (parsedConfigInstruction) {
+      const configSystemBlocks: Array<{ type: 'text'; text: string }> = [];
+      for (const part of parsedConfigInstruction.parts) {
+        if (part.text) {
+          configSystemBlocks.push({ type: 'text', text: part.text });
+        }
+      }
+      if (configSystemBlocks.length > 0) {
+        mergedSystem = [...configSystemBlocks, ...(mergedSystem || [])];
+      }
+    }
 
     const thinkingConfig: ClaudeThinkingConfig | undefined =
       this.config.thinking || (thinking as ClaudeThinkingConfig | undefined);
@@ -260,7 +279,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       temperature: this.config.temperature,
       top_p: this.config.top_p || this.config.topP,
       top_k: this.config.top_k || this.config.topK,
-      ...(system ? { system } : {}),
+      ...(mergedSystem ? { system: mergedSystem } : {}),
       ...(thinkingConfig ? { thinking: thinkingConfig } : {}),
       messages: extractedMessages as ClaudeRequest['messages'],
     };

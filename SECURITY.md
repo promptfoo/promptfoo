@@ -6,9 +6,11 @@ Promptfoo takes security seriously. We appreciate responsible disclosure and wil
 
 Promptfoo is a developer tool that runs in your environment with your user permissions. It is designed to be **permissive by default**.
 
-Some features intentionally execute user-provided code (custom assertions, providers, transforms, plugins). This code execution is **not sandboxed** and should be treated the same way you would treat running a Node.js script locally.
+Some features intentionally execute user-provided code (custom assertions, custom or script-based providers, transforms, hooks, plugins, and templates in fields that execute code). This code execution is **not sandboxed** and should be treated the same way you would treat running a Node.js script locally.
 
-**Important:** Treat Promptfoo configuration files and any referenced scripts as **trusted code**. Do not run Promptfoo against untrusted configs, prompt packs, or pull requests without isolation.
+**The guiding principle:** Promptfoo OSS is a local eval runner, not a sandbox for adversarial eval content. If you explicitly run a config, or select/configure a provider, model, fixture, dataset, prompt pack, remote resource, model-output feedback loop, template, or field that Promptfoo evaluates as code, the result is your responsibility. Running evals against adversarial providers, models, fixtures, remote content, or model-output feedback loops carries inherent risk — use isolation and scoped credentials (see Hardening Recommendations). A vulnerability exists when behavior bypasses a supported isolation boundary or hardening control, affects Cloud/on-prem tenant isolation, or sends data or secrets to a destination the user did not configure to participate in that eval.
+
+**Important:** Treat Promptfoo configuration files and everything they reference or evaluate against as **trusted code and data**. This includes referenced scripts, prompt packs, test fixtures or datasets, configured providers, models, remote content, and model-output feedback loops. Run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, model-output feedback loops, or pull requests only when the run is isolated and secrets are scoped for that run.
 
 ### Local Web Server
 
@@ -18,28 +20,41 @@ The server includes **CSRF/origin checks** that use browser-provided `Sec-Fetch-
 
 ### Trust Boundaries
 
-**Trusted inputs (treated as code):**
+**Trusted configuration and explicit code execution:**
 
 - Promptfoo config files (`promptfooconfig.yaml`, etc.)
-- Referenced local scripts and modules
-- Custom JS assertions, providers, transforms, and plugins
+- Configured references to local scripts, modules, prompt packs, test fixtures, and datasets
+- **Code-executing fields** — config fields where Promptfoo evaluates the value as code rather than data. These include: custom JS/Python/Ruby assertions, custom or script-based providers, transforms, hooks, session parsers, plugins, and `file://`-backed scripts
+- Runtime values interpolated into code-executing fields, such as inline script assertions or transforms
 
-**Untrusted inputs (must remain data-only):**
+**Trusted eval pipeline:**
 
-- Prompt text, test cases, and fixtures
-- Model outputs and grader outputs
+- Prompt, provider, assertion, and transform templates configured by the user
+- Template output is usually data — for example, a prompt template `Tell me about {{topic}}` produces text sent to a provider. However, template output becomes trusted generated code when the target is a code-executing field — for example, a JavaScript assertion `value: 'output.includes("{{keyword}}")'`
+- Built-in assertions, graders, transforms, providers, reports, and their template/rendering steps are part of the configured local eval pipeline for the run
+
+**Runtime data:**
+
+- Prompt text, test case variable values, and fixture or dataset row values
+- Model outputs, grader outputs, `_conversation` history, and values saved with `storeOutputAs`
 - Remote content fetched during evaluation
 
-A vulnerability exists when untrusted inputs can trigger code execution, file access, or network access without explicit configuration.
+Built-in eval logic and trusted templates may render, transform, score, store, or send runtime data through prompts, provider requests, graders, assertions, transforms, and reports. The eval pipeline may also execute trusted built-in or user-configured code that consumes that runtime data — for example, interpolating model output into a grading prompt as a template variable, rendering stored values through the standard Nunjucks pipeline, or passing `_conversation` history through a built-in assertion or grader. Passing runtime data through the configured template engine and eval pipeline is normal operation and is not a sandbox boundary for adversarial eval content, even when that runtime data contains template syntax.
+
+Treat adversarial providers, models, prompt packs, fixtures, datasets, remote content, and model-output feedback loops as untrusted eval content and run them with isolation, least-privileged credentials, and restricted egress.
+
+**Configured destinations:**
+
+A destination is configured only for the data and credentials the user directly selected or configured it to receive as part of the eval path. Selecting a provider, grader, report, or other eval component for a run counts as configuring that destination for the data and credentials needed by that component in that eval path. For example, an HTTP provider URL is configured to receive that provider's rendered request, and a grading provider is configured to receive prompts and runtime data needed by the selected model-graded assertion. A Promptfoo-hosted service endpoint, telemetry path, browser-loaded resource, or unrelated provider is a separate destination unless the user separately chose or configured it for that same eval path and data or credential.
 
 ## Hardening Recommendations
 
-If you run Promptfoo in higher-risk contexts (CI, shared machines, third-party configs):
+If you run Promptfoo in higher-risk contexts (CI, shared machines, third-party configs or prompt packs, adversarial providers or models, model-output feedback loops):
 
 - Run inside a container or VM with minimal privileges
 - Use dedicated, least-privileged API keys
 - Avoid placing secrets in prompts, fixtures, or config files
-- Restrict network egress when running third-party code
+- Restrict network egress when running third-party code or adversarial eval content
 - In CI: do not run Promptfoo with secrets on untrusted PRs (e.g., from forks)
 - Do not expose the local web server to untrusted networks or the public internet
 - Use a reverse proxy with authentication if you need remote access to the web UI
@@ -90,7 +105,7 @@ A good report helps us triage and fix issues faster. Please include:
 We may close reports as one of the following:
 
 - **Invalid** — the reported behavior does not reproduce, depends on stale/nonexistent code, or relies on an unrealistic setup
-- **Out of scope** — the behavior matches the documented trust model or requires explicitly configured trusted code
+- **Out of scope** — the behavior matches the documented trust model or requires explicitly configured trusted code or eval content
 - **Duplicate** — the report is materially the same as an earlier advisory
 - **Already fixed** — the issue is valid but no longer affects the latest supported release
 
@@ -114,8 +129,8 @@ Severity is assessed using [CVSS v4.0](https://www.first.org/cvss/v4.0/specifica
 
 **Promptfoo-specific severity considerations (illustrative, not automatic):**
 
-- Untrusted input leading to arbitrary code execution: typically **Critical**
-- Secret or credential leakage to unconfigured or attacker-controlled destinations: typically **High**
+- Code execution that bypasses a supported isolation boundary or hardening control: typically **Critical**
+- Secret or credential leakage to destinations not configured to participate in the selected eval path: typically **High**
 - Algorithmic DoS in CI pipelines causing significant resource exhaustion: typically **Medium–High**
 - Web UI XSS requiring deliberate user interaction (for example, self-XSS): typically **Low** or no CVE (see Scope)
 
@@ -134,8 +149,9 @@ We request CVEs through GitHub Security Advisories when appropriate. Final advis
 
 **We usually request a CVE for:**
 
-- Remote code execution from untrusted inputs (prompts, test cases, model outputs)
-- Secret or credential leakage to unconfigured or unintended destinations
+- Code execution that bypasses a supported hardening control or isolation boundary outside the documented local eval pipeline
+- Bypasses of Cloud/on-prem isolation boundaries
+- Secret or credential leakage to destinations not configured to participate in the selected eval path
 - Supply chain compromise affecting Promptfoo-published packages, dependencies, or build artifacts
 
 **CVE-eligible (case-by-case):**
@@ -145,7 +161,8 @@ We request CVEs through GitHub Security Advisories when appropriate. Final advis
 
 **We generally do not request a CVE for:**
 
-- Issues in explicitly configured custom code (JS assertions, providers, transforms)
+- Issues in explicitly configured custom code or templates in code-executing fields (e.g., JS/Python assertions, custom providers, transforms, hooks, plugins)
+- Adversarial eval content flowing through the configured template engine and eval pipeline (e.g., model output interpolated into grading prompts, `_conversation` history rendered or passed through built-in assertions/graders, variable values rendered through the standard Nunjucks pipeline, or data passed to configured providers)
 - Local API access issues within the documented trust model
 - Self-XSS requiring the user to paste payloads into their own console or UI
 - Quality, UX, or non-security functional bugs
@@ -177,19 +194,21 @@ When a fix is released, we will:
 
 **In scope:**
 
-- Code execution, file access, or network access triggered by **untrusted data inputs** (prompts, test cases, fixtures, model outputs) without explicit configuration enabling it
+- Code execution, file access, network access, or secret exposure that bypasses a supported isolation boundary or hardening control outside the documented local eval pipeline
 - Bypasses of documented restrictions or isolation boundaries
-- Unexpected secret exposure or credential leakage to unconfigured destinations
-- Path traversal or arbitrary file read/write from data-only inputs
+- Data, secret, or credential leakage to destinations not configured to participate in the selected eval path
+- Path traversal or arbitrary file read/write that escapes the configured eval flow, documented file access behavior, or supported path restrictions
 - Vulnerabilities in CLI, config parsing, or web UI affecting confidentiality, integrity, or availability beyond the intended trust model described above
 - Algorithmic complexity DoS (crafted input causing hang/crash with modest input size)
 
 **Out of scope:**
 
-- Code execution from **explicitly configured** custom code (JS assertions, providers, transforms, session parsers, plugins, or `file://`-backed scripts configured in your config file)
+- Code execution from **explicitly configured** custom code or templates in code-executing fields (e.g., JS/Python assertions, custom providers, transforms, hooks, plugins, `file://`-backed scripts)
+- Adversarial eval content flowing through the configured template engine, built-in assertions, graders, providers, transforms, reports, or model-output feedback loops. This includes model outputs, `_conversation` history, grader outputs, fixture values, and stored runtime values rendered or passed through Nunjucks or other configured eval pipeline steps
+- Code execution caused by interpolating runtime data into a code-executing field the user configured, such as `value: 'output === "{{expected}}"'` in a JavaScript assertion — use `context.vars.expected` or safe serialization when the value should remain data
 - Code execution via **direct local web API access** or **browser access to the OSS local server** (e.g., `curl`, scripts, SDKs, the bundled UI, or malicious webpages reaching `promptfoo view`) — the local server has the same trust level as the CLI and its CSRF/origin checks are best-effort hardening, not a supported security boundary
-- Issues requiring the user to run untrusted configs or scripts with local privileges
-- Network requests triggered by content in **user-controlled config files** (test variables, prompts, fixtures defined in your config) — users are responsible for what they put in their own configs
+- Issues requiring the user to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges, including cases where adversarial model output is rendered or processed by built-in assertions or graders during that local run
+- Network requests to URLs, providers, graders, or Promptfoo services that were configured to receive the relevant eval data or credentials
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Third-party dependency issues that don't materially affect Promptfoo's security posture (report upstream)
 - Social engineering, phishing, or physical attacks
@@ -199,7 +218,8 @@ When a fix is released, we will:
 
 - "A malicious custom assertion reads `process.env` and posts it to a webhook" → Expected behavior; custom code runs with your permissions
 - "A third-party prompt pack includes a transform that runs shell commands" → Expected behavior; don't run untrusted configs
-- "The Web UI fetches a URL when a test variable contains a URL" → Expected behavior; users control their own config content
+- "A third-party model returns template syntax that is rendered or processed by a built-in assertion or grader and appears in a grading prompt" → Expected behavior; the configured eval pipeline processes runtime data as part of normal operation. Run adversarial models with isolation and scoped credentials
+- "An HTTP provider fetches a URL produced from a prompt or test variable" → Expected behavior; provider requests are part of the configured eval flow
 - "The local web API executes provider transforms as code" → Expected behavior; the web API has the same trust model as the CLI
 - "A malicious website can reach the local server if I replay browser headers with `curl`" → Not a valid browser repro, and local-server browser-origin claims are out of scope
 

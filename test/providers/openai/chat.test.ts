@@ -1800,6 +1800,104 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(prefixedGpt5Body.max_completion_tokens).toBeUndefined();
     });
 
+    it('should strip max_tokens from passthrough for GPT-5 models', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-5.4-mini', {
+        config: {
+          passthrough: { max_tokens: 16000 },
+        },
+      });
+      await provider.callApi('Test prompt');
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+      expect(body.max_tokens).toBeUndefined();
+    });
+
+    it('should strip max_tokens from passthrough for reasoning models', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('o3', {
+        config: {
+          passthrough: { max_tokens: 8000 },
+        },
+      });
+      await provider.callApi('Test prompt');
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+      expect(body.max_tokens).toBeUndefined();
+    });
+
+    it('should preserve max_tokens in passthrough for regular models', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o', {
+        config: {
+          passthrough: { max_tokens: 2000 },
+        },
+      });
+      await provider.callApi('Test prompt');
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+      expect(body.max_tokens).toBe(2000);
+    });
+
+    it('should not share config between provider instances', () => {
+      const sharedConfig = {
+        max_tokens: 16000,
+        temperature: 0,
+        response_format: { type: 'json_object' as const },
+      };
+
+      const providerA = new OpenAiChatCompletionProvider('gpt-4.1-mini', {
+        config: sharedConfig,
+      });
+      const providerB = new OpenAiChatCompletionProvider('gpt-5.4-mini', {
+        config: sharedConfig,
+      });
+
+      // Configs should be independent
+      expect(providerA.config).not.toBe(sharedConfig);
+      expect(providerB.config).not.toBe(sharedConfig);
+      expect(providerA.config).not.toBe(providerB.config);
+      expect(providerA.config.max_tokens).toBe(16000);
+      expect(providerB.config.max_tokens).toBe(16000);
+
+      // Mutating one should not affect the other
+      (providerA.config as any).max_tokens = 999;
+      expect(providerB.config.max_tokens).toBe(16000);
+
+      // Original object should not be mutated
+      expect(sharedConfig.max_tokens).toBe(16000);
+    });
+
     it('should handle reasoning_effort for reasoning models', async () => {
       const mockResponse = {
         data: {

@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - exec provider closes stdin (regression for #8686)'
+
+providers:
+  - 'exec:node ../providers/exec-provider-reads-stdin.js'
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: World
+    assert:
+      - type: contains
+        value: stdin closed

@@ -60,6 +60,7 @@ export default function ConfigModal({ open, onClose }: ConfigModalProps) {
                 <TooltipTrigger asChild>
                   <button
                     type="button"
+                    aria-label="Copy config to clipboard"
                     onClick={handleCopyClick}
                     className="p-2 rounded hover:bg-muted transition-colors"
                   >
@@ -72,6 +73,7 @@ export default function ConfigModal({ open, onClose }: ConfigModalProps) {
                 <TooltipTrigger asChild>
                   <button
                     type="button"
+                    aria-label="Download config"
                     onClick={handleDownloadClick}
                     className="p-2 rounded hover:bg-muted transition-colors"
                   >

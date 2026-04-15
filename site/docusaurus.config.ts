@@ -3,10 +3,22 @@ import * as path from 'path';
 
 import { themes } from 'prism-react-renderer';
 import type * as Preset from '@docusaurus/preset-classic';
-import type { Config } from '@docusaurus/types';
+import type { Config, Plugin } from '@docusaurus/types';
 
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
+
+function webpackProgressCompatibilityPlugin(): Plugin {
+  return {
+    name: 'webpack-progress-compatibility-plugin',
+    configureWebpack(config) {
+      config.plugins = config.plugins?.filter(
+        (plugin) => plugin?.constructor?.name !== 'WebpackBarPlugin',
+      );
+      return {};
+    },
+  };
+}
 
 const config: Config = {
   title: 'Promptfoo',
@@ -429,6 +441,7 @@ const config: Config = {
   } satisfies Preset.ThemeConfig,
 
   plugins: [
+    webpackProgressCompatibilityPlugin,
     require.resolve('docusaurus-plugin-image-zoom'),
     require.resolve('./src/plugins/docusaurus-plugin-og-image'),
     // GA/analytics loaded conditionally via consent.js (GDPR)

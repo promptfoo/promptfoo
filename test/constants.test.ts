@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CLOUD_PROVIDER_PREFIX,
   DEFAULT_API_BASE_URL,
@@ -11,17 +11,19 @@ import {
   VERSION,
 } from '../src/constants';
 import { REDTEAM_DEFAULTS } from '../src/redteam/constants';
+import { mockProcessEnv } from './util/utils';
 
 describe('constants', () => {
-  const originalEnv = process.env;
+  let restoreEnv: () => void;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env = {};
+    restoreEnv = mockProcessEnv({}, { clear: true });
   });
 
-  afterAll(() => {
-    process.env = originalEnv;
+  afterEach(() => {
+    restoreEnv();
+    vi.clearAllMocks();
   });
 
   it('should export VERSION from package.json', () => {

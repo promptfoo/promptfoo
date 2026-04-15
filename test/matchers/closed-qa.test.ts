@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesClosedQa } from '../../src/matchers';
+import { matchesClosedQa } from '../../src/matchers/llmGrading';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
+import { createMockProvider } from '../factories/provider';
 
 import type { GradingConfig } from '../../src/types/index';
 
@@ -173,10 +174,7 @@ Does the answer meet the criteria? Answer Y or N.`;
 
     const grading = {
       rubricPrompt: customPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: mockCallApi,
-      },
+      provider: createMockProvider({ callApi: mockCallApi }),
     };
 
     const result = await matchesClosedQa(input, expected, output, grading);

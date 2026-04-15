@@ -1,13 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesSimilarity } from '../../src/matchers';
+import cliState from '../../src/cliState';
+import { matchesSimilarity } from '../../src/matchers/similarity';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
+import * as remoteGeneration from '../../src/redteam/remoteGeneration';
+import * as remoteGrading from '../../src/remoteGrading';
+import { createMockProvider } from '../factories/provider';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import type { GradingConfig } from '../../src/types/index';
 
 describe('matchesSimilarity', () => {
   beforeEach(() => {
+    (cliState as any).config = {};
     vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
       if (text === 'Expected output' || text === 'Sample output') {
         return Promise.resolve({
@@ -56,6 +61,27 @@ describe('matchesSimilarity', () => {
     await expect(matchesSimilarity(expected, output, threshold)).resolves.toEqual({
       pass: false,
       reason: 'Similarity 0.00 is less than threshold 0.9',
+      score: 0,
+      tokensUsed: {
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+        cached: expect.any(Number),
+        completionDetails: expect.any(Object),
+        numRequests: 0,
+      },
+    });
+  });
+
+  it('should return zero similarity for zero-magnitude embeddings', async () => {
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
+      embedding: [0, 0, 0],
+      tokenUsage: { total: 5, prompt: 2, completion: 3 },
+    });
+
+    await expect(matchesSimilarity('Expected output', 'Sample output', 0.5)).resolves.toEqual({
+      pass: false,
+      reason: 'Similarity 0.00 is less than threshold 0.5',
       score: 0,
       tokensUsed: {
         total: expect.any(Number),
@@ -318,14 +344,38 @@ describe('matchesSimilarity', () => {
   });
 
   describe('metric validation', () => {
-    it('should reject non-cosine metric for callSimilarityApi providers', async () => {
-      const mockProvider = {
-        id: () => 'test-similarity-provider',
+    it('should normalize missing completion details for native similarity providers', async () => {
+      const mockProvider = Object.assign(createMockProvider({ id: 'test-similarity-provider' }), {
         callSimilarityApi: vi.fn().mockResolvedValue({
           similarity: 0.9,
           tokenUsage: { total: 5, prompt: 2, completion: 3 },
         }),
+      });
+
+      const grading: GradingConfig = {
+        provider: mockProvider as any,
       };
+
+      await expect(matchesSimilarity('expected', 'output', 0.8, false, grading)).resolves.toEqual(
+        expect.objectContaining({
+          tokensUsed: expect.objectContaining({
+            completionDetails: {
+              reasoning: 0,
+              acceptedPrediction: 0,
+              rejectedPrediction: 0,
+            },
+          }),
+        }),
+      );
+    });
+
+    it('should reject non-cosine metric for callSimilarityApi providers', async () => {
+      const mockProvider = Object.assign(createMockProvider({ id: 'test-similarity-provider' }), {
+        callSimilarityApi: vi.fn().mockResolvedValue({
+          similarity: 0.9,
+          tokenUsage: { total: 5, prompt: 2, completion: 3 },
+        }),
+      });
 
       const grading: GradingConfig = {
         provider: mockProvider as any,
@@ -337,6 +387,53 @@ describe('matchesSimilarity', () => {
         pass: false,
         reason: expect.stringContaining('only supports cosine similarity'),
       });
+    });
+
+    it('should use embeddings for non-cosine metrics when provider supports both APIs', async () => {
+      const mockProvider = Object.assign(createMockProvider({ id: 'hybrid-similarity-provider' }), {
+        callSimilarityApi: vi.fn().mockResolvedValue({
+          similarity: 0.1,
+          tokenUsage: { total: 5, prompt: 2, completion: 3 },
+        }),
+        callEmbeddingApi: vi.fn().mockImplementation((text: string) =>
+          Promise.resolve({
+            embedding: text === 'expected' ? [1, 0] : [0.5, 0],
+            tokenUsage: { total: 5, prompt: 2, completion: 3 },
+          }),
+        ),
+      });
+
+      const grading: GradingConfig = {
+        provider: mockProvider as any,
+      };
+
+      await expect(
+        matchesSimilarity('expected', 'output', 0.4, false, grading, 'dot_product'),
+      ).resolves.toMatchObject({
+        pass: true,
+        score: 0.5,
+      });
+      expect(mockProvider.callSimilarityApi).not.toHaveBeenCalled();
+      expect(mockProvider.callEmbeddingApi).toHaveBeenCalledTimes(2);
+    });
+
+    it('should keep non-cosine metrics local when remote grading is enabled', async () => {
+      (cliState as any).config = { redteam: {} };
+      vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(true);
+      vi.spyOn(remoteGrading, 'doRemoteGrading').mockResolvedValue({
+        pass: true,
+        score: 1,
+        reason: 'remote',
+      });
+
+      await expect(
+        matchesSimilarity('Expected output', 'Sample output', 0.5, false, undefined, 'dot_product'),
+      ).resolves.toMatchObject({
+        pass: true,
+        score: 1,
+      });
+      expect(remoteGeneration.shouldGenerateRemote).not.toHaveBeenCalled();
+      expect(remoteGrading.doRemoteGrading).not.toHaveBeenCalled();
     });
   });
 });
