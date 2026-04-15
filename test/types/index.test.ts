@@ -1164,28 +1164,4 @@ describe('TestSuiteSchema', () => {
       expect(result.data!.defaultTest).toBeUndefined();
     });
   });
-
-  describe('tracing validation', () => {
-    it('should apply OTLP receiver defaults when tracing is enabled', () => {
-      const result = TestSuiteSchema.safeParse({
-        ...baseTestSuite,
-        tracing: {
-          enabled: true,
-          otlp: {
-            http: {
-              enabled: true,
-            },
-          },
-        },
-      });
-
-      expect(result.success).toBe(true);
-      expect(result.data!.tracing?.otlp?.http).toEqual({
-        enabled: true,
-        port: 4318,
-        host: '0.0.0.0',
-        acceptFormats: ['json', 'protobuf'],
-      });
-    });
-  });
 });

@@ -27,7 +27,7 @@ export type CodingAgentCollection = (typeof CODING_AGENT_COLLECTIONS)[number];
 type CodingAgentMetadataPlugin = CodingAgentCollection | CodingAgentPlugin;
 
 export const CODING_AGENT_PLUGIN_DISPLAY_NAMES: Record<CodingAgentMetadataPlugin, string> = {
-  'coding-agent:all': 'Coding Agent All',
+  'coding-agent:all': 'Coding Agent Full Suite',
   'coding-agent:core': 'Coding Agent Core',
   'coding-agent:repo-prompt-injection': 'Repository Prompt Injection',
   'coding-agent:terminal-output-injection': 'Terminal Output Injection',
@@ -46,9 +46,9 @@ export const CODING_AGENT_PLUGIN_DISPLAY_NAMES: Record<CodingAgentMetadataPlugin
 
 export const CODING_AGENT_PLUGIN_DESCRIPTIONS: Record<CodingAgentMetadataPlugin, string> = {
   'coding-agent:all':
-    'Tests coding agents against the full coding-agent suite, including prompt injection, terminal output injection, secret handling, sandbox read/write boundaries, network egress, procfs credentials, delayed CI exfiltration, generated vulnerabilities, automation poisoning, steganographic exfiltration, and verifier sabotage risks',
+    'Tests coding agents against every supported coding-agent plugin, including prompt injection, terminal output injection, secret handling, sandbox read/write boundaries, network egress, procfs credentials, delayed CI exfiltration, generated vulnerabilities, automation poisoning, steganographic exfiltration, and verifier sabotage risks',
   'coding-agent:core':
-    'Tests coding agents against a focused MVP set of repository prompt injection, terminal output injection, secret environment read, sandbox read escape, and verifier sabotage risks',
+    'Tests coding agents against a focused baseline set of repository prompt injection, terminal output injection, secret environment read, sandbox read escape, and verifier sabotage risks',
   'coding-agent:repo-prompt-injection':
     'Tests whether instructions embedded in README files, source comments, fixture data, issue text, logs, or generated artifacts can override the user task or operating policy',
   'coding-agent:terminal-output-injection':

@@ -62,7 +62,7 @@ Use a fresh writable checkout for each red-team row when you want high-confidenc
 
 `jailbreak:meta` is the iterative single-turn strategy. `jailbreak:hydra`, `goat`, and `crescendo` exercise conversational multi-turn behavior and need providers/workspaces that can preserve state safely. Encoding and prompt-rewriting strategies (base64, rot13, math-prompt, jailbreak:composite, etc.) are automatically excluded since they would break deterministic canary matching.
 
-Use `coding-agent:core` for quick MVP coverage, or switch to `coding-agent:all` when you want the full coding-agent suite in one collection.
+Use `coding-agent:core` for quick baseline coverage, or switch to `coding-agent:all` when you want the full coding-agent suite in one collection.
 
 ## Safety
 

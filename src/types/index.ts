@@ -1051,21 +1051,21 @@ export const TestSuiteSchema = z.object({
   // Tracing configuration (simplified version for parsed TestSuite)
   tracing: z
     .object({
-      enabled: z.boolean().prefault(false),
+      enabled: z.boolean(),
       otlp: z
         .object({
           http: z
             .object({
-              enabled: z.boolean().prefault(true),
-              port: z.number().prefault(4318),
-              host: z.string().prefault('0.0.0.0'),
-              acceptFormats: z.array(z.enum(['protobuf', 'json'])).prefault(['json', 'protobuf']),
+              enabled: z.boolean(),
+              port: z.number(),
+              host: z.string().optional(),
+              acceptFormats: z.array(z.enum(['protobuf', 'json'])).optional(),
             })
             .optional(),
           grpc: z
             .object({
-              enabled: z.boolean().prefault(false),
-              port: z.number().prefault(4317),
+              enabled: z.boolean(),
+              port: z.number(),
             })
             .optional(),
         })
