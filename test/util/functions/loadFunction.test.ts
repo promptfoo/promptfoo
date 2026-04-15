@@ -20,7 +20,7 @@ const { TEST_JS_PATH, TEST_PY_PATH, TEST_TXT_PATH, mockResolve } = vi.hoisted(()
   const TEST_JS_PATH = '/test/resolved/function.js';
   const TEST_PY_PATH = '/test/resolved/function.py';
   const TEST_TXT_PATH = '/test/resolved/function.txt';
-  const mockResolve = vi.fn((...args: string[]) => {
+  const mockResolve = vi.fn((...args: string[]): string => {
     const lastArg = args[args.length - 1] || '';
     if (lastArg.endsWith('.py')) {
       return TEST_PY_PATH;
