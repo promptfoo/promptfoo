@@ -37,6 +37,14 @@ import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
 
+/**
+ * The subset of `loadApiProviders` inputs the redteam code actually supplies
+ * to it. This is a deliberate **narrowing** of loadApiProviders's full input
+ * surface (which also accepts ApiProvider instances, ProviderFunction
+ * closures, arrays, records, etc.) so the injection seam below cannot be
+ * misused to bypass provider loading. Widen only after confirming every
+ * redteam call site.
+ */
 export type LoadableRedteamProvider = string | ProviderOptions;
 export type RedteamProviderLoader = (
   providers: LoadableRedteamProvider[],
