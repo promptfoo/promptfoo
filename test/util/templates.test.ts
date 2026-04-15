@@ -105,20 +105,43 @@ describe('templateReferencesVariable', () => {
   it.each<[string, string]>([
     ['basic symbol read', '{{ _conversation[0].output }}'],
     ['filter input', '{{ _conversation | length }}'],
+    ['chained filters', '{{ _conversation | first | length }}'],
     ['if condition', '{% if _conversation %}yes{% endif %}'],
     ['elif condition', '{% if false %}no{% elif _conversation %}yes{% endif %}'],
     ['ternary true branch', '{{ "yes" if _conversation else "no" }}'],
     ['ternary condition', '{{ first if _conversation else second }}'],
+    ['ternary else branch', '{{ a if x else _conversation }}'],
     ['logical expression', '{{ _conversation and foo }}'],
     ['not expression', '{{ not _conversation }}'],
     ['comparison', '{{ _conversation == [] }}'],
+    ['less-than', '{{ x < _conversation }}'],
     ['for loop iterable', '{% for turn in _conversation %}{{ turn.output }}{% endfor %}'],
     ['function argument', '{{ summarize(_conversation) }}'],
+    ['keyword argument value', '{{ fn(arg=_conversation) }}'],
     ['filter argument', '{{ input | default(_conversation) }}'],
+    ['is test with call arg', '{{ foo is divisibleby(_conversation) }}'],
     ['bracket index lookup', '{{ obj[_conversation] }}'],
+    ['array literal member', '{{ [_conversation, other] }}'],
+    ['group expression', '{{ (_conversation) }}'],
+    ['negated expression', '{{ -_conversation }}'],
+    ['concat', '{{ "a" ~ _conversation ~ "b" }}'],
     ['dict literal value', '{{ {"history": _conversation}["history"][0].output }}'],
     ['set value binding', '{% set history = _conversation %}{{ history }}'],
     ['set block binding', '{% set history %}{{ _conversation }}{% endset %}{{ history }}'],
+    ['macro body free variable', '{% macro render() %}{{ _conversation }}{% endmacro %}'],
+    ['macro default value', '{% macro render(x=_conversation) %}{{ x }}{% endmacro %}'],
+    [
+      'macro default value with body ref',
+      '{% macro render(x=_conversation) %}{{ _conversation }}{% endmacro %}',
+    ],
+    ['include expression', '{% include _conversation %}'],
+    ['extends expression', '{% extends _conversation %}{% block b %}{% endblock %}'],
+    ['from-import template expression', '{% from template_name import foo %}{{ _conversation }}'],
+    ['block body reference', '{% block body %}{{ _conversation }}{% endblock %}'],
+    [
+      'call block body reference',
+      '{% macro m() %}{{ caller() }}{% endmacro %}{% call m() %}{{ _conversation }}{% endcall %}',
+    ],
   ])('detects a real reference in %s', (_label, template) => {
     expect(templateReferencesVariable(template, '_conversation')).toBe(true);
   });
@@ -143,6 +166,21 @@ describe('templateReferencesVariable', () => {
       '{% for i in range(3) %}{% set _conversation = [] %}{{ _conversation }}{% endfor %}',
     ],
     ['import target shadow', '{% import "x.njk" as _conversation %}{{ _conversation }}'],
+    ['from-import alias binding', '{% from "x.njk" import foo as _conversation %}{{ question }}'],
+    ['block name label', '{% block _conversation %}hi{% endblock %}'],
+    [
+      'for-loop tuple target shadow',
+      '{% for k, _conversation in items %}{{ _conversation }}{% endfor %}',
+    ],
+    [
+      'nested for target shadow',
+      '{% for _conversation in outer %}{% for x in _conversation %}{{ _conversation }}{% endfor %}{% endfor %}',
+    ],
+    ['set tuple target shadow', '{% set a, _conversation = pair %}{{ _conversation }}'],
+    [
+      'macro keyword-default param name shadow',
+      '{% macro render(_conversation=something) %}{{ _conversation }}{% endmacro %}',
+    ],
   ])('ignores %s', (_label, template) => {
     expect(templateReferencesVariable(template, '_conversation')).toBe(false);
   });

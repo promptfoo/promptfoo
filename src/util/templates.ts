@@ -172,12 +172,70 @@ function forNodeReferencesVariable(
   );
 }
 
+/**
+ * Collect only parameter NAMES from a Macro.args NodeList. This is the set of
+ * names bound inside the macro body — positional Symbols and `Pair.key`
+ * Symbols inside `KeywordArgs`. Default-value expressions (`Pair.value`) are
+ * *not* bindings and must be walked separately as references in the outer
+ * scope.
+ */
+function collectMacroParamNames(argsNode: unknown): string[] {
+  const names: string[] = [];
+  if (!isNunjucksAstNode(argsNode) || !Array.isArray(argsNode.children)) {
+    return names;
+  }
+  for (const child of argsNode.children) {
+    if (!isNunjucksAstNode(child)) {
+      continue;
+    }
+    if (child.typename === 'Symbol' && typeof child.value === 'string') {
+      names.push(child.value);
+      continue;
+    }
+    if (child.typename === 'KeywordArgs' && Array.isArray(child.children)) {
+      for (const pair of child.children) {
+        if (
+          isNunjucksAstNode(pair) &&
+          pair.typename === 'Pair' &&
+          isNunjucksAstNode(pair.key) &&
+          pair.key.typename === 'Symbol' &&
+          typeof pair.key.value === 'string'
+        ) {
+          names.push(pair.key.value);
+        }
+      }
+    }
+  }
+  return names;
+}
+
 function macroNodeReferencesVariable(
   node: NunjucksAstNode,
   variableName: string,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
-  const macroScope = addBoundSymbols(addBoundSymbols(boundSymbols, node.name), node.args);
+  // Walk the arg list with a scope that shadows only param names (not their
+  // default-value expressions). This catches references like
+  // `{% macro render(x=_conversation) %}` where `_conversation` in the default
+  // is a real symbol read evaluated at call time.
+  const paramNames = collectMacroParamNames(node.args);
+  const argScope = new Set(boundSymbols);
+  for (const name of paramNames) {
+    argScope.add(name);
+  }
+  if (astChildReferencesVariable(node, 'args', variableName, argScope)) {
+    return true;
+  }
+
+  // Walk the body with the full macro scope (outer + param names + macro name).
+  const macroScope = new Set(argScope);
+  if (
+    isNunjucksAstNode(node.name) &&
+    node.name.typename === 'Symbol' &&
+    typeof node.name.value === 'string'
+  ) {
+    macroScope.add(node.name.value);
+  }
   return astChildReferencesVariable(node, 'body', variableName, macroScope);
 }
 
@@ -190,6 +248,27 @@ function setNodeReferencesVariable(
     astChildReferencesVariable(node, 'value', variableName, boundSymbols) ||
     astChildReferencesVariable(node, 'body', variableName, boundSymbols)
   );
+}
+
+function fromImportNodeReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: string,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  // `{% from template import a, b as c %}` — the template expression may
+  // reference variables, but the `names` list introduces local bindings
+  // (both plain and aliased) and must never be walked as references.
+  return astChildReferencesVariable(node, 'template', variableName, boundSymbols);
+}
+
+function blockNodeReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: string,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  // `{% block name %}...{% endblock %}` — `name` is a template-inheritance
+  // label, not a variable reference. Only the body can reference variables.
+  return astChildReferencesVariable(node, 'body', variableName, boundSymbols);
 }
 
 function astFieldsReferenceVariable(
@@ -231,6 +310,14 @@ function astReferencesVariable(
 
   if (node.typename === 'Set') {
     return setNodeReferencesVariable(node, variableName, boundSymbols);
+  }
+
+  if (node.typename === 'FromImport') {
+    return fromImportNodeReferencesVariable(node, variableName, boundSymbols);
+  }
+
+  if (node.typename === 'Block') {
+    return blockNodeReferencesVariable(node, variableName, boundSymbols);
   }
 
   return astFieldsReferenceVariable(node, variableName, boundSymbols);
