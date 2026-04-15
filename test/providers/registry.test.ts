@@ -44,6 +44,15 @@ vi.mock('../../src/providers/scriptCompletion', async (importOriginal) => {
   };
 });
 
+vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('../../src/redteam/remoteGeneration')>();
+  return {
+    ...mod,
+    shouldGenerateRemote: vi.fn(() => true),
+    neverGenerateRemote: vi.fn(() => false),
+  };
+});
+
 describe('Provider Registry', () => {
   describe('Provider Factories', () => {
     const mockProviderOptions: ProviderOptions = {
@@ -141,14 +150,42 @@ describe('Provider Registry', () => {
     });
 
     it('should handle redteam providers correctly', async () => {
-      const redteamPaths = [
-        'promptfoo:redteam:best-of-n',
-        'promptfoo:redteam:crescendo',
-        'promptfoo:redteam:goat',
-        'promptfoo:redteam:iterative',
-        'promptfoo:redteam:iterative:image',
-        'promptfoo:redteam:iterative:tree',
-        'promptfoo:redteam:mischievous-user',
+      const redteamCases: Array<{ path: string; expectedId: string }> = [
+        {
+          path: 'agentic:memory-poisoning',
+          expectedId: 'promptfoo:redteam:agentic:memory-poisoning',
+        },
+        {
+          path: 'promptfoo:redteam:authoritative-markup-injection',
+          expectedId: 'promptfoo:redteam:authoritative-markup-injection',
+        },
+        { path: 'promptfoo:redteam:best-of-n', expectedId: 'promptfoo:redteam:best-of-n' },
+        { path: 'promptfoo:redteam:crescendo', expectedId: 'promptfoo:redteam:crescendo' },
+        { path: 'promptfoo:redteam:custom', expectedId: 'promptfoo:redteam:custom' },
+        { path: 'promptfoo:redteam:custom:my-strategy', expectedId: 'promptfoo:redteam:custom' },
+        { path: 'promptfoo:redteam:goat', expectedId: 'promptfoo:redteam:goat' },
+        { path: 'promptfoo:redteam:hydra', expectedId: 'promptfoo:redteam:hydra' },
+        {
+          path: 'promptfoo:redteam:indirect-web-pwn',
+          expectedId: 'promptfoo:redteam:indirect-web-pwn',
+        },
+        { path: 'promptfoo:redteam:iterative', expectedId: 'promptfoo:redteam:iterative' },
+        {
+          path: 'promptfoo:redteam:iterative:image',
+          expectedId: 'promptfoo:redteam:iterative:image',
+        },
+        {
+          path: 'promptfoo:redteam:iterative:meta',
+          expectedId: 'promptfoo:redteam:iterative:meta',
+        },
+        {
+          path: 'promptfoo:redteam:iterative:tree',
+          expectedId: 'promptfoo:redteam:iterative:tree',
+        },
+        {
+          path: 'promptfoo:redteam:mischievous-user',
+          expectedId: 'promptfoo:redteam:mischievous-user',
+        },
       ];
 
       const redteamConfig = {
@@ -159,16 +196,18 @@ describe('Provider Registry', () => {
           maxTurns: 3,
           maxBacktracks: 2,
           redteamProvider: 'test-provider',
+          // CustomProvider requires strategyText
+          strategyText: 'test-strategy',
         },
       };
 
-      for (const path of redteamPaths) {
+      for (const { path, expectedId } of redteamCases) {
         const factory = (await getProviderFactories(path)).find((f) => f.test(path));
-        expect(factory).toBeDefined();
+        expect(factory, `Missing factory for ${path}`).toBeDefined();
 
         const provider = await factory!.create(path, redteamConfig, mockContext);
         expect(provider).toBeDefined();
-        expect(provider.id()).toEqual(path);
+        expect(provider.id()).toEqual(expectedId);
       }
     });
 
