@@ -132,7 +132,7 @@
     },
     "chevrotain": {
       ".": "11.1.1",
-      "@chevrotain/cst-dts-gen": "11.1.1",
+      "@chevrotain/cst-dts-gen": "11.2.0",
       "@chevrotain/gast": "11.1.1",
       "@chevrotain/regexp-to-ast": "11.1.1",
       "@chevrotain/types": "11.1.1",
