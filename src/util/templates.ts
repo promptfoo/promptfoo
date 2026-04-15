@@ -53,11 +53,9 @@ function parseNunjucksTemplate(template: string): ParseResult {
   try {
     return { ok: true, ast: parser.parse(template) };
   } catch (err) {
-    logger.debug(
-      `[templates] nunjucks parse failed; falling back to conservative detection: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    );
+    logger.debug('[templates] nunjucks parse failed; falling back to conservative detection', {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return { ok: false };
   }
 }
@@ -72,44 +70,73 @@ function isNonReferenceSymbol(parent?: NunjucksParentContext): boolean {
     (parent.node.typename === 'Filter' && parent.field === 'name') ||
     (parent.node.typename === 'Is' && parent.field === 'right') ||
     (parent.node.typename === 'Set' && parent.field === 'targets') ||
-    (parent.node.typename === 'For' && parent.field === 'name') ||
+    (isForLikeNode(parent.node) && parent.field === 'name') ||
     (parent.node.typename === 'Macro' && parent.field === 'name') ||
     (parent.node.typename === 'Import' && parent.field === 'target') ||
     (parent.node.typename === 'FromImport' && parent.field === 'names')
   );
 }
 
-function collectSymbolValues(node: unknown): string[] {
-  if (Array.isArray(node)) {
-    return node.flatMap((item) => collectSymbolValues(item));
-  }
-  if (!isNunjucksAstNode(node)) {
-    return [];
-  }
-  if (node.typename === 'Symbol' && typeof node.value === 'string') {
-    return [node.value];
-  }
-
-  const values: string[] = [];
-  for (const field of node.fields ?? []) {
-    const child = node[field];
-    if (Array.isArray(child)) {
-      for (const item of child) {
-        values.push(...collectSymbolValues(item));
-      }
-    } else {
-      values.push(...collectSymbolValues(child));
-    }
-  }
-  return values;
+function getSymbolName(node: unknown): string | undefined {
+  return isNunjucksAstNode(node) && node.typename === 'Symbol' && typeof node.value === 'string'
+    ? node.value
+    : undefined;
 }
 
-function addBoundSymbols(scope: ReadonlySet<string>, node: unknown): Set<string> {
+function collectBindingNames(node: unknown): string[] {
+  if (Array.isArray(node)) {
+    return node.flatMap((item) => collectBindingNames(item));
+  }
+
+  const symbolName = getSymbolName(node);
+  if (symbolName) {
+    return [symbolName];
+  }
+
+  if (!isNunjucksAstNode(node) || !Array.isArray(node.children)) {
+    return [];
+  }
+
+  return node.children.flatMap((child) => collectBindingNames(child));
+}
+
+function addBindingNames(scope: ReadonlySet<string>, node: unknown): Set<string> {
   const nextScope = new Set(scope);
-  for (const value of collectSymbolValues(node)) {
-    nextScope.add(value);
+  for (const name of collectBindingNames(node)) {
+    nextScope.add(name);
   }
   return nextScope;
+}
+
+function addNamesToScope(scope: ReadonlySet<string>, names: readonly string[]): Set<string> {
+  const nextScope = new Set(scope);
+  for (const name of names) {
+    nextScope.add(name);
+  }
+  return nextScope;
+}
+
+function collectFromImportBindingNames(namesNode: unknown): string[] {
+  if (!isNunjucksAstNode(namesNode) || !Array.isArray(namesNode.children)) {
+    return [];
+  }
+
+  const names: string[] = [];
+  for (const child of namesNode.children) {
+    const plainImportName = getSymbolName(child);
+    if (plainImportName) {
+      names.push(plainImportName);
+      continue;
+    }
+
+    if (isNunjucksAstNode(child) && child.typename === 'Pair') {
+      const aliasName = getSymbolName(child.value);
+      if (aliasName) {
+        names.push(aliasName);
+      }
+    }
+  }
+  return names;
 }
 
 function astNodeListReferencesVariable(
@@ -127,13 +154,13 @@ function astNodeListReferencesVariable(
       return true;
     }
     if (item.typename === 'Set') {
-      scope = addBoundSymbols(scope, item.targets);
+      scope = addBindingNames(scope, item.targets);
     } else if (item.typename === 'Macro') {
-      scope = addBoundSymbols(scope, item.name);
+      scope = addBindingNames(scope, item.name);
     } else if (item.typename === 'Import') {
-      scope = addBoundSymbols(scope, item.target);
+      scope = addBindingNames(scope, item.target);
     } else if (item.typename === 'FromImport') {
-      scope = addBoundSymbols(scope, item.names);
+      scope = addNamesToScope(scope, collectFromImportBindingNames(item.names));
     }
   }
   return false;
@@ -159,12 +186,16 @@ function astChildReferencesVariable(
   );
 }
 
-function forNodeReferencesVariable(
+function isForLikeNode(node: NunjucksAstNode): boolean {
+  return node.typename === 'For' || node.typename === 'AsyncEach' || node.typename === 'AsyncAll';
+}
+
+function forLikeNodeReferencesVariable(
   node: NunjucksAstNode,
   variableName: string,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
-  const loopScope = addBoundSymbols(boundSymbols, node.name);
+  const loopScope = addBindingNames(boundSymbols, node.name);
   return (
     astChildReferencesVariable(node, 'arr', variableName, boundSymbols) ||
     astChildReferencesVariable(node, 'body', variableName, loopScope) ||
@@ -173,66 +204,45 @@ function forNodeReferencesVariable(
 }
 
 /**
- * Collect only parameter NAMES from a Macro.args NodeList. This is the set of
- * names bound inside the macro body — positional Symbols and `Pair.key`
- * Symbols inside `KeywordArgs`. Default-value expressions (`Pair.value`) are
- * *not* bindings and must be walked separately as references in the outer
- * scope.
+ * Walk a Nunjucks macro/caller signature left-to-right. Positional args and
+ * earlier keyword defaults are visible to later defaults, but the current
+ * keyword is not bound until its own default value has been evaluated.
  */
-function collectMacroParamNames(argsNode: unknown): string[] {
-  const names: string[] = [];
-  if (!isNunjucksAstNode(argsNode) || !Array.isArray(argsNode.children)) {
-    return names;
-  }
-  for (const child of argsNode.children) {
-    if (!isNunjucksAstNode(child)) {
-      continue;
-    }
-    if (child.typename === 'Symbol' && typeof child.value === 'string') {
-      names.push(child.value);
-      continue;
-    }
-    if (child.typename === 'KeywordArgs' && Array.isArray(child.children)) {
-      for (const pair of child.children) {
-        if (
-          isNunjucksAstNode(pair) &&
-          pair.typename === 'Pair' &&
-          isNunjucksAstNode(pair.key) &&
-          pair.key.typename === 'Symbol' &&
-          typeof pair.key.value === 'string'
-        ) {
-          names.push(pair.key.value);
-        }
-      }
-    }
-  }
-  return names;
-}
-
-function macroArgsReferenceVariable(
+function analyzeSignatureArgs(
   argsNode: unknown,
   variableName: string,
   boundSymbols: ReadonlySet<string>,
-): boolean {
+): { paramNames: string[]; referencesVariable: boolean } {
+  const paramNames: string[] = [];
   if (!isNunjucksAstNode(argsNode) || !Array.isArray(argsNode.children)) {
-    return false;
+    return { paramNames, referencesVariable: false };
   }
 
+  const defaultScope = new Set(boundSymbols);
   for (const child of argsNode.children) {
     if (!isNunjucksAstNode(child)) {
       continue;
     }
-    if (child.typename === 'Symbol') {
+    const positionalParamName = getSymbolName(child);
+    if (positionalParamName) {
+      paramNames.push(positionalParamName);
+      defaultScope.add(positionalParamName);
       continue;
     }
     if (child.typename === 'KeywordArgs' && Array.isArray(child.children)) {
       for (const pair of child.children) {
+        const keywordParamName =
+          isNunjucksAstNode(pair) && pair.typename === 'Pair' ? getSymbolName(pair.key) : undefined;
         if (
           isNunjucksAstNode(pair) &&
           pair.typename === 'Pair' &&
-          astChildReferencesVariable(pair, 'value', variableName, boundSymbols)
+          astChildReferencesVariable(pair, 'value', variableName, defaultScope)
         ) {
-          return true;
+          return { paramNames, referencesVariable: true };
+        }
+        if (keywordParamName) {
+          paramNames.push(keywordParamName);
+          defaultScope.add(keywordParamName);
         }
       }
       continue;
@@ -242,14 +252,14 @@ function macroArgsReferenceVariable(
         child,
         variableName,
         { field: 'children', node: argsNode },
-        boundSymbols,
+        defaultScope,
       )
     ) {
-      return true;
+      return { paramNames, referencesVariable: true };
     }
   }
 
-  return false;
+  return { paramNames, referencesVariable: false };
 }
 
 function macroNodeReferencesVariable(
@@ -257,24 +267,20 @@ function macroNodeReferencesVariable(
   variableName: string,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
-  // Macro defaults are evaluated before the parameter is assigned, so only
-  // parameter names themselves are bindings while Pair.value remains outer-scope.
-  const paramNames = collectMacroParamNames(node.args);
-  if (macroArgsReferenceVariable(node.args, variableName, boundSymbols)) {
+  const { paramNames, referencesVariable } = analyzeSignatureArgs(
+    node.args,
+    variableName,
+    boundSymbols,
+  );
+  if (referencesVariable) {
     return true;
   }
 
   // Walk the body with the full macro scope (outer + param names + macro name).
-  const macroScope = new Set(boundSymbols);
-  for (const name of paramNames) {
-    macroScope.add(name);
-  }
-  if (
-    isNunjucksAstNode(node.name) &&
-    node.name.typename === 'Symbol' &&
-    typeof node.name.value === 'string'
-  ) {
-    macroScope.add(node.name.value);
+  const macroScope = addNamesToScope(boundSymbols, paramNames);
+  const macroName = getSymbolName(node.name);
+  if (macroName) {
+    macroScope.add(macroName);
   }
   return astChildReferencesVariable(node, 'body', variableName, macroScope);
 }
@@ -340,7 +346,16 @@ function callerNodeReferencesVariable(
   variableName: string,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
-  const callerScope = addBoundSymbols(boundSymbols, node.args);
+  const { paramNames, referencesVariable } = analyzeSignatureArgs(
+    node.args,
+    variableName,
+    boundSymbols,
+  );
+  if (referencesVariable) {
+    return true;
+  }
+
+  const callerScope = addNamesToScope(boundSymbols, paramNames);
   return astChildReferencesVariable(node, 'body', variableName, callerScope);
 }
 
@@ -373,8 +388,8 @@ function astReferencesVariable(
     );
   }
 
-  if (node.typename === 'For') {
-    return forNodeReferencesVariable(node, variableName, boundSymbols);
+  if (isForLikeNode(node)) {
+    return forLikeNodeReferencesVariable(node, variableName, boundSymbols);
   }
 
   if (node.typename === 'Macro') {

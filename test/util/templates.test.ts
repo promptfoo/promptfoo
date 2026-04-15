@@ -151,6 +151,16 @@ describe('templateReferencesVariable', () => {
       'call block body reference with unrelated caller arg',
       '{% macro m() %}{{ caller("local") }}{% endmacro %}{% call(x) m() %}{{ _conversation }}{% endcall %}',
     ],
+    [
+      'call block caller default value',
+      '{% macro m() %}{{ caller() }}{% endmacro %}{% call(x=_conversation) m() %}{{ x[0].output }}{% endcall %}',
+    ],
+    [
+      'call block caller self-referential default value',
+      '{% macro m() %}{{ caller() }}{% endmacro %}{% call(_conversation=_conversation) m() %}{{ _conversation[0].output }}{% endcall %}',
+    ],
+    ['asyncEach iterable', '{% asyncEach turn in _conversation %}{{ turn.output }}{% endeach %}'],
+    ['asyncAll iterable', '{% asyncAll turn in _conversation %}{{ turn.output }}{% endall %}'],
   ])('detects a real reference in %s', (_label, template) => {
     expect(templateReferencesVariable(template, '_conversation')).toBe(true);
   });
@@ -192,11 +202,47 @@ describe('templateReferencesVariable', () => {
       '{% macro render(_conversation=something) %}{{ _conversation }}{% endmacro %}',
     ],
     [
+      'macro keyword default left-to-right shadow',
+      '{% macro render(_conversation=[], history=_conversation) %}{{ history | length }}{% endmacro %}{{ render() }}',
+    ],
+    [
+      'macro positional param used by keyword default',
+      '{% macro render(_conversation, history=_conversation) %}{{ history }}{% endmacro %}',
+    ],
+    [
       'call block caller argument shadow',
       '{% macro m() %}{{ caller("local") }}{% endmacro %}{% call(_conversation) m() %}{{ _conversation }}{% endcall %}',
     ],
+    [
+      'call block caller keyword default left-to-right shadow',
+      '{% macro m() %}{{ caller() }}{% endmacro %}{% call(_conversation=[], history=_conversation) m() %}{{ history | length }}{% endcall %}',
+    ],
+    [
+      'asyncEach target shadow',
+      '{% asyncEach _conversation in items %}{{ _conversation }}{% endeach %}',
+    ],
+    [
+      'asyncAll target shadow',
+      '{% asyncAll _conversation in items %}{{ _conversation }}{% endall %}',
+    ],
   ])('ignores %s', (_label, template) => {
     expect(templateReferencesVariable(template, '_conversation')).toBe(false);
+  });
+
+  it('handles from-import aliases without shadowing source names', () => {
+    expect(templateReferencesVariable('{% from "x.njk" import foo %}{{ foo }}', 'foo')).toBe(false);
+    expect(
+      templateReferencesVariable('{% from "x.njk" import foo as helper %}{{ helper }}', 'helper'),
+    ).toBe(false);
+    expect(
+      templateReferencesVariable('{% from "x.njk" import foo as helper %}{{ foo }}', 'foo'),
+    ).toBe(true);
+    expect(
+      templateReferencesVariable(
+        '{% from templateName import foo as helper %}{{ helper }}',
+        'templateName',
+      ),
+    ).toBe(true);
   });
 
   it('returns false for empty variable names', () => {
