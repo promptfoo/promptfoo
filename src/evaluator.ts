@@ -4,6 +4,7 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
+import { LRUCache } from 'lru-cache';
 import {
   getAssertionBaseType,
   hasTraceAwareAssertions,
@@ -76,7 +77,7 @@ import {
   isProviderAllowed,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
-import { extractVariablesFromTemplate, templateReferencesVariable } from './util/templates';
+import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
@@ -105,7 +106,10 @@ import type {
 import type { CallApiContextParams } from './types/providers';
 
 const CONVERSATION_VAR_NAME = '_conversation';
-const promptUsesConversationVariableCache = new Map<string, boolean>();
+const PROMPT_CONVERSATION_CACHE_MAX = 1024;
+const promptUsesConversationVariableCache = new LRUCache<string, boolean>({
+  max: PROMPT_CONVERSATION_CACHE_MAX,
+});
 
 function promptUsesConversationVariable(prompt: Pick<Prompt, 'raw'>): boolean {
   const cached = promptUsesConversationVariableCache.get(prompt.raw);
@@ -113,9 +117,19 @@ function promptUsesConversationVariable(prompt: Pick<Prompt, 'raw'>): boolean {
     return cached;
   }
 
-  const usesConversationVariable = templateReferencesVariable(prompt.raw, CONVERSATION_VAR_NAME);
-  promptUsesConversationVariableCache.set(prompt.raw, usesConversationVariable);
-  return usesConversationVariable;
+  const { referenced, parsed } = analyzeTemplateReference(prompt.raw, CONVERSATION_VAR_NAME);
+  // Only cache successfully parsed results. Caching a parse failure would
+  // poison the cache for the lifetime of the process and silently downgrade
+  // future conversation-aware runs to parallel execution.
+  if (parsed) {
+    promptUsesConversationVariableCache.set(prompt.raw, referenced);
+  }
+  return referenced;
+}
+
+/** Test-only: reset the per-process prompt conversation-variable cache. */
+export function __resetPromptConversationCacheForTests(): void {
+  promptUsesConversationVariableCache.clear();
 }
 
 /**

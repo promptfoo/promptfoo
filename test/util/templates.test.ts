@@ -2,6 +2,7 @@ import nunjucks from 'nunjucks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
+  analyzeTemplateReference,
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
   getNunjucksEngine,
@@ -101,86 +102,105 @@ describe('extractVariablesFromTemplates', () => {
 });
 
 describe('templateReferencesVariable', () => {
-  it('matches real expression references to the variable', () => {
-    expect(templateReferencesVariable('{{ _conversation[0].output }}', '_conversation')).toBe(true);
-    expect(templateReferencesVariable('{{ _conversation | length }}', '_conversation')).toBe(true);
-    expect(
-      templateReferencesVariable('{% if _conversation %}yes{% endif %}', '_conversation'),
-    ).toBe(true);
-    expect(
-      templateReferencesVariable(
-        '{% for turn in _conversation %}{{ turn.output }}{% endfor %}',
-        '_conversation',
-      ),
-    ).toBe(true);
-    expect(templateReferencesVariable('{{ summarize(_conversation) }}', '_conversation')).toBe(
+  it.each<[string, string]>([
+    ['basic symbol read', '{{ _conversation[0].output }}'],
+    ['filter input', '{{ _conversation | length }}'],
+    ['if condition', '{% if _conversation %}yes{% endif %}'],
+    ['elif condition', '{% if false %}no{% elif _conversation %}yes{% endif %}'],
+    ['ternary true branch', '{{ "yes" if _conversation else "no" }}'],
+    ['ternary condition', '{{ first if _conversation else second }}'],
+    ['logical expression', '{{ _conversation and foo }}'],
+    ['not expression', '{{ not _conversation }}'],
+    ['comparison', '{{ _conversation == [] }}'],
+    ['for loop iterable', '{% for turn in _conversation %}{{ turn.output }}{% endfor %}'],
+    ['function argument', '{{ summarize(_conversation) }}'],
+    ['filter argument', '{{ input | default(_conversation) }}'],
+    ['bracket index lookup', '{{ obj[_conversation] }}'],
+    ['dict literal value', '{{ {"history": _conversation}["history"][0].output }}'],
+    ['set value binding', '{% set history = _conversation %}{{ history }}'],
+    ['set block binding', '{% set history %}{{ _conversation }}{% endset %}{{ history }}'],
+  ])('detects a real reference in %s', (_label, template) => {
+    expect(templateReferencesVariable(template, '_conversation')).toBe(true);
+  });
+
+  it.each<[string, string]>([
+    ['substring in plain text', 'Summarize the pre_conversation_context for {{ question }}'],
+    ['substring in symbol name', '{{ pre_conversation_context }}'],
+    ['string literal', '{{ "_conversation" }}'],
+    ['comment mention', '{# _conversation #}{{ question }}'],
+    ['property of another object', '{{ foo._conversation }}'],
+    ['bracket lookup on another object', '{{ foo["_conversation"] }}'],
+    ['dict literal key', '{{ {_conversation: input} }}'],
+    ['filter name', '{{ input | _conversation }}'],
+    ['is test name', '{{ input is _conversation }}'],
+    ['raw block', '{% raw %}{{ _conversation }}{% endraw %}'],
+    ['for-loop target shadow', '{% for _conversation in items %}{{ _conversation }}{% endfor %}'],
+    ['macro argument shadow', '{% macro render(_conversation) %}{{ _conversation }}{% endmacro %}'],
+    ['set value shadow', '{% set _conversation = [] %}{{ _conversation }}'],
+    ['set block shadow', '{% set _conversation %}local{% endset %}{{ _conversation }}'],
+    [
+      'set inside loop body',
+      '{% for i in range(3) %}{% set _conversation = [] %}{{ _conversation }}{% endfor %}',
+    ],
+    ['import target shadow', '{% import "x.njk" as _conversation %}{{ _conversation }}'],
+  ])('ignores %s', (_label, template) => {
+    expect(templateReferencesVariable(template, '_conversation')).toBe(false);
+  });
+
+  it('returns false for empty variable names', () => {
+    expect(templateReferencesVariable('{{ _conversation }}', '')).toBe(false);
+  });
+
+  it('returns false for templates that do not mention the variable at all', () => {
+    expect(templateReferencesVariable('{{ question }}', '_conversation')).toBe(false);
+    expect(templateReferencesVariable('', '_conversation')).toBe(false);
+  });
+
+  it('falls back to a conservative match when the template fails to parse', () => {
+    // Old substring-based code would force serial execution here; the new
+    // AST-based code must preserve that safety envelope when parsing fails
+    // rather than silently returning false.
+    expect(templateReferencesVariable('{{ _conversation', '_conversation')).toBe(true);
+    expect(templateReferencesVariable('{{ _conversation[0].output {% if %}', '_conversation')).toBe(
       true,
     );
-    expect(
-      templateReferencesVariable(
-        '{{ {"history": _conversation}["history"][0].output }}',
-        '_conversation',
-      ),
-    ).toBe(true);
-    expect(
-      templateReferencesVariable('{% set history = _conversation %}{{ history }}', '_conversation'),
-    ).toBe(true);
-    expect(
-      templateReferencesVariable(
-        '{% set history %}{{ _conversation }}{% endset %}{{ history }}',
-        '_conversation',
-      ),
-    ).toBe(true);
+    expect(templateReferencesVariable('{{ _conversation }}{% endif %}', '_conversation')).toBe(
+      true,
+    );
   });
 
-  it('ignores text, strings, comments, keys, filters, tests, and other object properties', () => {
-    expect(
-      templateReferencesVariable(
-        'Summarize the pre_conversation_context for {{ question }}',
-        '_conversation',
-      ),
-    ).toBe(false);
-    expect(templateReferencesVariable('{{ pre_conversation_context }}', '_conversation')).toBe(
-      false,
-    );
-    expect(templateReferencesVariable('{{ "_conversation" }}', '_conversation')).toBe(false);
-    expect(templateReferencesVariable('{# _conversation #}{{ question }}', '_conversation')).toBe(
-      false,
-    );
-    expect(templateReferencesVariable('{{ foo._conversation }}', '_conversation')).toBe(false);
-    expect(templateReferencesVariable('{{ foo["_conversation"] }}', '_conversation')).toBe(false);
-    expect(templateReferencesVariable('{{ {_conversation: input} }}', '_conversation')).toBe(false);
-    expect(templateReferencesVariable('{{ input | _conversation }}', '_conversation')).toBe(false);
-    expect(templateReferencesVariable('{{ input is _conversation }}', '_conversation')).toBe(false);
-    expect(
-      templateReferencesVariable(
-        '{% for _conversation in items %}{{ _conversation }}{% endfor %}',
-        '_conversation',
-      ),
-    ).toBe(false);
-    expect(
-      templateReferencesVariable(
-        '{% macro render(_conversation) %}{{ _conversation }}{% endmacro %}',
-        '_conversation',
-      ),
-    ).toBe(false);
-    expect(
-      templateReferencesVariable(
-        '{% set _conversation = [] %}{{ _conversation }}',
-        '_conversation',
-      ),
-    ).toBe(false);
-    expect(
-      templateReferencesVariable(
-        '{% set _conversation %}local{% endset %}{{ _conversation }}',
-        '_conversation',
-      ),
-    ).toBe(false);
+  it('does not throw on malformed templates', () => {
+    expect(() => templateReferencesVariable('{{ _conversation', '_conversation')).not.toThrow();
+    expect(() => templateReferencesVariable('{% for %}', '_conversation')).not.toThrow();
+  });
+});
+
+describe('analyzeTemplateReference', () => {
+  it('reports parsed=true when the template parses', () => {
+    expect(analyzeTemplateReference('{{ _conversation }}', '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(analyzeTemplateReference('{{ question }}', '_conversation')).toEqual({
+      referenced: false,
+      parsed: true,
+    });
   });
 
-  it('returns false for empty variable names and invalid templates', () => {
-    expect(templateReferencesVariable('{{ _conversation }}', '')).toBe(false);
-    expect(templateReferencesVariable('{{ _conversation', '_conversation')).toBe(false);
+  it('reports parsed=false and conservative referenced=true on parse failure', () => {
+    expect(analyzeTemplateReference('{{ _conversation', '_conversation')).toEqual({
+      referenced: true,
+      parsed: false,
+    });
+  });
+
+  it('reports parsed=true with referenced=false when the variable is not mentioned', () => {
+    // The textual fast path returns parsed=true because nothing was actually parsed
+    // — no parse failure to surface.
+    expect(analyzeTemplateReference('{{ question }}', '_conversation')).toEqual({
+      referenced: false,
+      parsed: true,
+    });
   });
 });
 

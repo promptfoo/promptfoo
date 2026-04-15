@@ -1,6 +1,7 @@
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
 import { getEnvBool } from '../envars';
+import logger from '../logger';
 
 import type { NunjucksFilterMap } from '../types/index';
 
@@ -16,13 +17,15 @@ type NunjucksParser = {
 };
 
 type NunjucksWithParser = typeof nunjucks & {
-  parser: NunjucksParser;
+  parser?: NunjucksParser;
 };
 
 type NunjucksParentContext = {
   field: string;
   node: NunjucksAstNode;
 };
+
+type ParseResult = { ok: true; ast: NunjucksAstNode } | { ok: false };
 
 function isNunjucksAstNode(value: unknown): value is NunjucksAstNode {
   return Boolean(
@@ -32,11 +35,30 @@ function isNunjucksAstNode(value: unknown): value is NunjucksAstNode {
   );
 }
 
-function parseNunjucksTemplate(template: string): NunjucksAstNode | undefined {
+function getNunjucksParser(): NunjucksParser | undefined {
+  return (nunjucks as unknown as NunjucksWithParser).parser;
+}
+
+function parseNunjucksTemplate(template: string): ParseResult {
+  const parser = getNunjucksParser();
+  if (!parser || typeof parser.parse !== 'function') {
+    // Nunjucks private parser export is missing — likely a version drift.
+    // Surface it once at debug level and signal parse failure so callers
+    // can fall back conservatively.
+    logger.debug(
+      '[templates] nunjucks.parser.parse is not available; falling back to conservative detection',
+    );
+    return { ok: false };
+  }
   try {
-    return (nunjucks as unknown as NunjucksWithParser).parser.parse(template);
-  } catch {
-    return undefined;
+    return { ok: true, ast: parser.parse(template) };
+  } catch (err) {
+    logger.debug(
+      `[templates] nunjucks parse failed; falling back to conservative detection: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    return { ok: false };
   }
 }
 
@@ -51,7 +73,9 @@ function isNonReferenceSymbol(parent?: NunjucksParentContext): boolean {
     (parent.node.typename === 'Is' && parent.field === 'right') ||
     (parent.node.typename === 'Set' && parent.field === 'targets') ||
     (parent.node.typename === 'For' && parent.field === 'name') ||
-    (parent.node.typename === 'Macro' && parent.field === 'name')
+    (parent.node.typename === 'Macro' && parent.field === 'name') ||
+    (parent.node.typename === 'Import' && parent.field === 'target') ||
+    (parent.node.typename === 'FromImport' && parent.field === 'names')
   );
 }
 
@@ -106,6 +130,10 @@ function astNodeListReferencesVariable(
       scope = addBoundSymbols(scope, item.targets);
     } else if (item.typename === 'Macro') {
       scope = addBoundSymbols(scope, item.name);
+    } else if (item.typename === 'Import') {
+      scope = addBoundSymbols(scope, item.target);
+    } else if (item.typename === 'FromImport') {
+      scope = addBoundSymbols(scope, item.names);
     }
   }
   return false;
@@ -306,13 +334,53 @@ export function extractVariablesFromTemplates(templates: string[]): string[] {
 }
 
 /**
- * Check whether a valid Nunjucks template references a variable as an expression symbol.
+ * Detailed result for {@link analyzeTemplateReference}. `parsed` is `false`
+ * only when the Nunjucks parser threw or its private export is missing; in
+ * that case `referenced` is set conservatively from a textual substring check
+ * so callers can preserve the old substring-match safety envelope without
+ * memoizing a parse failure.
  */
-export function templateReferencesVariable(template: string, variableName: string): boolean {
+export type TemplateReferenceResult = {
+  referenced: boolean;
+  parsed: boolean;
+};
+
+/**
+ * Classify whether a template references `variableName` as a real Nunjucks
+ * expression symbol, and surface whether the template parsed successfully.
+ *
+ * Callers that cache results should avoid caching when `parsed` is `false`,
+ * otherwise a transient parse failure would poison the cache for the lifetime
+ * of the process.
+ */
+export function analyzeTemplateReference(
+  template: string,
+  variableName: string,
+): TemplateReferenceResult {
   if (!variableName || !template.includes(variableName)) {
-    return false;
+    return { referenced: false, parsed: true };
   }
 
-  const ast = parseNunjucksTemplate(template);
-  return ast ? astReferencesVariable(ast, variableName) : false;
+  const parseResult = parseNunjucksTemplate(template);
+  if (!parseResult.ok) {
+    return { referenced: true, parsed: false };
+  }
+  return {
+    referenced: astReferencesVariable(parseResult.ast, variableName),
+    parsed: true,
+  };
+}
+
+/**
+ * Check whether a Nunjucks template references a variable as a real expression
+ * symbol (not a string literal, comment, object key, filter/test name, property
+ * access, macro/for/set binding, or `{% import %}` alias).
+ *
+ * If parsing fails, returns `true` whenever the template textually contains
+ * `variableName`. This preserves the safety envelope of the old substring-based
+ * check so callers that gate serial-only behavior on this result do not
+ * silently downgrade to parallel execution when a template is malformed.
+ */
+export function templateReferencesVariable(template: string, variableName: string): boolean {
+  return analyzeTemplateReference(template, variableName).referenced;
 }
