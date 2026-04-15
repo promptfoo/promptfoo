@@ -701,6 +701,37 @@ function evidenceFromProviderRaw(raw: unknown): TargetEvidence[] {
         });
       }
     }
+
+    if (type === 'tool_use' || type === 'tool_call') {
+      // Generic tool invocations (Write/Edit/Read/MCP) that aren't shell
+      // commands. Provider wrappers should surface these when the underlying
+      // agent writes files via file-edit tools rather than Bash heredocs;
+      // without this, deterministic verifiers only see the final assistant
+      // text and miss vulnerable code delivered through tool inputs.
+      const toolName = getString(itemObject.tool) ?? getString(itemObject.name) ?? 'tool';
+      const toolInput =
+        getString(itemObject.input) ?? getString(itemObject.content) ?? getString(itemObject.text);
+      if (toolInput) {
+        evidence.push({
+          evidenceSource: 'artifact-file',
+          location: `provider raw item ${index + 1} ${toolName} input`,
+          text: toolInput,
+        });
+      }
+    }
+
+    if (type === 'tool_result' || type === 'tool_output') {
+      const toolName = getString(itemObject.tool) ?? getString(itemObject.name) ?? 'tool';
+      const toolOutput =
+        getString(itemObject.output) ?? getString(itemObject.text) ?? getString(itemObject.content);
+      if (toolOutput) {
+        evidence.push({
+          evidenceSource: 'command-output',
+          location: `provider raw item ${index + 1} ${toolName} output`,
+          text: toolOutput,
+        });
+      }
+    }
   });
 
   return evidence;
