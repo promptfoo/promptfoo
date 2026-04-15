@@ -238,6 +238,27 @@ describe('Provider Registry', () => {
       }
     });
 
+    it('wraps redteam factory failures with the requested provider path', async () => {
+      // CustomProvider requires config.strategyText; constructing without it
+      // should surface the original invariant message plus the provider path
+      // the user typed, not a bare "requires strategyText" error from deep in
+      // the redteam module tree.
+      const customPath = 'promptfoo:redteam:custom';
+      const factory = (await getProviderFactories(customPath)).find((f) => f.test(customPath));
+      expect(factory).toBeDefined();
+
+      const brokenConfig: ProviderOptions = {
+        id: 'test-provider',
+        config: {
+          // intentionally missing strategyText
+        },
+      };
+
+      await expect(factory!.create(customPath, brokenConfig, mockContext)).rejects.toThrow(
+        /Failed to load redteam provider 'promptfoo:redteam:custom'.*strategyText/,
+      );
+    });
+
     it('should handle anthropic providers correctly', async () => {
       const factory = providerMap.find((f) => f.test('anthropic:messages:claude-3'));
       expect(factory).toBeDefined();

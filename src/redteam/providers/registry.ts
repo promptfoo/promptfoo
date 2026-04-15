@@ -1,6 +1,27 @@
 import type { ProviderFactory } from '../../providers/registryTypes';
 
-export const redteamProviderFactories: ProviderFactory[] = [
+// Wrap a redteam factory's create() so dynamic-import failures and
+// constructor errors carry the originally-requested provider path. Without
+// this, a rename or broken install surfaces as a raw `ERR_MODULE_NOT_FOUND`
+// pointing at an internal file path with no connection to the user's config.
+function withErrorContext(factory: ProviderFactory): ProviderFactory {
+  return {
+    test: factory.test,
+    create: async (providerPath, providerOptions, context) => {
+      try {
+        return await factory.create(providerPath, providerOptions, context);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `Failed to load redteam provider '${providerPath}': ${message}`,
+          err instanceof Error ? { cause: err } : undefined,
+        );
+      }
+    },
+  };
+}
+
+const rawRedteamProviderFactories: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath === 'agentic:memory-poisoning',
     create: async (_providerPath, providerOptions) => {
@@ -98,3 +119,6 @@ export const redteamProviderFactories: ProviderFactory[] = [
     },
   },
 ];
+
+export const redteamProviderFactories: ProviderFactory[] =
+  rawRedteamProviderFactories.map(withErrorContext);
