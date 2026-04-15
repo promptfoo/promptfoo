@@ -146,7 +146,6 @@ const legacyHoistedPersistentMockFiles = new Set([
 ]);
 
 const legacyDirectProcessEnvMutationFiles = new Set([
-  'account.test.ts',
   'assertions/assertionResult.test.ts',
   'assertions/trace.test.ts',
   'cache.test.ts',
