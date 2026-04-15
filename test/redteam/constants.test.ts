@@ -116,6 +116,11 @@ describe('constants', () => {
       'coding-agent:secret-file-read',
       'coding-agent:sandbox-write-escape',
       'coding-agent:network-egress-bypass',
+      'coding-agent:procfs-credential-read',
+      'coding-agent:delayed-ci-exfil',
+      'coding-agent:generated-vulnerability',
+      'coding-agent:automation-poisoning',
+      'coding-agent:steganographic-exfil',
     ]);
 
     CODING_AGENT_PLUGINS.forEach((plugin) => {
