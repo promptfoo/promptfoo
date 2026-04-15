@@ -1281,6 +1281,13 @@ export interface EvalWithMetadata {
 export type EvaluateTestSuite = {
   prompts: (string | object | PromptFunction)[];
   writeLatestResults?: boolean;
+  /**
+   * Author to attribute the evaluation to.
+   * When the user is logged into cloud with a stored email, that identity
+   * takes precedence and this option is ignored. Otherwise resolution is:
+   * this option > stored user email > PROMPTFOO_AUTHOR env var > null.
+   */
+  author?: string;
 } & Omit<TestSuiteConfig, 'prompts'>;
 
 export type EvaluateTestSuiteWithEvaluateOptions = EvaluateTestSuite & {

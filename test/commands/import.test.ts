@@ -169,6 +169,31 @@ describe('importCommand', () => {
       // Verify author is preserved from metadata
       expect(importedEval!.author).toBe(sampleData.metadata.author);
     });
+
+    it('should preserve imported author even when the local user is cloud-authed as someone else', async () => {
+      // Simulate a cloud-authed importer with a different local identity. The
+      // imported eval's historical author must still win — this is a
+      // regression test for PR #7760.
+      const originalApiKey = process.env.PROMPTFOO_API_KEY;
+      process.env.PROMPTFOO_API_KEY = 'fake-test-api-key';
+      try {
+        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+        const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+
+        const importedEval = await Eval.findById(sampleData.evalId);
+        expect(importedEval).toBeDefined();
+        expect(importedEval!.author).toBe(sampleData.metadata.author);
+      } finally {
+        if (originalApiKey === undefined) {
+          delete process.env.PROMPTFOO_API_KEY;
+        } else {
+          process.env.PROMPTFOO_API_KEY = originalApiKey;
+        }
+      }
+    });
   });
 
   describe('collision handling', () => {
