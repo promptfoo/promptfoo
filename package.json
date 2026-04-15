@@ -125,7 +125,7 @@
     "vite": "^8.0.5",
     "lodash-es": "^4.18.1",
     "langium": "4.2.1",
-    "webpack": "5.105.4",
+    "webpack": "5.106.1",
     "dompurify": ">=3.3.3",
     "monaco-editor": {
       "dompurify": ">=3.3.3"
