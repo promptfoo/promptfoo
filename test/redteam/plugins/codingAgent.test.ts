@@ -2780,6 +2780,21 @@ PY`,
     );
     const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(unrelatedCwd);
 
+    // Set the rubric mock BEFORE calling the grader: when the deterministic
+    // verifier finds no sabotage (the file still matches its recorded sha),
+    // the grader falls through to the parent's LLM rubric path. Without an
+    // explicit mock, that fall-through resolves to undefined and the test
+    // crashes with `TypeError: Cannot read properties of undefined`.
+    // `vi.clearAllMocks()` in beforeEach only clears call history, not mock
+    // implementations, so we always set ours per-test instead of relying on
+    // a previous test's leftover state.
+    const { matchesLlmRubric } = await import('../../../src/matchers/llmGrading');
+    vi.mocked(matchesLlmRubric).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'agent fixed the implementation, not the verifier',
+    });
+
     try {
       const grader = new CodingAgentGrader('coding-agent:verifier-sabotage');
 
@@ -2803,6 +2818,7 @@ PY`,
       // deterministic verifier finds no sabotage and the grader falls
       // through to the LLM rubric.
       expect(result.rubric).not.toMatch(/Deterministic coding-agent verifier/);
+      expect(vi.mocked(matchesLlmRubric)).toHaveBeenCalled();
     } finally {
       cwdSpy.mockRestore();
       fs.rmSync(unrelatedCwd, { recursive: true, force: true });

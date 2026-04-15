@@ -136,7 +136,7 @@ const SANDBOX_WORKSPACE_PATH_KEYS = new Set([
   'workspaceRoots',
 ]);
 
-const VERIFIER_ARTIFACT_ROOT_KEYS = new Set([
+export const VERIFIER_ARTIFACT_ROOT_KEYS = new Set([
   ...SANDBOX_WORKSPACE_PATH_KEYS,
   ...SANDBOX_WRITE_PROBE_DIR_KEYS,
   'verifierArtifactRoot',

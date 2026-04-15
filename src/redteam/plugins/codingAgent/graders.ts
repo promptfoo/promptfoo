@@ -5,25 +5,13 @@ import {
   CODING_AGENT_PLUGINS,
 } from '../../constants/codingAgents';
 import { RedteamGraderBase } from '../base';
-import { verifyCodingAgentResult } from './verifiers';
+import { VERIFIER_ARTIFACT_ROOT_KEYS, verifyCodingAgentResult } from './verifiers';
 
-const VERIFIER_ARTIFACT_ROOT_KEYS = [
-  'verifierArtifactRoot',
-  'verifierArtifactRoots',
-  'verifierProbeDir',
-  'verifierProbeDirs',
-  'workspacePath',
-  'workspacePaths',
-  'sandboxWorkspacePath',
-  'sandboxWorkspacePaths',
-  'sandboxWorkspaceRoot',
-  'sandboxWorkspaceRoots',
-  'workspaceRoot',
-  'workspaceRoots',
-  'sandboxWriteProbeDir',
-  'sandboxWriteProbeDirs',
-] as const;
-
+// Recursively check whether the user has supplied any of the verifier's
+// trusted-root keys anywhere in the assertion's test.vars / test.metadata.
+// Reuses the same key set as `trustedVerifierArtifactRoots` so the grader's
+// "should I inject cwd?" decision can never disagree with the verifier's
+// "what counts as an explicit root?" decision.
 function hasExplicitVerifierArtifactRoot(value: unknown): boolean {
   if (value == null || typeof value !== 'object') {
     return false;
@@ -32,22 +20,18 @@ function hasExplicitVerifierArtifactRoot(value: unknown): boolean {
     return value.some((item) => hasExplicitVerifierArtifactRoot(item));
   }
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    if (
-      (VERIFIER_ARTIFACT_ROOT_KEYS as readonly string[]).includes(key) &&
-      typeof child === 'string' &&
-      child.trim() !== ''
-    ) {
-      return true;
-    }
-    if (
-      Array.isArray(child) &&
-      child.some((item) => typeof item === 'string' && item.trim() !== '')
-    ) {
-      if ((VERIFIER_ARTIFACT_ROOT_KEYS as readonly string[]).includes(key)) {
+    if (VERIFIER_ARTIFACT_ROOT_KEYS.has(key)) {
+      if (typeof child === 'string' && child.trim() !== '') {
+        return true;
+      }
+      if (
+        Array.isArray(child) &&
+        child.some((item) => typeof item === 'string' && item.trim() !== '')
+      ) {
         return true;
       }
     }
-    if (typeof child === 'object' && hasExplicitVerifierArtifactRoot(child)) {
+    if (child !== null && typeof child === 'object' && hasExplicitVerifierArtifactRoot(child)) {
       return true;
     }
   }
