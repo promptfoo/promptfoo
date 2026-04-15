@@ -2199,6 +2199,7 @@ function ResultsTable({
           // Grow vertically into any empty space; this applies when total number of evals is so few that the table otherwise
           // won't extend to the bottom of the viewport.
           flexGrow: 1,
+          minHeight: 0,
           position: 'relative',
         }}
         ref={tableRef}
@@ -2235,7 +2236,7 @@ function ResultsTable({
           </tbody>
         </table>
       </div>
-      <div className="pagination sticky bottom-0 z-10 flex items-center gap-4 flex-wrap justify-between bg-background border-t border-border w-screen px-4 -mx-4 shadow-lg py-2">
+      <div className="pagination sticky bottom-0 z-10 flex shrink-0 items-center gap-4 flex-wrap justify-between bg-background border-t border-border w-screen px-4 -mx-4 shadow-lg py-2">
         <div>
           Showing{' '}
           {filteredResultsCount === 0 ? (
