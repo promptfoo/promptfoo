@@ -147,7 +147,7 @@
       ".": "0.4.1",
       "chevrotain": "11.2.0"
     },
-    "webpack": "5.106.1",
+    "webpack": "5.106.2",
     "dompurify": ">=3.3.3",
     "monaco-editor": {
       "dompurify": ">=3.3.3"
