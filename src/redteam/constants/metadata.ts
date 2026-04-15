@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  CODING_AGENT_COLLECTIONS,
   CODING_AGENT_PLUGIN_ALIASES,
   CODING_AGENT_PLUGIN_DESCRIPTIONS,
   CODING_AGENT_PLUGIN_DISPLAY_NAMES,
@@ -491,7 +492,9 @@ const codingAgentRiskCategorySeverityMap: Record<
   Severity
 > = {
   ...Object.fromEntries(CODING_AGENT_PLUGINS.map((pluginId) => [pluginId, Severity.High])),
-  'coding-agent:core': Severity.High,
+  ...Object.fromEntries(
+    CODING_AGENT_COLLECTIONS.map((collectionId) => [collectionId, Severity.High]),
+  ),
 } as Record<CodingAgentCollection | CodingAgentPlugin, Severity>;
 
 /*

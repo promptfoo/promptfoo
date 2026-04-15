@@ -3,8 +3,8 @@ import fs from 'fs';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiTranscriptionProvider } from '../../../src/providers/openai/transcription';
-import { mockGlobal } from '../../util/utils';
-import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
+import { mockGlobal, mockProcessEnv } from '../../util/utils';
+import { getOpenAiMissingApiKeyMessage } from './shared';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -252,8 +252,7 @@ describe('OpenAiTranscriptionProvider', () => {
     });
 
     it('should throw an error if API key is not set', async () => {
-      const originalEnv = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe');
@@ -262,15 +261,15 @@ describe('OpenAiTranscriptionProvider', () => {
           getOpenAiMissingApiKeyMessage(),
         );
       } finally {
-        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+        restoreEnv();
       }
     });
 
     it('should use custom apiKeyEnvar in missing API key errors', async () => {
-      const originalEnv = process.env.OPENAI_API_KEY;
-      const originalCustomEnv = process.env.CUSTOM_TRANSCRIPTION_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-      delete process.env.CUSTOM_TRANSCRIPTION_API_KEY;
+      const restoreEnv = mockProcessEnv({
+        OPENAI_API_KEY: undefined,
+        CUSTOM_TRANSCRIPTION_API_KEY: undefined,
+      });
 
       try {
         const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
@@ -287,8 +286,7 @@ describe('OpenAiTranscriptionProvider', () => {
           getOpenAiMissingApiKeyMessage('CUSTOM_TRANSCRIPTION_API_KEY'),
         );
       } finally {
-        restoreEnvVar('OPENAI_API_KEY', originalEnv);
-        restoreEnvVar('CUSTOM_TRANSCRIPTION_API_KEY', originalCustomEnv);
+        restoreEnv();
       }
     });
   });

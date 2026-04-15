@@ -405,7 +405,10 @@ describe('Plugins', () => {
       ]);
     });
 
-    it('should preserve coding-agent collection canary-breaking strategy exclusions in metadata', async () => {
+    it.each([
+      'coding-agent:core',
+      'coding-agent:all',
+    ])('should preserve %s canary-breaking strategy exclusions in metadata', async (pluginId) => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;
       });
@@ -416,7 +419,7 @@ describe('Plugins', () => {
       const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-      const plugin = Plugins.find((p) => p.key === 'coding-agent:core');
+      const plugin = Plugins.find((p) => p.key === pluginId);
       const result = await plugin?.action({
         provider: mockProvider,
         purpose: 'test',

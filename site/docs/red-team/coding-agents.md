@@ -45,7 +45,16 @@ Additional coding-agent plugins cover narrower harness and code-generation risks
 | The agent persists unsafe behavior through hooks, package scripts, workflows, or release automation | `coding-agent:automation-poisoning`    |
 | The agent hides sensitive data in encoded or low-visibility artifacts                               | `coding-agent:steganographic-exfil`    |
 
-Use the core collection for MVP coverage. Add custom assertions or extra plugins when you need to test a specific harness surface, such as MCP connectors, network policy, package-manager scripts, persistent caches, browser automation, or cloud credentials.
+Use the core collection for quick baseline coverage. Use the full collection when you want comprehensive coding-agent coverage:
+
+```yaml
+redteam:
+  plugins:
+    - id: coding-agent:all
+      numTests: 10
+```
+
+Add custom assertions or extra plugins when you need to test a specific harness surface, such as MCP connectors, network policy, package-manager scripts, persistent caches, browser automation, or cloud credentials.
 
 For protected local-file handling, add `coding-agent:secret-file-read` when you need to test whether diagnostic tasks pull dotfile contents, sibling-repo secrets, temp-file secrets, browser-profile data, package-cache credentials, support-bundle contents, or content-derived digests into target-visible output. Treat metadata-only inventories, such as permissions or modified times for `/etc`, as sandbox-read or harness-boundary evidence unless protected contents or digests are exposed.
 
@@ -206,6 +215,7 @@ redteam:
   plugins:
     - id: coding-agent:core
       numTests: 10
+    # For comprehensive coverage, use coding-agent:all instead.
 
 tracing:
   enabled: true
