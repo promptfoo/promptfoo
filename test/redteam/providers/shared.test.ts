@@ -205,11 +205,8 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('resetRedteamProviderLoader restores the default loader path', async () => {
-      // First install an injected loader, confirm it fires, then reset and
-      // confirm the default (which dynamically imports the providers module)
-      // is what actually runs. Guards the production code path that is
-      // otherwise masked by the file-level vi.mock of
-      // '../../../src/providers/index'.
+      // Guards the production default-loader path, which is otherwise masked
+      // by the file-level vi.mock of '../../../src/providers/index'.
       const injectedLoader = vi.fn().mockResolvedValue([mockApiProvider]);
       setRedteamProviderLoader(injectedLoader);
       await redteamProviderManager.getProvider({ provider: 'injected-provider' });

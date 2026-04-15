@@ -1682,10 +1682,8 @@ const providerFamilies: ProviderFamily[] = [
 export async function getProviderFactories(providerPath: string): Promise<ProviderFactory[]> {
   const matchingFamilies = providerFamilies.filter((family) => family.canHandle(providerPath));
 
-  // Hot path: loadApiProvider calls this once per resolution. For the common
-  // case where no family matches (every non-redteam provider), return the
-  // module-scoped providerMap directly instead of copying ~100 entries into a
-  // fresh array.
+  // Hot path: return the module-scoped providerMap directly for the common
+  // no-family-match case instead of copying ~100 entries into a fresh array.
   if (matchingFamilies.length === 0) {
     return providerMap;
   }

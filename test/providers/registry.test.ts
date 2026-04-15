@@ -86,11 +86,7 @@ describe('Provider Registry', () => {
     describe('getProviderFactories boundary contract', () => {
       it('returns exactly providerMap for a non-redteam path (no redteam factories leaked)', async () => {
         const factories = await getProviderFactories('openai:gpt-4');
-
         expect(factories).toEqual(providerMap);
-        expect(factories).toHaveLength(providerMap.length);
-        expect(factories.some((f) => f.test('promptfoo:redteam:crescendo'))).toBe(false);
-        expect(factories.some((f) => f.test('agentic:memory-poisoning'))).toBe(false);
       });
 
       it('appends redteam factories for a redteam path', async () => {

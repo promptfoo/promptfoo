@@ -75,7 +75,6 @@ describe('redteamProviderFactories', () => {
     expect(factory, `Missing factory for ${path}`).toBeDefined();
 
     const provider = await factory!.create(path, mockProviderOptions, mockContext);
-    expect(provider).toBeDefined();
     expect(provider.id()).toEqual(expectedId);
   });
 
@@ -116,13 +115,10 @@ describe('redteamProviderFactories', () => {
     it('wraps constructor failures with the requested provider path', async () => {
       const customPath = 'promptfoo:redteam:custom';
       const factory = redteamProviderFactories.find((f) => f.test(customPath));
-      expect(factory).toBeDefined();
 
       const brokenConfig: ProviderOptions = {
         id: 'test-provider',
-        config: {
-          // intentionally missing strategyText
-        },
+        config: {},
       };
 
       await expect(factory!.create(customPath, brokenConfig, mockContext)).rejects.toThrow(
