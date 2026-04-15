@@ -179,6 +179,31 @@ describe('shared redteam provider utilities', () => {
       expect(mockedLoadApiProviders).not.toHaveBeenCalled();
     });
 
+    it('setRedteamProviderLoader returns a disposer that restores the previous loader', async () => {
+      const firstLoader = vi.fn().mockResolvedValue([createMockProvider({ id: 'first' })]);
+      const secondLoader = vi.fn().mockResolvedValue([createMockProvider({ id: 'second' })]);
+
+      const restoreFirst = setRedteamProviderLoader(firstLoader);
+      const restoreSecond = setRedteamProviderLoader(secondLoader);
+
+      // Dispose in reverse order — second disposer restores the first loader.
+      restoreSecond();
+      redteamProviderManager.clearProvider();
+      await redteamProviderManager.getProvider({ provider: 'afterSecond' });
+      expect(firstLoader).toHaveBeenCalledWith(['afterSecond']);
+      expect(secondLoader).not.toHaveBeenCalled();
+
+      // Disposing the first restores the default, which dispatches through
+      // the file-level vi.mock of '../../../src/providers/index'.
+      restoreFirst();
+      redteamProviderManager.clearProvider();
+      firstLoader.mockClear();
+      mockedLoadApiProviders.mockResolvedValueOnce([createMockProvider({ id: 'default' })]);
+      await redteamProviderManager.getProvider({ provider: 'afterFirst' });
+      expect(firstLoader).not.toHaveBeenCalled();
+      expect(mockedLoadApiProviders).toHaveBeenCalledWith(['afterFirst']);
+    });
+
     it('resetRedteamProviderLoader restores the default loader path', async () => {
       // First install an injected loader, confirm it fires, then reset and
       // confirm the default (which dynamically imports the providers module)

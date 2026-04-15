@@ -49,8 +49,23 @@ const defaultRedteamProviderLoader: RedteamProviderLoader = async (providers) =>
 
 let redteamProviderLoader = defaultRedteamProviderLoader;
 
-export function setRedteamProviderLoader(loader: RedteamProviderLoader): void {
+/**
+ * Install a custom loader for redteam provider resolution. Returns a
+ * disposer that restores the previous loader; callers (typically tests) are
+ * strongly encouraged to pair the install with the returned disposer so
+ * random-order tests cannot leak a mutated loader across files.
+ *
+ * ```ts
+ * const restore = setRedteamProviderLoader(mockLoader);
+ * try { ... } finally { restore(); }
+ * ```
+ */
+export function setRedteamProviderLoader(loader: RedteamProviderLoader): () => void {
+  const previous = redteamProviderLoader;
   redteamProviderLoader = loader;
+  return () => {
+    redteamProviderLoader = previous;
+  };
 }
 
 export function resetRedteamProviderLoader(): void {
