@@ -609,7 +609,9 @@ describe('evaluate function', () => {
       );
     });
 
-    // Test cases for GitHub issue #4111: Model-graded assertions with provider resolution
+    // Regression for GitHub issue #4111: model-graded assertions that specified
+    // `provider` as a string ID were not resolved from the main providers
+    // array/providerMap, causing those assertions to fail.
     describe('Model-graded assertions with provider resolution', () => {
       it('should resolve model-graded assertions using providers from main array', async () => {
         const mockLiteLLMProvider = createMockProvider({
@@ -1196,6 +1198,9 @@ describe('evaluate with external defaultTest', () => {
     });
   });
 
+  // Regression test for #8687: resolved providers must not mutate the input
+  // testSuite, because SDK clients can attach circular references at runtime
+  // and break JSON serialization when those mutated objects are reused.
   describe('input testSuite mutation safety', () => {
     let resolveProviderSpy: ReturnType<typeof vi.spyOn>;
 
@@ -1407,6 +1412,18 @@ describe('evaluate with external defaultTest', () => {
       expect(() => JSON.stringify(persistedConfig)).not.toThrow();
       // The input itself must also be safe — library callers may persist or log it.
       expect(() => JSON.stringify(testSuite)).not.toThrow();
+
+      const passedTestSuite = vi.mocked(doEvaluate).mock.calls.at(-1)?.[0];
+      expect(passedTestSuite).toBeDefined();
+      expect(
+        (passedTestSuite!.defaultTest as { options: { provider: { id: () => string } } }).options
+          .provider,
+      ).toBe(resolvedProvider);
+      expect(
+        (
+          passedTestSuite!.defaultTest as { options: { provider: { id: () => string } } }
+        ).options.provider.id(),
+      ).toBe('bedrock:resolved');
 
       createEvalSpy.mockRestore();
     });
