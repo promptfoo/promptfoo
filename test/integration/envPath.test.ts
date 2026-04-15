@@ -1,6 +1,7 @@
 import fs from 'fs';
 import * as path from 'path';
 
+import dedent from 'dedent';
 import {
   afterAll,
   beforeAll,
@@ -273,22 +274,22 @@ tests:
 
       fs.writeFileSync(
         tempConfigFile,
-        `
-commandLineOptions:
-  envPath:
-    - ${envFile1}
-    - ${envFile2}
+        dedent`
+          commandLineOptions:
+            envPath:
+              - ${envFile1}
+              - ${envFile2}
 
-prompts:
-  - "Test prompt"
+          prompts:
+            - "Test prompt"
 
-providers:
-  - echo
+          providers:
+            - echo
 
-tests:
-  - vars:
-      input: "test"
-`,
+          tests:
+            - vars:
+                input: "test"
+        `,
       );
 
       const cmdObj = { config: [tempConfigFile] };
@@ -388,22 +389,22 @@ tests:
 
       fs.writeFileSync(
         tempConfigFile,
-        `
-commandLineOptions:
-  envPath:
-    - ${envFile1}
-    - ${envFile2}
+        dedent`
+          commandLineOptions:
+            envPath:
+              - ${envFile1}
+              - ${envFile2}
 
-prompts:
-  - "Test prompt"
+          prompts:
+            - "Test prompt"
 
-providers:
-  - echo
+          providers:
+            - echo
 
-tests:
-  - vars:
-      input: "test"
-`,
+          tests:
+            - vars:
+                input: "test"
+        `,
       );
 
       try {
