@@ -59,6 +59,7 @@ vi.mock('../../src/util', async () => {
 });
 
 const mockSetupEnv = setupEnv as MockedFunction<typeof setupEnv>;
+const dedentYaml = dedent.withOptions({ escapeSpecialCharacters: false });
 
 describe('Integration: commandLineOptions.envPath', () => {
   let tempDir: string;
@@ -274,7 +275,7 @@ tests:
 
       fs.writeFileSync(
         tempConfigFile,
-        dedent`
+        dedentYaml`
           commandLineOptions:
             envPath:
               - ${envFile1}
@@ -389,7 +390,7 @@ tests:
 
       fs.writeFileSync(
         tempConfigFile,
-        dedent`
+        dedentYaml`
           commandLineOptions:
             envPath:
               - ${envFile1}
