@@ -209,26 +209,66 @@ function collectMacroParamNames(argsNode: unknown): string[] {
   return names;
 }
 
+function macroArgsReferenceVariable(
+  argsNode: unknown,
+  variableName: string,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  if (!isNunjucksAstNode(argsNode) || !Array.isArray(argsNode.children)) {
+    return false;
+  }
+
+  for (const child of argsNode.children) {
+    if (!isNunjucksAstNode(child)) {
+      continue;
+    }
+    if (child.typename === 'Symbol') {
+      continue;
+    }
+    if (child.typename === 'KeywordArgs' && Array.isArray(child.children)) {
+      for (const pair of child.children) {
+        if (
+          isNunjucksAstNode(pair) &&
+          pair.typename === 'Pair' &&
+          astChildReferencesVariable(pair, 'value', variableName, boundSymbols)
+        ) {
+          return true;
+        }
+      }
+      continue;
+    }
+    if (
+      astReferencesVariable(
+        child,
+        variableName,
+        { field: 'children', node: argsNode },
+        boundSymbols,
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function macroNodeReferencesVariable(
   node: NunjucksAstNode,
   variableName: string,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
-  // Walk the arg list with a scope that shadows only param names (not their
-  // default-value expressions). This catches references like
-  // `{% macro render(x=_conversation) %}` where `_conversation` in the default
-  // is a real symbol read evaluated at call time.
+  // Macro defaults are evaluated before the parameter is assigned, so only
+  // parameter names themselves are bindings while Pair.value remains outer-scope.
   const paramNames = collectMacroParamNames(node.args);
-  const argScope = new Set(boundSymbols);
-  for (const name of paramNames) {
-    argScope.add(name);
-  }
-  if (astChildReferencesVariable(node, 'args', variableName, argScope)) {
+  if (macroArgsReferenceVariable(node.args, variableName, boundSymbols)) {
     return true;
   }
 
   // Walk the body with the full macro scope (outer + param names + macro name).
-  const macroScope = new Set(argScope);
+  const macroScope = new Set(boundSymbols);
+  for (const name of paramNames) {
+    macroScope.add(name);
+  }
   if (
     isNunjucksAstNode(node.name) &&
     node.name.typename === 'Symbol' &&
@@ -237,6 +277,30 @@ function macroNodeReferencesVariable(
     macroScope.add(node.name.value);
   }
   return astChildReferencesVariable(node, 'body', variableName, macroScope);
+}
+
+function isNodeReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: string,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  if (astChildReferencesVariable(node, 'left', variableName, boundSymbols)) {
+    return true;
+  }
+
+  const right = node.right;
+  if (!isNunjucksAstNode(right)) {
+    return false;
+  }
+
+  if (right.typename === 'FunCall') {
+    return astChildReferencesVariable(right, 'args', variableName, boundSymbols);
+  }
+
+  return (
+    right.typename !== 'Symbol' &&
+    astReferencesVariable(right, variableName, { field: 'right', node }, boundSymbols)
+  );
 }
 
 function setNodeReferencesVariable(
@@ -269,6 +333,15 @@ function blockNodeReferencesVariable(
   // `{% block name %}...{% endblock %}` — `name` is a template-inheritance
   // label, not a variable reference. Only the body can reference variables.
   return astChildReferencesVariable(node, 'body', variableName, boundSymbols);
+}
+
+function callerNodeReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: string,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  const callerScope = addBoundSymbols(boundSymbols, node.args);
+  return astChildReferencesVariable(node, 'body', variableName, callerScope);
 }
 
 function astFieldsReferenceVariable(
@@ -308,6 +381,10 @@ function astReferencesVariable(
     return macroNodeReferencesVariable(node, variableName, boundSymbols);
   }
 
+  if (node.typename === 'Is') {
+    return isNodeReferencesVariable(node, variableName, boundSymbols);
+  }
+
   if (node.typename === 'Set') {
     return setNodeReferencesVariable(node, variableName, boundSymbols);
   }
@@ -318,6 +395,10 @@ function astReferencesVariable(
 
   if (node.typename === 'Block') {
     return blockNodeReferencesVariable(node, variableName, boundSymbols);
+  }
+
+  if (node.typename === 'Caller') {
+    return callerNodeReferencesVariable(node, variableName, boundSymbols);
   }
 
   return astFieldsReferenceVariable(node, variableName, boundSymbols);

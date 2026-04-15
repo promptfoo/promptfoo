@@ -120,6 +120,7 @@ describe('templateReferencesVariable', () => {
     ['keyword argument value', '{{ fn(arg=_conversation) }}'],
     ['filter argument', '{{ input | default(_conversation) }}'],
     ['is test with call arg', '{{ foo is divisibleby(_conversation) }}'],
+    ['is test function argument value', '{{ foo is _conversation(_conversation) }}'],
     ['bracket index lookup', '{{ obj[_conversation] }}'],
     ['array literal member', '{{ [_conversation, other] }}'],
     ['group expression', '{{ (_conversation) }}'],
@@ -134,6 +135,10 @@ describe('templateReferencesVariable', () => {
       'macro default value with body ref',
       '{% macro render(x=_conversation) %}{{ _conversation }}{% endmacro %}',
     ],
+    [
+      'macro self-referential default value',
+      '{% macro render(_conversation=_conversation) %}{{ _conversation[0].output }}{% endmacro %}{{ render() }}',
+    ],
     ['include expression', '{% include _conversation %}'],
     ['extends expression', '{% extends _conversation %}{% block b %}{% endblock %}'],
     ['from-import template expression', '{% from template_name import foo %}{{ _conversation }}'],
@@ -141,6 +146,10 @@ describe('templateReferencesVariable', () => {
     [
       'call block body reference',
       '{% macro m() %}{{ caller() }}{% endmacro %}{% call m() %}{{ _conversation }}{% endcall %}',
+    ],
+    [
+      'call block body reference with unrelated caller arg',
+      '{% macro m() %}{{ caller("local") }}{% endmacro %}{% call(x) m() %}{{ _conversation }}{% endcall %}',
     ],
   ])('detects a real reference in %s', (_label, template) => {
     expect(templateReferencesVariable(template, '_conversation')).toBe(true);
@@ -156,6 +165,7 @@ describe('templateReferencesVariable', () => {
     ['dict literal key', '{{ {_conversation: input} }}'],
     ['filter name', '{{ input | _conversation }}'],
     ['is test name', '{{ input is _conversation }}'],
+    ['is test function name', '{{ input is _conversation(foo) }}'],
     ['raw block', '{% raw %}{{ _conversation }}{% endraw %}'],
     ['for-loop target shadow', '{% for _conversation in items %}{{ _conversation }}{% endfor %}'],
     ['macro argument shadow', '{% macro render(_conversation) %}{{ _conversation }}{% endmacro %}'],
@@ -180,6 +190,10 @@ describe('templateReferencesVariable', () => {
     [
       'macro keyword-default param name shadow',
       '{% macro render(_conversation=something) %}{{ _conversation }}{% endmacro %}',
+    ],
+    [
+      'call block caller argument shadow',
+      '{% macro m() %}{{ caller("local") }}{% endmacro %}{% call(_conversation) m() %}{{ _conversation }}{% endcall %}',
     ],
   ])('ignores %s', (_label, template) => {
     expect(templateReferencesVariable(template, '_conversation')).toBe(false);
