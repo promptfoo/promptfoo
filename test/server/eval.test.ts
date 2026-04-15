@@ -58,11 +58,16 @@ describe('eval routes', () => {
       });
   }
 
-  async function setFirstResultPromptRaw(eval_: Eval, raw: string) {
+  async function setResultPromptRaws(eval_: Eval, raws: string[]) {
     const results = await eval_.getResults();
-    invariant(results[0] instanceof EvalResult, 'EvalResult is required');
-    results[0].prompt = { ...results[0].prompt, raw };
-    await results[0].save();
+    await Promise.all(
+      raws.map(async (raw, index) => {
+        const result = results[index];
+        invariant(result instanceof EvalResult, 'EvalResult is required');
+        result.prompt = { ...result.prompt, raw };
+        await result.save();
+      }),
+    );
   }
 
   function createManualRatingPayload(originalResult: any, pass: boolean) {
@@ -258,10 +263,10 @@ describe('eval routes', () => {
       expect(updatedEval.config.tests).toHaveLength(2);
     });
 
-    it('returns table data with only oversized per-cell prompts stripped when possible', async () => {
-      const eval_ = await EvalFactory.create();
+    it('returns table data with only the largest per-cell prompt stripped when possible', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 3 });
       testEvalIds.add(eval_.id);
-      await setFirstResultPromptRaw(eval_, 'x'.repeat(50_001));
+      await setResultPromptRaws(eval_, ['small prompt', 'x'.repeat(100), 'x'.repeat(50)]);
 
       mockTablePayloadRangeError((attempt) => attempt === 1);
 
@@ -277,12 +282,14 @@ describe('eval routes', () => {
           row.outputs.map((output) => output?.prompt),
       );
       expect(prompts.filter((prompt) => prompt === '[content too large]')).toHaveLength(1);
-      expect(prompts).toContain('What is the capital of {{state}}?');
+      expect(prompts).toContain('small prompt');
+      expect(prompts).toContain('x'.repeat(50));
     });
 
-    it('strips all per-cell prompts when the oversized-only fallback is still too large', async () => {
-      const eval_ = await EvalFactory.create();
+    it('strips per-cell prompts largest first until the response serializes', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 3 });
       testEvalIds.add(eval_.id);
+      await setResultPromptRaws(eval_, ['small prompt', 'x'.repeat(100), 'x'.repeat(50)]);
 
       mockTablePayloadRangeError((attempt) => attempt <= 2);
 
@@ -292,13 +299,12 @@ describe('eval routes', () => {
       expect(res.body).toHaveProperty('table');
       expect(res.body.config.tests).toHaveLength(2);
 
-      for (const row of res.body.table.body) {
-        for (const output of row.outputs) {
-          if (output) {
-            expect(output.prompt).toBe('[content too large]');
-          }
-        }
-      }
+      const prompts: Array<string | undefined> = res.body.table.body.flatMap(
+        (row: { outputs: Array<{ prompt?: string }> }) =>
+          row.outputs.map((output) => output?.prompt),
+      );
+      expect(prompts.filter((prompt) => prompt === '[content too large]')).toHaveLength(2);
+      expect(prompts).toContain('small prompt');
     });
 
     it('returns 413 when the table response is still too large after stripping prompts', async () => {

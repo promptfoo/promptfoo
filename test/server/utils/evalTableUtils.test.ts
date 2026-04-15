@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   evalTableToCsv,
   evalTableToJson,
+  getEvalTableOutputPromptLocationsBySize,
+  LARGE_TABLE_CELL_PROMPT_PLACEHOLDER,
   streamEvalCsv,
+  stripEvalTableOutputPrompts,
 } from '../../../src/server/utils/evalTableUtils';
 import { ResultFailureReason } from '../../../src/types/index';
 import { createCompletedPrompt } from '../../factories/eval';
@@ -1003,6 +1006,43 @@ describe('evalTableUtils', () => {
         // Note: When messages are present, redteamHistory is not included in its own column
         // The redteamHistory data would be empty since messages take precedence
       });
+    });
+  });
+
+  describe('table prompt stripping helpers', () => {
+    it('should sort prompt locations by size and strip only targeted locations', () => {
+      const payload = {
+        table: {
+          ...mockTable,
+          body: [
+            {
+              ...mockTable.body[0],
+              outputs: [
+                { ...mockTable.body[0].outputs[0], prompt: 'short prompt' },
+                { ...mockTable.body[0].outputs[1], prompt: 'very long prompt' },
+              ],
+            },
+          ],
+        },
+        totalCount: 1,
+        filteredCount: 1,
+        filteredMetrics: null,
+        config: {},
+        author: null,
+        version: 4,
+        id: 'eval-id',
+      };
+
+      const locations = getEvalTableOutputPromptLocationsBySize(payload);
+      expect(locations).toEqual([
+        { rowIndex: 0, outputIndex: 1, length: 'very long prompt'.length },
+        { rowIndex: 0, outputIndex: 0, length: 'short prompt'.length },
+      ]);
+
+      const stripped = stripEvalTableOutputPrompts(payload, locations.slice(0, 1));
+
+      expect(stripped.table.body[0].outputs[0].prompt).toBe('short prompt');
+      expect(stripped.table.body[0].outputs[1].prompt).toBe(LARGE_TABLE_CELL_PROMPT_PLACEHOLDER);
     });
   });
 

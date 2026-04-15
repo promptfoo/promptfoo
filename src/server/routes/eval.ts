@@ -16,7 +16,9 @@ import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
   generateEvalCsv,
+  getEvalTableOutputPromptLocationsBySize,
   mergeComparisonTables,
+  stripEvalTableOutputPrompts,
 } from '../utils/evalTableUtils';
 import type { Request, Response } from 'express';
 
@@ -37,30 +39,6 @@ export const evalRouter = Router();
 // Running jobs
 export const evalJobs = new Map<string, Job>();
 
-const LARGE_TABLE_CELL_PROMPT_PLACEHOLDER = '[content too large]';
-const MAX_TABLE_CELL_PROMPT_LENGTH = 50_000;
-
-function stripTableOutputPrompts(
-  payload: EvalTableDTO,
-  shouldStripPrompt: (prompt: string) => boolean,
-): EvalTableDTO {
-  return {
-    ...payload,
-    table: {
-      ...payload.table,
-      body: payload.table.body.map((row) => ({
-        ...row,
-        outputs: row.outputs.map((output) => {
-          if (!output || !shouldStripPrompt(output.prompt)) {
-            return output;
-          }
-          return { ...output, prompt: LARGE_TABLE_CELL_PROMPT_PLACEHOLDER };
-        }),
-      })),
-    },
-  } as EvalTableDTO;
-}
-
 function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
   try {
     res.json(responsePayload);
@@ -69,42 +47,35 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
       throw error;
     }
 
-    logger.warn('[GET /:id/table] Response too large, retrying without large cell prompts', {
+    const promptLocations = getEvalTableOutputPromptLocationsBySize(responsePayload);
+    logger.warn('[GET /:id/table] Response too large, stripping per-cell prompts by size', {
       evalId,
+      promptCount: promptLocations.length,
     });
 
-    const responseWithoutLargeCellPrompts = stripTableOutputPrompts(
-      responsePayload,
-      (prompt) => prompt.length > MAX_TABLE_CELL_PROMPT_LENGTH,
-    );
-
-    try {
-      res.json(responseWithoutLargeCellPrompts);
-    } catch (retryError) {
-      if (!(retryError instanceof RangeError)) {
-        throw retryError;
-      }
-
-      logger.warn(
-        '[GET /:id/table] Response still too large after stripping large prompts, retrying without per-cell prompt content',
-        { evalId },
+    for (
+      let numPromptsToStrip = 1;
+      numPromptsToStrip <= promptLocations.length;
+      numPromptsToStrip += 1
+    ) {
+      const responseWithoutPrompts = stripEvalTableOutputPrompts(
+        responsePayload,
+        promptLocations.slice(0, numPromptsToStrip),
       );
-
-      const responseWithoutCellPrompts = stripTableOutputPrompts(responsePayload, () => true);
-
       try {
-        res.json(responseWithoutCellPrompts);
-      } catch (finalError) {
-        if (!(finalError instanceof RangeError)) {
-          throw finalError;
+        res.json(responseWithoutPrompts);
+        return;
+      } catch (retryError) {
+        if (!(retryError instanceof RangeError)) {
+          throw retryError;
         }
-
-        logger.error('[GET /:id/table] Response still too large after stripping prompts', {
-          evalId,
-        });
-        res.status(413).json({ error: 'Eval too large to display. Try reducing the page size.' });
       }
     }
+
+    logger.error('[GET /:id/table] Response still too large after stripping prompts', {
+      evalId,
+    });
+    res.status(413).json({ error: 'Eval too large to display. Try reducing the page size.' });
   }
 }
 

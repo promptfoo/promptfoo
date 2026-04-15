@@ -5,6 +5,7 @@ import type Eval from '../../models/eval';
 import type {
   CompletedPrompt,
   EvalResultsFilterMode,
+  EvalTableDTO,
   EvaluateTableRow,
   Prompt,
 } from '../../types/index';
@@ -71,6 +72,14 @@ export const REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES = {
 };
 
 const REDTEAM_METADATA_COLUMNS = Object.values(REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES);
+
+export const LARGE_TABLE_CELL_PROMPT_PLACEHOLDER = '[content too large]';
+
+export type EvalTableOutputPromptLocation = {
+  rowIndex: number;
+  outputIndex: number;
+  length: number;
+};
 
 /**
  * Get the status string for an output
@@ -241,6 +250,43 @@ export function evalTableToJson(table: {
   body: EvaluateTableRow[];
 }): unknown {
   return table;
+}
+
+export function getEvalTableOutputPromptLocationsBySize(
+  payload: EvalTableDTO,
+): EvalTableOutputPromptLocation[] {
+  return payload.table.body
+    .flatMap((row, rowIndex) =>
+      row.outputs.flatMap((output, outputIndex) =>
+        output?.prompt ? [{ rowIndex, outputIndex, length: output.prompt.length }] : [],
+      ),
+    )
+    .sort((a, b) => b.length - a.length);
+}
+
+export function stripEvalTableOutputPrompts(
+  payload: EvalTableDTO,
+  locations: Iterable<Pick<EvalTableOutputPromptLocation, 'rowIndex' | 'outputIndex'>>,
+): EvalTableDTO {
+  const locationsToStrip = new Set(
+    Array.from(locations, ({ rowIndex, outputIndex }) => `${rowIndex}:${outputIndex}`),
+  );
+
+  return {
+    ...payload,
+    table: {
+      ...payload.table,
+      body: payload.table.body.map((row, rowIndex) => ({
+        ...row,
+        outputs: row.outputs.map((output, outputIndex) => {
+          if (!output || !locationsToStrip.has(`${rowIndex}:${outputIndex}`)) {
+            return output;
+          }
+          return { ...output, prompt: LARGE_TABLE_CELL_PROMPT_PLACEHOLDER };
+        }),
+      })),
+    },
+  } as EvalTableDTO;
 }
 
 /**
