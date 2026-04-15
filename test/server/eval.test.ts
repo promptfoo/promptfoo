@@ -58,6 +58,13 @@ describe('eval routes', () => {
       });
   }
 
+  async function setFirstResultPromptRaw(eval_: Eval, raw: string) {
+    const results = await eval_.getResults();
+    invariant(results[0] instanceof EvalResult, 'EvalResult is required');
+    results[0].prompt = { ...results[0].prompt, raw };
+    await results[0].save();
+  }
+
   function createManualRatingPayload(originalResult: any, pass: boolean) {
     const payload = { ...originalResult.gradingResult };
     const score = pass ? 1 : 0;
@@ -251,9 +258,10 @@ describe('eval routes', () => {
       expect(updatedEval.config.tests).toHaveLength(2);
     });
 
-    it('returns table data with stripped per-cell prompts when the full payload is too large', async () => {
+    it('returns table data with only oversized per-cell prompts stripped when possible', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
+      await setFirstResultPromptRaw(eval_, 'x'.repeat(50_001));
 
       mockTablePayloadRangeError((attempt) => attempt === 1);
 
@@ -262,6 +270,26 @@ describe('eval routes', () => {
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('table');
       expect(res.body.table.body.length).toBeGreaterThan(0);
+      expect(res.body.config.tests).toHaveLength(2);
+
+      const prompts: Array<string | undefined> = res.body.table.body.flatMap(
+        (row: { outputs: Array<{ prompt?: string }> }) =>
+          row.outputs.map((output) => output?.prompt),
+      );
+      expect(prompts.filter((prompt) => prompt === '[content too large]')).toHaveLength(1);
+      expect(prompts).toContain('What is the capital of {{state}}?');
+    });
+
+    it('strips all per-cell prompts when the oversized-only fallback is still too large', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      mockTablePayloadRangeError((attempt) => attempt <= 2);
+
+      const res = await request(app).get(`/api/eval/${eval_.id}/table`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('table');
       expect(res.body.config.tests).toHaveLength(2);
 
       for (const row of res.body.table.body) {
