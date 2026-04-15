@@ -2,7 +2,7 @@ import './setup';
 
 import { randomUUID } from 'crypto';
 
-import { afterEach, expect, it, type MockInstance, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
@@ -17,22 +17,7 @@ import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
-let loggerInfoSpy: MockInstance | undefined;
-
-function sawConversationConcurrencyLog(): boolean {
-  return (
-    loggerInfoSpy?.mock.calls.some(
-      ([message]) =>
-        typeof message === 'string' &&
-        message.includes('Setting concurrency to 1 because the') &&
-        message.includes('_conversation'),
-    ) ?? false
-  );
-}
-
 afterEach(() => {
-  loggerInfoSpy?.mockRestore();
-  loggerInfoSpy = undefined;
   vi.useRealTimers();
 });
 
@@ -83,48 +68,51 @@ describeEvaluator('evaluator execution control', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
-  it('does not force concurrency to 1 for _conversation substrings', async () => {
-    loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+  async function getMaxInFlightProviderCalls(rawPrompt: string): Promise<number> {
+    let activeCalls = 0;
+    let maxActiveCalls = 0;
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      callApi: vi.fn().mockImplementation(async (prompt) => {
+        activeCalls += 1;
+        maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        activeCalls -= 1;
+
+        return {
+          output: String(prompt),
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        };
       }),
     };
 
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
-      prompts: [toPrompt('Summarize the pre_conversation_context for {{ question }}')],
-      tests: [{ vars: { question: 'What changed?' } }],
+      prompts: [toPrompt(rawPrompt)],
+      tests: [{ vars: { question: 'First turn' } }, { vars: { question: 'Second turn' } }],
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 3 });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
 
-    expect(sawConversationConcurrencyLog()).toBe(false);
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+    return maxActiveCalls;
+  }
+
+  it('does not force concurrency to 1 for _conversation substrings', async () => {
+    const maxInFlightCalls = await getMaxInFlightProviderCalls(
+      'Summarize the pre_conversation_context for {{ question }}',
+    );
+
+    expect(maxInFlightCalls).toBeGreaterThan(1);
   });
 
   it('forces concurrency to 1 for real _conversation template references', async () => {
-    loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
-    const mockApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
-    };
+    const maxInFlightCalls = await getMaxInFlightProviderCalls(
+      '{{ {"history": _conversation}["history"][0].output }} {{ question }}',
+    );
 
-    const testSuite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('{{ {"history": _conversation}["history"][0].output }} {{ question }}')],
-      tests: [{ vars: { question: 'What changed?' } }],
-    };
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 3 });
-
-    expect(sawConversationConcurrencyLog()).toBe(true);
+    expect(maxInFlightCalls).toBe(1);
   });
 
   it('skips delay for cached responses', async () => {

@@ -105,9 +105,17 @@ import type {
 import type { CallApiContextParams } from './types/providers';
 
 const CONVERSATION_VAR_NAME = '_conversation';
+const promptUsesConversationVariableCache = new Map<string, boolean>();
 
 function promptUsesConversationVariable(prompt: Pick<Prompt, 'raw'>): boolean {
-  return templateReferencesVariable(prompt.raw, CONVERSATION_VAR_NAME);
+  const cached = promptUsesConversationVariableCache.get(prompt.raw);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const usesConversationVariable = templateReferencesVariable(prompt.raw, CONVERSATION_VAR_NAME);
+  promptUsesConversationVariableCache.set(prompt.raw, usesConversationVariable);
+  return usesConversationVariable;
 }
 
 /**

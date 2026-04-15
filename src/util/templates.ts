@@ -309,7 +309,7 @@ export function extractVariablesFromTemplates(templates: string[]): string[] {
  * Check whether a valid Nunjucks template references a variable as an expression symbol.
  */
 export function templateReferencesVariable(template: string, variableName: string): boolean {
-  if (!variableName) {
+  if (!variableName || !template.includes(variableName)) {
     return false;
   }
 
