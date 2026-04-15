@@ -126,21 +126,21 @@
     "lodash-es": "^4.18.1",
     "langium": {
       ".": "4.2.2",
-      "@chevrotain/regexp-to-ast": "11.1.1",
-      "chevrotain": "11.1.1",
+      "@chevrotain/regexp-to-ast": "11.2.0",
+      "chevrotain": "11.2.0",
       "chevrotain-allstar": "0.3.1"
     },
     "chevrotain": {
-      ".": "11.1.1",
-      "@chevrotain/cst-dts-gen": "11.1.1",
-      "@chevrotain/gast": "11.1.1",
-      "@chevrotain/regexp-to-ast": "11.1.1",
-      "@chevrotain/types": "11.1.1",
-      "@chevrotain/utils": "11.1.1"
+      ".": "11.2.0",
+      "@chevrotain/cst-dts-gen": "11.2.0",
+      "@chevrotain/gast": "11.2.0",
+      "@chevrotain/regexp-to-ast": "11.2.0",
+      "@chevrotain/types": "11.2.0",
+      "@chevrotain/utils": "11.2.0"
     },
     "chevrotain-allstar": {
       ".": "0.3.1",
-      "chevrotain": "11.1.1"
+      "chevrotain": "11.2.0"
     },
     "webpack": "5.106.1",
     "dompurify": ">=3.3.3",
