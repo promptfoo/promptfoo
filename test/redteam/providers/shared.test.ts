@@ -179,6 +179,31 @@ describe('shared redteam provider utilities', () => {
       expect(mockedLoadApiProviders).not.toHaveBeenCalled();
     });
 
+    it('resetRedteamProviderLoader restores the default loader path', async () => {
+      // First install an injected loader, confirm it fires, then reset and
+      // confirm the default (which dynamically imports the providers module)
+      // is what actually runs. Guards the production code path that is
+      // otherwise masked by the file-level vi.mock of
+      // '../../../src/providers/index'.
+      const injectedLoader = vi.fn().mockResolvedValue([mockApiProvider]);
+      setRedteamProviderLoader(injectedLoader);
+      await redteamProviderManager.getProvider({ provider: 'injected-provider' });
+      expect(injectedLoader).toHaveBeenCalledWith(['injected-provider']);
+      expect(mockedLoadApiProviders).not.toHaveBeenCalled();
+
+      resetRedteamProviderLoader();
+      redteamProviderManager.clearProvider();
+
+      const secondProvider = createMockProvider({ id: 'from-default-loader' });
+      mockedLoadApiProviders.mockResolvedValueOnce([secondProvider]);
+
+      const result = await redteamProviderManager.getProvider({ provider: 'default-provider' });
+
+      expect(result).toBe(secondProvider);
+      expect(mockedLoadApiProviders).toHaveBeenCalledWith(['default-provider']);
+      expect(injectedLoader).toHaveBeenCalledTimes(1);
+    });
+
     it('loads provider from provider options', async () => {
       const providerOptions = { id: 'test-provider', apiKey: 'test-key' };
       mockedLoadApiProviders.mockResolvedValue([mockApiProvider]);
