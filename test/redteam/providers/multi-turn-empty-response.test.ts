@@ -3,6 +3,7 @@ import { CrescendoProvider } from '../../../src/redteam/providers/crescendo/inde
 import { CustomProvider } from '../../../src/redteam/providers/custom/index';
 import RedteamIterativeProvider from '../../../src/redteam/providers/iterative';
 import { createMockProvider } from '../../factories/provider';
+import { mockProcessEnv } from '../../util/utils';
 
 import type { ApiProvider, AtomicTestCase, CallApiContextParams } from '../../../src/types/index';
 
@@ -57,7 +58,7 @@ vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Multi-turn strategies empty response handling', () => {
-  const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+  let restoreEnv: () => void;
   const createMockTargetProvider = () => createMockProvider({ id: 'mock-target' });
 
   const createTestContext = (targetProvider: ApiProvider): CallApiContextParams => ({
@@ -118,18 +119,14 @@ describe('Multi-turn strategies empty response handling', () => {
     mockGetProvider.mockReset();
     mockGetTargetResponse.mockReset();
 
-    process.env.OPENAI_API_KEY = 'test-api-key';
+    restoreEnv = mockProcessEnv({ OPENAI_API_KEY: 'test-api-key' });
 
     // Set up the mock provider
     mockGetProvider.mockResolvedValue(createMockRedteamProvider());
   });
 
   afterEach(() => {
-    if (originalOpenAiApiKey) {
-      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
-    } else {
-      delete process.env.OPENAI_API_KEY;
-    }
+    restoreEnv();
   });
 
   describe('Crescendo strategy', () => {

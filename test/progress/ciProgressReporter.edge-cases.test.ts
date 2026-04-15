@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { CIProgressReporter } from '../../src/progress/ciProgressReporter';
-import { mockConsole } from '../util/utils';
+import { mockConsole, mockProcessEnv } from '../util/utils';
 
 // Mock the logger
 vi.mock('../../src/logger', () => ({
@@ -11,19 +11,21 @@ vi.mock('../../src/logger', () => ({
   },
 }));
 
-let consoleLogMock: ReturnType<typeof mockConsole>;
-
 describe('CIProgressReporter - Edge Cases', () => {
+  let consoleLogMock: ReturnType<typeof mockConsole>;
+  let restoreEnv: () => void;
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     consoleLogMock = mockConsole('log');
+    restoreEnv = mockProcessEnv({ GITHUB_ACTIONS: undefined });
   });
 
   afterEach(() => {
     vi.useRealTimers();
     consoleLogMock.mockRestore();
-    delete process.env.GITHUB_ACTIONS;
+    restoreEnv();
   });
 
   describe('Zero and Single Test Cases', () => {
@@ -267,22 +269,30 @@ describe('CIProgressReporter - Edge Cases', () => {
 
   describe('GitHub Actions Special Characters', () => {
     it('should escape newlines and :: in error messages', () => {
-      process.env.GITHUB_ACTIONS = 'true';
-      const reporter = new CIProgressReporter(100);
+      const restoreGithubActions = mockProcessEnv({ GITHUB_ACTIONS: 'true' });
+      try {
+        const reporter = new CIProgressReporter(100);
 
-      reporter.error('Error with\nnewline and :: annotation');
+        reporter.error('Error with\nnewline and :: annotation');
 
-      expect(consoleLogMock).toHaveBeenCalledWith('::error::Error with newline and   annotation');
+        expect(consoleLogMock).toHaveBeenCalledWith('::error::Error with newline and   annotation');
+      } finally {
+        restoreGithubActions();
+      }
     });
 
     it('should handle very long error messages', () => {
-      process.env.GITHUB_ACTIONS = 'true';
-      const reporter = new CIProgressReporter(100);
+      const restoreGithubActions = mockProcessEnv({ GITHUB_ACTIONS: 'true' });
+      try {
+        const reporter = new CIProgressReporter(100);
 
-      const longError = 'A'.repeat(1000);
-      reporter.error(longError);
+        const longError = 'A'.repeat(1000);
+        reporter.error(longError);
 
-      expect(consoleLogMock).toHaveBeenCalledWith(expect.stringContaining('::error::'));
+        expect(consoleLogMock).toHaveBeenCalledWith(expect.stringContaining('::error::'));
+      } finally {
+        restoreGithubActions();
+      }
     });
   });
 

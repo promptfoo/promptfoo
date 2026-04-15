@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';
@@ -15,6 +15,7 @@ import {
   createProviderResponse,
   type MockApiProvider,
 } from '../../factories/provider';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -41,8 +42,14 @@ vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('fetchRemoteGeneration', () => {
+  let restoreEnv: () => void;
+
   beforeAll(() => {
-    delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
+    restoreEnv = mockProcessEnv({ PROMPTFOO_REMOTE_GENERATION_URL: undefined });
+  });
+
+  afterAll(() => {
+    restoreEnv();
   });
 
   beforeEach(() => {
