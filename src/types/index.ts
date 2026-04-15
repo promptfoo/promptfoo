@@ -367,6 +367,11 @@ export interface EvaluateResult {
 
 export interface EvaluateTableOutput {
   cost: number;
+  detail?: {
+    available: boolean;
+    omittedFields: Array<'prompt' | 'response' | 'testCase' | 'metadata' | 'media'>;
+  };
+  evalId?: string;
   failureReason: ResultFailureReason;
   gradingResult?: GradingResult | null;
   id: string;
@@ -458,6 +463,10 @@ export type EvalTableDTO = {
   filteredCount: number;
   filteredMetrics: PromptMetrics[] | null;
   config: Partial<UnifiedConfig>;
+  configDetail?: {
+    available: boolean;
+    omittedFields: Array<'tests' | 'defaultTest' | 'scenarios'>;
+  };
   author: string | null;
   version: number;
   id: string;

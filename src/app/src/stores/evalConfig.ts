@@ -28,6 +28,40 @@ export const DEFAULT_CONFIG: Partial<UnifiedConfig> = {
   extensions: [],
 };
 
+export const MAX_PERSISTED_EVAL_CONFIG_BYTES = 2_000_000;
+
+function getJsonSize(value: unknown): number {
+  try {
+    return new Blob([JSON.stringify(value)]).size;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+export function getPersistableEvalConfig(config: Partial<UnifiedConfig>): Partial<UnifiedConfig> {
+  if (getJsonSize(config) <= MAX_PERSISTED_EVAL_CONFIG_BYTES) {
+    return config;
+  }
+
+  const compactConfig: Partial<UnifiedConfig> = {
+    ...config,
+    tests: [],
+    defaultTest: {},
+    scenarios: [],
+  };
+
+  if (getJsonSize(compactConfig) <= MAX_PERSISTED_EVAL_CONFIG_BYTES) {
+    return compactConfig;
+  }
+
+  return {
+    ...DEFAULT_CONFIG,
+    description: config.description ?? '',
+    providers: config.providers ?? [],
+    prompts: [],
+  };
+}
+
 export const useStore = create<EvalConfigState>()(
   persist(
     (set, get) => ({
@@ -64,6 +98,9 @@ export const useStore = create<EvalConfigState>()(
     {
       name: 'promptfoo',
       skipHydration: true,
+      partialize: (state) => ({
+        config: getPersistableEvalConfig(state.config),
+      }),
     },
   ),
 );

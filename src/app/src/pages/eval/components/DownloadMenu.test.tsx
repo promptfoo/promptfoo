@@ -45,6 +45,14 @@ const { downloadBlobMock, useDownloadEvalMock } = vi.hoisted(() => ({
   useDownloadEvalMock: vi.fn(),
 }));
 
+const { fetchEvalConfigMock, fetchEvalResultDetailMock, prefetchEvalConfigMock } = vi.hoisted(
+  () => ({
+    fetchEvalConfigMock: vi.fn(),
+    fetchEvalResultDetailMock: vi.fn(),
+    prefetchEvalConfigMock: vi.fn(),
+  }),
+);
+
 vi.mock('../../../hooks/useDownloadEval', () => ({
   downloadBlob: downloadBlobMock,
   DownloadFormat: {
@@ -52,6 +60,12 @@ vi.mock('../../../hooks/useDownloadEval', () => ({
     JSON: 'json',
   },
   useDownloadEval: useDownloadEvalMock,
+}));
+
+vi.mock('../../../utils/api', () => ({
+  fetchEvalConfig: fetchEvalConfigMock,
+  fetchEvalResultDetail: fetchEvalResultDetailMock,
+  prefetchEvalConfig: prefetchEvalConfigMock,
 }));
 
 const { yamlDumpMock } = vi.hoisted(() => ({
@@ -105,6 +119,16 @@ describe('DownloadMenu', () => {
 
     yamlDumpMock.mockClear();
     yamlDumpMock.mockReturnValue('mocked yaml');
+    fetchEvalConfigMock.mockReset();
+    fetchEvalConfigMock.mockResolvedValue({ config: mockConfig });
+    prefetchEvalConfigMock.mockReset();
+    prefetchEvalConfigMock.mockResolvedValue(null);
+    fetchEvalResultDetailMock.mockReset();
+    fetchEvalResultDetailMock.mockResolvedValue({
+      testCase: { vars: { prompt: 'detail prompt', testVar: 'detail value' } },
+      text: 'detail output',
+      metadata: { redteamFinalPrompt: 'detail final prompt' },
+    });
 
     downloadBlobMock.mockReset();
     downloadBlobMock.mockImplementation((blob: Blob, fileName: string) => {
@@ -223,6 +247,53 @@ describe('DownloadMenu', () => {
     });
   });
 
+  it('hydrates DPO exports from result detail when table rows are lean', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: {
+          vars: ['prompt'],
+          prompts: [{ provider: 'provider1', label: 'label1' }],
+        },
+        body: [
+          {
+            test: { description: 'lean row' },
+            vars: ['lean prompt'],
+            outputs: [
+              { id: 'output-1', pass: false, text: '[content omitted: 120000 characters]' },
+            ],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+    fetchEvalResultDetailMock.mockResolvedValueOnce({
+      testCase: { vars: { prompt: 'full prompt from detail' } },
+      text: 'full output from detail',
+      metadata: {},
+    });
+
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('DPO JSON'));
+
+    await waitFor(() => {
+      expect(downloadBlobMock).toHaveBeenCalledWith(expect.any(Blob), `${mockEvalId}-dpo.json`);
+    });
+
+    expect(fetchEvalResultDetailMock).toHaveBeenCalledWith(mockEvalId, 'output-1');
+    const blob = downloadBlobMock.mock.calls[0][0] as Blob;
+    const exported = JSON.parse(await blob.text());
+    expect(exported).toEqual([
+      {
+        chosen: [],
+        rejected: ['full output from detail'],
+        vars: { prompt: 'full prompt from detail' },
+        providers: ['provider1'],
+        prompts: ['label1'],
+      },
+    ]);
+  });
+
   it('downloads Human Eval Test YAML when clicking the button', async () => {
     renderDownloadDialog();
     await userEvent.click(screen.getByText('Human Eval YAML'));
@@ -231,6 +302,57 @@ describe('DownloadMenu', () => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
       expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
     });
+  });
+
+  it('hydrates failed-test configs from full config and result detail', async () => {
+    const fullConfig = {
+      ...mockConfig,
+      defaultTest: { options: { provider: 'full-default' } },
+      tests: [{ vars: { prompt: 'original test' } }],
+    };
+    const fullFailedTest = {
+      vars: { prompt: 'full failed prompt' },
+      assert: [{ type: 'contains', value: 'expected' }],
+      metadata: { id: 'full-test' },
+    };
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: {
+          vars: ['prompt'],
+          prompts: [{ provider: 'provider1', label: 'label1' }],
+        },
+        body: [
+          {
+            test: { description: 'lean failed test' },
+            vars: ['lean prompt'],
+            outputs: [{ id: 'failed-output', pass: false, text: 'failed output' }],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+    fetchEvalConfigMock.mockResolvedValueOnce({ config: fullConfig });
+    fetchEvalResultDetailMock.mockResolvedValueOnce({
+      testCase: fullFailedTest,
+      text: 'full failed output',
+      metadata: {},
+    });
+
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('Download Failed Tests'));
+
+    await waitFor(() => {
+      expect(yamlDumpMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultTest: fullConfig.defaultTest,
+          tests: [fullFailedTest],
+        }),
+        { skipInvalid: true },
+      );
+    });
+    expect(fetchEvalConfigMock).toHaveBeenCalledWith(mockEvalId);
+    expect(fetchEvalResultDetailMock).toHaveBeenCalledWith(mockEvalId, 'failed-output');
   });
 
   it('handles malformed output structures in DPO JSON export without crashing', async () => {

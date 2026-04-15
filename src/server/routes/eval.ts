@@ -9,15 +9,18 @@ import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
+import { convertEvalResultToTableCell } from '../../util/exportToFile/index';
 import invariant from '../../util/invariant';
 import { shouldShareResults } from '../../util/sharing';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
+import { trimEvalConfigForTableApi, trimEvalTableForApi } from '../utils/evalTablePayload';
 import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
   generateEvalCsv,
   mergeComparisonTables,
 } from '../utils/evalTableUtils';
+import { sendJsonResponse } from '../utils/safeJsonResponse';
 import type { Request, Response } from 'express';
 
 import type {
@@ -161,11 +164,11 @@ evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
   }
 
   const { id } = paramsResult.data;
-  const { table, config } = bodyResult.data;
+  const { table, config, configPatch } = bodyResult.data;
 
   try {
     // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with EvaluateTable
-    await updateResult(id, config, table as unknown as EvaluateTable | undefined);
+    await updateResult(id, config, table as unknown as EvaluateTable | undefined, configPatch);
     res.json(EvalSchemas.Update.Response.parse({ message: 'Eval updated successfully' }));
   } catch {
     res.status(500).json({ error: 'Failed to update eval table' });
@@ -210,6 +213,33 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
   } catch (error) {
     logger.error(`Failed to update eval author: ${error}`);
     res.status(500).json({ error: 'Failed to update eval author' });
+  }
+});
+
+evalRouter.get('/:id/config', async (req: Request, res: Response): Promise<void> => {
+  const paramsResult = EvalSchemas.Config.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    return;
+  }
+
+  const { id } = paramsResult.data;
+
+  try {
+    const eval_ = await Eval.findById(id);
+    if (!eval_) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+
+    const responsePayload = EvalSchemas.Config.Response.parse({ config: eval_.config });
+    sendJsonResponse(res, responsePayload, {
+      evalId: id,
+      tooLargeMessage: 'Eval config is too large to serialize',
+    });
+  } catch (error) {
+    logger.error('[GET /:id/config] Failed to fetch eval config', { error, evalId: id });
+    res.status(500).json({ error: 'Failed to fetch eval config' });
   }
 });
 
@@ -283,7 +313,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 
   const indices = table.body.map((row) => row.testIdx);
 
-  let returnTable = { head: table.head, body: table.body };
+  let returnTable: EvaluateTable = { head: table.head as EvaluateTable['head'], body: table.body };
 
   if (comparisonEvalIds.length > 0) {
     // Fetch comparison evals and their tables, keeping track of eval IDs
@@ -318,15 +348,18 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
       comparisonData.filter(
         (data): data is { evalId: string; table: typeof table } => data !== null,
       ),
-    );
+    ) as unknown as EvaluateTable;
   }
 
   // Handle JSON export format (CSV is handled above via unified generateEvalCsv)
   if (format === 'json') {
     const jsonData = evalTableToJson(returnTable);
 
-    setDownloadHeaders(res, `${id}.json`, 'application/json');
-    res.json(jsonData);
+    sendJsonResponse(res, jsonData, {
+      beforeSend: () => setDownloadHeaders(res, `${id}.json`, 'application/json'),
+      evalId: id,
+      tooLargeMessage: 'Eval JSON export is too large to serialize',
+    });
     return;
   }
 
@@ -371,18 +404,76 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   }
 
   // Default response for table view
-  res.json({
-    table: returnTable,
+  const leanTable = trimEvalTableForApi(returnTable);
+  const leanConfig = trimEvalConfigForTableApi(eval_.config);
+  const responsePayload = EvalSchemas.Table.Response.parse({
+    table: leanTable,
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
     filteredMetrics,
-    config: eval_.config,
+    config: leanConfig.config,
+    configDetail: leanConfig.detail,
     author: eval_.author || null,
     version: eval_.version(),
     id,
     stats: eval_.getStats(),
-  } as EvalTableDTO);
+  });
+
+  sendJsonResponse(res, responsePayload as unknown as EvalTableDTO, {
+    evalId: id,
+    stripOversizedStringsOnRangeError: true,
+    tooLargeMessage: 'Eval table response is too large to serialize',
+  });
 });
+
+evalRouter.get(
+  '/:evalId/results/:resultId/detail',
+  async (req: Request, res: Response): Promise<void> => {
+    const paramsResult = EvalSchemas.ResultDetail.Params.safeParse(req.params);
+    if (!paramsResult.success) {
+      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+      return;
+    }
+
+    const { evalId, resultId } = paramsResult.data;
+
+    try {
+      const result = await EvalResult.findById(resultId);
+      if (!result || result.evalId !== evalId) {
+        res.status(404).json({ error: 'Result not found' });
+        return;
+      }
+
+      const cell = convertEvalResultToTableCell(result);
+      const responsePayload = EvalSchemas.ResultDetail.Response.parse({
+        evalId,
+        resultId: cell.id,
+        prompt: result.prompt.raw,
+        providerPrompt: result.response?.prompt,
+        response: result.response,
+        testCase: result.testCase,
+        metadata: result.metadata,
+        text: cell.text,
+        output: result.response?.output,
+        audio: cell.audio,
+        video: cell.video,
+        images: cell.images,
+      });
+
+      sendJsonResponse(res, responsePayload, {
+        evalId,
+        tooLargeMessage: 'Eval result detail is too large to serialize',
+      });
+    } catch (error) {
+      logger.error('[GET /:evalId/results/:resultId/detail] Failed to fetch result detail', {
+        error,
+        evalId,
+        resultId,
+      });
+      res.status(500).json({ error: 'Failed to fetch result detail' });
+    }
+  },
+);
 
 evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
   const paramsResult = EvalSchemas.MetadataKeys.Params.safeParse(req.params);

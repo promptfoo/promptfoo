@@ -4,6 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import { fetchEvalResultDetail, prefetchEvalResultDetail } from '@app/utils/api';
 import {
   normalizeMediaText,
   resolveAudioSource,
@@ -11,13 +12,20 @@ import {
   resolveVideoSource,
 } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
-import { type EvaluateTableOutput, type ImageOutput, ResultFailureReason } from '@promptfoo/types';
+import {
+  type EvaluateTableOutput,
+  type ImageOutput,
+  type ProviderResponse,
+  ResultFailureReason,
+  type Vars,
+} from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,
   ClipboardCopy,
   Hash,
   Link,
+  Loader2,
   Pencil,
   Search,
   Star,
@@ -35,6 +43,7 @@ import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
 import { getHumanRating } from './utils';
+import type { EvalResultDetailResponse } from '@promptfoo/types/api/eval';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -954,19 +963,29 @@ function renderPromptBlock({
   showPrompts,
   firstOutput,
   prompt,
+  loading,
+  error,
 }: {
   showPrompts: boolean;
   firstOutput?: EvaluateTableOutput | null;
-  prompt: EvaluateTableOutput['prompt'];
+  prompt?: EvaluateTableOutput['prompt'];
+  loading: boolean;
+  error: string | null;
 }): React.ReactNode {
-  if (!showPrompts || !firstOutput?.prompt) {
+  if (!showPrompts || (!firstOutput?.prompt && !prompt && !loading && !error)) {
     return null;
   }
 
   return (
     <div className="prompt">
       <span className="pill">Prompt</span>
-      {typeof prompt === 'string' ? prompt : JSON.stringify(prompt, null, 2)}
+      {loading
+        ? 'Loading...'
+        : error
+          ? error
+          : typeof prompt === 'string'
+            ? prompt
+            : JSON.stringify(prompt, null, 2)}
     </div>
   );
 }
@@ -997,6 +1016,10 @@ function renderOutputActions({
   openPrompt,
   output,
   text,
+  cellDetail,
+  detailLoading,
+  detailError,
+  detailAvailable,
   rowIndex,
   promptIndex,
   evaluationId,
@@ -1013,6 +1036,7 @@ function renderOutputActions({
   handleSetScore,
   handleCommentOpen,
   handlePromptOpen,
+  prefetchCellDetail,
   handlePromptClose,
   setActionsHovered,
 }: {
@@ -1024,6 +1048,10 @@ function renderOutputActions({
   openPrompt: boolean;
   output: EvaluateTableOutput;
   text: string;
+  cellDetail: EvalResultDetailResponse | null;
+  detailLoading: boolean;
+  detailError: string | null;
+  detailAvailable: boolean;
   rowIndex: number;
   promptIndex: number;
   evaluationId?: string;
@@ -1040,9 +1068,14 @@ function renderOutputActions({
   handleSetScore: () => void;
   handleCommentOpen: () => void;
   handlePromptOpen: () => void;
+  prefetchCellDetail: () => void;
   handlePromptClose: () => void;
   setActionsHovered: (hovered: boolean) => void;
 }): React.ReactNode {
+  const displayPrompt = cellDetail?.prompt || output.prompt || (detailLoading ? 'Loading...' : '');
+  const detailResponse = cellDetail?.response as ProviderResponse | undefined;
+  const detailVariables = (cellDetail?.testCase?.vars as Vars | undefined) ?? output.testCase?.vars;
+
   return (
     <div
       className="cell-actions"
@@ -1157,17 +1190,24 @@ function renderOutputActions({
         </TooltipTrigger>
         <TooltipContent>Edit comment</TooltipContent>
       </Tooltip>
-      {output.prompt && (
+      {(output.prompt || detailAvailable) && (
         <>
           <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
               <button
                 type="button"
-                className="action p-1 rounded hover:bg-muted transition-colors"
+                className={`action p-1 rounded hover:bg-muted transition-colors ${detailError ? 'text-red-600 dark:text-red-400' : ''}`}
                 onClick={handlePromptOpen}
+                onFocus={prefetchCellDetail}
+                onMouseEnter={prefetchCellDetail}
                 aria-label="View output and test details"
+                aria-busy={detailLoading}
               >
-                <Search className="size-4" />
+                {detailLoading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Search className="size-4" />
+                )}
               </button>
             </TooltipTrigger>
             <TooltipContent>View output and test details</TooltipContent>
@@ -1176,17 +1216,19 @@ function renderOutputActions({
             <EvalOutputPromptDialog
               open={openPrompt}
               onClose={handlePromptClose}
-              prompt={output.prompt}
+              prompt={displayPrompt || detailError || ''}
               provider={output.provider}
               gradingResults={output.gradingResult?.componentResults}
-              output={text}
-              metadata={output.metadata}
-              providerPrompt={getActualPrompt(output.response, { formatted: true })}
+              output={cellDetail?.text || text}
+              metadata={cellDetail?.metadata || output.metadata}
+              providerPrompt={getActualPrompt(detailResponse || output.response, {
+                formatted: true,
+              })}
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
               testIndex={rowIndex}
               promptIndex={promptIndex}
-              variables={output.metadata?.inputVars || output.testCase?.vars}
+              variables={(output.metadata?.inputVars as Vars | undefined) || detailVariables}
               onAddFilter={addFilter}
               onResetFilters={resetFilters}
               onReplay={replayEvaluation}
@@ -1265,6 +1307,14 @@ function EvalOutputCell({
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     getHumanRating(output)?.pass ?? null,
   );
+  const [cellDetail, setCellDetail] = React.useState<EvalResultDetailResponse | null>(null);
+  const [detailLoading, setDetailLoading] = React.useState(false);
+  const [detailError, setDetailError] = React.useState<string | null>(null);
+  const detailRequestRef = React.useRef<AbortController | null>(null);
+  const isMountedRef = React.useRef(true);
+
+  const detailEvalId = output.evalId || evaluationId || '';
+  const detailAvailable = Boolean(detailEvalId && output.id && (output.detail?.available ?? true));
 
   // Update activeRating when output changes
   React.useEffect(() => {
@@ -1272,8 +1322,90 @@ function EvalOutputCell({
     setActiveRating(humanRating ?? null);
   }, [output]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset lazy detail when the rendered result changes
+  React.useEffect(() => {
+    detailRequestRef.current?.abort();
+    detailRequestRef.current = null;
+    setCellDetail(null);
+    setDetailLoading(false);
+    setDetailError(null);
+  }, [detailEvalId, output.id]);
+
+  React.useEffect(() => {
+    return () => {
+      detailRequestRef.current?.abort();
+    };
+  }, []);
+
+  const loadCellDetail = useCallback(async () => {
+    if (!detailAvailable || cellDetail) {
+      return cellDetail;
+    }
+
+    detailRequestRef.current?.abort();
+    const controller = new AbortController();
+    detailRequestRef.current = controller;
+    setDetailLoading(true);
+    setDetailError(null);
+
+    try {
+      const detail = await fetchEvalResultDetail(detailEvalId, output.id, controller.signal);
+      setCellDetail(detail);
+      return detail;
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return null;
+      }
+      const message = getErrorMessage(error);
+      setDetailError(message);
+      logger.error('Failed to fetch eval result detail', { error: message, detailEvalId });
+      return null;
+    } finally {
+      if (detailRequestRef.current === controller) {
+        detailRequestRef.current = null;
+        setDetailLoading(false);
+      }
+    }
+  }, [cellDetail, detailAvailable, detailEvalId, output.id]);
+
+  const prefetchCellDetail = useCallback(() => {
+    if (!detailAvailable || cellDetail || detailLoading || detailError) {
+      return;
+    }
+
+    void Promise.resolve(prefetchEvalResultDetail(detailEvalId, output.id)).then((detail) => {
+      if (detail && isMountedRef.current) {
+        setCellDetail((currentDetail) => currentDetail ?? detail);
+      }
+    });
+  }, [cellDetail, detailAvailable, detailError, detailEvalId, detailLoading, output.id]);
+
+  React.useEffect(() => {
+    if (
+      showPrompts &&
+      !output.prompt &&
+      detailAvailable &&
+      !cellDetail &&
+      !detailLoading &&
+      !detailError
+    ) {
+      void loadCellDetail();
+    }
+  }, [
+    cellDetail,
+    detailAvailable,
+    detailError,
+    detailLoading,
+    loadCellDetail,
+    output.prompt,
+    showPrompts,
+  ]);
+
   const handlePromptOpen = () => {
     setOpen(true);
+    if (!cellDetail && !detailLoading) {
+      void loadCellDetail();
+    }
   };
   const handlePromptClose = () => {
     setOpen(false);
@@ -1405,7 +1537,6 @@ function EvalOutputCell({
 
   const [linked, setLinked] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
-  const isMountedRef = React.useRef(true);
   const linkedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const copiedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
 
@@ -1533,7 +1664,13 @@ function EvalOutputCell({
         showPassReasons,
         passReasons,
       })}
-      {renderPromptBlock({ showPrompts, firstOutput, prompt: output.prompt })}
+      {renderPromptBlock({
+        showPrompts,
+        firstOutput,
+        prompt: cellDetail?.prompt || output.prompt,
+        loading: detailLoading,
+        error: detailError,
+      })}
       {renderResponseAudioPlayer(responseAudioSource)}
       <div
         className={!showPassFail && !showPrompts ? 'content-needs-action-clearance' : undefined}
@@ -1569,6 +1706,10 @@ function EvalOutputCell({
         openPrompt,
         output,
         text,
+        cellDetail,
+        detailLoading,
+        detailError,
+        detailAvailable,
         rowIndex,
         promptIndex,
         evaluationId,
@@ -1585,6 +1726,7 @@ function EvalOutputCell({
         handleSetScore,
         handleCommentOpen,
         handlePromptOpen,
+        prefetchCellDetail,
         handlePromptClose,
         setActionsHovered,
       })}

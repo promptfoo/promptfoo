@@ -20,7 +20,12 @@ import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
-import { callApi } from '@app/utils/api';
+import {
+  callApi,
+  clearEvalApiResponseCache,
+  fetchEvalConfig,
+  prefetchEvalConfig,
+} from '@app/utils/api';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
@@ -354,6 +359,7 @@ export default function ResultsView({
 
   // State for download dialog
   const [downloadDialogOpen, setDownloadDialogOpen] = React.useState(false);
+  const [isLoadingRerunConfig, setIsLoadingRerunConfig] = React.useState(false);
 
   const currentEvalId = evalId || defaultEvalId || 'default';
   const validEvalId = evalId || defaultEvalId;
@@ -555,6 +561,31 @@ export default function ResultsView({
     [updateColumnVisibility],
   );
 
+  const prefetchFullConfig = React.useCallback(() => {
+    if (evalId) {
+      void prefetchEvalConfig(evalId);
+    }
+  }, [evalId]);
+
+  const handleEditAndRerun = React.useCallback(async () => {
+    try {
+      invariant(config, 'Config must be loaded before editing');
+      setIsLoadingRerunConfig(true);
+
+      const configToEdit = evalId ? (await fetchEvalConfig(evalId)).config : config;
+      updateConfig(configToEdit);
+      navigate(ROUTES.SETUP);
+    } catch (error) {
+      console.error('Failed to load eval config for editing:', error);
+      showToast(
+        `Failed to load eval config: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error',
+      );
+    } finally {
+      setIsLoadingRerunConfig(false);
+    }
+  }, [config, evalId, navigate, showToast, updateConfig]);
+
   const handleSaveEvalName = React.useCallback(
     async (newName: string) => {
       try {
@@ -566,13 +597,14 @@ export default function ResultsView({
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ config: newConfig }),
+          body: JSON.stringify({ configPatch: { description: newName } }),
         });
 
         if (!response.ok) {
           throw new Error('Failed to update eval name');
         }
 
+        clearEvalApiResponseCache(evalId ?? undefined);
         setConfig(newConfig);
       } catch (error) {
         console.error('Failed to update eval name:', error);
@@ -752,16 +784,24 @@ export default function ResultsView({
         Edit name
       </DropdownMenuItem>
       <DropdownMenuItem
-        onClick={() => {
-          updateConfig(config!);
-          navigate(ROUTES.SETUP);
-        }}
+        onClick={() => void handleEditAndRerun()}
+        onFocus={prefetchFullConfig}
+        onMouseEnter={prefetchFullConfig}
+        disabled={isLoadingRerunConfig}
       >
-        <Play className="size-4 mr-2" />
-        Edit and re-run
+        {isLoadingRerunConfig ? (
+          <Spinner className="size-4 mr-2" />
+        ) : (
+          <Play className="size-4 mr-2" />
+        )}
+        {isLoadingRerunConfig ? 'Loading config...' : 'Edit and re-run'}
       </DropdownMenuItem>
       <CompareEvalMenuItem onClick={() => setCompareDialogOpen(true)} />
-      <DropdownMenuItem onClick={() => setConfigModalOpen(true)}>
+      <DropdownMenuItem
+        onClick={() => setConfigModalOpen(true)}
+        onFocus={prefetchFullConfig}
+        onMouseEnter={prefetchFullConfig}
+      >
         <Eye className="size-4 mr-2" />
         View YAML
       </DropdownMenuItem>

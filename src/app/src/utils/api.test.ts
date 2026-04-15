@@ -1,6 +1,15 @@
 import { mockBrowserProperty } from '@app/tests/browserMocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { callApi, fetchUserEmail, fetchUserId, getApiBaseUrl, updateEvalAuthor } from './api';
+import {
+  callApi,
+  clearEvalApiResponseCache,
+  fetchEvalConfig,
+  fetchEvalResultDetail,
+  fetchUserEmail,
+  fetchUserId,
+  getApiBaseUrl,
+  updateEvalAuthor,
+} from './api';
 
 // Mock the store
 vi.mock('@app/stores/apiConfig', () => ({
@@ -16,6 +25,7 @@ const mockFetch = vi.fn();
 
 beforeEach(() => {
   mockBrowserProperty(globalThis, 'fetch', mockFetch as typeof fetch);
+  clearEvalApiResponseCache();
 });
 
 // Helper to create mock state with only apiBaseUrl (other fields unused by getApiBaseUrl)
@@ -219,6 +229,95 @@ describe('fetchUserId', () => {
 
     const userId = await fetchUserId();
     expect(userId).toBe('12345');
+  });
+});
+
+describe('fetchEvalResultDetail', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
+  });
+
+  it('returns result detail when API call succeeds', async () => {
+    const detail = {
+      evalId: 'eval 123',
+      resultId: 'result/123',
+      prompt: 'full prompt',
+      text: 'full output',
+      testCase: { vars: { topic: 'details' } },
+    };
+    mockFetch.mockResolvedValue(new Response(JSON.stringify(detail), { status: 200 }));
+
+    await expect(fetchEvalResultDetail('eval 123', 'result/123')).resolves.toEqual(detail);
+    expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval%20123/results/result%2F123/detail', {
+      signal: undefined,
+    });
+  });
+
+  it('throws API error messages from non-ok responses', async () => {
+    mockFetch.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Detail unavailable' }), { status: 413 }),
+    );
+
+    await expect(fetchEvalResultDetail('eval-123', 'result-123')).rejects.toThrow(
+      'Detail unavailable',
+    );
+  });
+
+  it('reuses a prefetched result detail response', async () => {
+    const detail = {
+      evalId: 'eval-123',
+      resultId: 'result-123',
+      prompt: 'full prompt',
+      text: 'full output',
+    };
+    mockFetch.mockResolvedValue(new Response(JSON.stringify(detail), { status: 200 }));
+
+    await expect(fetchEvalResultDetail('eval-123', 'result-123')).resolves.toEqual(detail);
+    await expect(fetchEvalResultDetail('eval-123', 'result-123')).resolves.toEqual(detail);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('fetchEvalConfig', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
+  });
+
+  it('returns full eval config when API call succeeds', async () => {
+    const body = {
+      config: {
+        description: 'full config',
+        tests: [{ vars: { topic: 'details' } }],
+      },
+    };
+    mockFetch.mockResolvedValue(new Response(JSON.stringify(body), { status: 200 }));
+
+    await expect(fetchEvalConfig('eval 123')).resolves.toEqual(body);
+    expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval%20123/config', { signal: undefined });
+  });
+
+  it('throws API error messages from non-ok config responses', async () => {
+    mockFetch.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Config unavailable' }), { status: 413 }),
+    );
+
+    await expect(fetchEvalConfig('eval-123')).rejects.toThrow('Config unavailable');
+  });
+
+  it('can clear cached eval responses for an eval', async () => {
+    const body = { config: { description: 'full config' } };
+    mockFetch
+      .mockResolvedValueOnce(new Response(JSON.stringify(body), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(body), { status: 200 }));
+
+    await fetchEvalConfig('eval-123');
+    clearEvalApiResponseCache('eval-123');
+    await fetchEvalConfig('eval-123');
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });
 

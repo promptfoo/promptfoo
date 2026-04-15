@@ -1,5 +1,6 @@
 import { mockClipboard } from '@app/tests/browserMocks';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
+import { fetchEvalResultDetail, prefetchEvalResultDetail } from '@app/utils/api';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import {
   type AssertionType,
@@ -16,11 +17,23 @@ import type { EvalOutputCellProps } from './EvalOutputCell';
 
 // Mock the EvalOutputPromptDialog component to check what props are passed to it
 vi.mock('./EvalOutputPromptDialog', () => ({
-  default: vi.fn(({ metadata }) => (
-    <div data-testid="dialog-component" data-metadata={JSON.stringify(metadata)}>
+  default: vi.fn(({ metadata, prompt, output, variables }) => (
+    <div
+      data-testid="dialog-component"
+      data-metadata={JSON.stringify(metadata)}
+      data-output={output}
+      data-prompt={prompt}
+      data-variables={JSON.stringify(variables)}
+    >
       Mocked Dialog Component
     </div>
   )),
+}));
+
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
+  fetchEvalResultDetail: vi.fn(),
+  prefetchEvalResultDetail: vi.fn(),
 }));
 
 const renderWithProviders = (ui: React.ReactElement) => {
@@ -164,6 +177,7 @@ describe('EvalOutputCell', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetMockStoreState();
+    vi.mocked(prefetchEvalResultDetail).mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -256,6 +270,218 @@ describe('EvalOutputCell', () => {
     expect(passedMetadata.citations).toEqual([
       { source: 'metadata source', content: 'metadata content' },
     ]);
+  });
+
+  it('lazy-loads stripped prompt details for inline prompt display', async () => {
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'Full prompt from detail',
+      text: 'Full output from detail',
+      metadata: { detailKey: 'detailValue' },
+      testCase: { vars: { topic: 'details' } },
+    });
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+          },
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(fetchEvalResultDetail).toHaveBeenCalledWith(
+        'eval-1',
+        'test-id',
+        expect.any(AbortSignal),
+      );
+    });
+    expect(await screen.findByText('Full prompt from detail')).toBeInTheDocument();
+  });
+
+  it('does not auto-load details when the table already includes a prompt', () => {
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'Full prompt from detail',
+      text: 'Full output from detail',
+    });
+
+    renderWithProviders(<EvalOutputCell {...defaultProps} evaluationId="eval-1" />);
+
+    expect(fetchEvalResultDetail).not.toHaveBeenCalled();
+    expect(screen.getByText('Test prompt')).toBeInTheDocument();
+  });
+
+  it('does not render detail action or fetch when detail is unavailable for stripped prompts', () => {
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          detail: {
+            available: false,
+            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+          },
+        }}
+      />,
+    );
+
+    expect(fetchEvalResultDetail).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /view output and test details/i })).toBeNull();
+  });
+
+  it('loads stripped prompt detail from the action when inline prompts are hidden', async () => {
+    const user = userEvent.setup();
+    mockResultsViewSettings.showPrompts = false;
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'Full prompt from detail',
+      text: 'Full output from detail',
+    });
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+          },
+        }}
+      />,
+    );
+
+    expect(fetchEvalResultDetail).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
+    await waitFor(() => {
+      expect(fetchEvalResultDetail).toHaveBeenCalledWith(
+        'eval-1',
+        'test-id',
+        expect.any(AbortSignal),
+      );
+    });
+    expect(await screen.findByTestId('dialog-component')).toHaveAttribute(
+      'data-prompt',
+      'Full prompt from detail',
+    );
+  });
+
+  it('prefetches stripped prompt detail on action intent', async () => {
+    const user = userEvent.setup();
+    mockResultsViewSettings.showPrompts = false;
+    vi.mocked(prefetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'Prefetched prompt',
+      text: 'Prefetched output',
+    });
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+          },
+        }}
+      />,
+    );
+
+    const detailButton = screen.getByRole('button', { name: /view output and test details/i });
+    await user.hover(detailButton);
+
+    await waitFor(() => {
+      expect(prefetchEvalResultDetail).toHaveBeenCalledWith('eval-1', 'test-id');
+    });
+    await act(async () => {});
+
+    await user.click(detailButton);
+    expect(fetchEvalResultDetail).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('dialog-component')).toHaveAttribute(
+      'data-prompt',
+      'Prefetched prompt',
+    );
+  });
+
+  it('uses lazy-loaded detail in the prompt dialog', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'Full prompt from detail',
+      text: 'Full output from detail',
+      metadata: { detailKey: 'detailValue' },
+      testCase: { vars: { topic: 'details' } },
+    });
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+          },
+        }}
+      />,
+    );
+
+    await screen.findByText('Full prompt from detail');
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
+    const dialogComponent = screen.getByTestId('dialog-component');
+    expect(dialogComponent).toHaveAttribute('data-prompt', 'Full prompt from detail');
+    expect(dialogComponent).toHaveAttribute('data-output', 'Full output from detail');
+    expect(JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}')).toEqual({
+      detailKey: 'detailValue',
+    });
+    expect(JSON.parse(dialogComponent.getAttribute('data-variables') || '{}')).toEqual({
+      topic: 'details',
+    });
+  });
+
+  it('shows detail load errors for stripped prompts', async () => {
+    vi.mocked(fetchEvalResultDetail).mockRejectedValue(new Error('Detail unavailable'));
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+          },
+        }}
+      />,
+    );
+
+    expect(await screen.findByText('Detail unavailable')).toBeInTheDocument();
   });
 
   it('displays pass/fail status correctly', () => {

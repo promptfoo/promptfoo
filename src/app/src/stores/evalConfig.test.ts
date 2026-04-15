@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { DEFAULT_CONFIG, useStore } from './evalConfig';
+import { DEFAULT_CONFIG, getPersistableEvalConfig, useStore } from './evalConfig';
+import type { UnifiedConfig } from '@promptfoo/types';
 
 describe('evalConfig store', () => {
   beforeEach(() => {
@@ -55,6 +56,26 @@ describe('evalConfig store', () => {
 
       const { config } = useStore.getState();
       expect(config).toEqual(DEFAULT_CONFIG);
+    });
+
+    it('keeps oversized edit configs in memory while compacting persisted state', () => {
+      const largeConfig = {
+        description: 'Large config',
+        prompts: ['Prompt'],
+        providers: ['echo'],
+        defaultTest: { vars: { large: 'x'.repeat(1_000_000) } },
+        scenarios: [{ config: { large: 'x'.repeat(1_000_000) }, tests: [] }],
+        tests: [{ vars: { large: 'x'.repeat(1_000_000) } }],
+      } as unknown as Partial<UnifiedConfig>;
+
+      useStore.getState().setConfig(largeConfig);
+
+      expect(useStore.getState().config.tests).toHaveLength(1);
+      const persistableConfig = getPersistableEvalConfig(useStore.getState().config);
+      expect(persistableConfig.description).toBe('Large config');
+      expect(persistableConfig.tests).toEqual([]);
+      expect(persistableConfig.defaultTest).toEqual({});
+      expect(persistableConfig.scenarios).toEqual([]);
     });
   });
 

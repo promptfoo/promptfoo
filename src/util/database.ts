@@ -185,6 +185,7 @@ export async function updateResult(
   id: string,
   newConfig?: Partial<UnifiedConfig>,
   newTable?: EvaluateTable,
+  configPatch?: Partial<UnifiedConfig>,
 ): Promise<void> {
   try {
     // Fetch the existing eval data from the database
@@ -197,6 +198,12 @@ export async function updateResult(
 
     if (newConfig) {
       existingEval.config = newConfig;
+    }
+    if (configPatch) {
+      existingEval.config = {
+        ...existingEval.config,
+        ...configPatch,
+      };
     }
     if (newTable) {
       existingEval.setTable(newTable);

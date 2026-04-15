@@ -98,6 +98,102 @@ export const EvalTableQuerySchema = z.object({
 
 export type EvalTableQuery = z.infer<typeof EvalTableQuerySchema>;
 
+const EvalConfigDetailFieldSchema = z.enum(['tests', 'defaultTest', 'scenarios']);
+
+const EvalConfigDetailInfoSchema = z.object({
+  available: z.boolean(),
+  omittedFields: z.array(EvalConfigDetailFieldSchema),
+});
+
+const EvalTableCellDetailFieldSchema = z.enum([
+  'prompt',
+  'response',
+  'testCase',
+  'metadata',
+  'media',
+]);
+
+const EvalTableCellDetailInfoSchema = z.object({
+  available: z.boolean(),
+  omittedFields: z.array(EvalTableCellDetailFieldSchema),
+});
+
+const EvalTableOutputSchema = z
+  .object({
+    id: z.string(),
+    prompt: z.string(),
+    detail: EvalTableCellDetailInfoSchema.optional(),
+  })
+  .passthrough();
+
+const EvalTableResponseTableSchema = z
+  .object({
+    head: z.object({
+      prompts: z.array(z.record(z.string(), z.unknown())),
+      vars: z.array(z.string()),
+    }),
+    body: z.array(
+      z
+        .object({
+          outputs: z.array(EvalTableOutputSchema.nullable().optional()),
+          vars: z.array(z.string()),
+          testIdx: z.number(),
+        })
+        .passthrough(),
+    ),
+  })
+  .passthrough();
+
+export const EvalTableResponseSchema = z.object({
+  table: EvalTableResponseTableSchema,
+  totalCount: z.number(),
+  filteredCount: z.number(),
+  filteredMetrics: z.array(z.record(z.string(), z.unknown())).nullable(),
+  config: z.record(z.string(), z.unknown()),
+  configDetail: EvalConfigDetailInfoSchema.optional(),
+  author: z.string().nullable(),
+  version: z.number(),
+  id: z.string(),
+  stats: z.record(z.string(), z.unknown()).optional(),
+});
+
+export type EvalTableResponse = z.infer<typeof EvalTableResponseSchema>;
+
+// GET /api/eval/:id/config
+
+export const EvalConfigParamsSchema = EvalIdParamSchema;
+
+export const EvalConfigResponseSchema = z.object({
+  config: z.record(z.string(), z.unknown()),
+});
+
+export type EvalConfigResponse = z.infer<typeof EvalConfigResponseSchema>;
+
+// GET /api/eval/:evalId/results/:resultId/detail
+
+export const EvalResultDetailParamsSchema = z.object({
+  evalId: z.string().min(1),
+  resultId: z.string().min(1),
+});
+
+export const EvalResultDetailResponseSchema = z.object({
+  evalId: z.string(),
+  resultId: z.string(),
+  prompt: z.string(),
+  providerPrompt: z.unknown().optional(),
+  response: z.unknown().optional(),
+  testCase: z.record(z.string(), z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  text: z.string(),
+  output: z.unknown().optional(),
+  audio: z.unknown().optional(),
+  video: z.unknown().optional(),
+  images: z.array(z.record(z.string(), z.unknown())).optional(),
+});
+
+export type EvalResultDetailParams = z.infer<typeof EvalResultDetailParamsSchema>;
+export type EvalResultDetailResponse = z.infer<typeof EvalResultDetailResponseSchema>;
+
 // POST /api/eval/job
 
 /**
@@ -164,6 +260,7 @@ export const EvaluateTableSchema = z
 export const UpdateEvalRequestSchema = z.object({
   table: EvaluateTableSchema.optional(),
   config: z.record(z.string(), z.unknown()).optional(),
+  configPatch: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const UpdateEvalResponseSchema = MessageResponseSchema;
@@ -316,6 +413,15 @@ export const EvalSchemas = {
   Table: {
     Params: EvalIdParamSchema,
     Query: EvalTableQuerySchema,
+    Response: EvalTableResponseSchema,
+  },
+  Config: {
+    Params: EvalConfigParamsSchema,
+    Response: EvalConfigResponseSchema,
+  },
+  ResultDetail: {
+    Params: EvalResultDetailParamsSchema,
+    Response: EvalResultDetailResponseSchema,
   },
   AddResults: {
     Params: AddResultsParamsSchema,
