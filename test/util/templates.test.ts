@@ -5,6 +5,7 @@ import {
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
   getNunjucksEngine,
+  templateReferencesVariable,
 } from '../../src/util/templates';
 
 describe('extractVariablesFromTemplate', () => {
@@ -96,6 +97,57 @@ describe('extractVariablesFromTemplates', () => {
     const result = extractVariablesFromTemplates(templates);
 
     expect(result).toEqual(['name', 'age']);
+  });
+});
+
+describe('templateReferencesVariable', () => {
+  it('matches real expression references to the variable', () => {
+    expect(templateReferencesVariable('{{ _conversation[0].output }}', '_conversation')).toBe(true);
+    expect(templateReferencesVariable('{{ _conversation | length }}', '_conversation')).toBe(true);
+    expect(
+      templateReferencesVariable('{% if _conversation %}yes{% endif %}', '_conversation'),
+    ).toBe(true);
+    expect(
+      templateReferencesVariable(
+        '{% for turn in _conversation %}{{ turn.output }}{% endfor %}',
+        '_conversation',
+      ),
+    ).toBe(true);
+    expect(templateReferencesVariable('{{ summarize(_conversation) }}', '_conversation')).toBe(
+      true,
+    );
+    expect(
+      templateReferencesVariable(
+        '{{ {"history": _conversation}["history"][0].output }}',
+        '_conversation',
+      ),
+    ).toBe(true);
+  });
+
+  it('ignores text, strings, comments, keys, filters, tests, and other object properties', () => {
+    expect(
+      templateReferencesVariable(
+        'Summarize the pre_conversation_context for {{ question }}',
+        '_conversation',
+      ),
+    ).toBe(false);
+    expect(templateReferencesVariable('{{ pre_conversation_context }}', '_conversation')).toBe(
+      false,
+    );
+    expect(templateReferencesVariable('{{ "_conversation" }}', '_conversation')).toBe(false);
+    expect(templateReferencesVariable('{# _conversation #}{{ question }}', '_conversation')).toBe(
+      false,
+    );
+    expect(templateReferencesVariable('{{ foo._conversation }}', '_conversation')).toBe(false);
+    expect(templateReferencesVariable('{{ foo["_conversation"] }}', '_conversation')).toBe(false);
+    expect(templateReferencesVariable('{{ {_conversation: input} }}', '_conversation')).toBe(false);
+    expect(templateReferencesVariable('{{ input | _conversation }}', '_conversation')).toBe(false);
+    expect(templateReferencesVariable('{{ input is _conversation }}', '_conversation')).toBe(false);
+  });
+
+  it('returns false for empty variable names and invalid templates', () => {
+    expect(templateReferencesVariable('{{ _conversation }}', '')).toBe(false);
+    expect(templateReferencesVariable('{{ _conversation', '_conversation')).toBe(false);
   });
 });
 

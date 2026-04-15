@@ -4,6 +4,88 @@ import { getEnvBool } from '../envars';
 
 import type { NunjucksFilterMap } from '../types/index';
 
+type NunjucksAstNode = {
+  fields?: readonly string[];
+  typename?: string;
+  value?: unknown;
+  [field: string]: unknown;
+};
+
+type NunjucksParser = {
+  parse: (template: string) => NunjucksAstNode;
+};
+
+type NunjucksWithParser = typeof nunjucks & {
+  parser: NunjucksParser;
+};
+
+type NunjucksParentContext = {
+  field: string;
+  node: NunjucksAstNode;
+};
+
+function isNunjucksAstNode(value: unknown): value is NunjucksAstNode {
+  return Boolean(
+    value &&
+      typeof value === 'object' &&
+      typeof (value as { typename?: unknown }).typename === 'string',
+  );
+}
+
+function parseNunjucksTemplate(template: string): NunjucksAstNode | undefined {
+  try {
+    return (nunjucks as unknown as NunjucksWithParser).parser.parse(template);
+  } catch {
+    return undefined;
+  }
+}
+
+function isNonReferenceSymbol(parent?: NunjucksParentContext): boolean {
+  if (!parent) {
+    return false;
+  }
+
+  return (
+    (parent.node.typename === 'Pair' && parent.field === 'key') ||
+    (parent.node.typename === 'Filter' && parent.field === 'name') ||
+    (parent.node.typename === 'Is' && parent.field === 'right') ||
+    (parent.node.typename === 'Set' && parent.field === 'targets') ||
+    (parent.node.typename === 'For' && parent.field === 'name') ||
+    (parent.node.typename === 'Macro' && parent.field === 'name')
+  );
+}
+
+function astReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: string,
+  parent?: NunjucksParentContext,
+): boolean {
+  if (node.typename === 'Symbol' && node.value === variableName) {
+    return !isNonReferenceSymbol(parent);
+  }
+
+  for (const field of node.fields ?? []) {
+    const child = node[field];
+    if (Array.isArray(child)) {
+      if (
+        child.some(
+          (item) =>
+            isNunjucksAstNode(item) && astReferencesVariable(item, variableName, { field, node }),
+        )
+      ) {
+        return true;
+      }
+    } else if (
+      isNunjucksAstNode(child) &&
+      astReferencesVariable(child, variableName, { field, node })
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /**
  * Get a Nunjucks engine instance with optional filters and configuration.
  * @param filters - Optional map of custom Nunjucks filters.
@@ -99,4 +181,16 @@ export function extractVariablesFromTemplates(templates: string[]): string[] {
     variables.forEach((variable) => variableSet.add(variable));
   }
   return Array.from(variableSet);
+}
+
+/**
+ * Check whether a valid Nunjucks template references a variable as an expression symbol.
+ */
+export function templateReferencesVariable(template: string, variableName: string): boolean {
+  if (!variableName) {
+    return false;
+  }
+
+  const ast = parseNunjucksTemplate(template);
+  return ast ? astReferencesVariable(ast, variableName) : false;
 }

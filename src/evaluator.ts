@@ -76,7 +76,7 @@ import {
   isProviderAllowed,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
-import { extractVariablesFromTemplate } from './util/templates';
+import { extractVariablesFromTemplate, templateReferencesVariable } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
@@ -103,6 +103,12 @@ import type {
   VarValue,
 } from './types/index';
 import type { CallApiContextParams } from './types/providers';
+
+const CONVERSATION_VAR_NAME = '_conversation';
+
+function promptUsesConversationVariable(prompt: Pick<Prompt, 'raw'>): boolean {
+  return templateReferencesVariable(prompt.raw, CONVERSATION_VAR_NAME);
+}
 
 /**
  * Manages a single progress bar for the evaluation
@@ -551,7 +557,7 @@ function attachConversationVar({
   test: AtomicTestCase;
   vars: Vars;
 }) {
-  const usesConversation = prompt.raw.includes('_conversation');
+  const usesConversation = promptUsesConversationVariable(prompt);
   if (
     !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
     !test.options?.disableConversationVar &&
@@ -2416,7 +2422,7 @@ function adjustConcurrencyForSerialFeatures({
   prompts: CompletedPrompt[];
   tests: AtomicTestCase[];
 }) {
-  const usesConversationVar = prompts.some((p) => p.raw.includes('_conversation'));
+  const usesConversationVar = prompts.some(promptUsesConversationVariable);
   if (concurrency <= 1) {
     return { concurrency, usesConversationVar };
   }
@@ -2424,7 +2430,7 @@ function adjustConcurrencyForSerialFeatures({
   const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
   if (usesConversationVar) {
     logger.info(
-      `Setting concurrency to 1 because the ${chalk.cyan('_conversation')} variable is used.`,
+      `Setting concurrency to 1 because the ${chalk.cyan(CONVERSATION_VAR_NAME)} variable is used.`,
     );
     return { concurrency: 1, usesConversationVar };
   }
