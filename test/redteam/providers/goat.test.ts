@@ -219,6 +219,7 @@ describe('RedteamGoatProvider', () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',
       maxTurns: 1,
+      stateful: true,
     });
     const fileContent = 'local secret from attacker-controlled file var';
     const filePath = createTempFile('attacker-goal.txt', fileContent);
@@ -302,29 +303,97 @@ describe('RedteamGoatProvider', () => {
     expect(renderedPromptText).not.toContain(fileContent);
   });
 
-  it('should restore attacker vars in JSON object keys', () => {
-    const restoreAttackerVarPlaceholders = (
-      RedteamGoatProvider as unknown as {
-        restoreAttackerVarPlaceholders: (
-          renderedPromptTemplate: string,
-          valueByPlaceholder: Record<string, string>,
-        ) => string;
-      }
-    ).restoreAttackerVarPlaceholders;
-    const placeholder = '__PROMPTFOO_GOAT_ATTACKER_VAR__test__';
-    const attackerValue = 'file:///tmp/attacker-key.txt';
-
-    const restoredPrompt = restoreAttackerVarPlaceholders(
-      JSON.stringify({
-        [placeholder]: placeholder,
-      }),
-      { [placeholder]: attackerValue },
-    );
-
-    const parsedPrompt = JSON.parse(restoredPrompt);
-    expect(parsedPrompt).toEqual({
-      [attackerValue]: attackerValue,
+  it('should preserve filters on attacker prompts without evaluating attacker templates', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      stateful: true,
     });
+    const attackerGoal = '  do {{7*7}}  ';
+
+    mockFetch.mockResolvedValue({
+      json: async () => ({
+        message: { role: 'user', content: attackerGoal },
+      }),
+      ok: true,
+    });
+
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider, { goal: 'initial goal' }, undefined);
+    context.prompt = { raw: 'Attack: {{goal | trim | upper}}', label: 'test' };
+
+    await provider.callApi('test prompt', context);
+
+    expect(getRenderedTargetPromptText(targetProvider)).toBe('Attack: DO {{7*7}}');
+  });
+
+  it('should preserve filters on file:// attacker prompts without dereferencing them', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      stateful: true,
+    });
+    const fileContent = 'filtered local secret';
+    const filePath = createTempFile('filtered-goal.txt', fileContent);
+    const fileUrl = `file://${filePath}`;
+
+    mockFetch.mockResolvedValue({
+      json: async () => ({
+        message: { role: 'user', content: `  ${fileUrl}\n` },
+      }),
+      ok: true,
+    });
+
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider, { goal: 'initial goal' }, undefined);
+    context.prompt = { raw: 'Attack: {{goal | trim}}', label: 'test' };
+
+    await provider.callApi('test prompt', context);
+
+    const renderedPromptText = getRenderedTargetPromptText(targetProvider);
+    expect(renderedPromptText).toBe(`Attack: ${fileUrl}`);
+    expect(renderedPromptText).not.toContain(fileContent);
+  });
+
+  it('should preserve filters on multi-input attacker vars', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      stateful: true,
+      inputs: {
+        email: 'The user email',
+      },
+    });
+
+    mockFetch.mockResolvedValue({
+      json: async () => ({
+        message: {
+          role: 'user',
+          content: JSON.stringify({
+            prompt: '  Keep {{7*7}}  ',
+            email: '  USER@EXAMPLE.COM  ',
+          }),
+        },
+      }),
+      ok: true,
+    });
+
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(
+      targetProvider,
+      { goal: 'initial goal', email: 'safe@example.com' },
+      undefined,
+    );
+    context.prompt = {
+      raw: 'Goal={{goal | trim}}; Email={{email | trim | lower}}',
+      label: 'test',
+    };
+
+    await provider.callApi('test prompt', context);
+
+    expect(getRenderedTargetPromptText(targetProvider)).toBe(
+      'Goal=Keep {{7*7}}; Email=user@example.com',
+    );
   });
 
   it('should pass excludeTargetOutputFromAgenticAttackGeneration through config', async () => {

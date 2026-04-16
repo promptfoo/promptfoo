@@ -156,8 +156,12 @@ describe('BestOfNProvider - Runtime Behavior', () => {
 
     await provider.callApi('test prompt', context);
 
-    expect(mockCallApi).toHaveBeenCalledTimes(1);
-    expect(mockCallApi).toHaveBeenCalledWith('candidate 2', expect.any(Object), undefined);
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
+      'candidate 2',
+      expect.any(Object),
+      undefined,
+    );
   });
 
   it('should pass the injected variable through renderPrompt without special loading or template rendering', async () => {
