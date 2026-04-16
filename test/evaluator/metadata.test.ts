@@ -412,7 +412,7 @@ describeEvaluator('evaluator metadata', () => {
     expect(capturedContext.result.metadata.sessionId).toBeUndefined();
   });
 
-  it('should persist afterEach hook namedScores and metadata into result and metrics', async () => {
+  it('should persist afterEach hook namedScores, metadata, and response.metadata into result and metrics', async () => {
     const mockExtension = 'file://test-extension.js:afterEach';
 
     const mockedRunExtensionHook = vi.mocked(runExtensionHook);
@@ -430,6 +430,13 @@ describeEvaluator('evaluator metadata', () => {
             metadata: {
               ...ctx.result.metadata,
               hook_key: 'hook_value',
+            },
+            response: {
+              ...ctx.result.response,
+              metadata: {
+                ...ctx.result.response?.metadata,
+                session_url: 'https://example.com/session/123',
+              },
             },
           },
         };
@@ -454,11 +461,15 @@ describeEvaluator('evaluator metadata', () => {
     const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
 
     // Verify hook's namedScores flowed into prompt metrics
-    expect(summary.prompts[0].metrics.namedScores).toHaveProperty('hook_metric', 42);
+    expect(summary.prompts[0].metrics?.namedScores).toHaveProperty('hook_metric', 42);
 
     // Verify hook's metadata and namedScores are in the persisted result
     const result = summary.results[0];
     expect(result.metadata).toHaveProperty('hook_key', 'hook_value');
     expect(result.namedScores).toHaveProperty('hook_metric', 42);
+    expect(result.response?.metadata).toHaveProperty(
+      'session_url',
+      'https://example.com/session/123',
+    );
   });
 });

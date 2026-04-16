@@ -993,6 +993,28 @@ describe('evaluatorHelpers', () => {
         });
       });
 
+      it('should merge returned response.metadata into the result', async () => {
+        vi.mocked(transform).mockResolvedValue({
+          test: {} as TestCase,
+          result: {
+            response: { metadata: { session_viewer: 'https://viewer.example.com', tool_count: 3 } },
+          },
+        });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
+        expect(out.result.response?.metadata).toEqual({
+          session_viewer: 'https://viewer.example.com',
+          tool_count: 3,
+        });
+        // Other response fields should be preserved
+        expect(out.result.response?.output).toBe('test output');
+      });
+
       it('should preserve existing namedScores and metadata when extension returns none', async () => {
         vi.mocked(transform).mockResolvedValue(undefined);
 
@@ -1073,14 +1095,14 @@ describe('evaluatorHelpers', () => {
         expect(out.result.namedScores.shared_metric).toBe(99);
       });
 
-      it('should not allow overriding success, score, or response fields via return value', async () => {
+      it('should not allow overriding success, score, or response.output via return value', async () => {
         vi.mocked(transform).mockResolvedValue({
           test: {} as TestCase,
           result: {
             namedScores: { custom: 1 },
             success: false,
             score: 0,
-            response: { output: 'hacked' },
+            response: { output: 'hacked', metadata: { injected: true } },
           },
         });
 
@@ -1090,12 +1112,14 @@ describe('evaluatorHelpers', () => {
         };
 
         const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
-        // success, score, response should remain unchanged
+        // success and score should remain unchanged
         expect(out.result.success).toBe(true);
         expect(out.result.score).toBe(1);
+        // response.output should remain unchanged
         expect(out.result.response?.output).toBe('test output');
-        // but namedScores should be merged
+        // but namedScores and response.metadata should be merged
         expect(out.result.namedScores.custom).toBe(1);
+        expect(out.result.response?.metadata?.injected).toBe(true);
       });
 
       it('should pass accumulated context to subsequent extensions (chaining input)', async () => {

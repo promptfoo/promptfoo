@@ -540,13 +540,14 @@ export type BeforeEachExtensionHookContext = {
  * Context passed to afterEach extension hooks.
  * Called after each test case is evaluated.
  *
- * When the hook returns the modified context, `result.namedScores` and
- * `result.metadata` will be merged into the evaluation result and persisted.
+ * When the hook returns the modified context, `result.namedScores`,
+ * `result.metadata`, and `result.response.metadata` will be shallow-merged
+ * into the evaluation result and persisted.
  */
 export type AfterEachExtensionHookContext = {
   /** The test case that was evaluated */
   test: TestCase;
-  /** The result of the evaluation (namedScores and metadata are mutable) */
+  /** The result of the evaluation (namedScores, metadata, and response.metadata are mutable) */
   result: EvaluateResult;
 };
 
@@ -731,6 +732,16 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
         case 'afterEach': {
           if (extensionReturnValue.result) {
             const currentResult = (updatedContext as AfterEachExtensionHookContext).result;
+            const mergedResponse =
+              currentResult.response && extensionReturnValue.result.response?.metadata
+                ? {
+                    ...currentResult.response,
+                    metadata: {
+                      ...currentResult.response.metadata,
+                      ...extensionReturnValue.result.response.metadata,
+                    },
+                  }
+                : currentResult.response;
             (updatedContext as AfterEachExtensionHookContext) = {
               test: (updatedContext as AfterEachExtensionHookContext).test,
               result: {
@@ -743,6 +754,7 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
                   ...currentResult.metadata,
                   ...(extensionReturnValue.result.metadata || {}),
                 },
+                response: mergedResponse,
               },
             };
           }
