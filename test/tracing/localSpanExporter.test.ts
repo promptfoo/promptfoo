@@ -33,6 +33,7 @@ describe('LocalSpanExporter', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.resetAllMocks();
   });
 
@@ -107,7 +108,7 @@ describe('LocalSpanExporter', () => {
             name: 'test-span',
           }),
         ],
-        { skipTraceCheck: false },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -140,14 +141,42 @@ describe('LocalSpanExporter', () => {
           expect.objectContaining({ spanId: 'span-1' }),
           expect.objectContaining({ spanId: 'span-2' }),
         ]),
-        { skipTraceCheck: false },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
 
       // Second call for trace-2 with 1 span
       expect(mockAddSpans).toHaveBeenCalledWith(
         'trace-2',
         [expect.objectContaining({ spanId: 'span-3' })],
-        { skipTraceCheck: false },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
+      );
+    });
+
+    it('retries once when the trace record is not visible yet', async () => {
+      vi.useFakeTimers();
+      const span = createMockSpan();
+
+      mockAddSpans
+        .mockResolvedValueOnce({ stored: false, reason: 'Trace trace-id-123 not found' })
+        .mockResolvedValueOnce({ stored: true });
+
+      const resultPromise = exportSpans([span]);
+      await vi.advanceTimersByTimeAsync(50);
+      const result = await resultPromise;
+
+      expect(result.code).toBe(ExportResultCode.SUCCESS);
+      expect(mockAddSpans).toHaveBeenCalledTimes(2);
+      expect(mockAddSpans).toHaveBeenNthCalledWith(
+        1,
+        'trace-id-123',
+        [expect.objectContaining({ spanId: 'span-id-456' })],
+        { skipTraceCheck: false, warnIfMissingTrace: false },
+      );
+      expect(mockAddSpans).toHaveBeenNthCalledWith(
+        2,
+        'trace-id-123',
+        [expect.objectContaining({ spanId: 'span-id-456' })],
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
