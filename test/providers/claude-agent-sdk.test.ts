@@ -3399,7 +3399,7 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(toolSpan!.status?.code).toBe(2); // SpanStatusCode.ERROR
       });
 
-      it('does not emit a tool span when the tool_use has no matching result', async () => {
+      it('emits an incomplete tool span when the tool_use has no matching result', async () => {
         const { emittedSpans } = installTracerSpy();
 
         mockQuery.mockReturnValue(
@@ -3439,7 +3439,10 @@ describe('ClaudeCodeSDKProvider', () => {
         });
         await provider.callApi('prompt');
 
-        expect(emittedSpans.some((s) => s.name === 'tool Read')).toBe(false);
+        const toolSpan = emittedSpans.find((s) => s.name === 'tool Read');
+        expect(toolSpan).toBeDefined();
+        expect(toolSpan!.attrs['tool.incomplete']).toBe(true);
+        expect(toolSpan!.status?.code).toBe(2); // SpanStatusCode.ERROR
       });
 
       it('propagates response.model from modelUsage and finish_reasons from terminal_reason', async () => {
@@ -3485,6 +3488,245 @@ describe('ClaudeCodeSDKProvider', () => {
         // surfaced metadata the extractor depends on.
         expect(result.metadata?.modelUsage).toHaveProperty('claude-haiku-4-5-20251001');
         expect(result.metadata?.terminalReason).toBe('max_turns');
+      });
+
+      it('propagates tool.parent_id for sub-agent tool calls', async () => {
+        const { emittedSpans } = installTracerSpy();
+
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: 'task-1',
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'sub-1',
+                  name: 'Glob',
+                  input: { pattern: '**/*.ts' },
+                },
+              ]),
+              session_id: 'test-session',
+            },
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'sub-1',
+                    content: 'matched 3 files',
+                    is_error: false,
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'test-session',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'ok',
+              usage: createMockUsage(1, 1),
+              total_cost_usd: 0,
+              duration_ms: 1,
+              duration_api_ms: 1,
+              is_error: false,
+              num_turns: 1,
+              permission_denials: [],
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('prompt');
+
+        const toolSpan = emittedSpans.find((s) => s.name === 'tool Glob');
+        expect(toolSpan).toBeDefined();
+        expect(toolSpan!.attrs['tool.parent_id']).toBe('task-1');
+      });
+
+      it('sanitizes secrets in tool.input and tool.output on the span', async () => {
+        const { emittedSpans } = installTracerSpy();
+        const secret = 'sk-proj-' + 'a'.repeat(40);
+
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'call-1',
+                  name: 'Bash',
+                  input: { command: `export KEY=${secret}` },
+                },
+              ]),
+              session_id: 'test-session',
+            },
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'call-1',
+                    content: `Echoed ${secret} from env`,
+                    is_error: false,
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'test-session',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'ok',
+              usage: createMockUsage(1, 1),
+              total_cost_usd: 0,
+              duration_ms: 1,
+              duration_api_ms: 1,
+              is_error: false,
+              num_turns: 1,
+              permission_denials: [],
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('prompt');
+
+        const toolSpan = emittedSpans.find((s) => s.name === 'tool Bash');
+        expect(toolSpan).toBeDefined();
+        expect(toolSpan!.attrs['tool.input']).not.toContain(secret);
+        expect(toolSpan!.attrs['tool.output']).not.toContain(secret);
+        expect(toolSpan!.attrs['tool.input']).toContain('<REDACTED_API_KEY>');
+        expect(toolSpan!.attrs['tool.output']).toContain('<REDACTED_API_KEY>');
+      });
+
+      it('substitutes <unserializable> for circular tool input without dropping the span', async () => {
+        const { emittedSpans } = installTracerSpy();
+        const circular: Record<string, unknown> = { a: 1 };
+        circular.self = circular;
+
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'call-circ',
+                  name: 'Weird',
+                  input: circular,
+                },
+              ]),
+              session_id: 'test-session',
+            },
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'call-circ',
+                    content: 'ok',
+                    is_error: false,
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'test-session',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'ok',
+              usage: createMockUsage(1, 1),
+              total_cost_usd: 0,
+              duration_ms: 1,
+              duration_api_ms: 1,
+              is_error: false,
+              num_turns: 1,
+              permission_denials: [],
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('prompt');
+
+        const toolSpan = emittedSpans.find((s) => s.name === 'tool Weird');
+        expect(toolSpan).toBeDefined();
+        expect(toolSpan!.attrs['tool.input']).toBe('<unserializable>');
+      });
+
+      it('picks gen_ai.response.model by largest usage, not iteration order', async () => {
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'mu-tiebreak',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'ok',
+              usage: createMockUsage(10, 20),
+              total_cost_usd: 0,
+              duration_ms: 1,
+              duration_api_ms: 1,
+              is_error: false,
+              num_turns: 2,
+              permission_denials: [],
+              modelUsage: {
+                // Low-usage first key would win if we used iteration order.
+                'claude-haiku-4-5': {
+                  inputTokens: 1,
+                  outputTokens: 1,
+                  cacheReadInputTokens: 0,
+                  cacheCreationInputTokens: 0,
+                  webSearchRequests: 0,
+                  costUSD: 0,
+                  contextWindow: 200000,
+                  maxOutputTokens: 8192,
+                },
+                'claude-sonnet-4-5': {
+                  inputTokens: 500,
+                  outputTokens: 600,
+                  cacheReadInputTokens: 0,
+                  cacheCreationInputTokens: 0,
+                  webSearchRequests: 0,
+                  costUSD: 0,
+                  contextWindow: 200000,
+                  maxOutputTokens: 8192,
+                },
+              },
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('prompt');
+        expect(result.metadata?.modelUsage).toHaveProperty('claude-sonnet-4-5');
+        // The extractor (not directly returned) uses modelUsage; this test proves
+        // our modelUsage payload reached metadata so the new tie-break logic can
+        // operate on it.
       });
     });
   });

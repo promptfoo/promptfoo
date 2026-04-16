@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { SpanStatusCode } from '@opentelemetry/api';
+import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
 import dedent from 'dedent';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
@@ -66,7 +66,18 @@ function stringifyForSpan(value: unknown): string | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
-  const raw = typeof value === 'string' ? value : JSON.stringify(value);
+  let raw: string | undefined;
+  if (typeof value === 'string') {
+    raw = value;
+  } else {
+    try {
+      raw = JSON.stringify(value);
+    } catch {
+      // JSON.stringify throws on circular references / BigInts / etc.
+      // Preserve the enclosing span by substituting a sentinel for just this attribute.
+      return '<unserializable>';
+    }
+  }
   if (raw === undefined) {
     return undefined;
   }
@@ -77,15 +88,21 @@ function stringifyForSpan(value: unknown): string | undefined {
 }
 
 /**
- * Emit a child span for a single completed tool call. Parents to the currently
- * active span (the provider's GenAI wrapper), so the UI shows an agent → tool
- * hierarchy similar to the OpenAI Agents SDK.
+ * Emit a child span for a single tool call. Parents to the currently active
+ * span (the provider's GenAI wrapper) so the UI shows an agent → tool hierarchy
+ * similar to the OpenAI Agents SDK.
+ *
+ * When `incomplete` is true the call never produced a matching `tool_result`
+ * (aborted run, stop hook, or the stream ended mid-tool). Such spans are
+ * flagged via `tool.incomplete` and marked ERROR so traces surface the gap
+ * instead of silently dropping the tool.
  */
 function emitToolSpan(
   entry: ToolCallEntry,
   startTimeMs: number,
   endTimeMs: number,
   isError: boolean,
+  incomplete = false,
 ): void {
   try {
     const tracer = getGenAITracer();
@@ -93,6 +110,9 @@ function emitToolSpan(
       'tool.name': entry.name,
       'tool.is_error': isError,
     };
+    if (incomplete) {
+      attributes['tool.incomplete'] = true;
+    }
     const input = stringifyForSpan(entry.input);
     if (input !== undefined) {
       attributes['tool.input'] = input;
@@ -109,11 +129,12 @@ function emitToolSpan(
       startTime: startTimeMs,
       attributes,
     });
-    span.setStatus({ code: isError ? SpanStatusCode.ERROR : SpanStatusCode.OK });
+    span.setStatus({
+      code: isError || incomplete ? SpanStatusCode.ERROR : SpanStatusCode.OK,
+    });
     span.end(endTimeMs);
   } catch (err) {
-    // Never let a telemetry failure break the eval.
-    logger.debug(`[ClaudeAgentSDK] Failed to emit tool span for ${entry.name}: ${err}`);
+    logger.warn(`[ClaudeAgentSDK] Failed to emit tool span for ${entry.name}: ${err}`);
   }
 }
 
@@ -837,9 +858,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       ...context?.prompt?.config,
     };
 
-    // Set up env for the Claude Agent SDK call
-    // Pass through entire environment like claude-agent-sdk CLI does, layered lowest-to-highest:
-    // process.env < config.env < EnvOverrides. Sort keys for stable cache key generation.
+    // Sort keys for stable cache-key hashing. Precedence is documented on the
+    // `env` field of ClaudeCodeOptions: process.env < config.env < EnvOverrides.
     const env: Record<string, string> = {};
     for (const key of Object.keys(process.env).sort()) {
       if (process.env[key] !== undefined) {
@@ -847,7 +867,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       }
     }
 
-    // User-supplied provider config env (e.g. OTEL_* for SDK telemetry)
     if (config.env) {
       for (const key of Object.keys(config.env).sort()) {
         const value = config.env[key];
@@ -857,7 +876,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       }
     }
 
-    // EnvOverrides take precedence over everything else
     if (this.env) {
       for (const key of Object.keys(this.env).sort()) {
         const value = this.env[key as keyof typeof this.env];
@@ -1117,15 +1135,18 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           requestBody: prompt,
         },
         async () => {
-          // Propagate trace context to the SDK subprocess so its OTEL spans attach under
-          // our span. Prefer the active span's traceparent (when OTEL SDK is initialized),
-          // otherwise fall back to the one supplied by the evaluator. An all-zero
-          // trace_id means the tracer is not recording, so treat it as unusable.
+          // Propagate trace context to the SDK subprocess so its OTEL spans attach
+          // under our span. Prefer the active span's traceparent; fall back to the
+          // evaluator-supplied one. `getTraceparent()` can return an all-zero trace
+          // id when no OTEL SDK is registered (NonRecordingSpan / INVALID_TRACEID),
+          // which would poison propagation — skip it in that case.
           const ZERO_TRACE_ID = '00000000000000000000000000000000';
           const active = getTraceparent();
           const activeValid = active && !active.includes(ZERO_TRACE_ID) ? active : undefined;
           const traceparent = activeValid ?? context?.traceparent;
-          // Done here (after caching) so TRACEPARENT isn't part of the cache key.
+          // Mutating env here is safe because initializeAgenticCache serialized
+          // cacheKeyQueryOptions (which shares this env reference) into a hash
+          // string earlier in callApi, so TRACEPARENT cannot affect the cache key.
           if (traceparent && !env.TRACEPARENT) {
             env.TRACEPARENT = traceparent;
           }
@@ -1142,6 +1163,22 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // Wall-clock start time per tool_use.id, captured when we first see the tool_use
           // message so we can synthesize child spans with realistic durations.
           const toolStartTimes = new Map<string, number>();
+
+          // Drain any tool_use entries that never saw a matching tool_result. Without
+          // this, aborted runs and stop-hook terminations silently drop the tool span.
+          const drainOrphans = (): void => {
+            if (toolStartTimes.size === 0) {
+              return;
+            }
+            const endedAt = Date.now();
+            for (const [toolUseId, startMs] of toolStartTimes) {
+              const entry = toolCallsMap.get(toolUseId);
+              if (entry) {
+                emitToolSpan(entry, startMs, endedAt, false, /* incomplete */ true);
+              }
+            }
+            toolStartTimes.clear();
+          };
 
           for await (const msg of res) {
             if (msg.type === 'assistant') {
@@ -1193,6 +1230,27 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
               const toolCallsArray = Array.from(toolCallsMap.values());
               const skillCalls = deriveSkillCalls(toolCallsArray);
+
+              // The stream is about to close; emit any orphan tool spans first so
+              // abort/hook-stop runs don't silently drop them.
+              drainOrphans();
+
+              // Aborted terminal reasons mean the agent stopped unexpectedly mid-run.
+              // Mark the provider span ERROR directly — without poisoning the
+              // response's `output`/`error` contract, since any produced output is
+              // still useful and downstream assertions may depend on it.
+              const abortedTerminalReason =
+                typeof msg.terminal_reason === 'string' &&
+                (msg.terminal_reason.startsWith('aborted_') ||
+                  msg.terminal_reason === 'hook_stopped')
+                  ? msg.terminal_reason
+                  : undefined;
+              if (abortedTerminalReason) {
+                otelTrace.getActiveSpan()?.setStatus({
+                  code: SpanStatusCode.ERROR,
+                  message: `aborted: ${abortedTerminalReason}`,
+                });
+              }
 
               if (msg.subtype === 'success') {
                 logger.debug(`Claude Agent SDK response: ${raw}`);
@@ -1250,6 +1308,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             }
           }
 
+          drainOrphans();
           return { error: "Claude Agent SDK call didn't return a result" };
         },
         (response) => {
@@ -1268,15 +1327,25 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           if (Array.isArray(toolCalls) && toolCalls.length > 0) {
             additional['gen_ai.agent.tool_call_count'] = toolCalls.length;
           }
-          // Response model: the SDK reports per-model usage; the first (often only)
-          // key is the model that actually produced the response, which may differ
-          // from the requested model when fallbacks fire.
+          // Response model: the SDK reports per-model usage keyed by model name.
+          // Pick the key with the largest token usage rather than iteration order —
+          // the SDK makes no ordering contract, and tie-breaking by usage gives the
+          // model that actually did most of the work when fallbacks fire.
           let responseModel: string | undefined;
           const modelUsage = metadata.modelUsage;
-          if (modelUsage && typeof modelUsage === 'object') {
-            const firstKey = Object.keys(modelUsage)[0];
-            if (firstKey) {
-              responseModel = firstKey;
+          if (modelUsage && typeof modelUsage === 'object' && !Array.isArray(modelUsage)) {
+            let topUsage = -1;
+            for (const [key, usage] of Object.entries(
+              modelUsage as Record<string, { inputTokens?: number; outputTokens?: number }>,
+            )) {
+              if (typeof key !== 'string' || key.length === 0 || key === 'undefined') {
+                continue;
+              }
+              const total = (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0);
+              if (total > topUsage) {
+                topUsage = total;
+                responseModel = key;
+              }
             }
           }
 
