@@ -3051,22 +3051,32 @@ class Evaluator {
       // and response.metadata. Pass a shallow copy so in-place mutations by hooks
       // don't affect the live row (only the returned fields are applied).
       // Guard: skip when no extensions to avoid coercing undefined metadata to {}.
+      // Errors are caught so the row is always persisted (without hook modifications).
       if (context.testSuite.extensions?.length) {
-        const afterEachOut = await runExtensionHook(context.testSuite.extensions, 'afterEach', {
-          test: evalStep.test,
-          result: {
-            ...row,
-            namedScores: { ...row.namedScores },
-            metadata: { ...row.metadata },
-            response: row.response
-              ? { ...row.response, metadata: { ...row.response.metadata } }
-              : row.response,
-          },
-        });
-        row.namedScores = afterEachOut.result.namedScores;
-        row.metadata = afterEachOut.result.metadata;
-        if (row.response && afterEachOut.result.response) {
-          row.response.metadata = afterEachOut.result.response.metadata;
+        try {
+          const afterEachOut = await runExtensionHook(context.testSuite.extensions, 'afterEach', {
+            test: evalStep.test,
+            result: {
+              ...row,
+              namedScores: { ...row.namedScores },
+              metadata: { ...row.metadata },
+              response: row.response
+                ? { ...row.response, metadata: { ...row.response.metadata } }
+                : row.response,
+            },
+          });
+          row.namedScores = afterEachOut.result.namedScores;
+          row.metadata = afterEachOut.result.metadata;
+          if (row.response && afterEachOut.result.response) {
+            row.response.metadata = afterEachOut.result.response.metadata;
+          }
+        } catch (error) {
+          logger.error(
+            `afterEach extension hook failed, persisting row without hook modifications`,
+            {
+              error,
+            },
+          );
         }
       }
 
