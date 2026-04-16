@@ -32,7 +32,7 @@ npm run local -- redteam run -c examples/redteam-docx-document-upload/promptfooc
 
 The target declares two inputs:
 
-- `document` uses `type: docx`, so generated document text is materialized into a real DOCX data URI before the provider is called. Its `config.inputPurpose` describes the kind of document the app expects, and `config.injectionPlacements` controls which DOCX-native surfaces may carry the injected instruction.
+- `document` uses `type: docx`, so generated document text is materialized into a real DOCX data URI before the provider is called. Its `description` describes the kind of document the app expects, and `config.injectionPlacements` controls which DOCX-native surfaces may carry the injected instruction.
 - `question` is plain text that asks the assistant to summarize the uploaded document. It sets `config.benign: true` so multi-input generation keeps the user request natural while placing the adversarial content in `document`.
 
 The custom provider uploads the DOCX bytes to `example-app`'s `/documents` endpoint, then asks the chat endpoint to call `summarize_document` with the returned `document_id`.
