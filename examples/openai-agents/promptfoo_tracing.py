@@ -69,7 +69,29 @@ def _value_to_otlp(value: Any) -> dict[str, Any]:
         return {"stringValue": value}
     if isinstance(value, list):
         return {"arrayValue": {"values": [_value_to_otlp(item) for item in value]}}
-    return {"stringValue": json.dumps(value, ensure_ascii=False, sort_keys=True)}
+    if isinstance(value, dict):
+        return {"stringValue": _safe_json_dumps(value)}
+    return {"stringValue": str(value)}
+
+
+def _safe_json_dumps(value: Any) -> str:
+    try:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        try:
+            return json.dumps(value, ensure_ascii=False, default=str)
+        except (TypeError, ValueError):
+            return str(value)
+
+
+def _sanitize_attribute_value(value: Any) -> Any:
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, list):
+        return [_sanitize_attribute_value(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _sanitize_attribute_value(item) for key, item in value.items()}
+    return str(value)
 
 
 def _command_to_string(value: Any) -> str | None:
@@ -101,7 +123,7 @@ def _apply_custom_span_data(
         return custom_name
 
     for key, value in data.items():
-        attributes[key] = value
+        attributes[str(key)] = _sanitize_attribute_value(value)
 
     sdk_span_type = data.get("sdk_span_type")
     if isinstance(sdk_span_type, str) and sdk_span_type:

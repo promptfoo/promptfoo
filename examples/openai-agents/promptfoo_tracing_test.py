@@ -78,6 +78,11 @@ class FakeSpan:
         self.span_data = FakeSpanData(payload)
 
 
+class OpaqueCustomValue:
+    def __str__(self):
+        return "opaque-custom-value"
+
+
 def otlp_attrs(span):
     return {
         attr["key"]: next(iter(attr["value"].values())) for attr in span["attributes"]
@@ -134,6 +139,24 @@ class PromptfooTracingTests(unittest.TestCase):
         self.assertEqual(attrs["command"], "sed -n '1,40p' AGENTS.md")
         self.assertEqual(attrs["codex.command"], "sed -n '1,40p' AGENTS.md")
         self.assertEqual(attrs["process.exit.code"], "0")
+
+    def test_custom_span_data_handles_non_json_values(self):
+        span = self.exporter._span_to_otlp(
+            FakeSpan(
+                {
+                    "type": "custom",
+                    "name": "custom",
+                    "data": {
+                        "opaque": OpaqueCustomValue(),
+                        "nested": {"value": OpaqueCustomValue()},
+                    },
+                }
+            )
+        )
+        attrs = otlp_attrs(span)
+
+        self.assertEqual(attrs["opaque"], "opaque-custom-value")
+        self.assertEqual(attrs["nested"], '{"value": "opaque-custom-value"}')
 
 
 if __name__ == "__main__":
