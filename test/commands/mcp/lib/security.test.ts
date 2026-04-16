@@ -180,6 +180,8 @@ describe('MCP Security', () => {
       expect(() => validateProviderId('invalid provider')).toThrow(ConfigurationError);
       expect(() => validateProviderId('bad$provider')).toThrow(ConfigurationError);
       expect(() => validateProviderId('')).toThrow(ConfigurationError);
+      expect(() => validateProviderId('openai:')).toThrow(ConfigurationError);
+      expect(() => validateProviderId('openai::gpt-4')).toThrow(ConfigurationError);
       expect(() => validateProviderId('../providers/custom.js')).toThrow(ConfigurationError);
       expect(() => validateProviderId('openai:../../secret')).toThrow(ConfigurationError);
     });

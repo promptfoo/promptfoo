@@ -7,6 +7,9 @@ import { ConfigurationError } from './errors';
  * Security utilities for MCP server operations
  */
 
+const SIMPLE_PROVIDER_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
+const PROVIDER_MODEL_SEGMENT_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.\\/-]*$/;
+
 /**
  * Validates that a file path is safe and within allowed boundaries.
  *
@@ -115,13 +118,15 @@ export function validateProviderId(providerId: string): void {
     return;
   }
 
-  // Allow common provider formats
-  const validFormats = [
-    /^[a-zA-Z][a-zA-Z0-9_-]*$/, // simple provider ID or configured alias
-    /^[a-zA-Z][a-zA-Z0-9_-]*(?::[a-zA-Z0-9][a-zA-Z0-9_.:/-]*)+$/, // provider:model format, including nested provider modes
-  ];
+  const [providerPrefix, ...modelSegments] = providerId.split(':');
+  const isSimpleProviderId =
+    modelSegments.length === 0 && SIMPLE_PROVIDER_ID_PATTERN.test(providerPrefix);
+  const isProviderModelId =
+    modelSegments.length > 0 &&
+    SIMPLE_PROVIDER_ID_PATTERN.test(providerPrefix) &&
+    modelSegments.every((segment) => PROVIDER_MODEL_SEGMENT_PATTERN.test(segment));
 
-  if (!validFormats.some((format) => format.test(providerId))) {
+  if (!isSimpleProviderId && !isProviderModelId) {
     throw new ConfigurationError(
       `Invalid provider ID format: ${providerId}. Expected format like "openai:gpt-4" or path to provider file.`,
     );
