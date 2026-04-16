@@ -170,13 +170,17 @@ describe('shared redteam provider utilities', () => {
 
     it('loads configured providers through an injected provider loader', async () => {
       const injectedLoader = vi.fn().mockResolvedValue([mockApiProvider]);
-      setRedteamProviderLoader(injectedLoader);
+      const restoreLoader = setRedteamProviderLoader(injectedLoader);
 
-      const result = await redteamProviderManager.getProvider({ provider: 'test-provider' });
+      try {
+        const result = await redteamProviderManager.getProvider({ provider: 'test-provider' });
 
-      expect(result).toBe(mockApiProvider);
-      expect(injectedLoader).toHaveBeenCalledWith(['test-provider']);
-      expect(mockedLoadApiProviders).not.toHaveBeenCalled();
+        expect(result).toBe(mockApiProvider);
+        expect(injectedLoader).toHaveBeenCalledWith(['test-provider']);
+        expect(mockedLoadApiProviders).not.toHaveBeenCalled();
+      } finally {
+        restoreLoader();
+      }
     });
 
     it('setRedteamProviderLoader returns a disposer that restores the previous loader', async () => {
@@ -186,44 +190,53 @@ describe('shared redteam provider utilities', () => {
       const restoreFirst = setRedteamProviderLoader(firstLoader);
       const restoreSecond = setRedteamProviderLoader(secondLoader);
 
-      // Dispose in reverse order — second disposer restores the first loader.
-      restoreSecond();
-      redteamProviderManager.clearProvider();
-      await redteamProviderManager.getProvider({ provider: 'afterSecond' });
-      expect(firstLoader).toHaveBeenCalledWith(['afterSecond']);
-      expect(secondLoader).not.toHaveBeenCalled();
+      try {
+        // Dispose in reverse order — second disposer restores the first loader.
+        restoreSecond();
+        redteamProviderManager.clearProvider();
+        await redteamProviderManager.getProvider({ provider: 'afterSecond' });
+        expect(firstLoader).toHaveBeenCalledWith(['afterSecond']);
+        expect(secondLoader).not.toHaveBeenCalled();
 
-      // Disposing the first restores the default, which dispatches through
-      // the file-level vi.mock of '../../../src/providers/index'.
-      restoreFirst();
-      redteamProviderManager.clearProvider();
-      firstLoader.mockClear();
-      mockedLoadApiProviders.mockResolvedValueOnce([createMockProvider({ id: 'default' })]);
-      await redteamProviderManager.getProvider({ provider: 'afterFirst' });
-      expect(firstLoader).not.toHaveBeenCalled();
-      expect(mockedLoadApiProviders).toHaveBeenCalledWith(['afterFirst']);
+        // Disposing the first restores the default, which dispatches through
+        // the file-level vi.mock of '../../../src/providers/index'.
+        restoreFirst();
+        redteamProviderManager.clearProvider();
+        firstLoader.mockClear();
+        mockedLoadApiProviders.mockResolvedValueOnce([createMockProvider({ id: 'default' })]);
+        await redteamProviderManager.getProvider({ provider: 'afterFirst' });
+        expect(firstLoader).not.toHaveBeenCalled();
+        expect(mockedLoadApiProviders).toHaveBeenCalledWith(['afterFirst']);
+      } finally {
+        resetRedteamProviderLoader();
+      }
     });
 
     it('resetRedteamProviderLoader restores the default loader path', async () => {
       // Guards the production default-loader path, which is otherwise masked
       // by the file-level vi.mock of '../../../src/providers/index'.
       const injectedLoader = vi.fn().mockResolvedValue([mockApiProvider]);
-      setRedteamProviderLoader(injectedLoader);
-      await redteamProviderManager.getProvider({ provider: 'injected-provider' });
-      expect(injectedLoader).toHaveBeenCalledWith(['injected-provider']);
-      expect(mockedLoadApiProviders).not.toHaveBeenCalled();
+      const restoreLoader = setRedteamProviderLoader(injectedLoader);
 
-      resetRedteamProviderLoader();
-      redteamProviderManager.clearProvider();
+      try {
+        await redteamProviderManager.getProvider({ provider: 'injected-provider' });
+        expect(injectedLoader).toHaveBeenCalledWith(['injected-provider']);
+        expect(mockedLoadApiProviders).not.toHaveBeenCalled();
 
-      const secondProvider = createMockProvider({ id: 'from-default-loader' });
-      mockedLoadApiProviders.mockResolvedValueOnce([secondProvider]);
+        restoreLoader();
+        redteamProviderManager.clearProvider();
 
-      const result = await redteamProviderManager.getProvider({ provider: 'default-provider' });
+        const secondProvider = createMockProvider({ id: 'from-default-loader' });
+        mockedLoadApiProviders.mockResolvedValueOnce([secondProvider]);
 
-      expect(result).toBe(secondProvider);
-      expect(mockedLoadApiProviders).toHaveBeenCalledWith(['default-provider']);
-      expect(injectedLoader).toHaveBeenCalledTimes(1);
+        const result = await redteamProviderManager.getProvider({ provider: 'default-provider' });
+
+        expect(result).toBe(secondProvider);
+        expect(mockedLoadApiProviders).toHaveBeenCalledWith(['default-provider']);
+        expect(injectedLoader).toHaveBeenCalledTimes(1);
+      } finally {
+        resetRedteamProviderLoader();
+      }
     });
 
     it('loads provider from provider options', async () => {
