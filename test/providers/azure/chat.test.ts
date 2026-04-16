@@ -678,6 +678,17 @@ describe('AzureChatCompletionProvider', () => {
       expect((provider as any).isReasoningModel()).toBe(true);
     });
 
+    it('treats Claude Opus 4.7 deployments as reasoning models (temperature omitted)', () => {
+      // Claude Opus 4.7 rejects temperature at the model level — gating via
+      // isReasoningModel causes the Azure body to omit it by default.
+      const provider = new AzureChatCompletionProvider('claude-opus-4-7', { config: {} });
+      expect((provider as any).isReasoningModel()).toBe(true);
+
+      // Opus 4.6 regression: still a non-reasoning deployment.
+      const opus46 = new AzureChatCompletionProvider('claude-opus-4-6-20260205', { config: {} });
+      expect((opus46 as any).isReasoningModel()).toBe(false);
+    });
+
     it('should detect reasoning models with isReasoningModel flag', () => {
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {

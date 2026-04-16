@@ -98,7 +98,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       lowerName.includes('phi-4-reasoning') ||
       lowerName.includes('phi-4-mini-reasoning') ||
       // xAI Grok reasoning models
-      (lowerName.includes('grok') && lowerName.includes('reasoning'))
+      (lowerName.includes('grok') && lowerName.includes('reasoning')) ||
+      // Claude Opus 4.7 — adaptive thinking always on, temperature deprecated at
+      // the model level (API returns 400 with it). Treat like a reasoning model
+      // so the Azure body omits temperature by default.
+      lowerName.includes('claude-opus-4-7')
     );
   }
 

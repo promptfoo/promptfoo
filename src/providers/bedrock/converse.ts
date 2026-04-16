@@ -807,7 +807,12 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // - maxTokens: only include if NOT (reasoning enabled AND high effort)
     // - temperature/topP: only include if reasoning is NOT enabled
     const maxTokens = reasoningEnabled && isHighEffort ? undefined : maxTokensValue;
-    const temperature = reasoningEnabled ? undefined : temperatureValue;
+    // Claude Opus 4.7 deprecated `temperature` at the model level — any request
+    // that includes it on Bedrock returns ValidationException. Drop the value
+    // for Opus 4.7 IDs (bare, `us.`, `eu.`, `jp.`, `global.`) regardless of
+    // where it came from (config or AWS_BEDROCK_TEMPERATURE env var).
+    const isOpus47 = this.modelName.includes('anthropic.claude-opus-4-7');
+    const temperature = reasoningEnabled || isOpus47 ? undefined : temperatureValue;
     const topP = reasoningEnabled ? undefined : topPValue;
 
     // Only return config if at least one field is set
