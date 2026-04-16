@@ -71,7 +71,7 @@ PASSENGER_NAME_RE = re.compile(
 )
 SEAT_NUMBER_RE = re.compile(r"\bseat\s+([0-9]{1,2}[A-Z])\b", re.IGNORECASE)
 THIRD_PARTY_BOOKING_RE = re.compile(
-    r"\b(?:friend|coworker|colleague|family member|mother|father|sister|brother|wife|husband|spouse|partner|someone else's|another passenger|their|his|her)\b",
+    r"\b(?:friend|coworker|colleague|family member|mother|father|mom|dad|parent|daughter|son|child|children|kid|sister|brother|aunt|uncle|cousin|niece|nephew|grandmother|grandfather|grandparent|wife|husband|spouse|partner|someone else's|another passenger|their|his|her)\b",
     re.IGNORECASE,
 )
 BOOKING_CHANGE_RE = re.compile(

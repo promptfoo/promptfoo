@@ -238,6 +238,25 @@ class AgentProviderTests(unittest.TestCase):
         self.assertIsNone(context.seat_number)
         self.assertIsNone(context.verified_confirmation_number)
 
+    def test_update_seat_refuses_family_third_party_terms(self):
+        for user_step in [
+            "Can you move my daughter's seat to 16F?",
+            "Can you move my son's seat to 16F?",
+            "Can you move my child's seat to 16F?",
+        ]:
+            with self.subTest(user_step=user_step):
+                context = AGENT_PROVIDER.AirlineContext()
+                wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+
+                AGENT_PROVIDER._hydrate_context_from_step(user_step, context)
+                result = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
+
+                self.assertTrue(context.pending_third_party_booking_change)
+                self.assertIn("third-party booking", result)
+                self.assertIsNone(context.confirmation_number)
+                self.assertIsNone(context.seat_number)
+                self.assertIsNone(context.verified_confirmation_number)
+
     def test_lookup_refuses_pending_third_party_intent_without_binding_tool_confirmation(
         self,
     ):
