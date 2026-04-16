@@ -235,7 +235,11 @@ function extractToolArgs(span: TraceSpan): unknown {
   return undefined;
 }
 
-function extractCommand(span: TraceSpan): string | undefined {
+function extractCommand(
+  span: TraceSpan,
+  toolName = extractToolName(span),
+  getToolArgs = () => extractToolArgs(span),
+): string | undefined {
   const attributes = span.attributes || {};
 
   const directMatch = getStringAttribute(attributes, COMMAND_ATTRIBUTE_KEYS);
@@ -253,8 +257,7 @@ function extractCommand(span: TraceSpan): string | undefined {
     }
   }
 
-  const toolName = extractToolName(span);
-  const toolArgs = extractToolArgs(span);
+  const toolArgs = getToolArgs();
   if (isCommandToolName(toolName) && toolArgs && typeof toolArgs === 'object') {
     const args = toolArgs as Record<string, unknown>;
     const command = args.cmd ?? args.command;
@@ -336,7 +339,16 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
     })
     .map(({ span }) => {
       const toolName = extractToolName(span);
-      const command = extractCommand(span);
+      let toolArgs: unknown;
+      let hasExtractedToolArgs = false;
+      const getToolArgs = () => {
+        if (!hasExtractedToolArgs) {
+          toolArgs = extractToolArgs(span);
+          hasExtractedToolArgs = true;
+        }
+        return toolArgs;
+      };
+      const command = extractCommand(span, toolName, getToolArgs);
       const searchQuery = extractSearchQuery(span);
 
       let type: TrajectoryStepType = 'span';
@@ -348,7 +360,7 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
         type = 'command';
         name = command;
         aliases.add(command);
-        args = extractToolArgs(span);
+        args = getToolArgs();
         if (toolName) {
           aliases.add(toolName);
         }
@@ -360,7 +372,7 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
         type = 'tool';
         name = toolName;
         aliases.add(toolName);
-        args = extractToolArgs(span);
+        args = getToolArgs();
       } else if (command) {
         type = 'command';
         name = command;
