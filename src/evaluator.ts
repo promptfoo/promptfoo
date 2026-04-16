@@ -68,7 +68,11 @@ import { isNonTransientHttpStatus } from './util/fetch/errors';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
-import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
+import {
+  accumulateNamedMetric,
+  backfillNamedScoreWeights,
+  filterFiniteScores,
+} from './util/namedMetrics';
 import { isPromptAllowed } from './util/promptMatching';
 import {
   isAnthropicProvider,
@@ -3047,11 +3051,8 @@ class Evaluator {
       context.numComplete++;
       const promptEvalCount = reservePromptEvalCount(context, row.promptIdx);
 
-      // Run afterEach hook before persisting - may modify namedScores, metadata,
-      // and response.metadata. Pass a shallow copy so in-place mutations by hooks
-      // don't affect the live row (only the returned fields are applied).
-      // Guard: skip when no extensions to avoid coercing undefined metadata to {}.
-      // Errors are caught so the row is always persisted (without hook modifications).
+      // Apply afterEach hook mutations before persisting. Pass a shallow copy
+      // so in-place mutations don't corrupt the row on hook failure.
       if (context.testSuite.extensions?.length) {
         try {
           const afterEachOut = await runExtensionHook(context.testSuite.extensions, 'afterEach', {
@@ -3065,17 +3066,9 @@ class Evaluator {
                 : row.response,
             },
           });
-          // Sanitize namedScores: only keep finite numbers to prevent NaN
-          // corruption in metrics aggregation (covers both return-value and
-          // in-place mutation paths).
-          const hookScores = afterEachOut.result.namedScores;
-          const sanitized: Record<string, number> = {};
-          for (const [key, value] of Object.entries(hookScores)) {
-            if (typeof value === 'number' && Number.isFinite(value)) {
-              sanitized[key] = value;
-            }
-          }
-          row.namedScores = sanitized;
+          // runExtensionHook sanitizes namedScores via filterFiniteScores;
+          // re-sanitize here to also catch in-place mutations that bypass the merge.
+          row.namedScores = filterFiniteScores(afterEachOut.result.namedScores);
           row.metadata = afterEachOut.result.metadata;
           if (row.response && afterEachOut.result.response) {
             row.response.metadata = afterEachOut.result.response.metadata;
@@ -3083,9 +3076,7 @@ class Evaluator {
         } catch (error) {
           logger.error(
             `afterEach extension hook failed, persisting row without hook modifications`,
-            {
-              error,
-            },
+            { error },
           );
         }
       }

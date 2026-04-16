@@ -26,6 +26,7 @@ import {
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
 import { renderVarsInObject } from './util/index';
 import invariant from './util/invariant';
+import { filterFiniteScores } from './util/namedMetrics';
 import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
@@ -742,15 +743,7 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
                     },
                   }
                 : currentResult.response;
-            // Filter namedScores to only include finite numeric values to prevent
-            // NaN corruption in metrics aggregation.
-            const returnedScores = extensionReturnValue.result.namedScores || {};
-            const validScores: Record<string, number> = {};
-            for (const [key, value] of Object.entries(returnedScores)) {
-              if (typeof value === 'number' && Number.isFinite(value)) {
-                validScores[key] = value;
-              }
-            }
+            const validScores = filterFiniteScores(extensionReturnValue.result.namedScores || {});
             (updatedContext as AfterEachExtensionHookContext) = {
               test: (updatedContext as AfterEachExtensionHookContext).test,
               result: {
