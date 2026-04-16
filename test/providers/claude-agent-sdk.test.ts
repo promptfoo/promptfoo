@@ -654,6 +654,99 @@ describe('ClaudeCodeSDKProvider', () => {
           }
         }
       });
+
+      it('injects promptfoo.trace_id and promptfoo.parent_span_id as OTEL_RESOURCE_ATTRIBUTES', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const traceId = '0af7651916cd43dd8448eb211c80319c';
+        const spanId = 'b7ad6b7169203331';
+        await provider.callApi('prompt', {
+          traceparent: `00-${traceId}-${spanId}-01`,
+          prompt: { raw: 'prompt', label: 'prompt' },
+          vars: {},
+        } as CallApiContextParams);
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.env.OTEL_RESOURCE_ATTRIBUTES).toBe(
+          `promptfoo.trace_id=${traceId},promptfoo.parent_span_id=${spanId}`,
+        );
+      });
+
+      it('preserves a pre-existing OTEL_RESOURCE_ATTRIBUTES and trims trailing commas', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          config: {
+            env: {
+              OTEL_RESOURCE_ATTRIBUTES: 'deployment.environment=prod, service.owner=team-x,',
+            },
+          },
+        });
+        const traceId = '0af7651916cd43dd8448eb211c80319c';
+        const spanId = 'b7ad6b7169203331';
+        await provider.callApi('prompt', {
+          traceparent: `00-${traceId}-${spanId}-01`,
+          prompt: { raw: 'prompt', label: 'prompt' },
+          vars: {},
+        } as CallApiContextParams);
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.env.OTEL_RESOURCE_ATTRIBUTES).toBe(
+          `deployment.environment=prod,service.owner=team-x,promptfoo.trace_id=${traceId},promptfoo.parent_span_id=${spanId}`,
+        );
+      });
+
+      it('overrides a user-provided promptfoo.trace_id rather than duplicating it', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          config: {
+            env: {
+              OTEL_RESOURCE_ATTRIBUTES:
+                'promptfoo.trace_id=stale,promptfoo.parent_span_id=stale,other.key=keep',
+            },
+          },
+        });
+        const traceId = '0af7651916cd43dd8448eb211c80319c';
+        const spanId = 'b7ad6b7169203331';
+        await provider.callApi('prompt', {
+          traceparent: `00-${traceId}-${spanId}-01`,
+          prompt: { raw: 'prompt', label: 'prompt' },
+          vars: {},
+        } as CallApiContextParams);
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        const attrs = callArgs.options.env.OTEL_RESOURCE_ATTRIBUTES as string;
+        // User's `other.key` is kept; the stale promptfoo.* kvs are stripped;
+        // the fresh values land at the end so last-wins semantics in OTEL
+        // parsers pick ours even for parsers that don't dedupe.
+        expect(attrs).toBe(
+          `other.key=keep,promptfoo.trace_id=${traceId},promptfoo.parent_span_id=${spanId}`,
+        );
+        expect(attrs.match(/promptfoo\.trace_id=/g)?.length).toBe(1);
+      });
+
+      it('skips OTEL_RESOURCE_ATTRIBUTES entirely when traceparent is malformed', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('prompt', {
+          // Missing the span_id segment.
+          traceparent: '00-0af7651916cd43dd8448eb211c80319c',
+          prompt: { raw: 'prompt', label: 'prompt' },
+          vars: {},
+        } as CallApiContextParams);
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.env.OTEL_RESOURCE_ATTRIBUTES).toBeUndefined();
+      });
     });
 
     describe('working directory management', () => {
