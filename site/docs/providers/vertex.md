@@ -48,7 +48,7 @@ Anthropic's Claude models are available with the following versions:
 
 **Claude 4.7:**
 
-- `vertex:claude-opus-4-7` - Claude 4.7 Opus for agentic coding, agents, and computer use
+- `vertex:claude-opus-4-7` - Claude 4.7 Opus for agentic coding, agents, and computer use. Currently served through the `global` endpoint (`config.region: global`) with multi-region US and EU endpoints rolling out; see the [Google Cloud announcement](https://cloud.google.com/blog/products/ai-machine-learning/claude-opus-4-7-on-vertex-ai).
 
 **Claude 4.6:**
 

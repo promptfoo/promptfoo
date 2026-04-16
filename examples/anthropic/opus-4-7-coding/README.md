@@ -36,6 +36,16 @@ npx promptfoo@latest eval
 npx promptfoo@latest view
 ```
 
+## Other providers
+
+Opus 4.7 is also reachable through:
+
+- AWS Bedrock — `bedrock:us.anthropic.claude-opus-4-7` (or `bedrock:converse:us.anthropic.claude-opus-4-7`)
+- Google Vertex — `vertex:claude-opus-4-7` with `config.region: global`
+- Azure AI Foundry — `azure:chat:claude-opus-4-7`
+
+Promptfoo suppresses `temperature` on Opus 4.7 across all four providers (the model deprecated it at the model level) and warns once per provider instance if the user set it explicitly.
+
 ## Learn More
 
 - [Claude Opus 4.7 announcement](https://www.anthropic.com/news/claude-opus-4-7)
