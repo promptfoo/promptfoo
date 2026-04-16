@@ -1151,6 +1151,22 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           if (traceparent && !env.TRACEPARENT) {
             env.TRACEPARENT = traceparent;
           }
+          // Some SDK telemetry signals (logs in particular) do not inherit
+          // TRACEPARENT into their OTEL context. Encode the trace + parent span
+          // IDs as resource attributes too — promptfoo's OTLP /v1/logs receiver
+          // reads these to link log-derived spans to the evaluation trace.
+          if (traceparent) {
+            const parts = traceparent.split('-');
+            if (parts.length >= 3) {
+              const extras: string[] = [
+                `promptfoo.trace_id=${parts[1]}`,
+                `promptfoo.parent_span_id=${parts[2]}`,
+              ];
+              env.OTEL_RESOURCE_ATTRIBUTES = env.OTEL_RESOURCE_ATTRIBUTES
+                ? `${env.OTEL_RESOURCE_ATTRIBUTES},${extras.join(',')}`
+                : extras.join(',');
+            }
+          }
 
           // Dynamically import the ESM module once and cache it
           if (!this.claudeCodeModule) {

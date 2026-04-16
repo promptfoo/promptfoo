@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import express from 'express';
 import logger from '../logger';
 import {
@@ -55,6 +57,49 @@ interface OTLPResourceSpan {
 
 interface OTLPTraceRequest {
   resourceSpans: OTLPResourceSpan[];
+}
+
+// Minimal OTLP logs JSON shapes. Full OTEL log signal includes severity,
+// observedTimeUnixNano, and more — we only use the fields needed to synthesize
+// point-in-time spans under the log's trace.
+interface OTLPLogRecord {
+  timeUnixNano?: string;
+  observedTimeUnixNano?: string;
+  traceId?: string;
+  spanId?: string;
+  severityNumber?: number;
+  severityText?: string;
+  body?: OTLPAttribute['value'];
+  attributes?: OTLPAttribute[];
+}
+
+interface OTLPScopeLogs {
+  scope?: {
+    name: string;
+    version?: string;
+  };
+  logRecords: OTLPLogRecord[];
+}
+
+interface OTLPResourceLogs {
+  resource?: {
+    attributes?: OTLPAttribute[];
+  };
+  scopeLogs: OTLPScopeLogs[];
+}
+
+interface OTLPLogsRequest {
+  resourceLogs: OTLPResourceLogs[];
+}
+
+// Log event names we don't want cluttering traces (internal, not actionable).
+const LOG_EVENT_NAME_DENYLIST: ReadonlySet<string> = new Set(['claude_code.tracing']);
+// Nominal span duration for a log-derived span so it renders as a thin bar
+// instead of a zero-width point in trace UIs.
+const LOG_SPAN_DURATION_MS = 1;
+
+function randomHex(chars: number): string {
+  return crypto.randomBytes(chars / 2).toString('hex');
 }
 
 type OTLPFormat = 'json' | 'protobuf';
@@ -160,6 +205,32 @@ export class OTLPReceiver {
           getRequestFormat(req.headers['content-type']) === 'protobuf',
       }),
     );
+
+    // /v1/logs accepts JSON only. Claude Agent SDK emits most useful telemetry
+    // (tool executions, API requests, interactions) as OTEL logs, not spans;
+    // we materialize each log record as a zero-ish-duration span so the
+    // Traces tab can render them under the evaluation trace.
+    this.app.use('/v1/logs', (req, res, next) => {
+      if (req.method !== 'POST') {
+        next();
+        return;
+      }
+      const format = getRequestFormat(req.headers['content-type']);
+      if (format !== 'json') {
+        res.status(415).json({
+          error: 'Only application/json is supported for /v1/logs',
+        });
+        return;
+      }
+      next();
+    });
+    this.app.use(
+      '/v1/logs',
+      express.json({
+        limit: '10mb',
+        type: (req) => getRequestFormat(req.headers['content-type']) === 'json',
+      }),
+    );
     logger.debug('[OtlpReceiver] Middleware configured for accepted OTLP formats');
   }
 
@@ -188,6 +259,23 @@ export class OTLPReceiver {
         // OTLP success response
         res.status(200).json({ partialSuccess: {} });
         logger.debug('[OtlpReceiver] Successfully processed traces');
+      } catch (error) {
+        this.handleProcessingError(error, res);
+      }
+    });
+
+    // OTLP HTTP endpoint for logs (JSON only). Each log record becomes a span
+    // parented to the span it was emitted from, so SDK-internal events show up
+    // in the Traces tab alongside provider and tool spans.
+    this.app.post('/v1/logs', async (req, res) => {
+      logger.debug('[OtlpReceiver] Received logs request');
+      try {
+        const traces = this.parseOTLPLogsJSONRequest(req.body as OTLPLogsRequest);
+        logger.debug(`[OtlpReceiver] Parsed ${traces.length} logs into span records`);
+        if (traces.length > 0) {
+          await this.persistTraces(this.groupTraces(traces));
+        }
+        res.status(200).json({ partialSuccess: {} });
       } catch (error) {
         this.handleProcessingError(error, res);
       }
@@ -375,6 +463,109 @@ export class OTLPReceiver {
     }
 
     return traces;
+  }
+
+  private parseOTLPLogsJSONRequest(body: OTLPLogsRequest): ParsedTrace[] {
+    const traces: ParsedTrace[] = [];
+    const resourceLogs = body?.resourceLogs ?? [];
+    logger.debug(`[OtlpReceiver] Parsing logs request with ${resourceLogs.length} resource logs`);
+
+    for (const resourceLog of resourceLogs) {
+      const resourceAttributes = this.parseAttributes(resourceLog.resource?.attributes);
+      for (const scopeLog of resourceLog.scopeLogs ?? []) {
+        for (const log of scopeLog.logRecords ?? []) {
+          const parsed = this.logRecordToParsedTrace(log, scopeLog, resourceAttributes);
+          if (parsed) {
+            traces.push(parsed);
+          }
+        }
+      }
+    }
+
+    return traces;
+  }
+
+  private logRecordToParsedTrace(
+    log: OTLPLogRecord,
+    scopeLog: OTLPScopeLogs,
+    resourceAttributes: Record<string, any>,
+  ): ParsedTrace | null {
+    // Prefer an inline traceId on the log record (set when the SDK propagated
+    // TRACEPARENT into its logs context). Fall back to the resource attribute
+    // promptfoo.trace_id — the claude-agent-sdk provider injects this via
+    // OTEL_RESOURCE_ATTRIBUTES because Claude Code's logs signal does not
+    // inherit TRACEPARENT. Without either, we can't link anywhere useful.
+    const resourceTraceId =
+      typeof resourceAttributes['promptfoo.trace_id'] === 'string'
+        ? (resourceAttributes['promptfoo.trace_id'] as string)
+        : undefined;
+    const rawTraceId = log.traceId ?? resourceTraceId;
+    if (!rawTraceId) {
+      return null;
+    }
+    const traceId = this.convertId(rawTraceId, 32);
+
+    const attributes: Record<string, any> = {
+      ...resourceAttributes,
+      ...this.parseAttributes(log.attributes),
+      'otel.scope.name': scopeLog.scope?.name,
+      'otel.scope.version': scopeLog.scope?.version,
+      'otel.log.severity_number': log.severityNumber,
+      'otel.log.severity_text': log.severityText,
+    };
+
+    // Prefer the OTEL "event.name" semantic convention for the span name, which
+    // Claude Code sets to things like "claude_code.tool.execution".
+    const eventName = attributes['event.name'] ?? attributes['claude_code.event.name'];
+    const bodyValue = log.body ? this.parseAttributeValue(log.body) : undefined;
+    const name =
+      typeof eventName === 'string' && eventName.length > 0
+        ? eventName
+        : typeof bodyValue === 'string' && bodyValue.length > 0 && bodyValue.length <= 128
+          ? bodyValue
+          : 'otel.log';
+
+    if (LOG_EVENT_NAME_DENYLIST.has(name)) {
+      return null;
+    }
+
+    if (bodyValue !== undefined) {
+      attributes['otel.log.body'] = bodyValue;
+    }
+
+    const timeNano = log.timeUnixNano ?? log.observedTimeUnixNano;
+    const startTime = timeNano ? Number(timeNano) / 1_000_000 : Date.now();
+    const endTime = startTime + LOG_SPAN_DURATION_MS;
+
+    // Log's own span_id is the span the log was emitted from, so that span
+    // becomes our synthesized span's parent. Fall back to the resource-level
+    // promptfoo.parent_span_id the provider injected. We mint a fresh 16-hex
+    // span id so multiple logs within the same span don't collide on
+    // (trace_id, span_id).
+    const resourceParentSpanId =
+      typeof resourceAttributes['promptfoo.parent_span_id'] === 'string'
+        ? (resourceAttributes['promptfoo.parent_span_id'] as string)
+        : undefined;
+    const rawParentSpanId =
+      log.spanId && /[1-9a-f]/i.test(log.spanId) ? log.spanId : resourceParentSpanId;
+    const parentSpanId = rawParentSpanId ? this.convertId(rawParentSpanId, 16) : undefined;
+
+    return {
+      traceId,
+      span: {
+        spanId: randomHex(16),
+        parentSpanId,
+        name,
+        startTime,
+        endTime,
+        attributes,
+        statusCode: 1, // OK — OTEL logs don't carry a span status; success unless severity >= ERROR
+        statusMessage:
+          typeof log.severityNumber === 'number' && log.severityNumber >= 17
+            ? log.severityText
+            : undefined,
+      },
+    };
   }
 
   private async parseOTLPProtobufRequest(body: Buffer): Promise<ParsedTrace[]> {

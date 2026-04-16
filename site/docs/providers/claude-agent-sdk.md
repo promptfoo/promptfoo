@@ -985,6 +985,21 @@ tracing:
       port: 4318
 ```
 
+### Deep tracing (SDK-internal events)
+
+To also capture Claude Code's internal events — API requests, tool decisions, tool results — set `OTEL_LOGS_EXPORTER=otlp` and use the JSON logs protocol. Each log record becomes a child span on the provider span.
+
+```yaml
+config:
+  env:
+    CLAUDE_CODE_ENABLE_TELEMETRY: '1'
+    OTEL_LOGS_EXPORTER: otlp
+    OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:4318'
+    OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json'
+```
+
+The receiver's `/v1/logs` endpoint accepts JSON only. The provider automatically injects `OTEL_RESOURCE_ATTRIBUTES=promptfoo.trace_id=...,promptfoo.parent_span_id=...` so logs link to the correct evaluation trace even though the SDK's logs signal doesn't natively inherit `TRACEPARENT`.
+
 ## Caching Behavior
 
 This provider automatically caches responses, and will read from the cache if the prompt, configuration, and files in the working directory (if `working_dir` is set) are the same as a previous run.
