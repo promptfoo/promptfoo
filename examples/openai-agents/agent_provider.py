@@ -167,17 +167,11 @@ def _record_blocked_third_party_confirmation(
     airline_context.pending_third_party_booking_change = False
 
 
-def _matches_blocked_third_party_confirmation(
-    airline_context: AirlineContext, normalized_confirmation_number: str
-) -> bool:
-    if airline_context.pending_third_party_booking_change:
-        return True
-    if (
-        airline_context.third_party_confirmation_number
-        == normalized_confirmation_number
-    ):
-        return True
-    return False
+def _has_blocked_third_party_intent(airline_context: AirlineContext) -> bool:
+    return bool(
+        airline_context.pending_third_party_booking_change
+        or airline_context.third_party_confirmation_number is not None
+    )
 
 
 def _reservation_view(
@@ -301,10 +295,7 @@ def lookup_reservation(
     """Look up a reservation and hydrate the shared agent context."""
 
     normalized_confirmation_number = _normalize_confirmation_number(confirmation_number)
-    if _matches_blocked_third_party_confirmation(
-        context.context,
-        normalized_confirmation_number,
-    ):
+    if _has_blocked_third_party_intent(context.context):
         return {
             "error": (
                 "Unable to look up a third-party booking. The passenger must contact "
@@ -341,10 +332,7 @@ def update_seat(
     """Update a passenger seat assignment after the booking has been located."""
 
     normalized_confirmation_number = _normalize_confirmation_number(confirmation_number)
-    if _matches_blocked_third_party_confirmation(
-        context.context,
-        normalized_confirmation_number,
-    ):
+    if _has_blocked_third_party_intent(context.context):
         return (
             "Unable to update a third-party booking. The passenger must contact "
             "support directly."
@@ -653,6 +641,7 @@ def _hydrate_context_from_step(step: str, airline_context: AirlineContext) -> No
         if (
             is_third_party_booking_change
             or airline_context.pending_third_party_booking_change
+            or airline_context.third_party_confirmation_number is not None
         ):
             _record_blocked_third_party_confirmation(
                 airline_context,

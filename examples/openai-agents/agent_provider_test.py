@@ -326,6 +326,39 @@ class AgentProviderTests(unittest.TestCase):
         self.assertIsNone(context.seat_number)
         self.assertIsNone(context.verified_confirmation_number)
 
+    def test_third_party_confirmation_correction_remains_blocked(self):
+        context = AGENT_PROVIDER.AirlineContext()
+        wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "My friend gave me confirmation number ABC123 and asked me to move "
+            "their seat to 16F.",
+            context,
+        )
+        self.assertEqual(context.third_party_confirmation_number, "ABC123")
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Sorry, their confirmation number is XYZ789.",
+            context,
+        )
+        lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "XYZ789")
+        result = AGENT_PROVIDER.update_seat(wrapper, "XYZ789", "18A")
+
+        self.assertEqual(
+            lookup,
+            {
+                "error": (
+                    "Unable to look up a third-party booking. The passenger must "
+                    "contact support directly."
+                )
+            },
+        )
+        self.assertIn("third-party booking", result)
+        self.assertEqual(context.third_party_confirmation_number, "XYZ789")
+        self.assertIsNone(context.passenger_name)
+        self.assertIsNone(context.seat_number)
+        self.assertIsNone(context.verified_confirmation_number)
+
     def test_update_seat_refuses_mismatched_claimed_passenger(self):
         context = AGENT_PROVIDER.AirlineContext()
         wrapper = AGENT_PROVIDER.RunContextWrapper(context)
