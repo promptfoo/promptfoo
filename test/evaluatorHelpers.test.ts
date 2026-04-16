@@ -904,6 +904,49 @@ describe('evaluatorHelpers', () => {
         );
       });
 
+      it('should chain multiple beforeAll extensions so each sees prior changes', async () => {
+        const baseTests = [{ vars: { original: 'yes' } }];
+        const chainContext = {
+          suite: {
+            providers: [mockApiProvider],
+            prompts: [toPrompt('Test prompt')],
+            tests: baseTests,
+          } as TestSuite,
+        };
+
+        vi.mocked(transform)
+          .mockResolvedValueOnce({
+            suite: {
+              providers: chainContext.suite.providers,
+              prompts: chainContext.suite.prompts,
+              tests: [...baseTests, { vars: { added_by_ext1: 'yes' } }],
+            },
+          })
+          .mockImplementationOnce(async (_ext, context) => {
+            // Extension #2 should see the tests array modified by extension #1
+            const ctx = context as { suite: TestSuite };
+            expect(ctx.suite.tests).toHaveLength(2);
+            expect(ctx.suite.tests?.[1]).toEqual({ vars: { added_by_ext1: 'yes' } });
+            return {
+              suite: {
+                providers: ctx.suite.providers,
+                prompts: ctx.suite.prompts,
+                tests: [...(ctx.suite.tests || []), { vars: { added_by_ext2: 'yes' } }],
+              },
+            };
+          });
+
+        const out = await runExtensionHook(
+          ['file://ext1.js:beforeAll', 'file://ext2.js:beforeAll'],
+          'beforeAll',
+          chainContext,
+        );
+        expect(out.suite.tests).toHaveLength(3);
+        expect(out.suite.tests?.[0]).toEqual({ vars: { original: 'yes' } });
+        expect(out.suite.tests?.[1]).toEqual({ vars: { added_by_ext1: 'yes' } });
+        expect(out.suite.tests?.[2]).toEqual({ vars: { added_by_ext2: 'yes' } });
+      });
+
       it('should handle mixed extensions with correct calling conventions', async () => {
         // Mix of hook-specific and generic extensions
         const extensions = [
