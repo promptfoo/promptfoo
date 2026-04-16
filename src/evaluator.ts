@@ -68,11 +68,8 @@ import { isNonTransientHttpStatus } from './util/fetch/errors';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
-import {
-  accumulateNamedMetric,
-  backfillNamedScoreWeights,
-  filterFiniteScores,
-} from './util/namedMetrics';
+import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
+import { filterFiniteScores } from './util/numeric';
 import { isPromptAllowed } from './util/promptMatching';
 import {
   isAnthropicProvider,
