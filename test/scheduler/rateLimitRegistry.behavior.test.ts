@@ -4,10 +4,10 @@ import { getFetchRetryContextMaxRetries } from '../../src/util/fetch/retryContex
 
 import type { ApiProvider } from '../../src/types/providers';
 
-function createProvider(maxRetries?: unknown): ApiProvider {
+function createProvider(maxRetries?: unknown, id = 'test-provider'): ApiProvider {
   const config = maxRetries === undefined ? {} : { maxRetries };
   return {
-    id: () => 'test-provider',
+    id: () => id,
     config,
     callApi: vi.fn(),
   } as unknown as ApiProvider;
@@ -58,12 +58,15 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
   });
 
   it('should clear an outer retry context when a nested provider has no maxRetries', async () => {
+    // Use distinct provider ids so the outer and inner calls map to separate
+    // ProviderRateLimitState instances — otherwise shared slot queue state
+    // could mask the ALS-scope behavior we're asserting.
     const registry = new RateLimitRegistry({
       maxConcurrency: 2,
       queueTimeoutMs: 100,
     });
-    const outerProvider = createProvider(0);
-    const innerProvider = createProvider(undefined);
+    const outerProvider = createProvider(0, 'outer-provider');
+    const innerProvider = createProvider(undefined, 'inner-provider');
 
     try {
       const contextValue = await registry.execute(outerProvider, () =>
@@ -130,26 +133,18 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
       queueTimeoutMs: 100,
     });
 
-    const seen: Array<{ id: string; ctx: number | undefined }> = [];
-    function provider(id: string, maxRetries: unknown): ApiProvider {
-      return {
-        id: () => id,
-        config: { maxRetries },
-        callApi: vi.fn(),
-      } as unknown as ApiProvider;
-    }
-    async function capture(id: string): Promise<number | undefined> {
+    async function capture(): Promise<number | undefined> {
       const ctx = getFetchRetryContextMaxRetries();
-      seen.push({ id, ctx });
-      // Yield so both calls can interleave before returning.
+      // Yield so both calls can interleave before returning — guards against
+      // a regression where the context from the later call leaks into the earlier.
       await new Promise((resolve) => setImmediate(resolve));
       return ctx;
     }
 
     try {
       const [a, b] = await Promise.all([
-        registry.execute(provider('p0', 0), () => capture('p0')),
-        registry.execute(provider('p5', 5), () => capture('p5')),
+        registry.execute(createProvider(0, 'p0'), capture),
+        registry.execute(createProvider(5, 'p5'), capture),
       ]);
       expect(a).toBe(0);
       expect(b).toBe(5);
