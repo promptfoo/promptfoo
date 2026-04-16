@@ -4,8 +4,9 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
-import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
+import { getTargetResponse } from './shared';
 
 import type {
   ApiProvider,
@@ -283,7 +284,14 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         });
 
         // Send to target
-        const targetResponse = await targetProvider.callApi(fetchPrompt, context, options);
+        const targetResponse = await getTargetResponse(
+          targetProvider,
+          fetchPrompt,
+          context,
+          options,
+        );
+        // Count every target call attempt, including failed responses.
+        accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
         // Check if target used web fetch (from metadata if available)
         if (targetResponse.metadata?.webFetchUsed) {
@@ -311,16 +319,6 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         messages.push({ role: 'assistant', content: responseOutput });
         redteamHistory.push({ prompt: fetchPrompt, output: responseOutput });
         lastOutput = responseOutput;
-
-        // Accumulate token usage
-        if (targetResponse.tokenUsage) {
-          totalTokenUsage.total =
-            (totalTokenUsage.total || 0) + (targetResponse.tokenUsage.total || 0);
-          totalTokenUsage.prompt =
-            (totalTokenUsage.prompt || 0) + (targetResponse.tokenUsage.prompt || 0);
-          totalTokenUsage.completion =
-            (totalTokenUsage.completion || 0) + (targetResponse.tokenUsage.completion || 0);
-        }
 
         // 3. Check if page was fetched
         const tracking = await this.checkPageFetched(webPage.uuid, evalId);

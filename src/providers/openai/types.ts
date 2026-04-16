@@ -52,8 +52,9 @@ export interface Reasoning {
    * **o-series models only**
    *
    * Constraints effort on reasoning for
-   * [reasoning models](https://platform.openai.com/docs/guides/reasoning). Currently
-   * supported values are `low`, `medium`, and `high`. Reducing reasoning effort can
+   * [reasoning models](https://platform.openai.com/docs/guides/reasoning). Supported
+   * values are `low`, `medium`, and `high` for o-series models. GPT-5 models may
+   * also support `none`, `minimal`, and `xhigh`. Reducing reasoning effort can
    * result in faster responses and fewer tokens used on reasoning in a response.
    */
   effort?: ReasoningEffort;
@@ -66,8 +67,10 @@ export interface Reasoning {
   summary?: 'auto' | 'concise' | 'detailed' | null;
 }
 
+export type GPT5ReasoningEffort = Exclude<ReasoningEffort, null> | 'minimal' | 'xhigh';
+
 export type GPT5Reasoning = Omit<Reasoning, 'effort'> & {
-  effort?: ReasoningEffort | 'minimal';
+  effort?: GPT5ReasoningEffort;
 };
 
 /** Verbosity level supported by GPT-5 models */
@@ -182,6 +185,14 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
    * GPT-5 only: Controls the verbosity of the model's responses. Ignored for non-GPT-5 models.
    */
   verbosity?: GPT5Verbosity;
+
+  /**
+   * When true, omit hardcoded defaults for temperature, max_tokens, top_p, etc.
+   * Only values explicitly set via config or environment variables will be sent.
+   * Used by proxy providers (e.g. LiteLLM) that want the upstream API/proxy to
+   * apply its own defaults.
+   */
+  omitDefaults?: boolean;
 };
 
 // =============================================================================
@@ -196,7 +207,7 @@ export type OpenAiVideoModel = 'sora-2' | 'sora-2-pro';
 /**
  * Supported video sizes (aspect ratios)
  */
-export type OpenAiVideoSize = '1280x720' | '720x1280';
+export type OpenAiVideoSize = '1280x720' | '720x1280' | '1792x1024' | '1024x1792';
 
 /**
  * Valid video duration in seconds (Sora API only accepts these values)

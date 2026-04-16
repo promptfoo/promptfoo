@@ -31,6 +31,8 @@ describe('GoogleImageProvider', async () => {
     process.env.GOOGLE_API_KEY = 'test-api-key';
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     delete process.env.GEMINI_API_KEY;
+    delete process.env.GOOGLE_PROJECT_ID;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
 
     // Set up default mock behaviors
     mockLoadCredentials.mockImplementation(function (creds) {
@@ -42,6 +44,7 @@ describe('GoogleImageProvider', async () => {
   afterEach(() => {
     delete process.env.GOOGLE_API_KEY;
     delete process.env.GOOGLE_PROJECT_ID;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     delete process.env.GEMINI_API_KEY;
   });
@@ -81,7 +84,10 @@ describe('GoogleImageProvider', async () => {
       expect.any(Number),
       'json',
     );
-    expect(result.output).toContain('![Generated Image](data:image/png;base64,base64data)');
+    expect(result.output).toContain('data:image/png;base64,base64data');
+    expect(result.images).toEqual([
+      { data: 'data:image/png;base64,base64data', mimeType: 'image/png' },
+    ]);
   });
 
   it('should return error when both project ID and API key are missing', async () => {
@@ -146,7 +152,10 @@ describe('GoogleImageProvider', async () => {
         timeout: 300000,
       });
 
-      expect(result.output).toContain('![Generated Image](data:image/png;base64,base64data)');
+      expect(result.output).toContain('data:image/png;base64,base64data');
+      expect(result.images).toEqual([
+        { data: 'data:image/png;base64,base64data', mimeType: 'image/png' },
+      ]);
     });
 
     it('should handle OAuth errors', async () => {
@@ -303,8 +312,13 @@ describe('GoogleImageProvider', async () => {
         'json',
       );
 
-      expect(result.output).toContain('![Generated Image](data:image/png;base64,base64data1)');
-      expect(result.output).toContain('![Generated Image](data:image/png;base64,base64data2)');
+      // First image as output for blob externalization
+      expect(result.output).toBe('data:image/png;base64,base64data1');
+      // All images in structured field
+      expect(result.images).toEqual([
+        { data: 'data:image/png;base64,base64data1', mimeType: 'image/png' },
+        { data: 'data:image/png;base64,base64data2', mimeType: 'image/png' },
+      ]);
       expect(result.cached).toBe(false);
       expect(result.cost).toBe(0.08); // 2 images * 0.04
     });
@@ -368,7 +382,7 @@ describe('GoogleImageProvider', async () => {
         expect.any(Number),
         'json',
       );
-      expect(result.output).toContain('![Generated Image]');
+      expect(result.output).toContain('data:image/png;base64,base64data');
     });
   });
 });

@@ -1,10 +1,14 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockGlobal } from '../util/utils';
 
-// Mock crypto.randomUUID using vi.stubGlobal
 const mockRandomUUID = vi.fn(() => 'test-uuid');
-vi.stubGlobal('crypto', {
+const restoreCrypto = mockGlobal('crypto', {
   ...crypto,
   randomUUID: mockRandomUUID,
+} as Crypto);
+
+afterAll(() => {
+  restoreCrypto();
 });
 
 // Mock logger
@@ -272,10 +276,38 @@ describe('TraceStore', () => {
 
   describe('getTrace', () => {
     it('should retrieve a single trace with spans', async () => {
-      const mockTrace = { id: '1', traceId: 'trace-1', evaluationId: 'eval-1' };
+      const mockTrace = {
+        id: '1',
+        traceId: 'trace-1',
+        evaluationId: 'eval-1',
+        testCaseId: 'test-case-1',
+        metadata: { source: 'test' },
+      };
       const mockSpans = [
-        { id: '1', traceId: 'trace-1', spanId: 'span-1' },
-        { id: '2', traceId: 'trace-1', spanId: 'span-2' },
+        {
+          id: '1',
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          parentSpanId: null,
+          name: 'span one',
+          startTime: 1000,
+          endTime: null,
+          attributes: null,
+          statusCode: null,
+          statusMessage: null,
+        },
+        {
+          id: '2',
+          traceId: 'trace-1',
+          spanId: 'span-2',
+          parentSpanId: 'span-1',
+          name: 'span two',
+          startTime: 2000,
+          endTime: 2500,
+          attributes: { foo: 'bar' },
+          statusCode: 1,
+          statusMessage: 'ok',
+        },
       ];
 
       // Mock trace query - update the select chain to include limit
@@ -299,8 +331,32 @@ describe('TraceStore', () => {
       const result = await traceStore.getTrace('trace-1');
 
       expect(result).toEqual({
-        ...mockTrace,
-        spans: mockSpans,
+        traceId: 'trace-1',
+        evaluationId: 'eval-1',
+        testCaseId: 'test-case-1',
+        metadata: { source: 'test' },
+        spans: [
+          {
+            spanId: 'span-1',
+            parentSpanId: undefined,
+            name: 'span one',
+            startTime: 1000,
+            endTime: undefined,
+            attributes: undefined,
+            statusCode: undefined,
+            statusMessage: undefined,
+          },
+          {
+            spanId: 'span-2',
+            parentSpanId: 'span-1',
+            name: 'span two',
+            startTime: 2000,
+            endTime: 2500,
+            attributes: { foo: 'bar' },
+            statusCode: 1,
+            statusMessage: 'ok',
+          },
+        ],
       });
     });
 

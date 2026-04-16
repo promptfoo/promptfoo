@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+import { createMockProvider } from '../../factories/provider';
 import type { Mock } from 'vitest';
 
 import type {
@@ -16,6 +17,11 @@ const mockGrader = {
 };
 
 const mockGetGraderById = vi.fn().mockReturnValue(mockGrader);
+
+vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
+}));
 
 vi.mock('../../../src/redteam/graders', async (importOriginal) => {
   return {
@@ -39,20 +45,14 @@ describe('RedteamGoatProvider', () => {
     outputValue: any = 'target response',
     tokenUsage: any = {},
     responseOverrides: Record<string, unknown> = {},
-  ) => {
-    const targetProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn() as any,
-    };
-
-    (targetProvider.callApi as any).mockResolvedValue({
-      output: outputValue,
-      tokenUsage,
-      ...responseOverrides,
+  ) =>
+    createMockProvider({
+      response: {
+        output: outputValue,
+        tokenUsage,
+        ...responseOverrides,
+      },
     });
-
-    return targetProvider;
-  };
 
   // Helper function to create a mock context
   const createMockContext = (
@@ -118,6 +118,41 @@ describe('RedteamGoatProvider', () => {
     });
   });
 
+  it('should enforce maxCharsPerMessage from provider config without cliState', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxCharsPerMessage: 5,
+      maxTurns: 1,
+      stateful: true,
+    });
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider);
+
+    await provider.callApi('test prompt', context);
+
+    expect(targetProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should preserve an explicit maxTurns value of 0', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 0,
+    });
+
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider);
+    const result = await provider.callApi('test prompt', context);
+
+    expect(provider.config.maxTurns).toBe(0);
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(targetProvider.callApi).not.toHaveBeenCalled();
+    expect(result.output).toBe('');
+    expect(result.prompt).toBe('');
+    expect(result.metadata?.stopReason).toBe('Max turns reached');
+    expect(result.metadata?.successfulAttacks).toEqual([]);
+    expect(result.metadata?.totalSuccessfulAttacks).toBe(0);
+  });
+
   it('should default stateful to false when not specified', () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',
@@ -164,15 +199,7 @@ describe('RedteamGoatProvider', () => {
       maxTurns: 2,
     });
 
-    const targetProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn() as any,
-    };
-
-    (targetProvider.callApi as any).mockResolvedValue({
-      output: 'target response',
-      tokenUsage: {},
-    });
+    const targetProvider = createMockTargetProvider();
 
     const prompt: Prompt = {
       raw: 'test prompt',
@@ -201,6 +228,28 @@ describe('RedteamGoatProvider', () => {
 
     const bodyObj = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body);
     expect(bodyObj.purpose).toBeUndefined();
+  });
+
+  it('should stop when target ends conversation', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 3,
+    });
+
+    const targetProvider = createMockTargetProvider(
+      '',
+      {},
+      {
+        conversationEnded: true,
+        conversationEndReason: 'thread_closed',
+      },
+    );
+
+    const context = createMockContext(targetProvider);
+    const result = await provider.callApi('test prompt', context);
+
+    expect(result.metadata?.stopReason).toBe('Target ended conversation');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it('should handle grader integration and stop early on failure', async () => {
@@ -248,15 +297,7 @@ describe('RedteamGoatProvider', () => {
     });
 
     const objectResponse = { foo: 'bar', baz: 123 };
-    const targetProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn() as any,
-    };
-
-    (targetProvider.callApi as any).mockResolvedValue({
-      output: objectResponse,
-      tokenUsage: {},
-    });
+    const targetProvider = createMockTargetProvider(objectResponse);
 
     const prompt: Prompt = {
       raw: 'test prompt',
@@ -280,15 +321,7 @@ describe('RedteamGoatProvider', () => {
       maxTurns: 1,
     });
 
-    const targetProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn() as any,
-    };
-
-    (targetProvider.callApi as any).mockResolvedValue({
-      output: 'target response',
-      tokenUsage: {},
-    });
+    const targetProvider = createMockTargetProvider();
 
     const context: CallApiContextParams = {
       originalProvider: targetProvider,
@@ -314,15 +347,7 @@ describe('RedteamGoatProvider', () => {
       maxTurns: 1,
     });
 
-    const targetProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn() as any,
-    };
-
-    (targetProvider.callApi as any).mockResolvedValue({
-      output: 'target response',
-      tokenUsage: {},
-    });
+    const targetProvider = createMockTargetProvider();
 
     const context: CallApiContextParams = {
       originalProvider: targetProvider,
@@ -394,12 +419,9 @@ describe('RedteamGoatProvider', () => {
         continueAfterSuccess: true,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as any,
-      };
-
-      (targetProvider.callApi as any)
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({
           output: 'first harmful response',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
@@ -470,14 +492,10 @@ describe('RedteamGoatProvider', () => {
         continueAfterSuccess: true,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as any,
-      };
-
-      (targetProvider.callApi as any).mockResolvedValue({
-        output: 'safe response',
-        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      const targetProvider = createMockTargetProvider('safe response', {
+        total: 10,
+        prompt: 5,
+        completion: 5,
       });
 
       // Mock grader to always pass (indicating no successful attacks)
@@ -532,12 +550,9 @@ describe('RedteamGoatProvider', () => {
         continueAfterSuccess: true,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as any,
-      };
-
-      (targetProvider.callApi as any)
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({ output: 'safe response 1', tokenUsage: {} })
         .mockResolvedValueOnce({ output: 'harmful response 1', tokenUsage: {} })
         .mockResolvedValueOnce({ output: 'safe response 2', tokenUsage: {} })
@@ -957,13 +972,9 @@ describe('RedteamGoatProvider', () => {
         maxTurns: 3,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as any,
-      };
-
-      // Mock target provider for multiple calls with different token usage
-      (targetProvider.callApi as any)
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({
           output: 'response 1',
           tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
@@ -997,12 +1008,9 @@ describe('RedteamGoatProvider', () => {
         maxTurns: 3,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as any,
-      };
-
-      (targetProvider.callApi as any)
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({
           output: 'response with tokens',
           tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
@@ -1036,12 +1044,9 @@ describe('RedteamGoatProvider', () => {
         maxTurns: 2,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as any,
-      };
-
-      (targetProvider.callApi as any)
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({
           output: 'successful response',
           tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
@@ -1070,12 +1075,9 @@ describe('RedteamGoatProvider', () => {
         maxTurns: 2,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as any,
-      };
-
-      (targetProvider.callApi as any)
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({
           output: 'response with zero tokens',
           tokenUsage: { total: 0, prompt: 0, completion: 0, numRequests: 1 },
@@ -1104,13 +1106,10 @@ describe('RedteamGoatProvider', () => {
         maxTurns: 2,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as any,
-      };
-
+      const targetProvider = createMockProvider();
       // First call (normal attack), second call (next attack)
-      (targetProvider.callApi as any)
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({
           output: 'first response',
           tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
@@ -1161,15 +1160,7 @@ describe('RedteamGoatProvider', () => {
         maxTurns: 1,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as any,
-      };
-
-      (targetProvider.callApi as any).mockResolvedValue({
-        output: 'target response',
-        tokenUsage: {},
-      });
+      const targetProvider = createMockTargetProvider();
 
       const context = createMockContext(targetProvider);
       const abortController = new AbortController();

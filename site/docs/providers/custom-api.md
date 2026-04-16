@@ -11,10 +11,10 @@ Custom Javascript providers let you create providers in JavaScript or TypeScript
 
 promptfoo supports multiple JavaScript module formats. Complete working examples are available on GitHub:
 
-- [CommonJS Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider) - (`.js`, `.cjs`) - Uses `module.exports` and `require()`
-- [ESM Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider-mjs) - (`.mjs`, `.js` with `"type": "module"`) - Uses `import`/`export`
-- [TypeScript Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider-typescript) - (`.ts`) - Provides type safety with interfaces
-- [Embeddings Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-provider-embeddings) (commonjs)
+- [CommonJS Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-custom/basic) - (`.js`, `.cjs`) - Uses `module.exports` and `require()`
+- [ESM Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-custom/mjs) - (`.mjs`, `.js` with `"type": "module"`) - Uses `import`/`export`
+- [TypeScript Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-custom/typescript) - (`.ts`) - Provides type safety with interfaces
+- [Embeddings Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-custom/embeddings) (commonjs)
 
 ## Provider Interface
 
@@ -89,6 +89,8 @@ module.exports = class OpenAIProvider {
   },
   cost: 0.002,
   cached: false,
+  conversationEnded: false, // Optional: set true to stop multi-turn redteam gracefully
+  conversationEndReason: 'thread_closed', // Optional reason when conversationEnded=true
   metadata: {}, // Additional data
   ...
 }
@@ -96,16 +98,25 @@ module.exports = class OpenAIProvider {
 
 ### Context Parameter
 
-The `context` parameter contains:
+The `context` parameter provides test case information and utility objects:
 
 ```javascript
 {
-  vars: {}, // Test case variables
-  prompt: {}, // Original prompt template
-  originalProvider: {}, // Used when provider is overridden
-  logger: {} // Winston logger instance
+  vars: {},              // Test case variables
+  prompt: {},            // Prompt template (raw, label, config)
+  test: {                // Full test case object
+    vars: {},
+    metadata: {
+      pluginId: '...',   // Redteam plugin (e.g. "promptfoo:redteam:harmful:hate")
+      strategyId: '...',  // Redteam strategy (e.g. "jailbreak", "prompt-injection")
+    },
+  },
+  originalProvider: {},  // Original provider when overridden
+  logger: {},            // Winston logger instance
 }
 ```
+
+For redteam evals, use `context.test.metadata.pluginId` and `context.test.metadata.strategyId` to identify which plugin and strategy generated the test case.
 
 ### Reporting the Actual Prompt
 
@@ -140,7 +151,7 @@ The reported prompt is used for:
 - **Assertions**: Prompt-based assertions like `moderation` check this value
 - **Debugging**: Helps understand what was actually sent to the LLM
 
-See the [vercel-ai-sdk example](https://github.com/promptfoo/promptfoo/tree/main/examples/vercel-ai-sdk) for a complete working example.
+See the [vercel-ai-sdk example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-vercel/ai-sdk) for a complete working example.
 
 ### Two-Stage Provider
 
@@ -236,6 +247,32 @@ export default class TypedProvider implements ApiProvider {
     };
   }
 }
+```
+
+### TypeScript Providers in Frontend Projects
+
+Promptfoo loads TypeScript providers in Node.js, not through your frontend bundler. If your provider imports app code from a Vite, Next.js, or Webpack project, make sure the imports are also valid from Node.
+
+For path aliases such as `@/utils`, define the alias in `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  }
+}
+```
+
+Run `promptfoo eval` from the project root so the TypeScript loader can find that `tsconfig.json`.
+
+If your provider depends on bundler-only aliases, browser-only globals, CSS imports, or frontend plugins, compile or bundle the provider to JavaScript first and reference the built file:
+
+```yaml
+providers:
+  - file://dist/promptfoo-provider.js
 ```
 
 ## Additional Capabilities

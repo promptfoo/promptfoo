@@ -60,7 +60,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
       calculateWER: config?.calculateWER || false,
       baseUrl: config?.baseUrl || 'https://api.elevenlabs.io/v1',
       timeout: config?.timeout || 120000,
-      retries: config?.retries || 3,
+      retries: config?.retries ?? 3,
       label: options.label || config?.label,
       apiKey: config?.apiKey,
       apiKeyEnvar: config?.apiKeyEnvar,

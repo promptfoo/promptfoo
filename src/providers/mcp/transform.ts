@@ -59,7 +59,7 @@ export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
           type: 'object',
           properties,
           ...(required && required.length > 0 ? { required } : {}),
-          ...(additionalProperties !== undefined ? { additionalProperties } : {}),
+          ...(additionalProperties === undefined ? {} : { additionalProperties }),
         },
       },
     };

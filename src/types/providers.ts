@@ -21,6 +21,14 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface SkillCallEntry {
+  name: string;
+  input?: unknown;
+  path?: string;
+  source?: 'heuristic' | 'tool';
+  is_error?: boolean;
+}
+
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
 // Local interface to avoid circular dependency with src/types/index.ts
@@ -112,9 +120,9 @@ export interface ApiProvider {
   transform?: string;
   toJSON?: () => any;
   /**
-   * Cleanup method called when a provider call is aborted (e.g., due to timeout)
-   * Providers should implement this to clean up any resources they might have
-   * allocated, such as file handles, network connections, etc.
+   * Provider-wide cleanup hook for releasing long-lived resources such as worker
+   * processes, browser sessions, or pooled connections at eval shutdown.
+   * Request-scoped cancellation should be implemented with `abortSignal`.
    */
   cleanup?: () => void | Promise<void>;
 }
@@ -162,7 +170,7 @@ export interface ProviderResponse {
     http?: {
       status: number;
       statusText: string;
-      headers: Record<string, string>;
+      headers?: Record<string, string>;
       requestHeaders?: Record<string, string>;
     };
     [key: string]: any;
@@ -186,6 +194,16 @@ export interface ProviderResponse {
   providerTransformedOutput?: string | any;
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
+  /**
+   * Indicates the target intentionally ended the active conversation/session.
+   * Multi-turn redteam strategies can use this to stop probing gracefully.
+   */
+  conversationEnded?: boolean;
+  /**
+   * Optional machine-readable reason explaining why the conversation ended.
+   * Example: `thread_closed`.
+   */
+  conversationEndReason?: string;
   sessionId?: string;
   guardrails?: GuardrailResponse;
   finishReason?: string;
@@ -206,7 +224,7 @@ export interface ProviderResponse {
     storageRef?: { key?: string }; // Storage reference for video file (Sora)
     url?: string; // Storage ref URL (e.g., storageRef:video/abc123.mp4) or blob URI
     format?: string; // 'mp4'
-    size?: string; // '1280x720' or '720x1280'
+    size?: string; // '1280x720', '720x1280', '1792x1024', or '1024x1792'
     duration?: number; // Seconds
     thumbnail?: string; // Storage ref URL for thumbnail (Sora)
     spritesheet?: string; // Storage ref URL for spritesheet (Sora)
@@ -214,6 +232,13 @@ export interface ProviderResponse {
     aspectRatio?: string; // '16:9' or '9:16' (Veo)
     resolution?: string; // '720p' or '1080p' (Veo)
   };
+  images?: ImageOutput[];
+}
+
+export interface ImageOutput {
+  data?: string; // data URI or base64
+  blobRef?: BlobRef;
+  mimeType?: string;
 }
 
 export interface ProviderEmbeddingResponse {

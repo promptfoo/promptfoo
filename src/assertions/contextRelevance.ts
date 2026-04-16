@@ -1,4 +1,4 @@
-import { matchesContextRelevance } from '../matchers';
+import { matchesContextRelevance } from '../matchers/rag';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
 

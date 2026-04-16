@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
-import { getUserEmail } from '../../../src/globalConfig/accounts';
+import { getUserEmail, isLoggedIntoCloud } from '../../../src/globalConfig/accounts';
 import logger from '../../../src/logger';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addGcgTestCases, CONCURRENCY } from '../../../src/redteam/strategies/gcg';
@@ -24,12 +24,14 @@ vi.mock('../../../src/logger', () => ({
 describe('gcg strategy', () => {
   const mockFetchWithCache = vi.mocked(fetchWithCache);
   const mockGetUserEmail = vi.mocked(getUserEmail);
+  const mockIsLoggedIntoCloud = vi.mocked(isLoggedIntoCloud);
   const mockNeverGenerateRemote = vi.mocked(neverGenerateRemote);
   const mockGetRemoteGenerationUrl = vi.mocked(getRemoteGenerationUrl);
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetUserEmail.mockReturnValue('test@example.com');
+    mockIsLoggedIntoCloud.mockReturnValue(true);
     mockNeverGenerateRemote.mockReturnValue(false);
     mockGetRemoteGenerationUrl.mockReturnValue('http://test-url');
   });
@@ -80,6 +82,14 @@ describe('gcg strategy', () => {
         }),
       },
       expect.any(Number),
+    );
+  });
+
+  it('should throw error when user is not authenticated', async () => {
+    mockIsLoggedIntoCloud.mockReturnValue(false);
+
+    await expect(addGcgTestCases(testCases, 'prompt', {})).rejects.toThrow(
+      'The GCG strategy requires authentication',
     );
   });
 

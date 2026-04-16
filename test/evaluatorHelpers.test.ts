@@ -12,8 +12,9 @@ import {
   runExtensionHook,
 } from '../src/evaluatorHelpers';
 import { transform } from '../src/util/transform';
+import { createMockProvider } from './factories/provider';
 
-import type { ApiProvider, Prompt, TestCase, TestSuite } from '../src/types/index';
+import type { Prompt, TestCase, TestSuite } from '../src/types/index';
 
 // Use vi.hoisted to define mocks and helpers that need to be accessible in vi.mock factories
 const { actualPathResolve, dynamicModuleMocks, mockDynamicModule, mockPathResolve } = vi.hoisted(
@@ -108,15 +109,7 @@ vi.mock('../src/util/transform', () => ({
   transform: vi.fn(),
 }));
 
-const mockApiProvider: ApiProvider = {
-  id: function id() {
-    return 'test-provider';
-  },
-  callApi: vi.fn().mockResolvedValue({
-    output: 'Test output',
-    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-  }),
-};
+const mockApiProvider = createMockProvider();
 
 function toPrompt(text: string): Prompt {
   return { raw: text, label: text };
@@ -332,6 +325,21 @@ describe('evaluatorHelpers', () => {
 
       const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
       expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1');
+    });
+
+    it('should throw a clear error when a package variable does not export a function', async () => {
+      const prompt = toPrompt('Test prompt with {{ var1 }}');
+      const vars = {
+        var1: 'package:@promptfoo/fake:testFunction',
+      };
+
+      mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
+        testFunction: false,
+      });
+
+      await expect(renderPrompt(prompt, vars, {})).rejects.toThrow(
+        'Variable source malformed: package:@promptfoo/fake:testFunction must export a function. Received: boolean',
+      );
     });
 
     it('should load external json files in renderPrompt and parse the JSON content', async () => {

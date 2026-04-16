@@ -1,2 +1,4 @@
-openai-agents==0.1.0
-pydantic==2.12.0
+openai-agents>=0.13.2,<0.14
+opentelemetry-api>=1,<2
+opentelemetry-sdk>=1,<2
+opentelemetry-exporter-otlp-proto-http>=1,<2

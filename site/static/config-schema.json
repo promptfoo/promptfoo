@@ -164,6 +164,12 @@
     "__schema6": {
       "type": "object",
       "properties": {
+        "ABLIT_API_BASE_URL": {
+          "type": "string"
+        },
+        "ABLIT_KEY": {
+          "type": "string"
+        },
         "AI21_API_BASE_URL": {
           "type": "string"
         },
@@ -347,6 +353,9 @@
         "MISTRAL_API_KEY": {
           "type": "string"
         },
+        "MODELSLAB_API_KEY": {
+          "type": "string"
+        },
         "NSCALE_SERVICE_TOKEN": {
           "type": "string"
         },
@@ -374,7 +383,25 @@
         "OPENAI_ORGANIZATION": {
           "type": "string"
         },
+        "CLAWDBOT_GATEWAY_PASSWORD": {
+          "type": "string"
+        },
+        "CLAWDBOT_GATEWAY_TOKEN": {
+          "type": "string"
+        },
+        "CLAWDBOT_GATEWAY_URL": {
+          "type": "string"
+        },
         "CODEX_API_KEY": {
+          "type": "string"
+        },
+        "OPENCLAW_CONFIG_PATH": {
+          "type": "string"
+        },
+        "OPENCLAW_GATEWAY_PASSWORD": {
+          "type": "string"
+        },
+        "OPENCLAW_GATEWAY_PORT": {
           "type": "string"
         },
         "OPENCLAW_GATEWAY_TOKEN": {
@@ -561,6 +588,9 @@
                     "type": "string"
                   },
                   "raw": {
+                    "type": "string"
+                  },
+                  "template": {
                     "type": "string"
                   },
                   "display": {
@@ -828,6 +858,12 @@
                 "similar:euclidean",
                 "starts-with",
                 "tool-call-f1",
+                "skill-used",
+                "trajectory:goal-success",
+                "trajectory:tool-args-match",
+                "trajectory:step-count",
+                "trajectory:tool-sequence",
+                "trajectory:tool-used",
                 "trace-error-spans",
                 "trace-span-count",
                 "trace-span-duration",
@@ -892,6 +928,12 @@
                 "similar:euclidean",
                 "starts-with",
                 "tool-call-f1",
+                "skill-used",
+                "trajectory:goal-success",
+                "trajectory:tool-args-match",
+                "trajectory:step-count",
+                "trajectory:tool-sequence",
+                "trajectory:tool-used",
                 "trace-error-spans",
                 "trace-span-count",
                 "trace-span-duration",
@@ -1042,6 +1084,9 @@
           "type": "boolean"
         },
         "disableConversationVar": {
+          "type": "boolean"
+        },
+        "disableDefaultAsserts": {
           "type": "boolean"
         },
         "runSerially": {
@@ -1449,6 +1494,12 @@
                 "env": {
                   "type": "object",
                   "properties": {
+                    "ABLIT_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "ABLIT_KEY": {
+                      "type": "string"
+                    },
                     "AI21_API_BASE_URL": {
                       "type": "string"
                     },
@@ -1632,6 +1683,9 @@
                     "MISTRAL_API_KEY": {
                       "type": "string"
                     },
+                    "MODELSLAB_API_KEY": {
+                      "type": "string"
+                    },
                     "NSCALE_SERVICE_TOKEN": {
                       "type": "string"
                     },
@@ -1659,7 +1713,25 @@
                     "OPENAI_ORGANIZATION": {
                       "type": "string"
                     },
+                    "CLAWDBOT_GATEWAY_PASSWORD": {
+                      "type": "string"
+                    },
+                    "CLAWDBOT_GATEWAY_TOKEN": {
+                      "type": "string"
+                    },
+                    "CLAWDBOT_GATEWAY_URL": {
+                      "type": "string"
+                    },
                     "CODEX_API_KEY": {
+                      "type": "string"
+                    },
+                    "OPENCLAW_CONFIG_PATH": {
+                      "type": "string"
+                    },
+                    "OPENCLAW_GATEWAY_PASSWORD": {
+                      "type": "string"
+                    },
+                    "OPENCLAW_GATEWAY_PORT": {
                       "type": "string"
                     },
                     "OPENCLAW_GATEWAY_TOKEN": {
@@ -1850,7 +1922,8 @@
               "owasp:agentic",
               "eu:ai-act",
               "iso:42001",
-              "gdpr"
+              "gdpr",
+              "dod:ai:ethics"
             ]
           }
         },
@@ -1911,6 +1984,21 @@
                       "bias:race",
                       "bola",
                       "cca",
+                      "coding-agent:all",
+                      "coding-agent:automation-poisoning",
+                      "coding-agent:core",
+                      "coding-agent:delayed-ci-exfil",
+                      "coding-agent:generated-vulnerability",
+                      "coding-agent:network-egress-bypass",
+                      "coding-agent:procfs-credential-read",
+                      "coding-agent:repo-prompt-injection",
+                      "coding-agent:sandbox-read-escape",
+                      "coding-agent:sandbox-write-escape",
+                      "coding-agent:secret-env-read",
+                      "coding-agent:secret-file-read",
+                      "coding-agent:steganographic-exfil",
+                      "coding-agent:terminal-output-injection",
+                      "coding-agent:verifier-sabotage",
                       "competitors",
                       "contracts",
                       "coppa",
@@ -1920,6 +2008,12 @@
                       "debug-access",
                       "default",
                       "divergent-repetition",
+                      "dod:ai:ethics",
+                      "dod:ai:ethics:01",
+                      "dod:ai:ethics:02",
+                      "dod:ai:ethics:03",
+                      "dod:ai:ethics:04",
+                      "dod:ai:ethics:05",
                       "donotanswer",
                       "ecommerce",
                       "ecommerce:compliance-bypass",
@@ -1952,7 +2046,9 @@
                       "financial:defamation",
                       "financial:hallucination",
                       "financial:impartiality",
+                      "financial:japan-fiea-suitability",
                       "financial:misconduct",
+                      "financial:sox-compliance",
                       "financial:sycophancy",
                       "foundation",
                       "gdpr",
@@ -2000,6 +2096,7 @@
                       "indirect-prompt-injection",
                       "insurance",
                       "insurance:coverage-discrimination",
+                      "insurance:data-disclosure",
                       "insurance:network-misinformation",
                       "insurance:phi-disclosure",
                       "intent",
@@ -2014,6 +2111,9 @@
                       "mcp",
                       "medical",
                       "medical:anchoring-bias",
+                      "medical:fda:ai-disclosure",
+                      "medical:fda:cyber-access-control",
+                      "medical:fda:cyber-audit-tampering",
                       "medical:hallucination",
                       "medical:incorrect-knowledge",
                       "medical:off-label-use",
@@ -2021,12 +2121,24 @@
                       "medical:sycophancy",
                       "misinformation",
                       "mitre:atlas",
+                      "mitre:atlas:ai-attack-staging",
+                      "mitre:atlas:ai-model-access",
+                      "mitre:atlas:collection",
+                      "mitre:atlas:command-and-control",
+                      "mitre:atlas:credential-access",
+                      "mitre:atlas:defense-evasion",
+                      "mitre:atlas:discovery",
+                      "mitre:atlas:execution",
                       "mitre:atlas:exfiltration",
                       "mitre:atlas:impact",
                       "mitre:atlas:initial-access",
+                      "mitre:atlas:lateral-movement",
                       "mitre:atlas:ml-attack-staging",
+                      "mitre:atlas:persistence",
+                      "mitre:atlas:privilege-escalation",
                       "mitre:atlas:reconnaissance",
                       "mitre:atlas:resource-development",
+                      "model-identification",
                       "nist:ai",
                       "nist:ai:measure",
                       "nist:ai:measure:1.1",
@@ -2123,6 +2235,11 @@
                       "sql-injection",
                       "ssrf",
                       "system-prompt-override",
+                      "teen-safety",
+                      "teen-safety:age-restricted-goods-and-services",
+                      "teen-safety:dangerous-content",
+                      "teen-safety:dangerous-roleplay",
+                      "teen-safety:harmful-body-ideals",
                       "telecom",
                       "telecom:accessibility-violation",
                       "telecom:account-takeover",
@@ -2174,6 +2291,21 @@
                           "bias:race",
                           "bola",
                           "cca",
+                          "coding-agent:all",
+                          "coding-agent:automation-poisoning",
+                          "coding-agent:core",
+                          "coding-agent:delayed-ci-exfil",
+                          "coding-agent:generated-vulnerability",
+                          "coding-agent:network-egress-bypass",
+                          "coding-agent:procfs-credential-read",
+                          "coding-agent:repo-prompt-injection",
+                          "coding-agent:sandbox-read-escape",
+                          "coding-agent:sandbox-write-escape",
+                          "coding-agent:secret-env-read",
+                          "coding-agent:secret-file-read",
+                          "coding-agent:steganographic-exfil",
+                          "coding-agent:terminal-output-injection",
+                          "coding-agent:verifier-sabotage",
                           "competitors",
                           "contracts",
                           "coppa",
@@ -2183,6 +2315,12 @@
                           "debug-access",
                           "default",
                           "divergent-repetition",
+                          "dod:ai:ethics",
+                          "dod:ai:ethics:01",
+                          "dod:ai:ethics:02",
+                          "dod:ai:ethics:03",
+                          "dod:ai:ethics:04",
+                          "dod:ai:ethics:05",
                           "donotanswer",
                           "ecommerce",
                           "ecommerce:compliance-bypass",
@@ -2215,7 +2353,9 @@
                           "financial:defamation",
                           "financial:hallucination",
                           "financial:impartiality",
+                          "financial:japan-fiea-suitability",
                           "financial:misconduct",
+                          "financial:sox-compliance",
                           "financial:sycophancy",
                           "foundation",
                           "gdpr",
@@ -2263,6 +2403,7 @@
                           "indirect-prompt-injection",
                           "insurance",
                           "insurance:coverage-discrimination",
+                          "insurance:data-disclosure",
                           "insurance:network-misinformation",
                           "insurance:phi-disclosure",
                           "intent",
@@ -2277,6 +2418,9 @@
                           "mcp",
                           "medical",
                           "medical:anchoring-bias",
+                          "medical:fda:ai-disclosure",
+                          "medical:fda:cyber-access-control",
+                          "medical:fda:cyber-audit-tampering",
                           "medical:hallucination",
                           "medical:incorrect-knowledge",
                           "medical:off-label-use",
@@ -2284,12 +2428,24 @@
                           "medical:sycophancy",
                           "misinformation",
                           "mitre:atlas",
+                          "mitre:atlas:ai-attack-staging",
+                          "mitre:atlas:ai-model-access",
+                          "mitre:atlas:collection",
+                          "mitre:atlas:command-and-control",
+                          "mitre:atlas:credential-access",
+                          "mitre:atlas:defense-evasion",
+                          "mitre:atlas:discovery",
+                          "mitre:atlas:execution",
                           "mitre:atlas:exfiltration",
                           "mitre:atlas:impact",
                           "mitre:atlas:initial-access",
+                          "mitre:atlas:lateral-movement",
                           "mitre:atlas:ml-attack-staging",
+                          "mitre:atlas:persistence",
+                          "mitre:atlas:privilege-escalation",
                           "mitre:atlas:reconnaissance",
                           "mitre:atlas:resource-development",
+                          "model-identification",
                           "nist:ai",
                           "nist:ai:measure",
                           "nist:ai:measure:1.1",
@@ -2386,6 +2542,11 @@
                           "sql-injection",
                           "ssrf",
                           "system-prompt-override",
+                          "teen-safety",
+                          "teen-safety:age-restricted-goods-and-services",
+                          "teen-safety:dangerous-content",
+                          "teen-safety:dangerous-roleplay",
+                          "teen-safety:harmful-body-ideals",
                           "telecom",
                           "telecom:accessibility-violation",
                           "telecom:account-takeover",
@@ -2571,6 +2732,12 @@
         },
         "maxConcurrency": {
           "description": "Maximum number of concurrent API calls",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxCharsPerMessage": {
+          "description": "Maximum number of characters allowed per generated user message",
           "type": "integer",
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991

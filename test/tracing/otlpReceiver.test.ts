@@ -130,6 +130,19 @@ describe('OTLPReceiver', () => {
         supported_formats: ['json', 'protobuf'],
       });
     });
+
+    it('should advertise configured formats', async () => {
+      receiver = new OTLPReceiver({ acceptFormats: ['json'] });
+      (receiver as any).traceStore = mockTraceStore;
+
+      const response = await request(receiver.getApp()).get('/v1/traces').expect(200);
+
+      expect(response.body).toEqual({
+        service: 'promptfoo-otlp-receiver',
+        version: '1.0.0',
+        supported_formats: ['json'],
+      });
+    });
   });
 
   describe('Trace ingestion', () => {
@@ -202,6 +215,45 @@ describe('OTLPReceiver', () => {
             }),
             statusCode: 0,
             statusMessage: 'OK',
+          }),
+        ]),
+        { skipTraceCheck: true },
+      );
+    });
+
+    it('should accept json with a charset content type', async () => {
+      const otlpRequest = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: Buffer.from('12345678901234567890123456789012', 'hex').toString(
+                      'base64',
+                    ),
+                    spanId: Buffer.from('1234567890123456', 'hex').toString('base64'),
+                    name: 'json-with-charset',
+                    startTimeUnixNano: '1700000000000000000',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json; charset=utf-8')
+        .send(otlpRequest)
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        '12345678901234567890123456789012',
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'json-with-charset',
           }),
         ]),
         { skipTraceCheck: true },
@@ -333,6 +385,67 @@ describe('OTLPReceiver', () => {
         .expect(415);
 
       expect(response.body).toEqual({ error: 'Unsupported content type' });
+    });
+
+    it('should reject protobuf when only json is enabled', async () => {
+      receiver = new OTLPReceiver({ acceptFormats: ['json'] });
+      (receiver as any).traceStore = mockTraceStore;
+
+      const encodedData = await encodeOTLPRequest({
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: new Uint8Array(16),
+                    spanId: new Uint8Array(8),
+                    name: 'disabled-protobuf',
+                    startTimeUnixNano: 1n,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+
+      const response = await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/x-protobuf')
+        .send(encodedData)
+        .expect(415);
+
+      expect(response.body).toEqual({ error: 'Unsupported content type' });
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+    });
+
+    it('should reject json when only protobuf is enabled', async () => {
+      receiver = new OTLPReceiver({ acceptFormats: ['protobuf'] });
+      (receiver as any).traceStore = mockTraceStore;
+
+      const response = await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({ resourceSpans: [] })
+        .expect(415);
+
+      expect(response.body).toEqual({ error: 'Unsupported content type' });
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+    });
+
+    it('should reject malformed json with 415 when json is disabled', async () => {
+      receiver = new OTLPReceiver({ acceptFormats: ['protobuf'] });
+      (receiver as any).traceStore = mockTraceStore;
+
+      const response = await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send('{ invalid json')
+        .expect(415);
+
+      expect(response.body).toEqual({ error: 'Unsupported content type' });
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
     });
 
     it('should reject invalid protobuf data', async () => {

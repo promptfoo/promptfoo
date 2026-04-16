@@ -6,15 +6,10 @@ import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { fetchWithRetries } from '../../src/util/fetch/index';
+import { createMockProvider } from '../factories/provider';
 import { TestGrader } from '../util/utils';
 
-import type {
-  ApiProvider,
-  Assertion,
-  AtomicTestCase,
-  GradingResult,
-  ProviderResponse,
-} from '../../src/types/index';
+import type { ApiProvider, Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
 
 vi.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
@@ -94,8 +89,9 @@ vi.mock('../../src/cliState', () => ({
   },
   basePath: '/base/path',
 }));
-vi.mock('../../src/matchers', async () => {
-  const actual = await vi.importActual<typeof import('../../src/matchers')>('../../src/matchers');
+vi.mock('../../src/matchers/rag', async () => {
+  const actual =
+    await vi.importActual<typeof import('../../src/matchers/rag')>('../../src/matchers/rag');
   return {
     ...actual,
     matchesContextRelevance: vi
@@ -514,6 +510,66 @@ describe('runAssertion', () => {
     expect(result).toMatchObject({
       pass: false,
       reason: 'JSON does not conform to the provided schema. Errors: data/latitude must be number',
+    });
+  });
+
+  it('should fail when the not-is-json assertion finds matching schema', async () => {
+    const output = '{"latitude": 80.123, "longitude": -1}';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-is-json',
+        value: isJsonAssertionWithSchema.value,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Output is JSON that conforms to the provided schema',
+    });
+  });
+
+  it('should pass when the not-is-json assertion finds non-matching schema', async () => {
+    const output = '{"latitude": "high", "longitude": [-1]}';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-is-json',
+        value: isJsonAssertionWithSchema.value,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should pass when the not-is-json assertion with schema receives non-JSON input', async () => {
+    const output = 'this is not json at all';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-is-json',
+        value: isJsonAssertionWithSchema.value,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
     });
   });
 
@@ -1157,6 +1213,66 @@ describe('runAssertion', () => {
     );
   });
 
+  it('should fail when the not-contains-json assertion finds matching schema', async () => {
+    const output = 'here is the answer\n\n```{"latitude": 80.123, "longitude": -1}```';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-contains-json',
+        value: containsJsonAssertionWithSchema.value,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Output contains JSON conforming to the provided schema',
+    });
+  });
+
+  it('should pass when the not-contains-json assertion finds no matching schema', async () => {
+    const output = 'here is the answer\n\n```{"latitude": "not a number", "longitude": -1}```';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-contains-json',
+        value: containsJsonAssertionWithSchema.value,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should pass when the not-contains-json assertion with schema finds no JSON at all', async () => {
+    const output = 'here is the answer with no JSON whatsoever';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-contains-json',
+        value: containsJsonAssertionWithSchema.value,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
+    });
+  });
+
   it('should pass when the javascript assertion passes', async () => {
     const output = 'Expected output';
 
@@ -1772,6 +1888,11 @@ describe('runAssertion', () => {
     value: 'This is the expected output.',
     threshold: 0.75,
   };
+  const notRougeNAssertion: Assertion = {
+    type: 'not-rouge-n',
+    value: 'This is the expected output.',
+    threshold: 0.75,
+  };
 
   it('should pass when the rouge-n assertion passes', async () => {
     const output = 'This is the expected output.';
@@ -1803,6 +1924,40 @@ describe('runAssertion', () => {
       pass: false,
       reason: 'ROUGE-N score 0.22 is less than threshold 0.75',
     });
+  });
+
+  it('should pass when the not-rouge-n assertion score is below threshold', async () => {
+    const output = 'some different output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: notRougeNAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'ROUGE-N score 0.22 is less than threshold 0.75',
+    });
+    expect(result.score).toBeCloseTo(0.78, 2);
+  });
+
+  it('should fail when the not-rouge-n assertion score is above threshold', async () => {
+    const output = 'This is the expected output.';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: notRougeNAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'ROUGE-N score 1.00 is greater than or equal to threshold 0.75',
+    });
+    expect(result.score).toBe(0);
   });
 
   // Test for starts-with assertion
@@ -1853,14 +2008,10 @@ describe('runAssertion', () => {
     };
 
     // Test grader fails
-    const BogusGrader: ApiProvider = {
-      id(): string {
-        return 'BogusGrader';
-      },
-      async callApi(): Promise<ProviderResponse> {
-        throw new Error('Should not be called');
-      },
-    };
+    const BogusGrader = createMockProvider({
+      id: 'BogusGrader',
+      callApi: vi.fn<ApiProvider['callApi']>().mockRejectedValue(new Error('Should not be called')),
+    });
     const test: AtomicTestCase = {
       assert: [assertion],
       options: {

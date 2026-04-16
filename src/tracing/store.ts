@@ -241,7 +241,7 @@ export class TraceStore {
     }
   }
 
-  async getTrace(traceId: string): Promise<any | null> {
+  async getTrace(traceId: string): Promise<import('../types/tracing').TraceData | null> {
     try {
       logger.debug(`[TraceStore] Fetching trace ${traceId}`);
       const db = this.getDatabase();
@@ -263,8 +263,20 @@ export class TraceStore {
       logger.debug(`[TraceStore] Found ${spans.length} spans for trace ${traceId}`);
 
       return {
-        ...trace,
-        spans,
+        traceId: trace.traceId,
+        evaluationId: trace.evaluationId,
+        testCaseId: trace.testCaseId,
+        metadata: trace.metadata ?? undefined,
+        spans: spans.map((span) => ({
+          spanId: span.spanId,
+          parentSpanId: span.parentSpanId ?? undefined,
+          name: span.name,
+          startTime: span.startTime,
+          endTime: span.endTime ?? undefined,
+          attributes: span.attributes ?? undefined,
+          statusCode: span.statusCode ?? undefined,
+          statusMessage: span.statusMessage ?? undefined,
+        })),
       };
     } catch (error) {
       logger.error(`[TraceStore] Failed to get trace: ${error}`);

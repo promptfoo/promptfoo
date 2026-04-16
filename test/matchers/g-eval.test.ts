@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesGEval } from '../../src/matchers';
+import { matchesGEval } from '../../src/matchers/llmGrading';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
 describe('matchesGEval', () => {
@@ -43,6 +43,37 @@ describe('matchesGEval', () => {
     });
 
     expect(DefaultGradingProvider.callApi).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['positive', 'the answer should contain harmful or inappropriate content'],
+    ['negated', 'the answer should not contain harmful or inappropriate content'],
+  ])('should render observed-condition scoring for %s criteria', async (_, criteria) => {
+    await matchesGEval(criteria, 'Test input', 'Test output', 0.7);
+
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledTimes(2);
+    expect(DefaultGradingProvider.callApi).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining(criteria),
+      expect.any(Object),
+    );
+    expect(DefaultGradingProvider.callApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining(criteria),
+      expect.any(Object),
+    );
+    expect(DefaultGradingProvider.callApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining(
+        'the condition described by the Evaluation Criteria is fully and clearly observed in the Reply',
+      ),
+      expect.any(Object),
+    );
+    expect(DefaultGradingProvider.callApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('and 0 indicates that it is not observed at all'),
+      expect.any(Object),
+    );
   });
 
   it('should handle custom rubric prompts', async () => {
@@ -119,6 +150,75 @@ describe('matchesGEval', () => {
       score: 0.3,
       reason: 'The response lacks coherence',
       tokensUsed: expect.any(Object),
+    });
+  });
+
+  it('should return provider errors from the step-generation call', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      error: 'steps provider unavailable',
+      tokenUsage: { total: 3, prompt: 1, completion: 2 },
+    });
+
+    const result = await matchesGEval('Evaluate coherence', 'Test input', 'Test output', 0.7);
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'steps provider unavailable',
+      tokensUsed: expect.objectContaining({
+        total: 3,
+        prompt: 1,
+        completion: 2,
+      }),
+    });
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('should return provider errors from the evaluation call', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi')
+      .mockImplementationOnce(async () => ({
+        output: '{"steps": ["Check clarity"]}',
+        tokenUsage: { total: 3, prompt: 1, completion: 2 },
+      }))
+      .mockImplementationOnce(async () => ({
+        error: 'evaluation provider unavailable',
+        tokenUsage: { total: 4, prompt: 2, completion: 2 },
+      }));
+
+    const result = await matchesGEval('Evaluate coherence', 'Test input', 'Test output', 0.7);
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'evaluation provider unavailable',
+      tokensUsed: expect.objectContaining({
+        total: 7,
+        prompt: 3,
+        completion: 4,
+      }),
+    });
+  });
+
+  it('should fail clearly when the evaluation result is not a string', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi')
+      .mockImplementationOnce(async () => ({
+        output: '{"steps": ["Check clarity"]}',
+        tokenUsage: { total: 3, prompt: 1, completion: 2 },
+      }))
+      .mockImplementationOnce(async () => ({
+        output: { score: 8, reason: 'object output' },
+        tokenUsage: { total: 4, prompt: 2, completion: 2 },
+      }));
+
+    const result = await matchesGEval('Evaluate coherence', 'Test input', 'Test output', 0.7);
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'LLM-proposed evaluation result response is not a string',
+      tokensUsed: expect.objectContaining({
+        total: 7,
+      }),
     });
   });
 

@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
-import { getUserEmail } from '../../globalConfig/accounts';
+import { getUserEmail, isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import {
   extractTraceIdFromTraceparent,
@@ -16,6 +16,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -26,7 +27,12 @@ import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
-import { getLastMessageContent, tryUnblocking } from './shared';
+import {
+  buildGraderResultAssertion,
+  getGraderAssertionValue,
+  getLastMessageContent,
+  tryUnblocking,
+} from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { type RawTracingConfig, resolveTracingOptions } from './tracingOptions';
 
@@ -53,7 +59,7 @@ import type { Message } from './shared';
  */
 interface GoatMetadata extends BaseRedteamMetadata {
   redteamFinalPrompt?: string;
-  stopReason: 'Grader failed' | 'Max turns reached';
+  stopReason: 'Grader failed' | 'Max turns reached' | 'Target ended conversation';
   successfulAttacks?: Array<{
     turn: number;
     prompt: string;
@@ -79,6 +85,7 @@ export interface ExtractAttackFailureResponse {
 
 interface GoatConfig {
   injectVar: string;
+  maxCharsPerMessage?: number;
   maxTurns: number;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   stateful: boolean;
@@ -120,6 +127,7 @@ export default class GoatProvider implements ApiProvider {
   constructor(
     options: ProviderOptions & {
       maxTurns?: number;
+      maxCharsPerMessage?: number;
       injectVar?: string;
       stateful?: boolean;
       excludeTargetOutputFromAgenticAttackGeneration?: boolean;
@@ -133,8 +141,14 @@ export default class GoatProvider implements ApiProvider {
       throw new Error(`GOAT strategy requires remote grading to be enabled`);
     }
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
+    let maxTurns = options.maxTurns ?? 5;
+    // Cap turns for unauthenticated users
+    if (!isLoggedIntoCloud()) {
+      maxTurns = Math.min(maxTurns, 10);
+    }
     this.config = {
-      maxTurns: options.maxTurns || 5,
+      maxTurns,
+      ...(options.maxCharsPerMessage ? { maxCharsPerMessage: options.maxCharsPerMessage } : {}),
       injectVar: options.injectVar,
       stateful: options.stateful ?? false,
       excludeTargetOutputFromAgenticAttackGeneration:
@@ -149,6 +163,7 @@ export default class GoatProvider implements ApiProvider {
     logger.debug('[GOAT] Constructor options', {
       injectVar: options.injectVar,
       maxTurns: options.maxTurns,
+      maxCharsPerMessage: options.maxCharsPerMessage,
       stateful: options.stateful,
       continueAfterSuccess: options.continueAfterSuccess,
       perTurnLayers: this.perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
@@ -180,6 +195,12 @@ export default class GoatProvider implements ApiProvider {
 
     const targetProvider: ApiProvider | undefined = context?.originalProvider;
     invariant(targetProvider, 'Expected originalProvider to be set');
+    const maxCharsPerMessage =
+      this.config.maxCharsPerMessage ??
+      (context?.test?.metadata?.strategyConfig as { maxCharsPerMessage?: number } | undefined)
+        ?.maxCharsPerMessage ??
+      (context?.test?.metadata?.pluginConfig as { maxCharsPerMessage?: number } | undefined)
+        ?.maxCharsPerMessage;
 
     const messages: Message[] = [];
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
@@ -228,6 +249,7 @@ export default class GoatProvider implements ApiProvider {
     // Generate goal-specific evaluation rubric
     const userGoal = context?.test?.metadata?.goal || context?.vars[this.config.injectVar];
     const additionalRubric = getGoalRubric(userGoal);
+    let stopReason: GoatMetadata['stopReason'] = 'Max turns reached';
 
     for (let turn = 0; turn < this.config.maxTurns; turn++) {
       try {
@@ -276,6 +298,7 @@ export default class GoatProvider implements ApiProvider {
               unblockingTargetPrompt = transformResult.prompt;
             }
 
+            throwIfTargetPromptExceedsMaxChars(unblockingTargetPrompt, maxCharsPerMessage);
             const unblockingResponse = await targetProvider.callApi(
               unblockingTargetPrompt,
               context,
@@ -516,6 +539,7 @@ export default class GoatProvider implements ApiProvider {
         }
 
         const iterationStart = Date.now();
+        throwIfTargetPromptExceedsMaxChars(targetPrompt, maxCharsPerMessage);
         const targetResponse = (await targetProvider.callApi(
           targetPrompt,
           context,
@@ -562,6 +586,38 @@ export default class GoatProvider implements ApiProvider {
         if (targetResponse.sessionId) {
           context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
           context.vars.sessionId = targetResponse.sessionId;
+        }
+        if (targetResponse.conversationEnded) {
+          logger.info('[GOAT] Target ended conversation', {
+            turn,
+            reason: targetResponse.conversationEndReason,
+          });
+          const endedOutput =
+            typeof targetResponse.output === 'string'
+              ? targetResponse.output
+              : safeJsonStringify(targetResponse.output);
+
+          if (endedOutput) {
+            messages.push({
+              role: 'assistant',
+              content: endedOutput,
+            });
+            redteamHistory.push({
+              prompt: attackerMessage.content,
+              promptAudio: lastTransformResult?.audio,
+              promptImage: lastTransformResult?.image,
+              output: endedOutput,
+              outputAudio:
+                targetResponse.audio?.data && targetResponse.audio?.format
+                  ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+                  : undefined,
+              inputVars: currentInputVars,
+            });
+          }
+
+          lastTargetResponse = targetResponse;
+          stopReason = 'Target ended conversation';
+          break;
         }
         if (targetResponse.error) {
           throw new Error(`[GOAT] Target returned an error: ${targetResponse.error}`);
@@ -619,7 +675,7 @@ export default class GoatProvider implements ApiProvider {
         lastTargetResponse = finalResponse;
 
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
-        if (test && grader && finalOutput) {
+        if (test && assertToUse && grader && finalOutput) {
           // Build grading context with tracing and exfil tracking data
           let gradingContext:
             | {
@@ -637,17 +693,7 @@ export default class GoatProvider implements ApiProvider {
             | undefined;
 
           // First try to get exfil data from provider response metadata (Playwright provider)
-          if (finalResponse.metadata?.wasExfiltrated !== undefined) {
-            logger.debug('[GOAT] Using exfil data from provider response metadata');
-            gradingContext = {
-              ...(tracingOptions.includeInGrading
-                ? { traceContext: targetResponse.traceContext, traceSummary: gradingTraceSummary }
-                : {}),
-              wasExfiltrated: Boolean(finalResponse.metadata.wasExfiltrated),
-              exfilCount: Number(finalResponse.metadata.exfilCount) || 0,
-              exfilRecords: [],
-            };
-          } else {
+          if (finalResponse.metadata?.wasExfiltrated === undefined) {
             // Try to fetch exfil tracking from server API via webPageUuid
             const webPageUuid = test.metadata?.webPageUuid as string | undefined;
             if (webPageUuid) {
@@ -672,6 +718,16 @@ export default class GoatProvider implements ApiProvider {
                 };
               }
             }
+          } else {
+            logger.debug('[GOAT] Using exfil data from provider response metadata');
+            gradingContext = {
+              ...(tracingOptions.includeInGrading
+                ? { traceContext: targetResponse.traceContext, traceSummary: gradingTraceSummary }
+                : {}),
+              wasExfiltrated: Boolean(finalResponse.metadata.wasExfiltrated),
+              exfilCount: Number(finalResponse.metadata.exfilCount) || 0,
+              exfilRecords: [],
+            };
           }
 
           // Fallback to just tracing context if no exfil data found
@@ -687,7 +743,7 @@ export default class GoatProvider implements ApiProvider {
             finalOutput,
             test,
             targetProvider,
-            assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+            getGraderAssertionValue(assertToUse),
             additionalRubric,
             undefined,
             gradingContext,
@@ -695,11 +751,7 @@ export default class GoatProvider implements ApiProvider {
           graderPassed = grade.pass;
           storedGraderResult = {
             ...grade,
-            assertion: grade.assertion
-              ? { ...grade.assertion, value: rubric }
-              : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
-                ? { ...assertToUse, value: rubric }
-                : undefined,
+            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
           };
         }
 
@@ -716,6 +768,7 @@ export default class GoatProvider implements ApiProvider {
           if (this.config.continueAfterSuccess) {
             // Continue to next turn
           } else {
+            stopReason = 'Grader failed';
             break;
           }
         }
@@ -742,10 +795,7 @@ export default class GoatProvider implements ApiProvider {
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
         redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
         messages: messages as Record<string, any>[],
-        stopReason:
-          this.successfulAttacks.length > 0 && !this.config.continueAfterSuccess
-            ? 'Grader failed'
-            : 'Max turns reached',
+        stopReason,
         redteamHistory,
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
