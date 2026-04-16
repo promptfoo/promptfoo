@@ -208,13 +208,21 @@ redteam:
       numTests: 1
     - id: harmful:non-violent-crime
       numTests: 1
+    - id: ascii-smuggling
+      numTests: 1
+    - id: data-exfil
+      numTests: 1
+    - id: pii:api-db
+      numTests: 1
+    - id: pii:social
+      numTests: 1
   strategies:
-    - id: basic
     - id: jailbreak:meta
-    - id: jailbreak:composite
-    - id: base64
-    - id: rot13
-    - id: mischievous-user
+    - id: jailbreak:hydra
+      config:
+        maxTurns: 4
+        maxBacktracks: 2
+        stateful: true
 
 tracing:
   enabled: true

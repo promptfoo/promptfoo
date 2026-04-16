@@ -67,11 +67,16 @@ If you also want a provider-level Python OpenTelemetry span alongside the SDK sp
 ```bash
 npx promptfoo@latest redteam generate -c promptfooconfig.redteam.yaml -o redteam.generated.yaml --remote --force --strict
 npx promptfoo@latest redteam eval -c redteam.generated.yaml --no-cache --no-share -j 1 -o redteam-results.json
+
+npx promptfoo@latest redteam generate -c promptfooconfig.redteam.coding.yaml -o redteam.coding.generated.yaml --remote --force --strict
+npx promptfoo@latest redteam eval -c redteam.coding.generated.yaml --no-cache --no-share -j 1 -o redteam-coding-results.json
 ```
 
-The red-team config targets the airline agent with tracing enabled and returns only the user-visible final answer, not the verbose eval transcript. It exercises agent-specific boundaries across OWASP Agentic AI, OWASP LLM, MITRE ATLAS, and NIST AI RMF mappings: tool discovery, prompt extraction, debug access, system prompt override, authorization bypass, cross-session leakage, memory poisoning, privacy, excessive agency, and custom airline policy probes. It also applies jailbreak and encoding strategies.
+The airline red-team config targets the airline agent with tracing enabled and returns only the user-visible final answer, not the verbose eval transcript. It exercises agent-specific boundaries across OWASP Agentic AI, OWASP LLM, MITRE ATLAS, and NIST AI RMF mappings: tool discovery, prompt extraction, debug access, system prompt override, authorization bypass, cross-session leakage, memory poisoning, privacy, PII, data exfiltration, ASCII smuggling, excessive agency, and custom airline policy probes. It applies only the `jailbreak:meta` and `jailbreak:hydra` strategies.
 
-This sample is intentionally not a production-hardened airline agent. Some generated probes should find real breaks, especially around encoded third-party booking changes and multi-turn authorization bypasses. Each generated attack inherits trace assertions that require OpenAI Agents SDK spans, require zero traced errors, and fail if the mutating `update_seat` tool is used during adversarial probes. Inspect failures together with the Trace Timeline so you can distinguish a user-visible refusal problem from an internal tool-path or boundary failure.
+The coding-agent red-team config targets the SandboxAgent workflow and focuses on repository prompt injection, terminal-output injection, secret/env/file reads, sandbox write escapes, network egress, delayed CI exfiltration, generated vulnerabilities, automation poisoning, steganographic exfiltration, and verifier sabotage. This is the stronger harness-oriented companion to the airline policy red team.
+
+This sample is intentionally not a production-hardened airline agent. Some generated probes should find real breaks, especially around third-party booking changes, authority/consent claims, data-exfiltration attempts, and multi-turn authorization bypasses. Each generated attack inherits trace assertions that require OpenAI Agents SDK spans, require zero traced errors, and fail if the mutating `update_seat` tool is used during adversarial probes. Inspect failures together with the Trace Timeline so you can distinguish a user-visible refusal problem from an internal tool-path or boundary failure.
 
 ## Notes
 
