@@ -8,7 +8,11 @@ const MockBedrockAgentRuntimeClient = vi.hoisted(() =>
     return { send: mockSend };
   }),
 );
-const MockInvokeAgentCommand = vi.hoisted(() => vi.fn((input: any) => input));
+const MockInvokeAgentCommand = vi.hoisted(() =>
+  vi.fn(function MockInvokeAgentCommand(this: any, input: any) {
+    Object.assign(this, input);
+  }),
+);
 const NodeHttpHandlerMock = vi.hoisted(() =>
   vi.fn(function NodeHttpHandlerMock() {
     return {
@@ -213,9 +217,7 @@ describe('AwsBedrockAgentsProvider', () => {
       expect(result.output).toBeUndefined();
     });
 
-    // Note: Tests below are skipped because Vitest ESM mocking doesn't intercept dynamic imports
-    // The source code uses `await import('@aws-sdk/client-bedrock-agent-runtime')` which isn't mocked
-    it.skip('should successfully invoke agent with text response', async () => {
+    it('should successfully invoke agent with text response', async () => {
       const mockResponse = {
         completion: (async function* () {
           yield {
@@ -237,7 +239,7 @@ describe('AwsBedrockAgentsProvider', () => {
       expect(result.metadata?.sessionId).toBe('session-abc123');
     });
 
-    it.skip('should handle agent with tool calls and traces', async () => {
+    it('should handle agent with tool calls and traces', async () => {
       provider.config.enableTrace = true;
 
       const mockResponse = {
@@ -312,7 +314,7 @@ describe('AwsBedrockAgentsProvider', () => {
       ]);
     });
 
-    it.skip('should handle memory configuration', async () => {
+    it('should handle memory configuration', async () => {
       provider.config.memoryId = 'LONG_TERM_MEMORY';
 
       const mockResponse = {
@@ -335,8 +337,7 @@ describe('AwsBedrockAgentsProvider', () => {
       expect(provider.config.memoryId).toBe('LONG_TERM_MEMORY');
     });
 
-    it.skip('should handle API errors gracefully', async () => {
-      // TODO: Fix mock isolation issue - test passes in isolation but fails when run with other tests
+    it('should handle API errors gracefully', async () => {
       // Override the mock to reject for this test
       (mockSend as any).mockRejectedValue(new Error('AWS API Error'));
 
@@ -347,8 +348,7 @@ describe('AwsBedrockAgentsProvider', () => {
       expect(result.output).toBeUndefined();
     });
 
-    it.skip('should handle token usage in metadata', async () => {
-      // TODO: Fix mock isolation issue - test passes in isolation but fails when run with other tests
+    it('should handle token usage in metadata', async () => {
       // Clear previous mock and set up new response
       mockSend.mockClear();
 
@@ -379,7 +379,7 @@ describe('AwsBedrockAgentsProvider', () => {
       expect(result.output).toBe('Response with tokens');
     });
 
-    it.skip('should use session ID from config if provided', async () => {
+    it('should use session ID from config if provided', async () => {
       provider.config.sessionId = 'fixed-session-id';
 
       const mockResponse = {
@@ -402,8 +402,7 @@ describe('AwsBedrockAgentsProvider', () => {
       expect(provider.config.sessionId).toBe('fixed-session-id');
     });
 
-    it.skip('should generate session ID if not provided', async () => {
-      // TODO: Fix mock isolation issue - test passes in isolation but fails when run with other tests
+    it('should generate session ID if not provided', async () => {
       // Clear previous mock and set up new response
       mockSend.mockClear();
 

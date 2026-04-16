@@ -17,6 +17,7 @@ import RedteamIterativeMetaProvider from '../redteam/providers/iterativeMeta';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { createAbliterationProvider } from './abliteration';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
 import { AnthropicCompletionProvider } from './anthropic/completion';
@@ -145,6 +146,19 @@ export const providerMap: ProviderFactory[] = [
   createScriptBasedProviderFactory('golang', 'go', GolangProvider),
   createScriptBasedProviderFactory('python', 'py', PythonProvider),
   createScriptBasedProviderFactory('ruby', 'rb', RubyProvider),
+  {
+    test: (providerPath: string) => providerPath.startsWith('abliteration:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createAbliterationProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
   {
     test: (providerPath: string) => providerPath === 'agentic:memory-poisoning',
     create: async (
@@ -894,6 +908,27 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
       const configuredModel = getConfiguredOpenAiModel(providerOptions);
+
+      // Codex app-server providers (openai:codex-app-server or openai:codex-desktop)
+      if (modelType === 'codex-app-server' || modelType === 'codex-desktop') {
+        const { OpenAICodexAppServerProvider } = await import('./openai/codex-app-server');
+        const codexModel = modelName || configuredModel;
+        const codexProviderId = providerOptions.id ?? providerPath;
+        return new OpenAICodexAppServerProvider({
+          ...providerOptions,
+          id: codexProviderId,
+          config: codexModel
+            ? {
+                ...providerOptions.config,
+                model: codexModel,
+              }
+            : providerOptions.config,
+          env: {
+            ...context.env,
+            ...providerOptions.env,
+          },
+        });
+      }
 
       // Codex SDK providers (openai:codex-sdk or openai:codex)
       if (modelType === 'codex-sdk' || modelType === 'codex') {

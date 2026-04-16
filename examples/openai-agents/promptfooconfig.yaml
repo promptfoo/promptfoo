@@ -68,7 +68,7 @@ tests:
         value:
           max_count: 0
       - type: trajectory:goal-success
-        provider: openai:gpt-5.4-mini
+        provider: openai:chat:gpt-5.4-mini
         value: Move the passenger with confirmation ABC123 to seat 14C and answer the baggage policy question correctly.
 
   - description: FAQ-only request should not change the booking

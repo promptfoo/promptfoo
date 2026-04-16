@@ -1,5 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { filterConfigForDisplay, ProviderDisplay } from './ProviderDisplay';
 
@@ -307,11 +308,11 @@ describe('filterConfigForDisplay', () => {
 
 describe('ProviderDisplay', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   const renderWithProviders = (
@@ -320,7 +321,7 @@ describe('ProviderDisplay', () => {
     fallbackIndex?: number,
   ) => {
     return render(
-      <TooltipProvider>
+      <TooltipProvider delayDuration={0}>
         <ProviderDisplay
           providerString={providerString}
           providersArray={providersArray}
@@ -331,11 +332,9 @@ describe('ProviderDisplay', () => {
   };
 
   const hoverAndGetTooltip = async (element: Element) => {
-    fireEvent.pointerMove(element, { pointerType: 'mouse' });
-    act(() => {
-      vi.advanceTimersByTime(200);
-    });
-    return screen.getByRole('tooltip');
+    const user = userEvent.setup();
+    await user.hover(element);
+    return screen.findByRole('tooltip');
   };
 
   describe('provider name display', () => {

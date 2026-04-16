@@ -7,22 +7,19 @@ import {
 } from '../../../../src/redteam/constants';
 import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmful/constants';
 import { getHarmfulTests } from '../../../../src/redteam/plugins/harmful/unaligned';
+import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 
 import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
-import type { ApiProvider, CallApiFunction } from '../../../../src/types/index';
 
 vi.mock('../../../../src/envars');
 
 describe('harmful plugin', () => {
-  let mockProvider: ApiProvider;
+  let mockProvider: MockApiProvider;
   let mockCallApi: MockInstance;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockProvider = {
-      callApi: vi.fn() as CallApiFunction,
-      id: vi.fn().mockReturnValue('test-provider'),
-    };
+    mockProvider = createMockProvider();
     if (mockCallApi) {
       mockCallApi.mockRestore();
     }

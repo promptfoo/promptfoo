@@ -53,6 +53,7 @@ For example:
 
 - Successful API responses are cached with their complete response data
 - Error responses are not cached to allow for retry attempts
+- When `evaluateOptions.repeat` or `--repeat` is greater than 1, each repeat index uses a separate cache namespace. Re-running the same eval can reuse those per-repeat cached responses, while preserving distinct outputs between repeat 0, repeat 1, etc.
 - Cache is automatically invalidated when:
   - TTL expires (default: 14 days)
   - Cache is manually cleared
@@ -61,6 +62,8 @@ For example:
 ## Command Line
 
 If you're using the command line, call `promptfoo eval` with `--no-cache` to disable the cache, or set `{ evaluateOptions: { cache: false }}` in your config file.
+
+Use `--no-cache` with `--repeat` when you want every run to make fresh LLM calls instead of replaying each repeat index from cache.
 
 Use `promptfoo cache clear` command to clear the cache.
 

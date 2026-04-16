@@ -17,16 +17,19 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
+      code_scan_action_release_created: ${{ steps.release.outputs['code-scan-action--release_created'] }}
+      code_scan_action_tag_name: ${{ steps.release.outputs['code-scan-action--tag_name'] }}
+      code_scan_action_version: ${{ steps.release.outputs['code-scan-action--version'] }}
     steps:
       # Use GitHub App token so the created PR triggers CI workflows
       # (PRs created with GITHUB_TOKEN don't trigger workflows to prevent loops)
-      - uses: actions/create-github-app-token@v3
+      - uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3
         id: app-token
         with:
           app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
           private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
 
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
         id: release
         with:
           token: ${{ steps.app-token.outputs.token }}
@@ -41,14 +44,14 @@ jobs:
           echo "Renaming release to: $TAG_NAME"
           gh release edit "$TAG_NAME" --title "$TAG_NAME" --repo ${{ github.repository }}
 
-      # Format CHANGELOG.md after release-please creates/updates the PR
+      # Format CHANGELOG files after release-please creates/updates the PR
       # This fixes the asterisk bullet markers that release-please generates
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         if: ${{ steps.release.outputs.prs_created == 'true' }}
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         if: ${{ steps.release.outputs.prs_created == 'true' }}
         with:
           node-version-file: '.nvmrc'
@@ -56,23 +59,38 @@ jobs:
       - name: Install prettier
         if: ${{ steps.release.outputs.prs_created == 'true' }}
         run: npm ci --ignore-scripts --prefer-offline
-      - name: Format CHANGELOG.md
+      - name: Format CHANGELOG files
         if: ${{ steps.release.outputs.prs_created == 'true' }}
         env:
           PR_JSON: ${{ steps.release.outputs.pr }}
         run: |
+          set -euo pipefail
+
           PR_BRANCH=$(echo "$PR_JSON" | jq -r '.headBranchName')
-          echo "Formatting CHANGELOG.md on branch: $PR_BRANCH"
+          echo "Formatting CHANGELOG files on branch: $PR_BRANCH"
           git fetch origin "$PR_BRANCH"
           git checkout "$PR_BRANCH"
-          npx prettier --write CHANGELOG.md
-          if git diff --quiet CHANGELOG.md; then
+
+          mapfile -t changelog_files < <(
+            git diff --name-only --diff-filter=ACMRT origin/main...HEAD \
+              | grep -E '(^|/)CHANGELOG\.md$' \
+              || true
+          )
+
+          if [[ "${#changelog_files[@]}" -eq 0 ]]; then
+            echo "No CHANGELOG files changed in release PR"
+            exit 0
+          fi
+
+          npx prettier --write "${changelog_files[@]}"
+
+          if git diff --quiet -- "${changelog_files[@]}"; then
             echo "No formatting changes needed"
           else
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add CHANGELOG.md
-            git commit -m "chore: format CHANGELOG.md with prettier"
+            git add "${changelog_files[@]}"
+            git commit -m "chore: format CHANGELOG files with prettier"
             git push origin "$PR_BRANCH"
           fi
 
@@ -84,13 +102,13 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      - run: npm install -g npm@latest
+      - run: npm install -g npm@11.11.0
       - run: npm ci
       - run: npm test
 
@@ -104,14 +122,14 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      - run: npm install -g npm@latest
+      - run: npm install -g npm@11.11.0
       - run: npm ci
       - run: npm publish --provenance --access public
         env:
@@ -128,3 +146,126 @@ jobs:
     uses: ./.github/workflows/docker.yml
     with:
       tag_name: ${{ needs.release-please.outputs.tag_name }}
+
+  publish-code-scan-action:
+    if: needs.release-please.outputs.code_scan_action_release_created == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: release-please
+    permissions:
+      contents: read
+    steps:
+      - name: Create app token for code-scan-action mirror
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3
+        id: mirror-token
+        with:
+          app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
+          private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
+          owner: promptfoo
+          repositories: code-scan-action
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - run: npm install -g npm@11.11.0
+
+      # Install root deps first; code-scan-action imports shared source from ../../src
+      - run: npm ci
+
+      - name: Install Code Scan Action dependencies
+        working-directory: code-scan-action
+        run: npm ci
+
+      - name: Type Check Code Scan Action
+        working-directory: code-scan-action
+        run: npm run tsc
+
+      - name: Build Code Scan Action
+        working-directory: code-scan-action
+        run: npm run build
+
+      - name: Prepare mirror release payload
+        env:
+          CODE_SCAN_ACTION_VERSION: ${{ needs.release-please.outputs.code_scan_action_version }}
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_TAG: ${{ needs.release-please.outputs.code_scan_action_tag_name }}
+        run: |
+          set -euo pipefail
+
+          export_dir="$RUNNER_TEMP/code-scan-action-export"
+          rm -rf "$export_dir"
+          mkdir -p "$export_dir"
+
+          cp code-scan-action/action.yml "$export_dir/action.yml"
+          cp code-scan-action/README.md "$export_dir/README.md"
+          cp code-scan-action/CHANGELOG.md "$export_dir/CHANGELOG.md"
+          cp -R code-scan-action/dist "$export_dir/dist"
+
+          cat > "$export_dir/.release-source.json" <<JSON
+          {
+            "repository": "${{ github.repository }}",
+            "sourceSha": "$SOURCE_SHA",
+            "sourceTag": "$SOURCE_TAG",
+            "packagePath": "code-scan-action",
+            "version": "$CODE_SCAN_ACTION_VERSION"
+          }
+          JSON
+
+      - name: Open mirror release PR
+        env:
+          GH_TOKEN: ${{ steps.mirror-token.outputs.token }}
+          CODE_SCAN_ACTION_VERSION: ${{ needs.release-please.outputs.code_scan_action_version }}
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_TAG: ${{ needs.release-please.outputs.code_scan_action_tag_name }}
+        run: |
+          set -euo pipefail
+
+          branch="release/code-scan-action-v${CODE_SCAN_ACTION_VERSION}"
+          export_dir="$RUNNER_TEMP/code-scan-action-export"
+          mirror_dir="$RUNNER_TEMP/code-scan-action-mirror"
+
+          rm -rf "$mirror_dir"
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/promptfoo/code-scan-action.git" "$mirror_dir"
+          cd "$mirror_dir"
+
+          git switch -C "$branch" origin/main
+          rsync -a --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='AGENTS.md' \
+            --exclude='CLAUDE.md' \
+            --exclude='LICENSE*' \
+            "$export_dir"/ "$mirror_dir"/
+
+          if git diff --quiet; then
+            echo "No mirror changes to publish for code-scan-action v${CODE_SCAN_ACTION_VERSION}"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Release code-scan-action v${CODE_SCAN_ACTION_VERSION}"
+          git push --force-with-lease origin "HEAD:$branch"
+
+          pr_body=$(cat <<BODY
+          Automated release mirror for \`@promptfoo/code-scan-action\` v${CODE_SCAN_ACTION_VERSION}.
+
+          Source: promptfoo/promptfoo@${SOURCE_SHA}
+          Source tag: ${SOURCE_TAG}
+
+          This PR is generated from the monorepo release workflow. The mirror repository validation workflow rebuilds from \`.release-source.json\` and checks that the generated artifacts match.
+          BODY
+          )
+
+          existing_pr="$(gh pr list --repo promptfoo/code-scan-action --head "$branch" --base main --state open --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing_pr" ]]; then
+            gh pr edit "$existing_pr" --repo promptfoo/code-scan-action --title "Release code-scan-action v${CODE_SCAN_ACTION_VERSION}" --body "$pr_body"
+          else
+            gh pr create --repo promptfoo/code-scan-action --base main --head "$branch" --title "Release code-scan-action v${CODE_SCAN_ACTION_VERSION}" --body "$pr_body"
+          fi

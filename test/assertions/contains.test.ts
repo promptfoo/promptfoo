@@ -7,18 +7,14 @@ import {
   handleIContainsAll,
   handleIContainsAny,
 } from '../../src/assertions/contains';
+import { createMockProvider, createProviderResponse } from '../factories/provider';
 
-import type {
-  ApiProvider,
-  AssertionParams,
-  AssertionValue,
-  AtomicTestCase,
-} from '../../src/types/index';
+import type { AssertionParams, AssertionValue, AtomicTestCase } from '../../src/types/index';
 
-const mockProvider: ApiProvider = {
-  id: () => 'mock',
-  callApi: async () => ({ output: 'mock' }),
-};
+const mockProvider = createMockProvider({
+  id: 'mock',
+  response: createProviderResponse({ output: 'mock' }),
+});
 
 const defaultParams = {
   baseType: 'contains' as const,
@@ -446,7 +442,7 @@ describe('handleContainsAny', () => {
     expect(result.pass).toBe(false);
   });
 
-  it('should handle regex match with unmatched quotes', () => {
+  it('should reject unmatched quotes', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'contains-any', value: '"test' },
@@ -455,13 +451,37 @@ describe('handleContainsAny', () => {
       inverse: false,
     };
 
-    const result = handleContainsAny(params);
-    expect(result).toEqual({
-      pass: true,
-      score: 1,
-      reason: 'Assertion passed',
-      assertion: params.assertion,
-    });
+    expect(() => handleContainsAny(params)).toThrow(
+      'Unterminated quoted field in contains assertion value',
+    );
+  });
+
+  it('should reject non-delimiter characters after quoted fields', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'contains-any', value: '"hello"world' },
+      renderedValue: '"hello"world' as AssertionValue,
+      outputString: 'hello world',
+      inverse: false,
+    };
+
+    expect(() => handleContainsAny(params)).toThrow(
+      'Expected comma after quoted field in contains assertion value',
+    );
+  });
+
+  it('should reject whitespace-separated quoted and unquoted fields without a comma', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'contains-any', value: '"hello" world' },
+      renderedValue: '"hello" world' as AssertionValue,
+      outputString: 'hello world',
+      inverse: false,
+    };
+
+    expect(() => handleContainsAny(params)).toThrow(
+      'Expected comma after quoted field in contains assertion value',
+    );
   });
 });
 
@@ -549,7 +569,7 @@ describe('handleIContainsAny', () => {
     });
   });
 
-  it('should handle empty string in comma-separated list', () => {
+  it('should ignore empty entries in comma-separated list', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'icontains-any', value: ',WORLD,,' },
@@ -563,6 +583,24 @@ describe('handleIContainsAny', () => {
       pass: false,
       score: 0,
       reason: 'Expected output to contain one of "WORLD"',
+      assertion: params.assertion,
+    });
+  });
+
+  it('should preserve quoted empty strings in comma-separated list', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'icontains-any', value: '"",WORLD' },
+      renderedValue: '"",WORLD' as AssertionValue,
+      outputString: '',
+      inverse: false,
+    };
+
+    const result = handleIContainsAny(params);
+    expect(result).toEqual({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
       assertion: params.assertion,
     });
   });

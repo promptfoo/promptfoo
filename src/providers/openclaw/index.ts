@@ -1,5 +1,6 @@
 import { OpenClawAgentProvider } from './agent';
 import { OpenClawChatProvider } from './chat';
+import { OpenClawEmbeddingProvider } from './embedding';
 import { OpenClawResponsesProvider } from './responses';
 import { OpenClawToolInvokeProvider } from './tools';
 
@@ -8,8 +9,10 @@ import type { ApiProvider, ProviderOptions } from '../../types/providers';
 
 export { OpenClawAgentProvider } from './agent';
 export { OpenClawChatProvider } from './chat';
+export { OpenClawEmbeddingProvider } from './embedding';
 export { OpenClawResponsesProvider } from './responses';
 export {
+  buildOpenClawModelName,
   readOpenClawConfig,
   resetConfigCache,
   resolveAuthSecret,
@@ -28,6 +31,10 @@ export { OpenClawToolInvokeProvider } from './tools';
  *   openclaw:my-agent       → OpenClawChatProvider('my-agent')
  *   openclaw:responses      → OpenClawResponsesProvider('main')
  *   openclaw:responses:X    → OpenClawResponsesProvider('X')
+ *   openclaw:embedding      → OpenClawEmbeddingProvider('main')
+ *   openclaw:embedding:X    → OpenClawEmbeddingProvider('X')
+ *   openclaw:embeddings     → OpenClawEmbeddingProvider('main')
+ *   openclaw:embeddings:X   → OpenClawEmbeddingProvider('X')
  *   openclaw:agent          → OpenClawAgentProvider('main')
  *   openclaw:agent:X        → OpenClawAgentProvider('X')
  *   openclaw:tools:sessions_list → OpenClawToolInvokeProvider('sessions_list')
@@ -44,6 +51,11 @@ export function createOpenClawProvider(
   if (keyword === 'responses') {
     const agentId = splits[2] || 'main';
     return new OpenClawResponsesProvider(agentId, opts);
+  }
+
+  if (keyword === 'embedding' || keyword === 'embeddings') {
+    const agentId = splits[2] || 'main';
+    return new OpenClawEmbeddingProvider(agentId, opts);
   }
 
   if (keyword === 'agent') {

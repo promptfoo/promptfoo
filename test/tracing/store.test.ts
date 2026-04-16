@@ -1,10 +1,14 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockGlobal } from '../util/utils';
 
-// Mock crypto.randomUUID using vi.stubGlobal
 const mockRandomUUID = vi.fn(() => 'test-uuid');
-vi.stubGlobal('crypto', {
+const restoreCrypto = mockGlobal('crypto', {
   ...crypto,
   randomUUID: mockRandomUUID,
+} as Crypto);
+
+afterAll(() => {
+  restoreCrypto();
 });
 
 // Mock logger

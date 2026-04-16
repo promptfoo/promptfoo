@@ -299,6 +299,11 @@ const redTeamSidebar = [
       },
       {
         type: 'doc',
+        label: 'Multi-Input Testing',
+        id: 'red-team/multi-input',
+      },
+      {
+        type: 'doc',
         label: 'Multi-Modal Red Teaming',
         id: 'guides/multimodal-red-team',
       },
@@ -428,7 +433,7 @@ const sidebars = {
                 'guides/choosing-best-gpt-model',
                 'guides/gpt-5.2-vs-o3',
                 'guides/compare-open-source-models',
-                'guides/gpt-5-vs-gpt-5-mini-mmlu',
+                'guides/gpt-mmlu-comparison',
                 'guides/qwen-benchmark',
                 'guides/azure-vs-openai',
                 'guides/mixtral-vs-gpt',

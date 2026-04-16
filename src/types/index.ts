@@ -51,6 +51,13 @@ export interface RateLimitRegistryRef {
   dispose: () => void;
 }
 
+/**
+ * Minimal interface for deferred provider-call queues used by serial grading orchestration.
+ */
+export interface ProviderCallQueueRef {
+  enqueue: <T>(providerId: string, call: () => Promise<T>) => Promise<T>;
+}
+
 export * from '../redteam/types';
 export * from './agent';
 export * from './prompts';
@@ -209,6 +216,17 @@ export interface RunEvalOptions {
    * When provided, provider calls are wrapped with rate limiting and retry logic.
    */
   rateLimitRegistry?: RateLimitRegistryRef;
+
+  /**
+   * Defers assertion grading so the evaluator can group model-graded provider
+   * calls across rows. Intended for serial evaluation orchestration.
+   */
+  deferGrading?: boolean;
+
+  /**
+   * Queue used while deferred grading is active to group grader provider calls.
+   */
+  providerCallQueue?: ProviderCallQueueRef;
 }
 
 export const EvaluateOptionsSchema = z.object({
@@ -826,6 +844,8 @@ export const TestCaseSchema = z.object({
       disableVarExpansion: z.boolean().optional(),
       // If true, do not include an implicit `_conversation` variable in the prompt.
       disableConversationVar: z.boolean().optional(),
+      // If true, skip defaultTest assertions for this test case while still inheriting other defaults.
+      disableDefaultAsserts: z.boolean().optional(),
       // If true, run this without concurrency no matter what
       runSerially: z.boolean().optional(),
     })
@@ -1261,6 +1281,13 @@ export interface EvalWithMetadata {
 export type EvaluateTestSuite = {
   prompts: (string | object | PromptFunction)[];
   writeLatestResults?: boolean;
+  /**
+   * Author to attribute the evaluation to.
+   * When the user is logged into cloud with a stored email, that identity
+   * takes precedence and this option is ignored. Otherwise resolution is:
+   * this option > stored user email > PROMPTFOO_AUTHOR env var > null.
+   */
+  author?: string;
 } & Omit<TestSuiteConfig, 'prompts'>;
 
 export type EvaluateTestSuiteWithEvaluateOptions = EvaluateTestSuite & {

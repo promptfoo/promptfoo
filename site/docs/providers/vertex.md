@@ -46,6 +46,10 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 
 Anthropic's Claude models are available with the following versions:
 
+**Claude 4.7:**
+
+- `vertex:claude-opus-4-7` - Claude 4.7 Opus for agentic coding, long-running agents, and computer use. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. See the [Google Cloud announcement](https://cloud.google.com/blog/products/ai-machine-learning/claude-opus-4-7-on-vertex-ai) for details.
+
 **Claude 4.6:**
 
 - `vertex:claude-sonnet-4-6` - Claude 4.6 Sonnet balancing performance with speed
@@ -553,11 +557,13 @@ providers:
               enabled: true
               llama_guard_settings: {}
 
-  # For Claude models
+  # For Claude models (require specific regions like us-east5)
   - id: vertex:claude-3-5-sonnet-v2@20241022
     config:
+      region: us-east5
       anthropic_version: 'vertex-2023-10-16'
       max_tokens: 1024
+      systemInstruction: 'You are a helpful assistant'
 ```
 
 ### Safety Settings
@@ -599,7 +605,8 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 
 - Support for text, code, and analysis tasks
 - Tool use (function calling) capabilities
-- Available in multiple regions (us-east5, europe-west1, asia-southeast1)
+- Available in multiple regions (us-east5, europe-west1, asia-southeast1) plus the `global` endpoint for Opus 4.7
+- Claude Opus 4.7: adaptive thinking and `xhigh` effort level; promptfoo automatically omits `temperature` (deprecated for this model) and forwards the rest of the Anthropic Messages body to Vertex's `rawPredict` endpoint
 - Quota limits vary by model version (20-245 QPM)
 
 ## Advanced Usage
@@ -693,14 +700,21 @@ You need to:
    - Search for "Claude"
    - Click "Enable" on the specific Claude models you want to use
 
-2. Use a supported region. Claude models are only available in:
-   - `us-east5`
-   - `europe-west1`
+2. Pick a supported region. Common choices:
+   - `us-east5` and `europe-west1` for Claude 3.x / 4.x models
+   - `global` for the global endpoint (Claude Opus 4.7 and other newer models with dynamic routing)
+   - US and EU multi-region endpoints where enabled
 
 Example configuration with correct region:
 
 ```yaml
 providers:
+  - id: vertex:claude-opus-4-7
+    config:
+      region: global
+      anthropic_version: 'vertex-2023-10-16'
+      max_tokens: 1024
+
   - id: vertex:claude-3-5-sonnet-v2@20241022
     config:
       region: us-east5 # or europe-west1
@@ -752,16 +766,28 @@ Configure system-level instructions for the model:
 
 ```yaml
 providers:
+  # Works with Gemini models
   - id: vertex:gemini-2.5-pro
     config:
-      # Direct text
       systemInstruction: 'You are a helpful assistant'
 
-      # Or load from file
+  # Also works with Claude models (require specific regions like us-east5)
+  - id: vertex:claude-sonnet-4-6
+    config:
+      region: us-east5
+      systemInstruction: 'You are a helpful assistant'
+```
+
+You can also load system instructions from a file:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-pro
+    config:
       systemInstruction: file://system-instruction.txt
 ```
 
-System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability.
+System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability. The `systemInstruction` config works across both Gemini and Claude models on Vertex AI.
 
 ### Generation Configuration
 

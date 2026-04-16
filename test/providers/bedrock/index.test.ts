@@ -55,7 +55,7 @@ const nodeHttpHandlerFactory = vi.hoisted(() => {
 });
 
 const credentialProviderSsoFactory = vi.hoisted(() => ({
-  mockSSOProvider: vi.fn(),
+  fromSSO: vi.fn(() => 'sso-provider'),
 }));
 
 vi.mock('@aws-sdk/client-bedrock-runtime', async (importOriginal) => {
@@ -74,6 +74,10 @@ vi.mock('@smithy/node-http-handler', () => ({
 }));
 
 const NodeHttpHandlerMock = vi.mocked(NodeHttpHandler);
+
+vi.mock('@aws-sdk/credential-provider-sso', () => ({
+  fromSSO: credentialProviderSsoFactory.fromSSO,
+}));
 
 // Preserve proxy variables so they can be restored after each test. These are
 // set in the container environment and can influence proxy-related logic in the
@@ -118,6 +122,8 @@ class TestBedrockProvider extends AwsBedrockGenericProvider {
 describe('AwsBedrockGenericProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    credentialProviderSsoFactory.fromSSO.mockReset();
+    credentialProviderSsoFactory.fromSSO.mockReturnValue('sso-provider');
     delete process.env.AWS_BEDROCK_MAX_RETRIES;
     delete process.env.AWS_BEARER_TOKEN_BEDROCK;
     // Ensure proxy environment variables do not force proxy-specific code paths
@@ -616,6 +622,35 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.system).toBe('You are a helpful assistant.');
     });
 
+    it('omits temperature for Claude Opus 4.7 on Bedrock invokeModel path', async () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        temperature: 0.5,
+      };
+      // Regional inference profile ID — matches `us.`, `eu.`, `jp.`, `global.` via .includes()
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        config,
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-7',
+      );
+      expect(params.temperature).toBeUndefined();
+    });
+
+    it('still forwards temperature for Claude Opus 4.6 on Bedrock invokeModel (regression)', async () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        temperature: 0,
+      };
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        config,
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-6-v1',
+      );
+      expect(params.temperature).toBe(0);
+    });
+
     it('should convert lone system message to user message', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
@@ -763,24 +798,14 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should return SSO credential provider when profile is specified', async () => {
-      vi.mock('@aws-sdk/credential-provider-sso', async (importOriginal) => {
-        return {
-          ...(await importOriginal()),
-
-          fromSSO: (config: any) => {
-            credentialProviderSsoFactory.mockSSOProvider();
-            expect(config).toEqual({ profile: 'test-profile' });
-            return 'sso-provider';
-          },
-        };
-      });
-
       const provider = new TestBedrockProvider({
         profile: 'test-profile',
       });
 
       const credentials = await provider.getCredentials();
-      expect(credentialProviderSsoFactory.mockSSOProvider).toHaveBeenCalledWith();
+      expect(credentialProviderSsoFactory.fromSSO).toHaveBeenCalledWith({
+        profile: 'test-profile',
+      });
       expect(credentials).toBe('sso-provider');
     });
 
@@ -2928,6 +2953,24 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     expect(AWS_BEDROCK_MODELS['us-gov.anthropic.claude-3-haiku-20240307-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
+  });
+
+  it('should map Claude Opus 4.7 models correctly', async () => {
+    // Base model ID (no -v1 suffix for 4.7+ — verified via `aws bedrock list-foundation-models`)
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+
+    // Cross-region inference profiles (verified via `aws bedrock list-inference-profiles`).
+    // Opus 4.7 uses the newer `jp.`/`global.` scheme instead of the older `apac.` prefix.
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['jp.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['global.anthropic.claude-opus-4-7']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+
+    // Sanity check: the -v1 suffix variant (which Anthropic/AWS docs do not publish) is NOT
+    // registered. Regressing this would silently route requests through the generic fallback.
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-7-v1']).toBeUndefined();
   });
 
   it('should map Nova 2 models correctly', async () => {
