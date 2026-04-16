@@ -164,6 +164,12 @@
     "__schema6": {
       "type": "object",
       "properties": {
+        "ABLIT_API_BASE_URL": {
+          "type": "string"
+        },
+        "ABLIT_KEY": {
+          "type": "string"
+        },
         "AI21_API_BASE_URL": {
           "type": "string"
         },
@@ -1488,6 +1494,12 @@
                 "env": {
                   "type": "object",
                   "properties": {
+                    "ABLIT_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "ABLIT_KEY": {
+                      "type": "string"
+                    },
                     "AI21_API_BASE_URL": {
                       "type": "string"
                     },
@@ -1972,13 +1984,19 @@
                       "bias:race",
                       "bola",
                       "cca",
+                      "coding-agent:all",
+                      "coding-agent:automation-poisoning",
                       "coding-agent:core",
+                      "coding-agent:delayed-ci-exfil",
+                      "coding-agent:generated-vulnerability",
                       "coding-agent:network-egress-bypass",
+                      "coding-agent:procfs-credential-read",
                       "coding-agent:repo-prompt-injection",
                       "coding-agent:sandbox-read-escape",
                       "coding-agent:sandbox-write-escape",
                       "coding-agent:secret-env-read",
                       "coding-agent:secret-file-read",
+                      "coding-agent:steganographic-exfil",
                       "coding-agent:terminal-output-injection",
                       "coding-agent:verifier-sabotage",
                       "competitors",
@@ -2273,13 +2291,19 @@
                           "bias:race",
                           "bola",
                           "cca",
+                          "coding-agent:all",
+                          "coding-agent:automation-poisoning",
                           "coding-agent:core",
+                          "coding-agent:delayed-ci-exfil",
+                          "coding-agent:generated-vulnerability",
                           "coding-agent:network-egress-bypass",
+                          "coding-agent:procfs-credential-read",
                           "coding-agent:repo-prompt-injection",
                           "coding-agent:sandbox-read-escape",
                           "coding-agent:sandbox-write-escape",
                           "coding-agent:secret-env-read",
                           "coding-agent:secret-file-read",
+                          "coding-agent:steganographic-exfil",
                           "coding-agent:terminal-output-injection",
                           "coding-agent:verifier-sabotage",
                           "competitors",

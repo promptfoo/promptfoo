@@ -1,6 +1,7 @@
 import fs from 'fs';
 import * as path from 'path';
 
+import dedent from 'dedent';
 import {
   afterAll,
   beforeAll,
@@ -58,6 +59,7 @@ vi.mock('../../src/util', async () => {
 });
 
 const mockSetupEnv = setupEnv as MockedFunction<typeof setupEnv>;
+const dedentYaml = dedent.withOptions({ escapeSpecialCharacters: false });
 
 describe('Integration: commandLineOptions.envPath', () => {
   let tempDir: string;
@@ -186,7 +188,6 @@ tests:
   it('should handle multiple config files and use first envPath found', async () => {
     const config1File = path.join(tempDir, 'config1.yaml');
     const config2File = path.join(tempDir, 'config2.yaml');
-    const _envFile1 = path.join(tempDir, '.env1');
     const envFile2 = path.join(tempDir, '.env2');
 
     fs.writeFileSync(
@@ -273,22 +274,22 @@ tests:
 
       fs.writeFileSync(
         tempConfigFile,
-        `
-commandLineOptions:
-  envPath:
-    - ${envFile1}
-    - ${envFile2}
+        dedentYaml`
+          commandLineOptions:
+            envPath:
+              - ${envFile1}
+              - ${envFile2}
 
-prompts:
-  - "Test prompt"
+          prompts:
+            - "Test prompt"
 
-providers:
-  - echo
+          providers:
+            - echo
 
-tests:
-  - vars:
-      input: "test"
-`,
+          tests:
+            - vars:
+                input: "test"
+        `,
       );
 
       const cmdObj = { config: [tempConfigFile] };
@@ -377,6 +378,42 @@ tests:
       // CLI envPath should be called once (no config envPath)
       expect(mockSetupEnv).toHaveBeenCalledTimes(1);
       expect(mockSetupEnv).toHaveBeenCalledWith([envFile1, envFile2]);
+    });
+
+    it('should load config envPath when CLI envPath defaults to an empty array', async () => {
+      const envFile1 = path.join(tempDir, '.env.empty-cli1');
+      const envFile2 = path.join(tempDir, '.env.empty-cli2');
+
+      fs.writeFileSync(envFile1, 'CONFIG_VAR1=config1');
+      fs.writeFileSync(envFile2, 'CONFIG_VAR2=config2');
+
+      fs.writeFileSync(
+        tempConfigFile,
+        dedentYaml`
+          commandLineOptions:
+            envPath:
+              - ${envFile1}
+              - ${envFile2}
+
+          prompts:
+            - "Test prompt"
+
+          providers:
+            - echo
+
+          tests:
+            - vars:
+                input: "test"
+        `,
+      );
+
+      try {
+        await doEval({ config: [tempConfigFile], envPath: [] }, {}, undefined, {});
+      } catch {}
+
+      expect(mockSetupEnv).toHaveBeenCalledTimes(2);
+      expect(mockSetupEnv).toHaveBeenNthCalledWith(1, []);
+      expect(mockSetupEnv).toHaveBeenNthCalledWith(2, [envFile1, envFile2]);
     });
   });
 });

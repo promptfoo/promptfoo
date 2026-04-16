@@ -7,8 +7,10 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
+import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
+import { AbliterationProvider } from '../../src/providers/abliteration';
 import { AnthropicCompletionProvider } from '../../src/providers/anthropic/completion';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureCompletionProvider } from '../../src/providers/azure/completion';
@@ -52,6 +54,7 @@ import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
 import { checkProviderApiKeys } from '../../src/util/provider';
+import { createMockProvider } from '../factories/provider';
 
 import type { ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
 
@@ -170,6 +173,14 @@ const defaultMockResponse = {
     entries: vi.fn().mockReturnValue([]),
   },
 };
+
+beforeEach(() => {
+  mockExecFile.mockReset();
+  mockFsReadFileSync.mockReset();
+  mockFsExistsSync.mockReset();
+  mockFsMkdirSync.mockReset();
+  mockFsWriteFileSync.mockReset();
+});
 
 describe('call provider apis', () => {
   beforeEach(() => {
@@ -700,6 +711,33 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('meta/meta-llama/Meta-Llama-3-8B-Instruct');
   });
 
+  it('loadApiProvider with abliteration', async () => {
+    const provider = await loadApiProvider('abliteration:abliterated-model');
+    expect(provider).toBeInstanceOf(AbliterationProvider);
+    expect(provider.id()).toBe('abliteration:abliterated-model');
+    expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
+    expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
+    expect(provider.config.showThinking).toBe(false);
+  });
+
+  it('loadApiProvider with abliteration chat format', async () => {
+    const provider = await loadApiProvider('abliteration:chat:abliterated-model');
+    expect(provider).toBeInstanceOf(AbliterationProvider);
+    expect(provider.id()).toBe('abliteration:abliterated-model');
+    expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
+    expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
+    expect(provider.config.showThinking).toBe(false);
+  });
+
+  it('loadApiProvider rejects malformed abliteration routes', async () => {
+    await expect(loadApiProvider('abliteration:chat')).rejects.toThrow(
+      'Abliteration provider requires a model name. Use format: abliteration:<model_name> or abliteration:chat:<model_name>',
+    );
+    await expect(loadApiProvider('abliteration:')).rejects.toThrow(
+      'Abliteration provider requires a model name. Use format: abliteration:<model_name> or abliteration:chat:<model_name>',
+    );
+  });
+
   it('loadApiProvider with litellm default (chat)', async () => {
     const provider = await loadApiProvider('litellm:gpt-5.1-mini');
     expect(provider.id()).toBe('litellm:gpt-5.1-mini');
@@ -1200,6 +1238,68 @@ describe('loadApiProvider', () => {
     })) as OpenAiChatCompletionProvider;
 
     expect(provider.env?.OPENAI_API_KEY).toBe('override-key');
+  });
+
+  it('preserves merged env overrides for Abliteration providers', async () => {
+    const originalAblitKey = process.env.ABLIT_KEY;
+    const originalAblitApiBaseUrl = process.env.ABLIT_API_BASE_URL;
+    delete process.env.ABLIT_KEY;
+    delete process.env.ABLIT_API_BASE_URL;
+
+    try {
+      const provider = (await loadApiProvider('abliteration:abliterated-model', {
+        env: {
+          ABLIT_API_BASE_URL: 'https://context.example.com/v1',
+        },
+        options: {
+          env: {
+            ABLIT_KEY: 'provider-key',
+          },
+        },
+      })) as AbliterationProvider;
+
+      expect(provider.env?.ABLIT_API_BASE_URL).toBe('https://context.example.com/v1');
+      expect(provider.env?.ABLIT_KEY).toBe('provider-key');
+      expect(provider.config.apiBaseUrl).toBe('https://context.example.com/v1');
+      expect(provider.getApiKey()).toBe('provider-key');
+    } finally {
+      if (originalAblitKey === undefined) {
+        delete process.env.ABLIT_KEY;
+      } else {
+        process.env.ABLIT_KEY = originalAblitKey;
+      }
+
+      if (originalAblitApiBaseUrl === undefined) {
+        delete process.env.ABLIT_API_BASE_URL;
+      } else {
+        process.env.ABLIT_API_BASE_URL = originalAblitApiBaseUrl;
+      }
+    }
+  });
+
+  it('uses cliState env values for Abliteration providers loaded without context env', async () => {
+    const originalConfig = cliState.config;
+    cliState.config = {
+      env: {
+        ABLIT_API_BASE_URL: 'https://cli-state.example.com/v1',
+      },
+    };
+
+    try {
+      const provider = (await loadApiProvider('abliteration:abliterated-model', {
+        options: {
+          env: {
+            ABLIT_KEY: 'provider-key',
+          },
+        },
+      })) as AbliterationProvider;
+
+      expect(provider.env?.ABLIT_API_BASE_URL).toBeUndefined();
+      expect(provider.config.apiBaseUrl).toBe('https://cli-state.example.com/v1');
+      expect(provider.getApiKey()).toBe('provider-key');
+    } finally {
+      cliState.config = originalConfig;
+    }
   });
 
   it('passes provider env overrides through the registry to Claude Agent SDK providers', async () => {
@@ -1757,16 +1857,8 @@ describe('resolveProvider', () => {
   let mockProvider2: any;
 
   beforeEach(async () => {
-    mockProvider1 = {
-      id: () => 'provider-1',
-      label: 'Provider One',
-      callApi: vi.fn(),
-    };
-
-    mockProvider2 = {
-      id: () => 'provider-2',
-      callApi: vi.fn(),
-    };
+    mockProvider1 = createMockProvider({ id: 'provider-1', label: 'Provider One' });
+    mockProvider2 = createMockProvider({ id: 'provider-2' });
 
     mockProviderMap = {
       'provider-1': mockProvider1,
@@ -1860,10 +1952,7 @@ describe('resolveProvider', () => {
     const { resolveProvider } = await import('../../src/providers');
 
     // Test that 'echo' gets resolved from providerMap instead of loadApiProvider
-    const mockEchoProvider = {
-      id: () => 'echo-from-map',
-      callApi: vi.fn(),
-    };
+    const mockEchoProvider = createMockProvider({ id: 'echo-from-map' });
 
     const mapWithEcho = {
       ...mockProviderMap,

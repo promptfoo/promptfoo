@@ -201,7 +201,7 @@ export abstract class RedteamPluginBase {
       let rejectedPromptLimit: number | undefined;
 
       for (const prompt of parsedPrompts) {
-        const promptText = '__prompt' in prompt ? String(prompt.__prompt) : JSON.stringify(prompt);
+        const promptText = '__prompt' in prompt ? prompt.__prompt : JSON.stringify(prompt);
         // TODO(ian): In multi-input mode, validate the generated user-facing field values rather
         // than the serialized JSON envelope stored in __prompt, which overcounts keys/braces.
         const violation = getGeneratedPromptOverLimit(promptText, this.config.maxCharsPerMessage);

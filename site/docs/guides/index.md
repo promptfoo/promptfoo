@@ -32,7 +32,7 @@ Compare LLM performance on your own data to make informed model selection decisi
 - [Choosing the Best GPT Model](/docs/guides/choosing-best-gpt-model) — Pick the right GPT variant for your workload
 - [GPT-5.2 vs o3](/docs/guides/gpt-vs-reasoning-model) — Compare standard vs reasoning models
 - [Comparing Open-Source Models](/docs/guides/compare-open-source-models) — Evaluate Mistral, Llama, Gemma, and Phi on custom datasets
-- [GPT-5 vs GPT-5-mini MMLU](/docs/guides/gpt-mmlu-comparison) — Measure GPT performance on the MMLU benchmark
+- [GPT Model Tiers MMLU-Pro](/docs/guides/gpt-mmlu-comparison) — Measure GPT model tier performance on MMLU-Pro
 - [Qwen vs Llama vs GPT](/docs/guides/qwen-benchmark) — Run a custom benchmark across model families
 - [OpenAI vs Azure Benchmark](/docs/guides/azure-vs-openai) — Test whether Azure-hosted models match OpenAI directly
 - [Mixtral vs GPT](/docs/guides/mixtral-vs-gpt) — Pit Mixtral against GPT on real tasks

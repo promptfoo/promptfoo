@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   checkProviderApiKeys,
   doesProviderRefMatch,
@@ -17,6 +17,7 @@ import {
   isProviderConfigFileReference,
   normalizeProviderRef,
 } from '../../src/util/providerRef';
+import { createMockProvider } from '../factories/provider';
 
 import type { ApiProvider } from '../../src/types/index';
 
@@ -308,52 +309,36 @@ describe('providerToIdentifier', () => {
 
 describe('getProviderIdentifier', () => {
   it('returns label when present', () => {
-    const provider = {
-      id: () => 'openai:gpt-4',
-      label: 'my-custom-label',
-    } as ApiProvider;
+    const provider = createMockProvider({ id: 'openai:gpt-4', label: 'my-custom-label' });
     expect(getProviderIdentifier(provider)).toBe('my-custom-label');
   });
 
   it('returns id when no label', () => {
-    const provider = {
-      id: () => 'openai:gpt-4',
-    } as ApiProvider;
+    const provider = createMockProvider({ id: 'openai:gpt-4' });
     expect(getProviderIdentifier(provider)).toBe('openai:gpt-4');
   });
 });
 
 describe('getProviderDescription', () => {
   it('returns both label and id when both present', () => {
-    const provider = {
-      id: () => 'openai:gpt-4',
-      label: 'my-custom-label',
-    } as ApiProvider;
+    const provider = createMockProvider({ id: 'openai:gpt-4', label: 'my-custom-label' });
     expect(getProviderDescription(provider)).toBe('my-custom-label (openai:gpt-4)');
   });
 
   it('returns only id when no label', () => {
-    const provider = {
-      id: () => 'openai:gpt-4',
-    } as ApiProvider;
+    const provider = createMockProvider({ id: 'openai:gpt-4' });
     expect(getProviderDescription(provider)).toBe('openai:gpt-4');
   });
 
   it('returns only id when label equals id', () => {
-    const provider = {
-      id: () => 'openai:gpt-4',
-      label: 'openai:gpt-4',
-    } as ApiProvider;
+    const provider = createMockProvider({ id: 'openai:gpt-4', label: 'openai:gpt-4' });
     expect(getProviderDescription(provider)).toBe('openai:gpt-4');
   });
 });
 
 describe('doesProviderRefMatch', () => {
   const createProvider = (id: string, label?: string): ApiProvider =>
-    ({
-      id: () => id,
-      label,
-    }) as ApiProvider;
+    createMockProvider({ id, label });
 
   it('matches exact label', () => {
     const provider = createProvider('openai:gpt-4', 'fast-model');
@@ -407,10 +392,7 @@ describe('doesProviderRefMatch', () => {
 
 describe('isProviderAllowed', () => {
   const createProvider = (id: string, label?: string): ApiProvider =>
-    ({
-      id: () => id,
-      label,
-    }) as ApiProvider;
+    createMockProvider({ id, label });
 
   it('allows all providers when no filter', () => {
     const provider = createProvider('openai:gpt-4');
@@ -550,14 +532,15 @@ describe('isGoogleProvider', () => {
 });
 
 describe('checkProviderApiKeys', () => {
-  it('detects missing API key and maps to correct env var', () => {
-    const provider = {
-      id: () => 'openai:gpt-4',
-      callApi: vi.fn(),
-      config: {},
+  const providerWithKey = (id: string, extras: Record<string, unknown> = {}): ApiProvider =>
+    Object.assign(createMockProvider({ id, config: {} }), {
       getApiKey: () => undefined,
       requiresApiKey: () => true,
-    } as unknown as ApiProvider;
+      ...extras,
+    }) as unknown as ApiProvider;
+
+  it('detects missing API key and maps to correct env var', () => {
+    const provider = providerWithKey('openai:gpt-4');
 
     const result = checkProviderApiKeys([provider]);
     expect(result.size).toBe(1);
@@ -565,70 +548,36 @@ describe('checkProviderApiKeys', () => {
   });
 
   it('skips providers with valid key, no getApiKey method, or requiresApiKey false', () => {
-    const providers = [
-      {
-        id: () => 'openai:gpt-4',
-        callApi: vi.fn(),
-        config: {},
-        getApiKey: () => 'sk-1234',
-        requiresApiKey: () => true,
-      },
-      { id: () => 'http:custom', callApi: vi.fn() },
-      {
-        id: () => 'openai:gpt-4',
-        callApi: vi.fn(),
-        config: {},
-        getApiKey: () => undefined,
-        requiresApiKey: () => false,
-      },
-      {
-        id: () => 'litellm:gpt-4',
-        callApi: vi.fn(),
-        config: { apiKeyRequired: false },
-        getApiKey: () => undefined,
-      },
-    ] as unknown as ApiProvider[];
+    const providers: ApiProvider[] = [
+      providerWithKey('openai:gpt-4', { getApiKey: () => 'sk-1234' }),
+      createMockProvider({ id: 'http:custom' }),
+      providerWithKey('openai:gpt-4', { requiresApiKey: () => false }),
+      Object.assign(
+        createMockProvider({ id: 'litellm:gpt-4', config: { apiKeyRequired: false } }),
+        { getApiKey: () => undefined },
+      ) as unknown as ApiProvider,
+    ];
 
     const result = checkProviderApiKeys(providers);
     expect(result.size).toBe(0);
   });
 
   it('skips azure providers (Azure AD token auth)', () => {
-    const provider = {
-      id: () => 'azure:gpt-4',
-      callApi: vi.fn(),
-      config: {},
-      getApiKey: () => undefined,
-      requiresApiKey: () => true,
-    } as unknown as ApiProvider;
+    const provider = providerWithKey('azure:gpt-4');
 
     const result = checkProviderApiKeys([provider]);
     expect(result.size).toBe(0);
   });
 
   it('deduplicates multiple providers sharing the same env var', () => {
-    const providers = [
-      {
-        id: () => 'openai:gpt-4',
-        callApi: vi.fn(),
-        config: {},
-        getApiKey: () => undefined,
-        requiresApiKey: () => true,
-      },
-      {
-        id: () => 'openai:gpt-5-mini',
-        callApi: vi.fn(),
-        config: {},
-        getApiKey: () => undefined,
-        requiresApiKey: () => true,
-      },
-      {
-        id: () => 'anthropic:claude-sonnet-4-5-20250514',
-        callApi: vi.fn(),
-        config: {},
-        getApiKey: () => undefined,
-      },
-    ] as unknown as ApiProvider[];
+    const providers: ApiProvider[] = [
+      providerWithKey('openai:gpt-4'),
+      providerWithKey('openai:gpt-5-mini'),
+      Object.assign(
+        createMockProvider({ id: 'anthropic:claude-sonnet-4-5-20250514', config: {} }),
+        { getApiKey: () => undefined },
+      ) as unknown as ApiProvider,
+    ];
 
     const result = checkProviderApiKeys(providers);
     expect(result.size).toBe(2);

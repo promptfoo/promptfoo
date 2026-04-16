@@ -18,6 +18,9 @@ vi.mock('../../src/globalConfig/cloud', () => ({
     isEnabled: vi.fn().mockReturnValue(false),
   },
 }));
+vi.mock('../../src/globalConfig/accounts', () => ({
+  getAuthor: vi.fn().mockReturnValue(null),
+}));
 vi.mock('../../src/models/modelAudit', () => ({
   __esModule: true,
   default: {

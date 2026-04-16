@@ -198,8 +198,7 @@ function expectCliArg(args: string[], name: string, value: string): void {
 }
 
 function expectSanitizedExecEnv(options: PromptfooExecCall['options'] | NpmExecCall['options']) {
-  expect(options).toBeDefined();
-  expect(options?.env).toBeDefined();
+  expect(options?.env).toEqual(expect.any(Object));
   expect(options?.env?.NPM_CONFIG_BEFORE).toBeUndefined();
   expect(options?.env?.npm_config_before).toBeUndefined();
 }

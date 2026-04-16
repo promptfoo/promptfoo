@@ -1116,6 +1116,11 @@ assert:
   - type: rouge-n
     threshold: 0.6
     value: hello world
+
+  # Ensure Rouge-N score is below a threshold
+  - type: not-rouge-n
+    threshold: 0.75
+    value: hello world
 ```
 
 `value` can reference other variables using template syntax. For example:

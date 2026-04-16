@@ -22,6 +22,7 @@ vi.mock('fs', async (importOriginal) => {
 describe('ElevenLabsAlignmentProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockReadFile.mockReset();
     process.env.ELEVENLABS_API_KEY = 'test-api-key';
   });
 

@@ -17,6 +17,7 @@ import RedteamIterativeMetaProvider from '../redteam/providers/iterativeMeta';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { createAbliterationProvider } from './abliteration';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
 import { AnthropicCompletionProvider } from './anthropic/completion';
@@ -145,6 +146,19 @@ export const providerMap: ProviderFactory[] = [
   createScriptBasedProviderFactory('golang', 'go', GolangProvider),
   createScriptBasedProviderFactory('python', 'py', PythonProvider),
   createScriptBasedProviderFactory('ruby', 'rb', RubyProvider),
+  {
+    test: (providerPath: string) => providerPath.startsWith('abliteration:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createAbliterationProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
   {
     test: (providerPath: string) => providerPath === 'agentic:memory-poisoning',
     create: async (

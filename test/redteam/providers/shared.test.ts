@@ -17,13 +17,13 @@ import {
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
 import { sleep } from '../../../src/util/time';
+import { createMockProvider } from '../../factories/provider';
 
 import type {
   ApiProvider,
   Assertion,
   AssertionSet,
   CallApiContextParams,
-  CallApiFunction,
   CallApiOptionsParams,
   Prompt,
 } from '../../../src/types/index';
@@ -126,10 +126,7 @@ describe('shared redteam provider utilities', () => {
   });
 
   describe('RedteamProviderManager', () => {
-    const mockApiProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn() as CallApiFunction,
-    };
+    const mockApiProvider = createMockProvider({ response: { output: 'test output' } });
 
     it('creates default OpenAI provider when no provider specified', async () => {
       const result = await redteamProviderManager.getProvider({});
@@ -202,10 +199,7 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('uses provider from cliState if available', async () => {
-      const mockStateProvider: ApiProvider = {
-        id: () => 'state-provider',
-        callApi: vi.fn() as CallApiFunction,
-      };
+      const mockStateProvider = createMockProvider({ id: 'state-provider' });
 
       // Clear and set up cliState for this test
       setCliStateConfig({
@@ -220,10 +214,7 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('sets and reuses providers', async () => {
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as CallApiFunction,
-      };
+      const mockProvider = createMockProvider({ response: { output: 'test output' } });
       mockedLoadApiProviders.mockResolvedValue([mockProvider]);
 
       // Set the provider
@@ -243,10 +234,7 @@ describe('shared redteam provider utilities', () => {
     describe('getGradingProvider', () => {
       it('returns cached grading provider set via setGradingProvider', async () => {
         redteamProviderManager.clearProvider();
-        const gradingInstance: ApiProvider = {
-          id: () => 'grading-cached',
-          callApi: vi.fn(),
-        } as any;
+        const gradingInstance = createMockProvider({ id: 'grading-cached' });
 
         // Set concrete instance and retrieve it (jsonOnly false)
         await redteamProviderManager.setGradingProvider(gradingInstance as any);
@@ -256,10 +244,7 @@ describe('shared redteam provider utilities', () => {
 
       it('uses defaultTest chain when no cached grading provider', async () => {
         redteamProviderManager.clearProvider();
-        const mockProvider: ApiProvider = {
-          id: () => 'from-defaultTest-provider',
-          callApi: vi.fn(),
-        } as any;
+        const mockProvider = createMockProvider({ id: 'from-defaultTest-provider' });
         mockedLoadApiProviders.mockResolvedValue([mockProvider]);
 
         // Inject defaultTest provider config
@@ -291,10 +276,7 @@ describe('shared redteam provider utilities', () => {
 
       it('uses defaultTest.options.provider when no redteam.provider is set', async () => {
         redteamProviderManager.clearProvider();
-        const mockProvider: ApiProvider = {
-          id: () => 'defaultTest-provider',
-          callApi: vi.fn(),
-        } as any;
+        const mockProvider = createMockProvider({ id: 'defaultTest-provider' });
         mockedLoadApiProviders.mockResolvedValue([mockProvider]);
 
         // Set defaultTest.options.provider but not redteam.provider
@@ -316,10 +298,7 @@ describe('shared redteam provider utilities', () => {
 
       it('uses defaultTest.provider when no redteam.provider is set', async () => {
         redteamProviderManager.clearProvider();
-        const mockProvider: ApiProvider = {
-          id: () => 'defaultTest-direct-provider',
-          callApi: vi.fn(),
-        } as any;
+        const mockProvider = createMockProvider({ id: 'defaultTest-direct-provider' });
         mockedLoadApiProviders.mockResolvedValue([mockProvider]);
 
         // Set defaultTest.provider directly
@@ -339,10 +318,7 @@ describe('shared redteam provider utilities', () => {
 
       it('prefers redteam.provider over defaultTest provider', async () => {
         redteamProviderManager.clearProvider();
-        const redteamProvider: ApiProvider = {
-          id: () => 'redteam-explicit-provider',
-          callApi: vi.fn(),
-        } as any;
+        const redteamProvider = createMockProvider({ id: 'redteam-explicit-provider' });
         mockedLoadApiProviders.mockResolvedValue([redteamProvider]);
 
         // Set both redteam.provider and defaultTest.options.provider
@@ -380,10 +356,9 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('handles thrown errors in getTargetResponse', async () => {
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockRejectedValue(new Error('Network error')),
-      };
+      const mockProvider = createMockProvider({
+        callApi: vi.fn<ApiProvider['callApi']>().mockRejectedValue(new Error('Network error')),
+      });
 
       const result = await getTargetResponse(mockProvider, 'test prompt');
 
@@ -398,10 +373,9 @@ describe('shared redteam provider utilities', () => {
       const abortError = new Error('The operation was aborted');
       abortError.name = 'AbortError';
 
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockRejectedValue(abortError) as any,
-      };
+      const mockProvider = createMockProvider({
+        callApi: vi.fn<ApiProvider['callApi']>().mockRejectedValue(abortError),
+      });
 
       await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
         'The operation was aborted',
@@ -411,10 +385,9 @@ describe('shared redteam provider utilities', () => {
     it('swallows non-AbortError exceptions and returns error response', async () => {
       const regularError = new Error('API timeout');
 
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockRejectedValue(regularError) as any,
-      };
+      const mockProvider = createMockProvider({
+        callApi: vi.fn<ApiProvider['callApi']>().mockRejectedValue(regularError),
+      });
 
       const result = await getTargetResponse(mockProvider, 'test prompt');
 
@@ -431,10 +404,7 @@ describe('shared redteam provider utilities', () => {
       });
 
       it('setMultilingualProvider caches provider and getMultilingualProvider returns it', async () => {
-        const mockProvider: ApiProvider = {
-          id: () => 'test-multilingual-provider',
-          callApi: vi.fn() as CallApiFunction,
-        };
+        const mockProvider = createMockProvider({ id: 'test-multilingual-provider' });
 
         mockedLoadApiProviders.mockResolvedValueOnce([mockProvider]);
 
@@ -466,13 +436,12 @@ describe('shared redteam provider utilities', () => {
           maxCharsPerMessage: 5,
         },
       });
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      const mockProvider = createMockProvider({
+        response: {
           output: 'test response',
           tokenUsage: { numRequests: 1 },
-        }),
-      };
+        },
+      });
 
       const result = await getTargetResponse(mockProvider, 'too long');
 
@@ -490,13 +459,12 @@ describe('shared redteam provider utilities', () => {
           maxCharsPerMessage: 5,
         },
       });
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      const mockProvider = createMockProvider({
+        response: {
           output: 'ok',
           tokenUsage: { numRequests: 1 },
-        }),
-      };
+        },
+      });
       const prompt = JSON.stringify([
         { role: 'system', content: 'this system message is long' },
         { role: 'user', content: 'short' },
@@ -509,13 +477,12 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('uses maxCharsPerMessage from test metadata when cliState is unset', async () => {
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      const mockProvider = createMockProvider({
+        response: {
           output: 'test response',
           tokenUsage: { numRequests: 1 },
-        }),
-      };
+        },
+      });
       const context = {
         prompt: { raw: '', label: '' },
         vars: {},
@@ -537,13 +504,12 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('checks GOAT audio/image hybrid payload transcript text without counting base64 blobs', async () => {
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      const mockProvider = createMockProvider({
+        response: {
           output: 'ok',
           tokenUsage: { numRequests: 1 },
-        }),
-      };
+        },
+      });
       const context = {
         prompt: { raw: '', label: '' },
         vars: {},
@@ -578,13 +544,12 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('rejects GOAT audio/image hybrid payloads when currentTurn transcript exceeds maxCharsPerMessage', async () => {
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      const mockProvider = createMockProvider({
+        response: {
           output: 'ok',
           tokenUsage: { numRequests: 1 },
-        }),
-      };
+        },
+      });
       const context = {
         prompt: { raw: '', label: '' },
         vars: {},
@@ -618,14 +583,13 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('returns successful response with string output', async () => {
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      const mockProvider = createMockProvider({
+        response: {
           output: 'test response',
           tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
           sessionId: 'test-session',
-        }),
-      };
+        },
+      });
 
       const result = await getTargetResponse(mockProvider, 'test prompt');
 
@@ -642,10 +606,7 @@ describe('shared redteam provider utilities', () => {
         tokenUsage: { numRequests: 1 },
       });
 
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: mockCallApi,
-      };
+      const mockProvider = createMockProvider({ callApi: mockCallApi });
 
       const prompt: Prompt = {
         raw: 'test prompt',
@@ -664,13 +625,12 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('stringifies non-string output', async () => {
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      const mockProvider = createMockProvider({
+        response: {
           output: { key: 'value' },
           tokenUsage: { numRequests: 1 },
-        }),
-      };
+        },
+      });
 
       const result = await getTargetResponse(mockProvider, 'test prompt');
 
@@ -681,13 +641,12 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('handles provider error response', async () => {
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      const mockProvider = createMockProvider({
+        response: {
           error: 'API error',
           sessionId: 'error-session',
-        }),
-      };
+        },
+      });
 
       const result = await getTargetResponse(mockProvider, 'test prompt');
 
@@ -700,14 +659,13 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('respects provider delay for non-cached responses', async () => {
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
+      const mockProvider = createMockProvider({
         delay: 100,
-        callApi: vi.fn().mockResolvedValue({
+        response: {
           output: 'test response',
           tokenUsage: { numRequests: 1 },
-        }),
-      };
+        },
+      });
 
       await getTargetResponse(mockProvider, 'test prompt');
 
@@ -715,15 +673,14 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('skips delay for cached responses', async () => {
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
+      const mockProvider = createMockProvider({
         delay: 100,
-        callApi: vi.fn().mockResolvedValue({
+        response: {
           output: 'test response',
           cached: true,
           tokenUsage: { numRequests: 1 },
-        }),
-      };
+        },
+      });
 
       await getTargetResponse(mockProvider, 'test prompt');
 
@@ -731,10 +688,7 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('throws error when neither output nor error is set', async () => {
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({}),
-      };
+      const mockProvider = createMockProvider({ response: {} });
 
       await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
         /Target returned malformed response: expected either `output` or `error` property to be set/,
@@ -742,12 +696,11 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('uses default tokenUsage when not provided', async () => {
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      const mockProvider = createMockProvider({
+        response: {
           output: 'test response',
-        }),
-      };
+        },
+      });
 
       const result = await getTargetResponse(mockProvider, 'test prompt');
 
@@ -758,13 +711,12 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('accepts conversationEnded without output or error', async () => {
-      const mockProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      const mockProvider = createMockProvider({
+        response: {
           conversationEnded: true,
           conversationEndReason: 'thread_closed',
-        }),
-      };
+        },
+      });
 
       const result = await getTargetResponse(mockProvider, 'test prompt');
 
@@ -778,13 +730,12 @@ describe('shared redteam provider utilities', () => {
 
     describe('edge cases for empty and falsy responses', () => {
       it('handles empty string output correctly', async () => {
-        const mockProvider: ApiProvider = {
-          id: () => 'test-provider',
-          callApi: vi.fn().mockResolvedValue({
+        const mockProvider = createMockProvider({
+          response: {
             output: '', // Empty string
             tokenUsage: { numRequests: 1 },
-          }),
-        };
+          },
+        });
 
         const result = await getTargetResponse(mockProvider, 'test prompt');
 
@@ -795,13 +746,12 @@ describe('shared redteam provider utilities', () => {
       });
 
       it('handles zero output correctly', async () => {
-        const mockProvider: ApiProvider = {
-          id: () => 'test-provider',
-          callApi: vi.fn().mockResolvedValue({
+        const mockProvider = createMockProvider({
+          response: {
             output: 0, // Zero value
             tokenUsage: { numRequests: 1 },
-          }),
-        };
+          },
+        });
 
         const result = await getTargetResponse(mockProvider, 'test prompt');
 
@@ -812,13 +762,12 @@ describe('shared redteam provider utilities', () => {
       });
 
       it('handles false output correctly', async () => {
-        const mockProvider: ApiProvider = {
-          id: () => 'test-provider',
-          callApi: vi.fn().mockResolvedValue({
+        const mockProvider = createMockProvider({
+          response: {
             output: false, // Boolean false
             tokenUsage: { numRequests: 1 },
-          }) as CallApiFunction,
-        };
+          },
+        });
 
         const result = await getTargetResponse(mockProvider, 'test prompt');
 
@@ -829,13 +778,12 @@ describe('shared redteam provider utilities', () => {
       });
 
       it('handles null output correctly', async () => {
-        const mockProvider: ApiProvider = {
-          id: () => 'test-provider',
-          callApi: vi.fn().mockResolvedValue({
+        const mockProvider = createMockProvider({
+          response: {
             output: null, // Null value
             tokenUsage: { numRequests: 1 },
-          }) as CallApiFunction,
-        };
+          },
+        });
 
         const result = await getTargetResponse(mockProvider, 'test prompt');
 
@@ -846,13 +794,12 @@ describe('shared redteam provider utilities', () => {
       });
 
       it('still fails when output property is missing', async () => {
-        const mockProvider: ApiProvider = {
-          id: () => 'test-provider',
-          callApi: vi.fn().mockResolvedValue({
+        const mockProvider = createMockProvider({
+          response: {
             // No output property at all
             tokenUsage: { numRequests: 1 },
-          }) as CallApiFunction,
-        };
+          },
+        });
 
         await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
           /Target returned malformed response: expected either `output` or `error` property to be set/,
@@ -860,12 +807,11 @@ describe('shared redteam provider utilities', () => {
       });
 
       it('still fails when both output and error are missing', async () => {
-        const mockProvider: ApiProvider = {
-          id: () => 'test-provider',
-          callApi: vi.fn().mockResolvedValue({
+        const mockProvider = createMockProvider({
+          response: {
             someOtherField: 'value',
-          } as any) as CallApiFunction,
-        };
+          } as any,
+        });
 
         await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
           /Target returned malformed response/,

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runCompareAssertion } from '../../src/assertions/index';
+import { createMockProvider, createProviderResponse } from '../factories/provider';
 
 import type {
   ApiProvider,
@@ -13,21 +14,21 @@ describe('select-best context propagation', () => {
     let capturedContext: CallApiContextParams | undefined;
 
     // Create a grading provider that captures the context
-    const gradingProvider: ApiProvider = {
-      id: () => 'test-grading-provider',
-      callApi: vi.fn(async (_prompt: string, context) => {
+    const gradingProvider = createMockProvider({
+      id: 'test-grading-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (_prompt, context) => {
         capturedContext = context;
         return {
           output: '0', // Select first option
           tokenUsage: {},
         };
       }),
-    };
+    });
 
-    const originalProvider: ApiProvider = {
-      id: () => 'original-provider',
-      callApi: vi.fn().mockResolvedValue({ output: '', tokenUsage: {} }),
-    };
+    const originalProvider = createMockProvider({
+      id: 'original-provider',
+      response: createProviderResponse({ output: '', tokenUsage: {} }),
+    });
 
     const test: AtomicTestCase = {
       vars: { foo: 'bar' },

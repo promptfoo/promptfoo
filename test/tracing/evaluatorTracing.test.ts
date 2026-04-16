@@ -39,6 +39,8 @@ vi.mock('../../src/tracing/otlpReceiver', () => ({
 describe('evaluatorTracing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockStartOTLPReceiver.mockReset();
+    mockStartOTLPReceiver.mockResolvedValue(undefined);
     resetTracingState();
     // Reset environment variables
     delete process.env.PROMPTFOO_TRACING_ENABLED;

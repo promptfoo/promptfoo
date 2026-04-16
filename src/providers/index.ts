@@ -170,7 +170,7 @@ export async function loadApiProvider(
       ret.transform = options.transform;
       ret.delay = options.delay;
       ret.inputs = options.inputs;
-      ret.label ||= renderEnvOnlyInObject(String(options.label || ''), mergedEnv);
+      ret.label ||= renderEnvOnlyInObject(options.label || '', mergedEnv);
       return ret;
     }
   }
