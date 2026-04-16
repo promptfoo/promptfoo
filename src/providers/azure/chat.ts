@@ -14,6 +14,7 @@ import {
   renderVarsInObject,
 } from '../../util/index';
 import invariant from '../../util/invariant';
+import { isClaudeOpus47Model } from '../anthropic/util';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
@@ -102,6 +103,17 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     );
   }
 
+  /**
+   * Claude Opus 4.7 deprecates `temperature` at the model level — the
+   * deployment returns 400 for any request that includes it. Opus 4.7 keeps
+   * the standard `max_tokens` field (not `max_completion_tokens`) and does
+   * not accept `reasoning_effort`, so we only strip temperature here and
+   * leave the rest of the chat body intact.
+   */
+  protected isClaudeOpus47(): boolean {
+    return isClaudeOpus47Model(this.deploymentName);
+  }
+
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
@@ -150,6 +162,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     // Check if this is configured as a reasoning model
     const isReasoningModel = this.isReasoningModel();
+    const isClaudeOpus47 = this.isClaudeOpus47();
 
     // Get max tokens based on model type
     const maxTokensDefault = config.omitDefaults
@@ -206,7 +219,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           }
         : {
             ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
-            ...(temperature === undefined ? {} : { temperature }),
+            ...(temperature === undefined || isClaudeOpus47 ? {} : { temperature }),
           }),
       ...(topP === undefined ? {} : { top_p: topP }),
       ...(presencePenalty === undefined ? {} : { presence_penalty: presencePenalty }),

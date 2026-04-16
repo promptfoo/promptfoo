@@ -18,7 +18,7 @@ import {
 } from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
 import { sanitizeObject } from '../util/sanitizer';
-import { providerMap } from './registry';
+import { getProviderFactories } from './registry';
 
 import type { EnvOverrides } from '../types/env';
 import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
@@ -164,7 +164,7 @@ export async function loadApiProvider(
     });
   }
 
-  for (const factory of providerMap) {
+  for (const factory of await getProviderFactories(renderedProviderPath)) {
     if (factory.test(renderedProviderPath)) {
       const ret = await factory.create(renderedProviderPath, providerOptions, context);
       ret.transform = options.transform;

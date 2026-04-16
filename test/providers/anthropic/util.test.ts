@@ -80,6 +80,28 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(0.0011); // (0.000001 * 100) + (0.000005 * 200) - $1/MTok input, $5/MTok output
     });
 
+    it('should calculate default cost for Claude Opus 4.7 model', () => {
+      const cost = calculateAnthropicCost('claude-opus-4-7', {}, 100, 200);
+      expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
+    });
+
+    it('should apply cache pricing for Claude Opus 4.7 with cache tokens', () => {
+      // Opus 4.7: $5/MTok input, $25/MTok output
+      // 100 uncached input, 50 cache_read, 30 cache_write, 200 output
+      const cost = calculateAnthropicCost('claude-opus-4-7', {}, 100, 200, 50, 30);
+      const expected =
+        100 * (5 / 1e6) + 50 * (5 / 1e6) * 0.1 + 30 * (5 / 1e6) * 1.25 + 200 * (25 / 1e6);
+      expect(cost).toBeCloseTo(expected, 10);
+    });
+
+    it('should return undefined for claude-opus-4-7-latest (alias does not exist)', () => {
+      // The Anthropic Models API returns 404 for `claude-opus-4-7-latest` — it is not a real
+      // alias. If someone copies the `-latest` pattern from 4.6 and re-adds it to
+      // ANTHROPIC_MODELS, this test will fail and prompt them to check the API first.
+      const cost = calculateAnthropicCost('claude-opus-4-7-latest', {}, 100, 200);
+      expect(cost).toBeUndefined();
+    });
+
     it('should calculate default cost for Claude Opus 4.6 model', () => {
       const cost = calculateAnthropicCost('claude-opus-4-6', {}, 100, 200);
       expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output

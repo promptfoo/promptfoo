@@ -9,6 +9,7 @@ import {
 import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
 
 const mockFetchWithProxy = vi.fn();
+const mockRenderPrompt = vi.fn();
 
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetchWithProxy(...args),
@@ -16,9 +17,7 @@ vi.mock('../../../src/util/fetch/index', () => ({
 
 vi.mock('../../../src/evaluatorHelpers', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  renderPrompt: vi
-    .fn()
-    .mockImplementation((_prompt: any, vars: any) => vars.input || 'rendered prompt'),
+  renderPrompt: (...args: any[]) => mockRenderPrompt(...args),
 }));
 
 vi.mock('../../../src/globalConfig/accounts', () => ({
@@ -30,7 +29,7 @@ vi.mock('../../../src/redteam/remoteGeneration', () => ({
   neverGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
-describe('BestOfNProvider - Abort Signal Handling', () => {
+describe('BestOfNProvider - Runtime Behavior', () => {
   let BestOfNProvider: typeof import('../../../src/redteam/providers/bestOfN').default;
   let mockTargetProvider: MockApiProvider;
 
@@ -42,6 +41,11 @@ describe('BestOfNProvider - Abort Signal Handling', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockRenderPrompt.mockReset();
+    mockRenderPrompt.mockImplementation(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (_prompt: any, vars: any) => vars.input || 'rendered prompt',
+    );
 
     // Dynamic import after mocks are set up
     const module = await import('../../../src/redteam/providers/bestOfN');
@@ -129,6 +133,51 @@ describe('BestOfNProvider - Abort Signal Handling', () => {
 
     // Non-AbortError should be caught and returned as an error response
     expect(result.error).toContain('Network error');
+  });
+
+  it.each([
+    'file://etc/passwd',
+    ' FILE://etc/passwd',
+    '\tFiLe://etc/passwd',
+    'package:@promptfoo/fake:getSecret',
+    ' PACKAGE:@promptfoo/fake:getSecret',
+    '\tPaCkAgE:@promptfoo/fake:getSecret',
+  ])('should skip unsafe candidate prompt from remote generation: %s', async (unsafePrompt) => {
+    const provider = new BestOfNProvider({
+      injectVar: 'input',
+    });
+    const context = createMockContext(mockTargetProvider);
+
+    mockFetchWithProxy.mockResolvedValue({
+      json: async () => ({
+        modifiedPrompts: [unsafePrompt, 'candidate 2'],
+      }),
+    });
+
+    await provider.callApi('test prompt', context);
+
+    expect(mockCallApi).toHaveBeenCalledTimes(1);
+    expect(mockCallApi).toHaveBeenCalledWith('candidate 2', expect.any(Object), undefined);
+  });
+
+  it('should pass the injected variable through renderPrompt without special loading or template rendering', async () => {
+    const provider = new BestOfNProvider({
+      injectVar: 'input',
+    });
+    const context = createMockContext(mockTargetProvider);
+
+    await provider.callApi('test prompt', context);
+
+    expect(mockRenderPrompt).toHaveBeenCalledWith(
+      context.prompt,
+      {
+        ...context.vars,
+        input: 'candidate 1',
+      },
+      context.filters,
+      mockTargetProvider,
+      ['input'],
+    );
   });
 });
 

@@ -115,6 +115,33 @@ export default class BestOfNProvider implements ApiProvider {
             return;
           }
 
+          if (typeof candidatePrompt !== 'string') {
+            logger.warn('[Best-of-N] Skipping non-string candidate prompt from remote generation', {
+              component: 'Best-of-N',
+              event: 'SkippingCandidatePrompt',
+              reason: 'non-string',
+              candidatePromptType: typeof candidatePrompt,
+            });
+            return;
+          }
+
+          const unsafeCandidateScheme = /^\s*(file:\/\/|package:)/i
+            .exec(candidatePrompt)?.[1]
+            .toLowerCase();
+          if (unsafeCandidateScheme) {
+            const schemeLabel = unsafeCandidateScheme.startsWith('file') ? 'file://' : 'package:';
+            logger.warn(
+              `[Best-of-N] Skipping unsafe ${schemeLabel} candidate prompt from remote generation`,
+              {
+                component: 'Best-of-N',
+                event: 'SkippingCandidatePrompt',
+                reason:
+                  schemeLabel === 'file://' ? 'unsafe-file-protocol' : 'unsafe-package-protocol',
+              },
+            );
+            return;
+          }
+
           const targetVars = {
             ...context.vars,
             [this.config.injectVar]: candidatePrompt,
@@ -125,7 +152,7 @@ export default class BestOfNProvider implements ApiProvider {
             targetVars,
             context.filters,
             targetProvider,
-            [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
+            [this.config.injectVar], // Skip special loading and template rendering for the injection variable
           );
 
           try {
