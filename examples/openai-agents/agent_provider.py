@@ -816,6 +816,23 @@ def call_api(
                 current_agent = last_result.last_agent
                 all_raw_responses.extend(last_result.raw_responses)
                 transcript.extend(_format_transcript(index, step, last_result))
+                if (
+                    current_agent.name == "FAQ Agent"
+                    and not _serialize(last_result.final_output).strip()
+                ):
+                    # A handoff can transfer control without producing the target
+                    # agent's final answer. Re-enter FAQ once so policy follow-ups
+                    # still exercise faq_lookup and return a user-visible answer.
+                    last_result = Runner.run_sync(
+                        current_agent,
+                        _step_input(prompt, step, airline_context),
+                        context=airline_context,
+                        max_turns=max_turns,
+                        session=session,
+                    )
+                    current_agent = last_result.last_agent
+                    all_raw_responses.extend(last_result.raw_responses)
+                    transcript.extend(_format_transcript(index, step, last_result))
 
         final_output = _serialize(
             last_result.final_output if last_result is not None else ""
