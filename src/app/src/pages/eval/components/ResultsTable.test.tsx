@@ -152,10 +152,6 @@ describe('ResultsTable Metrics Display', () => {
         },
       },
     }));
-    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
-      inComparisonMode: false,
-      renderMarkdown: true,
-    }));
   });
 
   it('displays total cost with correct formatting', () => {
@@ -410,7 +406,7 @@ describe('ResultsTable Metrics Display', () => {
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
-
+        inComparisonMode: false,
         setTable: vi.fn(),
         table: mockTableWithObjectVar,
         version: 4,
@@ -1631,8 +1627,6 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
         },
       },
     }));
-
-    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Simulate calling handleRating with updated values
     const updatedIsPass = false;
