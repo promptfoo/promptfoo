@@ -287,6 +287,20 @@ export interface ClaudeCodeOptions {
   append_system_prompt?: string;
 
   /**
+   * When `true`, strip per-user dynamic sections (working directory, auto-memory,
+   * git status) from the Claude Code preset system prompt so the prompt-caching
+   * prefix stays static and eligible for cross-user cache hits. The stripped
+   * context is re-injected as the first user message so the model still has
+   * access to it. Has no effect when `custom_system_prompt` is set.
+   *
+   * Useful for large eval fleets where many runs share the same system prompt
+   * and the per-user dynamic context would otherwise bust the cache.
+   *
+   * @see https://platform.claude.com/docs/en/agent-sdk/settings
+   */
+  exclude_dynamic_sections?: boolean;
+
+  /**
    * Since we run CC by default with a readonly set of allowed_tools, user can either fully replace the list ('custom_allowed_tools'), append to it ('append_allowed_tools'), or allow all tools ('allow_all_tools')
    */
   custom_allowed_tools?: string[];
@@ -988,6 +1002,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             type: 'preset',
             preset: 'claude_code',
             append: config.append_system_prompt,
+            ...(config.exclude_dynamic_sections ? { excludeDynamicSections: true } : {}),
           },
       maxThinkingTokens: config.max_thinking_tokens,
       allowedTools,

@@ -2218,6 +2218,45 @@ describe('ClaudeCodeSDKProvider', () => {
             }),
           });
         });
+
+        it('forwards exclude_dynamic_sections to the preset system prompt', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: { exclude_dynamic_sections: true, append_system_prompt: 'Extras' },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              systemPrompt: {
+                type: 'preset',
+                preset: 'claude_code',
+                append: 'Extras',
+                excludeDynamicSections: true,
+              },
+            }),
+          });
+        });
+
+        it('omits excludeDynamicSections when exclude_dynamic_sections is false/unset', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: { exclude_dynamic_sections: false },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          const passedOptions = mockQuery.mock.calls.at(-1)?.[0]?.options as Record<
+            string,
+            unknown
+          >;
+          const passedSystemPrompt = passedOptions.systemPrompt as Record<string, unknown>;
+          expect(passedSystemPrompt).not.toHaveProperty('excludeDynamicSections');
+        });
       });
     });
 

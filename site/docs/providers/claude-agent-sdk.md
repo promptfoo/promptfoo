@@ -156,6 +156,7 @@ prompts:
 | `betas`                              | string[]      | Enable beta features (e.g., `['context-1m-2025-08-07']` for 1M context)                                      | None                     |
 | `custom_system_prompt`               | string        | Replace default system prompt                                                                                | None                     |
 | `append_system_prompt`               | string        | Append to default system prompt                                                                              | None                     |
+| `exclude_dynamic_sections`           | boolean       | Strip per-user dynamic sections from the preset prompt so it stays cacheable across runs                     | false                    |
 | `tools`                              | array/object  | Base set of built-in tools (array of names or `{type: 'preset', preset: 'claude_code'}`)                     | None                     |
 | `custom_allowed_tools`               | string[]      | Replace default allowed tools                                                                                | None                     |
 | `append_allowed_tools`               | string[]      | Add to default allowed tools                                                                                 | None                     |
@@ -219,6 +220,8 @@ Claude Agent SDK also supports configuring models through [environment variables
 ## System Prompt
 
 Unless you specify a `custom_system_prompt`, the default Claude Code system prompt will be used. You can append additional instructions to it with `append_system_prompt`.
+
+For multi-user or high-volume eval fleets, set `exclude_dynamic_sections: true` to strip per-user context (working directory, auto-memory, git status) from the preset prompt so the prompt-caching prefix stays static and hits cross-user. The stripped context is re-injected as the first user message so the model still has access to it. Has no effect when `custom_system_prompt` is set.
 
 :::info
 Note that this differs slightly from the Claude Agent SDK's behavior when used independently of Promptfoo. The Agent SDK will _not_ use the Claude Code system prompt by default unless it's specified—it will instead use an empty system prompt if none is provided. If you want to use an empty system prompt with this provider, set `custom_system_prompt` to an empty string.
