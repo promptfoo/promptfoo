@@ -401,6 +401,32 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBe(5.0075);
   });
 
+  it('should fall back to model default for partial audio override (audioInputCost only)', () => {
+    const cost = calculateOpenAICost(
+      'gpt-4o-audio-preview',
+      { audioInputCost: 0.01 },
+      1000,
+      500,
+      200,
+      100,
+    );
+    const expected = (2.5 * 1000) / 1e6 + (10 * 500) / 1e6 + 0.01 * 200 + (80 * 100) / 1e6;
+    expect(cost).toBeCloseTo(expected, 6);
+  });
+
+  it('should fall back to audioCost for partial audio override (audioInputCost + audioCost)', () => {
+    const cost = calculateOpenAICost(
+      'gpt-4o-audio-preview',
+      { audioCost: 0.02, audioInputCost: 0.01 },
+      1000,
+      500,
+      200,
+      100,
+    );
+    const expected = (2.5 * 1000) / 1e6 + (10 * 500) / 1e6 + 0.01 * 200 + 0.02 * 100;
+    expect(cost).toBeCloseTo(expected, 6);
+  });
+
   it('should handle a model with no cost property', () => {
     const cost = calculateOpenAICost('text-davinci-002', {}, 1000, 500);
     expect(cost).toBeUndefined();
