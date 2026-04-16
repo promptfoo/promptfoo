@@ -188,6 +188,7 @@ prompts:
 | `executable`                         | string        | JavaScript runtime: `node`, `bun`, or `deno`                                                                 | Auto-detected            |
 | `executable_args`                    | string[]      | Arguments to pass to the JavaScript runtime                                                                  | None                     |
 | `extra_args`                         | object        | Additional CLI arguments (keys without `--`, values as strings or null for flags)                            | None                     |
+| `env`                                | object        | Extra environment variables to forward to the SDK subprocess (e.g. `OTEL_*`, `CLAUDE_CODE_ENABLE_TELEMETRY`) | None                     |
 | `path_to_claude_code_executable`     | string        | Path to a custom Claude Code executable                                                                      | Built-in                 |
 | `spawn_claude_code_process`          | function      | Custom spawn function for VMs/containers (programmatic only)                                                 | Default spawn            |
 
@@ -960,6 +961,29 @@ assert:
 ```
 
 For skill evals specifically, prefer the deterministic [`skill-used`](/docs/configuration/expected-outputs/deterministic/#skill-used) assertion over raw JavaScript when possible. Promptfoo derives `metadata.skillCalls` from these `Skill` tool calls automatically.
+
+## Tracing
+
+When [tracing](/docs/tracing/) is enabled, every provider call emits an OpenTelemetry span using the GenAI semantic conventions (`gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.*`, `gen_ai.response.model`, `gen_ai.response.finish_reasons`, etc.) plus a child span per completed tool call (`tool {name}` with `tool.input`, `tool.output`, `tool.is_error`). Spans are parented to the evaluation trace so they appear grouped in the Traces tab.
+
+The W3C `TRACEPARENT` environment variable is propagated to the SDK subprocess so telemetry it exports attaches to the same trace:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      env:
+        CLAUDE_CODE_ENABLE_TELEMETRY: '1'
+        OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:4318'
+        OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf'
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+```
 
 ## Caching Behavior
 

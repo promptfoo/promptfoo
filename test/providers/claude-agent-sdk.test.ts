@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearCache, disableCache, enableCache, getCache } from '../../src/cache';
+import { clearCache, disableCache, enableCache, getCache, isCacheEnabled } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import {
@@ -11,6 +11,7 @@ import {
   FS_READONLY_ALLOWED_TOOLS,
 } from '../../src/providers/claude-agent-sdk';
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
+import * as genaiTracer from '../../src/tracing/genaiTracer';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import type {
   NonNullableUsage,
@@ -542,6 +543,116 @@ describe('ClaudeCodeSDKProvider', () => {
 
         const result = checkProviderApiKeys([provider]);
         expect(result.size).toBe(0);
+      });
+    });
+
+    describe('config.env passthrough (OTEL / subprocess env)', () => {
+      it('should forward config.env entries to the SDK subprocess env', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          config: {
+            env: {
+              CLAUDE_CODE_ENABLE_TELEMETRY: '1',
+              OTEL_EXPORTER_OTLP_ENDPOINT: 'http://localhost:4318',
+              OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
+            },
+          },
+        });
+        await provider.callApi('prompt');
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.env.CLAUDE_CODE_ENABLE_TELEMETRY).toBe('1');
+        expect(callArgs.options.env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe('http://localhost:4318');
+        expect(callArgs.options.env.OTEL_EXPORTER_OTLP_PROTOCOL).toBe('http/protobuf');
+      });
+
+      it('should let EnvOverrides take precedence over config.env', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'override-key' },
+          config: {
+            env: {
+              ANTHROPIC_API_KEY: 'config-key',
+              OTEL_SERVICE_NAME: 'claude-agent-sdk',
+            },
+          },
+        });
+        await provider.callApi('prompt');
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.env.ANTHROPIC_API_KEY).toBe('override-key');
+        expect(callArgs.options.env.OTEL_SERVICE_NAME).toBe('claude-agent-sdk');
+      });
+
+      it('should propagate context.traceparent to env.TRACEPARENT for subprocess parenting', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const traceparent = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
+        await provider.callApi('prompt', {
+          traceparent,
+          prompt: { raw: 'prompt', label: 'prompt' },
+          vars: {},
+        } as CallApiContextParams);
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        // The wrapping span creates a new child span under the provided trace, so the
+        // TRACEPARENT forwarded to the SDK should share the same 32-char trace_id.
+        const forwarded: string | undefined = callArgs.options.env.TRACEPARENT;
+        expect(forwarded).toBeDefined();
+        const [, traceId] = forwarded!.split('-');
+        expect(traceId).toBe('0af7651916cd43dd8448eb211c80319c');
+      });
+
+      it('should not set TRACEPARENT when no active trace context is provided', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('prompt');
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.env.TRACEPARENT).toBeUndefined();
+      });
+
+      it('should not bust the cache when only TRACEPARENT differs between runs', async () => {
+        const wasEnabled = isCacheEnabled();
+        enableCache();
+        try {
+          mockQuery.mockImplementation(() => createMockResponse('cached-output'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+
+          const first = await provider.callApi('same prompt', {
+            traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+            prompt: { raw: 'same prompt', label: 'same prompt' },
+            vars: {},
+          } as CallApiContextParams);
+          expect(first.cached).toBeFalsy();
+
+          const second = await provider.callApi('same prompt', {
+            // Different traceparent → must not affect cache key
+            traceparent: '00-ffffffffffffffffffffffffffffffff-b7ad6b7169203331-01',
+            prompt: { raw: 'same prompt', label: 'same prompt' },
+            vars: {},
+          } as CallApiContextParams);
+          expect(second.cached).toBe(true);
+        } finally {
+          await clearCache();
+          if (wasEnabled) {
+            enableCache();
+          } else {
+            disableCache();
+          }
+        }
       });
     });
 
@@ -3127,6 +3238,253 @@ describe('ClaudeCodeSDKProvider', () => {
         );
         expect(subAgentCalls).toHaveLength(2);
         expect(subAgentCalls.map((t: any) => t.name)).toEqual(['Glob', 'Grep']);
+      });
+    });
+
+    describe('GenAI tracing', () => {
+      function installTracerSpy() {
+        const startSpan = vi.fn();
+        const emittedSpans: Array<{
+          name: string;
+          options: any;
+          attrs: Record<string, any>;
+          status?: { code: number };
+          endedAt?: number;
+        }> = [];
+        startSpan.mockImplementation((name: string, options: any = {}) => {
+          const attrs: Record<string, any> = { ...(options.attributes ?? {}) };
+          const entry: (typeof emittedSpans)[number] = { name, options, attrs };
+          emittedSpans.push(entry);
+          return {
+            setAttribute: (k: string, v: unknown) => {
+              attrs[k] = v;
+            },
+            setStatus: (status: { code: number }) => {
+              entry.status = status;
+            },
+            end: (endedAt?: number) => {
+              entry.endedAt = endedAt;
+            },
+          };
+        });
+        vi.spyOn(genaiTracer, 'getGenAITracer').mockReturnValue({ startSpan } as any);
+        return { startSpan, emittedSpans };
+      }
+
+      it('emits a child span per completed tool call with tool.* attributes', async () => {
+        const { emittedSpans } = installTracerSpy();
+
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'tool-1',
+                  name: 'Read',
+                  input: { file_path: '/test/file.ts' },
+                },
+              ]),
+              session_id: 'test-session',
+            },
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'tool-1',
+                    content: 'file contents here',
+                    is_error: false,
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'test-session',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'ok',
+              usage: createMockUsage(10, 20),
+              total_cost_usd: 0.001,
+              duration_ms: 500,
+              duration_api_ms: 400,
+              is_error: false,
+              num_turns: 1,
+              permission_denials: [],
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('prompt');
+
+        const toolSpan = emittedSpans.find((s) => s.name === 'tool Read');
+        expect(toolSpan).toBeDefined();
+        expect(toolSpan!.attrs['tool.name']).toBe('Read');
+        expect(toolSpan!.attrs['tool.is_error']).toBe(false);
+        expect(toolSpan!.attrs['tool.input']).toContain('/test/file.ts');
+        expect(toolSpan!.attrs['tool.output']).toContain('file contents here');
+        expect(typeof toolSpan!.options.startTime).toBe('number');
+        expect(typeof toolSpan!.endedAt).toBe('number');
+        expect(toolSpan!.endedAt! >= toolSpan!.options.startTime).toBe(true);
+        expect(toolSpan!.status?.code).toBe(1); // SpanStatusCode.OK
+      });
+
+      it('marks tool spans as ERROR when the tool_result reports an error', async () => {
+        const { emittedSpans } = installTracerSpy();
+
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'tool-err',
+                  name: 'Bash',
+                  input: { command: 'rm -rf /' },
+                },
+              ]),
+              session_id: 'test-session',
+            },
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'tool-err',
+                    content: 'Permission denied',
+                    is_error: true,
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'test-session',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'done',
+              usage: createMockUsage(5, 5),
+              total_cost_usd: 0.001,
+              duration_ms: 100,
+              duration_api_ms: 50,
+              is_error: false,
+              num_turns: 1,
+              permission_denials: [],
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('prompt');
+
+        const toolSpan = emittedSpans.find((s) => s.name === 'tool Bash');
+        expect(toolSpan).toBeDefined();
+        expect(toolSpan!.attrs['tool.is_error']).toBe(true);
+        expect(toolSpan!.status?.code).toBe(2); // SpanStatusCode.ERROR
+      });
+
+      it('does not emit a tool span when the tool_use has no matching result', async () => {
+        const { emittedSpans } = installTracerSpy();
+
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'orphan',
+                  name: 'Read',
+                  input: { file_path: '/x' },
+                },
+              ]),
+              session_id: 'test-session',
+            },
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'test-session',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'ok',
+              usage: createMockUsage(1, 1),
+              total_cost_usd: 0,
+              duration_ms: 1,
+              duration_api_ms: 1,
+              is_error: false,
+              num_turns: 1,
+              permission_denials: [],
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('prompt');
+
+        expect(emittedSpans.some((s) => s.name === 'tool Read')).toBe(false);
+      });
+
+      it('propagates response.model from modelUsage and finish_reasons from terminal_reason', async () => {
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'session-finish',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'ok',
+              usage: createMockUsage(1, 1),
+              total_cost_usd: 0,
+              duration_ms: 1,
+              duration_api_ms: 1,
+              is_error: false,
+              num_turns: 2,
+              permission_denials: [],
+              modelUsage: {
+                'claude-haiku-4-5-20251001': {
+                  inputTokens: 1,
+                  outputTokens: 1,
+                  cacheReadInputTokens: 0,
+                  cacheCreationInputTokens: 0,
+                  webSearchRequests: 0,
+                  costUSD: 0,
+                  contextWindow: 200000,
+                  maxOutputTokens: 8192,
+                },
+              },
+              terminal_reason: 'max_turns' as TerminalReason,
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('prompt');
+
+        // Attributes land on the wrapping provider span; exercised end-to-end in
+        // the docker/e2e runs. Here we assert the mapping path via the
+        // surfaced metadata the extractor depends on.
+        expect(result.metadata?.modelUsage).toHaveProperty('claude-haiku-4-5-20251001');
+        expect(result.metadata?.terminalReason).toBe('max_turns');
       });
     });
   });
