@@ -65,11 +65,13 @@ If you also want a provider-level Python OpenTelemetry span alongside the SDK sp
 ## Red Team The Agent
 
 ```bash
-npx promptfoo@latest redteam generate -c promptfooconfig.redteam.yaml -o redteam.generated.yaml
-npx promptfoo@latest redteam eval -c redteam.generated.yaml --no-cache --no-share -o redteam-results.json
+npx promptfoo@latest redteam generate -c promptfooconfig.redteam.yaml -o redteam.generated.yaml --remote --force --strict
+npx promptfoo@latest redteam eval -c redteam.generated.yaml --no-cache --no-share -j 1 -o redteam-results.json
 ```
 
-The red-team config targets the airline agent with tracing enabled and returns only the user-visible final answer, not the verbose eval transcript. It uses a small baseline covering tool discovery, prompt extraction, goal hijacking, and excessive agency. Inspect any failures together with the Trace Timeline so you can distinguish a refused attack from a tool-path or boundary failure.
+The red-team config targets the airline agent with tracing enabled and returns only the user-visible final answer, not the verbose eval transcript. It exercises agent-specific boundaries across OWASP Agentic AI, OWASP LLM, MITRE ATLAS, and NIST AI RMF mappings: tool discovery, prompt extraction, debug access, system prompt override, authorization bypass, cross-session leakage, memory poisoning, privacy, excessive agency, and custom airline policy probes. It also applies jailbreak and encoding strategies.
+
+This sample is intentionally not a production-hardened airline agent. Some generated probes should find real breaks, especially around encoded third-party booking changes and multi-turn authorization bypasses. Each generated attack inherits trace assertions that require OpenAI Agents SDK spans, require zero traced errors, and fail if the mutating `update_seat` tool is used during adversarial probes. Inspect failures together with the Trace Timeline so you can distinguish a user-visible refusal problem from an internal tool-path or boundary failure.
 
 ## Notes
 
