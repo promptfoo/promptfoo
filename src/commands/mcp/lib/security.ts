@@ -67,7 +67,7 @@ export function validateFilePath(filePath: string, basePath?: string): void {
  */
 export function validateMcpFilePath(filePath: string): void {
   const basePath = process.cwd();
-  validateFilePath(filePath, basePath);
+  validateFilePath(filePath);
 
   const resolvedBase = fs.realpathSync(basePath);
   const resolvedPath = path.resolve(basePath, filePath);

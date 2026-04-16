@@ -111,6 +111,25 @@ describe('MCP Security', () => {
         }
       },
     );
+
+    it.skipIf(process.platform === 'win32')(
+      'should allow real workspace paths when cwd is a symlink',
+      () => {
+        const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+        const realWorkspace = path.join(tempRoot, 'real-workspace');
+        const symlinkWorkspace = path.join(tempRoot, 'symlink-workspace');
+        fs.mkdirSync(realWorkspace);
+        fs.symlinkSync(realWorkspace, symlinkWorkspace);
+        const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(symlinkWorkspace);
+
+        try {
+          expect(() => validateMcpFilePath(path.join(realWorkspace, 'output.yaml'))).not.toThrow();
+        } finally {
+          cwdSpy.mockRestore();
+          fs.rmSync(tempRoot, { force: true, recursive: true });
+        }
+      },
+    );
   });
 
   describe('escapeRegExp', () => {
