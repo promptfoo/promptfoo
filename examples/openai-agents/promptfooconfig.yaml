@@ -6,7 +6,13 @@ prompts:
 
 providers:
   - id: file://agent_provider.py:call_api
-    label: OpenAI Agents Python SDK
+    label: airline-workflow
+    config:
+      model: gpt-5.4-mini
+      max_turns: 12
+      otlp_endpoint: http://localhost:4318
+  - id: file://agent_provider.py:call_sandbox_api
+    label: sandbox-workflow
     config:
       model: gpt-5.4-mini
       max_turns: 8
@@ -14,6 +20,8 @@ providers:
 
 tests:
   - description: Long-horizon booking change followed by a policy question
+    providers:
+      - airline-workflow
     vars:
       task: Complete the booking change and answer the follow-up policy question.
       steps_json: |
@@ -62,6 +70,22 @@ tests:
           min: 3
       - type: trace-span-count
         value:
+          pattern: 'task *'
+          min: 3
+      - type: trace-span-count
+        value:
+          pattern: 'turn *'
+          min: 6
+      - type: trace-span-count
+        value:
+          pattern: 'response *'
+          min: 6
+      - type: trace-span-count
+        value:
+          pattern: 'tool *'
+          min: 3
+      - type: trace-span-count
+        value:
           pattern: 'handoff *'
           min: 2
       - type: trace-error-spans
@@ -72,6 +96,8 @@ tests:
         value: Move the passenger with confirmation ABC123 to seat 14C and answer the baggage policy question correctly.
 
   - description: FAQ-only request should not change the booking
+    providers:
+      - airline-workflow
     vars:
       task: Answer a policy question without editing the booking.
       steps_json: |
@@ -87,6 +113,86 @@ tests:
         value: faq_lookup
       - type: not-trajectory:tool-used
         value: update_seat
+      - type: trace-error-spans
+        value:
+          max_count: 0
+
+  - description: Sandbox agent reviews a staged Python workspace
+    providers:
+      - sandbox-workflow
+    vars:
+      task: Read repo/task.md, run exactly `./bin/python -m unittest discover -s repo/tests`, inspect the implementation, and report the high-severity ticket details and minimal fix.
+    metadata:
+      testCaseId: openai-agents-python-sandbox
+    assert:
+      - type: contains
+        value: TICKET-014
+      - type: contains
+        value: high
+      - type: contains
+        value: platform-integrations
+      - type: contains
+        value: src/discount_policy.py
+      - type: contains
+        value: ./bin/python -m unittest
+      - type: contains
+        value: AssertionError
+      - type: contains
+        value: discount_percent >= 20
+      - type: trace-span-count
+        value:
+          pattern: 'task *'
+          min: 1
+      - type: trace-span-count
+        value:
+          pattern: 'agent Sandbox Workspace Analyst'
+          min: 1
+      - type: trace-span-count
+        value:
+          pattern: 'turn *'
+          min: 2
+      - type: trace-span-count
+        value:
+          pattern: 'response *'
+          min: 2
+      - type: trace-span-count
+        value:
+          pattern: tool exec_command
+          min: 2
+      - type: trace-span-count
+        value:
+          pattern: sandbox.start
+          min: 1
+      - type: trace-span-count
+        value:
+          pattern: sandbox.running
+          min: 1
+      - type: trace-span-count
+        value:
+          pattern: sandbox.cleanup*
+          min: 1
+      - type: trace-span-count
+        value:
+          pattern: sandbox.stop
+          min: 1
+      - type: trace-span-count
+        value:
+          pattern: sandbox.shutdown
+          min: 1
+      - type: trajectory:step-count
+        value:
+          type: command
+          min: 2
+      - type: trajectory:step-count
+        value:
+          type: command
+          pattern: '*unittest*'
+          min: 1
+      - type: trajectory:step-count
+        value:
+          type: command
+          pattern: '*discount_policy.py*'
+          min: 1
       - type: trace-error-spans
         value:
           max_count: 0

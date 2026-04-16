@@ -71,11 +71,69 @@ def _value_to_otlp(value: Any) -> dict[str, Any]:
     return {"stringValue": json.dumps(value, ensure_ascii=False, sort_keys=True)}
 
 
+def _command_to_string(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value.strip() or None
+    if isinstance(value, list):
+        command = " ".join(str(part) for part in value if str(part).strip())
+        return command.strip() or None
+    return str(value).strip() or None
+
+
 def _attributes_to_otlp(attributes: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         {"key": key, "value": _value_to_otlp(value)}
         for key, value in attributes.items()
     ]
+
+
+def _apply_custom_span_data(
+    span_data: dict[str, Any], attributes: dict[str, Any]
+) -> str:
+    custom_name = str(span_data.get("name") or "custom")
+    attributes["openai.agents.custom_span.name"] = custom_name
+
+    data = span_data.get("data")
+    if not isinstance(data, dict):
+        return custom_name
+
+    for key, value in data.items():
+        attributes[key] = value
+
+    sdk_span_type = data.get("sdk_span_type")
+    if isinstance(sdk_span_type, str) and sdk_span_type:
+        attributes["openai.agents.sdk_span_type"] = sdk_span_type
+
+    command = _command_to_string(data.get("command"))
+    if command:
+        attributes["command"] = command
+        if custom_name.lower().startswith("codex"):
+            attributes["codex.command"] = command
+
+    exit_code = data.get("exit_code")
+    if isinstance(exit_code, int):
+        attributes["process.exit.code"] = exit_code
+
+    sandbox_operation = data.get("sandbox.operation")
+    if isinstance(sandbox_operation, str) and sandbox_operation:
+        return f"sandbox.{sandbox_operation}"
+
+    if sdk_span_type == "task":
+        task_name = data.get("name")
+        return f"task {task_name}" if task_name else "task"
+
+    if sdk_span_type == "turn":
+        turn = data.get("turn")
+        agent_name = data.get("agent_name")
+        if turn is not None and agent_name:
+            return f"turn {turn} {agent_name}"
+        if turn is not None:
+            return f"turn {turn}"
+        return "turn"
+
+    return custom_name
 
 
 class PromptfooOTLPExporter(TracingExporter):
@@ -188,6 +246,8 @@ class PromptfooOTLPExporter(TracingExporter):
             response_id = span_data.get("response_id") or "response"
             name = f"response {response_id}"
             attributes["openai.response_id"] = response_id
+        elif span_type == "custom":
+            name = _apply_custom_span_data(span_data, attributes)
 
         if span.trace_metadata:
             for key, value in span.trace_metadata.items():

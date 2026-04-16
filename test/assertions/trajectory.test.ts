@@ -162,6 +162,35 @@ describe('trajectory utilities', () => {
     ]);
   });
 
+  it('normalizes OpenAI Agents sandbox exec_command tool spans as commands', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'sandbox-command',
+          name: 'tool exec_command',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'exec_command',
+            'tool.arguments': '{"cmd":"cat repo/tickets/TICKET-014.md","workdir":"/tmp/ws"}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('command');
+    expect(steps[0].name).toBe('cat repo/tickets/TICKET-014.md');
+    expect(steps[0].args).toEqual({
+      cmd: 'cat repo/tickets/TICKET-014.md',
+      workdir: '/tmp/ws',
+    });
+    expect(steps[0].aliases).toEqual(
+      expect.arrayContaining(['tool exec_command', 'exec_command', 'cat']),
+    );
+  });
+
   it('preserves original span order when timestamps are tied', () => {
     const steps = extractTrajectorySteps({
       ...mockTraceData,

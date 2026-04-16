@@ -14,12 +14,18 @@ MODULE_PATH = EXAMPLE_DIR / "agent_provider.py"
 def load_agent_provider():
     agents_module = types.ModuleType("agents")
     items_module = types.ModuleType("agents.items")
+    run_module = types.ModuleType("agents.run")
+    sandbox_module = types.ModuleType("agents.sandbox")
+    sandbox_entries_module = types.ModuleType("agents.sandbox.entries")
+    sandbox_sandboxes_module = types.ModuleType("agents.sandbox.sandboxes")
+    sandbox_unix_local_module = types.ModuleType("agents.sandbox.sandboxes.unix_local")
     tracing_module = types.ModuleType("promptfoo_tracing")
 
     class Agent:
-        def __init__(self, *_, name=None, handoffs=None, **__):
+        def __init__(self, *_, name=None, handoffs=None, **kwargs):
             self.name = name or "Agent"
             self.handoffs = list(handoffs or [])
+            self.kwargs = kwargs
 
     class ItemHelpers:
         @staticmethod
@@ -43,6 +49,32 @@ def load_agent_provider():
         def __init__(self, *args, **kwargs):
             self.args = args
             self.kwargs = kwargs
+
+    class RunConfig:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    class SandboxRunConfig:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    class Manifest:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.entries = kwargs.get("entries", {})
+
+    class SandboxAgent(Agent):
+        def __init__(self, *args, default_manifest=None, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.default_manifest = default_manifest
+
+    class File:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.content = kwargs.get("content")
+
+    class UnixLocalSandboxClient:
+        pass
 
     def function_tool(*decorator_args, **decorator_kwargs):
         if (
@@ -84,6 +116,15 @@ def load_agent_provider():
     agents_module.handoff = handoff
     agents_module.trace = trace
 
+    run_module.RunConfig = RunConfig
+
+    sandbox_module.Manifest = Manifest
+    sandbox_module.SandboxAgent = SandboxAgent
+    sandbox_module.SandboxRunConfig = SandboxRunConfig
+
+    sandbox_entries_module.File = File
+    sandbox_unix_local_module.UnixLocalSandboxClient = UnixLocalSandboxClient
+
     items_module.HandoffOutputItem = HandoffOutputItem
     items_module.MessageOutputItem = MessageOutputItem
     items_module.ToolCallOutputItem = ToolCallOutputItem
@@ -92,6 +133,11 @@ def load_agent_provider():
 
     sys.modules["agents"] = agents_module
     sys.modules["agents.items"] = items_module
+    sys.modules["agents.run"] = run_module
+    sys.modules["agents.sandbox"] = sandbox_module
+    sys.modules["agents.sandbox.entries"] = sandbox_entries_module
+    sys.modules["agents.sandbox.sandboxes"] = sandbox_sandboxes_module
+    sys.modules["agents.sandbox.sandboxes.unix_local"] = sandbox_unix_local_module
     sys.modules["promptfoo_tracing"] = tracing_module
 
     spec = importlib.util.spec_from_file_location(
@@ -231,6 +277,41 @@ class AgentProviderTests(unittest.TestCase):
         )
 
         self.assertEqual(session_id, "promptfoo-openai-agents-eval-1-case-1-repeat-2")
+
+    def test_sandbox_manifest_stages_ticket_fixture(self):
+        manifest = AGENT_PROVIDER._build_sandbox_manifest()
+
+        self.assertIn("AGENTS.md", manifest.entries)
+        self.assertIn("bin/python", manifest.entries)
+        self.assertIn("repo/task.md", manifest.entries)
+        self.assertIn("repo/__init__.py", manifest.entries)
+        self.assertIn("repo/tickets/TICKET-014.md", manifest.entries)
+        self.assertIn("repo/tests/__init__.py", manifest.entries)
+        self.assertIn("repo/tests/test_discount_policy.py", manifest.entries)
+        self.assertIn(
+            b"platform-integrations",
+            manifest.entries["repo/tickets/TICKET-014.md"].content,
+        )
+        self.assertIn(
+            b"./bin/python -m unittest discover -s repo/tests",
+            manifest.entries["AGENTS.md"].content,
+        )
+        self.assertEqual(
+            manifest.kwargs["environment"]["value"]["PATH"],
+            "bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
+        )
+        self.assertIn(
+            b"return discount_percent >= 20",
+            manifest.entries["repo/task.md"].content,
+        )
+
+    def test_sandbox_agent_uses_staged_manifest(self):
+        agent = AGENT_PROVIDER._build_sandbox_agent("gpt-5.4-mini")
+
+        self.assertEqual(agent.name, "Sandbox Workspace Analyst")
+        self.assertIn("repo/task.md", agent.default_manifest.entries)
+        self.assertIn("repo/src/discount_policy.py", agent.default_manifest.entries)
+        self.assertEqual(agent.kwargs["model_settings"].kwargs["tool_choice"], "required")
 
 
 if __name__ == "__main__":

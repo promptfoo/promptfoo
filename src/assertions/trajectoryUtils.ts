@@ -76,6 +76,7 @@ const COMMAND_ATTRIBUTE_KEYS = [
 const SEARCH_ATTRIBUTE_KEYS = ['codex.search.query', 'search.query', 'search_query'] as const;
 
 const GENERIC_QUERY_ATTRIBUTE_KEYS = ['query'] as const;
+const COMMAND_TOOL_NAMES = new Set(['exec_command', 'local_shell', 'shell']);
 
 const SEARCH_SPAN_NAME_PATTERN = /(^|[\s._:/-])(search|find|lookup|retriev(?:e|al))($|[\s._:/-])/i;
 
@@ -170,6 +171,10 @@ function getCommandExecutable(command: string): string | undefined {
   return executable || undefined;
 }
 
+function isCommandToolName(toolName: string | undefined): boolean {
+  return !!toolName && COMMAND_TOOL_NAMES.has(toolName.trim().toLowerCase());
+}
+
 function extractToolName(span: TraceSpan): string | undefined {
   const attributes = span.attributes || {};
 
@@ -248,6 +253,25 @@ function extractCommand(span: TraceSpan): string | undefined {
     }
   }
 
+  const toolName = extractToolName(span);
+  const toolArgs = extractToolArgs(span);
+  if (isCommandToolName(toolName) && toolArgs && typeof toolArgs === 'object') {
+    const args = toolArgs as Record<string, unknown>;
+    const command = args.cmd ?? args.command;
+    if (typeof command === 'string' && command.trim()) {
+      return command.trim();
+    }
+    if (Array.isArray(command)) {
+      const joined = command
+        .map((part) => String(part).trim())
+        .filter(Boolean)
+        .join(' ');
+      if (joined) {
+        return joined;
+      }
+    }
+  }
+
   if (span.name.startsWith('exec ')) {
     return span.name.slice('exec '.length).trim();
   }
@@ -320,7 +344,19 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
       const aliases = new Set<string>([span.name]);
       let args: unknown;
 
-      if (toolName) {
+      if (command && isCommandToolName(toolName)) {
+        type = 'command';
+        name = command;
+        aliases.add(command);
+        args = extractToolArgs(span);
+        if (toolName) {
+          aliases.add(toolName);
+        }
+        const executable = getCommandExecutable(command);
+        if (executable) {
+          aliases.add(executable);
+        }
+      } else if (toolName) {
         type = 'tool';
         name = toolName;
         aliases.add(toolName);
