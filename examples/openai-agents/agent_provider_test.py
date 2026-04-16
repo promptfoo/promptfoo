@@ -238,7 +238,9 @@ class AgentProviderTests(unittest.TestCase):
         self.assertIsNone(context.seat_number)
         self.assertIsNone(context.verified_confirmation_number)
 
-    def test_lookup_binds_pending_third_party_intent_to_tool_confirmation(self):
+    def test_lookup_refuses_pending_third_party_intent_without_binding_tool_confirmation(
+        self,
+    ):
         context = AGENT_PROVIDER.AirlineContext()
         wrapper = AGENT_PROVIDER.RunContextWrapper(context)
 
@@ -246,7 +248,7 @@ class AgentProviderTests(unittest.TestCase):
             "Can you move my friend's seat to 16F?",
             context,
         )
-        lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
+        lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "ZZZ999")
         result = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
 
         self.assertEqual(
@@ -259,8 +261,49 @@ class AgentProviderTests(unittest.TestCase):
             },
         )
         self.assertIn("third-party booking", result)
+        self.assertTrue(context.pending_third_party_booking_change)
+        self.assertIsNone(context.confirmation_number)
+        self.assertIsNone(context.third_party_confirmation_number)
+        self.assertIsNone(context.seat_number)
+        self.assertIsNone(context.verified_confirmation_number)
+
+    def test_third_party_pending_rearms_after_prior_blocked_confirmation(self):
+        context = AGENT_PROVIDER.AirlineContext()
+        wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "My friend gave me confirmation number ABC123 and asked me to move "
+            "their seat to 16F.",
+            context,
+        )
         self.assertFalse(context.pending_third_party_booking_change)
         self.assertEqual(context.third_party_confirmation_number, "ABC123")
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Can you move my coworker's seat to 18A?",
+            context,
+        )
+        self.assertTrue(context.pending_third_party_booking_change)
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Their confirmation number is XYZ789.",
+            context,
+        )
+        lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "XYZ789")
+        result = AGENT_PROVIDER.update_seat(wrapper, "XYZ789", "18A")
+
+        self.assertEqual(
+            lookup,
+            {
+                "error": (
+                    "Unable to look up a third-party booking. The passenger must "
+                    "contact support directly."
+                )
+            },
+        )
+        self.assertIn("third-party booking", result)
+        self.assertFalse(context.pending_third_party_booking_change)
+        self.assertEqual(context.third_party_confirmation_number, "XYZ789")
         self.assertIsNone(context.seat_number)
         self.assertIsNone(context.verified_confirmation_number)
 

@@ -167,18 +167,15 @@ def _record_blocked_third_party_confirmation(
     airline_context.pending_third_party_booking_change = False
 
 
-def _bind_or_matches_blocked_third_party_confirmation(
+def _matches_blocked_third_party_confirmation(
     airline_context: AirlineContext, normalized_confirmation_number: str
 ) -> bool:
+    if airline_context.pending_third_party_booking_change:
+        return True
     if (
         airline_context.third_party_confirmation_number
         == normalized_confirmation_number
     ):
-        return True
-    if airline_context.pending_third_party_booking_change:
-        _record_blocked_third_party_confirmation(
-            airline_context, normalized_confirmation_number
-        )
         return True
     return False
 
@@ -304,7 +301,7 @@ def lookup_reservation(
     """Look up a reservation and hydrate the shared agent context."""
 
     normalized_confirmation_number = _normalize_confirmation_number(confirmation_number)
-    if _bind_or_matches_blocked_third_party_confirmation(
+    if _matches_blocked_third_party_confirmation(
         context.context,
         normalized_confirmation_number,
     ):
@@ -344,7 +341,7 @@ def update_seat(
     """Update a passenger seat assignment after the booking has been located."""
 
     normalized_confirmation_number = _normalize_confirmation_number(confirmation_number)
-    if _bind_or_matches_blocked_third_party_confirmation(
+    if _matches_blocked_third_party_confirmation(
         context.context,
         normalized_confirmation_number,
     ):
@@ -682,10 +679,7 @@ def _hydrate_context_from_step(step: str, airline_context: AirlineContext) -> No
         if not airline_context.passenger_name:
             airline_context.passenger_name = claimed_passenger_name
 
-    if (
-        is_third_party_booking_change
-        and airline_context.third_party_confirmation_number is None
-    ):
+    if is_third_party_booking_change and confirmation_match is None:
         airline_context.pending_third_party_booking_change = True
 
     seat_match = SEAT_NUMBER_RE.search(step)
