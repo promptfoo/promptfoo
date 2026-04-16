@@ -3065,7 +3065,17 @@ class Evaluator {
                 : row.response,
             },
           });
-          row.namedScores = afterEachOut.result.namedScores;
+          // Sanitize namedScores: only keep finite numbers to prevent NaN
+          // corruption in metrics aggregation (covers both return-value and
+          // in-place mutation paths).
+          const hookScores = afterEachOut.result.namedScores;
+          const sanitized: Record<string, number> = {};
+          for (const [key, value] of Object.entries(hookScores)) {
+            if (typeof value === 'number' && Number.isFinite(value)) {
+              sanitized[key] = value;
+            }
+          }
+          row.namedScores = sanitized;
           row.metadata = afterEachOut.result.metadata;
           if (row.response && afterEachOut.result.response) {
             row.response.metadata = afterEachOut.result.response.metadata;

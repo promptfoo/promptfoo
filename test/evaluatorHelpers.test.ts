@@ -1138,6 +1138,42 @@ describe('evaluatorHelpers', () => {
         expect(out.result.namedScores.shared_metric).toBe(99);
       });
 
+      it('should filter non-numeric namedScores values', async () => {
+        vi.mocked(transform).mockResolvedValue({
+          test: {} as TestCase,
+          result: {
+            namedScores: {
+              valid_int: 42,
+              valid_float: 3.14,
+              valid_zero: 0,
+              valid_negative: -5,
+              string_val: 'not_a_number' as any,
+              null_val: null as any,
+              array_val: [1, 2] as any,
+              object_val: { nested: true } as any,
+              nan_val: NaN,
+              infinity_val: Infinity,
+              neg_infinity_val: -Infinity,
+            },
+          },
+        });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
+        // Only finite numeric values should survive
+        expect(out.result.namedScores).toEqual({
+          existing_metric: 0.5,
+          valid_int: 42,
+          valid_float: 3.14,
+          valid_zero: 0,
+          valid_negative: -5,
+        });
+      });
+
       it('should not allow overriding success, score, or response.output via return value', async () => {
         vi.mocked(transform).mockResolvedValue({
           test: {} as TestCase,

@@ -742,13 +742,22 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
                     },
                   }
                 : currentResult.response;
+            // Filter namedScores to only include finite numeric values to prevent
+            // NaN corruption in metrics aggregation.
+            const returnedScores = extensionReturnValue.result.namedScores || {};
+            const validScores: Record<string, number> = {};
+            for (const [key, value] of Object.entries(returnedScores)) {
+              if (typeof value === 'number' && Number.isFinite(value)) {
+                validScores[key] = value;
+              }
+            }
             (updatedContext as AfterEachExtensionHookContext) = {
               test: (updatedContext as AfterEachExtensionHookContext).test,
               result: {
                 ...currentResult,
                 namedScores: {
                   ...currentResult.namedScores,
-                  ...(extensionReturnValue.result.namedScores || {}),
+                  ...validScores,
                 },
                 metadata: {
                   ...currentResult.metadata,
