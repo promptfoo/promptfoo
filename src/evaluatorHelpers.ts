@@ -760,6 +760,9 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
           }
           break;
         }
+        // No case for 'afterAll': it runs after results are persisted and is
+        // intended for side effects (monitoring, cleanup). Return values are
+        // intentionally ignored since there is no downstream consumer.
       }
     }
   }

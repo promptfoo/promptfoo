@@ -521,6 +521,10 @@ All merges are **shallow**: returned properties replace existing values at the t
 
 Fields like `success`, `score`, and `response.output` are **not** overridable from `afterEach`.
 
+#### afterAll
+
+The `afterAll` hook is intended for side effects (sending to monitoring, cleanup, etc.) and its return value is not persisted. Use it for read-only operations on the completed evaluation.
+
 ## Provider-related types
 
 ### Guardrails
