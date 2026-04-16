@@ -71,6 +71,15 @@ PASSENGER_NAME_RE = re.compile(
     re.IGNORECASE,
 )
 SEAT_NUMBER_RE = re.compile(r"\bseat\s+([0-9]{1,2}[A-Z])\b", re.IGNORECASE)
+FIRST_PARTY_CONFIRMATION_NUMBER_RE = re.compile(
+    r"\bmy\s+confirmation number(?: is|:)?\s+[A-Z0-9]{3,}\b",
+    re.IGNORECASE,
+)
+FIRST_PARTY_RESERVATION_RE = re.compile(
+    r"\b(?:(?:this|it)\s+is|it's)\s+my\s+(?:own\s+)?(?:reservation|booking)\b"
+    r"|\bmy\s+(?:own\s+)?(?:reservation|booking)\b",
+    re.IGNORECASE,
+)
 THIRD_PARTY_BOOKING_RE = re.compile(
     r"\b(?:friend|coworker|colleague|family member|mother|father|mom|dad|parent|daughter|son|child|children|kid|sister|brother|aunt|uncle|cousin|niece|nephew|grandmother|grandfather|grandparent|wife|husband|spouse|partner|someone else's|another passenger|their|his|her)\b",
     re.IGNORECASE,
@@ -153,6 +162,16 @@ def _normalize_name(name: str | None) -> str | None:
 
 def _is_third_party_booking_change(step: str) -> bool:
     return bool(THIRD_PARTY_BOOKING_RE.search(step) and BOOKING_CHANGE_RE.search(step))
+
+
+def _is_first_party_reservation_claim(step: str) -> bool:
+    return bool(
+        CONFIRMATION_NUMBER_RE.search(step)
+        and (
+            FIRST_PARTY_CONFIRMATION_NUMBER_RE.search(step)
+            or FIRST_PARTY_RESERVATION_RE.search(step)
+        )
+    )
 
 
 def _record_blocked_third_party_confirmation(
@@ -634,6 +653,7 @@ def _build_steps(prompt: str, vars_dict: dict[str, Any]) -> list[str]:
 
 def _hydrate_context_from_step(step: str, airline_context: AirlineContext) -> None:
     is_third_party_booking_change = _is_third_party_booking_change(step)
+    is_first_party_reservation_claim = _is_first_party_reservation_claim(step)
     confirmation_match = CONFIRMATION_NUMBER_RE.search(step)
     if confirmation_match:
         normalized_confirmation_number = _normalize_confirmation_number(
@@ -641,14 +661,23 @@ def _hydrate_context_from_step(step: str, airline_context: AirlineContext) -> No
         )
         if (
             is_third_party_booking_change
-            or airline_context.pending_third_party_booking_change
-            or airline_context.third_party_confirmation_number is not None
+            or (
+                airline_context.pending_third_party_booking_change
+                and not is_first_party_reservation_claim
+            )
+            or (
+                airline_context.third_party_confirmation_number is not None
+                and not is_first_party_reservation_claim
+            )
         ):
             _record_blocked_third_party_confirmation(
                 airline_context,
                 normalized_confirmation_number,
             )
         else:
+            if is_first_party_reservation_claim:
+                airline_context.third_party_confirmation_number = None
+                airline_context.pending_third_party_booking_change = False
             previous_confirmation_number = airline_context.confirmation_number
             _, reservation = _reservation_view(
                 airline_context

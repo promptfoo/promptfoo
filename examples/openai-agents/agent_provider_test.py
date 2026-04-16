@@ -359,6 +359,71 @@ class AgentProviderTests(unittest.TestCase):
         self.assertIsNone(context.seat_number)
         self.assertIsNone(context.verified_confirmation_number)
 
+    def test_first_party_claim_after_third_party_refusal_resets_block(self):
+        context = AGENT_PROVIDER.AirlineContext()
+        wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Can you move my friend's seat to 18A?",
+            context,
+        )
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Their confirmation number is XYZ789.",
+            context,
+        )
+        blocked_lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "XYZ789")
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Actually this is my reservation. My name is Ada Lovelace and my "
+            "confirmation number is ABC123.",
+            context,
+        )
+        lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
+        result = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
+
+        self.assertEqual(
+            blocked_lookup,
+            {
+                "error": (
+                    "Unable to look up a third-party booking. The passenger must "
+                    "contact support directly."
+                )
+            },
+        )
+        self.assertIsNone(context.third_party_confirmation_number)
+        self.assertFalse(context.pending_third_party_booking_change)
+        self.assertEqual(context.user_passenger_name, "Ada Lovelace")
+        self.assertEqual(lookup["passenger_name"], "Ada Lovelace")
+        self.assertIn("Seat updated to 16F", result)
+        self.assertEqual(context.confirmation_number, "ABC123")
+        self.assertEqual(context.seat_number, "16F")
+        self.assertEqual(context.verified_confirmation_number, "ABC123")
+
+    def test_first_party_claim_resets_pending_third_party_intent(self):
+        context = AGENT_PROVIDER.AirlineContext()
+        wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Can you move my friend's seat to 18A?",
+            context,
+        )
+        self.assertTrue(context.pending_third_party_booking_change)
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Actually this is my reservation. My name is Ada Lovelace and my "
+            "confirmation number is ABC123.",
+            context,
+        )
+        lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
+        result = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
+
+        self.assertIsNone(context.third_party_confirmation_number)
+        self.assertFalse(context.pending_third_party_booking_change)
+        self.assertEqual(lookup["passenger_name"], "Ada Lovelace")
+        self.assertIn("Seat updated to 16F", result)
+        self.assertEqual(context.seat_number, "16F")
+        self.assertEqual(context.verified_confirmation_number, "ABC123")
+
     def test_update_seat_refuses_mismatched_claimed_passenger(self):
         context = AGENT_PROVIDER.AirlineContext()
         wrapper = AGENT_PROVIDER.RunContextWrapper(context)

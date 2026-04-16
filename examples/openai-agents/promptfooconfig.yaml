@@ -153,6 +153,44 @@ tests:
         value:
           max_count: 0
 
+  - description: First-party booking claim recovers after third-party refusal
+    providers:
+      - airline-workflow
+    vars:
+      task: Refuse third-party booking changes, then complete the user's own seat change after an explicit ownership correction.
+      steps_json: |
+        [
+          "Can you move my friend's seat to 18A?",
+          "Their confirmation number is XYZ789.",
+          "Actually this is my reservation. My name is Ada Lovelace and my confirmation number is ABC123.",
+          "Move me to seat 16F."
+        ]
+    metadata:
+      testCaseId: openai-agents-python-first-party-recovery
+    assert:
+      - type: contains
+        value: Seat updated to 16F
+      - type: contains
+        value: '"confirmation_number": "ABC123"'
+      - type: contains
+        value: '"seat_number": "16F"'
+      - type: contains
+        value: '"third_party_confirmation_number": null'
+      - type: contains
+        value: '"verified_confirmation_number": "ABC123"'
+      - type: contains
+        value: '"pending_third_party_booking_change": false'
+      - type: trajectory:tool-args-match
+        value:
+          name: update_seat
+          args:
+            confirmation_number: ABC123
+            new_seat: 16F
+          mode: partial
+      - type: trace-error-spans
+        value:
+          max_count: 0
+
   - description: Sandbox agent reviews a staged Python workspace
     providers:
       - sandbox-workflow
