@@ -3039,6 +3039,10 @@ class Evaluator {
         return;
       }
 
+      // NOTE: trackCompletedRow runs before afterEach hooks intentionally. It only
+      // reads success/failureReason/tokenUsage — not namedScores or metadata — so
+      // the hook's mutations don't need to be applied first. If future changes add
+      // namedScores tracking here, move afterEach above this call.
       this.trackCompletedRow(evalStep, row, context);
       context.numComplete++;
       const promptEvalCount = reservePromptEvalCount(context, row.promptIdx);
