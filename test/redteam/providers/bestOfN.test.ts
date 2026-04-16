@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sanitizeProvider } from '../../../src/models/evalResult';
+import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import {
   createMockProvider,
   createProviderResponse,
@@ -26,6 +27,10 @@ vi.mock('../../../src/globalConfig/accounts', () => ({
 }));
 
 vi.mock('../../../src/redteam/remoteGeneration', () => ({
+  getRemoteGenerationExplicitlyDisabledError: vi.fn(
+    (strategyName) =>
+      `${strategyName} requires remote generation, which has been explicitly disabled.`,
+  ),
   getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.api/generate'),
   neverGenerateRemote: vi.fn().mockReturnValue(false),
 }));
@@ -42,6 +47,8 @@ describe('BestOfNProvider - Abort Signal Handling', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(neverGenerateRemote).mockReset();
+    vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
     // Dynamic import after mocks are set up
     const module = await import('../../../src/redteam/providers/bestOfN');
@@ -137,6 +144,8 @@ describe('BestOfNProvider - Config Serialization', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(neverGenerateRemote).mockReset();
+    vi.mocked(neverGenerateRemote).mockReturnValue(false);
     const module = await import('../../../src/redteam/providers/bestOfN');
     BestOfNProvider = module.default;
   });
@@ -169,6 +178,14 @@ describe('BestOfNProvider - Config Serialization', () => {
     });
 
     expect(provider.config.maxConcurrency).toBe(3);
+  });
+
+  it('should throw an actionable error when remote generation is explicitly disabled', () => {
+    vi.mocked(neverGenerateRemote).mockReturnValue(true);
+
+    expect(() => new BestOfNProvider({ injectVar: 'query' })).toThrow(
+      'Best-of-N strategy requires remote generation, which has been explicitly disabled.',
+    );
   });
 
   it('should preserve config through sanitizeProvider for database storage', () => {

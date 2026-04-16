@@ -203,7 +203,7 @@ describe('HydraProvider', () => {
       expect(() => {
         new HydraProvider({ injectVar: 'input' });
       }).toThrow(
-        'jailbreak:hydra strategy requires remote generation, which is currently disabled for this configuration. To fix, enable remote generation (for example by unsetting OPENAI_API_KEY), set PROMPTFOO_REMOTE_GENERATION_URL, or log into Promptfoo Cloud.',
+        'jailbreak:hydra strategy requires remote generation, which is currently disabled for this configuration. To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, or log into Promptfoo Cloud with `promptfoo auth login`.',
       );
     });
 

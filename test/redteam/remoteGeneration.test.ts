@@ -5,6 +5,8 @@ import { isLoggedIntoCloud } from '../../src/globalConfig/accounts';
 import { readGlobalConfig } from '../../src/globalConfig/globalConfig';
 import { hasCodexDefaultCredentials } from '../../src/providers/openai/codexDefaults';
 import {
+  getRemoteGenerationDisabledError,
+  getRemoteGenerationExplicitlyDisabledError,
   getRemoteGenerationUrl,
   getRemoteGenerationUrlForUnaligned,
   getRemoteHealthUrl,
@@ -104,10 +106,26 @@ describe('shouldGenerateRemote', () => {
     vi.mocked(getEnvBool).mockImplementation(function () {
       return false;
     });
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return 'sk-123';
+    vi.mocked(getEnvString).mockImplementation(function (key) {
+      return key === 'OPENAI_API_KEY' ? 'sk-123' : '';
     });
     expect(shouldGenerateRemote()).toBe(false);
+  });
+
+  it('should return true when a custom remote generation URL is set', () => {
+    vi.mocked(isLoggedIntoCloud).mockReturnValue(false);
+    vi.mocked(getEnvBool).mockReturnValue(false);
+    vi.mocked(getEnvString).mockImplementation((key) => {
+      if (key === 'OPENAI_API_KEY') {
+        return 'sk-123';
+      }
+      if (key === 'PROMPTFOO_REMOTE_GENERATION_URL') {
+        return 'https://remote.example.test/api/v1/task';
+      }
+      return '';
+    });
+
+    expect(shouldGenerateRemote()).toBe(true);
   });
 
   it('should return true for redteam generation when only Codex default credentials exist', () => {
@@ -186,6 +204,20 @@ describe('shouldGenerateRemote', () => {
     });
     cliState.remote = true;
     expect(shouldGenerateRemote()).toBe(false);
+  });
+});
+
+describe('remote generation error helpers', () => {
+  it('should include the --remote recovery path when remote generation is implicitly disabled', () => {
+    expect(getRemoteGenerationDisabledError('jailbreak:hydra strategy')).toBe(
+      'jailbreak:hydra strategy requires remote generation, which is currently disabled for this configuration. To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, or log into Promptfoo Cloud with `promptfoo auth login`.',
+    );
+  });
+
+  it('should point to disable flags when remote generation is explicitly disabled', () => {
+    expect(getRemoteGenerationExplicitlyDisabledError('Best-of-N strategy')).toBe(
+      'Best-of-N strategy requires remote generation, which has been explicitly disabled. To enable it, unset PROMPTFOO_DISABLE_REMOTE_GENERATION and PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION. Optionally set PROMPTFOO_REMOTE_GENERATION_URL to use a self-hosted endpoint or log into Promptfoo Cloud with `promptfoo auth login`.',
+    );
   });
 });
 

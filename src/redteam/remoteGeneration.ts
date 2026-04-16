@@ -97,35 +97,19 @@ export function getRemoteVersionUrl(): string | null {
   return buildRemoteUrl('/version', 'https://api.promptfoo.app/version');
 }
 
-/**
- * Returns a standardized error message for strategies that require remote generation
- * but `shouldGenerateRemote()` returned false (e.g. OPENAI_API_KEY is set without cloud login).
- * Callers should use this when checking `!shouldGenerateRemote()`.
- * @param strategyName - The name of the strategy requiring remote generation
- * @returns A human-readable error message with remediation steps
- */
 export function getRemoteGenerationDisabledError(strategyName: string): string {
   return (
     `${strategyName} requires remote generation, which is currently disabled for this configuration. ` +
-    `To enable it: run with the --remote flag (e.g., promptfoo redteam run --remote), ` +
-    `set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, ` +
-    `or log into Promptfoo Cloud (promptfoo auth login).`
+    'To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, ' +
+    'or log into Promptfoo Cloud with `promptfoo auth login`.'
   );
 }
 
-/**
- * Returns a standardized error message for strategies that require remote generation
- * but it has been explicitly disabled via PROMPTFOO_DISABLE_REMOTE_GENERATION or
- * PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION.
- * Callers should use this when checking `neverGenerateRemote()`.
- * @param strategyName - The name of the strategy requiring remote generation
- * @returns A human-readable error message with remediation steps
- */
 export function getRemoteGenerationExplicitlyDisabledError(strategyName: string): string {
   return (
     `${strategyName} requires remote generation, which has been explicitly disabled. ` +
-    `To enable it: unset PROMPTFOO_DISABLE_REMOTE_GENERATION and PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION, ` +
-    `then set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint or log into Promptfoo Cloud (promptfoo auth login).`
+    'To enable it, unset PROMPTFOO_DISABLE_REMOTE_GENERATION and PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION. ' +
+    'Optionally set PROMPTFOO_REMOTE_GENERATION_URL to use a self-hosted endpoint or log into Promptfoo Cloud with `promptfoo auth login`.'
   );
 }
 
@@ -137,6 +121,10 @@ export function shouldGenerateRemote(options?: ShouldGenerateRemoteOptions): boo
   // If remote generation is explicitly disabled, respect that even for cloud users
   if (neverGenerateRemote()) {
     return false;
+  }
+
+  if (getEnvString('PROMPTFOO_REMOTE_GENERATION_URL')) {
+    return true;
   }
 
   // If logged into cloud, prefer remote generation
