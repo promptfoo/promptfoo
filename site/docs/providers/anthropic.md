@@ -53,6 +53,7 @@ The `anthropic` provider supports the following models via the messages API:
 
 | Model ID                                                                   | Description                      |
 | -------------------------------------------------------------------------- | -------------------------------- |
+| `anthropic:messages:claude-opus-4-7`                                       | Latest Claude 4.7 Opus model     |
 | `anthropic:messages:claude-sonnet-4-6`                                     | Latest Claude 4.6 Sonnet model   |
 | `anthropic:messages:claude-opus-4-6`                                       | Latest Claude 4.6 Opus model     |
 | `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5-latest)     | Claude 4.5 Opus model            |
@@ -74,6 +75,7 @@ Claude models are available across multiple platforms. Here's how the model name
 
 | Model             | Anthropic API                                         | Azure AI Foundry ([docs](/docs/providers/azure/#using-claude-models)) | AWS Bedrock ([docs](/docs/providers/aws-bedrock)) | GCP Vertex AI ([docs](/docs/providers/vertex)) |
 | ----------------- | ----------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
+| Claude 4.7 Opus   | claude-opus-4-7                                       | claude-opus-4-7                                                       | anthropic.claude-opus-4-7-v1                      | claude-opus-4-7                                |
 | Claude 4.6 Sonnet | claude-sonnet-4-6                                     | claude-sonnet-4-6                                                     | anthropic.claude-sonnet-4-6                       | claude-sonnet-4-6                              |
 | Claude 4.6 Opus   | claude-opus-4-6                                       | claude-opus-4-6-20260205                                              | anthropic.claude-opus-4-6-v1                      | claude-opus-4-6                                |
 | Claude 4.5 Opus   | claude-opus-4-5-20251101 (claude-opus-4-5-latest)     | claude-opus-4-5-20251101                                              | anthropic.claude-opus-4-5-20251101-v1:0           | claude-opus-4-5@20251101                       |
@@ -106,7 +108,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | stream          | -                     | Enable streaming (required when `max_tokens` > 21,333)                              |
 | tools           | -                     | An array of tool or function definitions for the model to call                      |
 | tool_choice     | -                     | An object specifying the tool to call                                               |
-| effort          | -                     | Output effort level: `low`, `medium`, `high`, or `max`                              |
+| effort          | -                     | Output effort level: `low`, `medium`, `high`, `xhigh`, or `max`                     |
 | output_format   | -                     | JSON schema configuration for structured outputs                                    |
 | thinking        | -                     | Configuration for Claude's extended thinking (`enabled`, `adaptive`, or `disabled`) |
 | showThinking    | -                     | Whether to include thinking content in the output (default: true)                   |
@@ -454,8 +456,8 @@ Claude supports an extended thinking capability that allows you to see the model
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  # Adaptive thinking (recommended for Claude Opus 4.6)
-  - id: anthropic:messages:claude-opus-4-6
+  # Adaptive thinking (recommended for Claude Opus 4.7)
+  - id: anthropic:messages:claude-opus-4-7
     config:
       max_tokens: 20000
       thinking:
@@ -472,14 +474,14 @@ providers:
 
 The thinking configuration has three possible values:
 
-1. Adaptive thinking (recommended for Claude Opus 4.6):
+1. Adaptive thinking (recommended for Claude Opus 4.7):
 
 ```yaml
 thinking:
   type: 'adaptive'
 ```
 
-In adaptive mode, Claude decides when and how much to think based on the complexity of the request. This is the recommended mode for `claude-opus-4-6`.
+In adaptive mode, Claude decides when and how much to think based on the complexity of the request. This is the recommended mode for `claude-opus-4-7`.
 
 2. Enabled thinking:
 
@@ -605,16 +607,18 @@ The `effort` parameter controls the output quality/speed tradeoff. Higher effort
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-opus-4-6
+  - id: anthropic:messages:claude-opus-4-7
     config:
-      effort: low # Options: low, medium, high, max
+      effort: xhigh # Options: low, medium, high, xhigh, max
 ```
+
+Claude Opus 4.7 introduces the `xhigh` level between `high` and `max`, giving finer control over reasoning/latency on hard problems. For coding and agentic use cases, Anthropic recommends starting with `high` or `xhigh`.
 
 This can be combined with other features like structured outputs:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-opus-4-6
+  - id: anthropic:messages:claude-opus-4-7
     config:
       effort: high
       output_format:

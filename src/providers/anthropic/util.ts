@@ -22,7 +22,15 @@ export const ANTHROPIC_MODELS = [
       output: 125 / 1e6, // $125 / MTok
     },
   })),
-  // Claude 4.6 models - Latest generation
+  // Claude 4.7 models - Latest generation
+  ...['claude-opus-4-7', 'claude-opus-4-7-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1e6, // $5 / MTok
+      output: 25 / 1e6, // $25 / MTok
+    },
+  })),
+  // Claude 4.6 models
   ...['claude-sonnet-4-6', 'claude-sonnet-4-6-latest'].map((model) => ({
     id: model,
     cost: {

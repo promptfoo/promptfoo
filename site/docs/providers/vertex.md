@@ -46,6 +46,10 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 
 Anthropic's Claude models are available with the following versions:
 
+**Claude 4.7:**
+
+- `vertex:claude-opus-4-7` - Claude 4.7 Opus for agentic coding, agents, and computer use
+
 **Claude 4.6:**
 
 - `vertex:claude-sonnet-4-6` - Claude 4.6 Sonnet balancing performance with speed
