@@ -1069,8 +1069,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           : config.settings,
       betas: config.betas,
       thinking: config.thinking,
-      // The SDK runtime accepts `xhigh` for newer models before the bundled d.ts does.
-      effort: config.effort as QueryOptions['effort'],
+      effort: config.effort,
       agent: config.agent,
       sessionId: config.session_id,
       debug: config.debug,
