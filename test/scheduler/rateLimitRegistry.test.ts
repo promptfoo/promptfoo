@@ -321,6 +321,10 @@ describe('RateLimitRegistry', () => {
       { label: 'negative number', input: -1 },
       { label: 'non-integer number', input: 2.5 },
       { label: 'non-integer string', input: '2.5' },
+      // Digit strings that overflow to Infinity / lose precision would cause
+      // unbounded retry loops if accepted — reject them.
+      { label: 'unsafe-integer string', input: '1' + '0'.repeat(400) },
+      { label: 'above MAX_SAFE_INTEGER', input: String(Number.MAX_SAFE_INTEGER) + '0' },
     ])('should warn and forward maxRetriesOverride=undefined for invalid $label ($input)', async ({
       input,
     }) => {

@@ -178,7 +178,13 @@ function getProviderMaxRetries(provider: ApiProvider): number | undefined {
   if (typeof raw === 'string') {
     const trimmed = raw.trim();
     if (/^\d+$/.test(trimmed)) {
-      return Number(trimmed);
+      // Reject digit strings that overflow to Infinity or lose precision past
+      // Number.MAX_SAFE_INTEGER — otherwise the retry loops would never
+      // terminate (attempt < Infinity is always true).
+      const parsed = Number(trimmed);
+      if (Number.isSafeInteger(parsed)) {
+        return parsed;
+      }
     }
   }
 
