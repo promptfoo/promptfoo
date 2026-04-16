@@ -346,8 +346,8 @@ export function calculateAnthropicCost(
 
   if (hasTieredPricing) {
     const isLongContext = effectiveInputTokens > 200_000;
-    const baseInputRate = isLongContext ? 6 / 1e6 : 3 / 1e6;
-    const outputRate = isLongContext ? 22.5 / 1e6 : 15 / 1e6;
+    const baseInputRate = config.inputCost ?? (isLongContext ? 6 / 1e6 : 3 / 1e6);
+    const outputRate = config.outputCost ?? (isLongContext ? 22.5 / 1e6 : 15 / 1e6);
 
     return (
       calculateCacheInputCost(baseInputRate, promptTokens, cacheRead, cacheCreation) +
@@ -359,9 +359,11 @@ export function calculateAnthropicCost(
   if (cacheRead || cacheCreation) {
     const modelInfo = ANTHROPIC_MODELS.find((m) => m.id === modelName);
     if (modelInfo) {
+      const inputCost = config.inputCost ?? modelInfo.cost.input;
+      const outputCost = config.outputCost ?? modelInfo.cost.output;
       return (
-        calculateCacheInputCost(modelInfo.cost.input, promptTokens, cacheRead, cacheCreation) +
-        completionTokens * modelInfo.cost.output
+        calculateCacheInputCost(inputCost, promptTokens, cacheRead, cacheCreation) +
+        completionTokens * outputCost
       );
     }
   }

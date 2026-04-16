@@ -513,6 +513,26 @@ describe('xAI Chat Provider', () => {
       expect(cost).toBeCloseTo(12.0, 2);
     });
 
+    it('uses separate custom input and output costs from config', () => {
+      const cost = calculateXAICost(
+        'grok-2-1212',
+        { inputCost: 0.001, outputCost: 0.003 },
+        1000,
+        500,
+      );
+      expect(cost).toBe(2.5);
+    });
+
+    it('prefers separate custom costs over custom cost', () => {
+      const cost = calculateXAICost(
+        'grok-2-1212',
+        { cost: 0.02, inputCost: 0.001, outputCost: 0.003 },
+        1000,
+        500,
+      );
+      expect(cost).toBe(2.5);
+    });
+
     it('handles reasoning tokens correctly', () => {
       // reasoningTokens is passed as 5th argument but doesn't affect calculation currently
       const costWithReasoning = calculateXAICost('grok-3-mini-beta', {}, 500, 500, 200);

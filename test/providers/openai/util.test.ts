@@ -345,6 +345,26 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBe(184.5);
   });
 
+  it('should use separate custom input and output costs from config when provided', () => {
+    const cost = calculateOpenAICost('gpt-4', { inputCost: 0.001, outputCost: 0.003 }, 1000, 500);
+    expect(cost).toBe(2.5);
+  });
+
+  it('should prefer separate custom input and output costs over custom cost', () => {
+    const cost = calculateOpenAICost(
+      'gpt-4',
+      { cost: 0.123, inputCost: 0.001, outputCost: 0.003 },
+      1000,
+      500,
+    );
+    expect(cost).toBe(2.5);
+  });
+
+  it('should use custom cost as fallback for partial separate text cost overrides', () => {
+    const cost = calculateOpenAICost('gpt-4', { cost: 0.004, outputCost: 0.001 }, 1000, 500);
+    expect(cost).toBe(4.5);
+  });
+
   it('should calculate cost correctly with custom audioCost', () => {
     const cost = calculateOpenAICost(
       'gpt-4o-audio-preview',
@@ -355,6 +375,30 @@ describe('calculateOpenAICost', () => {
       100,
     );
     expect(cost).toBe(15.0075);
+  });
+
+  it('should use separate custom audio input and output costs from config when provided', () => {
+    const cost = calculateOpenAICost(
+      'gpt-4o-audio-preview',
+      { audioInputCost: 0.01, audioOutputCost: 0.03 },
+      1000,
+      500,
+      200,
+      100,
+    );
+    expect(cost).toBe(5.0075);
+  });
+
+  it('should prefer separate custom audio costs over custom audioCost', () => {
+    const cost = calculateOpenAICost(
+      'gpt-4o-audio-preview',
+      { audioCost: 0.05, audioInputCost: 0.01, audioOutputCost: 0.03 },
+      1000,
+      500,
+      200,
+      100,
+    );
+    expect(cost).toBe(5.0075);
   });
 
   it('should handle a model with no cost property', () => {
