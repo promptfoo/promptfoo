@@ -92,7 +92,7 @@
     "whatwg-url": "16.0.1",
     "esbuild": "0.28.0",
     "jsdom": {
-      "@asamuzakjp/css-color": "5.1.10"
+      "@asamuzakjp/css-color": "5.1.11"
     },
     "storybook": {
       "esbuild": "0.27.7"
@@ -148,13 +148,14 @@
       "chevrotain": "11.2.0"
     },
     "webpack": "5.106.2",
-    "dompurify": ">=3.3.3",
+    "dompurify": "3.4.0",
     "monaco-editor": {
-      "dompurify": ">=3.3.3"
+      ".": "0.55.1",
+      "dompurify": "3.4.0"
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.105",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.107",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1028.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1028.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -214,7 +215,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.105",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.107",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1028.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1028.0",
     "@aws-sdk/client-s3": "^3.1003.0",
