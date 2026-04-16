@@ -92,7 +92,7 @@
     "whatwg-url": "16.0.1",
     "esbuild": "0.28.0",
     "jsdom": {
-      "@asamuzakjp/css-color": "5.1.10"
+      "@asamuzakjp/css-color": "5.1.11"
     },
     "storybook": {
       "esbuild": "0.27.7"
@@ -117,7 +117,7 @@
       "express": "^4.22.1"
     },
     "@anthropic-ai/claude-agent-sdk": {
-      "@anthropic-ai/sdk": "^0.88.0"
+      "@anthropic-ai/sdk": "^0.90.0"
     },
     "@isaacs/brace-expansion": ">=5.0.1",
     "fast-xml-parser": "$fast-xml-parser",
@@ -147,14 +147,15 @@
       ".": "0.4.1",
       "chevrotain": "11.2.0"
     },
-    "webpack": "5.106.1",
-    "dompurify": ">=3.3.3",
+    "webpack": "5.106.2",
+    "dompurify": "3.4.0",
     "monaco-editor": {
-      "dompurify": ">=3.3.3"
+      ".": "0.55.1",
+      "dompurify": "3.4.0"
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.104",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.112",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1028.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1028.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -208,13 +209,13 @@
     "source-map-support": "^0.5.21",
     "supertest": "^7.2.2",
     "ts-dedent": "^2.2.0",
-    "tsdown": "0.21.7",
+    "tsdown": "0.21.8",
     "typescript": "^6.0.2",
     "vitest": "^4.1.0",
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.104",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.112",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1028.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1028.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -252,7 +253,7 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.88.0",
+    "@anthropic-ai/sdk": "^0.90.0",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
     "@googleapis/sheets": "^13.0.1",
     "@inquirer/checkbox": "^5.1.0",

@@ -678,6 +678,26 @@ describe('AzureChatCompletionProvider', () => {
       expect((provider as any).isReasoningModel()).toBe(true);
     });
 
+    it('flags Claude Opus 4.7 via isClaudeOpus47 without treating it as reasoning', () => {
+      // Claude Opus 4.7 uses the chat body's standard max_tokens path but
+      // rejects `temperature` at the model level. Must NOT flip to the
+      // reasoning-model branch (which would swap max_tokens and send
+      // reasoning_effort).
+      const opus47 = new AzureChatCompletionProvider('claude-opus-4-7', { config: {} });
+      expect((opus47 as any).isReasoningModel()).toBe(false);
+      expect((opus47 as any).isClaudeOpus47()).toBe(true);
+
+      // Opus 4.6 regression: not matched.
+      const opus46 = new AzureChatCompletionProvider('claude-opus-4-6-20260205', { config: {} });
+      expect((opus46 as any).isReasoningModel()).toBe(false);
+      expect((opus46 as any).isClaudeOpus47()).toBe(false);
+
+      // Boundary: a hypothetical `claude-opus-4-70` or `claude-opus-4-7N`
+      // model must not be accidentally matched by the 4.7 predicate.
+      const opus470 = new AzureChatCompletionProvider('claude-opus-4-70', { config: {} });
+      expect((opus470 as any).isClaudeOpus47()).toBe(false);
+    });
+
     it('should detect reasoning models with isReasoningModel flag', () => {
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
@@ -695,6 +715,22 @@ describe('AzureChatCompletionProvider', () => {
         },
       });
       expect((provider as any).isReasoningModel()).toBe(true);
+    });
+
+    it('omits temperature for Claude Opus 4.7 while keeping the standard chat body', async () => {
+      const provider = new AzureChatCompletionProvider('claude-opus-4-7', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          max_tokens: 512,
+          temperature: 0.5,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('hi');
+      expect(body).toHaveProperty('max_tokens', 512);
+      expect(body).not.toHaveProperty('max_completion_tokens');
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('reasoning_effort');
     });
 
     it('should use max_completion_tokens for reasoning models', async () => {

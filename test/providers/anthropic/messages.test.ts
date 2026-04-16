@@ -1696,7 +1696,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should support all effort levels', async () => {
-      for (const effort of ['low', 'medium', 'high', 'max'] as const) {
+      for (const effort of ['low', 'medium', 'high', 'xhigh', 'max'] as const) {
         const provider = createProvider('claude-opus-4-6', {
           config: { effort },
         });
@@ -1899,6 +1899,102 @@ describe('AnthropicMessagesProvider', () => {
       expect(warnSpy).not.toHaveBeenCalledWith(
         expect.stringContaining('Assistant message prefilling is not supported'),
       );
+    });
+  });
+
+  describe('Opus 4.7 temperature handling', () => {
+    const mockResp = {
+      content: [{ type: 'text', text: 'ok' }],
+      model: 'claude-opus-4-7',
+      id: 'test-id',
+      role: 'assistant',
+      stop_reason: 'end_turn',
+      stop_details: null,
+      stop_sequence: null,
+      type: 'message',
+      usage: { input_tokens: 10, output_tokens: 5 },
+    } as Anthropic.Messages.Message;
+
+    it('omits temperature entirely for Opus 4.7 (no explicit config)', async () => {
+      const provider = createProvider('claude-opus-4-7', { config: {} });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).not.toHaveProperty('temperature');
+    });
+
+    it('omits temperature and warns when explicitly set on Opus 4.7', async () => {
+      const provider = createProvider('claude-opus-4-7', { config: { temperature: 0.5 } });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).not.toHaveProperty('temperature');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('temperature is deprecated on Claude Opus 4.7'),
+      );
+    });
+
+    it('omits temperature when config.temperature is 0 on Opus 4.7', async () => {
+      const provider = createProvider('claude-opus-4-7', { config: { temperature: 0 } });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).not.toHaveProperty('temperature');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('temperature is deprecated on Claude Opus 4.7'),
+      );
+    });
+
+    it('warns once per provider when called multiple times on Opus 4.7', async () => {
+      const provider = createProvider('claude-opus-4-7', { config: { temperature: 0.5 } });
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await provider.callApi('Hello');
+      await provider.callApi('Hello again');
+      await provider.callApi('Hello once more');
+
+      const warnings = warnSpy.mock.calls.filter((call) =>
+        String(call[0] ?? '').includes('temperature is deprecated on Claude Opus 4.7'),
+      );
+      expect(warnings).toHaveLength(1);
+    });
+
+    it('warns on Opus 4.7 when temperature set via env override', async () => {
+      const provider = createProvider('claude-opus-4-7', {
+        config: {},
+        env: { ANTHROPIC_TEMPERATURE: '0.3' },
+      });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).not.toHaveProperty('temperature');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('temperature is deprecated on Claude Opus 4.7'),
+      );
+    });
+
+    it('still sends temperature on Opus 4.6 (regression)', async () => {
+      const provider = createProvider('claude-opus-4-6', { config: { temperature: 0 } });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-opus-4-6' });
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).toHaveProperty('temperature', 0);
     });
   });
 
