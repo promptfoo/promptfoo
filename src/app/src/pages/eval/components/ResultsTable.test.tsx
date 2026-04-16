@@ -152,10 +152,6 @@ describe('ResultsTable Metrics Display', () => {
         },
       },
     }));
-    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
-      inComparisonMode: false,
-      renderMarkdown: true,
-    }));
   });
 
   it('displays total cost with correct formatting', () => {
@@ -410,7 +406,7 @@ describe('ResultsTable Metrics Display', () => {
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
-
+        inComparisonMode: false,
         setTable: vi.fn(),
         table: mockTableWithObjectVar,
         version: 4,
@@ -1632,8 +1628,6 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
       },
     }));
 
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-
     // Simulate calling handleRating with updated values
     const updatedIsPass = false;
     const updatedScore = 0.5;
@@ -2285,6 +2279,39 @@ describe('ResultsTable Pagination', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     const paginationElement = screen.getByText(/results per page/i);
     expect(paginationElement).toBeInTheDocument();
+  });
+
+  it('should keep the pagination footer pinned for short tables', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [],
+        head: {
+          prompts: [],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 1,
+      totalResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(container.querySelector('#results-table-container')).toHaveStyle({
+      minHeight: '0px',
+    });
+    expect(container.querySelector('.pagination')).toHaveClass('sticky', 'bottom-0', 'shrink-0');
   });
 });
 

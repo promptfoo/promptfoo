@@ -188,7 +188,6 @@ tests:
   it('should handle multiple config files and use first envPath found', async () => {
     const config1File = path.join(tempDir, 'config1.yaml');
     const config2File = path.join(tempDir, 'config2.yaml');
-    const _envFile1 = path.join(tempDir, '.env1');
     const envFile2 = path.join(tempDir, '.env2');
 
     fs.writeFileSync(

@@ -405,18 +405,6 @@ describe('getNunjucksEngine', () => {
   });
 
   describe('environment variables as globals', () => {
-    const originalEnv = process.env;
-
-    beforeEach(() => {
-      vi.resetModules();
-      process.env = { ...originalEnv };
-    });
-
-    afterEach(() => {
-      process.env = originalEnv;
-      vi.resetModules();
-    });
-
     it('should add environment variables as globals by default', () => {
       process.env.TEST_VAR = 'test_value';
       const engine = getNunjucksEngine();
