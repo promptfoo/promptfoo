@@ -5,7 +5,7 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { outputFromMessage, parseMessages } from '../anthropic/util';
+import { isClaudeOpus47Model, outputFromMessage, parseMessages } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
 import { novaOutputFromMessage, novaParseMessages } from './util';
@@ -1481,10 +1481,10 @@ export const BEDROCK_MODEL = {
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         1024,
       );
-      // Claude Opus 4.7 deprecated `temperature` at the model level — Bedrock
+      // Claude Opus 4.7 deprecates `temperature` at the model level — Bedrock
       // relays the resulting 400 as a ValidationException. Drop the default
-      // for any Opus 4.7 ID (bare, `us.`, `eu.`, `jp.`, `global.`).
-      const isOpus47 = modelName?.includes('anthropic.claude-opus-4-7') ?? false;
+      // regardless of which IAM-region prefix the user picked.
+      const isOpus47 = modelName ? isClaudeOpus47Model(modelName) : false;
       if (isOpus47) {
         if (config?.temperature != null || getEnvFloat('AWS_BEDROCK_TEMPERATURE') != null) {
           logger.warn(

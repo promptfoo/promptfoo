@@ -27,6 +27,7 @@ import {
   calculateAnthropicCost,
   getRefusalDetails,
   getTokenUsage,
+  isClaudeOpus47Model,
   outputFromMessage,
   parseMessages,
   processAnthropicTools,
@@ -299,11 +300,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // warn once per provider instance when the user supplied an explicit
     // temperature via config or the ANTHROPIC_TEMPERATURE env var (the
     // built-in default stays silent to avoid spamming every request).
-    const isOpus47 = this.modelName.startsWith('claude-opus-4-7');
+    const isOpus47 = isClaudeOpus47Model(this.modelName);
     const explicitTemperature =
       config.temperature != null ||
-      this.env?.ANTHROPIC_TEMPERATURE != null ||
-      process.env.ANTHROPIC_TEMPERATURE != null;
+      parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) != null ||
+      parseEnvFloat(process.env.ANTHROPIC_TEMPERATURE) != null;
     if (isOpus47 && explicitTemperature && !this.opus47TemperatureWarned) {
       logger.warn(
         'temperature is deprecated on Claude Opus 4.7 and will be omitted. Remove temperature from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.',

@@ -141,6 +141,16 @@ export const ANTHROPIC_MODELS = [
   })),
 ];
 
+/**
+ * Matches Claude Opus 4.7 model IDs across Anthropic, Bedrock (including the
+ * `us.`/`eu.`/`jp.`/`global.` inference-profile prefixes), Vertex, and Azure
+ * deployment names. Returns `false` for hypothetical suffix variants like
+ * `claude-opus-4-70` or `claude-opus-4-7N` so detection stays forward-compatible.
+ */
+export function isClaudeOpus47Model(modelId: string): boolean {
+  return /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i.test(modelId);
+}
+
 export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
   const hasToolUse = message.content.some((block) => block.type === 'tool_use');
   const hasThinking = message.content.some(

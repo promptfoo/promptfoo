@@ -26,6 +26,7 @@ import {
 } from '../../tracing/genaiTracer';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { isClaudeOpus47Model } from '../anthropic/util';
 import {
   isOpenAIToolArray,
   isOpenAIToolChoice,
@@ -807,11 +808,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // - maxTokens: only include if NOT (reasoning enabled AND high effort)
     // - temperature/topP: only include if reasoning is NOT enabled
     const maxTokens = reasoningEnabled && isHighEffort ? undefined : maxTokensValue;
-    // Claude Opus 4.7 deprecated `temperature` at the model level — any request
+    // Claude Opus 4.7 deprecates `temperature` at the model level — any request
     // that includes it on Bedrock returns ValidationException. Drop the value
-    // for Opus 4.7 IDs (bare, `us.`, `eu.`, `jp.`, `global.`) regardless of
-    // where it came from (config or AWS_BEDROCK_TEMPERATURE env var).
-    const isOpus47 = this.modelName.includes('anthropic.claude-opus-4-7');
+    // regardless of where it came from (config or AWS_BEDROCK_TEMPERATURE).
+    const isOpus47 = isClaudeOpus47Model(this.modelName);
     const temperature = reasoningEnabled || isOpus47 ? undefined : temperatureValue;
     const topP = reasoningEnabled ? undefined : topPValue;
 

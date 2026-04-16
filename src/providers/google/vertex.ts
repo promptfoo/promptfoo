@@ -14,6 +14,7 @@ import { isValidJson } from '../../util/json';
 import {
   calculateAnthropicCost,
   getTokenUsage,
+  isClaudeOpus47Model,
   outputFromMessage,
   parseMessages,
 } from '../anthropic/util';
@@ -271,12 +272,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
       maxTokens = thinkingConfig.budget_tokens + 1024;
     }
 
-    // Claude Opus 4.7 deprecated `temperature` at the model level — the
+    // Claude Opus 4.7 deprecates `temperature` at the model level — the
     // underlying Anthropic API returns 400 for any request that includes it.
     // Vertex forwards the request body verbatim to rawPredict, so suppress
     // the field here too.
-    const isOpus47 = this.modelName.startsWith('claude-opus-4-7');
-    const resolvedTemperature = isOpus47 ? undefined : this.config.temperature;
+    const resolvedTemperature = isClaudeOpus47Model(this.modelName)
+      ? undefined
+      : this.config.temperature;
 
     const body: ClaudeRequest = {
       anthropic_version:
