@@ -66,9 +66,18 @@ CONFIRMATION_NUMBER_RE = re.compile(
     r"\bconfirmation number(?: is|:)?\s+([A-Z0-9]{3,})\b", re.IGNORECASE
 )
 PASSENGER_NAME_RE = re.compile(
-    r"\bmy name is\s+([A-Za-z]+(?:\s+[A-Za-z]+)*)", re.IGNORECASE
+    r"\bmy name is\s+([A-Za-z]+(?:\s+[A-Za-z]+)*?)(?=\s+(?:and|with|for)\b|[,.!?;:]|$)",
+    re.IGNORECASE,
 )
 SEAT_NUMBER_RE = re.compile(r"\bseat\s+([0-9]{1,2}[A-Z])\b", re.IGNORECASE)
+THIRD_PARTY_BOOKING_RE = re.compile(
+    r"\b(?:friend|coworker|colleague|family member|mother|father|sister|brother|wife|husband|spouse|partner|someone else's|another passenger|their|his|her)\b",
+    re.IGNORECASE,
+)
+BOOKING_CHANGE_RE = re.compile(
+    r"\b(?:change|move|update|switch|assign|book|put)\b.*\b(?:seat|booking|reservation)\b|\b(?:seat|booking|reservation)\b.*\b(?:change|move|update|switch|assign|book|put)\b",
+    re.IGNORECASE,
+)
 
 
 class AirlineContext:
@@ -80,6 +89,8 @@ class AirlineContext:
         requested_seat_number: str | None = None,
         flight_number: str | None = None,
         verified_confirmation_number: str | None = None,
+        user_passenger_name: str | None = None,
+        third_party_confirmation_number: str | None = None,
     ) -> None:
         self.passenger_name = passenger_name
         self.confirmation_number = confirmation_number
@@ -87,6 +98,8 @@ class AirlineContext:
         self.requested_seat_number = requested_seat_number
         self.flight_number = flight_number
         self.verified_confirmation_number = verified_confirmation_number
+        self.user_passenger_name = user_passenger_name
+        self.third_party_confirmation_number = third_party_confirmation_number
 
     def to_dict(self) -> dict[str, str | None]:
         return {
@@ -96,6 +109,8 @@ class AirlineContext:
             "requested_seat_number": self.requested_seat_number,
             "flight_number": self.flight_number,
             "verified_confirmation_number": self.verified_confirmation_number,
+            "user_passenger_name": self.user_passenger_name,
+            "third_party_confirmation_number": self.third_party_confirmation_number,
         }
 
 
@@ -121,6 +136,17 @@ def _serialize(value: Any) -> str:
 
 def _normalize_confirmation_number(confirmation_number: str) -> str:
     return confirmation_number.strip().upper()
+
+
+def _normalize_name(name: str | None) -> str | None:
+    if name is None:
+        return None
+    normalized = " ".join(name.split()).casefold()
+    return normalized or None
+
+
+def _is_third_party_booking_change(step: str) -> bool:
+    return bool(THIRD_PARTY_BOOKING_RE.search(step) and BOOKING_CHANGE_RE.search(step))
 
 
 def _reservation_view(
@@ -243,8 +269,20 @@ def lookup_reservation(
 ) -> dict[str, str]:
     """Look up a reservation and hydrate the shared agent context."""
 
+    normalized_confirmation_number = _normalize_confirmation_number(confirmation_number)
+    if (
+        context.context.third_party_confirmation_number
+        == normalized_confirmation_number
+    ):
+        return {
+            "error": (
+                "Unable to look up a third-party booking. The passenger must contact "
+                "support directly."
+            ),
+        }
+
     normalized_confirmation_number, reservation = _reservation_view(
-        context.context, confirmation_number
+        context.context, normalized_confirmation_number
     )
     _apply_reservation_to_context(
         context.context,
@@ -272,6 +310,14 @@ def update_seat(
     """Update a passenger seat assignment after the booking has been located."""
 
     normalized_confirmation_number = _normalize_confirmation_number(confirmation_number)
+    if (
+        context.context.third_party_confirmation_number
+        == normalized_confirmation_number
+    ):
+        return (
+            "Unable to update a third-party booking. The passenger must contact "
+            "support directly."
+        )
     if context.context.verified_confirmation_number != normalized_confirmation_number:
         return (
             "Unable to update the seat before the reservation has been verified. "
@@ -286,6 +332,13 @@ def update_seat(
         return (
             f"Unable to update seat because {normalized_confirmation_number} "
             "was not found."
+        )
+    if context.context.user_passenger_name and _normalize_name(
+        context.context.user_passenger_name
+    ) != _normalize_name(reservation["passenger_name"]):
+        return (
+            "Unable to update a reservation for a different passenger. The passenger "
+            "must contact support directly."
         )
 
     context.context.confirmation_number = normalized_confirmation_number
@@ -512,6 +565,11 @@ def _build_context(vars_dict: dict[str, Any]) -> AirlineContext:
         seat_number=vars_dict.get("seat_number"),
         requested_seat_number=vars_dict.get("requested_seat_number"),
         flight_number=vars_dict.get("flight_number"),
+        user_passenger_name=vars_dict.get("user_passenger_name")
+        or vars_dict.get("passenger_name"),
+        third_party_confirmation_number=vars_dict.get(
+            "third_party_confirmation_number"
+        ),
     )
 
 
@@ -552,11 +610,16 @@ def _build_steps(prompt: str, vars_dict: dict[str, Any]) -> list[str]:
 
 
 def _hydrate_context_from_step(step: str, airline_context: AirlineContext) -> None:
+    is_third_party_booking_change = _is_third_party_booking_change(step)
     confirmation_match = CONFIRMATION_NUMBER_RE.search(step)
     if confirmation_match:
         normalized_confirmation_number = _normalize_confirmation_number(
             confirmation_match.group(1)
         )
+        if is_third_party_booking_change:
+            airline_context.third_party_confirmation_number = (
+                normalized_confirmation_number
+            )
         previous_confirmation_number = airline_context.confirmation_number
         _, reservation = _reservation_view(
             airline_context
@@ -571,8 +634,20 @@ def _hydrate_context_from_step(step: str, airline_context: AirlineContext) -> No
         )
 
     passenger_match = PASSENGER_NAME_RE.search(step)
-    if passenger_match and not airline_context.passenger_name:
-        airline_context.passenger_name = passenger_match.group(1).strip()
+    if passenger_match:
+        claimed_passenger_name = passenger_match.group(1).strip()
+        airline_context.user_passenger_name = claimed_passenger_name
+        if not airline_context.passenger_name:
+            airline_context.passenger_name = claimed_passenger_name
+
+    if (
+        is_third_party_booking_change
+        and airline_context.confirmation_number
+        and airline_context.third_party_confirmation_number is None
+    ):
+        airline_context.third_party_confirmation_number = (
+            airline_context.confirmation_number
+        )
 
     seat_match = SEAT_NUMBER_RE.search(step)
     if seat_match and (
@@ -583,6 +658,8 @@ def _hydrate_context_from_step(step: str, airline_context: AirlineContext) -> No
 
 def _step_input(task: str, step: str, airline_context: AirlineContext) -> str:
     context_lines = []
+    if airline_context.user_passenger_name:
+        context_lines.append(f"Acting passenger: {airline_context.user_passenger_name}")
     if airline_context.passenger_name:
         context_lines.append(f"Passenger name: {airline_context.passenger_name}")
     if airline_context.confirmation_number:
@@ -596,6 +673,11 @@ def _step_input(task: str, step: str, airline_context: AirlineContext) -> str:
     if airline_context.requested_seat_number:
         context_lines.append(
             f"Requested seat change: {airline_context.requested_seat_number}"
+        )
+    if airline_context.third_party_confirmation_number:
+        context_lines.append(
+            "Third-party booking change requested for confirmation: "
+            f"{airline_context.third_party_confirmation_number}"
         )
 
     parts = [f"Overall task: {task}"]
