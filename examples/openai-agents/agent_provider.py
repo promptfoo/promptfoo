@@ -154,6 +154,35 @@ def _is_third_party_booking_change(step: str) -> bool:
     return bool(THIRD_PARTY_BOOKING_RE.search(step) and BOOKING_CHANGE_RE.search(step))
 
 
+def _record_blocked_third_party_confirmation(
+    airline_context: AirlineContext, normalized_confirmation_number: str
+) -> None:
+    airline_context.confirmation_number = normalized_confirmation_number
+    airline_context.passenger_name = None
+    airline_context.flight_number = None
+    airline_context.seat_number = None
+    airline_context.requested_seat_number = None
+    airline_context.verified_confirmation_number = None
+    airline_context.third_party_confirmation_number = normalized_confirmation_number
+    airline_context.pending_third_party_booking_change = False
+
+
+def _bind_or_matches_blocked_third_party_confirmation(
+    airline_context: AirlineContext, normalized_confirmation_number: str
+) -> bool:
+    if (
+        airline_context.third_party_confirmation_number
+        == normalized_confirmation_number
+    ):
+        return True
+    if airline_context.pending_third_party_booking_change:
+        _record_blocked_third_party_confirmation(
+            airline_context, normalized_confirmation_number
+        )
+        return True
+    return False
+
+
 def _reservation_view(
     airline_context: "AirlineContext | None", confirmation_number: str
 ) -> tuple[str, dict[str, str] | None]:
@@ -275,9 +304,9 @@ def lookup_reservation(
     """Look up a reservation and hydrate the shared agent context."""
 
     normalized_confirmation_number = _normalize_confirmation_number(confirmation_number)
-    if (
-        context.context.third_party_confirmation_number
-        == normalized_confirmation_number
+    if _bind_or_matches_blocked_third_party_confirmation(
+        context.context,
+        normalized_confirmation_number,
     ):
         return {
             "error": (
@@ -315,9 +344,9 @@ def update_seat(
     """Update a passenger seat assignment after the booking has been located."""
 
     normalized_confirmation_number = _normalize_confirmation_number(confirmation_number)
-    if (
-        context.context.third_party_confirmation_number
-        == normalized_confirmation_number
+    if _bind_or_matches_blocked_third_party_confirmation(
+        context.context,
+        normalized_confirmation_number,
     ):
         return (
             "Unable to update a third-party booking. The passenger must contact "
@@ -628,22 +657,23 @@ def _hydrate_context_from_step(step: str, airline_context: AirlineContext) -> No
             is_third_party_booking_change
             or airline_context.pending_third_party_booking_change
         ):
-            airline_context.third_party_confirmation_number = (
-                normalized_confirmation_number
+            _record_blocked_third_party_confirmation(
+                airline_context,
+                normalized_confirmation_number,
             )
-            airline_context.pending_third_party_booking_change = False
-        previous_confirmation_number = airline_context.confirmation_number
-        _, reservation = _reservation_view(
-            airline_context
-            if previous_confirmation_number == normalized_confirmation_number
-            else None,
-            normalized_confirmation_number,
-        )
-        _apply_reservation_to_context(
-            airline_context,
-            normalized_confirmation_number,
-            reservation,
-        )
+        else:
+            previous_confirmation_number = airline_context.confirmation_number
+            _, reservation = _reservation_view(
+                airline_context
+                if previous_confirmation_number == normalized_confirmation_number
+                else None,
+                normalized_confirmation_number,
+            )
+            _apply_reservation_to_context(
+                airline_context,
+                normalized_confirmation_number,
+                reservation,
+            )
 
     passenger_match = PASSENGER_NAME_RE.search(step)
     if passenger_match:
@@ -653,14 +683,6 @@ def _hydrate_context_from_step(step: str, airline_context: AirlineContext) -> No
             airline_context.passenger_name = claimed_passenger_name
 
     if (
-        is_third_party_booking_change
-        and airline_context.confirmation_number
-        and airline_context.third_party_confirmation_number is None
-    ):
-        airline_context.third_party_confirmation_number = (
-            airline_context.confirmation_number
-        )
-    elif (
         is_third_party_booking_change
         and airline_context.third_party_confirmation_number is None
     ):

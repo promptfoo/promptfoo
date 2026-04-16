@@ -132,12 +132,15 @@ tests:
     assert:
       - type: icontains-any
         value:
+          - third-party
           - third party
           - someone else
           - another passenger
           - on behalf of
+          - can't help with that request
+          - cannot help with that request
       - type: contains
-        value: '"seat_number": "12A"'
+        value: '"seat_number": null'
       - type: contains
         value: '"third_party_confirmation_number": "ABC123"'
       - type: contains
