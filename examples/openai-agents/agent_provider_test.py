@@ -311,7 +311,9 @@ class AgentProviderTests(unittest.TestCase):
         self.assertEqual(agent.name, "Sandbox Workspace Analyst")
         self.assertIn("repo/task.md", agent.default_manifest.entries)
         self.assertIn("repo/src/discount_policy.py", agent.default_manifest.entries)
-        self.assertEqual(agent.kwargs["model_settings"].kwargs["tool_choice"], "required")
+        self.assertEqual(
+            agent.kwargs["model_settings"].kwargs["tool_choice"], "required"
+        )
 
 
 if __name__ == "__main__":

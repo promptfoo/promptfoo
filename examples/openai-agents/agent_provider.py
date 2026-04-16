@@ -413,7 +413,7 @@ def _build_sandbox_manifest() -> Manifest:
             },
         },
         entries={
-            "bin/python": File(content=b"#!/bin/sh\nexec python3 \"$@\"\n"),
+            "bin/python": File(content=b'#!/bin/sh\nexec python3 "$@"\n'),
             "AGENTS.md": File(
                 content=(
                     b"# AGENTS.md\n\n"
@@ -480,7 +480,7 @@ def _build_sandbox_manifest() -> Manifest:
                     b"    unittest.main()\n"
                 )
             ),
-        }
+        },
     )
 
 

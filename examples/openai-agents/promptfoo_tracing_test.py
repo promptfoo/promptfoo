@@ -80,8 +80,7 @@ class FakeSpan:
 
 def otlp_attrs(span):
     return {
-        attr["key"]: next(iter(attr["value"].values()))
-        for attr in span["attributes"]
+        attr["key"]: next(iter(attr["value"].values())) for attr in span["attributes"]
     }
 
 
