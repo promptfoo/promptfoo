@@ -222,7 +222,7 @@ redteam:
       config:
         maxTurns: 4
         maxBacktracks: 2
-        stateful: true
+        stateful: false
 
 tracing:
   enabled: true

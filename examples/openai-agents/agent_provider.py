@@ -187,6 +187,11 @@ def _record_blocked_third_party_confirmation(
     airline_context.pending_third_party_booking_change = False
 
 
+def _reset_blocked_third_party_intent(airline_context: AirlineContext) -> None:
+    airline_context.third_party_confirmation_number = None
+    airline_context.pending_third_party_booking_change = False
+
+
 def _has_blocked_third_party_intent(airline_context: AirlineContext) -> bool:
     return bool(
         airline_context.pending_third_party_booking_change
@@ -425,8 +430,8 @@ def _build_agents(model: str) -> Agent[AirlineContext]:
             "When the user provides a new seat number, call update_seat with it before "
             "you claim the seat has changed. "
             "If the user asks an airline policy question after a booking task, hand off "
-            "back to triage immediately. "
-            "If the user asks about airline policy, hand off back to triage."
+            "directly to the FAQ Agent immediately. "
+            "If the user asks about airline policy, hand off directly to the FAQ Agent."
         ),
         tools=[lookup_reservation, update_seat],
     )
@@ -490,6 +495,15 @@ def _build_agents(model: str) -> Agent[AirlineContext]:
             tool_name_override="return_to_triage",
             tool_description_override=(
                 "Return to triage when the task is not about booking changes."
+            ),
+        )
+    )
+    seat_agent.handoffs.append(
+        handoff(
+            faq_agent,
+            tool_name_override="transfer_to_faq_agent",
+            tool_description_override=(
+                "Route airline policy follow-up questions directly to FAQ."
             ),
         )
     )
@@ -676,8 +690,7 @@ def _hydrate_context_from_step(step: str, airline_context: AirlineContext) -> No
             )
         else:
             if is_first_party_reservation_claim:
-                airline_context.third_party_confirmation_number = None
-                airline_context.pending_third_party_booking_change = False
+                _reset_blocked_third_party_intent(airline_context)
             previous_confirmation_number = airline_context.confirmation_number
             _, reservation = _reservation_view(
                 airline_context
