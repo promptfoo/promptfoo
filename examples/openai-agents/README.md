@@ -59,6 +59,7 @@ If you also want a provider-level Python OpenTelemetry span alongside the SDK sp
 - at least three traced agent spans were captured during the long-horizon run
 - no traced error spans were emitted
 - the final trajectory achieved the stated goal
+- third-party booking changes are refused without mutating the reservation
 - the sandbox agent created a workspace, ran shell commands, ran the unittest command, and reported the staged ticket details with the minimal fix
 
 ## Red Team The Agent
