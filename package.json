@@ -92,7 +92,7 @@
     "whatwg-url": "16.0.1",
     "esbuild": "0.28.0",
     "jsdom": {
-      "@asamuzakjp/css-color": "5.1.10"
+      "@asamuzakjp/css-color": "5.1.11"
     },
     "storybook": {
       "esbuild": "0.27.7"
