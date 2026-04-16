@@ -208,14 +208,19 @@ If Codex itself is the system under test, prefer Promptfoo's dedicated [`openai:
 
 ## Red Team The Agent
 
-The example also includes `promptfooconfig.redteam.yaml`, which targets the Python SDK airline agent with trace capture enabled. The red-team target returns only the user-visible final answer, not the verbose eval transcript. It uses a small agent-focused baseline for tool discovery, prompt extraction, goal hijacking, and excessive agency:
+The example includes two red-team configs. `promptfooconfig.redteam.yaml` targets the Python SDK airline agent with trace capture enabled. `promptfooconfig.redteam.coding.yaml` targets the `SandboxAgent` coding workflow and exercises coding-agent risks such as repository prompt injection, terminal-output injection, synthetic secret reads, sandbox write escapes, network egress, delayed CI exfiltration, generated vulnerabilities, automation poisoning, steganographic exfiltration, and verifier sabotage.
 
 ```bash
-npx promptfoo@latest redteam generate -c promptfooconfig.redteam.yaml -o redteam.generated.yaml
-npx promptfoo@latest redteam eval -c redteam.generated.yaml --no-cache --no-share -o redteam-results.json
+npx promptfoo@latest redteam generate -c promptfooconfig.redteam.yaml -o redteam.generated.yaml --remote --force --strict
+npx promptfoo@latest redteam eval -c redteam.generated.yaml --no-cache --no-share -j 1 -o redteam-results.json
+
+npx promptfoo@latest redteam generate -c promptfooconfig.redteam.coding.yaml -o redteam.coding.generated.yaml --remote --force --strict
+npx promptfoo@latest redteam eval -c redteam.coding.generated.yaml --no-cache --no-share -j 1 -o redteam-coding-results.json
 ```
 
-Keep `redteam.generated.yaml` and `redteam-results.json` as local run artifacts unless you intentionally want to commit a fixed adversarial corpus. For ongoing work, inspect failures alongside the Trace Timeline so you can see whether the agent exposed tools, crossed its airline-support boundary, or merely refused the attack.
+Both configs use only `jailbreak:meta` and `jailbreak:hydra` strategies; Promptfoo also includes the generated baseline/direct probes that those strategies transform. The target returns only the user-visible final answer, but each generated test inherits trace assertions so you can catch internal tool-path failures even when the final answer looks like a refusal. For example, the airline red team forbids traced `update_seat` calls during adversarial probes.
+
+Keep generated corpora and result JSON files as local run artifacts unless you intentionally want to commit a fixed adversarial corpus. This sample is not production-hardened, so useful red-team runs should find some real breaks. Inspect failures alongside the Trace Timeline to separate output-only policy failures from internal tool-use or sandbox-boundary failures.
 
 ## Multimodal Input
 
