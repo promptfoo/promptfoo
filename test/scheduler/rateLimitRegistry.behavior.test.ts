@@ -57,6 +57,24 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
     }
   });
 
+  it('should clear an outer retry context when a nested provider has no maxRetries', async () => {
+    const registry = new RateLimitRegistry({
+      maxConcurrency: 2,
+      queueTimeoutMs: 100,
+    });
+    const outerProvider = createProvider(0);
+    const innerProvider = createProvider(undefined);
+
+    try {
+      const contextValue = await registry.execute(outerProvider, () =>
+        registry.execute(innerProvider, async () => getFetchRetryContextMaxRetries()),
+      );
+      expect(contextValue).toBeUndefined();
+    } finally {
+      registry.dispose();
+    }
+  });
+
   it('should propagate fetch retry context when scheduler is disabled', async () => {
     vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'true');
     try {

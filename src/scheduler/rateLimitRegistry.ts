@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { withFetchRetryContext } from '../util/fetch/retryContext';
+import { sanitizeUrl } from '../util/sanitizer';
 import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
 import { getRateLimitKey } from './rateLimitKey';
 
@@ -189,7 +190,17 @@ function getProviderMaxRetries(provider: ApiProvider): number | undefined {
   }
 
   logger.warn(
-    `[RateLimit] Ignoring invalid provider.config.maxRetries=${JSON.stringify(raw)} for ${provider.id()}; expected a non-negative integer.`,
+    '[RateLimit] Ignoring invalid provider.config.maxRetries; expected a non-negative integer.',
+    {
+      maxRetries: raw,
+      providerId: sanitizeProviderIdForLog(provider.id()),
+    },
   );
   return undefined;
+}
+
+function sanitizeProviderIdForLog(providerId: string): string {
+  return providerId.includes('://') || providerId.startsWith('/')
+    ? sanitizeUrl(providerId)
+    : providerId;
 }
