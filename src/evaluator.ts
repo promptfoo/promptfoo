@@ -69,6 +69,7 @@ import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
+import { filterFiniteScores } from './util/numeric';
 import { isPromptAllowed } from './util/promptMatching';
 import {
   isAnthropicProvider,
@@ -3039,9 +3040,44 @@ class Evaluator {
         return;
       }
 
+      // NOTE: trackCompletedRow runs before afterEach hooks intentionally. It only
+      // reads success/failureReason/tokenUsage — not namedScores or metadata — so
+      // the hook's mutations don't need to be applied first. If future changes add
+      // namedScores tracking here, move afterEach above this call.
       this.trackCompletedRow(evalStep, row, context);
       context.numComplete++;
       const promptEvalCount = reservePromptEvalCount(context, row.promptIdx);
+
+      // Apply afterEach hook mutations before persisting. Pass a shallow copy
+      // so in-place mutations don't corrupt the row on hook failure.
+      if (context.testSuite.extensions?.length) {
+        try {
+          const afterEachOut = await runExtensionHook(context.testSuite.extensions, 'afterEach', {
+            test: evalStep.test,
+            result: {
+              ...row,
+              namedScores: { ...row.namedScores },
+              metadata: { ...row.metadata },
+              response: row.response
+                ? { ...row.response, metadata: { ...row.response.metadata } }
+                : row.response,
+            },
+          });
+          // runExtensionHook sanitizes namedScores via filterFiniteScores;
+          // re-sanitize here to also catch in-place mutations that bypass the merge.
+          row.namedScores = filterFiniteScores(afterEachOut.result.namedScores);
+          row.metadata = afterEachOut.result.metadata;
+          if (row.response && afterEachOut.result.response) {
+            row.response.metadata = afterEachOut.result.response.metadata;
+          }
+        } catch (error) {
+          logger.error(
+            `afterEach extension hook failed, persisting row without hook modifications`,
+            { error },
+          );
+        }
+      }
+
       await this.persistEvalRow(row);
 
       if (this.abortIfTargetUnavailable(row, context)) {
@@ -3056,11 +3092,6 @@ class Evaluator {
         metrics,
         promptEvalCount,
         row,
-      });
-
-      await runExtensionHook(context.testSuite.extensions, 'afterEach', {
-        test: evalStep.test,
-        result: row,
       });
 
       context.options.progressCallback?.(
