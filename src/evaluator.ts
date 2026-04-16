@@ -3046,21 +3046,24 @@ class Evaluator {
       // Run afterEach hook before persisting - may modify namedScores, metadata,
       // and response.metadata. Pass a shallow copy so in-place mutations by hooks
       // don't affect the live row (only the returned fields are applied).
-      const afterEachOut = await runExtensionHook(context.testSuite.extensions, 'afterEach', {
-        test: evalStep.test,
-        result: {
-          ...row,
-          namedScores: { ...row.namedScores },
-          metadata: { ...row.metadata },
-          response: row.response
-            ? { ...row.response, metadata: { ...row.response.metadata } }
-            : row.response,
-        },
-      });
-      row.namedScores = afterEachOut.result.namedScores;
-      row.metadata = afterEachOut.result.metadata;
-      if (row.response && afterEachOut.result.response) {
-        row.response.metadata = afterEachOut.result.response.metadata;
+      // Guard: skip when no extensions to avoid coercing undefined metadata to {}.
+      if (context.testSuite.extensions?.length) {
+        const afterEachOut = await runExtensionHook(context.testSuite.extensions, 'afterEach', {
+          test: evalStep.test,
+          result: {
+            ...row,
+            namedScores: { ...row.namedScores },
+            metadata: { ...row.metadata },
+            response: row.response
+              ? { ...row.response, metadata: { ...row.response.metadata } }
+              : row.response,
+          },
+        });
+        row.namedScores = afterEachOut.result.namedScores;
+        row.metadata = afterEachOut.result.metadata;
+        if (row.response && afterEachOut.result.response) {
+          row.response.metadata = afterEachOut.result.response.metadata;
+        }
       }
 
       await this.persistEvalRow(row);
