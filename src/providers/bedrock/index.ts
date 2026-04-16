@@ -1419,7 +1419,7 @@ export const BEDROCK_MODEL = {
       config: BedrockClaudeMessagesCompletionOptions,
       prompt: string,
       _stop?: string[],
-      _modelName?: string,
+      modelName?: string,
       vars?: Record<string, VarValue>,
     ) => {
       let messages;
@@ -1481,7 +1481,19 @@ export const BEDROCK_MODEL = {
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         1024,
       );
-      addConfigParam(params, 'temperature', config?.temperature, undefined, 0);
+      // Claude Opus 4.7 deprecated `temperature` at the model level — Bedrock
+      // relays the resulting 400 as a ValidationException. Drop the default
+      // for any Opus 4.7 ID (bare, `us.`, `eu.`, `jp.`, `global.`).
+      const isOpus47 = modelName?.includes('anthropic.claude-opus-4-7') ?? false;
+      if (isOpus47) {
+        if (config?.temperature != null || getEnvFloat('AWS_BEDROCK_TEMPERATURE') != null) {
+          logger.warn(
+            'temperature is deprecated on Claude Opus 4.7 and will be omitted. Remove temperature from your Bedrock config (or unset AWS_BEDROCK_TEMPERATURE) to silence this warning.',
+          );
+        }
+      } else {
+        addConfigParam(params, 'temperature', config?.temperature, undefined, 0);
+      }
       addConfigParam(
         params,
         'anthropic_version',
