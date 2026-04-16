@@ -22,8 +22,11 @@ export const ANTHROPIC_MODELS = [
       output: 125 / 1e6, // $125 / MTok
     },
   })),
-  // Claude 4.7 models - Latest generation
-  ...['claude-opus-4-7', 'claude-opus-4-7-latest'].map((model) => ({
+  // Claude 4.7 models
+  // NOTE: Anthropic publishes a single alias-less ID for Opus 4.7 — the Models API
+  // returns 404 for `claude-opus-4-7-latest`, so we intentionally only register the
+  // canonical ID here.
+  ...['claude-opus-4-7'].map((model) => ({
     id: model,
     cost: {
       input: 5 / 1e6, // $5 / MTok

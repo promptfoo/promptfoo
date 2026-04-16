@@ -292,6 +292,23 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
+    // Opus 4.7 deprecated `temperature` at the model level — the API returns
+    // 400 `invalid_request_error` for any request that includes it, including
+    // promptfoo's default of 0. Suppress the parameter entirely and warn only
+    // if the user set it explicitly (env vars + built-in defaults shouldn't
+    // spam the log).
+    const isOpus47 = this.modelName.startsWith('claude-opus-4-7');
+    if (isOpus47 && config.temperature != null) {
+      logger.warn(
+        'temperature is deprecated on Claude Opus 4.7 and will be omitted. Remove temperature from your config to silence this warning.',
+      );
+    }
+
+    // Anthropic rejects `temperature` alongside `top_p`, with extended thinking,
+    // and on Opus 4.7 (deprecated at the model level). Collapse all three cases
+    // into one predicate so the params spread stays readable.
+    const omitTemperature = resolvedTopP != null || thinkingEnabled || isOpus47;
+
     // When authenticating via a Claude Code OAuth token, Anthropic's API
     // requires the Claude Code identity as the first system block — as of
     // 2025-Q4, sending any other leading system block returns HTTP 400
@@ -311,8 +328,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         config.max_tokens ?? getEnvInt('ANTHROPIC_MAX_TOKENS', thinkingEnabled ? 2048 : 1024),
       messages: extractedMessages,
       stream: shouldStream,
-      // Anthropic: temperature is incompatible with both top_p and extended thinking
-      ...(resolvedTopP != null || thinkingEnabled
+      ...(omitTemperature
         ? {}
         : {
             temperature:

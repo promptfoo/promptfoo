@@ -53,7 +53,7 @@ The `anthropic` provider supports the following models via the messages API:
 
 | Model ID                                                                   | Description                      |
 | -------------------------------------------------------------------------- | -------------------------------- |
-| `anthropic:messages:claude-opus-4-7`                                       | Latest Claude 4.7 Opus model     |
+| `anthropic:messages:claude-opus-4-7`                                       | Claude 4.7 Opus                  |
 | `anthropic:messages:claude-sonnet-4-6`                                     | Latest Claude 4.6 Sonnet model   |
 | `anthropic:messages:claude-opus-4-6`                                       | Latest Claude 4.6 Opus model     |
 | `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5-latest)     | Claude 4.5 Opus model            |
@@ -75,7 +75,7 @@ Claude models are available across multiple platforms. Here's how the model name
 
 | Model             | Anthropic API                                         | Azure AI Foundry ([docs](/docs/providers/azure/#using-claude-models)) | AWS Bedrock ([docs](/docs/providers/aws-bedrock)) | GCP Vertex AI ([docs](/docs/providers/vertex)) |
 | ----------------- | ----------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
-| Claude 4.7 Opus   | claude-opus-4-7                                       | claude-opus-4-7                                                       | anthropic.claude-opus-4-7-v1                      | claude-opus-4-7                                |
+| Claude 4.7 Opus   | claude-opus-4-7                                       | claude-opus-4-7                                                       | anthropic.claude-opus-4-7                         | claude-opus-4-7                                |
 | Claude 4.6 Sonnet | claude-sonnet-4-6                                     | claude-sonnet-4-6                                                     | anthropic.claude-sonnet-4-6                       | claude-sonnet-4-6                              |
 | Claude 4.6 Opus   | claude-opus-4-6                                       | claude-opus-4-6-20260205                                              | anthropic.claude-opus-4-6-v1                      | claude-opus-4-6                                |
 | Claude 4.5 Opus   | claude-opus-4-5-20251101 (claude-opus-4-5-latest)     | claude-opus-4-5-20251101                                              | anthropic.claude-opus-4-5-20251101-v1:0           | claude-opus-4-5@20251101                       |
@@ -449,6 +449,15 @@ tests:
   - vars:
       pdf_base64: file://document.pdf
 ```
+
+### Claude Opus 4.7 notes
+
+Opus 4.7 differs from earlier models in a few ways that affect promptfoo configs:
+
+- **`temperature` is deprecated.** The API returns `400 invalid_request_error` if `temperature` is sent. Promptfoo omits it automatically and logs a warning if you set it explicitly.
+- **Extended thinking is off; adaptive thinking is on.** Opus 4.7 does not accept `thinking: { type: 'enabled', budget_tokens: ... }`. Use `thinking: { type: 'adaptive' }` or let the model run with its default adaptive behavior.
+- **`xhigh` effort level** sits between `high` and `max`. Start with `high` or `xhigh` for coding/agentic tasks.
+- **Updated tokenizer.** The same input can map to 1.0–1.35× more tokens than Opus 4.6. Re-measure on real traffic when migrating.
 
 ### Extended Thinking
 

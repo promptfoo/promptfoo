@@ -2180,7 +2180,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'anthropic.claude-opus-4-7-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2221,7 +2221,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'apac.anthropic.claude-opus-4-7-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2241,7 +2240,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'eu.anthropic.claude-opus-4-7-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2272,7 +2271,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'us.anthropic.claude-opus-4-7-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2302,6 +2301,12 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
 
   // Global cross-region inference models (Nova 2)
   'global.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
+
+  // Global / Japan cross-region inference profiles for Claude Opus 4.7
+  // (verified via `aws bedrock list-inference-profiles`; Opus 4.7 uses the newer
+  // `jp.`/`global.` prefixes instead of the older `apac.` prefix).
+  'global.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'jp.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html

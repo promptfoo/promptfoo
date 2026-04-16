@@ -1902,6 +1902,56 @@ describe('AnthropicMessagesProvider', () => {
     });
   });
 
+  describe('Opus 4.7 temperature handling', () => {
+    const mockResp = {
+      content: [{ type: 'text', text: 'ok' }],
+      model: 'claude-opus-4-7',
+      id: 'test-id',
+      role: 'assistant',
+      stop_reason: 'end_turn',
+      stop_details: null,
+      stop_sequence: null,
+      type: 'message',
+      usage: { input_tokens: 10, output_tokens: 5 },
+    } as Anthropic.Messages.Message;
+
+    it('omits temperature entirely for Opus 4.7 (no explicit config)', async () => {
+      const provider = createProvider('claude-opus-4-7', { config: {} });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).not.toHaveProperty('temperature');
+    });
+
+    it('omits temperature and warns when explicitly set on Opus 4.7', async () => {
+      const provider = createProvider('claude-opus-4-7', { config: { temperature: 0.5 } });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).not.toHaveProperty('temperature');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('temperature is deprecated on Claude Opus 4.7'),
+      );
+    });
+
+    it('still sends temperature on Opus 4.6 (regression)', async () => {
+      const provider = createProvider('claude-opus-4-6', { config: { temperature: 0 } });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-opus-4-6' });
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).toHaveProperty('temperature', 0);
+    });
+  });
+
   describe('refusal stop_details handling', () => {
     it('should include guardrails in response when stop_reason is refusal', async () => {
       const provider = createProvider('claude-sonnet-4-6', { config: {} });

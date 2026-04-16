@@ -862,7 +862,7 @@ Available Claude models on Azure:
 
 | Model                        | Description                              |
 | ---------------------------- | ---------------------------------------- |
-| `claude-opus-4-7`            | Claude Opus 4.7 - Most capable model     |
+| `claude-opus-4-7`            | Claude Opus 4.7                          |
 | `claude-opus-4-6-20260205`   | Claude Opus 4.6                          |
 | `claude-sonnet-4-6`          | Claude Sonnet 4.6 - Balanced performance |
 | `claude-opus-4-5-20251101`   | Claude Opus 4.5                          |

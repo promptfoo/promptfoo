@@ -8,6 +8,8 @@ prompts:
 providers:
   - id: anthropic:messages:claude-opus-4-7
     config:
+      # Opus 4.7 uses adaptive thinking by default and has deprecated temperature
+      # at the model level — do not set temperature here.
       effort: xhigh # New level introduced with Opus 4.7, between high and max
       max_tokens: 8000
 
