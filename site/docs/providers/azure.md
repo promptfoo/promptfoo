@@ -846,7 +846,26 @@ See the [Azure OpenAI example](https://github.com/promptfoo/promptfoo/tree/main/
 
 ## Using Claude Models
 
-Azure AI Foundry provides access to Anthropic Claude models. These models use the standard Azure chat endpoint:
+Azure AI Foundry provides access to Anthropic Claude models through two different endpoint families.
+
+### Option 1 (recommended for Claude Opus 4.7): Anthropic Messages endpoint
+
+Azure AI Foundry exposes Claude deployments through Anthropic's Messages API at `https://<resource>.services.ai.azure.com/anthropic/v1/messages`. Point promptfoo's `anthropic:messages` provider at that base URL:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-opus-4-7
+    config:
+      apiBaseUrl: 'https://<resource>.services.ai.azure.com/anthropic'
+      apiKey: '{{env.AZURE_FOUNDRY_API_KEY}}'
+      max_tokens: 1024
+```
+
+This path gets the full Anthropic-provider feature set (including the Opus 4.7 `temperature` suppression) for free, because requests flow through promptfoo's native Anthropic provider.
+
+### Option 2: Azure OpenAI-compatible chat endpoint
+
+Claude deployments also accept OpenAI-style chat completion requests:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -855,8 +874,9 @@ providers:
       apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
       max_tokens: 4096
-      temperature: 0.7
 ```
+
+Claude Opus 4.7 deployments are auto-detected as reasoning-style models so `temperature` is omitted by default (setting it will still cause a 400 from the underlying model).
 
 Available Claude models on Azure:
 
