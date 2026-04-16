@@ -1,6 +1,7 @@
 import path from 'node:path';
 import fs from 'fs';
 
+import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache, getCache, isCacheEnabled } from '../../src/cache';
 import { importModule } from '../../src/esm';
@@ -3624,6 +3625,51 @@ describe('ClaudeCodeSDKProvider', () => {
         // surfaced metadata the extractor depends on.
         expect(result.metadata?.modelUsage).toHaveProperty('claude-haiku-4-5-20251001');
         expect(result.metadata?.terminalReason).toBe('max_turns');
+      });
+
+      it('marks the active provider span as ERROR when the SDK stops via hook_stopped', async () => {
+        const setStatus = vi.fn();
+        vi.spyOn(otelTrace, 'getActiveSpan').mockReturnValue({
+          setStatus,
+          spanContext: () => ({
+            traceId: '0af7651916cd43dd8448eb211c80319c',
+            spanId: 'b7ad6b7169203331',
+            traceFlags: 1,
+          }),
+        } as any);
+
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'session-hook-stopped',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'partial output',
+              usage: createMockUsage(1, 1),
+              total_cost_usd: 0,
+              duration_ms: 1,
+              duration_api_ms: 1,
+              is_error: false,
+              num_turns: 2,
+              permission_denials: [],
+              terminal_reason: 'hook_stopped' as TerminalReason,
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('prompt');
+
+        expect(result.output).toBe('partial output');
+        expect(result.error).toBeUndefined();
+        expect(result.metadata?.terminalReason).toBe('hook_stopped');
+        expect(setStatus).toHaveBeenCalledWith({
+          code: SpanStatusCode.ERROR,
+          message: 'aborted: hook_stopped',
+        });
       });
 
       it('propagates tool.parent_id for sub-agent tool calls', async () => {
