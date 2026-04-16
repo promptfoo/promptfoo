@@ -90,7 +90,9 @@ def _sanitize_attribute_value(value: Any) -> Any:
     if isinstance(value, list):
         return [_sanitize_attribute_value(item) for item in value]
     if isinstance(value, dict):
-        return {str(key): _sanitize_attribute_value(item) for key, item in value.items()}
+        return {
+            str(key): _sanitize_attribute_value(item) for key, item in value.items()
+        }
     return str(value)
 
 
