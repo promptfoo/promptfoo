@@ -13,7 +13,12 @@ import invariant from '../../../util/invariant';
 import { isValidJson } from '../../../util/json';
 import { sleep } from '../../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
-import { getRemoteGenerationDisabledError, shouldGenerateRemote } from '../../remoteGeneration';
+import {
+  getRemoteGenerationDisabledError,
+  getRemoteGenerationExplicitlyDisabledError,
+  neverGenerateRemote,
+  shouldGenerateRemote,
+} from '../../remoteGeneration';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -164,7 +169,11 @@ export class HydraProvider implements ApiProvider {
 
     // Hydra strategy requires remote generation
     if (!shouldGenerateRemote()) {
-      throw new Error(getRemoteGenerationDisabledError('jailbreak:hydra strategy'));
+      throw new Error(
+        neverGenerateRemote()
+          ? getRemoteGenerationExplicitlyDisabledError('jailbreak:hydra strategy')
+          : getRemoteGenerationDisabledError('jailbreak:hydra strategy'),
+      );
     }
 
     this.agentProvider = new PromptfooChatCompletionProvider({

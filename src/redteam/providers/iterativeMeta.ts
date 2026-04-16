@@ -11,7 +11,12 @@ import {
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { getRemoteGenerationDisabledError, shouldGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationDisabledError,
+  getRemoteGenerationExplicitlyDisabledError,
+  neverGenerateRemote,
+  shouldGenerateRemote,
+} from '../remoteGeneration';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -635,7 +640,11 @@ class RedteamIterativeMetaProvider implements ApiProvider {
 
     // Meta-agent strategy requires remote generation
     if (!shouldGenerateRemote()) {
-      throw new Error(getRemoteGenerationDisabledError('jailbreak:meta strategy'));
+      throw new Error(
+        neverGenerateRemote()
+          ? getRemoteGenerationExplicitlyDisabledError('jailbreak:meta strategy')
+          : getRemoteGenerationDisabledError('jailbreak:meta strategy'),
+      );
     }
 
     this.gradingProvider = new PromptfooChatCompletionProvider({

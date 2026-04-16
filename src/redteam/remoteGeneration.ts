@@ -109,7 +109,7 @@ export function getRemoteGenerationExplicitlyDisabledError(strategyName: string)
   return (
     `${strategyName} requires remote generation, which has been explicitly disabled. ` +
     'To enable it, unset PROMPTFOO_DISABLE_REMOTE_GENERATION and PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION. ' +
-    'Optionally set PROMPTFOO_REMOTE_GENERATION_URL to use a self-hosted endpoint or log into Promptfoo Cloud with `promptfoo auth login`.'
+    'Once re-enabled, you can point at a self-hosted endpoint with PROMPTFOO_REMOTE_GENERATION_URL or use Promptfoo Cloud via `promptfoo auth login`.'
   );
 }
 
