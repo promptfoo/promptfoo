@@ -60,6 +60,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;
   private mcpClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
+  private opus47TemperatureWarned = false;
 
   // Messages is the only Anthropic subclass wired to Claude Code OAuth —
   // the legacy text-completion endpoint does not accept OAuth tokens.
@@ -294,14 +295,20 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
     // Opus 4.7 deprecated `temperature` at the model level — the API returns
     // 400 `invalid_request_error` for any request that includes it, including
-    // promptfoo's default of 0. Suppress the parameter entirely and warn only
-    // if the user set it explicitly (env vars + built-in defaults shouldn't
-    // spam the log).
+    // promptfoo's built-in default of 0. Suppress the parameter entirely and
+    // warn once per provider instance when the user supplied an explicit
+    // temperature via config or the ANTHROPIC_TEMPERATURE env var (the
+    // built-in default stays silent to avoid spamming every request).
     const isOpus47 = this.modelName.startsWith('claude-opus-4-7');
-    if (isOpus47 && config.temperature != null) {
+    const explicitTemperature =
+      config.temperature != null ||
+      this.env?.ANTHROPIC_TEMPERATURE != null ||
+      process.env.ANTHROPIC_TEMPERATURE != null;
+    if (isOpus47 && explicitTemperature && !this.opus47TemperatureWarned) {
       logger.warn(
-        'temperature is deprecated on Claude Opus 4.7 and will be omitted. Remove temperature from your config to silence this warning.',
+        'temperature is deprecated on Claude Opus 4.7 and will be omitted. Remove temperature from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.',
       );
+      this.opus47TemperatureWarned = true;
     }
 
     // Anthropic rejects `temperature` alongside `top_p`, with extended thinking,

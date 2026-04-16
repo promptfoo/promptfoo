@@ -390,11 +390,12 @@ export interface ClaudeCodeOptions {
    * - 'low' - Minimal thinking, fastest responses
    * - 'medium' - Moderate thinking
    * - 'high' - Deep reasoning (default)
-   * - 'max' - Maximum effort (Opus 4.6 only)
+   * - 'xhigh' - Extra high reasoning (Opus 4.7+); sits between 'high' and 'max'
+   * - 'max' - Maximum effort
    *
    * @see https://docs.anthropic.com/en/docs/build-with-claude/effort
    */
-  effort?: 'low' | 'medium' | 'high' | 'max';
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
   /**
    * Agent name for the main thread. When specified, the agent's system prompt,

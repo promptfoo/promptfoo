@@ -2303,8 +2303,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'global.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
 
   // Global / Japan cross-region inference profiles for Claude Opus 4.7
-  // (verified via `aws bedrock list-inference-profiles`; Opus 4.7 uses the newer
-  // `jp.`/`global.` prefixes instead of the older `apac.` prefix).
+  // (verified via `aws bedrock list-inference-profiles`).
   'global.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'jp.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
 };
