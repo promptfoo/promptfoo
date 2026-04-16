@@ -4,6 +4,7 @@ import { DEFAULT_MAX_CONCURRENCY } from '../../../constants';
 import logger from '../../../logger';
 import { doRedteamRun } from '../../../redteam/shared';
 import { loadDefaultConfig } from '../../../util/config/default';
+import { validateMcpFilePath } from '../lib/security';
 import { createToolResponse, DEFAULT_TOOL_TIMEOUT_MS, withTimeout } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -107,6 +108,14 @@ export function registerRedteamRunTool(server: McpServer) {
           remote = false,
           progressBar = true,
         } = args;
+
+        if (configPath) {
+          validateMcpFilePath(configPath);
+        }
+
+        if (output) {
+          validateMcpFilePath(output);
+        }
 
         // Load default config
         try {
@@ -285,7 +294,12 @@ export function registerRedteamRunTool(server: McpServer) {
           },
         };
 
-        return createToolResponse('redteam_run', false, errorData);
+        return createToolResponse(
+          'redteam_run',
+          false,
+          errorData,
+          `Failed to run redteam scan: ${errorMessage}`,
+        );
       }
     },
   );

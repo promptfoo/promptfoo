@@ -1,3 +1,5 @@
+import path from 'path';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies before importing the module
@@ -232,6 +234,30 @@ describe('runEvaluation tool', () => {
   });
 
   describe('promptFilter validation', () => {
+    it('should reject config paths outside the workspace', async () => {
+      const { loadDefaultConfig } = await import('../../../../src/util/config/default');
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: path.join(path.dirname(process.cwd()), 'promptfooconfig.yaml'),
+      });
+
+      expect(result.isError).toBe(true);
+      expect(JSON.parse(result.content[0].text).error).toContain(
+        'Path must be within base directory',
+      );
+      expect(loadDefaultConfig).not.toHaveBeenCalled();
+    });
+
     it('should error on mixed numeric and non-numeric filters', async () => {
       const { registerRunEvaluationTool } = await import(
         '../../../../src/commands/mcp/tools/runEvaluation'

@@ -1,13 +1,13 @@
 ---
 title: Promptfoo MCP Server
-description: Deploy promptfoo as Model Context Protocol server enabling external AI agents to access evaluation and red teaming capabilities
+description: Run promptfoo as a local Model Context Protocol server for evaluation and red teaming capabilities
 sidebar_label: MCP Server
 sidebar_position: 21
 ---
 
 # Promptfoo MCP Server
 
-Expose promptfoo's eval tools to AI agents via Model Context Protocol (MCP).
+Expose promptfoo's eval tools to local AI agents via Model Context Protocol (MCP).
 
 :::info Prerequisites
 
@@ -25,7 +25,7 @@ Expose promptfoo's eval tools to AI agents via Model Context Protocol (MCP).
 # For Cursor, Claude Desktop (STDIO transport)
 npx promptfoo@latest mcp --transport stdio
 
-# For web tools (HTTP transport)
+# For local web tools (HTTP transport)
 npx promptfoo@latest mcp --transport http --port 3100
 ```
 
@@ -156,7 +156,11 @@ The AI will:
 Choose the appropriate transport based on your use case:
 
 - **STDIO (`--transport stdio`)**: For desktop AI tools (Cursor, Claude Desktop) that communicate via stdin/stdout
-- **HTTP (`--transport http`)**: For web applications, APIs, and remote integrations that need HTTP endpoints
+- **HTTP (`--transport http`)**: For local web applications, APIs, and integrations that need HTTP endpoints. HTTP binds to `127.0.0.1`.
+
+### HTTP Security
+
+The HTTP transport exposes tools that can run evals, read local promptfoo configs, and write generated outputs. It only listens on `127.0.0.1`, and browser-origin checks block cross-site POSTs.
 
 ## Best Practices
 

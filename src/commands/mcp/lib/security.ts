@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 
 import { ConfigurationError } from './errors';
@@ -55,14 +56,69 @@ export function validateFilePath(filePath: string, basePath?: string): void {
 }
 
 /**
+ * Validates a caller-supplied MCP file path against the current working directory.
+ *
+ * MCP clients run as separate local processes, so tools should not read or write
+ * arbitrary host paths outside the project the user selected when starting the
+ * MCP server.
+ */
+export function validateMcpFilePath(filePath: string): void {
+  const basePath = process.cwd();
+  validateFilePath(filePath, basePath);
+
+  const resolvedBase = fs.realpathSync(basePath);
+  const resolvedPath = path.resolve(basePath, filePath);
+  let existingPath = resolvedPath;
+
+  while (!fs.existsSync(existingPath)) {
+    const parentPath = path.dirname(existingPath);
+    if (parentPath === existingPath) {
+      break;
+    }
+    existingPath = parentPath;
+  }
+
+  const realExistingPath = fs.realpathSync(existingPath);
+  const relativePath = path.relative(resolvedBase, realExistingPath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    throw new ConfigurationError(`Path must be within base directory: ${basePath}`, filePath);
+  }
+}
+
+/**
  * Validates provider ID format
  */
 export function validateProviderId(providerId: string): void {
+  if (!providerId || /[\0\r\n]/.test(providerId)) {
+    throw new ConfigurationError('Invalid provider ID format: provider ID cannot be empty');
+  }
+
+  if (providerId.includes('..') || providerId.includes('~')) {
+    throw new ConfigurationError(
+      'Invalid provider ID format: provider IDs cannot contain ".." or "~"',
+    );
+  }
+
+  if (/^https?:\/\//i.test(providerId)) {
+    try {
+      const url = new URL(providerId);
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        return;
+      }
+    } catch {
+      throw new ConfigurationError(`Invalid provider URL: ${providerId}`);
+    }
+  }
+
+  if (/\.(js|ts|py|mjs)$/i.test(providerId)) {
+    validateMcpFilePath(providerId);
+    return;
+  }
+
   // Allow common provider formats
   const validFormats = [
-    /^[a-zA-Z0-9_-]+:[a-zA-Z0-9_.-]+$/, // provider:model format
-    /^[a-zA-Z0-9_/-]+\.(js|ts|py|mjs)$/, // file path format
-    /^https?:\/\/.+$/, // HTTP provider format
+    /^[a-zA-Z][a-zA-Z0-9_-]*$/, // simple provider ID or configured alias
+    /^[a-zA-Z][a-zA-Z0-9_-]*(?::[a-zA-Z0-9][a-zA-Z0-9_.:/-]*)+$/, // provider:model format, including nested provider modes
   ];
 
   if (!validFormats.some((format) => format.test(providerId))) {

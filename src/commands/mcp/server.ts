@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
 import logger from '../../logger';
+import { csrfProtection } from '../../server/middleware/csrfProtection';
 import telemetry from '../../telemetry';
 import { registerResources } from './resources';
 import { registerCompareProvidersTool } from './tools/compareProviders';
@@ -18,6 +19,12 @@ import { registerRunEvaluationTool } from './tools/runEvaluation';
 import { registerShareEvaluationTool } from './tools/shareEvaluation';
 import { registerTestProviderTool } from './tools/testProvider';
 import { registerValidatePromptfooConfigTool } from './tools/validatePromptfooConfig';
+
+export const DEFAULT_MCP_HTTP_HOST = '127.0.0.1';
+
+function formatHttpHostForUrl(host: string): string {
+  return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
+}
 
 /**
  * Creates an MCP server with tools for interacting with promptfoo
@@ -80,6 +87,7 @@ export async function startHttpMcpServer(port: number): Promise<void> {
 
   const app = express();
   app.use(express.json());
+  app.use(csrfProtection);
 
   const mcpServer = await createMcpServer();
 
@@ -108,14 +116,17 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   // Return a Promise that only resolves when the server shuts down
   // This keeps long-running commands running until SIGINT/SIGTERM
   return new Promise<void>((resolve) => {
-    const httpServer = app.listen(port, () => {
-      logger.info(`Promptfoo MCP server running at http://localhost:${port}`);
-      logger.info(`MCP endpoint: http://localhost:${port}/mcp`);
-      logger.info(`SSE endpoint: http://localhost:${port}/mcp/sse`);
+    const host = DEFAULT_MCP_HTTP_HOST;
+    const urlHost = formatHttpHostForUrl(host);
+    const httpServer = app.listen(port, host, () => {
+      logger.info(`Promptfoo MCP server running at http://${urlHost}:${port}`);
+      logger.info(`MCP endpoint: http://${urlHost}:${port}/mcp`);
+      logger.info(`SSE endpoint: http://${urlHost}:${port}/mcp/sse`);
 
       // Track server start
       telemetry.record('feature_used', {
         feature: 'mcp_server_started',
+        host,
         transport: 'http',
         port,
       });
@@ -130,6 +141,8 @@ export async function startHttpMcpServer(port: number): Promise<void> {
         return;
       }
       isShuttingDown = true;
+      process.removeListener('SIGINT', shutdown);
+      process.removeListener('SIGTERM', shutdown);
 
       logger.info('Shutting down MCP server...');
       const SHUTDOWN_TIMEOUT_MS = 5000;
@@ -200,6 +213,9 @@ export async function startStdioMcpServer(): Promise<void> {
         return;
       }
       isShuttingDown = true;
+      process.removeListener('SIGINT', shutdown);
+      process.removeListener('SIGTERM', shutdown);
+      process.stdin.removeListener('end', shutdown);
 
       // Add timeout to prevent indefinite hangs, matching HTTP server pattern
       const SHUTDOWN_TIMEOUT_MS = 5000;

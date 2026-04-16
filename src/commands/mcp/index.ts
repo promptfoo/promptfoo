@@ -33,7 +33,12 @@ export function mcpCommand(program: Command): void {
           process.exitCode = 1;
           return;
         }
-        await startHttpMcpServer(port);
+        try {
+          await startHttpMcpServer(port);
+        } catch (error) {
+          logger.error(error instanceof Error ? error.message : String(error));
+          process.exitCode = 1;
+        }
       }
     });
 }

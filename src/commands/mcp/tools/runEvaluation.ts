@@ -7,6 +7,7 @@ import { escapeRegExp } from '../../../util/text';
 import { doEval } from '../../eval';
 import { filterPrompts } from '../../eval/filterPrompts';
 import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultFormatter';
+import { validateMcpFilePath } from '../lib/security';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Command } from 'commander';
@@ -137,6 +138,10 @@ export function registerRunEvaluationTool(server: McpServer) {
           resultLimit = 20,
           resultOffset = 0,
         } = args;
+
+        if (configPath) {
+          validateMcpFilePath(configPath);
+        }
 
         // Load default config
         let defaultConfig;
@@ -517,7 +522,12 @@ export function registerRunEvaluationTool(server: McpServer) {
           },
         };
 
-        return createToolResponse('run_evaluation', false, errorData);
+        return createToolResponse(
+          'run_evaluation',
+          false,
+          errorData,
+          `Failed to run evaluation: ${errorMessage}`,
+        );
       }
     },
   );

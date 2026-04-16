@@ -1,6 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
+import { describe, expect, it, vi } from 'vitest';
 import { ConfigurationError } from '../../../../src/commands/mcp/lib/errors';
-import { validateFilePath, validateProviderId } from '../../../../src/commands/mcp/lib/security';
+import {
+  validateFilePath,
+  validateMcpFilePath,
+  validateProviderId,
+} from '../../../../src/commands/mcp/lib/security';
 import { escapeRegExp } from '../../../../src/util/text';
 
 describe('MCP Security', () => {
@@ -71,6 +79,40 @@ describe('MCP Security', () => {
     });
   });
 
+  describe('validateMcpFilePath', () => {
+    it('should constrain paths to the current working directory', () => {
+      const cwd = process.cwd();
+      const insidePath = path.join(cwd, 'mcp-output.yaml');
+      const outsidePath = path.join(path.dirname(cwd), 'outside-mcp-output.yaml');
+
+      expect(() => validateMcpFilePath('mcp-output.yaml')).not.toThrow();
+      expect(() => validateMcpFilePath(insidePath)).not.toThrow();
+      expect(() => validateMcpFilePath(outsidePath)).toThrow(ConfigurationError);
+    });
+
+    it.skipIf(process.platform === 'win32')(
+      'should reject paths that traverse outside the workspace through symlinks',
+      () => {
+        const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+        const workspace = path.join(tempRoot, 'workspace');
+        const outside = path.join(tempRoot, 'outside');
+        fs.mkdirSync(workspace);
+        fs.mkdirSync(outside);
+        fs.symlinkSync(outside, path.join(workspace, 'linked-outside'));
+        const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+
+        try {
+          expect(() => validateMcpFilePath('linked-outside/output.yaml')).toThrow(
+            ConfigurationError,
+          );
+        } finally {
+          cwdSpy.mockRestore();
+          fs.rmSync(tempRoot, { force: true, recursive: true });
+        }
+      },
+    );
+  });
+
   describe('escapeRegExp', () => {
     it('should escape special regex characters', () => {
       expect(escapeRegExp('hello.world')).toBe('hello\\.world');
@@ -113,9 +155,13 @@ describe('MCP Security', () => {
 
   describe('validateProviderId', () => {
     it('should accept valid provider:model format', () => {
+      expect(() => validateProviderId('echo')).not.toThrow();
+      expect(() => validateProviderId('custom-provider')).not.toThrow();
       expect(() => validateProviderId('openai:gpt-4')).not.toThrow();
       expect(() => validateProviderId('anthropic:claude-3')).not.toThrow();
       expect(() => validateProviderId('azure:gpt-4o')).not.toThrow();
+      expect(() => validateProviderId('openai:chat:gpt-5.4-2026-03-05')).not.toThrow();
+      expect(() => validateProviderId('bedrock:us.anthropic.claude-opus-4-6-v1:0')).not.toThrow();
     });
 
     it('should accept file path providers', () => {
@@ -131,8 +177,11 @@ describe('MCP Security', () => {
     });
 
     it('should reject invalid formats', () => {
-      expect(() => validateProviderId('invalid')).toThrow(ConfigurationError);
+      expect(() => validateProviderId('invalid provider')).toThrow(ConfigurationError);
+      expect(() => validateProviderId('bad$provider')).toThrow(ConfigurationError);
       expect(() => validateProviderId('')).toThrow(ConfigurationError);
+      expect(() => validateProviderId('../providers/custom.js')).toThrow(ConfigurationError);
+      expect(() => validateProviderId('openai:../../secret')).toThrow(ConfigurationError);
     });
   });
 });
