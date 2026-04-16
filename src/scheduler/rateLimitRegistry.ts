@@ -1,6 +1,8 @@
 import { EventEmitter } from 'events';
 
 import { getEnvBool, getEnvInt } from '../envars';
+import logger from '../logger';
+import { withFetchRetryContext } from '../util/fetch/retryContext';
 import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
 import { getRateLimitKey } from './rateLimitKey';
 
@@ -48,9 +50,13 @@ export class RateLimitRegistry extends EventEmitter {
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
     },
   ): Promise<T> {
-    // If disabled, just call directly
+    const providerMaxRetries = getProviderMaxRetries(provider);
+
+    // Even when the scheduler is disabled, propagate the retry context so
+    // `fetchWithRetries` picks up the provider's `maxRetries` as its default
+    // and `fetchWithProxy` disables transient retries when `maxRetries: 0`.
     if (!this.enabled) {
-      return callFn();
+      return withFetchRetryContext(providerMaxRetries, callFn);
     }
 
     const rateLimitKey = getRateLimitKey(provider);
@@ -65,12 +71,16 @@ export class RateLimitRegistry extends EventEmitter {
       queueDepth: state.getQueueDepth(),
     });
 
-    try {
-      const result = await state.executeWithRetry(requestId, callFn, {
+    const run = () =>
+      state.executeWithRetry(requestId, callFn, {
         getHeaders: options?.getHeaders,
         isRateLimited: options?.isRateLimited,
         getRetryAfter: options?.getRetryAfter,
+        maxRetriesOverride: providerMaxRetries,
       });
+
+    try {
+      const result = await withFetchRetryContext(providerMaxRetries, run);
 
       this.emit('request:completed', {
         rateLimitKey,
@@ -142,4 +152,38 @@ export class RateLimitRegistry extends EventEmitter {
  */
 export function createRateLimitRegistry(options: RateLimitRegistryOptions): RateLimitRegistry {
   return new RateLimitRegistry(options);
+}
+
+/**
+ * Read the provider's configured maxRetries value, tolerating numeric strings
+ * (e.g. from environment overrides) and rejecting invalid values.
+ *
+ * Returning `undefined` means "fall back to defaults" — distinct from `0`, which
+ * means "disable retries". Invalid user-supplied values (negatives, floats,
+ * non-numeric strings) are logged so config typos aren't silently ignored.
+ */
+function getProviderMaxRetries(provider: ApiProvider): number | undefined {
+  const raw: unknown =
+    provider.config && typeof provider.config === 'object'
+      ? (provider.config as { maxRetries?: unknown }).maxRetries
+      : undefined;
+
+  if (raw === undefined) {
+    return undefined;
+  }
+
+  if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) {
+    return raw;
+  }
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (/^\d+$/.test(trimmed)) {
+      return Number(trimmed);
+    }
+  }
+
+  logger.warn(
+    `[RateLimit] Ignoring invalid provider.config.maxRetries=${JSON.stringify(raw)} for ${provider.id()}; expected a non-negative integer.`,
+  );
+  return undefined;
 }

@@ -71,6 +71,17 @@ vi.mock('../../src/envars', () => ({
   getEnvBool: mockGetEnvBool,
 }));
 
+vi.mock('../../src/logger', () => ({
+  __esModule: true,
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  logRequestResponse: vi.fn(),
+}));
+
 // Import after mocks are set up
 const { RateLimitRegistry, createRateLimitRegistry } = await import(
   '../../src/scheduler/rateLimitRegistry'
@@ -253,6 +264,7 @@ describe('RateLimitRegistry', () => {
           getHeaders: undefined,
           isRateLimited: undefined,
           getRetryAfter: undefined,
+          maxRetriesOverride: undefined,
         },
       );
       expect(result).toBe('state-result');
@@ -277,7 +289,74 @@ describe('RateLimitRegistry', () => {
         getHeaders,
         isRateLimited,
         getRetryAfter,
+        maxRetriesOverride: undefined,
       });
+    });
+
+    it.each([
+      { input: 0, expected: 0 },
+      { input: 5, expected: 5 },
+      { input: '2', expected: 2 },
+    ])('should forward maxRetriesOverride=$expected for provider config.maxRetries=$input', async ({
+      input,
+      expected,
+    }) => {
+      mockState.executeWithRetry.mockResolvedValue('result');
+      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
+      const provider = {
+        ...mockProvider,
+        config: { ...mockProvider.config, maxRetries: input },
+      } as ApiProvider;
+
+      await registry.execute(provider, vi.fn());
+
+      expect(mockState.executeWithRetry).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.any(Function),
+        expect.objectContaining({ maxRetriesOverride: expected }),
+      );
+    });
+
+    it.each([
+      { label: 'negative number', input: -1 },
+      { label: 'non-integer number', input: 2.5 },
+      { label: 'non-integer string', input: '2.5' },
+    ])('should warn and forward maxRetriesOverride=undefined for invalid $label ($input)', async ({
+      input,
+    }) => {
+      mockState.executeWithRetry.mockResolvedValue('result');
+      const logger = (await import('../../src/logger')).default;
+      const warnSpy = vi.mocked(logger.warn);
+      warnSpy.mockClear();
+
+      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
+      const provider = {
+        ...mockProvider,
+        config: { ...mockProvider.config, maxRetries: input },
+      } as ApiProvider;
+
+      await registry.execute(provider, vi.fn());
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Ignoring invalid provider.config.maxRetries'),
+      );
+      expect(mockState.executeWithRetry).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.any(Function),
+        expect.objectContaining({ maxRetriesOverride: undefined }),
+      );
+    });
+
+    it('should not warn when provider does not set maxRetries', async () => {
+      mockState.executeWithRetry.mockResolvedValue('result');
+      const logger = (await import('../../src/logger')).default;
+      const warnSpy = vi.mocked(logger.warn);
+      warnSpy.mockClear();
+
+      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
+      await registry.execute(mockProvider, vi.fn());
+
+      expect(warnSpy).not.toHaveBeenCalled();
     });
 
     it('should generate unique request IDs', async () => {
