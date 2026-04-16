@@ -32,9 +32,53 @@ import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
+import type { ProviderOptions } from '../../types/providers';
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
+
+/**
+ * The subset of `loadApiProviders` inputs the redteam code actually supplies
+ * to it. This is a deliberate **narrowing** of loadApiProviders's full input
+ * surface (which also accepts ApiProvider instances, ProviderFunction
+ * closures, arrays, records, etc.) so the injection seam below cannot be
+ * misused to bypass provider loading. Widen only after confirming every
+ * redteam call site.
+ */
+export type LoadableRedteamProvider = string | ProviderOptions;
+export type RedteamProviderLoader = (
+  providers: LoadableRedteamProvider[],
+) => Promise<ApiProvider[]>;
+
+const defaultRedteamProviderLoader: RedteamProviderLoader = async (providers) => {
+  const { loadApiProviders } = await import('../../providers');
+  return loadApiProviders(providers);
+};
+
+let redteamProviderLoader = defaultRedteamProviderLoader;
+
+/**
+ * Install a custom loader for redteam provider resolution. Returns a
+ * disposer that restores the previous loader; callers (typically tests) are
+ * strongly encouraged to pair the install with the returned disposer so
+ * random-order tests cannot leak a mutated loader across files.
+ *
+ * ```ts
+ * const restore = setRedteamProviderLoader(mockLoader);
+ * try { ... } finally { restore(); }
+ * ```
+ */
+export function setRedteamProviderLoader(loader: RedteamProviderLoader): () => void {
+  const previous = redteamProviderLoader;
+  redteamProviderLoader = loader;
+  return () => {
+    redteamProviderLoader = previous;
+  };
+}
+
+export function resetRedteamProviderLoader(): void {
+  redteamProviderLoader = defaultRedteamProviderLoader;
+}
 
 async function loadRedteamProvider({
   provider,
@@ -54,9 +98,7 @@ async function loadRedteamProvider({
     ret = redteamProvider;
   } else if (typeof redteamProvider === 'string' || isProviderOptions(redteamProvider)) {
     logger.debug(`Loading ${purpose} provider`, { provider: redteamProvider });
-    const loadApiProvidersModule = await import('../../providers');
-    // Async import to avoid circular dependency
-    ret = (await loadApiProvidersModule.loadApiProviders([redteamProvider]))[0];
+    ret = (await redteamProviderLoader([redteamProvider]))[0];
   } else {
     const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
     logger.debug(`Using default ${purpose} provider: ${defaultModel}`);

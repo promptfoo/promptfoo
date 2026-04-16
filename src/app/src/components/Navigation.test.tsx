@@ -1,4 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { MODEL_AUDIT_ROUTES, REDTEAM_ROUTES, ROUTES } from '@app/constants/routes';
+import { mockMatchMedia, restoreBrowserMocks } from '@app/tests/browserMocks';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -6,11 +8,10 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Navigation from './Navigation';
 
+const LEGACY_MODEL_AUDIT_HISTORY_ROUTE = `${MODEL_AUDIT_ROUTES.ROOT}/history`;
+
 // Helper function to render Navigation with all required providers
-const renderNavigation = (
-  props: { onToggleDarkMode?: () => void } = {},
-  routerProps: { initialEntries?: string[] } = {},
-) => {
+const renderNavigation = (routerProps: { initialEntries?: string[] } = {}) => {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -23,14 +24,14 @@ const renderNavigation = (
     <TooltipProvider delayDuration={0}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter {...routerProps}>
-          <Navigation onToggleDarkMode={props.onToggleDarkMode || (() => {})} />
+          <Navigation />
         </MemoryRouter>
       </QueryClientProvider>
     </TooltipProvider>,
   );
 };
 
-const renderWithModal = (navigationProps: { onToggleDarkMode?: () => void } = {}) => {
+const renderWithModal = () => {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -60,7 +61,7 @@ const renderWithModal = (navigationProps: { onToggleDarkMode?: () => void } = {}
     <TooltipProvider delayDuration={0}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <Navigation onToggleDarkMode={navigationProps.onToggleDarkMode || (() => {})} />
+          <Navigation />
           <Modal />
         </MemoryRouter>
       </QueryClientProvider>
@@ -70,10 +71,15 @@ const renderWithModal = (navigationProps: { onToggleDarkMode?: () => void } = {}
 
 describe('Navigation', () => {
   beforeEach(() => {
+    localStorage.clear();
+    document.documentElement.removeAttribute('data-theme');
+    document.documentElement.style.colorScheme = '';
+    mockMatchMedia();
     vi.clearAllMocks();
   });
 
   afterEach(() => {
+    restoreBrowserMocks();
     vi.restoreAllMocks();
   });
 
@@ -99,25 +105,46 @@ describe('Navigation', () => {
     await user.click(screen.getByText('New'));
     const modelAuditItem = screen.getByText('Model Audit', { selector: 'div' });
     expect(modelAuditItem).toBeInTheDocument();
-    expect(modelAuditItem.closest('a')).toHaveAttribute('href', '/model-audit/setup');
+    expect(modelAuditItem.closest('a')).toHaveAttribute('href', MODEL_AUDIT_ROUTES.SETUP);
   });
 
   it('activates the Create button when on model audit setup page', () => {
-    renderNavigation({}, { initialEntries: ['/model-audit/setup'] });
+    renderNavigation({ initialEntries: [MODEL_AUDIT_ROUTES.SETUP] });
     const createButton = screen.getByText('New').closest('button');
     // The Create button gets a visual highlight when active, but specific class depends on implementation
     expect(createButton).toBeInTheDocument();
   });
 
-  it('calls onToggleDarkMode when the dark mode toggle is clicked', async () => {
+  it('changes theme preference from the compact theme button', async () => {
     const user = userEvent.setup();
-    const onToggleDarkMode = vi.fn();
-    renderNavigation({ onToggleDarkMode });
-    const darkModeToggle = screen.getByRole('button', {
-      name: /switch to dark mode/i,
+    renderNavigation();
+
+    const themeButton = screen.getByRole('button', {
+      name: 'Theme preference: System theme (light). Switch to Dark theme.',
     });
-    await user.click(darkModeToggle);
-    expect(onToggleDarkMode).toHaveBeenCalledTimes(1);
+    expect(themeButton).toHaveClass('size-9');
+
+    await user.click(themeButton);
+
+    await waitFor(() => {
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    });
+    expect(localStorage.getItem('darkMode')).toBe('true');
+    expect(
+      screen.getByRole('button', {
+        name: 'Theme preference: Dark theme. Switch to Light theme.',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the compact theme button in the same nav footprint', () => {
+    renderNavigation();
+
+    expect(
+      screen.getByRole('button', {
+        name: 'Theme preference: System theme (light). Switch to Dark theme.',
+      }),
+    ).toHaveClass('size-9');
   });
 
   it('renders appropriately on mobile viewport sizes', () => {
@@ -134,7 +161,7 @@ describe('Navigation', () => {
   });
 
   it('activates the Model Audit NavLink on /model-audit path', () => {
-    renderNavigation({}, { initialEntries: ['/model-audit'] });
+    renderNavigation({ initialEntries: [MODEL_AUDIT_ROUTES.ROOT] });
     const navBar = screen.getByRole('banner');
     const modelAuditLink = within(navBar).getByRole('link', { name: 'Model Audit' });
     expect(modelAuditLink).toHaveClass('bg-primary/10');
@@ -142,7 +169,7 @@ describe('Navigation', () => {
   });
 
   it('activates the Model Audit NavLink on /model-audit/:id path', () => {
-    renderNavigation({}, { initialEntries: ['/model-audit/123'] });
+    renderNavigation({ initialEntries: [MODEL_AUDIT_ROUTES.DETAIL('123')] });
     const navBar = screen.getByRole('banner');
     const modelAuditLink = within(navBar).getByRole('link', { name: 'Model Audit' });
     expect(modelAuditLink).toHaveClass('bg-primary/10');
@@ -150,31 +177,31 @@ describe('Navigation', () => {
   });
 
   it('does not activate Model Audit NavLink on /model-audit/setup path', () => {
-    renderNavigation({}, { initialEntries: ['/model-audit/setup'] });
+    renderNavigation({ initialEntries: [MODEL_AUDIT_ROUTES.SETUP] });
     const navBar = screen.getByRole('banner');
     const topLevelNavLink = within(navBar).getByRole('link', { name: 'Model Audit' });
     expect(topLevelNavLink).toBeDefined();
-    expect(topLevelNavLink).toHaveAttribute('href', '/model-audit');
+    expect(topLevelNavLink).toHaveAttribute('href', MODEL_AUDIT_ROUTES.ROOT);
     expect(topLevelNavLink).not.toHaveClass('bg-primary/10');
     expect(topLevelNavLink).toHaveClass('text-foreground');
   });
 
   it('does not activate Model Audit NavLink on /model-audit/history path', () => {
-    renderNavigation({}, { initialEntries: ['/model-audit/history'] });
+    renderNavigation({ initialEntries: [LEGACY_MODEL_AUDIT_HISTORY_ROUTE] });
     const navBar = screen.getByRole('banner');
     const topLevelNavLink = within(navBar).getByRole('link', { name: 'Model Audit' });
     expect(topLevelNavLink).toBeDefined();
-    expect(topLevelNavLink).toHaveAttribute('href', '/model-audit');
+    expect(topLevelNavLink).toHaveAttribute('href', MODEL_AUDIT_ROUTES.ROOT);
     expect(topLevelNavLink).not.toHaveClass('bg-primary/10');
     expect(topLevelNavLink).toHaveClass('text-foreground');
   });
 
   it('does not activate Model Audit NavLink on /model-audit/history/:id path', () => {
-    renderNavigation({}, { initialEntries: ['/model-audit/history/123'] });
+    renderNavigation({ initialEntries: [`${LEGACY_MODEL_AUDIT_HISTORY_ROUTE}/123`] });
     const navBar = screen.getByRole('banner');
     const topLevelNavLink = within(navBar).getByRole('link', { name: 'Model Audit' });
     expect(topLevelNavLink).toBeDefined();
-    expect(topLevelNavLink).toHaveAttribute('href', '/model-audit');
+    expect(topLevelNavLink).toHaveAttribute('href', MODEL_AUDIT_ROUTES.ROOT);
     expect(topLevelNavLink).not.toHaveClass('bg-primary/10');
     expect(topLevelNavLink).toHaveClass('text-foreground');
   });
@@ -189,7 +216,7 @@ describe('Navigation', () => {
 
       const modelAuditItem = screen.getByText('Model Audit', { selector: 'div' });
       expect(modelAuditItem).toBeInTheDocument();
-      expect(modelAuditItem.closest('a')).toHaveAttribute('href', '/model-audit/setup');
+      expect(modelAuditItem.closest('a')).toHaveAttribute('href', MODEL_AUDIT_ROUTES.SETUP);
 
       // Check description text
       expect(screen.getByText('Configure and run a model security scan')).toBeInTheDocument();
@@ -207,6 +234,7 @@ describe('Navigation', () => {
         expect(screen.getByText('Model Audit', { selector: 'div' })).toBeInTheDocument();
       });
 
+      // Click outside the dropdown
       await user.click(document.body);
 
       await waitFor(() => {
@@ -235,11 +263,12 @@ describe('Navigation', () => {
 
       const createButton = screen.getByText('New');
 
+      // Click to open dropdown
       await user.click(createButton);
 
       // Verify dropdown opens and items are accessible
       const modelAuditItem = screen.getByText('Model Audit', { selector: 'div' }).closest('a');
-      expect(modelAuditItem).toHaveAttribute('href', '/model-audit/setup');
+      expect(modelAuditItem).toHaveAttribute('href', MODEL_AUDIT_ROUTES.SETUP);
 
       // Verify keyboard accessibility of the link
       expect(modelAuditItem).toBeInTheDocument();
@@ -258,24 +287,24 @@ describe('Navigation', () => {
       // Check that other standard items are present (these should exist based on current UI)
       const evalItem = screen.queryByText('Eval');
       if (evalItem) {
-        expect(evalItem.closest('a')).toHaveAttribute('href', '/setup');
+        expect(evalItem.closest('a')).toHaveAttribute('href', ROUTES.SETUP);
       }
 
       const redTeamItem = screen.queryByText('Red Team');
       if (redTeamItem) {
-        expect(redTeamItem.closest('a')).toHaveAttribute('href', '/redteam/setup');
+        expect(redTeamItem.closest('a')).toHaveAttribute('href', REDTEAM_ROUTES.SETUP);
       }
     });
   });
 
   describe('Model Audit NavLink Active States', () => {
     it('activates Model Audit NavLink on /model-audit path', () => {
-      renderNavigation({}, { initialEntries: ['/model-audit'] });
+      renderNavigation({ initialEntries: [MODEL_AUDIT_ROUTES.ROOT] });
 
       // Find the top-level Model Audit NavLink (not the dropdown item)
       const allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
       const topLevelModelAuditLink = allModelAuditLinks.find(
-        (link) => link.getAttribute('href') === '/model-audit',
+        (link) => link.getAttribute('href') === MODEL_AUDIT_ROUTES.ROOT,
       );
       expect(topLevelModelAuditLink).toBeDefined();
       expect(topLevelModelAuditLink).toHaveClass('bg-primary/10');
@@ -283,11 +312,11 @@ describe('Navigation', () => {
     });
 
     it('activates Model Audit NavLink on /model-audit/:id path', () => {
-      renderNavigation({}, { initialEntries: ['/model-audit/123'] });
+      renderNavigation({ initialEntries: [MODEL_AUDIT_ROUTES.DETAIL('123')] });
 
       const allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
       const topLevelModelAuditLink = allModelAuditLinks.find(
-        (link) => link.getAttribute('href') === '/model-audit',
+        (link) => link.getAttribute('href') === MODEL_AUDIT_ROUTES.ROOT,
       );
       expect(topLevelModelAuditLink).toBeDefined();
       expect(topLevelModelAuditLink).toHaveClass('bg-primary/10');
@@ -295,11 +324,11 @@ describe('Navigation', () => {
     });
 
     it('does not activate Model Audit NavLink on /model-audit/setup path', () => {
-      renderNavigation({}, { initialEntries: ['/model-audit/setup'] });
+      renderNavigation({ initialEntries: [MODEL_AUDIT_ROUTES.SETUP] });
 
       const allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
       const topLevelModelAuditLink = allModelAuditLinks.find(
-        (link) => link.getAttribute('href') === '/model-audit',
+        (link) => link.getAttribute('href') === MODEL_AUDIT_ROUTES.ROOT,
       );
       expect(topLevelModelAuditLink).toBeDefined();
       expect(topLevelModelAuditLink).not.toHaveClass('bg-primary/10');
@@ -307,11 +336,11 @@ describe('Navigation', () => {
     });
 
     it('does not activate Model Audit NavLink on /model-audit/history path', () => {
-      renderNavigation({}, { initialEntries: ['/model-audit/history'] });
+      renderNavigation({ initialEntries: [LEGACY_MODEL_AUDIT_HISTORY_ROUTE] });
 
       const allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
       const topLevelModelAuditLink = allModelAuditLinks.find(
-        (link) => link.getAttribute('href') === '/model-audit',
+        (link) => link.getAttribute('href') === MODEL_AUDIT_ROUTES.ROOT,
       );
       expect(topLevelModelAuditLink).toBeDefined();
       expect(topLevelModelAuditLink).not.toHaveClass('bg-primary/10');
@@ -319,11 +348,11 @@ describe('Navigation', () => {
     });
 
     it('does not activate Model Audit NavLink on deeply nested paths under excluded routes like /model-audit/history/details/123', () => {
-      renderNavigation({}, { initialEntries: ['/model-audit/history/details/123'] });
+      renderNavigation({ initialEntries: [`${LEGACY_MODEL_AUDIT_HISTORY_ROUTE}/details/123`] });
 
       const allModelAuditLinks = screen.getAllByRole('link', { name: 'Model Audit' });
       const topLevelModelAuditLink = allModelAuditLinks.find(
-        (link) => link.getAttribute('href') === '/model-audit',
+        (link) => link.getAttribute('href') === MODEL_AUDIT_ROUTES.ROOT,
       );
       expect(topLevelModelAuditLink).toBeDefined();
       expect(topLevelModelAuditLink).not.toHaveClass('bg-primary/10');
@@ -339,6 +368,7 @@ describe('Navigation', () => {
       const createButton = screen.getByText('New').closest('button');
       expect(createButton).toBeInTheDocument();
 
+      // Check basic accessibility - button should be focusable
       await user.click(createButton!);
 
       // Verify dropdown functionality works
@@ -352,7 +382,7 @@ describe('Navigation', () => {
       await user.click(screen.getByText('New'));
 
       const modelAuditLink = screen.getByText('Model Audit', { selector: 'div' }).closest('a');
-      expect(modelAuditLink).toHaveAttribute('href', '/model-audit/setup');
+      expect(modelAuditLink).toHaveAttribute('href', MODEL_AUDIT_ROUTES.SETUP);
       expect(modelAuditLink).toBeInTheDocument();
     });
 

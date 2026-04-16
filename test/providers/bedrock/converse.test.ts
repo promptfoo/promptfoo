@@ -941,6 +941,69 @@ Third line`;
 
       spanSpy.mockRestore();
     });
+
+    it('omits temperature for Claude Opus 4.7 even when explicitly set', async () => {
+      const provider = new AwsBedrockConverseProvider('us.anthropic.claude-opus-4-7', {
+        config: {
+          region: 'us-east-1',
+          max_tokens: 1024,
+          temperature: 0.5,
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      const call = (ConverseCommand as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(
+        -1,
+      )?.[0] as { inferenceConfig?: Record<string, unknown> };
+      expect(call?.inferenceConfig?.temperature).toBeUndefined();
+      expect(call?.inferenceConfig?.maxTokens).toBe(1024);
+    });
+
+    it('omits temperature for Opus 4.7 via AWS_BEDROCK_TEMPERATURE env fallback', async () => {
+      process.env.AWS_BEDROCK_TEMPERATURE = '0.7';
+
+      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-opus-4-7', {
+        config: { region: 'us-east-1', max_tokens: 1024 },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      const call = (ConverseCommand as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(
+        -1,
+      )?.[0] as { inferenceConfig?: Record<string, unknown> };
+      expect(call?.inferenceConfig?.temperature).toBeUndefined();
+
+      delete process.env.AWS_BEDROCK_TEMPERATURE;
+    });
+
+    it('still forwards temperature for Opus 4.6 on Bedrock (regression)', async () => {
+      const provider = new AwsBedrockConverseProvider('us.anthropic.claude-opus-4-6-v1', {
+        config: { region: 'us-east-1', max_tokens: 1024, temperature: 0 },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      const call = (ConverseCommand as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(
+        -1,
+      )?.[0] as { inferenceConfig?: Record<string, unknown> };
+      expect(call?.inferenceConfig?.temperature).toBe(0);
+    });
   });
 
   describe('performance and service tier configuration', () => {

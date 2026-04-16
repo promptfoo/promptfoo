@@ -22,7 +22,18 @@ export const ANTHROPIC_MODELS = [
       output: 125 / 1e6, // $125 / MTok
     },
   })),
-  // Claude 4.6 models - Latest generation
+  // Claude 4.7 models
+  // NOTE: Anthropic publishes a single alias-less ID for Opus 4.7 — the Models API
+  // returns 404 for `claude-opus-4-7-latest`, so we intentionally only register the
+  // canonical ID here.
+  ...['claude-opus-4-7'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1e6, // $5 / MTok
+      output: 25 / 1e6, // $25 / MTok
+    },
+  })),
+  // Claude 4.6 models
   ...['claude-sonnet-4-6', 'claude-sonnet-4-6-latest'].map((model) => ({
     id: model,
     cost: {
@@ -129,6 +140,16 @@ export const ANTHROPIC_MODELS = [
     },
   })),
 ];
+
+/**
+ * Matches Claude Opus 4.7 model IDs across Anthropic, Bedrock (including the
+ * `us.`/`eu.`/`jp.`/`global.` inference-profile prefixes), Vertex, and Azure
+ * deployment names. Returns `false` for hypothetical suffix variants like
+ * `claude-opus-4-70` or `claude-opus-4-7N` so detection stays forward-compatible.
+ */
+export function isClaudeOpus47Model(modelId: string): boolean {
+  return /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i.test(modelId);
+}
 
 export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
   const hasToolUse = message.content.some((block) => block.type === 'tool_use');

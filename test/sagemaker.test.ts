@@ -146,6 +146,76 @@ vi.mock('../src/util/time', async (importOriginal) => {
   };
 });
 
+async function mockSageMakerSend(command: any) {
+  if (command.EndpointName === 'fail-endpoint') {
+    throw new Error('SageMaker endpoint failed');
+  }
+
+  // For embedding endpoints
+  if (command.EndpointName.includes('embedding')) {
+    return {
+      Body: new TextEncoder().encode(
+        JSON.stringify({
+          embedding: [0.1, 0.2, 0.3, 0.4, 0.5],
+        }),
+      ),
+    };
+  }
+
+  // Different response formats based on endpoint name
+  let responseBody;
+
+  if (command.EndpointName.includes('openai')) {
+    responseBody = {
+      choices: [
+        {
+          message: {
+            content: 'This is a response from OpenAI-compatible endpoint',
+          },
+        },
+      ],
+    };
+  } else if (command.EndpointName.includes('llama')) {
+    responseBody = {
+      generation: 'This is a response from Llama-compatible endpoint',
+    };
+  } else if (command.EndpointName.includes('huggingface')) {
+    responseBody = [
+      {
+        generated_text: 'This is a response from HuggingFace-compatible endpoint',
+      },
+    ];
+  } else if (command.EndpointName.includes('js-extract')) {
+    responseBody = {
+      custom: {
+        result: 'Extracted value',
+      },
+    };
+  } else if (command.EndpointName.includes('nested-data')) {
+    responseBody = {
+      data: {
+        nested: {
+          value: 'Nested data value',
+        },
+        array: [1, 2, 3],
+      },
+    };
+  } else {
+    // Custom format
+    responseBody = {
+      output: 'This is a response from custom endpoint',
+    };
+  }
+
+  return {
+    Body: new TextEncoder().encode(JSON.stringify(responseBody)),
+  };
+}
+
+beforeEach(() => {
+  mockSend.mockReset().mockImplementation(mockSageMakerSend);
+});
+
 describe('SageMakerCompletionProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();

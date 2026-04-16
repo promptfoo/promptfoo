@@ -6,6 +6,7 @@ import {
   formatOpenAiError,
   getTokenUsage,
   OPENAI_CHAT_MODELS,
+  OPENAI_RESPONSES_ONLY_MODELS,
   validateFunctionCall,
 } from '../../../src/providers/openai/util';
 
@@ -120,6 +121,11 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 0.6 + 500 * 12) / 1e6, 6);
   });
 
+  it('should calculate cost correctly for TTS model gpt-4o-mini-tts-2025-12-15', () => {
+    const cost = calculateOpenAICost('gpt-4o-mini-tts-2025-12-15', {}, 1000, 0, 0, 500);
+    expect(cost).toBeCloseTo((1000 * 0.6 + 500 * 12) / 1e6, 6);
+  });
+
   it('should calculate cost correctly for search preview model gpt-4o-search-preview', () => {
     const cost = calculateOpenAICost('gpt-4o-search-preview', {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 10) / 1e6, 6);
@@ -162,12 +168,32 @@ describe('calculateOpenAICost', () => {
 
   it('should calculate cost correctly for gpt-realtime', () => {
     const cost = calculateOpenAICost('gpt-realtime', {}, 1000, 500);
-    expect(cost).toBeCloseTo((1000 * 32 + 500 * 64) / 1e6, 6);
+    expect(cost).toBeCloseTo((1000 * 4 + 500 * 16) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for gpt-realtime-1.5', () => {
+    const cost = calculateOpenAICost('gpt-realtime-1.5', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 4 + 500 * 16) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for gpt-realtime-2025-08-28', () => {
+    const cost = calculateOpenAICost('gpt-realtime-2025-08-28', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 4 + 500 * 16) / 1e6, 6);
   });
 
   it('should calculate cost correctly with audio tokens', () => {
     const cost = calculateOpenAICost('gpt-4o-audio-preview', {}, 1000, 500, 200, 100);
     expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 10 + 200 * 40 + 100 * 80) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly with audio tokens for gpt-audio-1.5', () => {
+    const cost = calculateOpenAICost('gpt-audio-1.5', {}, 1000, 500, 200, 100);
+    expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 10 + 200 * 32 + 100 * 64) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for gpt-audio-mini-2025-12-15', () => {
+    const cost = calculateOpenAICost('gpt-audio-mini-2025-12-15', {}, 1000, 500, 200, 100);
+    expect(cost).toBeCloseTo((1000 * 0.6 + 500 * 2.4 + 200 * 10 + 100 * 20) / 1e6, 6);
   });
 
   it('should calculate cost correctly for gpt-4', () => {
@@ -230,6 +256,11 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 15) / 1e6, 6);
   });
 
+  it('should calculate long-context cost correctly for gpt-5.4', () => {
+    const cost = calculateOpenAICost('gpt-5.4', {}, 300_000, 1_000);
+    expect(cost).toBeCloseTo((300_000 * 5 + 1_000 * 22.5) / 1e6, 6);
+  });
+
   it('should calculate cost correctly for gpt-5.4-2026-03-05', () => {
     const cost = calculateOpenAICost('gpt-5.4-2026-03-05', {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 15) / 1e6, 6);
@@ -270,9 +301,23 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 30 + 500 * 180) / 1e6, 6);
   });
 
+  it('should calculate long-context cost correctly for gpt-5.4-pro', () => {
+    const cost = calculateOpenAICost('gpt-5.4-pro', {}, 300_000, 1_000);
+    expect(cost).toBeCloseTo((300_000 * 60 + 1_000 * 270) / 1e6, 6);
+  });
+
   it('should calculate cost correctly for gpt-5.4-pro-2026-03-05', () => {
     const cost = calculateOpenAICost('gpt-5.4-pro-2026-03-05', {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * 30 + 500 * 180) / 1e6, 6);
+  });
+
+  it('should keep GPT-5.4 Pro out of Chat Completions routing', () => {
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.4-pro')).toBe(false);
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.4-pro-2026-03-05')).toBe(false);
+    expect(OPENAI_RESPONSES_ONLY_MODELS.some((model) => model.id === 'gpt-5.4-pro')).toBe(true);
+    expect(
+      OPENAI_RESPONSES_ONLY_MODELS.some((model) => model.id === 'gpt-5.4-pro-2026-03-05'),
+    ).toBe(true);
   });
 
   it('should calculate cost correctly for gpt-5-nano', () => {
@@ -368,7 +413,13 @@ describe('calculateOpenAICost', () => {
 
   it('should calculate audio token costs for gpt-realtime', () => {
     const cost = calculateOpenAICost('gpt-realtime', {}, 1000, 500, 200, 100);
-    const expectedCost = (1000 * 32 + 500 * 64 + 200 * 32 + 100 * 64) / 1e6;
+    const expectedCost = (1000 * 4 + 500 * 16 + 200 * 32 + 100 * 64) / 1e6;
+    expect(cost).toBeCloseTo(expectedCost, 6);
+  });
+
+  it('should calculate audio token costs for gpt-realtime-mini-2025-12-15', () => {
+    const cost = calculateOpenAICost('gpt-realtime-mini-2025-12-15', {}, 1000, 500, 200, 100);
+    const expectedCost = (1000 * 0.6 + 500 * 2.4 + 200 * 10 + 100 * 20) / 1e6;
     expect(cost).toBeCloseTo(expectedCost, 6);
   });
 

@@ -13,7 +13,8 @@ type TestControlUsage = {
   file: string;
   kind: TestControlKind;
   line: number;
-  lineText: string;
+  fullLineText: string;
+  trimmedLineText: string;
 };
 
 type AllowedSkip = {
@@ -117,41 +118,13 @@ const allowedSkippedTests: AllowedSkip[] = [
   },
 ];
 
-const legacyHoistedPersistentMockFiles = new Set([
-  'commands/mcp/server.test.ts',
-  'onboarding.test.ts',
-  'providers/azure/chat-mcp-integration.test.ts',
-  'providers/bedrock/knowledgeBase.test.ts',
-  'providers/elevenlabs/alignment/index.test.ts',
-  'providers/elevenlabs/isolation/index.test.ts',
-  'providers/golangCompletion.test.ts',
-  'providers/google/gemini-mcp-integration.test.ts',
-  'providers/google/util.test.ts',
-  'providers/http-pfx-signature.test.ts',
-  'providers/http-tls.test.ts',
-  'providers/index.test.ts',
-  'providers/llamaApi.test.ts',
-  'providers/openai/agents.test.ts',
-  'providers/openai/chatkit-pool.test.ts',
-  'redteam/commands/poison.test.ts',
-  'redteam/providers/indirectWebPwn.test.ts',
-  'redteam/strategies/simpleVideo.test.ts',
-  'sagemaker.test.ts',
-  'table.test.ts',
-  'tracing/evaluatorTracing.test.ts',
-  'util/agent/agentClient.test.ts',
-  'util/apiHealth.test.ts',
-  'util/functions/loadFunction.test.ts',
-  'util/oauth.test.ts',
-]);
+const legacyHoistedPersistentMockFiles = new Set<string>();
 
 const legacyDirectProcessEnvMutationFiles = new Set([
-  'account.test.ts',
   'assertions/assertionResult.test.ts',
   'assertions/trace.test.ts',
   'cache.test.ts',
   'code-scan-action/main.test.ts',
-  'codeScans/mcp/filesystem.test.ts',
   'commands/modelScan.test.ts',
   'constants.test.ts',
   'database.test.ts',
@@ -160,33 +133,21 @@ const legacyDirectProcessEnvMutationFiles = new Set([
   'fetch.test.ts',
   'globalConfig/cloud.test.ts',
   'logger.test.ts',
-  'matchers/closed-qa.test.ts',
-  'matchers/factuality.test.ts',
-  'matchers/similarity.test.ts',
   'matchers/utils.test.ts',
   'onboarding.test.ts',
-  'progress/ciProgressReporter.edge-cases.test.ts',
-  'progress/ciProgressReporter.test.ts',
   'prompts/index.test.ts',
-  'prompts/processors/csv.test.ts',
   'providers.slack.test.ts',
   'providers.test.ts',
-  'providers/ai21.test.ts',
   'providers/anthropic/completion.test.ts',
   'providers/anthropic/generic.test.ts',
   'providers/anthropic/messages.test.ts',
-  'providers/azure.test.ts',
   'providers/azure/chat.test.ts',
   'providers/azure/completion.test.ts',
-  'providers/azure/foundry-agent.test.ts',
-  'providers/azure/generic.test.ts',
-  'providers/azure/responses-nested-schema.integration.test.ts',
   'providers/azure/responses.test.ts',
   'providers/bedrock.agents.test.ts',
   'providers/bedrock/converse.test.ts',
   'providers/bedrock/index.test.ts',
   'providers/bedrock/knowledgeBase.test.ts',
-  'providers/cerebras.test.ts',
   'providers/claude-agent-sdk.test.ts',
   'providers/cloudflare-ai.test.ts',
   'providers/cloudflare-gateway.test.ts',
@@ -205,58 +166,35 @@ const legacyDirectProcessEnvMutationFiles = new Set([
   'providers/google/live.test.ts',
   'providers/google/provider.test.ts',
   'providers/google/video.test.ts',
-  'providers/groq/chat.test.ts',
   'providers/groq/responses.test.ts',
-  'providers/http.test.ts',
   'providers/huggingface.test.ts',
   'providers/hyperbolic.test.ts',
-  'providers/hyperbolic/audio.test.ts',
-  'providers/hyperbolic/image.test.ts',
   'providers/index.test.ts',
   'providers/litellm.test.ts',
   'providers/openai-codex-sdk.e2e.test.ts',
   'providers/openai-codex-sdk.test.ts',
-  'providers/openai/assistant.test.ts',
   'providers/openai/chat.test.ts',
-  'providers/openai/chatkit.test.ts',
   'providers/openai/codexDefaults.test.ts',
   'providers/openai/completion.test.ts',
-  'providers/openai/embedding.test.ts',
   'providers/openai/image.test.ts',
   'providers/openai/index.test.ts',
   'providers/openai/realtime.test.ts',
-  'providers/openai/responses.test.ts',
-  'providers/openai/transcription.test.ts',
-  'providers/openai/video.test.ts',
   'providers/openclaw.test.ts',
   'providers/openrouter.test.ts',
-  'providers/pythonCompletion.unicode.test.ts',
   'providers/replicate.test.ts',
   'providers/snowflake.test.ts',
   'providers/truefoundry.test.ts',
   'providers/xai/image.test.ts',
   'providers/xai/voice.test.ts',
-  'python/windows-path.test.ts',
-  'python/wrapper.test.ts',
   'redteam/extraction/entities.test.ts',
   'redteam/extraction/purpose.test.ts',
-  'redteam/extraction/util.test.ts',
-  'redteam/index.test.ts',
   'redteam/plugins/teenSafety.test.ts',
-  'redteam/plugins/unsafebench.test.ts',
-  'redteam/providers/iterative.test.ts',
-  'redteam/providers/multi-turn-empty-response.test.ts',
   'redteam/providers/shared.test.ts',
-  'redteam/util.test.ts',
   'sagemaker.test.ts',
   'telemetry.test.ts',
   'tracing/evaluatorTracing.test.ts',
-  'tracing/integration.test.ts',
-  'ui/list/listRunner.test.ts',
-  'updates.test.ts',
   'util/apiHealth.test.ts',
   'util/config/load.test.ts',
-  'util/config/main.test.ts',
   'util/env.test.ts',
   'util/file.test.ts',
   'util/json.test.ts',
@@ -268,11 +206,24 @@ const legacyDirectProcessEnvMutationFiles = new Set([
 ]);
 
 const hoistedMockPattern = /\bvi\.hoisted\s*\(/;
-const persistentMockImplementationPattern =
-  /\.(?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)\s*\(/;
+const persistentMockMethods = [
+  'mockImplementation',
+  'mockRejectedValue',
+  'mockResolvedValue',
+  'mockReturnValue',
+] as const;
+const persistentMockImplementationPattern = new RegExp(
+  `\\.(?:${persistentMockMethods.join('|')})\\s*\\(`,
+);
 const mockImplementationResetPattern = /(?:\.mockReset\s*\(|\bvi\.resetAllMocks\s*\()/;
-const directProcessEnvMutationPattern =
-  /(?:\bprocess\.env\s*=|\bprocess\.env(?:\.[A-Za-z_][A-Za-z0-9_]*|\[['"][A-Za-z_][A-Za-z0-9_]*['"]\])\s*=|\bdelete\s+process\.env(?:\.[A-Za-z_][A-Za-z0-9_]*|\[['"][A-Za-z_][A-Za-z0-9_]*['"]\]))/;
+const envKeyPattern = String.raw`[A-Za-z_][A-Za-z0-9_]*`;
+const processEnvPropertyAccessPattern = String.raw`\bprocess\.env(?:\.${envKeyPattern}|\[['"]${envKeyPattern}['"]\])`;
+const processEnvObjectAssignmentPattern = String.raw`\bprocess\.env\s*=`;
+const processEnvPropertyAssignmentPattern = String.raw`${processEnvPropertyAccessPattern}\s*=`;
+const processEnvPropertyDeletePattern = String.raw`\bdelete\s+${processEnvPropertyAccessPattern}`;
+const directProcessEnvMutationPattern = new RegExp(
+  `(?:${processEnvObjectAssignmentPattern}|${processEnvPropertyAssignmentPattern}|${processEnvPropertyDeletePattern})`,
+);
 
 function findTestFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -377,7 +328,8 @@ function findTestControlUsages(file: string, source: string): TestControlUsage[]
       hasTestApiBase(node.expression)
     ) {
       const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-      const lineText = sourceLines[position.line]?.trim() ?? '';
+      const fullLineText = sourceLines[position.line] ?? '';
+      const trimmedLineText = fullLineText.trim();
 
       usages.push({
         column: position.character + 1,
@@ -385,7 +337,8 @@ function findTestControlUsages(file: string, source: string): TestControlUsage[]
         file,
         kind: node.name.text,
         line: position.line + 1,
-        lineText,
+        fullLineText,
+        trimmedLineText,
       });
     }
 
@@ -403,7 +356,7 @@ function findRootTestControlUsages(): TestControlUsage[] {
 }
 
 function formatUsage(usage: TestControlUsage) {
-  return `${usage.file}:${usage.line}:${usage.column}: ${usage.kind} is not allowed: ${usage.lineText || usage.expression}`;
+  return `${usage.file}:${usage.line}:${usage.column}: ${usage.kind} is not allowed: ${usage.trimmedLineText || usage.expression}`;
 }
 
 function isAllowedSkip(usage: TestControlUsage) {
@@ -411,7 +364,7 @@ function isAllowedSkip(usage: TestControlUsage) {
     (allowed) =>
       allowed.file === usage.file &&
       allowed.kind === usage.kind &&
-      allowed.linePattern.test(usage.lineText),
+      allowed.linePattern.test(usage.trimmedLineText),
   );
 }
 
@@ -468,7 +421,7 @@ describe('root test hygiene', () => {
             (usage) =>
               usage.file === allowed.file &&
               usage.kind === allowed.kind &&
-              allowed.linePattern.test(usage.lineText),
+              allowed.linePattern.test(usage.trimmedLineText),
           ),
       )
       .map((allowed) => `${allowed.file}: ${allowed.kind} allowlist is stale: ${allowed.reason}`);

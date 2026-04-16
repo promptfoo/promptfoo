@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
 import { CheckCircle, Edit, HelpCircle, Search, X } from 'lucide-react';
+import { DEFAULT_OPENAI_TARGET_ID } from '../constants';
 import { DEFAULT_WEBSOCKET_TIMEOUT_MS, DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE } from './consts';
 import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
 
@@ -168,7 +169,7 @@ const allProviderOptions = [
   {
     value: 'openai',
     label: 'OpenAI',
-    description: 'GPT-5.2, GPT-5.1, and GPT-5 models',
+    description: 'GPT-5.4, GPT-5.4 Mini, GPT-5.4 Nano and older models',
     tag: 'providers',
     recommended: true,
   },
@@ -544,7 +545,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'openai') {
       setProvider(
         {
-          id: 'openai:gpt-5.2',
+          id: DEFAULT_OPENAI_TARGET_ID,
           config: {},
           label: currentLabel,
         },

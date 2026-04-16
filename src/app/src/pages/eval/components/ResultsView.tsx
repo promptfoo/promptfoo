@@ -201,27 +201,28 @@ function ResultsChartsSection({
           pointerEvents: renderResultsCharts ? 'auto' : 'none',
         }}
       >
-        {canRenderResultsCharts ? (
-          <ResultsCharts scores={resultsChartsScores} />
-        ) : (
-          <Alert variant="info" className="mt-4 items-start">
-            <BarChart className="size-4 mt-0.5" />
-            <AlertContent>
-              <AlertTitle>Charts are unavailable for this evaluation</AlertTitle>
-              <AlertDescription className="space-y-3">
-                <p>
-                  We can show charts when the results include comparable prompts and chartable
-                  scores.
-                </p>
-                <ul className="list-disc pl-5 space-y-1">
-                  {resultsChartsUnavailableReasons.map((reason) => (
-                    <li key={reason}>{reason}</li>
-                  ))}
-                </ul>
-              </AlertDescription>
-            </AlertContent>
-          </Alert>
-        )}
+        {renderResultsCharts &&
+          (canRenderResultsCharts ? (
+            <ResultsCharts scores={resultsChartsScores} />
+          ) : (
+            <Alert variant="info" className="mt-4 items-start">
+              <BarChart className="size-4 mt-0.5" />
+              <AlertContent>
+                <AlertTitle>Charts are unavailable for this evaluation</AlertTitle>
+                <AlertDescription className="space-y-3">
+                  <p>
+                    We can show charts when the results include comparable prompts and chartable
+                    scores.
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    {resultsChartsUnavailableReasons.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </AlertContent>
+            </Alert>
+          ))}
       </div>
     </>
   );
@@ -702,7 +703,7 @@ export default function ResultsView({
     if (!table?.body) {
       return [];
     }
-    return table?.body
+    return table.body
       .flatMap((row) => row.outputs.map((output) => output?.score))
       .filter((score) => typeof score === 'number' && !Number.isNaN(score));
   }, [table]);
@@ -881,7 +882,7 @@ export default function ResultsView({
                     {debouncedSearchText && (
                       <Badge variant="secondary" className="text-xs h-5 gap-1">
                         Search:{' '}
-                        {debouncedSearchText.length > 4
+                        {debouncedSearchText.length > 5
                           ? debouncedSearchText.substring(0, 5) + '...'
                           : debouncedSearchText}
                         <button
@@ -950,7 +951,7 @@ export default function ResultsView({
           )}
         </EvalHeader>
         {activeView === 'results' && (
-          <div className="px-4">
+          <div className="px-4 flex flex-1 min-h-0 flex-col">
             <ResultsTable
               key={currentEvalId}
               maxTextLength={maxTextLength}

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { DEFAULT_OPENAI_TARGET_ID, OPENAI_TARGET_PLACEHOLDER } from '../constants';
 import { SetupSection } from '../SetupSection';
 
 import type { ProviderOptions } from '../../types';
@@ -34,8 +35,8 @@ const FoundationModelConfiguration = ({
     const providerConfigs = {
       openai: {
         name: 'OpenAI',
-        defaultModel: 'openai:gpt-5.4',
-        placeholder: 'openai:gpt-5.4, openai:gpt-5.3-chat-latest, openai:gpt-5-mini',
+        defaultModel: DEFAULT_OPENAI_TARGET_ID,
+        placeholder: OPENAI_TARGET_PLACEHOLDER,
         docUrl: 'https://www.promptfoo.dev/docs/providers/openai',
         envVar: 'OPENAI_API_KEY',
       },

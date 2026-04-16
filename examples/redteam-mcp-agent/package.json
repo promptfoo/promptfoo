@@ -15,7 +15,7 @@
     "@faker-js/faker": "^10.2.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^17.2.3",
-    "openai": "^6.33.0",
+    "openai": "^6.34.0",
     "zod": "^4.3.6"
   }
 }

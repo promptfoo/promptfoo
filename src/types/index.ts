@@ -513,6 +513,12 @@ export interface GradingResult {
     renderedAssertionValue?: string;
     // Full grading prompt sent to the grading LLM (for debugging)
     renderedGradingPrompt?: string;
+    // Set by LLM-grader matchers when a transport/parse failure prevents a real
+    // evaluation. Callers that support inverse semantics (e.g. `not-g-eval`)
+    // must not flip such results to a pass — a grader error is not evidence
+    // that the criterion was or was not met. `true`-literal so the field is
+    // only meaningful when present; never set `false` explicitly.
+    graderError?: true;
     [key: string]: any;
   };
 }
@@ -1281,6 +1287,13 @@ export interface EvalWithMetadata {
 export type EvaluateTestSuite = {
   prompts: (string | object | PromptFunction)[];
   writeLatestResults?: boolean;
+  /**
+   * Author to attribute the evaluation to.
+   * When the user is logged into cloud with a stored email, that identity
+   * takes precedence and this option is ignored. Otherwise resolution is:
+   * this option > stored user email > PROMPTFOO_AUTHOR env var > null.
+   */
+  author?: string;
 } & Omit<TestSuiteConfig, 'prompts'>;
 
 export type EvaluateTestSuiteWithEvaluateOptions = EvaluateTestSuite & {

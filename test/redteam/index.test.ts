@@ -19,7 +19,7 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remo
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
-import { stripAnsi } from '../util/utils';
+import { mockProcessEnv, stripAnsi } from '../util/utils';
 
 vi.mock('cli-progress');
 vi.mock('../../src/logger');
@@ -1056,21 +1056,21 @@ describe('synthesize', () => {
 
   describe('Logger', () => {
     it('debug log level hides progress bar', async () => {
-      const originalLogLevel = process.env.LOG_LEVEL;
-      process.env.LOG_LEVEL = 'debug';
+      const restoreEnv = mockProcessEnv({ LOG_LEVEL: 'debug' });
+      try {
+        await synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
 
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'test-plugin', numTests: 1 }],
-        prompts: ['Test prompt'],
-        strategies: [],
-        targetIds: ['test-provider'],
-      });
-
-      expect(cliProgress.SingleBar).not.toHaveBeenCalled();
-
-      process.env.LOG_LEVEL = originalLogLevel;
+        expect(cliProgress.SingleBar).not.toHaveBeenCalled();
+      } finally {
+        restoreEnv();
+      }
     });
   });
 
