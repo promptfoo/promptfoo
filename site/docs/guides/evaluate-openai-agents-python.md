@@ -55,7 +55,7 @@ If you skip this exporter, Promptfoo will not see the SDK's tool and handoff spa
 
 If you also enable Promptfoo's Python OpenTelemetry wrapper instrumentation with `PROMPTFOO_ENABLE_OTEL=true`, the example will emit a provider-level Python span as well. The custom SDK spans will inherit that active OpenTelemetry span as their parent. The example config accepts both OTLP JSON and OTLP/protobuf because the SDK bridge emits JSON while the wrapper exporter uses protobuf by default.
 
-SDK 0.14 adds custom spans for sandbox lifecycle work, and the sandbox shell capability emits `exec_command` function-tool spans. The example bridge maps SDK custom spans into normal OTLP attributes such as `sandbox.operation`, `command`, and `process.exit.code`, while Promptfoo normalizes OpenAI Agents `exec_command` tool spans as command trajectory steps. The same mapping also exposes command spans emitted by the SDK's experimental Codex tool as `command` and `codex.command`.
+SDK 0.14 adds custom spans for sandbox lifecycle work, and the SandboxAgent's shell tool emits `exec_command` function-tool spans. The example bridge maps SDK custom spans into normal OTLP attributes such as `sandbox.operation`, `command`, and `process.exit.code`, while Promptfoo normalizes OpenAI Agents `exec_command` tool spans as command trajectory steps. The same mapping also exposes command spans emitted by the SDK's experimental Codex tool as `command` and `codex.command`.
 
 ## Assertion Pattern
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import threading
 import urllib.error
 import urllib.request
@@ -294,7 +295,13 @@ class PromptfooTracingProcessor(TracingProcessor):
             spans = list(self._spans_by_trace.pop(trace.trace_id, []))
             self._traces.pop(trace.trace_id, None)
 
-        self._exporter.export([trace, *spans])
+        try:
+            self._exporter.export([trace, *spans])
+        except Exception as exc:
+            print(
+                f"[promptfoo_tracing] Failed to export trace {trace.trace_id}: {exc}",
+                file=sys.stderr,
+            )
 
     def on_span_start(self, span: Span[Any]) -> None:
         return None
@@ -320,7 +327,14 @@ class PromptfooTracingProcessor(TracingProcessor):
                 items: list[Trace | Span[Any]] = [*spans]
                 if trace is not None:
                     items.insert(0, trace)
-                self._exporter.export(items)
+                try:
+                    self._exporter.export(items)
+                except Exception as exc:
+                    print(
+                        f"[promptfoo_tracing] Failed to flush "
+                        f"{len(spans)} span(s): {exc}",
+                        file=sys.stderr,
+                    )
 
 
 def _parse_traceparent(traceparent: str | None) -> tuple[str, str] | None:
@@ -357,7 +371,13 @@ def configure_promptfoo_tracing(
     global _CURRENT_PROCESSOR
 
     if _CURRENT_PROCESSOR is not None:
-        _CURRENT_PROCESSOR.shutdown()
+        try:
+            _CURRENT_PROCESSOR.shutdown()
+        except Exception as exc:
+            print(
+                f"[promptfoo_tracing] Failed to shut down previous processor: {exc}",
+                file=sys.stderr,
+            )
         _CURRENT_PROCESSOR = None
 
     parsed = _active_otel_parent() or _parse_traceparent(context.get("traceparent"))

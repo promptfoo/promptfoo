@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import traceback
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -686,8 +687,9 @@ def call_api(
             "tokenUsage": _extract_token_usage(all_raw_responses),
         }
     except Exception as exc:
+        traceback.print_exc()
         return {
-            "error": str(exc),
+            "error": f"{type(exc).__name__}: {exc}",
             "output": f"Error: {exc}",
         }
 
@@ -752,7 +754,8 @@ def call_sandbox_api(
             },
         }
     except Exception as exc:
+        traceback.print_exc()
         return {
-            "error": str(exc),
+            "error": f"{type(exc).__name__}: {exc}",
             "output": f"Error: {exc}",
         }
