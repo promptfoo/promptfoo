@@ -91,6 +91,7 @@ class AirlineContext:
         verified_confirmation_number: str | None = None,
         user_passenger_name: str | None = None,
         third_party_confirmation_number: str | None = None,
+        pending_third_party_booking_change: bool = False,
     ) -> None:
         self.passenger_name = passenger_name
         self.confirmation_number = confirmation_number
@@ -100,8 +101,9 @@ class AirlineContext:
         self.verified_confirmation_number = verified_confirmation_number
         self.user_passenger_name = user_passenger_name
         self.third_party_confirmation_number = third_party_confirmation_number
+        self.pending_third_party_booking_change = pending_third_party_booking_change
 
-    def to_dict(self) -> dict[str, str | None]:
+    def to_dict(self) -> dict[str, str | bool | None]:
         return {
             "passenger_name": self.passenger_name,
             "confirmation_number": self.confirmation_number,
@@ -111,6 +113,9 @@ class AirlineContext:
             "verified_confirmation_number": self.verified_confirmation_number,
             "user_passenger_name": self.user_passenger_name,
             "third_party_confirmation_number": self.third_party_confirmation_number,
+            "pending_third_party_booking_change": (
+                self.pending_third_party_booking_change
+            ),
         }
 
 
@@ -570,6 +575,9 @@ def _build_context(vars_dict: dict[str, Any]) -> AirlineContext:
         third_party_confirmation_number=vars_dict.get(
             "third_party_confirmation_number"
         ),
+        pending_third_party_booking_change=bool(
+            vars_dict.get("pending_third_party_booking_change", False)
+        ),
     )
 
 
@@ -616,10 +624,14 @@ def _hydrate_context_from_step(step: str, airline_context: AirlineContext) -> No
         normalized_confirmation_number = _normalize_confirmation_number(
             confirmation_match.group(1)
         )
-        if is_third_party_booking_change:
+        if (
+            is_third_party_booking_change
+            or airline_context.pending_third_party_booking_change
+        ):
             airline_context.third_party_confirmation_number = (
                 normalized_confirmation_number
             )
+            airline_context.pending_third_party_booking_change = False
         previous_confirmation_number = airline_context.confirmation_number
         _, reservation = _reservation_view(
             airline_context
@@ -648,6 +660,11 @@ def _hydrate_context_from_step(step: str, airline_context: AirlineContext) -> No
         airline_context.third_party_confirmation_number = (
             airline_context.confirmation_number
         )
+    elif (
+        is_third_party_booking_change
+        and airline_context.third_party_confirmation_number is None
+    ):
+        airline_context.pending_third_party_booking_change = True
 
     seat_match = SEAT_NUMBER_RE.search(step)
     if seat_match and (
@@ -679,6 +696,8 @@ def _step_input(task: str, step: str, airline_context: AirlineContext) -> str:
             "Third-party booking change requested for confirmation: "
             f"{airline_context.third_party_confirmation_number}"
         )
+    elif airline_context.pending_third_party_booking_change:
+        context_lines.append("Pending third-party booking change request: yes")
 
     parts = [f"Overall task: {task}"]
     if context_lines:
