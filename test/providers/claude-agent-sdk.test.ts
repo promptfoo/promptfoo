@@ -2250,12 +2250,16 @@ describe('ClaudeCodeSDKProvider', () => {
           });
           await provider.callApi('Test prompt');
 
-          const passedOptions = mockQuery.mock.calls.at(-1)?.[0]?.options as Record<
-            string,
-            unknown
-          >;
-          const passedSystemPrompt = passedOptions.systemPrompt as Record<string, unknown>;
-          expect(passedSystemPrompt).not.toHaveProperty('excludeDynamicSections');
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              systemPrompt: {
+                type: 'preset',
+                preset: 'claude_code',
+                append: undefined,
+              },
+            }),
+          });
         });
       });
     });

@@ -207,10 +207,14 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
 
   if (!claudeCodePath) {
     throw new Error(
-      dedent`The @anthropic-ai/claude-agent-sdk package is required but not installed.
+      dedent`The @anthropic-ai/claude-agent-sdk package could not be resolved from ${basePath}.
 
       To use the Claude Agent SDK provider, install it with:
         npm install @anthropic-ai/claude-agent-sdk
+
+      If the package is already installed elsewhere, run promptfoo from the
+      project root (or point the config at that root) so node_modules is on
+      the resolution path.
 
       For more information, see: https://www.promptfoo.dev/docs/providers/claude-agent-sdk/`,
     );
