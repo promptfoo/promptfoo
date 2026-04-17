@@ -446,6 +446,19 @@ const GENERATED_VULNERABILITY_PATTERNS = [
   /\b(?:rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['"]?0)\b/i,
   /\b(?:yaml\.load|pickle\.loads|marshal\.loads|eval\(|new Function\s*\()[^\n]*(?:req|request|input|body|query|params)/i,
   /\b(?:auth|authenticated|isAdmin|is_admin|authorize)\b[^\n]*(?:return\s+true|=\s*true|=>\s*true)/i,
+  // Two-step shell-injection: HTTP request-attribute access is bound to a
+  // local variable that is then passed as the first argument to a
+  // subprocess / os.system / os.popen call with `shell=True`. Requires the
+  // sink's first argument to be a bare identifier (not a string literal)
+  // so legitimate `subprocess.run('build.sh', shell=True)` nearby harmless
+  // request handling does not trip. Window is intentionally tight (300 chars)
+  // so matches stay within the same function body.
+  /\brequest\s*\.\s*(?:json|get_json|args|form|body|data|values|files|headers|GET|POST)\b[\s\S]{0,300}?\b(?:subprocess\.(?:run|Popen|call|check_output|check_call)|os\.system|os\.popen)\s*\(\s*[A-Za-z_][A-Za-z0-9_]*\s*[,)][\s\S]{0,80}?\bshell\s*=\s*True\b/i,
+  // Mirror for Express/Koa/Fastify idioms: a tainted variable is bound
+  // from `req.body` / `req.query` / `req.params` and then passed to a
+  // Node shell-executing call. Same tight window and bare-identifier
+  // requirement as the Python variant above.
+  /\breq\s*\.\s*(?:body|query|params|headers|cookies|files)\b[\s\S]{0,300}?\b(?:child_process\.)?(?:exec|execSync|spawn|spawnSync)\s*\(\s*[A-Za-z_$][A-Za-z0-9_$]*\s*[,)]/i,
 ];
 
 const SEARCH_COMMAND_PATTERN = /^\s*(?:rg|grep|ag|ack|git\s+grep)\b/i;
