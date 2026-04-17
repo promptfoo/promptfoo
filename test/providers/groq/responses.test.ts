@@ -116,6 +116,45 @@ describe('GroqResponsesProvider', () => {
   });
 
   describe('callApi', () => {
+    it('preserves temperature for Groq reasoning models', async () => {
+      const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {
+        config: {
+          temperature: 0.7,
+          reasoning_effort: 'medium',
+        },
+      });
+
+      const mockResponse = new Response(
+        JSON.stringify({
+          id: 'resp_123',
+          model: 'openai/gpt-oss-120b',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Hello, world!' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        }),
+        {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        },
+      );
+      mockedFetchWithRetries.mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('Test prompt');
+
+      const mockCall = mockedFetchWithRetries.mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      expect(body.reasoning).toEqual({ effort: 'medium' });
+      expect(body.temperature).toBe(0.7);
+    });
+
     it('should call Groq Responses API endpoint', async () => {
       const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {});
 

@@ -10,8 +10,11 @@ import { IntentPlugin } from '../../../src/redteam/plugins/intent';
 import { PlinyPlugin } from '../../../src/redteam/plugins/pliny';
 import { UnsafeBenchPlugin } from '../../../src/redteam/plugins/unsafebench';
 import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
-
-import type { ApiProvider } from '../../../src/types/index';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
 
 vi.mock('../../../src/cache');
 vi.mock('../../../src/cliState', () => ({
@@ -53,16 +56,15 @@ vi.mock('../../../src/redteam/plugins/contracts', async () => {
 });
 
 describe('canGenerateRemote property and behavior', () => {
-  let mockProvider: ApiProvider;
+  let mockProvider: MockApiProvider;
 
   beforeEach(() => {
-    mockProvider = {
-      callApi: vi.fn().mockResolvedValue({
+    mockProvider = createMockProvider({
+      response: createProviderResponse({
         output: 'Sample output',
-        error: null,
+        error: null as any,
       }),
-      id: vi.fn().mockReturnValue('test-provider'),
-    };
+    });
 
     // Reset all mocks
     vi.clearAllMocks();

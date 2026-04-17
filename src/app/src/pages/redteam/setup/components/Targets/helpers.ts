@@ -3,30 +3,25 @@ export function getProviderType(providerId?: string): string | undefined {
     return undefined;
   }
 
+  if (providerId.startsWith('file://')) {
+    if (/\.(js|ts)(?::[^/\\]+)?$/i.test(providerId)) {
+      return 'javascript';
+    }
+    if (/\.py(?::[^/\\]+)?$/i.test(providerId)) {
+      return 'python';
+    }
+    if (/\.go(?::[^/\\]+)?$/i.test(providerId)) {
+      return 'go';
+    }
+    if (/\.(sh|bat|cmd|ps1)(?::[^/\\]+)?$/i.test(providerId)) {
+      return 'shell';
+    }
+    return 'file';
+  }
+
   // Handle provider formats like 'openrouter:openai/gpt-4o' or 'azure:chat:'
   if (providerId.includes(':')) {
     return providerId.split(':')[0];
-  }
-
-  // Handle file paths
-  if (providerId.startsWith('file://')) {
-    if (providerId.endsWith('.js') || providerId.endsWith('.ts')) {
-      return 'javascript';
-    }
-    if (providerId.endsWith('.py')) {
-      return 'python';
-    }
-    if (providerId.endsWith('.go')) {
-      return 'go';
-    }
-    if (
-      providerId.endsWith('.sh') ||
-      providerId.endsWith('.bat') ||
-      providerId.endsWith('.cmd') ||
-      providerId.endsWith('.ps1')
-    ) {
-      return 'shell';
-    }
   }
 
   // Direct provider types

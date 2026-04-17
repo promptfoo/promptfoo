@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiImageProvider } from '../../../src/providers/openai/image';
+import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -64,6 +65,7 @@ describe('OpenAiImageProvider', () => {
 
       expect(result).toEqual({
         output: '![Generate a cat](https://example.com/image.png)',
+        images: [{ data: 'https://example.com/image.png', mimeType: 'image/png' }],
         cached: false,
         cost: 0.04, // Default cost for DALL-E 3 standard 1024x1024
       });
@@ -83,8 +85,39 @@ describe('OpenAiImageProvider', () => {
 
       expect(result).toEqual({
         output: '![test prompt](https://example.com/image.png)',
+        images: [{ data: 'https://example.com/image.png', mimeType: 'image/png' }],
         cached: true,
         cost: 0, // Cost is 0 for cached responses
+      });
+    });
+
+    it('should include all generated URL images in images array', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key', n: 2 },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          data: [
+            { url: 'https://example.com/image-1.png' },
+            { url: 'https://example.com/image-2.png' },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        output: '![test prompt](https://example.com/image-1.png)',
+        images: [
+          { data: 'https://example.com/image-1.png', mimeType: 'image/png' },
+          { data: 'https://example.com/image-2.png', mimeType: 'image/png' },
+        ],
+        cached: false,
+        cost: 0.08, // DALL-E 3 standard 1024x1024 with n=2
       });
     });
 
@@ -124,11 +157,36 @@ describe('OpenAiImageProvider', () => {
 
         // Attempt to call the API should throw an error
         await expect(provider.callApi('Generate a cat')).rejects.toThrow(
-          'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+          getOpenAiMissingApiKeyMessage(),
         );
       } finally {
-        // Restore the original environment variable
-        process.env.OPENAI_API_KEY = originalEnv;
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+      }
+    });
+
+    it('should use custom apiKeyEnvar in missing API key errors', async () => {
+      const originalEnv = process.env.OPENAI_API_KEY;
+      const originalCustomEnv = process.env.CUSTOM_IMAGE_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.CUSTOM_IMAGE_API_KEY;
+
+      try {
+        const provider = new OpenAiImageProvider('dall-e-3', {
+          config: {
+            apiKeyEnvar: 'CUSTOM_IMAGE_API_KEY',
+          },
+          env: {
+            OPENAI_API_KEY: undefined,
+            CUSTOM_IMAGE_API_KEY: undefined,
+          },
+        });
+
+        await expect(provider.callApi('Generate a cat')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage('CUSTOM_IMAGE_API_KEY'),
+        );
+      } finally {
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+        restoreEnvVar('CUSTOM_IMAGE_API_KEY', originalCustomEnv);
       }
     });
   });
@@ -269,7 +327,8 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        output: JSON.stringify(mockBase64Response.data),
+        output: 'data:image/png;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/png;base64,base64EncodedImageData', mimeType: 'image/png' }],
         cached: false,
         isBase64: true,
         format: 'json',
@@ -520,7 +579,8 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        output: JSON.stringify(mockGptImage1Response.data),
+        output: 'data:image/png;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/png;base64,base64EncodedImageData', mimeType: 'image/png' }],
         cached: false,
         isBase64: true,
         format: 'json',
@@ -565,7 +625,7 @@ describe('OpenAiImageProvider', () => {
         config: { apiKey: 'test-key', output_format: 'jpeg' },
       });
 
-      await provider.callApi('test prompt');
+      const result = await provider.callApi('test prompt');
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
@@ -574,6 +634,10 @@ describe('OpenAiImageProvider', () => {
         }),
         expect.any(Number),
       );
+      expect(result).toMatchObject({
+        output: 'data:image/jpeg;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/jpeg;base64,base64EncodedImageData', mimeType: 'image/jpeg' }],
+      });
     });
 
     it('should handle gpt-image-1 output_compression parameter', async () => {
@@ -691,7 +755,8 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        output: JSON.stringify(mockGptImage1MiniResponse.data),
+        output: 'data:image/png;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/png;base64,base64EncodedImageData', mimeType: 'image/png' }],
         cached: false,
         isBase64: true,
         format: 'json',
@@ -822,7 +887,8 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        output: JSON.stringify(mockGptImage15Response.data),
+        output: 'data:image/png;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/png;base64,base64EncodedImageData', mimeType: 'image/png' }],
         cached: false,
         isBase64: true,
         format: 'json',
@@ -867,7 +933,7 @@ describe('OpenAiImageProvider', () => {
         config: { apiKey: 'test-key', output_format: 'jpeg' },
       });
 
-      await provider.callApi('test prompt');
+      const result = await provider.callApi('test prompt');
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
@@ -876,6 +942,10 @@ describe('OpenAiImageProvider', () => {
         }),
         expect.any(Number),
       );
+      expect(result).toMatchObject({
+        output: 'data:image/jpeg;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/jpeg;base64,base64EncodedImageData', mimeType: 'image/jpeg' }],
+      });
     });
 
     it('should handle gpt-image-1.5 output_compression parameter', async () => {

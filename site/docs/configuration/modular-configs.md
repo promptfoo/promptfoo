@@ -319,7 +319,7 @@ const config: UnifiedConfig = {
 export default config;
 ```
 
-See the [ts-config example](https://github.com/promptfoo/promptfoo/tree/main/examples/ts-config) for a complete implementation.
+See the [ts-config example](https://github.com/promptfoo/promptfoo/tree/main/examples/config-ts) for a complete implementation.
 
 ## Conditional Configuration Loading
 

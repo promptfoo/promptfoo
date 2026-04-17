@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DataTable } from './data-table';
@@ -165,7 +165,9 @@ describe('DataTable', () => {
 
     // Type a search term that matches nothing
     const searchInput = screen.getByPlaceholderText('Search...');
-    await user.type(searchInput, 'xyz-no-match');
+    await user.click(searchInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('xyz-no-match');
 
     // Data should be filtered out
     expect(screen.queryByText('Apple')).not.toBeInTheDocument();
@@ -175,6 +177,25 @@ describe('DataTable', () => {
     expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
     expect(screen.getByTestId('custom-action')).toBeInTheDocument();
     expect(screen.getByText('No results match your search')).toBeInTheDocument();
+  });
+
+  it('should show no-results state instead of empty state when manual column filters are active with no data', () => {
+    const activeColumnFilters = [{ id: 'name', value: 'Apple' }];
+
+    render(
+      <DataTable
+        columns={columns}
+        data={[]}
+        manualFiltering
+        columnFilters={activeColumnFilters}
+        onColumnFiltersChange={vi.fn()}
+        showToolbar
+      />,
+    );
+
+    expect(screen.queryByText('No data found')).not.toBeInTheDocument();
+    expect(screen.getByText('No results match your search')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
   });
 
   it('should rehydrate toolbar filter rows from active column filters when reopened', async () => {
@@ -193,7 +214,9 @@ describe('DataTable', () => {
 
     await user.click(screen.getByRole('button', { name: 'Filter Name' }));
     const headerFilterInput = await screen.findByPlaceholderText('Value...');
-    await user.type(headerFilterInput, 'Item 2');
+    await user.click(headerFilterInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('Item 2');
     await user.click(screen.getByRole('button', { name: 'Filter Name' }));
 
     await user.click(screen.getByRole('button', { name: /^Filters/ }));
@@ -445,7 +468,9 @@ describe('DataTable', () => {
       expect(screen.queryByText('Target-6')).not.toBeInTheDocument();
 
       const searchInput = screen.getByPlaceholderText('Search...');
-      await user.type(searchInput, 'Target');
+      await user.click(searchInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('Target');
 
       expect(screen.getByText(/Showing 1 to 5 of 10 rows/)).toBeInTheDocument();
       expect(screen.getByText('Target-5')).toBeInTheDocument();
@@ -504,6 +529,86 @@ describe('DataTable', () => {
     });
   });
 
+  describe('manual filtering', () => {
+    it('should call onColumnFiltersChange instead of filtering internally when manualFiltering is enabled', async () => {
+      const user = userEvent.setup();
+      const onColumnFiltersChange = vi.fn();
+
+      render(
+        <DataTable
+          columns={headerFilterColumns}
+          data={headerFilterRows}
+          manualFiltering
+          columnFilters={[]}
+          onColumnFiltersChange={onColumnFiltersChange}
+          showPagination={false}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Filter Name' }));
+      await user.click(screen.getByPlaceholderText('Value...'));
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('test');
+
+      expect(onColumnFiltersChange).toHaveBeenCalled();
+      const lastCall =
+        onColumnFiltersChange.mock.calls[onColumnFiltersChange.mock.calls.length - 1][0];
+      expect(lastCall).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'name' })]));
+    });
+
+    it('should not filter rows client-side when manualFiltering is enabled', () => {
+      render(
+        <DataTable
+          columns={headerFilterColumns}
+          data={headerFilterRows}
+          manualFiltering
+          columnFilters={[{ id: 'status', value: { operator: 'equals', value: 'alpha' } }]}
+          onColumnFiltersChange={vi.fn()}
+          showPagination={false}
+        />,
+      );
+
+      // All rows should still be visible since filtering is manual (server-side)
+      expect(screen.getByText('Row One')).toBeInTheDocument();
+      expect(screen.getByText('Row Two')).toBeInTheDocument();
+      expect(screen.getByText('Row Three')).toBeInTheDocument();
+      expect(screen.getByText('Row Four')).toBeInTheDocument();
+    });
+
+    it('should reflect externally controlled column filter state', () => {
+      const { rerender } = render(
+        <DataTable
+          columns={headerFilterColumns}
+          data={headerFilterRows}
+          manualFiltering
+          columnFilters={[]}
+          onColumnFiltersChange={vi.fn()}
+          showPagination={false}
+        />,
+      );
+
+      // No active filter indicator initially
+      const filterButton = screen.getByRole('button', { name: 'Filter Status' });
+      expect(filterButton).toBeInTheDocument();
+
+      // Apply external filter
+      rerender(
+        <DataTable
+          columns={headerFilterColumns}
+          data={headerFilterRows}
+          manualFiltering
+          columnFilters={[{ id: 'status', value: { operator: 'equals', value: 'beta' } }]}
+          onColumnFiltersChange={vi.fn()}
+          showPagination={false}
+        />,
+      );
+
+      // Filter button should now show active state (blue color)
+      const activeFilterButton = screen.getByRole('button', { name: 'Filter Status' });
+      expect(activeFilterButton).toBeInTheDocument();
+    });
+  });
+
   describe('column header filters', () => {
     it('should filter rows using the text input in a header popover', async () => {
       const user = userEvent.setup();
@@ -515,7 +620,9 @@ describe('DataTable', () => {
       render(<DataTable columns={headerFilterColumns} data={data} showPagination={false} />);
 
       await user.click(screen.getByRole('button', { name: 'Filter Name' }));
-      await user.type(screen.getByPlaceholderText('Value...'), 'Alpha');
+      await user.click(screen.getByPlaceholderText('Value...'));
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('Alpha');
 
       expect(screen.getByText('Alpha Row')).toBeInTheDocument();
       expect(screen.queryByText('Row Two')).not.toBeInTheDocument();
@@ -536,7 +643,7 @@ describe('DataTable', () => {
 
       await user.click(valueSelect);
       const option = screen.getByRole('option', { name: 'Beta', hidden: true });
-      fireEvent.click(option);
+      await user.click(option);
 
       expect(screen.getByText('Row Two')).toBeInTheDocument();
       expect(screen.queryByText('Row One')).not.toBeInTheDocument();
@@ -585,7 +692,9 @@ describe('DataTable', () => {
       expect(valueInput).toBeInTheDocument();
       expect(valueInput).toBeEnabled();
 
-      await user.type(valueInput, 'Row');
+      await user.click(valueInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('Row');
       expect(screen.getByText('Row One')).toBeInTheDocument();
     });
 
@@ -600,7 +709,7 @@ describe('DataTable', () => {
       const valueSelect = comboboxes[1];
       await user.click(valueSelect);
       const betaOption = screen.getByRole('option', { name: 'Beta', hidden: true });
-      fireEvent.click(betaOption);
+      await user.click(betaOption);
 
       await user.click(screen.getByRole('button', { name: /Filters/ }));
       const toolbarDialog = screen
@@ -807,6 +916,31 @@ describe('DataTable', () => {
       const dataCell = cells?.[1];
       expect(dataCell?.className).toContain('overflow-hidden');
     });
+  });
+
+  it('should keep compact header padding for utility columns', () => {
+    const data: TestRow[] = [{ id: '1', name: 'Test Item' }];
+    const renderSubComponent = () => <div data-testid="expanded-content">Details</div>;
+
+    const { container } = render(
+      <DataTable
+        columns={columns}
+        data={data}
+        enableRowSelection
+        renderSubComponent={renderSubComponent}
+      />,
+    );
+
+    const headerCells = container.querySelectorAll('thead th');
+    expect(headerCells).toHaveLength(4);
+    expect(headerCells[0].className).toContain('px-3');
+    expect(headerCells[1].className).toContain('px-3');
+    expect(headerCells[0].className).not.toContain('overflow-hidden');
+    expect(headerCells[1].className).not.toContain('overflow-hidden');
+    expect(headerCells[2].className).toContain('px-4');
+    expect(headerCells[2].className).toContain('overflow-hidden');
+    expect(headerCells[3].className).toContain('px-4');
+    expect(headerCells[3].className).toContain('overflow-hidden');
   });
 
   describe('cell content wrapper', () => {
@@ -1117,6 +1251,46 @@ describe('DataTable', () => {
       const expandedContent = screen.getByTestId('expanded-1');
       const expandedTd = expandedContent.closest('td');
       expect(expandedTd).toHaveAttribute('colspan', '3');
+    });
+
+    it('should render expanded content spanning only visible columns', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          renderSubComponent={renderSubComponent}
+          initialColumnVisibility={{ expand: false }}
+        />,
+      );
+
+      const table = screen.getByRole('table');
+      const rows = table.querySelectorAll('tbody tr');
+      await user.click(rows[0]);
+
+      const expandedContent = screen.getByTestId('expanded-1');
+      const expandedTd = expandedContent.closest('td');
+      expect(expandedTd).toHaveAttribute('colspan', '2');
+    });
+
+    it('should allow overriding the expanded row background', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          renderSubComponent={renderSubComponent}
+          expandedRowClassName="bg-transparent"
+        />,
+      );
+
+      const expandButtons = screen.getAllByRole('button', { name: /expand row/i });
+      await user.click(expandButtons[0]);
+
+      const expandedRow = screen.getByTestId('expanded-1').closest('tr');
+      expect(expandedRow).toHaveClass('bg-transparent');
     });
   });
 });

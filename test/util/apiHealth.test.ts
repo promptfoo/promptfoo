@@ -33,6 +33,8 @@ describe('API Health Utilities', () => {
     delete process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
     delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
 
+    mockIsEnabled.mockReset();
+    mockGetApiHost.mockReset();
     mockIsEnabled.mockReturnValue(false);
     mockGetApiHost.mockReturnValue('https://custom.api.com');
   });

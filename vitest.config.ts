@@ -18,6 +18,10 @@ export default defineConfig({
     root: '.',
     setupFiles: ['./vitest.setup.ts'],
 
+    // Keep successful backend unit-test runs focused on failures. Set
+    // PROMPTFOO_TEST_SHOW_OUTPUT=true when debugging stdout/stderr from tests.
+    silent: process.env.PROMPTFOO_TEST_SHOW_OUTPUT !== 'true',
+
     // Run tests in random order to catch test isolation issues early.
     // Tests should not depend on execution order or shared state.
     // Override with --sequence.shuffle=false when debugging specific failures.

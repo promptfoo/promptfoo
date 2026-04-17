@@ -1,6 +1,7 @@
 import type {
   ColumnDef,
   ColumnFiltersState,
+  ExpandedState,
   Row,
   RowSelectionState,
   SortingState,
@@ -41,6 +42,9 @@ interface DataTablePropsBase<TData, TValue = unknown> {
   rowSelection?: RowSelectionState;
   onRowSelectionChange?: (selection: RowSelectionState) => void;
   getRowId?: (row: TData) => string;
+  expanded?: ExpandedState;
+  onExpandedChange?: (expanded: ExpandedState) => void;
+  expandedRowClassName?: string;
   // Custom toolbar actions
   toolbarActions?: React.ReactNode;
   // Fixed height with scroll
@@ -57,8 +61,23 @@ interface DataTablePropsBase<TData, TValue = unknown> {
   onPageSizeChange?: (pageSize: number) => void;
 }
 
-export interface DataTableManualPaginationProps<TData, TValue = unknown>
-  extends DataTablePropsBase<TData, TValue> {
+// Discriminated union for filtering — when manualFiltering is true, columnFilters
+// and onColumnFiltersChange are required; otherwise they must not be passed.
+type DataTableManualFilteringProps = {
+  manualFiltering: true;
+  columnFilters: ColumnFiltersState;
+  onColumnFiltersChange: (filters: ColumnFiltersState) => void;
+};
+
+type DataTableAutoFilteringProps = {
+  manualFiltering?: false;
+  columnFilters?: never;
+  onColumnFiltersChange?: never;
+};
+
+type DataTableFilteringProps = DataTableManualFilteringProps | DataTableAutoFilteringProps;
+
+type DataTableManualPaginationFields = {
   /**
    * `true` enables server-driven/manual pagination: the caller owns pagination state
    * and provides the current page rows, total row count, and pagination handlers.
@@ -70,10 +89,9 @@ export interface DataTableManualPaginationProps<TData, TValue = unknown>
   pageSize: number;
   onPaginationChange: (pagination: { pageIndex: number; pageSize: number }) => void;
   onPageSizeChange: (pageSize: number) => void;
-}
+};
 
-export interface DataTableAutoPaginationProps<TData, TValue = unknown>
-  extends DataTablePropsBase<TData, TValue> {
+type DataTableAutoPaginationFields = {
   manualPagination?: false;
   rowCount?: never;
   pageCount?: never;
@@ -81,7 +99,21 @@ export interface DataTableAutoPaginationProps<TData, TValue = unknown>
   pageSize?: never;
   onPaginationChange?: never;
   onPageSizeChange?: never;
-}
+};
+
+export type DataTableManualPaginationProps<TData, TValue = unknown> = DataTablePropsBase<
+  TData,
+  TValue
+> &
+  DataTableFilteringProps &
+  DataTableManualPaginationFields;
+
+export type DataTableAutoPaginationProps<TData, TValue = unknown> = DataTablePropsBase<
+  TData,
+  TValue
+> &
+  DataTableFilteringProps &
+  DataTableAutoPaginationFields;
 
 export type DataTableProps<TData, TValue = unknown> =
   | DataTableManualPaginationProps<TData, TValue>

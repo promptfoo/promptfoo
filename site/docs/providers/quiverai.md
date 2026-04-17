@@ -116,5 +116,5 @@ Error messages include a `request_id` for debugging with QuiverAI support.
 
 ## See Also
 
-- [QuiverAI example](https://github.com/promptfoo/promptfoo/tree/main/examples/quiverai)
+- [QuiverAI example](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-quiverai)
 - [Configuration Reference](/docs/configuration/reference)

@@ -47,10 +47,14 @@
     BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif, 'Apple Color Emoji',
     'Segoe UI Emoji', 'Segoe UI Symbol';
   --docusaurus-highlighted-code-line-bg: #fffbdc;
+
+  /* Store page tokens */
+  --store-card-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  --store-card-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.1);
 }
 
 /* For readability concerns, you should choose a lighter palette in dark mode. */
-[data-theme='dark'] {
+:root[data-theme='dark'] {
   --ifm-color-primary: #ff7a7a;
   --ifm-color-primary-dark: #e53a3a;
   --ifm-color-primary-darker: #cb3434;
@@ -59,11 +63,15 @@
   --ifm-color-primary-lighter: #ffc6c6;
   --ifm-color-primary-lightest: #ffd9d9;
   --ifm-button-color: #fff;
-  --docusaurus-highlighted-code-line-bg: #353531;
+  --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.08);
 
   /* Update background colors */
   --ifm-background-color: #10191c;
   --ifm-background-surface-color: #17252b;
+
+  /* Store page tokens */
+  --store-card-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --store-card-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 code p {
@@ -366,15 +374,14 @@ html:not(.docs-wrapper) .DocSearch {
   background: rgba(201, 42, 42, 0.08);
 }
 
-/* Add breathing room between content and TOC, and widen it slightly */
+/* Add breathing room between content and TOC */
 .theme-doc-toc-desktop {
   padding-left: 1.5rem;
-  min-width: 280px;
 }
 
 /* Constrain doc content area for readability */
 [class*='docMainContainer'] > .container {
-  max-width: 1040px;
+  max-width: 1280px;
   margin: 0 auto;
 }
 
@@ -384,5 +391,39 @@ html:not(.docs-wrapper) .DocSearch {
   padding: 0;
 }
 
+/* Prevent iOS zoom on input focus within MUI overlays */
+[class*='MuiDrawer'] input,
+[class*='MuiDrawer'] select,
+[class*='MuiDrawer'] textarea,
+[class*='MuiDialog'] input,
+[class*='MuiDialog'] select,
+[class*='MuiDialog'] textarea {
+  font-size: 16px !important;
+}
+
+/* Print styles — hide MUI overlays */
+@media print {
+  .MuiDrawer-root,
+  .MuiDialog-root,
+  .MuiFab-root {
+    display: none !important;
+  }
+}
+
 /* Import custom pagination styles */
 @import url('./custom-pagination.css');
+
+/* Announcement bar link styling */
+div[class*='announcementBar'] a {
+  color: #ffffff;
+  text-decoration: none;
+  text-underline-offset: 2px;
+  opacity: 0.85;
+  transition: opacity 0.15s;
+}
+
+div[class*='announcementBar'] a:hover {
+  color: #ffffff;
+  text-decoration: underline;
+  opacity: 1;
+}

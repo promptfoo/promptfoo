@@ -228,6 +228,8 @@ def call_api(prompt, options, context):
     result["cached"] = False
     result["logProbs"] = [-0.5, -0.3, -0.1]
     result["latencyMs"] = 150  # custom latency in milliseconds
+    result["conversationEnded"] = False
+    result["conversationEndReason"] = "thread_closed"
 
     # Error handling
     if something_went_wrong:
@@ -263,6 +265,8 @@ class ProviderResponse:
     cached: Optional[bool]
     logProbs: Optional[List[float]]
     latencyMs: Optional[int]  # overrides measured latency
+    conversationEnded: Optional[bool]
+    conversationEndReason: Optional[str]
     metadata: Optional[Dict[str, Any]]
 
 class ProviderEmbeddingResponse:
@@ -280,6 +284,10 @@ class ProviderClassificationResponse:
 :::tip
 Always include the `output` field in your response, even if it's an empty string when an error occurs.
 :::
+
+For multi-turn red team strategies, return `conversationEnded: True` (with optional
+`conversationEndReason`) when your target intentionally closes the active thread so promptfoo
+stops probing gracefully instead of continuing into timeout/error turns.
 
 ## Complete Examples
 
@@ -676,7 +684,13 @@ tracing:
       enabled: true
 ```
 
-When tracing is enabled (`PROMPTFOO_ENABLE_OTEL=true`), the Python provider wrapper automatically:
+Install the Python OpenTelemetry packages and enable the wrapper instrumentation:
+
+```bash
+export PROMPTFOO_ENABLE_OTEL=true
+```
+
+When wrapper OTEL instrumentation is enabled, the Python provider wrapper:
 
 - Creates child spans linked to the parent evaluation trace
 - Records request/response body attributes
@@ -684,6 +698,8 @@ When tracing is enabled (`PROMPTFOO_ENABLE_OTEL=true`), the Python provider wrap
 - Includes evaluation and test case metadata
 
 The spans follow [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) with attributes like `gen_ai.request.model`, `gen_ai.usage.input_tokens`, and `gen_ai.usage.output_tokens`.
+
+This span covers the provider call itself. If you need internal workflow telemetry for tools, agents, or handoffs, create custom child spans or export framework-native traces into Promptfoo. See the [OpenAI Agents Python SDK guide](/docs/guides/evaluate-openai-agents-python) for a full example that makes `trajectory:*` assertions work with the Python `openai-agents` SDK.
 
 ### Handling Retries
 

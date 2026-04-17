@@ -1,5 +1,5 @@
 import { renderWithProviders } from '@app/utils/testutils';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
@@ -52,8 +52,11 @@ describe('ReportSettingsDialogButton', () => {
 
     const slider = screen.getByRole('slider');
 
-    // Simulate changing the slider value directly via fireEvent
-    fireEvent.change(slider, { target: { value: '0.75' } });
+    slider.focus();
+    // jsdom does not apply native range keyboard defaults, so set the DOM value directly.
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(slider, '0.75');
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    slider.dispatchEvent(new Event('change', { bubbles: true }));
 
     expect(mockSetPluginPassRateThreshold).toHaveBeenCalled();
     const calls = mockSetPluginPassRateThreshold.mock.calls;

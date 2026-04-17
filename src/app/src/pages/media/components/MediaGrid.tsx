@@ -78,7 +78,7 @@ export function MediaGrid({
       }
 
       const itemsPerRow = getItemsPerRow();
-      let newIndex = focusedIndex;
+      let newIndex: number;
 
       switch (e.key) {
         case 'ArrowRight':

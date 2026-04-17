@@ -110,7 +110,7 @@ describe('list command', () => {
     vi.mocked(wrapTable).mockReturnValue('mocked table');
     vi.mocked(shouldUseInkList).mockReturnValue(false);
     vi.mocked(runInkList).mockResolvedValue({ cancelled: true });
-    vi.mocked(sha256).mockImplementation((input: string) => `hash-${input}`);
+    vi.mocked(sha256).mockImplementation((input: string | Buffer) => `hash-${input}`);
     vi.mocked(getPrompts).mockResolvedValue([]);
     vi.mocked(getTestCases).mockResolvedValue([]);
     evalModel.getMany.mockResolvedValue([]);

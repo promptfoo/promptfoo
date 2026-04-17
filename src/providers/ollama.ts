@@ -207,7 +207,7 @@ export class OllamaCompletionProvider implements ApiProvider {
         },
         {} as Record<string, any>,
       ),
-      ...(this.config.think !== undefined ? { think: this.config.think } : {}),
+      ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.passthrough || {}),
     };
 
@@ -362,7 +362,7 @@ export class OllamaChatProvider implements ApiProvider {
         },
         {} as Record<string, any>,
       ),
-      ...(this.config.think !== undefined ? { think: this.config.think } : {}),
+      ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.passthrough || {}),
     };
 
