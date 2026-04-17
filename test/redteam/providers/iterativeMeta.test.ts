@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { runMetaAgentRedteam } from '../../../src/redteam/providers/iterativeMeta';
+import RedteamIterativeMetaProvider, {
+  runMetaAgentRedteam,
+} from '../../../src/redteam/providers/iterativeMeta';
 import {
   createMockProvider,
   createProviderResponse,
@@ -44,10 +46,12 @@ vi.mock('../../../src/redteam/graders', async (importOriginal) => {
 });
 
 const mockShouldGenerateRemote = vi.hoisted(() => vi.fn(() => true));
+const mockNeverGenerateRemote = vi.hoisted(() => vi.fn(() => false));
 
 vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
   return {
     ...(await importOriginal()),
+    neverGenerateRemote: mockNeverGenerateRemote,
     shouldGenerateRemote: mockShouldGenerateRemote,
   };
 });
@@ -93,6 +97,10 @@ describe('RedteamIterativeMetaProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockShouldGenerateRemote.mockReset();
+    mockShouldGenerateRemote.mockReturnValue(true);
+    mockNeverGenerateRemote.mockReset();
+    mockNeverGenerateRemote.mockReturnValue(false);
 
     // Mock cloud agent provider - returns attack prompts
     mockAgentProvider = createMockProvider({
@@ -139,8 +147,25 @@ describe('RedteamIterativeMetaProvider', () => {
     vi.resetAllMocks();
   });
 
-  // Note: Constructor tests omitted as they require complex module mocking
-  // The provider requires remote generation, so testing focuses on the core function
+  describe('constructor', () => {
+    it('should throw the implicit-disabled error when remote generation is unavailable for this config', () => {
+      mockShouldGenerateRemote.mockReturnValue(false);
+      mockNeverGenerateRemote.mockReturnValue(false);
+
+      expect(() => new RedteamIterativeMetaProvider({ injectVar: 'query' })).toThrow(
+        'jailbreak:meta strategy requires remote generation, which is currently disabled for this configuration. To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, or log into Promptfoo Cloud with `promptfoo auth login`.',
+      );
+    });
+
+    it('should throw the explicit-disabled error when a disable flag is set', () => {
+      mockShouldGenerateRemote.mockReturnValue(false);
+      mockNeverGenerateRemote.mockReturnValue(true);
+
+      expect(() => new RedteamIterativeMetaProvider({ injectVar: 'query' })).toThrow(
+        /jailbreak:meta strategy requires remote generation, which has been explicitly disabled\. To enable it, unset (PROMPTFOO_DISABLE_REMOTE_GENERATION|PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)/,
+      );
+    });
+  });
 
   describe('runMetaAgentRedteam', () => {
     it('should execute iterations and call cloud for decisions', async () => {

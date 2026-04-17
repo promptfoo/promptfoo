@@ -36,6 +36,11 @@ export interface TraceSpanQueryOptions {
   sanitizeAttributes?: boolean;
 }
 
+export interface AddSpansOptions {
+  skipTraceCheck?: boolean;
+  warnIfMissingTrace?: boolean;
+}
+
 const SENSITIVE_ATTRIBUTE_KEYS = [
   'authorization',
   'cookie',
@@ -151,7 +156,7 @@ export class TraceStore {
   async addSpans(
     traceId: string,
     spans: SpanData[],
-    options?: { skipTraceCheck?: boolean },
+    options?: AddSpansOptions,
   ): Promise<{ stored: boolean; reason?: string }> {
     try {
       logger.debug(`[TraceStore] Adding ${spans.length} spans to trace ${traceId}`);
@@ -169,10 +174,14 @@ export class TraceStore {
           .limit(1);
 
         if (trace.length === 0) {
-          logger.warn(
+          const message =
             `[TraceStore] Trace ${traceId} not found, skipping ${spans.length} spans. ` +
-              `This may indicate spans arrived before trace was created.`,
-          );
+            `This may indicate spans arrived before trace was created.`;
+          if (options?.warnIfMissingTrace === false) {
+            logger.debug(message);
+          } else {
+            logger.warn(message);
+          }
           return { stored: false, reason: `Trace ${traceId} not found` };
         }
         logger.debug(`[TraceStore] Trace ${traceId} found, proceeding with span insertion`);

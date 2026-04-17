@@ -2,8 +2,8 @@ import './setup';
 
 import { randomUUID } from 'crypto';
 
-import { afterEach, expect, it, vi } from 'vitest';
-import { evaluate } from '../../src/evaluator';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import {
@@ -16,6 +16,10 @@ import { sleep } from '../../src/util/time';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
+
+beforeEach(() => {
+  __resetPromptConversationCacheForTests();
+});
 
 afterEach(() => {
   vi.useRealTimers();
@@ -66,6 +70,126 @@ describeEvaluator('evaluator execution control', () => {
     expect(mockApiProvider.delay).toBe(0);
     expect(sleep).not.toHaveBeenCalled();
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  type ConcurrencyProbe = {
+    maxActiveCalls: number;
+    callApi: ReturnType<typeof vi.fn>;
+  };
+
+  async function runConcurrencyProbe(rawPrompt: string, testCount = 4): Promise<ConcurrencyProbe> {
+    let activeCalls = 0;
+    let maxActiveCalls = 0;
+    // Explicit barrier so every concurrent slot actually observes peak
+    // overlap, independent of wall-clock timing. With setTimeout-only
+    // sleeps a slow CI runner can serialize short sleeps and falsely
+    // report maxActiveCalls=1 even when the evaluator dispatched in
+    // parallel.
+    let releaseHold: (() => void) | undefined;
+    let holdPromise = new Promise<void>((resolve) => {
+      releaseHold = resolve;
+    });
+    const targetConcurrency = Math.min(testCount, 4);
+    const callApi = vi.fn().mockImplementation(async (prompt) => {
+      activeCalls += 1;
+      maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
+      if (activeCalls >= targetConcurrency) {
+        releaseHold?.();
+      }
+      // Wait until either the barrier trips (parallel path) or a short
+      // fallback fires (serial path — we'll never reach targetConcurrency).
+      await Promise.race([holdPromise, new Promise<void>((resolve) => setTimeout(resolve, 100))]);
+      activeCalls -= 1;
+      return {
+        output: String(prompt),
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      };
+    });
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi,
+    };
+
+    const tests = Array.from({ length: testCount }, (_, idx) => ({
+      vars: { question: `Turn ${idx + 1}` },
+    }));
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt(rawPrompt)],
+      tests,
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: targetConcurrency });
+
+    expect(callApi).toHaveBeenCalledTimes(testCount);
+    // Release the barrier if it's still held (e.g. serial path never tripped it).
+    releaseHold?.();
+    // Suppress unused-variable lint noise for holdPromise.
+    holdPromise = holdPromise.then(() => undefined);
+    return { maxActiveCalls, callApi };
+  }
+
+  it('does not force concurrency to 1 for _conversation substrings', async () => {
+    const { maxActiveCalls } = await runConcurrencyProbe(
+      'Summarize the pre_conversation_context for {{ question }}',
+    );
+
+    expect(maxActiveCalls).toBeGreaterThan(1);
+  });
+
+  it('forces concurrency to 1 for real _conversation template references', async () => {
+    const { maxActiveCalls } = await runConcurrencyProbe(
+      '{{ {"history": _conversation}["history"][0].output }} {{ question }}',
+      2,
+    );
+
+    expect(maxActiveCalls).toBe(1);
+  });
+
+  it('falls back to serial execution when a prompt that mentions _conversation fails to parse', async () => {
+    // Invalid Nunjucks ({% if %} with no condition), but the literal text
+    // contains `_conversation`. The old substring check always forced serial
+    // mode here, and the new parser-based check must preserve that safety
+    // envelope instead of silently running in parallel. The render itself
+    // will fail for an invalid template, so assert on the evaluator's
+    // concurrency-adjustment log rather than on peak in-flight calls.
+    const infoSpy = vi.spyOn(logger, 'info');
+    try {
+      const mockApiProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('test-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          output: 'ok',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        }),
+      };
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('{{ _conversation[0].output }} {% if %} {{ question }}')],
+        tests: [{ vars: { question: 'a' } }, { vars: { question: 'b' } }],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, { maxConcurrency: 4 });
+
+      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('Setting concurrency to 1'));
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it('propagates prior turn output into _conversation on the next serial call', async () => {
+    const { callApi } = await runConcurrencyProbe(
+      '{% if _conversation and _conversation|length > 0 %}prior={{ _conversation[0].response.output }} {% endif %}now={{ question }}',
+      2,
+    );
+
+    // First call has no prior history; second call should have received
+    // turn 1's rendered output threaded through the `_conversation` variable.
+    const firstRenderedPrompt = String(callApi.mock.calls[0][0]);
+    const secondRenderedPrompt = String(callApi.mock.calls[1][0]);
+    expect(firstRenderedPrompt).not.toContain('prior=');
+    expect(secondRenderedPrompt).toContain('prior=');
+    expect(secondRenderedPrompt).toContain('now=Turn 2');
   });
 
   it('skips delay for cached responses', async () => {

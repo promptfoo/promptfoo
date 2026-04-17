@@ -643,7 +643,7 @@ export class OpenClawAgentProvider implements ApiProvider {
     if (this.hasExplicitScopes) {
       return this.scopes;
     }
-    return deviceToken.scopes && deviceToken.scopes.length > 0 ? deviceToken.scopes : this.scopes;
+    return normalizeScopes([...this.scopes, ...(deviceToken.scopes || [])]);
   }
 
   private storeDeviceTokenFromHello(

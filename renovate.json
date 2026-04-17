@@ -40,6 +40,12 @@
       "groupName": "@inquirer packages"
     },
     {
+      "description": "Disable Chevrotain major updates while Node 20 is supported",
+      "matchPackageNames": ["chevrotain", "/^@chevrotain\\//"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
       "description": "Group Anthropic packages together across all dependency types",
       "matchPackagePatterns": ["^@anthropic-ai/"],
       "matchDepTypes": [

@@ -61,7 +61,7 @@ describe('EvalResult', () => {
         id: 'test-provider',
         label: 'Test Provider',
         config: {
-          apiKey: 'test-key',
+          apiKey: '[REDACTED]',
         },
       });
     });
@@ -76,7 +76,13 @@ describe('EvalResult', () => {
       };
 
       const result = sanitizeProvider(providerOptions);
-      expect(result).toEqual(providerOptions);
+      expect(result).toEqual({
+        id: 'test-provider',
+        label: 'Test Provider',
+        config: {
+          apiKey: '[REDACTED]',
+        },
+      });
     });
 
     it('should handle generic objects with id function', () => {
@@ -93,7 +99,7 @@ describe('EvalResult', () => {
         id: 'test-provider',
         label: 'Test Provider',
         config: {
-          apiKey: 'test-key',
+          apiKey: '[REDACTED]',
         },
       });
     });
@@ -184,6 +190,9 @@ describe('EvalResult', () => {
       });
     });
 
+    // Regression test for #7266: Node.js Timeout objects contain circular
+    // _idlePrev/_idleNext references, which previously caused
+    // "Converting circular structure to JSON" failures during result serialization.
     it('should handle results with Timeout objects (regression test for #7266)', async () => {
       const evalId = 'test-eval-timeout';
 
@@ -253,6 +262,8 @@ describe('EvalResult', () => {
       expect(retrieved?.response?.output).toBe('test output');
     });
 
+    // Regression context (PR #8688): provider credentials such as apiKey/token
+    // were leaking into persisted eval results and API-visible response payloads.
     describe('credential redaction (regression for PR #8688 review)', () => {
       it('redacts apiKey in testCase.options.provider.config', async () => {
         const evalId = 'test-eval-redact-options-provider';
@@ -381,7 +392,7 @@ describe('EvalResult', () => {
       });
     });
 
-    it('should preserve non-circular provider properties', async () => {
+    it('should redact apiKey while preserving non-circular nested provider properties', async () => {
       const evalId = 'test-eval-id';
 
       const providerWithNestedData: ProviderOptions = {
@@ -406,13 +417,21 @@ describe('EvalResult', () => {
         { persist: true },
       );
 
-      // Verify nested properties are preserved
-      expect(result.provider).toEqual(providerWithNestedData);
+      // Verify secrets are redacted while nested non-secret properties are preserved
+      expect(result.provider?.config?.apiKey).toBe('[REDACTED]');
+      expect(result.provider?.config?.options).toEqual({
+        temperature: 0.7,
+        maxTokens: 100,
+      });
 
-      // Verify it can be persisted and retrieved with all properties intact
+      // Verify it can be persisted and retrieved with redaction and nested properties intact
       const retrieved = await EvalResult.findById(result.id);
       expect(retrieved).not.toBeNull();
-      expect(retrieved?.provider).toEqual(providerWithNestedData);
+      expect(retrieved?.provider?.config?.apiKey).toBe('[REDACTED]');
+      expect(retrieved?.provider?.config?.options).toEqual({
+        temperature: 0.7,
+        maxTokens: 100,
+      });
     });
   });
 

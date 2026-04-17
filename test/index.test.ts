@@ -50,6 +50,17 @@ vi.mock('../src/evaluator', async () => {
     }),
   };
 });
+vi.mock('../src/globalConfig/accounts', async () => {
+  const originalModule = await vi.importActual<typeof import('../src/globalConfig/accounts')>(
+    '../src/globalConfig/accounts',
+  );
+  return {
+    ...originalModule,
+    // Pass the override through so tests can verify the full propagation chain.
+    // Individual tests can override this with mockImplementationOnce.
+    getAuthor: vi.fn((override?: string | null) => override ?? null),
+  };
+});
 vi.mock('../src/migrate');
 vi.mock('../src/prompts', async () => {
   const originalModule = await vi.importActual<typeof import('../src/prompts')>('../src/prompts');
@@ -408,7 +419,75 @@ describe('evaluate function', () => {
 
     await evaluate(testSuite);
 
-    expect(createEvalSpy).toHaveBeenCalledWith(expect.anything(), expect.anything());
+    expect(createEvalSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ author: null }),
+    );
+
+    createEvalSpy.mockRestore();
+  });
+
+  it('should not persist evaluate-only author in config', async () => {
+    const createEvalSpy = vi.spyOn(Eval, 'create');
+
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+      author: 'author@example.com',
+    };
+
+    await evaluate(testSuite);
+
+    expect(createEvalSpy.mock.calls[0][0]).not.toHaveProperty('author');
+
+    createEvalSpy.mockRestore();
+  });
+
+  it('should propagate the testSuite author through getAuthor to Eval.create', async () => {
+    const { getAuthor } = await import('../src/globalConfig/accounts');
+    const createEvalSpy = vi.spyOn(Eval, 'create');
+
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+      author: 'programmatic@example.com',
+    };
+
+    await evaluate(testSuite);
+
+    expect(vi.mocked(getAuthor)).toHaveBeenCalledWith('programmatic@example.com');
+    expect(createEvalSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ author: 'programmatic@example.com' }),
+    );
+
+    createEvalSpy.mockRestore();
+  });
+
+  it('should let cloud identity win over the testSuite author when cloud auth is active', async () => {
+    const { getAuthor } = await import('../src/globalConfig/accounts');
+    vi.mocked(getAuthor).mockReturnValueOnce('cloud@example.com');
+    const createEvalSpy = vi.spyOn(Eval, 'create');
+
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+      author: 'override@example.com',
+    };
+
+    await evaluate(testSuite);
+
+    expect(vi.mocked(getAuthor)).toHaveBeenCalledWith('override@example.com');
+    expect(createEvalSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ author: 'cloud@example.com' }),
+    );
 
     createEvalSpy.mockRestore();
   });
@@ -611,7 +690,9 @@ describe('evaluate function', () => {
       );
     });
 
-    // Test cases for GitHub issue #4111: Model-graded assertions with provider resolution
+    // Regression for GitHub issue #4111: model-graded assertions that specified
+    // `provider` as a string ID were not resolved from the main providers
+    // array/providerMap, causing those assertions to fail.
     describe('Model-graded assertions with provider resolution', () => {
       it('should resolve model-graded assertions using providers from main array', async () => {
         const mockLiteLLMProvider = createMockProvider({
@@ -1198,6 +1279,9 @@ describe('evaluate with external defaultTest', () => {
     });
   });
 
+  // Regression test for #8687: resolved providers must not mutate the input
+  // testSuite, because SDK clients can attach circular references at runtime
+  // and break JSON serialization when those mutated objects are reused.
   describe('input testSuite mutation safety', () => {
     let resolveProviderSpy: ReturnType<typeof vi.spyOn>;
 
@@ -1409,6 +1493,18 @@ describe('evaluate with external defaultTest', () => {
       expect(() => JSON.stringify(persistedConfig)).not.toThrow();
       // The input itself must also be safe — library callers may persist or log it.
       expect(() => JSON.stringify(testSuite)).not.toThrow();
+
+      const passedTestSuite = vi.mocked(doEvaluate).mock.calls.at(-1)?.[0];
+      expect(passedTestSuite).toBeDefined();
+      expect(
+        (passedTestSuite!.defaultTest as { options: { provider: { id: () => string } } }).options
+          .provider,
+      ).toBe(resolvedProvider);
+      expect(
+        (
+          passedTestSuite!.defaultTest as { options: { provider: { id: () => string } } }
+        ).options.provider.id(),
+      ).toBe('bedrock:resolved');
 
       createEvalSpy.mockRestore();
     });

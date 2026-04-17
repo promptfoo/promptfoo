@@ -79,6 +79,9 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGet.mockReset();
+    mockSet.mockReset();
+    mockIsCacheEnabled.mockReset().mockReturnValue(false);
     delete process.env.AWS_BEDROCK_MAX_RETRIES;
     delete process.env.AWS_BEARER_TOKEN_BEDROCK;
     delete process.env.HTTPS_PROXY;

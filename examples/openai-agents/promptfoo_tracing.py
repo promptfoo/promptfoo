@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import threading
 import urllib.error
 import urllib.request
@@ -68,7 +69,42 @@ def _value_to_otlp(value: Any) -> dict[str, Any]:
         return {"stringValue": value}
     if isinstance(value, list):
         return {"arrayValue": {"values": [_value_to_otlp(item) for item in value]}}
-    return {"stringValue": json.dumps(value, ensure_ascii=False, sort_keys=True)}
+    if isinstance(value, dict):
+        return {"stringValue": _safe_json_dumps(value)}
+    return {"stringValue": str(value)}
+
+
+def _safe_json_dumps(value: Any) -> str:
+    try:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        try:
+            return json.dumps(value, ensure_ascii=False, default=str)
+        except (TypeError, ValueError):
+            return str(value)
+
+
+def _sanitize_attribute_value(value: Any) -> Any:
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, list):
+        return [_sanitize_attribute_value(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            str(key): _sanitize_attribute_value(item) for key, item in value.items()
+        }
+    return str(value)
+
+
+def _command_to_string(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value.strip() or None
+    if isinstance(value, list):
+        command = " ".join(str(part) for part in value if str(part).strip())
+        return command.strip() or None
+    return str(value).strip() or None
 
 
 def _attributes_to_otlp(attributes: dict[str, Any]) -> list[dict[str, Any]]:
@@ -76,6 +112,53 @@ def _attributes_to_otlp(attributes: dict[str, Any]) -> list[dict[str, Any]]:
         {"key": key, "value": _value_to_otlp(value)}
         for key, value in attributes.items()
     ]
+
+
+def _apply_custom_span_data(
+    span_data: dict[str, Any], attributes: dict[str, Any]
+) -> str:
+    custom_name = str(span_data.get("name") or "custom")
+    attributes["openai.agents.custom_span.name"] = custom_name
+
+    data = span_data.get("data")
+    if not isinstance(data, dict):
+        return custom_name
+
+    for key, value in data.items():
+        attributes[str(key)] = _sanitize_attribute_value(value)
+
+    sdk_span_type = data.get("sdk_span_type")
+    if isinstance(sdk_span_type, str) and sdk_span_type:
+        attributes["openai.agents.sdk_span_type"] = sdk_span_type
+
+    command = _command_to_string(data.get("command"))
+    if command:
+        attributes["command"] = command
+        if custom_name.lower().startswith("codex"):
+            attributes["codex.command"] = command
+
+    exit_code = data.get("exit_code")
+    if isinstance(exit_code, int):
+        attributes["process.exit.code"] = exit_code
+
+    sandbox_operation = data.get("sandbox.operation")
+    if isinstance(sandbox_operation, str) and sandbox_operation:
+        return f"sandbox.{sandbox_operation}"
+
+    if sdk_span_type == "task":
+        task_name = data.get("name")
+        return f"task {task_name}" if task_name else "task"
+
+    if sdk_span_type == "turn":
+        turn = data.get("turn")
+        agent_name = data.get("agent_name")
+        if turn is not None and agent_name:
+            return f"turn {turn} {agent_name}"
+        if turn is not None:
+            return f"turn {turn}"
+        return "turn"
+
+    return custom_name
 
 
 class PromptfooOTLPExporter(TracingExporter):
@@ -188,6 +271,8 @@ class PromptfooOTLPExporter(TracingExporter):
             response_id = span_data.get("response_id") or "response"
             name = f"response {response_id}"
             attributes["openai.response_id"] = response_id
+        elif span_type == "custom":
+            name = _apply_custom_span_data(span_data, attributes)
 
         if span.trace_metadata:
             for key, value in span.trace_metadata.items():
@@ -234,7 +319,13 @@ class PromptfooTracingProcessor(TracingProcessor):
             spans = list(self._spans_by_trace.pop(trace.trace_id, []))
             self._traces.pop(trace.trace_id, None)
 
-        self._exporter.export([trace, *spans])
+        try:
+            self._exporter.export([trace, *spans])
+        except Exception as exc:
+            print(
+                f"[promptfoo_tracing] Failed to export trace {trace.trace_id}: {exc}",
+                file=sys.stderr,
+            )
 
     def on_span_start(self, span: Span[Any]) -> None:
         return None
@@ -260,7 +351,14 @@ class PromptfooTracingProcessor(TracingProcessor):
                 items: list[Trace | Span[Any]] = [*spans]
                 if trace is not None:
                     items.insert(0, trace)
-                self._exporter.export(items)
+                try:
+                    self._exporter.export(items)
+                except Exception as exc:
+                    print(
+                        f"[promptfoo_tracing] Failed to flush "
+                        f"{len(spans)} span(s): {exc}",
+                        file=sys.stderr,
+                    )
 
 
 def _parse_traceparent(traceparent: str | None) -> tuple[str, str] | None:
@@ -297,7 +395,13 @@ def configure_promptfoo_tracing(
     global _CURRENT_PROCESSOR
 
     if _CURRENT_PROCESSOR is not None:
-        _CURRENT_PROCESSOR.shutdown()
+        try:
+            _CURRENT_PROCESSOR.shutdown()
+        except Exception as exc:
+            print(
+                f"[promptfoo_tracing] Failed to shut down previous processor: {exc}",
+                file=sys.stderr,
+            )
         _CURRENT_PROCESSOR = None
 
     parsed = _active_otel_parent() or _parse_traceparent(context.get("traceparent"))

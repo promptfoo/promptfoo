@@ -33,7 +33,11 @@ interface ProviderModel {
 
 export interface ProviderConfig {
   cost?: number;
+  inputCost?: number;
+  outputCost?: number;
   audioCost?: number;
+  audioInputCost?: number;
+  audioOutputCost?: number;
 }
 
 /**
@@ -71,8 +75,9 @@ export function calculateCost(
     model.cost.longContext && promptTokens > model.cost.longContext.threshold
       ? model.cost.longContext
       : undefined;
-  const inputCost = config.cost ?? longContextCost?.input ?? model.cost.input;
-  const outputCost = config.cost ?? longContextCost?.output ?? model.cost.output;
+  const inputCost = config.inputCost ?? config.cost ?? longContextCost?.input ?? model.cost.input;
+  const outputCost =
+    config.outputCost ?? config.cost ?? longContextCost?.output ?? model.cost.output;
   return inputCost * promptTokens + outputCost * completionTokens;
 }
 

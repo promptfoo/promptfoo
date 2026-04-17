@@ -1,10 +1,17 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AzureGenericProvider } from '../../../src/providers/azure/generic';
+import { mockProcessEnv } from '../../util/utils';
 
 describe('AzureGenericProvider', () => {
   describe('getApiBaseUrl', () => {
+    let restoreEnv: () => void;
+
     beforeEach(() => {
-      delete process.env.AZURE_OPENAI_API_HOST;
+      restoreEnv = mockProcessEnv({ AZURE_OPENAI_API_HOST: undefined });
+    });
+
+    afterEach(() => {
+      restoreEnv();
     });
 
     it('should return apiBaseUrl if set', () => {
