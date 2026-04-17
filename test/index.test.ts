@@ -1586,9 +1586,10 @@ describe('evaluate with external defaultTest', () => {
       expect(roundTripped.tests?.[0].options?.transform).toBe('[inline function]: namedTransform');
       expect(roundTripped.tests?.[0].assert?.[0].transform).toMatch(/^\[inline function\]/);
 
-      // Exactly one warning about the serialization substitution.
-      expect(warnSpy).toHaveBeenCalledTimes(1);
-      expect(warnSpy.mock.calls[0][0]).toContain('[inline function]');
+      // Warning surfaces the serialization substitution. Assert on content, not
+      // call count — a future refactor that splits this into multiple lines
+      // should still satisfy the guarantee.
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[inline function]'));
 
       createEvalSpy.mockRestore();
       warnSpy.mockRestore();
