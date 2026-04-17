@@ -478,4 +478,137 @@ describeEvaluator('evaluator grading concurrency', () => {
     expect(gradingCacheMissCount).toBe(2);
     expect(gradingProvider.callApi).toHaveBeenCalledTimes(4);
   });
+
+  it('serializes async assert-set judges so grouping survives PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', async () => {
+    // Regression: without forcing assertion concurrency to 1 when the grouping
+    // queue is active, async graders inside an assert-set would interleave
+    // judges across rows (judge-one row1, judge-two row1, judge-one row2, ...)
+    // and defeat the single-judge-drain guarantee.
+    const callOrder: string[] = [];
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: `Target output for ${prompt}`,
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const makeAsyncJudge = (id: string): ApiProvider => ({
+      id: vi.fn().mockReturnValue(id),
+      callApi: vi.fn(async () => {
+        // Yield to the event loop a few times to expose any interleaving that
+        // `async.forEachOfLimit(ASSERTIONS_MAX_CONCURRENCY)` would produce.
+        await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        callOrder.push(id);
+        return {
+          output: JSON.stringify({ pass: true, score: 1, reason: `${id} passed` }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    });
+    const judgeOne = makeAsyncJudge('judge-one');
+    const judgeTwo = makeAsyncJudge('judge-two');
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: [
+        {
+          vars: { topic: 'alpha' },
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                { type: 'llm-rubric', value: 'Judge alpha one', provider: judgeOne },
+                { type: 'llm-rubric', value: 'Judge alpha two', provider: judgeTwo },
+              ],
+            },
+          ],
+        },
+        {
+          vars: { topic: 'beta' },
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                { type: 'llm-rubric', value: 'Judge beta one', provider: judgeOne },
+                { type: 'llm-rubric', value: 'Judge beta two', provider: judgeTwo },
+              ],
+            },
+          ],
+        },
+        {
+          vars: { topic: 'gamma' },
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                { type: 'llm-rubric', value: 'Judge gamma one', provider: judgeOne },
+                { type: 'llm-rubric', value: 'Judge gamma two', provider: judgeTwo },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(3);
+    expect(callOrder).toEqual([
+      'judge-one',
+      'judge-one',
+      'judge-one',
+      'judge-two',
+      'judge-two',
+      'judge-two',
+    ]);
+  });
+
+  it('does not log error-level message when deferred grading is aborted', async () => {
+    const { default: logger } = await import('../../src/logger');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+
+    const abortController = new AbortController();
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: `Target output for ${prompt}`,
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const judge: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge'),
+      callApi: vi.fn(async () => {
+        abortController.abort();
+        const abortError = new Error('Aborted');
+        abortError.name = 'AbortError';
+        throw abortError;
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: [
+        {
+          vars: { topic: 'alpha' },
+          assert: [{ type: 'llm-rubric', value: 'Judge alpha', provider: judge }],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {
+      maxConcurrency: 1,
+      abortSignal: abortController.signal,
+    });
+
+    const gradingErrorLogs = errorSpy.mock.calls.filter(
+      ([message]) => typeof message === 'string' && message.includes('Assertion grading failed'),
+    );
+    expect(gradingErrorLogs).toHaveLength(0);
+
+    errorSpy.mockRestore();
+  });
 });

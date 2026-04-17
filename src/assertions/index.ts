@@ -21,6 +21,7 @@ import {
 import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
+import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
 import { getTraceStore } from '../tracing/store';
 import {
@@ -693,36 +694,41 @@ export async function runAssertions({
     }
   }
 
-  await async.forEachOfLimit(
-    asserts,
-    ASSERTIONS_MAX_CONCURRENCY,
-    async ({ assertion, assertResult, index }) => {
-      if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
-        // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
-        return;
-      }
+  // When the grouping queue is active (serial mode with model-graded assertions),
+  // dispatching assertions concurrently lets per-assertion preprocessing reorder
+  // enqueues relative to declaration, which can split groups and defeat the
+  // single-judge-drain guarantee. Serialize so the queue can group by provider
+  // ID deterministically.
+  const concurrency = getProviderCallExecutionContext()?.providerCallQueue
+    ? 1
+    : ASSERTIONS_MAX_CONCURRENCY;
 
-      const result = await runAssertion({
-        prompt,
-        provider,
-        providerResponse,
-        assertion,
-        test,
-        vars,
-        latencyMs,
-        assertIndex: index,
-        traceId,
-        traceData: preloadedTraceData,
-      });
+  await async.forEachOfLimit(asserts, concurrency, async ({ assertion, assertResult, index }) => {
+    if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
+      // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
+      return;
+    }
 
-      assertResult.addResult({
-        index,
-        result,
-        metric: renderMetricName(assertion.metric, vars || test.vars || {}),
-        weight: assertion.weight,
-      });
-    },
-  );
+    const result = await runAssertion({
+      prompt,
+      provider,
+      providerResponse,
+      assertion,
+      test,
+      vars,
+      latencyMs,
+      assertIndex: index,
+      traceId,
+      traceData: preloadedTraceData,
+    });
+
+    assertResult.addResult({
+      index,
+      result,
+      metric: renderMetricName(assertion.metric, vars || test.vars || {}),
+      weight: assertion.weight,
+    });
+  });
 
   await async.forEach(subAssertResults, async (subAssertResult) => {
     const result = await subAssertResult.testResult();
