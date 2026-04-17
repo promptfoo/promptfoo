@@ -208,13 +208,11 @@ describe('SageMakerCompletionProvider', () => {
       });
 
       const result = await provider.callApi('hello');
-      expect(result.error).toContain('transform boom');
       expect(result.output).toBeUndefined();
       // The response error unwraps `transform()`'s wrapper so the user sees a
-      // single `SageMaker transform error: <raw>` instead of a
-      // `SageMaker transform error: Transform failed (...): <raw>` stutter.
-      expect(result.error).not.toContain('Transform failed');
-      expect(result.error?.match(/SageMaker transform error/g)).toHaveLength(1);
+      // single `SageMaker transform error: <raw>` with no double-labeling.
+      // Pin the exact shape rather than negating the wrapper's internal format.
+      expect(result.error).toMatch(/^SageMaker transform error: transform boom$/);
     });
 
     it('falls back to the original prompt when a function transform returns undefined', async () => {

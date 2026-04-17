@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
-import { TransformInputType, transform } from '../util/transform';
+import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
 
 import type { EnvOverrides } from '../types/env';
@@ -311,26 +311,19 @@ abstract class SageMakerGenericProvider {
   /**
    * Run `applyTransformation` and convert a function-transform throw into a
    * `ProviderResponse.error` so the evaluator sees a uniform error row instead
-   * of an uncaught rejection. `kind` only affects the error-message prefix.
+   * of an uncaught rejection.
    */
   protected async runTransformSafely(
     input: string,
     context: CallApiContextParams | undefined,
-    kind: 'prompt' | 'embedding',
+    errorPrefix: string,
   ): Promise<{ ok: true; value: string } | { ok: false; error: string }> {
     try {
       return { ok: true, value: await this.applyTransformation(input, context) };
-    } catch (transformError: any) {
-      // `transform()` wraps with `Transform failed (label): ...` and stashes the
-      // original on `.cause`. Unwrap so the response error reads once, not twice.
-      const cause = (transformError as Error & { cause?: unknown })?.cause;
-      const raw =
-        transformError instanceof Error && cause instanceof Error ? cause : transformError;
-      const message = raw?.message ?? String(raw);
-      const prefix =
-        kind === 'embedding' ? 'SageMaker embedding transform error' : 'SageMaker transform error';
-      logger.error(`${prefix}: ${message}`);
-      return { ok: false, error: `${prefix}: ${message}` };
+    } catch (transformError) {
+      const message = `${errorPrefix}: ${getTransformErrorMessage(transformError)}`;
+      logger.error(message);
+      return { ok: false, error: message };
     }
   }
 
@@ -686,7 +679,11 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     // Get the delay value - the context delay takes precedence over the provider's delay
     const delayMs = context?.originalProvider?.delay || this.delay;
 
-    const transformResult = await this.runTransformSafely(prompt, context, 'prompt');
+    const transformResult = await this.runTransformSafely(
+      prompt,
+      context,
+      'SageMaker transform error',
+    );
     if (!transformResult.ok) {
       return { error: transformResult.error };
     }
@@ -892,7 +889,11 @@ export class SageMakerEmbeddingProvider
     // Get the delay value - the context delay takes precedence over the provider's delay
     const delayMs = context?.originalProvider?.delay || this.delay;
 
-    const transformResult = await this.runTransformSafely(text, context, 'embedding');
+    const transformResult = await this.runTransformSafely(
+      text,
+      context,
+      'SageMaker embedding transform error',
+    );
     if (!transformResult.ok) {
       return { error: transformResult.error };
     }

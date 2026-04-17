@@ -27,7 +27,18 @@ export const TRANSFORM_KEYS = [
   'contextTransform',
   'postprocess',
 ] as const;
-export type TransformKey = (typeof TRANSFORM_KEYS)[number];
+
+/**
+ * Unwraps `transform()`'s `Transform failed (label): ...` wrapper and returns
+ * the underlying message. Callers that add their own label wrapper (e.g.
+ * `contextUtils.resolveContext`, SageMaker's error response) use this to avoid
+ * stuttering two labels in the user-facing message.
+ */
+export function getTransformErrorMessage(error: unknown): string {
+  const cause = (error as Error & { cause?: unknown })?.cause;
+  const raw = error instanceof Error && cause instanceof Error ? cause : error;
+  return raw instanceof Error ? raw.message : String(raw);
+}
 
 export const TransformInputType = {
   OUTPUT: 'output',

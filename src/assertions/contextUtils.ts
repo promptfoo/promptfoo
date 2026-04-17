@@ -1,5 +1,5 @@
 import invariant from '../util/invariant';
-import { getTransformLabel, transform } from '../util/transform';
+import { getTransformErrorMessage, getTransformLabel, transform } from '../util/transform';
 
 import type { Assertion, AtomicTestCase, ProviderResponse } from '../types/index';
 
@@ -74,14 +74,11 @@ export async function resolveContext(
 
       contextValue = transformed;
     } catch (error) {
-      // `transform()` wraps errors with its own `Transform failed (label): ...`
-      // prefix and stashes the original on `.cause`. Prefer the raw cause here so
-      // the user-facing message reads `Failed to transform context ... : <raw>`
-      // instead of double-labeling with a stutter.
-      const cause = (error as Error & { cause?: unknown })?.cause;
-      const rawError = error instanceof Error && cause instanceof Error ? cause : error;
-      const message = rawError instanceof Error ? rawError.message : String(rawError);
-      throw new Error(`Failed to transform context using expression '${getLabel()}': ${message}`);
+      // Unwrap `transform()`'s own `Transform failed (label): ...` prefix so
+      // the user-facing message doesn't stutter two labels.
+      throw new Error(
+        `Failed to transform context using expression '${getLabel()}': ${getTransformErrorMessage(error)}`,
+      );
     }
   }
 

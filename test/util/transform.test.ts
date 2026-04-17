@@ -4,6 +4,7 @@ import logger from '../../src/logger';
 import { runPython } from '../../src/python/pythonUtils';
 import {
   FILE_TRANSFORM_LABEL,
+  getTransformErrorMessage,
   getTransformLabel,
   INLINE_FUNCTION_LABEL,
   INLINE_STRING_LABEL,
@@ -513,6 +514,30 @@ describe('util', () => {
 
         const result = await transform(fn, 'ignored', { vars: {}, prompt: {} });
         expect(result).toBe('thenable-resolved');
+      });
+    });
+
+    describe('getTransformErrorMessage', () => {
+      it('returns the raw message from a transform-wrapped Error via .cause', () => {
+        const raw = new Error('underlying boom');
+        const wrapped = new Error('Transform failed ([inline function]: fn): underlying boom');
+        (wrapped as Error & { cause?: unknown }).cause = raw;
+        expect(getTransformErrorMessage(wrapped)).toBe('underlying boom');
+      });
+
+      it('falls back to the error message when there is no cause', () => {
+        expect(getTransformErrorMessage(new Error('plain'))).toBe('plain');
+      });
+
+      it('stringifies non-Error throw values', () => {
+        expect(getTransformErrorMessage('just a string')).toBe('just a string');
+        expect(getTransformErrorMessage(42)).toBe('42');
+      });
+
+      it('returns the outer message when the cause is not an Error', () => {
+        const wrapped = new Error('outer');
+        (wrapped as Error & { cause?: unknown }).cause = 'a string cause';
+        expect(getTransformErrorMessage(wrapped)).toBe('outer');
       });
     });
 
