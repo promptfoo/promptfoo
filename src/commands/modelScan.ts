@@ -908,7 +908,7 @@ export function modelScanCommand(program: Command): void {
       }
 
       if (!saveToDatabase) {
-        await runPassthroughModelAudit(args, delegationEnv, /* treatExitOneAsIssues */ true);
+        await runPassthroughModelAudit(args, delegationEnv, true);
         return;
       }
 
