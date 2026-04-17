@@ -975,6 +975,24 @@ describe('loadApiProvider', () => {
     expect(providers[0].config).toEqual({ custom: 'value' });
   });
 
+  it('loadApiProviders and getProviderIds agree on the id of a labeled ProviderFunction in an array', async () => {
+    // Regression guard: the array-branch of loadApiProviders used to hardcode
+    // `custom-function-${idx}` regardless of `.label`, while getProviderIds and
+    // the single-function branch honored the label. They only agreed by accident
+    // (via the label fallback inside `createProviderFromFunction`). Use the
+    // descriptor-derived id so the two call sites can never drift again.
+    const providerFunction: ProviderFunction & { label?: string } = async (prompt) => ({
+      output: `Output for ${prompt}`,
+    });
+    providerFunction.label = 'Labeled Function';
+
+    const providers = await loadApiProviders([providerFunction, providerFunction] as any);
+    const providerIds = getProviderIds([providerFunction, providerFunction] as any);
+
+    expect(providers.map((p) => p.id())).toEqual(providerIds);
+    expect(providerIds).toEqual(['Labeled Function', 'Labeled Function']);
+  });
+
   it('loadApiProviders with ApiProvider object preserves the provider instance', async () => {
     const apiProvider = {
       id: () => 'custom-api-provider',

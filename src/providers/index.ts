@@ -407,11 +407,12 @@ export async function loadApiProviders(
           case 'named':
             return [await loadApiProvider(descriptor.loadProviderPath, { basePath, env })];
           case 'function':
+            // Use the descriptor-derived id (which honors `.label`) instead of a
+            // hardcoded `custom-function-${idx}` fallback so this branch stays
+            // symmetric with the single-function branch above and with the
+            // `getProviderIds` array branch below.
             return [
-              createProviderFromFunction(
-                provider as ProviderFunctionWithMetadata,
-                `custom-function-${idx}`,
-              ),
+              createProviderFromFunction(provider as ProviderFunctionWithMetadata, descriptor.id),
             ];
           case 'options':
           case 'map':
