@@ -212,6 +212,24 @@ describe('SageMakerCompletionProvider', () => {
       expect(result.output).toBeUndefined();
     });
 
+    it('falls back to the original prompt when a function transform returns undefined', async () => {
+      // `stringifyTransformResult` returns undefined for null/undefined return values,
+      // which causes `applyTransformation` to fall back to the original prompt with a
+      // debug log. Guard this observable behavior so a future refactor doesn't turn
+      // it into an error by accident.
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'custom',
+          transform: (() => undefined) as unknown as (prompt: unknown) => string,
+        },
+      });
+
+      await expect(provider.applyTransformation('original-prompt')).resolves.toBe(
+        'original-prompt',
+      );
+    });
+
     it('preserves an explicit maxTokens value of 0', () => {
       vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '1024');
 

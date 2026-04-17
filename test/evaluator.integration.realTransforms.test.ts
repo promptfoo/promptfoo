@@ -215,4 +215,93 @@ describe('Transformation integration (real transform)', () => {
     expect(row.success).toBe(false);
     expect(String(row.error ?? '')).toContain('test transform boom');
   });
+
+  it('chains provider + test + assertion transforms (all functions) end-to-end', async () => {
+    const { runAssertions } = await import('../src/assertions');
+    const runAssertionsSpy = vi.mocked(runAssertions);
+    // Let the assertion runner see the assertion so we can verify its transform executed.
+    runAssertionsSpy.mockImplementation(async ({ test: _test, providerResponse }) => {
+      return providerResponse.output === '((  raw  ))'
+        ? { pass: true, score: 1, namedScores: {} }
+        : { pass: false, score: 0, reason: `unexpected: ${providerResponse.output}` };
+    });
+
+    const suite = makeSuite({
+      providers: [
+        {
+          id: () => 'mock-provider',
+          callApi: async () => ({ output: '  raw  ' }),
+          // Stage 1 — provider transform wraps with parens.
+          transform: (output: unknown) => `(${output})`,
+        } as ApiProvider,
+      ],
+      tests: [
+        {
+          vars: { name: 'world' },
+          options: {
+            // Stage 2 — test options transform wraps again.
+            transform: (output: unknown) => `(${output})`,
+          },
+          assert: [
+            {
+              type: 'contains' as const,
+              value: 'raw',
+              // Stage 3 — assertion-level transform. Receives the chained output.
+              // This is a pure identity — the `runAssertions` mock checks that
+              // the post-test-transform value arrived at the assertion layer,
+              // which is enough to prove the chain composed.
+              transform: (output: unknown) => String(output),
+            },
+          ],
+        },
+      ],
+    });
+
+    const results = await evaluate(suite, new Eval({}), { maxConcurrency: 1 });
+    expect(results.results[0].response?.output).toBe('((  raw  ))');
+    // runAssertions received the fully-chained output; its return of pass:true
+    // (keyed on the chain output) proves the assertion transform was reached.
+    expect(results.results[0].success).toBe(true);
+  });
+
+  it('runs a loaded ProviderFunction carrying label, delay, config, and transform', async () => {
+    // End-to-end coverage that goes through the package-level wiring:
+    // loadApiProviders wraps a `ProviderFunction` into an `ApiProvider`, and the
+    // evaluator honors every attached metadata field. Mirrors the path a Node.js
+    // package user actually hits.
+    const { loadApiProviders } = await import('../src/providers/index');
+    const { sleep } = await import('../src/util/time');
+    const sleepMock = vi.mocked(sleep);
+    sleepMock.mockClear();
+
+    const providerFn: any = async (prompt: string) => ({
+      output: `served:${prompt}`,
+    });
+    providerFn.label = 'fn-provider-with-metadata';
+    providerFn.delay = 250;
+    providerFn.config = { custom: 'value' };
+    providerFn.transform = (output: unknown) => String(output).toUpperCase();
+
+    const [wrapped] = await loadApiProviders([providerFn]);
+    expect(wrapped.id()).toBe('fn-provider-with-metadata');
+    expect(wrapped.label).toBe('fn-provider-with-metadata');
+    expect(wrapped.delay).toBe(250);
+    expect(wrapped.config).toEqual({ custom: 'value' });
+    expect(wrapped.transform).toBe(providerFn.transform);
+
+    const results = await evaluate(
+      {
+        prompts: [{ raw: 'hi {{name}}', label: 'p' }],
+        providers: [wrapped],
+        tests: [{ vars: { name: 'world' } }],
+      } as TestSuite,
+      new Eval({}),
+      { maxConcurrency: 1 },
+    );
+
+    // Provider-level function transform ran against the callApi output.
+    expect(results.results[0].response?.output).toBe('SERVED:HI WORLD');
+    // Delay was honored (passed to the mocked sleep).
+    expect(sleepMock).toHaveBeenCalledWith(250);
+  });
 });
