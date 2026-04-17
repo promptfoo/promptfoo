@@ -68,7 +68,7 @@ const MAX_RECENT_SCANS = 10;
 // Singleton promise for request deduplication
 let checkInstallationPromise: Promise<{ installed: boolean; cwd: string }> | null = null;
 
-const DEFAULT_SCAN_OPTIONS: ScanOptions = {
+export const DEFAULT_SCAN_OPTIONS: ScanOptions = {
   blacklist: [],
   timeout: 3600,
   scanners: [],

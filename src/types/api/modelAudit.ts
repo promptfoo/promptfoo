@@ -17,17 +17,21 @@ export type CheckInstalledResponse = z.infer<typeof CheckInstalledResponseSchema
 // GET /api/model-audit/scanners
 // ---------------------------------------------------------------------------
 
-export const ScannerInfoSchema = z.object({
-  id: z.string(),
-  class: z.string(),
-  description: z.string(),
-  extensions: z.array(z.string()),
-  dependencies: z.array(z.string()),
-});
+export const ScannerInfoSchema = z
+  .object({
+    id: z.string(),
+    class: z.string().optional().default(''),
+    description: z.string().optional().default(''),
+    extensions: z.array(z.string()).optional().default([]),
+    dependencies: z.array(z.string()).optional().default([]),
+  })
+  .passthrough();
 
-export const ListScannersResponseSchema = z.object({
-  scanners: z.array(ScannerInfoSchema),
-});
+export const ListScannersResponseSchema = z
+  .object({
+    scanners: z.array(ScannerInfoSchema),
+  })
+  .passthrough();
 
 export type ScannerInfo = z.infer<typeof ScannerInfoSchema>;
 export type ListScannersResponse = z.infer<typeof ListScannersResponseSchema>;

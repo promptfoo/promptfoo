@@ -18,6 +18,7 @@ import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
 import { Spinner } from '@app/components/ui/spinner';
 import { Switch } from '@app/components/ui/switch';
+import { DEFAULT_SCAN_OPTIONS } from '../stores';
 
 import type { ScannerCatalogEntry, ScanOptions } from '../ModelAudit.types';
 
@@ -31,15 +32,6 @@ interface AdvancedOptionsDialogProps {
   scannerCatalogError?: string | null;
 }
 
-const defaultScanOptions: ScanOptions = {
-  blacklist: [],
-  timeout: 3600,
-  maxSize: undefined,
-  strict: false,
-  scanners: [],
-  excludeScanner: [],
-};
-
 export default function AdvancedOptionsDialog({
   open,
   onClose,
@@ -52,7 +44,7 @@ export default function AdvancedOptionsDialog({
   const [blacklistInput, setBlacklistInput] = useState('');
   const [scannerFilter, setScannerFilter] = useState('');
   const [localOptions, setLocalOptions] = useState({
-    ...defaultScanOptions,
+    ...DEFAULT_SCAN_OPTIONS,
     ...scanOptions,
   });
 
@@ -60,7 +52,7 @@ export default function AdvancedOptionsDialog({
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     setLocalOptions({
-      ...defaultScanOptions,
+      ...DEFAULT_SCAN_OPTIONS,
       ...scanOptions,
     });
   }, [scanOptions, open]);

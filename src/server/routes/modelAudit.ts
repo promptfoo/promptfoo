@@ -18,7 +18,15 @@ import type { ModelAuditScanResults } from '../../types/modelAudit';
 
 export const modelAuditRouter = Router();
 
-function spawnModelAuditCapture(args: string[]): Promise<{
+interface SpawnCaptureOptions {
+  /** Abort signal to terminate the child process (e.g. on client disconnect). */
+  signal?: AbortSignal;
+}
+
+function spawnModelAuditCapture(
+  args: string[],
+  options: SpawnCaptureOptions = {},
+): Promise<{
   code: number | null;
   stdout: string;
   stderr: string;
@@ -33,6 +41,21 @@ function spawnModelAuditCapture(args: string[]): Promise<{
     let stdout = '';
     let stderr = '';
 
+    // Forward client disconnect to the child process.
+    const onAbort = () => {
+      if (!child.killed) {
+        child.kill('SIGTERM');
+      }
+    };
+    if (options.signal) {
+      if (options.signal.aborted) {
+        onAbort();
+      } else {
+        options.signal.addEventListener('abort', onAbort, { once: true });
+      }
+    }
+    const cleanupAbort = () => options.signal?.removeEventListener('abort', onAbort);
+
     child.stdout?.on('data', (data) => {
       stdout += data.toString();
     });
@@ -41,8 +64,12 @@ function spawnModelAuditCapture(args: string[]): Promise<{
       stderr += data.toString();
     });
 
-    child.on('error', reject);
+    child.on('error', (error) => {
+      cleanupAbort();
+      reject(error);
+    });
     child.on('close', (code) => {
+      cleanupAbort();
       resolve({ code, stdout, stderr });
     });
   });
@@ -66,7 +93,11 @@ modelAuditRouter.get('/check-installed', async (_req: Request, res: Response): P
   }
 });
 
-modelAuditRouter.get('/scanners', async (_req: Request, res: Response): Promise<void> => {
+modelAuditRouter.get('/scanners', async (req: Request, res: Response): Promise<void> => {
+  const abortController = new AbortController();
+  const onClientClose = () => abortController.abort();
+  req.on('close', onClientClose);
+
   try {
     const { installed } = await checkModelAuditInstalled();
     if (!installed) {
@@ -76,12 +107,16 @@ modelAuditRouter.get('/scanners', async (_req: Request, res: Response): Promise<
       return;
     }
 
-    const { code, stdout, stderr } = await spawnModelAuditCapture([
-      'scan',
-      '--list-scanners',
-      '--format',
-      'json',
-    ]);
+    const { args } = parseModelAuditArgs([], { listScanners: true, format: 'json' });
+
+    const { code, stdout, stderr } = await spawnModelAuditCapture(args, {
+      signal: abortController.signal,
+    });
+
+    // If the client disconnected mid-request, the child was killed; don't respond.
+    if (abortController.signal.aborted) {
+      return;
+    }
 
     if (code !== null && code !== 0) {
       sendError(res, 500, 'Failed to list ModelAudit scanners', { code, stderr });
@@ -91,7 +126,12 @@ modelAuditRouter.get('/scanners', async (_req: Request, res: Response): Promise<
     const parsedOutput = JSON.parse(stdout);
     res.json(ModelAuditSchemas.ListScanners.Response.parse(parsedOutput));
   } catch (error) {
+    if (abortController.signal.aborted) {
+      return;
+    }
     sendError(res, 500, 'Failed to list ModelAudit scanners', error);
+  } finally {
+    req.removeListener('close', onClientClose);
   }
 });
 

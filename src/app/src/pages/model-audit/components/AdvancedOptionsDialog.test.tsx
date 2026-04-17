@@ -208,6 +208,51 @@ describe('AdvancedOptionsDialog', () => {
     );
   });
 
+  it('clears the opposite selection when toggling scanner mutual-exclusion', async () => {
+    const user = userEvent.setup();
+    const onOptionsChange = vi.fn();
+    render(
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={vi.fn()}
+        scanOptions={{ ...defaultScanOptions, excludeScanner: ['pickle'] }}
+        onOptionsChange={onOptionsChange}
+        scannerCatalog={[
+          {
+            id: 'pickle',
+            class: 'PickleScanner',
+            description: 'Scans pickle files',
+            extensions: ['.pkl'],
+            dependencies: [],
+          },
+        ]}
+      />,
+    );
+
+    const excludeCheckbox = screen.getByRole('checkbox', { name: 'Exclude pickle' });
+    const onlyCheckbox = screen.getByRole('checkbox', { name: 'Only run pickle' });
+    expect(excludeCheckbox).toBeChecked();
+    expect(onlyCheckbox).not.toBeChecked();
+
+    // Toggling "Only" should clear the "Exclude" checkbox for the same scanner.
+    await user.click(onlyCheckbox);
+    expect(onlyCheckbox).toBeChecked();
+    expect(excludeCheckbox).not.toBeChecked();
+
+    // Toggling "Exclude" back should clear "Only".
+    await user.click(excludeCheckbox);
+    expect(excludeCheckbox).toBeChecked();
+    expect(onlyCheckbox).not.toBeChecked();
+
+    await user.click(screen.getByRole('button', { name: 'Save Options' }));
+    expect(onOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scanners: [],
+        excludeScanner: ['pickle'],
+      }),
+    );
+  });
+
   it('calls onClose but not onOptionsChange when Cancel is clicked', async () => {
     const user = userEvent.setup();
     render(

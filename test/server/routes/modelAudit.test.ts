@@ -75,7 +75,7 @@ describe('Model Audit Routes', () => {
       expect(() => ListScannersResponseSchema.parse(response.body)).not.toThrow();
       expect(mockedSpawn).toHaveBeenCalledWith(
         'modelaudit',
-        ['scan', '--list-scanners', '--format', 'json'],
+        ['scan', '--format', 'json', '--list-scanners'],
         expect.objectContaining({
           env: expect.objectContaining({
             PROMPTFOO_DELEGATED: 'true',
