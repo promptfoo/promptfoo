@@ -21,6 +21,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.trace import SpanContext, SpanKind, Status, StatusCode, TraceFlags
 
+
 def configure_tracing() -> None:
     """Configure tracing when Promptfoo has not already done it for this worker."""
     current_provider = trace.get_tracer_provider()
