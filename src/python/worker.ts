@@ -141,6 +141,11 @@ export class PythonWorker {
       return;
     }
 
+    if (isPythonWarningStderr(message)) {
+      logger.warn(logMessage);
+      return;
+    }
+
     logger.error(logMessage);
   }
 
@@ -332,4 +337,10 @@ export class PythonWorker {
       this.shuttingDown = false;
     }
   }
+}
+
+function isPythonWarningStderr(message: string): boolean {
+  return (
+    /\b(?:\w+Warning|Warning):/.test(message) || message.trimStart().startsWith('warnings.warn(')
+  );
 }

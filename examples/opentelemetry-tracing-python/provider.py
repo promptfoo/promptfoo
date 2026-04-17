@@ -12,7 +12,7 @@ testing protobuf support in Promptfoo.
 
 import re
 import time
-from typing import Any
+from typing import Any, Optional
 
 from opentelemetry import context, trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -21,33 +21,36 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.trace import SpanContext, SpanKind, Status, StatusCode, TraceFlags
 
-# Initialize OpenTelemetry with OTLP HTTP exporter (uses protobuf by default)
-resource = Resource.create(
-    {
-        "service.name": "python-rag-provider",
-        "service.version": "1.0.0",
-        "deployment.environment": "development",
-    }
-)
+def configure_tracing() -> None:
+    """Configure tracing when Promptfoo has not already done it for this worker."""
+    current_provider = trace.get_tracer_provider()
+    if current_provider.__class__.__name__ != "ProxyTracerProvider":
+        return
 
-# Create OTLP exporter pointing to Promptfoo's receiver
-# This uses application/x-protobuf content type by default
-exporter = OTLPSpanExporter(
-    endpoint="http://localhost:4318/v1/traces",
-)
+    resource = Resource.create(
+        {
+            "service.name": "python-rag-provider",
+            "service.version": "1.0.0",
+            "deployment.environment": "development",
+        }
+    )
 
-# Use SimpleSpanProcessor for immediate export (synchronous)
-# This ensures spans are exported before the provider returns
-# For production use, consider BatchSpanProcessor for better performance
-provider = TracerProvider(resource=resource)
-processor = SimpleSpanProcessor(exporter)
-provider.add_span_processor(processor)
-trace.set_tracer_provider(provider)
+    # OTLPSpanExporter reads OTEL_EXPORTER_OTLP_ENDPOINT from the environment,
+    # which Promptfoo propagates to Python workers when tracing is enabled.
+    exporter = OTLPSpanExporter()
+
+    # Use SimpleSpanProcessor for immediate export (synchronous).
+    provider = TracerProvider(resource=resource)
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    trace.set_tracer_provider(provider)
+
+
+configure_tracing()
 
 tracer = trace.get_tracer("python-rag-provider", "1.0.0")
 
 
-def parse_traceparent(traceparent: str) -> SpanContext | None:
+def parse_traceparent(traceparent: str) -> Optional[SpanContext]:
     """Parse W3C Trace Context traceparent header."""
     match = re.match(r"^(\d{2})-([a-f0-9]{32})-([a-f0-9]{16})-(\d{2})$", traceparent)
     if not match:

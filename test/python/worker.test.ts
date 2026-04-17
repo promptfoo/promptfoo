@@ -131,6 +131,27 @@ def call_api(prompt, options, context):
     }
   });
 
+  it('should log Python warnings on stderr as warnings', () => {
+    worker = new PythonWorker(testScriptPath, 'call_api');
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    try {
+      (worker as any).handleStderr(
+        '/venv/lib/python3.9/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+\n  warnings.warn(',
+      );
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Python worker stderr: /venv/lib/python3.9/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+',
+      );
+      expect(warnSpy).toHaveBeenCalledWith('Python worker stderr:   warnings.warn(');
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
   it('should keep arbitrary stderr containing OTEL text at error level', () => {
     worker = new PythonWorker(testScriptPath, 'call_api');
     const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
