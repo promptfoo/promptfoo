@@ -1,10 +1,10 @@
-# openai-reasoning-comparison (OpenAI Reasoning Effort Comparison)
+# compare-gpt-reasoning-effort (GPT Reasoning Effort Comparison)
 
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example openai-reasoning-comparison
-cd openai-reasoning-comparison
+npx promptfoo@latest init --example compare-gpt-reasoning-effort
+cd compare-gpt-reasoning-effort
 ```
 
 ## Usage
