@@ -42,4 +42,22 @@ describe('redteam warning in eval command', () => {
     );
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('promptfoo redteam generate'));
   });
+
+  it('should not warn when scenarios are present even if tests is empty', () => {
+    const config = {
+      redteam: {
+        purpose: 'Test red team purpose',
+      },
+    } as Partial<UnifiedConfig>;
+    const testSuite = {
+      prompts: [],
+      providers: [],
+      tests: [],
+      scenarios: [{ config: [], tests: [] }],
+    } as TestSuite;
+
+    warnIfRedteamConfigHasNoTests(config, testSuite);
+
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
 });

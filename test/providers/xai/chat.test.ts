@@ -499,9 +499,7 @@ describe('xAI Chat Provider', () => {
       // Unknown model
       expect(calculateXAICost('invalid-model', {}, 600, 400)).toBe(undefined);
       // Missing token counts
-      expect(calculateXAICost('grok-2-1212', {}, undefined as any, undefined as any)).toBe(
-        undefined,
-      );
+      expect(calculateXAICost('grok-2-1212', {})).toBe(undefined);
       expect(calculateXAICost('grok-2-1212', {}, 0, 0)).toBe(undefined);
     });
 

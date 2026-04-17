@@ -2,11 +2,10 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import { createMockProvider } from '../../factories/provider';
-import type { Mock } from 'vitest';
 
 import type {
   ApiProvider,
@@ -156,7 +155,7 @@ describe('RedteamGoatProvider', () => {
     });
   });
 
-  it('should enforce maxCharsPerMessage from provider config without cliState', async () => {
+  it('should enforce maxCharsPerMessage from provider config', async () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',
       maxCharsPerMessage: 5,
@@ -483,7 +482,7 @@ describe('RedteamGoatProvider', () => {
       completion: 5,
     });
 
-    // Mock grader to fail (indicating success)
+    // Mock grader with pass:false (attack succeeded / jailbreak detected)
     (mockGrader.getResult as any).mockResolvedValue({
       grade: {
         pass: false,
@@ -602,7 +601,7 @@ describe('RedteamGoatProvider', () => {
         completion: 5,
       });
 
-      // Mock grader to fail on first attempt (indicating success)
+      // Mock grader with pass:false on first attempt (indicating attack success)
       (mockGrader.getResult as any).mockResolvedValue({
         grade: {
           pass: false,

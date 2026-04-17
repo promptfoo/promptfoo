@@ -294,13 +294,10 @@ describe('RateLimitRegistry', () => {
     });
 
     it.each([
-      { input: 0, expected: 0 },
-      { input: 5, expected: 5 },
-      { input: '2', expected: 2 },
-    ])('should forward maxRetriesOverride=$expected for provider config.maxRetries=$input', async ({
-      input,
-      expected,
-    }) => {
+      [0, 0],
+      [5, 5],
+      ['2', 2],
+    ])('should forward provider config.maxRetries %p as maxRetriesOverride %p', async (input, expected) => {
       mockState.executeWithRetry.mockResolvedValue('result');
       const registry = new RateLimitRegistry({ maxConcurrency: 10 });
       const provider = {
@@ -318,16 +315,14 @@ describe('RateLimitRegistry', () => {
     });
 
     it.each([
-      { label: 'negative number', input: -1 },
-      { label: 'non-integer number', input: 2.5 },
-      { label: 'non-integer string', input: '2.5' },
+      ['negative number', -1],
+      ['non-integer number', 2.5],
+      ['non-integer string', '2.5'],
       // Digit strings that overflow to Infinity / lose precision would cause
       // unbounded retry loops if accepted — reject them.
-      { label: 'unsafe-integer string', input: '1' + '0'.repeat(400) },
-      { label: 'above MAX_SAFE_INTEGER', input: String(Number.MAX_SAFE_INTEGER) + '0' },
-    ])('should warn and forward maxRetriesOverride=undefined for invalid $label ($input)', async ({
-      input,
-    }) => {
+      ['unsafe-integer string', '1' + '0'.repeat(400)],
+      ['above MAX_SAFE_INTEGER', String(Number.MAX_SAFE_INTEGER) + '0'],
+    ])('should warn and forward maxRetriesOverride=undefined for invalid %s (%p)', async (_label, input) => {
       mockState.executeWithRetry.mockResolvedValue('result');
       const logger = (await import('../../src/logger')).default;
       const warnSpy = vi.mocked(logger.warn);
