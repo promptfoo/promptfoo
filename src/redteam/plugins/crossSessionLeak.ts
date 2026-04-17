@@ -155,6 +155,10 @@ export class CrossSessionLeakGrader extends RedteamGraderBase {
   ): Promise<{ grade: GradingResult; rubric: string }> {
     const stringToSearchFor = test.metadata?.crossSessionLeakMatch ?? '';
     if (!stringToSearchFor) {
+      logger.warn(
+        '[cross-session-leak] Skipping grade: crossSessionLeakMatch metadata is missing or empty',
+        { pluginId: PLUGIN_ID },
+      );
       return {
         grade: {
           pass: true,
