@@ -88,7 +88,7 @@ describe('PythonProvider', () => {
   };
   const PythonWorkerPoolMock = workerPoolMocks.PythonWorkerPoolMock;
 
-  beforeEach(() => {
+  const resetPythonCompletionMocks = () => {
     vi.clearAllMocks();
     PythonWorkerPoolMock.mockClear();
     mockPoolInstance.initialize.mockReset();
@@ -120,12 +120,17 @@ describe('PythonProvider', () => {
 
     // Reset cliState.maxConcurrency before each test
     cliState.maxConcurrency = undefined;
+  };
+
+  beforeEach(() => {
+    resetPythonCompletionMocks();
   });
 
   afterEach(() => {
     // Ensure cliState is cleaned up after each test
     cliState.maxConcurrency = undefined;
     vi.unstubAllEnvs();
+    resetPythonCompletionMocks();
   });
 
   describe('constructor', () => {
@@ -749,6 +754,25 @@ describe('PythonProvider', () => {
           PROMPTFOO_ENABLE_OTEL: 'true',
           OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:44329',
         },
+      );
+    });
+
+    it('should not invent a local OTLP endpoint when evaluator explicitly disables one', async () => {
+      const provider = new PythonProvider('script.py');
+      mockPoolInstance.execute.mockResolvedValue({ output: 'traced result' });
+
+      await provider.callApi('test prompt', {
+        traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+        otelExporterOtlpEndpoint: undefined,
+      } as any);
+
+      expect(mockPythonWorkerPool).toHaveBeenCalledWith(
+        expect.stringContaining('script.py'),
+        'call_api',
+        1,
+        undefined,
+        undefined,
+        undefined,
       );
     });
 

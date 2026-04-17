@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { createServer } from 'http';
 import path from 'path';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -16,6 +17,28 @@ const describeOrSkip = process.platform === 'win32' && process.env.CI ? describe
 describeOrSkip('PythonWorker', () => {
   let worker: PythonWorker;
   const testScriptPath = path.join(__dirname, 'fixtures', 'simple_provider.py');
+
+  function clearOtelEnv(): Record<string, string | undefined> {
+    const originalEnv = {
+      OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+      PROMPTFOO_ENABLE_OTEL: process.env.PROMPTFOO_ENABLE_OTEL,
+      PROMPTFOO_OTEL_ENDPOINT: process.env.PROMPTFOO_OTEL_ENDPOINT,
+    };
+    delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    delete process.env.PROMPTFOO_ENABLE_OTEL;
+    delete process.env.PROMPTFOO_OTEL_ENDPOINT;
+    return originalEnv;
+  }
+
+  function restoreOtelEnv(originalEnv: Record<string, string | undefined>): void {
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
 
   beforeAll(() => {
     // Create test fixture
@@ -41,6 +64,7 @@ def call_api(prompt, options, context):
     if (worker) {
       await worker.shutdown();
     }
+    vi.restoreAllMocks();
   });
 
   it(
@@ -159,6 +183,110 @@ def call_api(prompt, options, context):
         expect(result.otel_enabled).toBe('true');
         expect(result.otlp_endpoint).toBe('http://collector.local:4318');
       } finally {
+        if (fs.existsSync(envPath)) {
+          fs.unlinkSync(envPath);
+        }
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should lazily enable OTEL env when a traced call reaches an untraced worker',
+    async () => {
+      const envPath = path.join(__dirname, 'fixtures', 'lazy_otel_provider.py');
+      const otlpServer = createServer((req, res) => {
+        req.resume();
+        res.writeHead(200);
+        res.end();
+      });
+      await new Promise<void>((resolve) => otlpServer.listen(0, '127.0.0.1', resolve));
+      const otlpEndpoint = `http://127.0.0.1:${(otlpServer.address() as { port: number }).port}`;
+      const originalEnv = clearOtelEnv();
+
+      fs.writeFileSync(
+        envPath,
+        `
+import os
+
+def call_api(prompt, options, context):
+    return {
+        "output": "ok",
+        "otel_enabled": os.getenv("PROMPTFOO_ENABLE_OTEL"),
+        "otlp_endpoint": os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+    }
+`,
+      );
+
+      try {
+        worker = new PythonWorker(envPath, 'call_api');
+        await worker.initialize();
+
+        const result = (await worker.call('call_api', [
+          'Hello world',
+          {},
+          {
+            traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+            otelExporterOtlpEndpoint: otlpEndpoint,
+          },
+        ])) as {
+          otel_enabled: string;
+          otlp_endpoint: string;
+        };
+
+        expect(result.otel_enabled).toBe('true');
+        expect(result.otlp_endpoint).toBe(otlpEndpoint);
+      } finally {
+        restoreOtelEnv(originalEnv);
+        await new Promise<void>((resolve, reject) =>
+          otlpServer.close((error) => (error ? reject(error) : resolve())),
+        );
+        if (fs.existsSync(envPath)) {
+          fs.unlinkSync(envPath);
+        }
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should not lazily enable OTEL without an endpoint for a traced call',
+    async () => {
+      const envPath = path.join(__dirname, 'fixtures', 'lazy_otel_no_endpoint_provider.py');
+      const originalEnv = clearOtelEnv();
+      fs.writeFileSync(
+        envPath,
+        `
+import os
+
+def call_api(prompt, options, context):
+    return {
+        "output": "ok",
+        "otel_enabled": os.getenv("PROMPTFOO_ENABLE_OTEL"),
+        "otlp_endpoint": os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+    }
+`,
+      );
+
+      try {
+        worker = new PythonWorker(envPath, 'call_api');
+        await worker.initialize();
+
+        const result = (await worker.call('call_api', [
+          'Hello world',
+          {},
+          {
+            traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+          },
+        ])) as {
+          otel_enabled: string | null;
+          otlp_endpoint: string | null;
+        };
+
+        expect(result.otel_enabled).toBeNull();
+        expect(result.otlp_endpoint).toBeNull();
+      } finally {
+        restoreOtelEnv(originalEnv);
         if (fs.existsSync(envPath)) {
           fs.unlinkSync(envPath);
         }

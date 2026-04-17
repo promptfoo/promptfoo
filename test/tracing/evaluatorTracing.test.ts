@@ -7,6 +7,8 @@ import {
   getLocalOtlpHttpEndpoint,
   isOtlpReceiverStarted,
   isTracingEnabled,
+  resetTracingState,
+  startOtlpReceiverIfNeeded,
 } from '../../src/tracing/evaluatorTracing';
 
 import type { TestCase, TestSuite } from '../../src/types/index';
@@ -21,6 +23,13 @@ vi.mock('../../src/logger', () => ({
   },
 }));
 
+const otlpReceiverMocks = vi.hoisted(() => ({
+  startOTLPReceiver: vi.fn().mockResolvedValue(undefined),
+  stopOTLPReceiver: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../src/tracing/otlpReceiver', () => otlpReceiverMocks);
+
 // Mock the trace store
 vi.mock('../../src/tracing/store', () => ({
   getTraceStore: vi.fn(() => ({
@@ -31,6 +40,9 @@ vi.mock('../../src/tracing/store', () => ({
 describe('evaluatorTracing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetTracingState();
+    otlpReceiverMocks.startOTLPReceiver.mockResolvedValue(undefined);
+    otlpReceiverMocks.stopOTLPReceiver.mockResolvedValue(undefined);
     // Reset environment variables
     delete process.env.PROMPTFOO_OTEL_ENABLED;
   });
@@ -295,6 +307,34 @@ describe('evaluatorTracing', () => {
   describe('isOtlpReceiverStarted', () => {
     it('should return false initially', () => {
       expect(isOtlpReceiverStarted()).toBe(false);
+    });
+
+    it('should start the OTLP receiver when a test enables tracing via metadata', async () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tests: [
+          {
+            vars: {},
+            metadata: { tracingEnabled: true },
+          },
+        ],
+        tracing: {
+          otlp: {
+            http: {
+              enabled: true,
+              port: 44329,
+              host: '127.0.0.1',
+              acceptFormats: ['json'],
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      await startOtlpReceiverIfNeeded(testSuite);
+
+      expect(otlpReceiverMocks.startOTLPReceiver).toHaveBeenCalledWith(44329, '127.0.0.1');
+      expect(isOtlpReceiverStarted()).toBe(true);
     });
   });
 });

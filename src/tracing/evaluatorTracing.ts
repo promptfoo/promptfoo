@@ -22,6 +22,15 @@ function getOtlpHttpReceiverConfig(testSuite?: TestSuite): { host: string; port:
   };
 }
 
+function isSuiteTracingEnabled(testSuite: TestSuite): boolean {
+  return (
+    testSuite.tracing?.enabled === true ||
+    (typeof testSuite.defaultTest === 'object' &&
+      testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
+    testSuite.tests?.some((test) => test.metadata?.tracingEnabled === true) === true
+  );
+}
+
 function getConnectableOtlpHost(host: string): string {
   const trimmedHost = host.trim();
 
@@ -104,7 +113,7 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
   );
 
   const envTracingEnabled = getEnvBool('PROMPTFOO_OTEL_ENABLED', false);
-  const suiteTracingEnabled = testSuite.tracing?.enabled === true;
+  const suiteTracingEnabled = isSuiteTracingEnabled(testSuite);
   const tracingEnabled = suiteTracingEnabled || envTracingEnabled;
   const httpReceiverEnabled = testSuite.tracing?.otlp?.http?.enabled !== false;
 
