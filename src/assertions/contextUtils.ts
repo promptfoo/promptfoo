@@ -48,7 +48,10 @@ export async function resolveContext(
   }
 
   if (assertion.contextTransform) {
-    const transformLabel = getTransformLabel(assertion.contextTransform);
+    // Defer the `getTransformLabel` call until an error path actually uses it:
+    // the label is only needed by the invariant thunk or the catch block, never
+    // on the happy path of a successful contextTransform.
+    const getLabel = () => getTransformLabel(assertion.contextTransform);
     try {
       // Use providerTransformedOutput if available
       // Otherwise fall back to output for backwards compatibility
@@ -66,7 +69,7 @@ export async function resolveContext(
           (Array.isArray(transformed) && transformed.every((item) => typeof item === 'string')),
         () =>
           `contextTransform must return a string or array of strings. Got ${typeof transformed}. ` +
-          `Check your transform expression: ${transformLabel}`,
+          `Check your transform expression: ${getLabel()}`,
       );
 
       contextValue = transformed;
@@ -77,9 +80,7 @@ export async function resolveContext(
       // instead of double-labeling with a stutter.
       const rawError = error instanceof Error && error.cause instanceof Error ? error.cause : error;
       const message = rawError instanceof Error ? rawError.message : String(rawError);
-      throw new Error(
-        `Failed to transform context using expression '${transformLabel}': ${message}`,
-      );
+      throw new Error(`Failed to transform context using expression '${getLabel()}': ${message}`);
     }
   }
 
