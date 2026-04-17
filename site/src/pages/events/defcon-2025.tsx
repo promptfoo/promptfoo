@@ -1,21 +1,14 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
 import styles from './defcon-2025.module.css';
 
 export default function Defcon2025(): React.ReactElement {
-  useEffect(() => {
-    // Force dark theme for this page
-    document.documentElement.setAttribute('data-theme', 'dark');
-
-    // Cleanup on unmount
-    return () => {
-      document.documentElement.removeAttribute('data-theme');
-    };
-  }, []);
+  useForcedTheme('dark');
 
   const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
     e.preventDefault();

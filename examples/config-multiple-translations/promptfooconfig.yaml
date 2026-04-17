@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Array-based multi-language translation testing
+
+prompts:
+  - file://prompts.txt
+
+providers:
+  - openai:gpt-4.1-mini
+  - openai:gpt-4.1
+  - anthropic:claude-sonnet-4-6
+
+tests:
+  - vars:
+      language:
+        - French
+        - German
+        - Spanish
+        - Italian
+        - Portuguese
+      input:
+        - 'Hello world'
+        - 'Good morning'
+        - 'How are you?'
+        - 'Thank you very much'
+        - 'See you later'
+    assert:
+      - type: llm-rubric
+        value: 'Is this a correct translation of "{{input}}" into {{language}}? Score 1-5 where 5 is perfect.'
+        threshold: 0.7

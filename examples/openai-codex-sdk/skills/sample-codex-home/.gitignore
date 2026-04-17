@@ -1,0 +1,10 @@
+logs_*.sqlite
+logs_*.sqlite-shm
+logs_*.sqlite-wal
+sessions/
+skills/
+state_*.sqlite
+state_*.sqlite-shm
+state_*.sqlite-wal
+.tmp/
+tmp/

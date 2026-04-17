@@ -53,8 +53,8 @@ export function calculateDeepSeekCost(
   }
 
   const uncachedPromptTokens = cachedTokens ? promptTokens - cachedTokens : promptTokens;
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
+  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
+  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
   const cacheReadCost = config.cacheReadCost ?? model.cost.cache_read;
 
   const inputCostTotal = inputCost * uncachedPromptTokens;
