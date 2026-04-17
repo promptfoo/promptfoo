@@ -34,6 +34,7 @@ import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
   generateTraceContextIfNeeded,
+  getLocalOtlpHttpEndpoint,
   isOtlpReceiverStarted,
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
@@ -445,6 +446,7 @@ export async function runEval({
         callApiContext.traceparent = traceContext.traceparent;
         callApiContext.evaluationId = traceContext.evaluationId;
         callApiContext.testCaseId = traceContext.testCaseId;
+        callApiContext.otelExporterOtlpEndpoint = getLocalOtlpHttpEndpoint(testSuite);
       }
 
       // Wrap provider call with rate limit registry if available

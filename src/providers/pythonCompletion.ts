@@ -3,7 +3,7 @@ import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
 import cliState from '../cliState';
-import { getEnvBool } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { getConfiguredPythonPath, getEnvInt } from '../python/pythonUtils';
 import { PythonWorkerPool } from '../python/workerPool';
@@ -27,6 +27,33 @@ interface PythonProviderConfig {
   workers?: number;
   timeout?: number;
   [key: string]: any; // Allow arbitrary config properties for user scripts
+}
+
+interface PythonProviderInitializationOptions {
+  enableOtelTracing?: boolean;
+  otelExporterOtlpEndpoint?: string;
+}
+
+const DEFAULT_PYTHON_OTEL_ENDPOINT = 'http://127.0.0.1:4318';
+
+function getPythonOtelEnvOverrides(
+  enableOtelTracing: boolean,
+  otelExporterOtlpEndpoint?: string,
+): Record<string, string> | undefined {
+  if (!enableOtelTracing) {
+    return undefined;
+  }
+
+  const otlpEndpoint =
+    getEnvString('PROMPTFOO_OTEL_ENDPOINT') ||
+    getEnvString('OTEL_EXPORTER_OTLP_ENDPOINT') ||
+    otelExporterOtlpEndpoint ||
+    DEFAULT_PYTHON_OTEL_ENDPOINT;
+
+  return {
+    PROMPTFOO_ENABLE_OTEL: 'true',
+    OTEL_EXPORTER_OTLP_ENDPOINT: otlpEndpoint,
+  };
 }
 
 export class PythonProvider implements ApiProvider {
@@ -63,7 +90,7 @@ export class PythonProvider implements ApiProvider {
    * This should be called after initialization
    * @returns A promise that resolves when all file references have been processed
    */
-  public async initialize(options?: { enableOtelTracing?: boolean }): Promise<void> {
+  public async initialize(options?: PythonProviderInitializationOptions): Promise<void> {
     // If already initialized, return immediately
     if (this.isInitialized) {
       return;
@@ -88,17 +115,12 @@ export class PythonProvider implements ApiProvider {
           path.join(this.options?.config.basePath || '', this.scriptPath),
         );
 
-        const envOverrides: Record<string, string> = {};
         const enableOtelTracing =
           options?.enableOtelTracing ?? getEnvBool('PROMPTFOO_OTEL_ENABLED', false);
-        if (enableOtelTracing) {
-          envOverrides.PROMPTFOO_ENABLE_OTEL = 'true';
-          // Default to Promptfoo's local OTLP receiver for Python spans unless the user already
-          // has an OTLP endpoint configured (in which case we assume they know what they're doing).
-          if (!process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
-            envOverrides.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:4318';
-          }
-        }
+        const envOverrides = getPythonOtelEnvOverrides(
+          enableOtelTracing,
+          options?.otelExporterOtlpEndpoint,
+        );
 
         this.pool = new PythonWorkerPool(
           absPath,
@@ -106,7 +128,7 @@ export class PythonProvider implements ApiProvider {
           workerCount,
           getConfiguredPythonPath(this.config.pythonExecutable),
           this.config.timeout,
-          Object.keys(envOverrides).length > 0 ? envOverrides : undefined,
+          envOverrides,
         );
 
         await this.pool.initialize();
@@ -192,7 +214,10 @@ export class PythonProvider implements ApiProvider {
     if (!this.isInitialized || !this.pool) {
       const enableOtelTracing =
         Boolean(context?.traceparent) || getEnvBool('PROMPTFOO_OTEL_ENABLED', false);
-      await this.initialize({ enableOtelTracing });
+      await this.initialize({
+        enableOtelTracing,
+        otelExporterOtlpEndpoint: context?.otelExporterOtlpEndpoint,
+      });
     }
 
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));

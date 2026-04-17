@@ -12,6 +12,42 @@ import type { EvaluateOptions, TestCase, TestSuite } from '../types/index';
 
 // Track whether OTLP receiver has been started
 let otlpReceiverStarted = false;
+const DEFAULT_OTLP_HTTP_HOST = '127.0.0.1';
+const DEFAULT_OTLP_HTTP_PORT = 4318;
+
+function getOtlpHttpReceiverConfig(testSuite?: TestSuite): { host: string; port: number } {
+  return {
+    host: testSuite?.tracing?.otlp?.http?.host || DEFAULT_OTLP_HTTP_HOST,
+    port: testSuite?.tracing?.otlp?.http?.port || DEFAULT_OTLP_HTTP_PORT,
+  };
+}
+
+function getConnectableOtlpHost(host: string): string {
+  const trimmedHost = host.trim();
+
+  if (!trimmedHost || trimmedHost === '0.0.0.0') {
+    return DEFAULT_OTLP_HTTP_HOST;
+  }
+
+  if (trimmedHost === '::' || trimmedHost === '[::]') {
+    return '[::1]';
+  }
+
+  if (trimmedHost.includes(':') && !trimmedHost.startsWith('[')) {
+    return `[${trimmedHost}]`;
+  }
+
+  return trimmedHost;
+}
+
+export function getLocalOtlpHttpEndpoint(testSuite?: TestSuite): string | undefined {
+  if (testSuite?.tracing?.otlp?.http?.enabled === false) {
+    return undefined;
+  }
+
+  const { host, port } = getOtlpHttpReceiverConfig(testSuite);
+  return `http://${getConnectableOtlpHost(host)}:${port}`;
+}
 
 /**
  * Reset module state (for testing purposes).
@@ -79,8 +115,7 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
     try {
       logger.debug('[EvaluatorTracing] Tracing configuration detected, starting OTLP receiver');
       const { startOTLPReceiver } = await import('./otlpReceiver');
-      const port = testSuite.tracing?.otlp?.http?.port || 4318;
-      const host = testSuite.tracing?.otlp?.http?.host || '127.0.0.1';
+      const { host, port } = getOtlpHttpReceiverConfig(testSuite);
       logger.debug(`[EvaluatorTracing] Starting OTLP receiver on ${host}:${port}`);
       await startOTLPReceiver(port, host);
       otlpReceiverStarted = true;

@@ -105,9 +105,43 @@ export class PythonWorker {
       });
 
       this.process!.stderr?.on('data', (data) => {
-        logger.error(`Python worker stderr: ${data.toString()}`);
+        this.handleStderr(data);
       });
     });
+  }
+
+  private handleStderr(data: unknown): void {
+    const message = String(data).trimEnd();
+    if (!message) {
+      return;
+    }
+
+    for (const line of message.split(/\r?\n/)) {
+      this.logStderrLine(line);
+    }
+  }
+
+  private logStderrLine(message: string): void {
+    if (!message) {
+      return;
+    }
+
+    const logMessage = `Python worker stderr: ${message}`;
+    if (message.startsWith('[PythonProvider] OpenTelemetry tracing enabled')) {
+      logger.debug(logMessage);
+      return;
+    }
+
+    if (
+      message.startsWith('[PythonProvider] OpenTelemetry packages not installed') ||
+      message.startsWith('[PythonProvider] Failed to initialize tracing') ||
+      message.startsWith('[PythonProvider] Tracing error')
+    ) {
+      logger.warn(logMessage);
+      return;
+    }
+
+    logger.error(logMessage);
   }
 
   async call(functionName: string, args: unknown[]): Promise<unknown> {

@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 import { PythonWorker } from '../../src/python/worker';
 
 // Windows CI has severe filesystem delays (antivirus, etc.) - allow up to 90s
@@ -62,6 +63,106 @@ def call_api(prompt, options, context):
         output: string;
       };
       expect(result.output).toBe('Echo: Hello world');
+    },
+    TEST_TIMEOUT,
+  );
+
+  it('should not log successful wrapper OTEL startup stderr as an error', () => {
+    worker = new PythonWorker(testScriptPath, 'call_api');
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    try {
+      (worker as any).handleStderr(
+        '[PythonProvider] OpenTelemetry tracing enabled, endpoint: http://127.0.0.1:4318/v1/traces\n',
+      );
+
+      expect(debugSpy).toHaveBeenCalledWith(
+        'Python worker stderr: [PythonProvider] OpenTelemetry tracing enabled, endpoint: http://127.0.0.1:4318/v1/traces',
+      );
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      debugSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('should log wrapper OTEL fallback stderr as a warning', () => {
+    worker = new PythonWorker(testScriptPath, 'call_api');
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    try {
+      (worker as any).handleStderr(
+        '[PythonProvider] OpenTelemetry packages not installed, tracing disabled.',
+      );
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Python worker stderr: [PythonProvider] OpenTelemetry packages not installed, tracing disabled.',
+      );
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('should keep arbitrary stderr containing OTEL text at error level', () => {
+    worker = new PythonWorker(testScriptPath, 'call_api');
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    try {
+      (worker as any).handleStderr(
+        'user stderr: [PythonProvider] OpenTelemetry tracing enabled but this is not wrapper startup',
+      );
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Python worker stderr: user stderr: [PythonProvider] OpenTelemetry tracing enabled but this is not wrapper startup',
+      );
+      expect(debugSpy).not.toHaveBeenCalled();
+    } finally {
+      debugSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  it(
+    'should pass environment overrides to the Python process',
+    async () => {
+      const envPath = path.join(__dirname, 'fixtures', 'env_provider.py');
+      fs.writeFileSync(
+        envPath,
+        `
+import os
+
+def call_api(prompt, options, context):
+    return {
+        "output": "ok",
+        "otel_enabled": os.getenv("PROMPTFOO_ENABLE_OTEL"),
+        "otlp_endpoint": os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+    }
+`,
+      );
+
+      try {
+        worker = new PythonWorker(envPath, 'call_api', undefined, undefined, undefined, {
+          PROMPTFOO_ENABLE_OTEL: 'true',
+          OTEL_EXPORTER_OTLP_ENDPOINT: 'http://collector.local:4318',
+        });
+        await worker.initialize();
+
+        const result = (await worker.call('call_api', ['Hello world', {}, {}])) as {
+          otel_enabled: string;
+          otlp_endpoint: string;
+        };
+        expect(result.otel_enabled).toBe('true');
+        expect(result.otlp_endpoint).toBe('http://collector.local:4318');
+      } finally {
+        if (fs.existsSync(envPath)) {
+          fs.unlinkSync(envPath);
+        }
+      }
     },
     TEST_TIMEOUT,
   );

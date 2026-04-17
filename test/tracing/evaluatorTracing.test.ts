@@ -4,6 +4,7 @@ import {
   generateTraceContextIfNeeded,
   generateTraceId,
   generateTraceparent,
+  getLocalOtlpHttpEndpoint,
   isOtlpReceiverStarted,
   isTracingEnabled,
 } from '../../src/tracing/evaluatorTracing';
@@ -197,6 +198,97 @@ describe('evaluatorTracing', () => {
       } as unknown as TestSuite;
       // testSuite enables tracing even though metadata doesn't
       expect(isTracingEnabled(test, testSuite)).toBe(true);
+    });
+  });
+
+  describe('getLocalOtlpHttpEndpoint', () => {
+    it('should return the default local HTTP receiver endpoint', () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+      } as unknown as TestSuite;
+
+      expect(getLocalOtlpHttpEndpoint(testSuite)).toBe('http://127.0.0.1:4318');
+    });
+
+    it('should convert wildcard bind hosts into a connectable loopback endpoint', () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              port: 44329,
+              host: '0.0.0.0',
+              acceptFormats: ['json'],
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      expect(getLocalOtlpHttpEndpoint(testSuite)).toBe('http://127.0.0.1:44329');
+    });
+
+    it('should bracket IPv6 receiver hosts for endpoint URLs', () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              port: 44330,
+              host: '::1',
+              acceptFormats: ['json'],
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      expect(getLocalOtlpHttpEndpoint(testSuite)).toBe('http://[::1]:44330');
+    });
+
+    it('should convert IPv6 wildcard bind hosts into IPv6 loopback endpoints', () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              port: 44331,
+              host: '::',
+              acceptFormats: ['json'],
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      expect(getLocalOtlpHttpEndpoint(testSuite)).toBe('http://[::1]:44331');
+    });
+
+    it('should return undefined when the local HTTP receiver is disabled', () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: false,
+              port: 4318,
+              host: '127.0.0.1',
+              acceptFormats: ['json'],
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      expect(getLocalOtlpHttpEndpoint(testSuite)).toBeUndefined();
     });
   });
 
