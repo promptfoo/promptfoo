@@ -2,7 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runMigration, shouldRunMigration } from '../src/cacheMigration';
 
 describe('Cache Migration from v4 to v7', () => {
@@ -10,8 +10,11 @@ describe('Cache Migration from v4 to v7', () => {
   let newCacheFile: string;
 
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-01T00:00:00Z'));
+
     // Create a temporary directory for testing
-    testCacheDir = path.join(os.tmpdir(), `test-cache-${Date.now()}`);
+    testCacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-cache-'));
     fs.mkdirSync(testCacheDir, { recursive: true });
     newCacheFile = path.join(testCacheDir, 'cache.json');
   });
@@ -21,6 +24,18 @@ describe('Cache Migration from v4 to v7', () => {
     if (fs.existsSync(testCacheDir)) {
       fs.rmSync(testCacheDir, { recursive: true, force: true });
     }
+
+    const parentDir = path.dirname(testCacheDir);
+    const testCacheBasename = path.basename(testCacheDir);
+    const backupDirs = fs
+      .readdirSync(parentDir)
+      .filter((dir) => dir.startsWith(`${testCacheBasename}.backup.`));
+
+    for (const backupDir of backupDirs) {
+      fs.rmSync(path.join(parentDir, backupDir), { recursive: true, force: true });
+    }
+
+    vi.useRealTimers();
   });
 
   function createOldCacheEntry(
@@ -372,6 +387,18 @@ describe('Cache Migration from v4 to v7', () => {
     });
 
     it('should return false when no old cache exists', () => {
+      expect(shouldRunMigration(testCacheDir)).toBe(false);
+    });
+
+    it('should return false after migration sunset date', () => {
+      vi.setSystemTime(new Date('2026-04-02T00:00:00Z'));
+
+      createOldCacheEntry('diskstore-abc', 'test.json', {
+        expireTime: (Date.now() + 60000).toString(),
+        key: 'test:key',
+        val: 'value',
+      });
+
       expect(shouldRunMigration(testCacheDir)).toBe(false);
     });
   });
