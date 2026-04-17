@@ -15,6 +15,20 @@ export const FILE_TRANSFORM_LABEL = '[file transform]';
 /** Error labels truncate inline string transforms past this length so they stay readable in logs. */
 const INLINE_STRING_LABEL_MAX_LENGTH = 80;
 
+/**
+ * Every config field that accepts a `StringOrFunctionSchema`. Shared between the
+ * runtime sanitizer in `src/index.ts` (which replaces function values with
+ * markers before persistence) and `scripts/generateJsonSchema.ts` (which rewrites
+ * these fields to string-only in the generated JSON schema).
+ */
+export const TRANSFORM_KEYS = [
+  'transform',
+  'transformVars',
+  'contextTransform',
+  'postprocess',
+] as const;
+export type TransformKey = (typeof TRANSFORM_KEYS)[number];
+
 export const TransformInputType = {
   OUTPUT: 'output',
   VARS: 'vars',

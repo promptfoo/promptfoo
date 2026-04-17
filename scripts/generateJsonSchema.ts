@@ -1,5 +1,6 @@
 import { type ZodType, z } from 'zod';
 import { UnifiedConfigSchema } from '../src/types';
+import { TRANSFORM_KEYS } from '../src/util/transform';
 import { StringOrFunctionSchema } from '../src/validators/shared';
 
 // NOTE: This script accesses Zod's internal _def property to extract the input schema
@@ -30,12 +31,7 @@ function getBaseSchema(schema: ZodType): ZodType {
 // UnifiedConfigSchema is wrapped in a .pipe() transform, so generate JSON Schema from its input.
 const innerSchema = getBaseSchema(UnifiedConfigSchema);
 
-const transformSchemaKeys = new Set([
-  'contextTransform',
-  'postprocess',
-  'transform',
-  'transformVars',
-]);
+const transformSchemaKeys: Set<string> = new Set(TRANSFORM_KEYS);
 
 /**
  * Strips every key from `target` and reassigns it to `{ type: 'string', description? }`,

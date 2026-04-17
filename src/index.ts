@@ -20,10 +20,11 @@ import { doRedteamRun } from './redteam/shared';
 import { Strategies } from './redteam/strategies/index';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
+import { isTransformFunction } from './types/transform';
 import { maybeLoadFromExternalFile } from './util/file';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util/index';
 import { readTests } from './util/testCaseReader';
-import { INLINE_FUNCTION_LABEL } from './util/transform';
+import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 
 import type {
   EvaluateOptions,
@@ -109,8 +110,6 @@ function withSerializableProvider<T extends Record<string, unknown>>(record: T):
  * `droppedRef.value` is flipped to `true` the first time a function is replaced
  * so the caller can emit a single warning instead of logging per field.
  */
-const TRANSFORM_KEYS = ['transform', 'transformVars', 'contextTransform', 'postprocess'] as const;
-
 function replaceFunctionTransforms<T extends Record<string, unknown>>(
   record: T,
   droppedRef: { value: boolean },
@@ -118,15 +117,14 @@ function replaceFunctionTransforms<T extends Record<string, unknown>>(
   let result: T | undefined;
   for (const key of TRANSFORM_KEYS) {
     const value = record[key];
-    if (typeof value !== 'function') {
+    if (!isTransformFunction(value)) {
       continue;
     }
-    const fn = value as { name?: string };
     if (!result) {
       result = { ...record };
     }
-    (result as Record<string, unknown>)[key] = fn.name
-      ? `${INLINE_FUNCTION_LABEL}: ${fn.name}`
+    (result as Record<string, unknown>)[key] = value.name
+      ? `${INLINE_FUNCTION_LABEL}: ${value.name}`
       : INLINE_FUNCTION_LABEL;
     droppedRef.value = true;
   }
