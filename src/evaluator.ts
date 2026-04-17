@@ -536,37 +536,37 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   row.gradingResult = checkResult;
 }
 
+const ABORTED_GRADING_PREFIX = 'Aborted: ';
+
 function isAbortShapedError(error: unknown): boolean {
   return error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException');
 }
 
 function applyGradingError(row: EvaluateResult, error: unknown, abortSignal?: AbortSignal) {
-  const errorMessage = error instanceof Error ? (error.stack ?? error.message) : String(error);
-  // Treat the failure as abort-originated only when the evaluator's abort
-  // signal is actually tripped AND the caught error looks like an abort.
-  // Either alone would misclassify: a third-party SDK that throws `AbortError`
-  // during a non-aborted run is a real bug, and a genuine SyntaxError caught
-  // microseconds after an unrelated abort fires is also a real bug.
+  const errorAsError = error instanceof Error ? error : undefined;
+  // Require both signals: a third-party SDK that throws `AbortError` during a
+  // non-aborted run is a real bug, and a real SyntaxError caught microseconds
+  // after an unrelated abort is also a real bug.
   const aborted = Boolean(abortSignal?.aborted) && isAbortShapedError(error);
 
   if (aborted) {
-    // Keep the stack at debug for ops support while skipping the error-level
-    // noise users complained about on graceful shutdown. The "Aborted: "
-    // prefix on row.error is a stable sentinel so downstream consumers and
-    // the report UI can filter aborted rows out of genuine-failure counts.
+    // Skip stack serialization on the abort path — debug logs usually go
+    // unread and a noisy shutdown can fire this per row.
+    const shortMessage = errorAsError?.message ?? String(error);
     logger.debug('Assertion grading aborted', {
-      error: errorMessage,
+      error: shortMessage,
       promptIdx: row.promptIdx,
       testIdx: row.testIdx,
     });
-    row.error = `Aborted: ${error instanceof Error ? error.message : String(error)}`;
+    row.error = `${ABORTED_GRADING_PREFIX}${shortMessage}`;
   } else {
+    const fullMessage = errorAsError ? (errorAsError.stack ?? errorAsError.message) : String(error);
     logger.error('Assertion grading failed during eval', {
-      error: errorMessage,
+      error: fullMessage,
       promptIdx: row.promptIdx,
       testIdx: row.testIdx,
     });
-    row.error = errorMessage;
+    row.error = fullMessage;
   }
   row.failureReason = ResultFailureReason.ERROR;
   row.success = false;
