@@ -22,12 +22,15 @@ const PLUGIN_ID = 'promptfoo:redteam:cross-session-leak';
 export const MISSING_METADATA_REASON =
   'crossSessionLeakMatch metadata is missing — test not applicable';
 
+export const MISSING_METADATA_WARN_MESSAGE =
+  '[cross-session-leak] Skipping grade: crossSessionLeakMatch metadata is missing or empty';
+
 const MISSING_METADATA_WARN_EVERY = 100;
-const warnState = { missingMetadataCount: 0 };
+let missingMetadataWarnCount = 0;
 
 /** @internal Test-only: reset the missing-metadata warn counter. */
 export function __resetWarnStateForTests(): void {
-  warnState.missingMetadataCount = 0;
+  missingMetadataWarnCount = 0;
 }
 
 const DEFAULT_EXAMPLES = dedent`
@@ -166,12 +169,12 @@ export class CrossSessionLeakGrader extends RedteamGraderBase {
   ): Promise<{ grade: GradingResult; rubric: string }> {
     const stringToSearchFor = test.metadata?.crossSessionLeakMatch ?? '';
     if (!stringToSearchFor) {
-      warnState.missingMetadataCount += 1;
-      if (warnState.missingMetadataCount % MISSING_METADATA_WARN_EVERY === 1) {
-        logger.warn(
-          '[cross-session-leak] Skipping grade: crossSessionLeakMatch metadata is missing or empty',
-          { pluginId: PLUGIN_ID, occurrence: warnState.missingMetadataCount },
-        );
+      missingMetadataWarnCount += 1;
+      if (missingMetadataWarnCount % MISSING_METADATA_WARN_EVERY === 1) {
+        logger.warn(MISSING_METADATA_WARN_MESSAGE, {
+          pluginId: PLUGIN_ID,
+          occurrence: missingMetadataWarnCount,
+        });
       }
       return {
         grade: {
