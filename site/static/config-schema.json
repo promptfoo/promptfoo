@@ -46,29 +46,34 @@
         "extensions": {
           "$ref": "#/definitions/__schema31"
         },
-        "metadata": {
+        "assertionTemplates": {
           "$ref": "#/definitions/__schema32"
         },
-        "redteam": {
+        "metadata": {
           "$ref": "#/definitions/__schema33"
         },
-        "writeLatestResults": {
+        "redteam": {
           "$ref": "#/definitions/__schema34"
         },
-        "tracing": {
+        "writeLatestResults": {
           "$ref": "#/definitions/__schema35"
         },
-        "evaluateOptions": {
+        "tracing": {
           "$ref": "#/definitions/__schema36"
         },
-        "commandLineOptions": {
+        "evaluateOptions": {
           "$ref": "#/definitions/__schema37"
         },
-        "targets": {
+        "commandLineOptions": {
           "$ref": "#/definitions/__schema38"
+        },
+        "targets": {
+          "$ref": "#/definitions/__schema39"
         }
       },
-      "required": ["prompts"],
+      "required": [
+        "prompts"
+      ],
       "additionalProperties": false
     },
     "__schema0": {
@@ -578,7 +583,9 @@
                     "type": "string"
                   }
                 },
-                "required": ["id"],
+                "required": [
+                  "id"
+                ],
                 "additionalProperties": false
               },
               {
@@ -602,7 +609,10 @@
                   "function": {},
                   "config": {}
                 },
-                "required": ["raw", "label"],
+                "required": [
+                  "raw",
+                  "label"
+                ],
                 "additionalProperties": false
               }
             ]
@@ -719,7 +729,10 @@
               ]
             }
           },
-          "required": ["id", "callApi"],
+          "required": [
+            "id",
+            "callApi"
+          ],
           "additionalProperties": false
         }
       ]
@@ -788,11 +801,26 @@
                 "additionalProperties": {}
               }
             },
-            "required": ["type", "assert"],
+            "required": [
+              "type",
+              "assert"
+            ],
             "additionalProperties": false
           },
           {
             "$ref": "#/definitions/__schema18"
+          },
+          {
+            "type": "object",
+            "required": [
+              "$ref"
+            ],
+            "properties": {
+              "$ref": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
           }
         ]
       }
@@ -944,7 +972,11 @@
             },
             {
               "type": "string",
-              "enum": ["select-best", "human", "max-score"]
+              "enum": [
+                "select-best",
+                "human",
+                "max-score"
+              ]
             },
             {}
           ]
@@ -975,7 +1007,9 @@
           "type": "string"
         }
       },
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "additionalProperties": false
     },
     "__schema19": {
@@ -1031,7 +1065,10 @@
                     "type": "string"
                   }
                 },
-                "required": ["role", "content"],
+                "required": [
+                  "role",
+                  "content"
+                ],
                 "additionalProperties": false
               }
             }
@@ -1156,7 +1193,9 @@
           }
         }
       },
-      "required": ["path"],
+      "required": [
+        "path"
+      ],
       "additionalProperties": false
     },
     "__schema24": {
@@ -1265,7 +1304,10 @@
                 }
               }
             },
-            "required": ["config", "tests"],
+            "required": [
+              "config",
+              "tests"
+            ],
             "additionalProperties": false
           }
         ]
@@ -1398,7 +1440,10 @@
             ]
           }
         },
-        "required": ["name", "value"],
+        "required": [
+          "name",
+          "value"
+        ],
         "additionalProperties": false
       }
     },
@@ -1420,9 +1465,18 @@
       "propertyNames": {
         "type": "string"
       },
-      "additionalProperties": {}
+      "additionalProperties": {
+        "$ref": "#/definitions/__schema18"
+      }
     },
     "__schema33": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "__schema34": {
       "type": "object",
       "properties": {
         "injectVar": {
@@ -1470,7 +1524,10 @@
                   }
                 }
               },
-              "required": ["id", "callApi"],
+              "required": [
+                "id",
+                "callApi"
+              ],
               "additionalProperties": false
             },
             {
@@ -1959,7 +2016,10 @@
                 }
               }
             },
-            "required": ["id", "purpose"],
+            "required": [
+              "id",
+              "purpose"
+            ],
             "additionalProperties": false
           }
         },
@@ -2595,10 +2655,19 @@
                   "severity": {
                     "description": "Severity level for this plugin",
                     "type": "string",
-                    "enum": ["critical", "high", "medium", "low", "informational"]
+                    "enum": [
+                      "critical",
+                      "high",
+                      "medium",
+                      "low",
+                      "informational"
+                    ]
                   }
                 },
-                "required": ["id", "numTests"],
+                "required": [
+                  "id",
+                  "numTests"
+                ],
                 "additionalProperties": false
               }
             ]
@@ -2723,7 +2792,9 @@
                     "additionalProperties": {}
                   }
                 },
-                "required": ["id"],
+                "required": [
+                  "id"
+                ],
                 "additionalProperties": false
               }
             ]
@@ -2779,12 +2850,20 @@
                 "type": "string"
               }
             },
-            "required": ["output", "pass", "score", "reason"],
+            "required": [
+              "output",
+              "pass",
+              "score",
+              "reason"
+            ],
             "additionalProperties": false
           }
         }
       },
-      "required": ["plugins", "strategies"],
+      "required": [
+        "plugins",
+        "strategies"
+      ],
       "additionalProperties": false,
       "definitions": {
         "__schema0": {
@@ -2849,10 +2928,10 @@
         }
       }
     },
-    "__schema34": {
+    "__schema35": {
       "type": "boolean"
     },
-    "__schema35": {
+    "__schema36": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -2877,11 +2956,19 @@
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "enum": ["protobuf", "json"]
+                    "enum": [
+                      "protobuf",
+                      "json"
+                    ]
                   }
                 }
               },
-              "required": ["enabled", "port", "host", "acceptFormats"],
+              "required": [
+                "enabled",
+                "port",
+                "host",
+                "acceptFormats"
+              ],
               "additionalProperties": false
             },
             "grpc": {
@@ -2894,7 +2981,10 @@
                   "type": "number"
                 }
               },
-              "required": ["enabled", "port"],
+              "required": [
+                "enabled",
+                "port"
+              ],
               "additionalProperties": false
             }
           },
@@ -2905,13 +2995,18 @@
           "properties": {
             "type": {
               "type": "string",
-              "enum": ["sqlite"]
+              "enum": [
+                "sqlite"
+              ]
             },
             "retentionDays": {
               "type": "number"
             }
           },
-          "required": ["type", "retentionDays"],
+          "required": [
+            "type",
+            "retentionDays"
+          ],
           "additionalProperties": false
         },
         "forwarding": {
@@ -2933,14 +3028,19 @@
               }
             }
           },
-          "required": ["enabled", "endpoint"],
+          "required": [
+            "enabled",
+            "endpoint"
+          ],
           "additionalProperties": false
         }
       },
-      "required": ["enabled"],
+      "required": [
+        "enabled"
+      ],
       "additionalProperties": false
     },
-    "__schema36": {
+    "__schema37": {
       "type": "object",
       "properties": {
         "cache": {
@@ -2983,7 +3083,7 @@
       },
       "additionalProperties": false
     },
-    "__schema37": {
+    "__schema38": {
       "type": "object",
       "properties": {
         "description": {
@@ -3159,7 +3259,7 @@
       },
       "additionalProperties": false
     },
-    "__schema38": {
+    "__schema39": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

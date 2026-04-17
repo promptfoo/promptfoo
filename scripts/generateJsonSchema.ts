@@ -89,16 +89,99 @@ const {
   ...mainSchema
 } = schemaContent as Record<string, unknown>;
 
+const allDefinitions = {
+  PromptfooConfigSchema: mainSchema,
+  ...(zodDefinitions as Record<string, unknown>),
+};
+
+// JSON Reference schema to allow YAML $ref syntax in assertion arrays.
+// @apidevtools/json-schema-ref-parser resolves these at runtime before Zod validation,
+// so they never appear in validated configs — but editors need to accept them.
+const jsonRefSchema = {
+  type: 'object',
+  required: ['$ref'],
+  properties: { $ref: { type: 'string' } },
+  additionalProperties: false,
+};
+
+/**
+ * Recursively walks the JSON Schema object and adds a JSON Reference alternative
+ * to every assertion array's `items.anyOf`. This allows YAML users to write
+ *   assert:
+ *     - $ref: '#/assertionTemplates/myTemplate'
+ * without editors showing "Property $ref is not allowed" errors.
+ *
+ * Detection heuristic: an array's items has `anyOf` containing an object whose
+ * `required` array includes both "type" and "assert" (AssertionSet pattern) or
+ * a $ref to a definition that has required: ["type"] (Assertion pattern).
+ */
+function addJsonRefToAssertionArrays(
+  obj: unknown,
+  defs: Record<string, unknown>,
+  visited = new WeakSet<object>(),
+): void {
+  if (typeof obj !== 'object' || obj === null) {
+    return;
+  }
+  if (visited.has(obj as object)) {
+    return;
+  }
+  visited.add(obj as object);
+
+  const o = obj as Record<string, unknown>;
+
+  if (o.type === 'array' && typeof o.items === 'object' && o.items !== null) {
+    const items = o.items as Record<string, unknown>;
+    if (Array.isArray(items.anyOf)) {
+      const anyOf = items.anyOf as Record<string, unknown>[];
+      const isAssertionArray = anyOf.some((opt) => {
+        // AssertionSet: inline object with required ["type", "assert"]
+        if (
+          Array.isArray(opt.required) &&
+          (opt.required as string[]).includes('type') &&
+          (opt.required as string[]).includes('assert')
+        ) {
+          return true;
+        }
+        // Assertion: $ref to a definition that has required: ["type"]
+        if (typeof opt.$ref === 'string') {
+          const defName = (opt.$ref as string).split('/').pop()!;
+          const def = defs[defName] as Record<string, unknown> | undefined;
+          if (Array.isArray(def?.required) && (def!.required as string[]).includes('type')) {
+            return true;
+          }
+        }
+        return false;
+      });
+
+      if (isAssertionArray) {
+        const alreadyHasRef = anyOf.some(
+          (opt) =>
+            opt.type === 'object' &&
+            Array.isArray(opt.required) &&
+            (opt.required as string[])[0] === '$ref',
+        );
+        if (!alreadyHasRef) {
+          anyOf.push(jsonRefSchema);
+        }
+      }
+    }
+  }
+
+  for (const value of Object.values(o)) {
+    addJsonRefToAssertionArrays(value, defs, visited);
+  }
+}
+
+addJsonRefToAssertionArrays(allDefinitions, allDefinitions);
+
 // Build final schema with proper structure and metadata
 const jsonSchema = {
   $schema: 'http://json-schema.org/draft-07/schema#',
   $id: 'https://promptfoo.dev/config-schema.json',
   title: 'Promptfoo Configuration Schema',
   $ref: '#/definitions/PromptfooConfigSchema',
-  definitions: {
-    PromptfooConfigSchema: mainSchema,
-    ...(zodDefinitions as Record<string, unknown>),
-  },
+  definitions: allDefinitions,
 };
 
 console.log(JSON.stringify(jsonSchema, null, 2));
