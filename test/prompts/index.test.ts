@@ -7,7 +7,12 @@ import { importModule } from '../../src/esm';
 import { processPrompts, readPrompts, readProviderPromptMap } from '../../src/prompts/index';
 import { maybeFilePath } from '../../src/prompts/utils';
 
-import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../../src/types/index';
+import type {
+  ApiProvider,
+  EvaluateTestSuite,
+  Prompt,
+  ProviderResponse,
+} from '../../src/types/index';
 
 vi.mock('proxy-agent', () => ({
   ProxyAgent: vi.fn().mockImplementation(() => ({})),
@@ -615,7 +620,7 @@ describe('readPrompts', () => {
 });
 
 describe('readProviderPromptMap', () => {
-  let config: Partial<UnifiedConfig>;
+  let config: Pick<Partial<EvaluateTestSuite>, 'providers'>;
   let parsedPrompts: Prompt[];
 
   beforeEach(() => {
@@ -656,6 +661,33 @@ describe('readProviderPromptMap', () => {
       providers: [{ id: 'provider1', prompts: ['customPrompt1'] }],
     };
     expect(readProviderPromptMap(config, parsedPrompts)).toEqual({ provider1: ['customPrompt1'] });
+  });
+
+  it('should handle a top-level ApiProvider object', () => {
+    const provider: ApiProvider = {
+      id: () => 'provider1',
+      callApi: vi.fn<ApiProvider['callApi']>(),
+      label: 'providerLabel',
+    };
+    config = { providers: provider };
+
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
+      provider1: ['prompt1', 'prompt2'],
+    });
+  });
+
+  it('should handle ApiProvider objects in provider arrays', () => {
+    const provider: ApiProvider = {
+      id: () => 'provider1',
+      callApi: vi.fn<ApiProvider['callApi']>(),
+      label: 'providerLabel',
+    };
+    config = { providers: [provider] };
+
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
+      provider1: ['prompt1', 'prompt2'],
+      providerLabel: ['prompt1', 'prompt2'],
+    });
   });
 
   it('should handle provider objects with id, label, and prompts', () => {

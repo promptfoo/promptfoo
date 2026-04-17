@@ -28,6 +28,8 @@ vi.mock('../../../../src/providers/elevenlabs/tts/audio', () => ({
 describe('ElevenLabsIsolationProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockReadFile.mockReset();
+    mockEncodeAudio.mockReset();
     process.env.ELEVENLABS_API_KEY = 'test-api-key';
   });
 

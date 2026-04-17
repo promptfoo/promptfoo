@@ -1,6 +1,8 @@
 {
   "name": "redteam-medical-agent",
   "version": "1.0.0",
+  "license": "MIT",
+  "private": true,
   "description": "Medical agent example for promptfoo red team testing",
   "main": "src/server.js",
   "scripts": {
@@ -9,7 +11,7 @@
   },
   "dependencies": {
     "express": "^5.2.1",
-    "openai": "^6.16.0",
+    "openai": "^6.34.0",
     "dotenv": "^17.2.3",
     "cors": "^2.8.6"
   }

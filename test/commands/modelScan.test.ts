@@ -18,6 +18,9 @@ vi.mock('../../src/globalConfig/cloud', () => ({
     isEnabled: vi.fn().mockReturnValue(false),
   },
 }));
+vi.mock('../../src/globalConfig/accounts', () => ({
+  getAuthor: vi.fn().mockReturnValue(null),
+}));
 vi.mock('../../src/models/modelAudit', () => ({
   __esModule: true,
   default: {
@@ -50,6 +53,7 @@ describe('modelScanCommand', () => {
     mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
       return undefined as never;
     });
+    process.exitCode = 0;
     vi.clearAllMocks();
 
     // Reset mock implementations (clearAllMocks only clears call history, not implementations)
@@ -79,6 +83,7 @@ describe('modelScanCommand', () => {
 
   afterEach(() => {
     mockExit.mockRestore();
+    process.exitCode = 0;
   });
 
   it('should exit if no paths are provided', async () => {
@@ -91,6 +96,10 @@ describe('modelScanCommand', () => {
     modelScanCommand(program);
 
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
+    command?.configureOutput({
+      writeErr: vi.fn(),
+      writeOut: vi.fn(),
+    });
     // Parse without path argument - Commander requires paths but the action should handle this
     try {
       await command?.parseAsync(['node', 'scan-model']);
@@ -104,8 +113,6 @@ describe('modelScanCommand', () => {
     // Now uses process.exitCode instead of process.exit()
     expect(process.exitCode).toBe(1);
 
-    // Reset exitCode for other tests
-    process.exitCode = 0;
     loggerErrorSpy.mockRestore();
   });
 
@@ -146,8 +153,6 @@ describe('modelScanCommand', () => {
     // Now uses process.exitCode instead of process.exit()
     expect(process.exitCode).toBe(1);
 
-    // Reset exitCode for other tests
-    process.exitCode = 0;
     loggerErrorSpy.mockRestore();
   });
 
@@ -261,8 +266,6 @@ describe('modelScanCommand', () => {
     // Now uses process.exitCode instead of process.exit()
     expect(process.exitCode).toBe(1);
 
-    // Reset exitCode for other tests
-    process.exitCode = 0;
     loggerErrorSpy.mockRestore();
   });
 
@@ -290,9 +293,6 @@ describe('modelScanCommand', () => {
 
     // Now uses process.exitCode instead of process.exit()
     expect(process.exitCode).toBe(1);
-
-    // Reset exitCode for other tests
-    process.exitCode = 0;
   });
 
   it('should handle exit code 2 (scan process error) in --no-write mode', async () => {
@@ -324,8 +324,6 @@ describe('modelScanCommand', () => {
     // Now uses process.exitCode instead of process.exit()
     expect(process.exitCode).toBe(2);
 
-    // Reset exitCode for other tests
-    process.exitCode = 0;
     loggerErrorSpy.mockRestore();
   });
 });

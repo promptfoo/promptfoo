@@ -26,6 +26,15 @@ vi.mock('../../src/cache', () => ({
   isCacheEnabled: mockIsCacheEnabled,
 }));
 
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
+
 vi.mock('fs');
 vi.mock('path');
 
@@ -57,6 +66,9 @@ describe('GolangProvider', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockExecFile.mockReset();
+    mockGetCache.mockReset();
+    mockIsCacheEnabled.mockReset();
 
     // Reset all mocks to default behavior
     mockGetCache.mockResolvedValue({

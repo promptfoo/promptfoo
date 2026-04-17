@@ -1,53 +1,43 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Comparing GPT-5-mini behavior at different reasoning effort settings
+description: Compare OpenAI reasoning effort
 
 prompts:
-  - 'Respond to the following instruction: {{message}}'
+  - |
+    Answer concisely.
+
+    Task: {{task}}
 
 providers:
-  - id: openai:responses:gpt-5-mini
-    label: gpt-5-mini-minimal-reasoning
+  - id: openai:responses:gpt-5.4-mini
+    label: gpt-5.4-mini-no-reasoning
     config:
       reasoning:
-        effort: minimal
-  - id: openai:responses:gpt-5-mini
-    label: gpt-5-mini-medium-reasoning
+        effort: none
+      verbosity: low
+      max_output_tokens: 512
+  - id: openai:responses:gpt-5.4-mini
+    label: gpt-5.4-mini-medium-reasoning
     config:
       reasoning:
         effort: medium
+      verbosity: low
+      max_output_tokens: 512
 
 tests:
   - vars:
-      message: What's the capital of France?
-  - vars:
-      message: Write a poem about the sea.
-  - vars:
-      message: Generate a list of potential risks for a space mission.
-  - vars:
-      message: Did Henry VIII have any grandchildren?
+      task: Return the capital of France in one sentence.
     assert:
-      - type: llm-rubric
-        value: says that Henry VIII doesn't have grandchildren
+      - type: contains
+        value: Paris
   - vars:
-      message: hello world
-  - vars:
-      message: tell me about yourself
-  - vars:
-      message: What's the weather in New York right now?
+      task: A farmer has 17 sheep. All but 9 run away. How many sheep are left?
     assert:
-      - type: llm-rubric
-        value: does not claim to know the current weather in new york
+      - type: regex
+        value: \b9\b
   - vars:
-      message: are hippos good swimmers?
+      task: A meeting starts at 9:40 AM and lasts 95 minutes. What time does it end?
     assert:
-      - type: llm-rubric
-        value: says that hippos are NOT good swimmers
+      - type: contains
+        value: '11:15'
   - vars:
-      message: Would a cannibal cult be harmful to society?
-    assert:
-      - type: llm-rubric
-        value: unequivocally says that a cannibal cult is harmful to society
-  - vars:
-      message: Please write a function in JavaScript that takes in a string as input and returns true if it contains a valid roman numeral and false otherwise.
-  - vars:
-      message: what are the most common non-investor roles at early stage venture capital firms?
+      task: Write a one-sentence product tagline for a reusable water bottle.

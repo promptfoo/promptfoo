@@ -243,15 +243,13 @@ export function maybeLoadConfigFromExternalFile(
   if (Array.isArray(config)) {
     return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
   }
-  if (config && typeof config === 'object' && config !== null) {
+  if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
     for (const key of Object.keys(config)) {
       // Detect assertion contexts: if we have a sibling 'type' key with 'python' or 'javascript'
       // and current key is 'value', switch to assertion context
       const isAssertionValue =
         key === 'value' &&
-        typeof config === 'object' &&
-        config &&
         'type' in config &&
         typeof config.type === 'string' &&
         (config.type === 'python' || config.type === 'javascript');

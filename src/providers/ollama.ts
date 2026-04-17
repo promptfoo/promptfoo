@@ -3,7 +3,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS, transformTools } from './shared';
 
 import type {
   ApiProvider,
@@ -207,7 +207,7 @@ export class OllamaCompletionProvider implements ApiProvider {
         },
         {} as Record<string, any>,
       ),
-      ...(this.config.think !== undefined ? { think: this.config.think } : {}),
+      ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.passthrough || {}),
     };
 
@@ -362,7 +362,7 @@ export class OllamaChatProvider implements ApiProvider {
         },
         {} as Record<string, any>,
       ),
-      ...(this.config.think !== undefined ? { think: this.config.think } : {}),
+      ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.passthrough || {}),
     };
 
@@ -370,7 +370,8 @@ export class OllamaChatProvider implements ApiProvider {
     if (this.config.tools) {
       const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools, context?.vars);
       if (loadedTools !== undefined) {
-        params.tools = loadedTools;
+        // Transform tools to OpenAI format if needed (Ollama uses OpenAI format)
+        params.tools = transformTools(loadedTools, 'openai');
       }
     }
 

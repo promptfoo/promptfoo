@@ -463,30 +463,37 @@ tests:
       });
 
       it('preserves id() method when using class-based providers in redteam', () => {
-        // This tests the actual redteam flow where the bug manifested.
-        // The redteam provider (attacker model) gets wrapped with rate limiting,
-        // and strategies call TokenUsageTracker.trackUsage(provider.id(), ...).
+        // This tests the redteam generate flow with a class-based provider whose
+        // id() method is on the prototype. Uses the contracts plugin (local generation)
+        // and base64 strategy (local transform) so no remote API calls are needed.
+        // The provider returns "Prompt:"-formatted output so the plugin can parse it.
+        //
+        // Note: The wrapProviderWithRateLimiting code path (where the original
+        // #7353 bug manifested) is covered by the unit test in
+        // test/scheduler/providerWrapper.test.ts.
         const configPath = path.join(FIXTURES_DIR, 'configs/redteam-class-provider-7353.yaml');
 
         const { exitCode, stderr, stdout } = runCli(
           ['redteam', 'generate', '-c', configPath, '--no-cache'],
-          { cwd: path.join(FIXTURES_DIR, 'configs'), timeout: 120000 },
+          {
+            cwd: path.join(FIXTURES_DIR, 'configs'),
+            env: { PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true' },
+          },
         );
 
-        // The key assertion: should NOT fail with "id is not a function"
-        // This was the specific error from bug #7353
-        expect(stderr).not.toContain('is not a function');
-        expect(stdout + stderr).not.toContain('redteamProvider.id is not a function');
+        const output = stdout + stderr;
 
-        // The command may fail for other reasons (e.g., our simple provider
-        // doesn't generate proper attack prompts), but that's OK - we just
-        // need to verify the id() method is accessible.
+        // The key assertion: should NOT fail with "id is not a function"
+        expect(output).not.toContain('is not a function');
+        expect(output).not.toContain('redteamProvider.id is not a function');
+        expect(output).not.toContain('TypeError');
+
+        // The command should succeed (contracts plugin generates locally)
         if (exitCode !== 0) {
-          // If it failed, make sure it wasn't due to the id() bug
-          const output = stdout + stderr;
-          expect(output).not.toContain('TypeError');
-          expect(output).not.toContain('is not a function');
+          console.error('stdout:', stdout);
+          console.error('stderr:', stderr);
         }
+        expect(exitCode).toBe(0);
       });
     });
   });

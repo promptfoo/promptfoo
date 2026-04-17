@@ -439,7 +439,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
           testIdx: result.testIdx,
           vars: varNames.map((varName) => {
             const value = result.testCase?.vars?.[varName];
-            return value !== undefined ? String(value) : '';
+            return value === undefined ? '' : String(value);
           }),
           outputs: new Array(numPrompts).fill(null),
           test: { description: result.testCase?.description },

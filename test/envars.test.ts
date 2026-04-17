@@ -230,6 +230,16 @@ describe('envars', () => {
       process.env.CUSTOM_INT_VAR = '123';
       expect(getEnvInt('CUSTOM_INT_VAR' as EnvVarKey)).toBe(123);
     });
+
+    it('should return 0 when environment variable is set to "0"', () => {
+      process.env.PROMPTFOO_CACHE_MAX_FILE_COUNT = '0';
+      expect(getEnvInt('PROMPTFOO_CACHE_MAX_FILE_COUNT')).toBe(0);
+    });
+
+    it('should return 0 instead of default when environment variable is "0"', () => {
+      process.env.PROMPTFOO_CACHE_MAX_FILE_COUNT = '0';
+      expect(getEnvInt('PROMPTFOO_CACHE_MAX_FILE_COUNT', 100)).toBe(0);
+    });
   });
 
   describe('getEnvFloat', () => {
@@ -270,6 +280,16 @@ describe('envars', () => {
     it('should return undefined when no default value is provided and the environment variable is not set', () => {
       delete process.env.OPENAI_TEMPERATURE;
       expect(getEnvFloat('OPENAI_TEMPERATURE')).toBeUndefined();
+    });
+
+    it('should return 0 when environment variable is set to "0"', () => {
+      process.env.OPENAI_TEMPERATURE = '0';
+      expect(getEnvFloat('OPENAI_TEMPERATURE')).toBe(0);
+    });
+
+    it('should return 0 instead of default when environment variable is "0"', () => {
+      process.env.OPENAI_TEMPERATURE = '0';
+      expect(getEnvFloat('OPENAI_TEMPERATURE', 0.7)).toBe(0);
     });
 
     it('should prioritize cliState.config.env over process.env for float values', () => {

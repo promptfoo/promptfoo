@@ -1,0 +1,20 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+or {
+  `process.env = $value` as $match where {
+    register_diagnostic(span=$match, message="Use mockProcessEnv() or vi.stubEnv() instead of mutating process.env.", severity="error")
+  },
+  `process.env.$name = $value` as $match where {
+    register_diagnostic(span=$match, message="Use mockProcessEnv() or vi.stubEnv() instead of mutating process.env.", severity="error")
+  },
+  `process.env[$name] = $value` as $match where {
+    register_diagnostic(span=$match, message="Use mockProcessEnv() or vi.stubEnv() instead of mutating process.env.", severity="error")
+  },
+  `delete process.env.$name` as $match where {
+    register_diagnostic(span=$match, message="Use mockProcessEnv() or vi.stubEnv() instead of mutating process.env.", severity="error")
+  },
+  `delete process.env[$name]` as $match where {
+    register_diagnostic(span=$match, message="Use mockProcessEnv() or vi.stubEnv() instead of mutating process.env.", severity="error")
+  }
+}

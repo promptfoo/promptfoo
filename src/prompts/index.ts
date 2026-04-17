@@ -2,6 +2,7 @@ import { stat } from 'fs/promises';
 
 import { globSync } from 'glob';
 import logger from '../logger';
+import { isApiProvider } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parsePathOrGlob } from '../util/index';
 import invariant from '../util/invariant';
@@ -26,7 +27,6 @@ import type {
   ProviderOptions,
   ProviderOptionsMap,
   TestSuite,
-  UnifiedConfig,
 } from '../types/index';
 
 export * from './grading';
@@ -39,7 +39,7 @@ export { DEFAULT_WEB_SEARCH_PROMPT } from './grading';
  * @returns A map of provider IDs to their respective prompts.
  */
 export function readProviderPromptMap(
-  config: Pick<Partial<UnifiedConfig>, 'providers'>,
+  config: Pick<Partial<EvaluateTestSuite>, 'providers'>,
   parsedPrompts: Prompt[],
 ): TestSuite['providerPromptMap'] {
   const ret: Record<string, string[]> = {};
@@ -48,10 +48,13 @@ export function readProviderPromptMap(
     return ret;
   }
 
-  const allPrompts = [];
-  for (const prompt of parsedPrompts) {
-    allPrompts.push(prompt.label);
-  }
+  const allPrompts = parsedPrompts.map((prompt) => prompt.label);
+  const addProviderPrompts = (id: string, label?: string, prompts = allPrompts) => {
+    ret[id] = prompts;
+    if (label) {
+      ret[label] = prompts;
+    }
+  };
 
   if (typeof config.providers === 'string') {
     return { [config.providers]: allPrompts };
@@ -61,7 +64,17 @@ export function readProviderPromptMap(
     return { 'Custom function': allPrompts };
   }
 
+  if (isApiProvider(config.providers)) {
+    addProviderPrompts(config.providers.id());
+    return ret;
+  }
+
   for (const provider of config.providers) {
+    if (isApiProvider(provider)) {
+      addProviderPrompts(provider.id(), provider.label);
+      continue;
+    }
+
     if (typeof provider === 'object') {
       // It's either a ProviderOptionsMap or a ProviderOptions
       if (provider.id) {
@@ -70,10 +83,7 @@ export function readProviderPromptMap(
           rawProvider.id,
           'You must specify an `id` on the Provider when you override options.prompts',
         );
-        ret[rawProvider.id] = rawProvider.prompts || allPrompts;
-        if (rawProvider.label) {
-          ret[rawProvider.label] = rawProvider.prompts || allPrompts;
-        }
+        addProviderPrompts(rawProvider.id, rawProvider.label, rawProvider.prompts || allPrompts);
       } else {
         const rawProvider = provider as ProviderOptionsMap;
         const originalId = Object.keys(rawProvider)[0];
@@ -262,14 +272,14 @@ export async function processPrompts(
 
 // G-Eval prompts
 export const GEVAL_PROMPT_STEPS = `
-Given an evaluation criteria which outlines how you should judge a piece of text, generate 3-4 concise evaluation steps applicable to any text based on the criteria below.
+Given evaluation criteria that outline how you should judge a piece of text, generate 3-4 concise evaluation steps applicable to any text based on the criteria below and designed to check whether the criteria are satisfied by the text.
 
 **EVALUATION CRITERIA**
 {{criteria}}
 
 **OUTPUT FORMAT**
 IMPORTANT:
-- Return output ONLY as a minified JSON object.
+- Return output ONLY as a minified JSON object (no code fences).
 - The JSON object must contain a single key, "steps", whose value is a list of strings.
 - Each string must represent one evaluation step.
 - Do NOT include any explanations, commentary, extra text, or additional formatting.
@@ -294,7 +304,7 @@ Please make sure you read and understand these instructions carefully. Please ke
 **Evaluation Steps**
 - {{steps}}
 Given the evaluation steps, return a JSON with two keys: 
-  1) a "score" key ranging from 0 - {{maxScore}}, with {{maxScore}} being that Reply follows the Evaluation Criteria outlined in the Evaluation Steps and 0 being that Reply does not;
+  1) a "score" key that MUST be an integer from 0 to {{maxScore}}, where {{maxScore}} indicates that the condition described by the Evaluation Criteria is fully and clearly observed in the Reply according to the Evaluation Steps, and 0 indicates that it is not observed at all;
   2) a "reason" key, a reason for the given score, but DO NOT QUOTE THE SCORE in your reason. Please mention specific information from Prompt and Reply in your reason, but be very concise with it!
 
 **Prompt**
@@ -305,7 +315,7 @@ Given the evaluation steps, return a JSON with two keys:
 
 **OUTPUT FORMAT**
 IMPORTANT: 
-- Return output ONLY as a minified JSON object.
+- Return output ONLY as a minified JSON object (no code fences).
 - The JSON object must contain exactly two keys: "score" and "reason".
 - No additional words, explanations, or formatting are needed.
 - Absolutely no additional text, explanations, line breaks, or formatting outside the JSON object are allowed.

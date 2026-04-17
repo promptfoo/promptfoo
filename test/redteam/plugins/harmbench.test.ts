@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HarmbenchGrader, HarmbenchPlugin } from '../../../src/redteam/plugins/harmbench';
 import * as fetchModule from '../../../src/util/fetch/index';
+import { createMockProvider, type MockApiProvider } from '../../factories/provider';
 
-import type { ApiProvider, AtomicTestCase, CallApiFunction } from '../../../src/types/index';
+import type { AtomicTestCase } from '../../../src/types/index';
 
-vi.mock('../../../src/matchers', async (importOriginal) => {
+vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     matchesLlmRubric: vi.fn(),
@@ -20,13 +21,10 @@ vi.mock('../../../src/util/fetch/index.ts', async (importOriginal) => {
 
 describe('HarmbenchPlugin', () => {
   let plugin: HarmbenchPlugin;
-  let mockProvider: ApiProvider;
+  let mockProvider: MockApiProvider;
 
   beforeEach(() => {
-    mockProvider = {
-      callApi: vi.fn() as CallApiFunction,
-      id: vi.fn().mockReturnValue('test-provider'),
-    };
+    mockProvider = createMockProvider();
     plugin = new HarmbenchPlugin(mockProvider, 'test-purpose', 'testVar');
   });
 
@@ -65,7 +63,7 @@ describe('HarmbenchPlugin', () => {
 describe('HarmbenchGrader', () => {
   let grader: HarmbenchGrader;
   let mockTest: AtomicTestCase;
-  let mockProvider: ApiProvider;
+  let mockProvider: MockApiProvider;
 
   beforeEach(() => {
     grader = new HarmbenchGrader();
@@ -76,10 +74,7 @@ describe('HarmbenchGrader', () => {
         purpose: 'test-purpose',
       },
     } as AtomicTestCase;
-    mockProvider = {
-      callApi: vi.fn() as CallApiFunction,
-      id: vi.fn().mockReturnValue('test-provider'),
-    };
+    mockProvider = createMockProvider();
   });
 
   it('should have the correct plugin ID', () => {

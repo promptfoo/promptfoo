@@ -19,7 +19,7 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remo
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
-import { stripAnsi } from '../util/utils';
+import { mockProcessEnv, stripAnsi } from '../util/utils';
 
 vi.mock('cli-progress');
 vi.mock('../../src/logger');
@@ -50,6 +50,10 @@ vi.mock('../../src/redteam/strategies', async () => ({
 
 vi.mock('../../src/util/apiHealth');
 vi.mock('../../src/redteam/remoteGeneration');
+vi.mock('../../src/redteam/sharpAvailability', async () => ({
+  ...(await vi.importActual('../../src/redteam/sharpAvailability')),
+  validateSharpDependency: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('../../src/redteam/util', async () => ({
   ...(await vi.importActual('../../src/redteam/util')),
   extractGoalFromPrompt: vi.fn().mockResolvedValue('mocked goal'),
@@ -239,6 +243,75 @@ describe('synthesize', () => {
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin1' }) }),
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin2' }) }),
       ]);
+    });
+
+    it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'short' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((testCase: any) => ({
+          ...testCase,
+          metadata: {
+            ...testCase.metadata,
+            strategyId: 'goat',
+          },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: mockStrategyAction,
+        id: 'goat',
+      });
+
+      const result = await synthesize({
+        maxCharsPerMessage: 12,
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'goat' }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(mockPluginAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            maxCharsPerMessage: 12,
+            modifiers: expect.objectContaining({
+              maxCharsPerMessage: 'Each generated user message must be 12 characters or fewer.',
+            }),
+          }),
+        }),
+      );
+      expect(mockStrategyAction).toHaveBeenCalledWith(
+        expect.any(Array),
+        'query',
+        expect.objectContaining({
+          maxCharsPerMessage: 12,
+        }),
+        'goat',
+      );
+      expect(result.testCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              pluginId: 'test-plugin',
+              pluginConfig: expect.objectContaining({
+                maxCharsPerMessage: 12,
+              }),
+              modifiers: expect.objectContaining({
+                maxCharsPerMessage: 'Each generated user message must be 12 characters or fewer.',
+              }),
+            }),
+          }),
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              strategyConfig: expect.objectContaining({
+                maxCharsPerMessage: 12,
+              }),
+            }),
+          }),
+        ]),
+      );
     });
 
     it('should warn about unregistered plugins', async () => {
@@ -983,21 +1056,21 @@ describe('synthesize', () => {
 
   describe('Logger', () => {
     it('debug log level hides progress bar', async () => {
-      const originalLogLevel = process.env.LOG_LEVEL;
-      process.env.LOG_LEVEL = 'debug';
+      const restoreEnv = mockProcessEnv({ LOG_LEVEL: 'debug' });
+      try {
+        await synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
 
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'test-plugin', numTests: 1 }],
-        prompts: ['Test prompt'],
-        strategies: [],
-        targetIds: ['test-provider'],
-      });
-
-      expect(cliProgress.SingleBar).not.toHaveBeenCalled();
-
-      process.env.LOG_LEVEL = originalLogLevel;
+        expect(cliProgress.SingleBar).not.toHaveBeenCalled();
+      } finally {
+        restoreEnv();
+      }
     });
   });
 
@@ -2250,8 +2323,8 @@ describe('Language configuration', () => {
     });
   });
 
-  describe('Language-disallowed strategies', () => {
-    it('should filter multilingual test cases for audio strategy', async () => {
+  describe('Multilingual support for media strategies', () => {
+    it('should support multilingual test cases for audio strategy', async () => {
       // Mock strategy action for audio
       const mockAudioAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
@@ -2278,24 +2351,19 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // With audio strategy present, language is forced to 'en' early in synthesize
-      // Base tests: 2 tests * 1 language = 2
-      // Audio strategy tests: 2 tests
-      // Total: 4 tests
-      expect(result.testCases.length).toBe(4);
+      // Audio strategy now supports multiple languages
+      // Mock plugin always returns 2 tests (ignores numTests)
+      // Base tests: 2 tests * 3 languages = 6
+      // Audio strategy tests: 6 tests (applies to all base tests)
+      // Total: 12 tests
+      expect(result.testCases.length).toBe(12);
 
-      // Check that audio strategy was applied
+      // Check that audio strategy was applied to all language variants
       const audioTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'audio');
-      expect(audioTests.length).toBe(2);
-
-      // All tests should be in English only
-      const allTests = result.testCases;
-      const languages = allTests.map((tc) => tc.metadata?.language || 'en');
-      expect(new Set(languages).size).toBe(1); // Only one language
-      expect(languages[0]).toBe('en');
+      expect(audioTests.length).toBe(6);
     });
 
-    it('should filter multilingual test cases for video strategy', async () => {
+    it('should support multilingual test cases for video strategy', async () => {
       const mockVideoAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
@@ -2318,17 +2386,17 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // With video strategy present, language is forced to 'en' early in synthesize
+      // Video strategy now supports multiple languages
       // Mock plugin always returns 2 tests (ignores numTests: 1)
-      // Base tests: 2 tests (from mock)
-      // Strategy transforms: 2 tests → 2 video tests
-      // Total: 2 base + 2 video = 4 tests
+      // Base tests: 2 tests * 2 languages = 4
+      // Strategy transforms: 4 tests → 4 video tests
+      // Total: 4 base + 4 video = 8 tests
       const videoTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'video');
-      expect(videoTests.length).toBe(2);
-      expect(result.testCases.length).toBe(4);
+      expect(videoTests.length).toBe(4);
+      expect(result.testCases.length).toBe(8);
     });
 
-    it('should filter multilingual test cases for image strategy', async () => {
+    it('should support multilingual test cases for image strategy', async () => {
       const mockImageAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
@@ -2351,17 +2419,17 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // With image strategy present, language is forced to 'en' early in synthesize
+      // Image strategy now supports multiple languages
       // Mock plugin always returns 2 tests (ignores numTests: 3)
-      // Base tests: 2 tests (from mock)
-      // Strategy transforms: 2 tests → 2 image tests
-      // Total: 2 base + 2 image = 4 tests
+      // Base tests: 2 tests * 4 languages = 8
+      // Strategy transforms: 8 tests → 8 image tests
+      // Total: 8 base + 8 image = 16 tests
       const imageTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'image');
-      expect(imageTests.length).toBe(2);
-      expect(result.testCases.length).toBe(4);
+      expect(imageTests.length).toBe(8);
+      expect(result.testCases.length).toBe(16);
     });
 
-    it('should support multilingual test cases for layer strategy', async () => {
+    it('should support multilingual test cases for jailbreak strategy', async () => {
       const mockJailbreakAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
@@ -2384,7 +2452,7 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // Layer strategy now supports multiple languages
+      // Jailbreak strategy supports multiple languages
       // Base tests: 2 tests * 2 languages = 4
       // Jailbreak strategy tests: 4 tests (applies to all base tests)
       // Total: 8 tests
@@ -2395,7 +2463,7 @@ describe('Language configuration', () => {
       expect(result.testCases.length).toBe(8);
     });
 
-    it('should filter multilingual test cases for math-prompt strategy', async () => {
+    it('should support multilingual test cases for math-prompt strategy', async () => {
       const mockMathPromptAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
@@ -2418,17 +2486,17 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // With math-prompt strategy present, language is forced to 'en' early in synthesize
+      // Math-prompt strategy now supports multiple languages
       // Mock plugin always returns 2 tests (ignores numTests: 1)
-      // Base tests: 2 tests (from mock)
-      // Strategy transforms: 2 tests → 2 math tests
-      // Total: 2 base + 2 math = 4 tests
+      // Base tests: 2 tests * 3 languages = 6
+      // Strategy transforms: 6 tests → 6 math tests
+      // Total: 6 base + 6 math = 12 tests
       const mathTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'math-prompt');
-      expect(mathTests.length).toBe(2);
-      expect(result.testCases.length).toBe(4);
+      expect(mathTests.length).toBe(6);
+      expect(result.testCases.length).toBe(12);
     });
 
-    it('should NOT filter multilingual test cases for non-disallowed strategies', async () => {
+    it('should support multilingual test cases for rot13 strategy', async () => {
       const mockRot13Action = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
@@ -2451,7 +2519,7 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // Rot13 is NOT in the disallow list, so it should process all languages
+      // Rot13 supports multilingual test cases
       const rot13Tests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'rot13');
       expect(rot13Tests.length).toBe(4); // 2 tests * 2 languages = 4
     });
@@ -2486,7 +2554,7 @@ describe('Language configuration', () => {
         numTests: 1,
         plugins: [{ id: 'policy', numTests: 1 }],
         prompts: ['Test prompt'],
-        strategies: [],
+        strategies: [{ id: 'goat' }],
         targetIds: ['test-provider'],
       });
 
@@ -2524,7 +2592,7 @@ describe('Language configuration', () => {
         numTests: 1,
         plugins: [{ id: 'other-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
-        strategies: [],
+        strategies: [{ id: 'jailbreak:hydra' }],
         targetIds: ['test-provider'],
       });
 
@@ -2585,7 +2653,7 @@ describe('Language configuration', () => {
           numTests: 1,
           plugins: [{ id: 'test-plugin', numTests: 1 }],
           prompts: ['Test prompt'],
-          strategies: [],
+          strategies: [{ id: 'jailbreak:meta' }],
           targetIds: ['test-provider'],
         });
 
