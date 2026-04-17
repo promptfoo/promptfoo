@@ -196,6 +196,15 @@ promptfoo scan-model models/ \
 # Enable strict mode for enhanced security validation
 promptfoo scan-model model.pkl --strict
 
+# Run only selected scanners
+promptfoo scan-model models/ --scanners pickle,tf_savedmodel
+
+# Exclude a scanner from the default scanner set
+promptfoo scan-model models/ --exclude-scanner weight_distribution
+
+# Discover available scanner IDs and class names
+promptfoo scan-model --list-scanners
+
 # Strict mode with additional output options
 promptfoo scan-model models/ \
   --strict \

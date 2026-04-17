@@ -63,6 +63,9 @@ interface ScanOptions {
   force?: boolean;
   share?: boolean;
   noShare?: boolean;
+  scanners?: string[];
+  excludeScanner?: string[];
+  listScanners?: boolean;
 }
 
 // ============================================================================
@@ -253,6 +256,14 @@ function spawnModelAudit(
   });
 }
 
+function collectRepeatableOption(value: string, previous: string[] = []): string[] {
+  return [...previous, value];
+}
+
+function hasScannerSelectionOptions(options: ScanOptions): boolean {
+  return Boolean(options.scanners?.length || options.excludeScanner?.length);
+}
+
 /**
  * Check for existing scan and determine if re-scan is needed.
  * Returns the existing audit if found and re-scan should happen.
@@ -277,6 +288,11 @@ async function checkExistingScan(
     const existing = await ModelAudit.findByRevision(modelId, metadata.sha);
 
     if (!existing) {
+      return { shouldSkip: false, existingAudit: null };
+    }
+
+    if (hasScannerSelectionOptions(options)) {
+      logger.debug('Re-scanning with scanner selection options');
       return { shouldSkip: false, existingAudit: null };
     }
 
@@ -463,6 +479,8 @@ async function saveAuditRecord(
       quiet: options.quiet,
       progress: options.progress,
       stream: options.stream,
+      scanners: options.scanners,
+      excludeScanner: options.excludeScanner,
     },
   };
 
@@ -707,7 +725,7 @@ export function modelScanCommand(program: Command): void {
   program
     .command('scan-model')
     .description('Scan model files for security and quality issues')
-    .argument('<paths...>', 'Model files or directories to scan')
+    .argument('[paths...]', 'Model files or directories to scan')
 
     // Core configuration
     .option(
@@ -736,6 +754,17 @@ export function modelScanCommand(program: Command): void {
     .option('--quiet', 'Silence detection messages')
     .option('--progress', 'Force enable progress reporting (auto-detected by default)')
     .option('--stream', 'Scan and delete downloaded files immediately after scan')
+    .option(
+      '--scanners <scanner>',
+      'Only run selected ModelAudit scanners (IDs/classes; comma-separated or repeated)',
+      collectRepeatableOption,
+    )
+    .option(
+      '--exclude-scanner <scanner>',
+      'Exclude a ModelAudit scanner from the active set (comma-separated or repeated)',
+      collectRepeatableOption,
+    )
+    .option('--list-scanners', 'List registered ModelAudit scanners and exit')
 
     // Miscellaneous
     .option('-v, --verbose', 'Enable verbose output')
@@ -747,7 +776,7 @@ export function modelScanCommand(program: Command): void {
 
     .action(async (paths: string[], options: ScanOptions) => {
       // Validate input
-      if (!paths || paths.length === 0) {
+      if (!options.listScanners && (!paths || paths.length === 0)) {
         logger.error('No paths specified. Provide at least one model file or directory to scan.');
         process.exitCode = 1;
         return;
@@ -770,6 +799,53 @@ export function modelScanCommand(program: Command): void {
       await checkModelAuditUpdates();
       if (currentScannerVersion) {
         logger.debug(`Using modelaudit version: ${currentScannerVersion}`);
+      }
+
+      const delegationEnv = {
+        ...process.env,
+        PROMPTFOO_DELEGATED: 'true',
+      };
+
+      if (options.listScanners) {
+        const cliOptions = {
+          ...options,
+          format: options.format || 'text',
+          output: options.output,
+          timeout: undefined,
+        };
+
+        let args: string[];
+        try {
+          args = parseModelAuditArgs(paths || [], cliOptions).args;
+        } catch (error) {
+          if (error instanceof z.ZodError) {
+            logger.error('Invalid model audit options provided:');
+            for (const err of error.issues) {
+              logger.error(`  - ${err.path.join('.')}: ${err.message}`);
+            }
+            process.exitCode = 1;
+            return;
+          }
+          throw error;
+        }
+
+        try {
+          const spawnResult = await spawnModelAudit(args, {
+            captureOutput: false,
+            env: delegationEnv,
+          });
+          if (spawnResult.code !== null && spawnResult.code !== 0) {
+            logger.error(`Model scan process exited with code ${spawnResult.code}`);
+          }
+          process.exitCode = spawnResult.code || 0;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          logger.error(`Failed to start modelaudit: ${message}`);
+          logger.info('Make sure modelaudit is installed and available in your PATH.');
+          logger.info('Install it using: pip install modelaudit');
+          process.exitCode = 1;
+        }
+        return;
       }
 
       // Determine if we should save to database
@@ -818,13 +894,9 @@ export function modelScanCommand(program: Command): void {
         throw error;
       }
 
-      logger.info(`Running model scan on: ${paths.join(', ')}`);
-
-      // Set up environment
-      const delegationEnv = {
-        ...process.env,
-        PROMPTFOO_DELEGATED: 'true',
-      };
+      if (saveToDatabase || outputFormat === 'text') {
+        logger.info(`Running model scan on: ${paths.join(', ')}`);
+      }
 
       try {
         if (saveToDatabase) {

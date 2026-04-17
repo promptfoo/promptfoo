@@ -227,6 +227,118 @@ describe('modelScanCommand', () => {
     );
   });
 
+  it('should pass scanner selection options to modelaudit', async () => {
+    const mockChildProcess = {
+      killed: false,
+      kill: vi.fn(),
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
+        if (event === 'close') {
+          callback(0);
+        }
+        return mockChildProcess;
+      }),
+    } as unknown as ChildProcess;
+
+    (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+
+    modelScanCommand(program);
+
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+    await command.parseAsync([
+      'node',
+      'scan-model',
+      'model.pkl',
+      '--scanners',
+      'pickle,tf_savedmodel',
+      '--scanners',
+      'PickleScanner',
+      '--exclude-scanner',
+      'weight_distribution',
+      '--no-write',
+    ]);
+
+    expect(spawn).toHaveBeenCalledWith(
+      'modelaudit',
+      [
+        'scan',
+        'model.pkl',
+        '--format',
+        'text',
+        '--timeout',
+        '300',
+        '--scanners',
+        'pickle,tf_savedmodel',
+        '--scanners',
+        'PickleScanner',
+        '--exclude-scanner',
+        'weight_distribution',
+      ],
+      expect.objectContaining({
+        stdio: 'inherit',
+      }),
+    );
+  });
+
+  it('should keep no-write JSON passthrough output free of promptfoo logs', async () => {
+    const mockChildProcess = {
+      killed: false,
+      kill: vi.fn(),
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
+        if (event === 'close') {
+          callback(0);
+        }
+        return mockChildProcess;
+      }),
+    } as unknown as ChildProcess;
+
+    (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+
+    modelScanCommand(program);
+
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+    await command.parseAsync([
+      'node',
+      'scan-model',
+      'model.pkl',
+      '--scanners',
+      'pickle',
+      '--format',
+      'json',
+      '--no-write',
+    ]);
+
+    expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('Running model scan on:'));
+  });
+
+  it('should list modelaudit scanners without requiring paths', async () => {
+    const mockChildProcess = {
+      killed: false,
+      kill: vi.fn(),
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
+        if (event === 'close') {
+          callback(0);
+        }
+        return mockChildProcess;
+      }),
+    } as unknown as ChildProcess;
+
+    (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+
+    modelScanCommand(program);
+
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+    await command.parseAsync(['node', 'scan-model', '--list-scanners', '--format', 'json']);
+
+    expect(spawn).toHaveBeenCalledWith(
+      'modelaudit',
+      ['scan', '--format', 'json', '--list-scanners'],
+      expect.objectContaining({
+        stdio: 'inherit',
+      }),
+    );
+    expect(process.exitCode).toBe(0);
+  });
+
   it('should handle modelaudit process error', async () => {
     // Mock logger.error to capture the output
     const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
@@ -404,6 +516,57 @@ describe('Re-scan on version change behavior', () => {
     expect(mockExit).not.toHaveBeenCalled();
     // Should not call spawn for actual scan (version check uses getModelAuditCurrentVersion)
     expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('should not reuse a revision match when scanner selection is requested', async () => {
+    const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } = await import(
+      '../../src/util/huggingfaceMetadata'
+    );
+    const ModelAudit = (await import('../../src/models/modelAudit')).default;
+
+    (isHuggingFaceModel as Mock).mockReturnValue(true);
+    (parseHuggingFaceModel as Mock).mockReturnValue({
+      owner: 'test-owner',
+      repo: 'test-model',
+    });
+    (getHuggingFaceMetadata as Mock).mockResolvedValue({
+      sha: 'abc123',
+      siblings: [],
+    });
+    (ModelAudit.findByRevision as Mock).mockResolvedValue({
+      id: 'existing-scan-id',
+      scannerVersion: '0.2.16',
+      createdAt: Date.now(),
+    });
+
+    const mockScanProcess = {
+      killed: false,
+      kill: vi.fn(),
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
+        if (event === 'close') {
+          callback(0);
+        }
+        return mockScanProcess;
+      }),
+    } as unknown as ChildProcess;
+
+    (spawn as unknown as Mock).mockReturnValue(mockScanProcess);
+
+    modelScanCommand(program);
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
+    await command?.parseAsync([
+      'node',
+      'scan-model',
+      'hf://test-owner/test-model',
+      '--scanners',
+      'pickle',
+      '--no-write',
+    ]);
+
+    expect(spawn).toHaveBeenCalledTimes(1);
+    const args = (spawn as Mock).mock.calls[0][1] as string[];
+    expect(args).toContain('--scanners');
+    expect(args).toContain('pickle');
   });
 
   it('should re-scan when scanner version has changed', async () => {
@@ -683,6 +846,9 @@ describe('Command Options Validation', () => {
       '--quiet',
       '--progress',
       '--stream',
+      '--scanners',
+      '--exclude-scanner',
+      '--list-scanners',
       '--verbose',
     ];
 

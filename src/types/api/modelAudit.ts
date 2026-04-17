@@ -14,6 +14,25 @@ export const CheckInstalledResponseSchema = z.object({
 export type CheckInstalledResponse = z.infer<typeof CheckInstalledResponseSchema>;
 
 // ---------------------------------------------------------------------------
+// GET /api/model-audit/scanners
+// ---------------------------------------------------------------------------
+
+export const ScannerInfoSchema = z.object({
+  id: z.string(),
+  class: z.string(),
+  description: z.string(),
+  extensions: z.array(z.string()),
+  dependencies: z.array(z.string()),
+});
+
+export const ListScannersResponseSchema = z.object({
+  scanners: z.array(ScannerInfoSchema),
+});
+
+export type ScannerInfo = z.infer<typeof ScannerInfoSchema>;
+export type ListScannersResponse = z.infer<typeof ListScannersResponseSchema>;
+
+// ---------------------------------------------------------------------------
 // POST /api/model-audit/check-path
 // ---------------------------------------------------------------------------
 
@@ -61,6 +80,8 @@ export const ScanRequestSchema = z.object({
       sbom: z.string().optional(),
       output: z.string().optional(),
       maxSize: z.string().optional(),
+      scanners: z.array(z.string()).optional(),
+      excludeScanner: z.array(z.string()).optional(),
       persist: z.boolean().optional(),
       name: z.string().optional(),
       author: z.string().optional(),
@@ -161,6 +182,9 @@ export type DeleteScanResponse = z.infer<typeof DeleteScanResponseSchema>;
 export const ModelAuditSchemas = {
   CheckInstalled: {
     Response: CheckInstalledResponseSchema,
+  },
+  ListScanners: {
+    Response: ListScannersResponseSchema,
   },
   CheckPath: {
     Request: CheckPathRequestSchema,

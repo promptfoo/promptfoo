@@ -18,6 +18,36 @@ import type { ModelAuditScanResults } from '../../types/modelAudit';
 
 export const modelAuditRouter = Router();
 
+function spawnModelAuditCapture(args: string[]): Promise<{
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('modelaudit', args, {
+      env: {
+        ...process.env,
+        PROMPTFOO_DELEGATED: 'true',
+      },
+    });
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout?.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr?.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    child.on('error', reject);
+    child.on('close', (code) => {
+      resolve({ code, stdout, stderr });
+    });
+  });
+}
+
 // Check if modelaudit is installed
 modelAuditRouter.get('/check-installed', async (_req: Request, res: Response): Promise<void> => {
   try {
@@ -33,6 +63,36 @@ modelAuditRouter.get('/check-installed', async (_req: Request, res: Response): P
         cwd: process.cwd(),
       }),
     );
+  }
+});
+
+modelAuditRouter.get('/scanners', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const { installed } = await checkModelAuditInstalled();
+    if (!installed) {
+      res.status(400).json({
+        error: 'ModelAudit is not installed. Please install it using: pip install modelaudit',
+      });
+      return;
+    }
+
+    const { code, stdout, stderr } = await spawnModelAuditCapture([
+      'scan',
+      '--list-scanners',
+      '--format',
+      'json',
+    ]);
+
+    if (code !== null && code !== 0) {
+      logger.error('ModelAudit scanner listing failed', { code, stderr });
+      res.status(500).json({ error: 'Failed to list ModelAudit scanners' });
+      return;
+    }
+
+    const parsedOutput = JSON.parse(stdout);
+    res.json(ModelAuditSchemas.ListScanners.Response.parse(parsedOutput));
+  } catch (error) {
+    sendError(res, 500, 'Failed to list ModelAudit scanners', error);
   }
 });
 
@@ -156,6 +216,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       event: 'model_scan',
       pathCount: paths.length,
       hasBlacklist: (options.blacklist?.length ?? 0) > 0,
+      hasScannerSelection: Boolean(options.scanners?.length || options.excludeScanner?.length),
       timeout: options.timeout ?? 0,
       verbose: options.verbose ?? false,
       persist,

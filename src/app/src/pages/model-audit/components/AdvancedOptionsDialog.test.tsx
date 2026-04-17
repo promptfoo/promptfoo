@@ -1,9 +1,14 @@
+import { callApi } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdvancedOptionsDialog from './AdvancedOptionsDialog';
 
 import type { ScanOptions } from '../ModelAudit.types';
+
+vi.mock('@app/utils/api');
+
+const mockCallApi = vi.mocked(callApi);
 
 describe('AdvancedOptionsDialog', () => {
   const mockOnClose = vi.fn();
@@ -18,6 +23,10 @@ describe('AdvancedOptionsDialog', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ scanners: [] }),
+    } as Response);
   });
 
   it('renders correctly when open', () => {
@@ -164,6 +173,55 @@ describe('AdvancedOptionsDialog', () => {
       }),
     );
     expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads scanner catalog and saves scanner selections', async () => {
+    const user = userEvent.setup();
+    const onOptionsChange = vi.fn();
+    mockCallApi.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          scanners: [
+            {
+              id: 'pickle',
+              class: 'PickleScanner',
+              description: 'Scans pickle files',
+              extensions: ['.pkl'],
+              dependencies: [],
+            },
+            {
+              id: 'weight_distribution',
+              class: 'WeightDistributionScanner',
+              description: 'Checks weight distributions',
+              extensions: ['.pt'],
+              dependencies: ['torch'],
+            },
+          ],
+        }),
+    } as Response);
+
+    render(
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={vi.fn()}
+        scanOptions={defaultScanOptions}
+        onOptionsChange={onOptionsChange}
+      />,
+    );
+
+    expect(await screen.findByText('pickle')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('checkbox', { name: 'Only run pickle' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Exclude weight_distribution' }));
+    await user.click(screen.getByRole('button', { name: 'Save Options' }));
+
+    expect(onOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scanners: ['pickle'],
+        excludeScanner: ['weight_distribution'],
+      }),
+    );
   });
 
   it('calls onClose but not onOptionsChange when Cancel is clicked', async () => {

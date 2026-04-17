@@ -71,6 +71,8 @@ let checkInstallationPromise: Promise<{ installed: boolean; cwd: string }> | nul
 const DEFAULT_SCAN_OPTIONS: ScanOptions = {
   blacklist: [],
   timeout: 3600,
+  scanners: [],
+  excludeScanner: [],
 };
 
 export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
