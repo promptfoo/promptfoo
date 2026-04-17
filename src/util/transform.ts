@@ -243,8 +243,12 @@ export async function transform(
     // Wrap with the label so callers (and user-visible row errors) identify
     // which transform blew up. Keep the original via `cause` so wrappers like
     // `contextUtils.resolveContext` can unwrap and avoid double-labeling.
+    // (Assign `cause` separately so this file compiles under ES2020 targets,
+    // e.g. the frontend workspace; the `.cause` field is still set at runtime.)
     if (error instanceof Error) {
-      throw new Error(`Transform failed (${label}): ${message}`, { cause: error });
+      const wrapped = new Error(`Transform failed (${label}): ${message}`);
+      (wrapped as Error & { cause?: unknown }).cause = error;
+      throw wrapped;
     }
     throw error;
   }

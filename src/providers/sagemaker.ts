@@ -253,60 +253,42 @@ abstract class SageMakerGenericProvider {
       // Direct TransformFunction values and file:// references delegate to the shared
       // `transform()` utility.
       if (typeof transformFn === 'string' && !transformFn.startsWith('file://')) {
-        try {
-          // SECURITY WARNING: Using new Function() with dynamic content can be risky
-          // This is safe only if transform content comes from trusted sources (like config files)
-          // and not from user input or external API responses
+        // SECURITY WARNING: Using new Function() with dynamic content can be risky
+        // This is safe only if transform content comes from trusted sources (like config files)
+        // and not from user input or external API responses
+        let result: unknown;
+        if (transformFn.includes('=>')) {
+          const fn = new Function(
+            'prompt',
+            'context',
+            `try { return (${transformFn})(prompt, context); } catch(e) { throw new Error("Transform function error: " + e.message); }`,
+          );
+          result = await Promise.resolve(fn(prompt, transformContext));
+        } else {
+          const fn = new Function(
+            'prompt',
+            'context',
+            `try { ${transformFn} } catch(e) { throw new Error("Transform function error: " + e.message); }`,
+          );
+          result = await Promise.resolve(fn(prompt, transformContext));
+        }
 
-          let result: unknown;
-          if (transformFn.includes('=>')) {
-            const fn = new Function(
-              'prompt',
-              'context',
-              `try { return (${transformFn})(prompt, context); } catch(e) { throw new Error("Transform function error: " + e.message); }`,
-            );
-            result = await Promise.resolve(fn(prompt, transformContext));
-          } else {
-            const fn = new Function(
-              'prompt',
-              'context',
-              `try { ${transformFn} } catch(e) { throw new Error("Transform function error: " + e.message); }`,
-            );
-            result = await Promise.resolve(fn(prompt, transformContext));
-          }
-
-          const transformedPrompt = stringifyTransformResult(result);
-          if (transformedPrompt !== undefined) {
-            return transformedPrompt;
-          }
-        } catch (transformError) {
-          logger.error(`Error executing inline transform: ${transformError}`);
+        const transformedPrompt = stringifyTransformResult(result);
+        if (transformedPrompt !== undefined) {
+          return transformedPrompt;
         }
       } else {
-        // `TransformFunction` values come from user code (Node.js package only) —
-        // surface their thrown errors so programming mistakes don't silently run
-        // the provider against the untransformed prompt. `file://` transforms
-        // retain the legacy best-effort behavior to avoid regressing existing
-        // SageMaker configs that tolerated file load / runtime hiccups.
-        const isDirectFunction = typeof transformFn === 'function';
-        try {
-          const transformed = await transform(
-            transformFn,
-            prompt,
-            transformContext,
-            false,
-            TransformInputType.OUTPUT,
-          );
+        const transformed = await transform(
+          transformFn,
+          prompt,
+          transformContext,
+          false,
+          TransformInputType.OUTPUT,
+        );
 
-          const transformedPrompt = stringifyTransformResult(transformed);
-          if (transformedPrompt !== undefined) {
-            return transformedPrompt;
-          }
-        } catch (transformError) {
-          if (isDirectFunction) {
-            throw transformError;
-          }
-          logger.error(`Error using transform utility: ${transformError}`);
+        const transformedPrompt = stringifyTransformResult(transformed);
+        if (transformedPrompt !== undefined) {
+          return transformedPrompt;
         }
       }
 
@@ -314,13 +296,41 @@ abstract class SageMakerGenericProvider {
       logger.warn(`Transform did not produce a valid result, using original prompt`);
       return prompt;
     } catch (error) {
-      // Function-transform errors flow through here from the inner rethrow; preserve
-      // them so the caller's try/catch in callApi / callEmbeddingApi builds a row.error.
+      // User-supplied function transforms must surface their errors so programming
+      // mistakes don't silently run the endpoint against the untransformed prompt.
+      // Inline-string and file:// transforms keep the legacy best-effort contract
+      // (log and fall through) so existing SageMaker configs aren't regressed.
       if (typeof this.transform === 'function') {
         throw error;
       }
       logger.error(`Error applying transform to prompt: ${error}`);
-      return prompt; // Return original prompt on error for string/file transforms
+      return prompt;
+    }
+  }
+
+  /**
+   * Run `applyTransformation` and convert a function-transform throw into a
+   * `ProviderResponse.error` so the evaluator sees a uniform error row instead
+   * of an uncaught rejection. `kind` only affects the error-message prefix.
+   */
+  protected async runTransformSafely(
+    input: string,
+    context: CallApiContextParams | undefined,
+    kind: 'prompt' | 'embedding',
+  ): Promise<{ ok: true; value: string } | { ok: false; error: string }> {
+    try {
+      return { ok: true, value: await this.applyTransformation(input, context) };
+    } catch (transformError: any) {
+      // `transform()` wraps with `Transform failed (label): ...` and stashes the
+      // original on `.cause`. Unwrap so the response error reads once, not twice.
+      const cause = (transformError as Error & { cause?: unknown })?.cause;
+      const raw =
+        transformError instanceof Error && cause instanceof Error ? cause : transformError;
+      const message = raw?.message ?? String(raw);
+      const prefix =
+        kind === 'embedding' ? 'SageMaker embedding transform error' : 'SageMaker transform error';
+      logger.error(`${prefix}: ${message}`);
+      return { ok: false, error: `${prefix}: ${message}` };
     }
   }
 
@@ -676,18 +686,11 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     // Get the delay value - the context delay takes precedence over the provider's delay
     const delayMs = context?.originalProvider?.delay || this.delay;
 
-    // Apply transformation to the prompt if a transform is specified.
-    // Function transforms now rethrow — surface as an error row instead of
-    // silently running the endpoint against the untransformed prompt.
-    let transformedPrompt: string;
-    try {
-      transformedPrompt = await this.applyTransformation(prompt, context);
-    } catch (transformError: any) {
-      logger.error(`SageMaker transform error: ${transformError}`);
-      return {
-        error: `SageMaker transform error: ${transformError?.message ?? String(transformError)}`,
-      };
+    const transformResult = await this.runTransformSafely(prompt, context, 'prompt');
+    if (!transformResult.ok) {
+      return { error: transformResult.error };
     }
+    const transformedPrompt = transformResult.value;
     const isTransformed = transformedPrompt !== prompt;
 
     if (isTransformed) {
@@ -889,17 +892,11 @@ export class SageMakerEmbeddingProvider
     // Get the delay value - the context delay takes precedence over the provider's delay
     const delayMs = context?.originalProvider?.delay || this.delay;
 
-    // Apply transformation to the text if a transform is specified.
-    // Function transforms rethrow; surface as an error response.
-    let transformedText: string;
-    try {
-      transformedText = await this.applyTransformation(text, context);
-    } catch (transformError: any) {
-      logger.error(`SageMaker embedding transform error: ${transformError}`);
-      return {
-        error: `SageMaker embedding transform error: ${transformError?.message ?? String(transformError)}`,
-      };
+    const transformResult = await this.runTransformSafely(text, context, 'embedding');
+    if (!transformResult.ok) {
+      return { error: transformResult.error };
     }
+    const transformedText = transformResult.value;
     const isTransformed = transformedText !== text;
 
     if (isTransformed) {
