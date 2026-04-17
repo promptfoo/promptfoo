@@ -694,11 +694,11 @@ export async function runAssertions({
     }
   }
 
-  // When the grouping queue is active (serial mode with model-graded assertions),
-  // dispatching assertions concurrently lets per-assertion preprocessing reorder
-  // enqueues relative to declaration, which can split groups and defeat the
-  // single-judge-drain guarantee. Serialize so the queue can group by provider
-  // ID deterministically.
+  // When the grouping queue is active (serial mode with model-graded
+  // assertions), dispatching assertions concurrently lets per-assertion
+  // preprocessing reorder enqueues relative to declaration, which can split
+  // groups so judges for one provider no longer run contiguously. Serialize
+  // so the queue can group by provider ID deterministically.
   const concurrency = getProviderCallExecutionContext()?.providerCallQueue
     ? 1
     : ASSERTIONS_MAX_CONCURRENCY;

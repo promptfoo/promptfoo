@@ -536,21 +536,38 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   row.gradingResult = checkResult;
 }
 
+function isAbortShapedError(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException');
+}
+
 function applyGradingError(row: EvaluateResult, error: unknown, abortSignal?: AbortSignal) {
   const errorMessage = error instanceof Error ? (error.stack ?? error.message) : String(error);
-  // Don't log when the grading failure is caused by a user-initiated abort;
-  // the non-deferred path handles this via the combinedAbortSignal.aborted check.
-  const isAbortError =
-    abortSignal?.aborted ||
-    (error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException'));
-  if (!isAbortError) {
+  // Treat the failure as abort-originated only when the evaluator's abort
+  // signal is actually tripped AND the caught error looks like an abort.
+  // Either alone would misclassify: a third-party SDK that throws `AbortError`
+  // during a non-aborted run is a real bug, and a genuine SyntaxError caught
+  // microseconds after an unrelated abort fires is also a real bug.
+  const aborted = Boolean(abortSignal?.aborted) && isAbortShapedError(error);
+
+  if (aborted) {
+    // Keep the stack at debug for ops support while skipping the error-level
+    // noise users complained about on graceful shutdown. The "Aborted: "
+    // prefix on row.error is a stable sentinel so downstream consumers and
+    // the report UI can filter aborted rows out of genuine-failure counts.
+    logger.debug('Assertion grading aborted', {
+      error: errorMessage,
+      promptIdx: row.promptIdx,
+      testIdx: row.testIdx,
+    });
+    row.error = `Aborted: ${error instanceof Error ? error.message : String(error)}`;
+  } else {
     logger.error('Assertion grading failed during eval', {
       error: errorMessage,
       promptIdx: row.promptIdx,
       testIdx: row.testIdx,
     });
+    row.error = errorMessage;
   }
-  row.error = errorMessage;
   row.failureReason = ResultFailureReason.ERROR;
   row.success = false;
   row.score = 0;
@@ -3441,12 +3458,14 @@ class Evaluator {
       // Best-effort: flush any rows whose target calls completed but whose
       // deferred grading hadn't started/completed yet, so a mid-eval interrupt
       // doesn't lose the already-computed target outputs. Failures here must
-      // not shadow the original error.
+      // not shadow the original error, so we log and rethrow the outer error.
+      const pendingRowCount = groupedRows.reduce((sum, entry) => sum + entry.rows.length, 0);
       try {
         await flushGroupedRows();
       } catch (flushError) {
-        logger.debug('Failed to flush grouped rows after error', {
+        logger.warn('Failed to flush grouped rows after error; target outputs may be lost', {
           error: flushError instanceof Error ? flushError.message : String(flushError),
+          pendingRowCount,
         });
       }
       throw error;
