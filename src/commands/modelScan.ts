@@ -265,7 +265,7 @@ function hasScannerSelectionOptions(options: ScanOptions): boolean {
 }
 
 /**
- * Build modelaudit CLI arguments from parsed options, logging Zod errors if any.
+ * Parse CLI options through Zod, logging validation errors to the CLI.
  * Returns null when validation fails (and sets process.exitCode to 1).
  */
 function buildCliArgs(
@@ -276,10 +276,7 @@ function buildCliArgs(
     return parseModelAuditArgs(paths, cliOptions);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      logger.error('Invalid model audit options provided:');
-      for (const err of error.issues) {
-        logger.error(`  - ${err.path.join('.')}: ${err.message}`);
-      }
+      logger.error(`Invalid model audit options provided:\n${z.prettifyError(error)}`);
       process.exitCode = 1;
       return null;
     }
@@ -288,21 +285,22 @@ function buildCliArgs(
 }
 
 /**
- * Run modelaudit in passthrough mode (inherited stdio), setting process.exitCode
- * from the child's exit code. Logs a generic spawn error on failure.
+ * Run modelaudit with inherited stdio and propagate its exit code.
+ *
+ * `treatExitOneAsIssues=true` suppresses the error log for exit code 1, which
+ * modelaudit uses to mean "scan completed, issues found" — callers that expect
+ * findings (like the main scan flow) should set this, while list/help flows
+ * (where a non-zero exit is always unexpected) should leave it false.
  */
 async function runPassthroughModelAudit(
   args: string[],
   env: NodeJS.ProcessEnv,
-  errorOnNonZero: boolean,
+  treatExitOneAsIssues = false,
 ): Promise<void> {
   try {
     const spawnResult = await spawnModelAudit(args, { captureOutput: false, env });
-    if (
-      spawnResult.code !== null &&
-      spawnResult.code !== 0 &&
-      (errorOnNonZero || spawnResult.code !== 1)
-    ) {
+    const isIssuesExit = treatExitOneAsIssues && spawnResult.code === 1;
+    if (spawnResult.code !== null && spawnResult.code !== 0 && !isIssuesExit) {
       logger.error(`Model scan process exited with code ${spawnResult.code}`);
     }
     process.exitCode = spawnResult.code || 0;
@@ -867,7 +865,7 @@ export function modelScanCommand(program: Command): void {
         if (!parsed) {
           return;
         }
-        await runPassthroughModelAudit(parsed.args, delegationEnv, /* errorOnNonZero */ true);
+        await runPassthroughModelAudit(parsed.args, delegationEnv);
         return;
       }
 
@@ -910,7 +908,7 @@ export function modelScanCommand(program: Command): void {
       }
 
       if (!saveToDatabase) {
-        await runPassthroughModelAudit(args, delegationEnv, /* errorOnNonZero */ false);
+        await runPassthroughModelAudit(args, delegationEnv, /* treatExitOneAsIssues */ true);
         return;
       }
 

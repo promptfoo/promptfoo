@@ -18,6 +18,11 @@ import type { ModelAuditScanResults } from '../../types/modelAudit';
 
 export const modelAuditRouter = Router();
 
+const LIST_SCANNERS_ARGS = parseModelAuditArgs([], {
+  listScanners: true,
+  format: 'json',
+}).args;
+
 interface SpawnCaptureOptions {
   /** Abort signal to terminate the child process (e.g. on client disconnect). */
   signal?: AbortSignal;
@@ -41,18 +46,15 @@ function spawnModelAuditCapture(
     let stdout = '';
     let stderr = '';
 
-    // Forward client disconnect to the child process.
     const onAbort = () => {
       if (!child.killed) {
         child.kill('SIGTERM');
       }
     };
-    if (options.signal) {
-      if (options.signal.aborted) {
-        onAbort();
-      } else {
-        options.signal.addEventListener('abort', onAbort, { once: true });
-      }
+    if (options.signal?.aborted) {
+      onAbort();
+    } else {
+      options.signal?.addEventListener('abort', onAbort, { once: true });
     }
     const cleanupAbort = () => options.signal?.removeEventListener('abort', onAbort);
 
@@ -107,13 +109,10 @@ modelAuditRouter.get('/scanners', async (req: Request, res: Response): Promise<v
       return;
     }
 
-    const { args } = parseModelAuditArgs([], { listScanners: true, format: 'json' });
-
-    const { code, stdout, stderr } = await spawnModelAuditCapture(args, {
+    const { code, stdout, stderr } = await spawnModelAuditCapture(LIST_SCANNERS_ARGS, {
       signal: abortController.signal,
     });
 
-    // If the client disconnected mid-request, the child was killed; don't respond.
     if (abortController.signal.aborted) {
       return;
     }
