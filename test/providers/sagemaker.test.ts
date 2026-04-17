@@ -163,6 +163,55 @@ describe('SageMakerCompletionProvider', () => {
       await expect(provider.applyTransformation('hello')).resolves.toBe('hello!');
     });
 
+    it('rethrows errors from a function transform instead of silently running against the untransformed prompt', async () => {
+      // Contract change in PR #8441: a user-supplied TransformFunction that throws
+      // is a programming error and must surface — string/file transforms keep their
+      // legacy best-effort behavior for backward compatibility.
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'custom',
+          transform: (() => {
+            throw new Error('boom in transform');
+          }) as (prompt: unknown) => string,
+        },
+      });
+
+      await expect(provider.applyTransformation('hello')).rejects.toThrow('boom in transform');
+    });
+
+    it('swallows errors from inline string transforms (legacy best-effort behavior)', async () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'custom',
+          transform: `(prompt) => { throw new Error('string boom'); }`,
+        },
+      });
+
+      // String transforms preserve the legacy contract: log and fall back to the
+      // original prompt. This test guards that we didn't over-rotate the rethrow.
+      await expect(provider.applyTransformation('hello')).resolves.toBe('hello');
+    });
+  });
+
+  describe('callApi with function transforms', () => {
+    it('surfaces function-transform failures as a ProviderResponse.error', async () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'custom',
+          transform: (() => {
+            throw new Error('transform boom');
+          }) as (prompt: unknown) => string,
+        },
+      });
+
+      const result = await provider.callApi('hello');
+      expect(result.error).toContain('transform boom');
+      expect(result.output).toBeUndefined();
+    });
+
     it('preserves an explicit maxTokens value of 0', () => {
       vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '1024');
 

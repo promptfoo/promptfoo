@@ -283,6 +283,12 @@ abstract class SageMakerGenericProvider {
           logger.error(`Error executing inline transform: ${transformError}`);
         }
       } else {
+        // `TransformFunction` values come from user code (Node.js package only) —
+        // surface their thrown errors so programming mistakes don't silently run
+        // the provider against the untransformed prompt. `file://` transforms
+        // retain the legacy best-effort behavior to avoid regressing existing
+        // SageMaker configs that tolerated file load / runtime hiccups.
+        const isDirectFunction = typeof transformFn === 'function';
         try {
           const transformed = await transform(
             transformFn,
@@ -297,6 +303,9 @@ abstract class SageMakerGenericProvider {
             return transformedPrompt;
           }
         } catch (transformError) {
+          if (isDirectFunction) {
+            throw transformError;
+          }
           logger.error(`Error using transform utility: ${transformError}`);
         }
       }
@@ -304,9 +313,14 @@ abstract class SageMakerGenericProvider {
       // Fall back to the original prompt if the transform result is not usable
       logger.warn(`Transform did not produce a valid result, using original prompt`);
       return prompt;
-    } catch (_) {
-      logger.error(`Error applying transform to prompt: ${_}`);
-      return prompt; // Return original prompt on error
+    } catch (error) {
+      // Function-transform errors flow through here from the inner rethrow; preserve
+      // them so the caller's try/catch in callApi / callEmbeddingApi builds a row.error.
+      if (typeof this.transform === 'function') {
+        throw error;
+      }
+      logger.error(`Error applying transform to prompt: ${error}`);
+      return prompt; // Return original prompt on error for string/file transforms
     }
   }
 
@@ -662,8 +676,18 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     // Get the delay value - the context delay takes precedence over the provider's delay
     const delayMs = context?.originalProvider?.delay || this.delay;
 
-    // Apply transformation to the prompt if a transform is specified
-    const transformedPrompt = await this.applyTransformation(prompt, context);
+    // Apply transformation to the prompt if a transform is specified.
+    // Function transforms now rethrow — surface as an error row instead of
+    // silently running the endpoint against the untransformed prompt.
+    let transformedPrompt: string;
+    try {
+      transformedPrompt = await this.applyTransformation(prompt, context);
+    } catch (transformError: any) {
+      logger.error(`SageMaker transform error: ${transformError}`);
+      return {
+        error: `SageMaker transform error: ${transformError?.message ?? String(transformError)}`,
+      };
+    }
     const isTransformed = transformedPrompt !== prompt;
 
     if (isTransformed) {
@@ -865,8 +889,17 @@ export class SageMakerEmbeddingProvider
     // Get the delay value - the context delay takes precedence over the provider's delay
     const delayMs = context?.originalProvider?.delay || this.delay;
 
-    // Apply transformation to the text if a transform is specified
-    const transformedText = await this.applyTransformation(text, context);
+    // Apply transformation to the text if a transform is specified.
+    // Function transforms rethrow; surface as an error response.
+    let transformedText: string;
+    try {
+      transformedText = await this.applyTransformation(text, context);
+    } catch (transformError: any) {
+      logger.error(`SageMaker embedding transform error: ${transformError}`);
+      return {
+        error: `SageMaker embedding transform error: ${transformError?.message ?? String(transformError)}`,
+      };
+    }
     const isTransformed = transformedText !== text;
 
     if (isTransformed) {
