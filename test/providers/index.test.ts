@@ -923,18 +923,116 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProviders with ProviderFunction', async () => {
-    const providerFunction: ProviderFunction = async (prompt) => {
+    const providerFunction: ProviderFunction & { transform?: (output: string) => string } = async (
+      prompt,
+    ) => {
       return {
         output: `Output for ${prompt}`,
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
       };
     };
+    providerFunction.transform = (output) => output.toUpperCase();
+
     const providers = await loadApiProviders(providerFunction);
     expect(providers).toHaveLength(1);
     expect(providers[0].id()).toBe('custom-function');
+    expect(providers[0].transform).toBe(providerFunction.transform);
     const response = await providers[0].callApi('Test prompt');
     expect(response.output).toBe('Output for Test prompt');
     expect(response.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+  });
+
+  it('loadApiProviders with bare ProviderFunction leaves metadata properties unset', async () => {
+    const bareProviderFunction: ProviderFunction = async (prompt) => ({
+      output: `Output for ${prompt}`,
+    });
+
+    const providers = await loadApiProviders([bareProviderFunction] as any);
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('custom-function-0');
+    // Metadata fields should be absent on the resulting ApiProvider (not set to undefined)
+    // so downstream merges like `config ?? {}` aren't clobbered.
+    expect('label' in providers[0]).toBe(false);
+    expect('transform' in providers[0]).toBe(false);
+    expect('delay' in providers[0]).toBe(false);
+    expect('inputs' in providers[0]).toBe(false);
+    expect('config' in providers[0]).toBe(false);
+  });
+
+  it('loadApiProviders with ProviderFunction preserves metadata properties', async () => {
+    const providerFunction: ProviderFunction & {
+      label?: string;
+      transform?: (output: string) => string;
+      delay?: number;
+      inputs?: any;
+      config?: any;
+    } = async (prompt) => ({ output: `Output for ${prompt}` });
+    providerFunction.label = 'My Function';
+    providerFunction.transform = (output) => output.toUpperCase();
+    providerFunction.delay = 500;
+    providerFunction.inputs = [{ role: 'user', content: 'hi' }];
+    providerFunction.config = { custom: 'value' };
+
+    const providers = await loadApiProviders([providerFunction] as any);
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('My Function');
+    expect(providers[0].label).toBe('My Function');
+    expect(providers[0].transform).toBe(providerFunction.transform);
+    expect(providers[0].delay).toBe(500);
+    expect(providers[0].inputs).toBe(providerFunction.inputs);
+    expect(providers[0].config).toEqual({ custom: 'value' });
+  });
+
+  it('loadApiProviders and getProviderIds agree on the id of a labeled ProviderFunction in an array', async () => {
+    // Regression guard: the array-branch of loadApiProviders used to hardcode
+    // `custom-function-${idx}` regardless of `.label`, while getProviderIds and
+    // the single-function branch honored the label. They only agreed by accident
+    // (via the label fallback inside `createProviderFromFunction`). Use the
+    // descriptor-derived id so the two call sites can never drift again.
+    const providerFunction: ProviderFunction & { label?: string } = async (prompt) => ({
+      output: `Output for ${prompt}`,
+    });
+    providerFunction.label = 'Labeled Function';
+
+    const providers = await loadApiProviders([providerFunction, providerFunction] as any);
+    const providerIds = getProviderIds([providerFunction, providerFunction] as any);
+
+    expect(providers.map((p) => p.id())).toEqual(providerIds);
+    expect(providerIds).toEqual(['Labeled Function', 'Labeled Function']);
+  });
+
+  it('loadApiProviders with ApiProvider object preserves the provider instance', async () => {
+    const apiProvider = {
+      id: () => 'custom-api-provider',
+      callApi: async (prompt: string) => ({ output: `Output for ${prompt}` }),
+      transform: (output: string | object) => String(output).toUpperCase(),
+    };
+
+    const providers = await loadApiProviders([apiProvider] as any);
+    expect(providers).toHaveLength(1);
+    expect(providers[0]).toBe(apiProvider);
+    expect(providers[0].id()).toBe('custom-api-provider');
+    expect(providers[0].transform).toBe(apiProvider.transform);
+    await expect(providers[0].callApi('Test prompt')).resolves.toEqual({
+      output: 'Output for Test prompt',
+    });
+  });
+
+  it('loadApiProviders with top-level ApiProvider object preserves the provider instance', async () => {
+    const apiProvider = {
+      id: () => 'custom-api-provider',
+      callApi: async (prompt: string) => ({ output: `Output for ${prompt}` }),
+    };
+
+    const providers = await loadApiProviders(apiProvider);
+    expect(providers).toHaveLength(1);
+    expect(providers[0]).toBe(apiProvider);
+  });
+
+  it('loadApiProviders rejects id-only objects instead of treating them as ApiProvider instances', async () => {
+    await expect(loadApiProviders([{ id: () => 'missing-call-api' }] as any)).rejects.toThrow(
+      'Invalid provider at index 0',
+    );
   });
 
   it('loadApiProviders with CustomApiProvider', async () => {
@@ -1783,6 +1881,16 @@ describe('getProviderIds', () => {
     ]);
   });
 
+  it('calls id() for ApiProvider objects', () => {
+    const apiProvider = {
+      id: () => 'custom-api-provider',
+      callApi: async () => ({ output: 'test' }),
+    };
+
+    const providerIds = getProviderIds([apiProvider] as any);
+    expect(providerIds).toEqual(['custom-api-provider']);
+  });
+
   it('extracts id from ProviderOptionsMap objects', () => {
     const providerIds = getProviderIds([
       { 'openai:gpt-4o-mini': { config: { temperature: 0.5 } } },
@@ -1912,6 +2020,8 @@ describe('resolveProvider', () => {
       return { output: `Response for: ${prompt}` };
     });
     mockFunctionProvider.label = 'My Custom Provider';
+    mockFunctionProvider.transform = (output: string) => output.toUpperCase();
+    mockFunctionProvider.delay = 250;
 
     const result = await resolveProvider(mockFunctionProvider, mockProviderMap);
 
@@ -1919,6 +2029,8 @@ describe('resolveProvider', () => {
     expect(typeof result.id).toBe('function');
     expect(result.id()).toBe('My Custom Provider');
     expect(result.callApi).toBe(mockFunctionProvider);
+    expect(result.transform).toBe(mockFunctionProvider.transform);
+    expect(result.delay).toBe(250);
   });
 
   it('should handle function provider without label', async () => {

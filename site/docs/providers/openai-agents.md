@@ -21,7 +21,7 @@ Test multi-turn agentic workflows built with the [@openai/agents](https://github
 :::note
 This page covers the JavaScript `@openai/agents` SDK and the built-in `openai:agents:*` provider.
 
-If you are using the Python `openai-agents` SDK, use the [OpenAI Agents Python SDK guide](/docs/guides/evaluate-openai-agents-python) and the [`openai-agents` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents) instead.
+If you are using the Python `openai-agents` SDK, including SDK 0.14 `SandboxAgent` workflows or the experimental Python `codex_tool`, use the [OpenAI Agents Python SDK guide](/docs/guides/evaluate-openai-agents-python) and the [`openai-agents` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents) instead.
 :::
 
 ## Prerequisites
@@ -350,7 +350,7 @@ Tools must be async functions. Synchronous tools will cause runtime errors.
 ## Related Documentation
 
 - [OpenAI Provider](/docs/providers/openai) - Standard OpenAI completions and chat
-- [OpenAI Agents Python SDK Guide](/docs/guides/evaluate-openai-agents-python) - Python SDK example with Promptfoo tracing
+- [OpenAI Agents Python SDK Guide](/docs/guides/evaluate-openai-agents-python) - Python SDK example with Promptfoo tracing, Sandbox Agents, and Codex tool span mapping
 - [Red Team Guide](/docs/red-team/quickstart) - Test agent safety
 - [Assertions](/docs/configuration/expected-outputs) - Validate agent responses
 - [OpenAI Agents SDK](https://github.com/openai/openai-agents-js) - Official SDK documentation

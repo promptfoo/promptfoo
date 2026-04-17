@@ -12,11 +12,17 @@ Some features intentionally execute user-provided code (custom assertions, custo
 
 **Important:** Treat Promptfoo configuration files and everything they reference or evaluate against as **trusted code and data**. This includes referenced scripts, prompt packs, test fixtures or datasets, configured providers, models, remote content, and model-output feedback loops. Run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, model-output feedback loops, or pull requests only when the run is isolated and secrets are scoped for that run.
 
-### Local Web Server
+### Local Developer Interfaces
 
-The local web server (`promptfoo view`) is a **single-user development tool** intended for use on your local machine. The web API executes evaluations with the same privileges as the CLI — inputs to the API (including provider configurations, transforms, and assertions) are treated as **trusted code**, equivalent to a local config file. The server is not designed to be exposed to untrusted networks or users.
+Promptfoo includes local developer interfaces such as the web UI (`promptfoo view`) and MCP server (`promptfoo mcp`). These interfaces are **single-user development tools** intended for use by trusted users and trusted local clients on your machine. They execute with the same user permissions as the CLI and can read configs, run evals, write outputs, and invoke configured providers.
 
-The server includes **CSRF/origin checks** that use browser-provided `Sec-Fetch-Site` and `Origin` headers to reduce accidental cross-origin requests from modern browsers. These checks are **best-effort hardening** for a local development tool, not a supported security boundary. Non-browser clients and requests without browser headers are allowed through to avoid breaking `curl`, scripts, and SDKs. Known localhost aliases (`localhost`, `127.0.0.1`, `[::1]`, `local.promptfoo.app`) are treated as equivalent origins.
+Direct access to these local interfaces by a trusted local user, trusted local browser, trusted MCP client, `curl`, scripts, or SDKs is not a security boundary. Inputs to these interfaces (including provider configurations, transforms, assertions, and MCP tool arguments) are treated as **trusted code and data**, equivalent to a local config file or CLI invocation.
+
+These interfaces are not designed to be exposed to untrusted networks or users. If you intentionally expose them remotely, use network restrictions, authentication, or a reverse proxy appropriate for your environment.
+
+The local web server includes **CSRF/origin checks** that use browser-provided `Sec-Fetch-Site` and `Origin` headers to reduce accidental cross-origin requests from modern browsers. These checks are **best-effort hardening** for a local development tool, not a supported security boundary. Non-browser clients and requests without browser headers are allowed through to avoid breaking `curl`, scripts, and SDKs. Known localhost aliases (`localhost`, `127.0.0.1`, `[::1]`, `local.promptfoo.app`) are treated as equivalent origins.
+
+The MCP server should bind to loopback by default for HTTP transports. MCP clients are expected to be trusted clients selected by the user. A vulnerability exists when the default MCP configuration exposes privileged tools beyond loopback without an explicit user choice, when a documented MCP hardening control is bypassed, or when an MCP tool sends data to a destination that was not configured for that data.
 
 ### Trust Boundaries
 
@@ -45,7 +51,26 @@ Treat adversarial providers, models, prompt packs, fixtures, datasets, remote co
 
 **Configured destinations:**
 
-A destination is configured only for the data and credentials the user directly selected or configured it to receive as part of the eval path. Selecting a provider, grader, report, or other eval component for a run counts as configuring that destination for the data and credentials needed by that component in that eval path. For example, an HTTP provider URL is configured to receive that provider's rendered request, and a grading provider is configured to receive prompts and runtime data needed by the selected model-graded assertion. A Promptfoo-hosted service endpoint, telemetry path, browser-loaded resource, or unrelated provider is a separate destination unless the user separately chose or configured it for that same eval path and data or credential.
+A destination is configured only for the data and credentials the user directly selected or configured it to receive as part of the eval path. Selecting a provider, grader, report, hosted feature, or other eval component for a run counts as configuring that destination for the data and credentials needed by that component in that eval path.
+
+For example, an HTTP provider URL is configured to receive that provider's rendered request, and a grading provider is configured to receive prompts and runtime data needed by the selected model-graded assertion. A Promptfoo-hosted service endpoint, telemetry path, browser-loaded resource, or unrelated provider is a separate destination unless the user separately chose or configured it for that same eval path and data or credential.
+
+Promptfoo-hosted features are configured only for the documented payload of the specific feature the user invokes or enables. Examples include remote test generation, remote grading, HTTP provider generation, sharing, Cloud sync, telemetry, account/license checks, and consent tracking. Invoking one hosted feature does not configure unrelated hosted destinations for the same data. For example, logging into Promptfoo Cloud configures account and license endpoints; it does not by itself configure telemetry, session replay, sharing, or Cloud media upload to receive eval content.
+
+Remote generation and remote grading have different data requirements. Hosted test generation may receive the application purpose, plugin/strategy configuration, generated attack context, user email for usage tracking, and any additional data documented for the selected hosted strategy. Hosted multi-turn or agentic attack generation may receive conversation history or target responses when that data is required by the selected strategy and the user has not enabled a privacy control that excludes target outputs. Hosted grading may receive the prompt sent to the target, the target response, grading criteria, and related assertion context. Feature documentation should describe the data sent for each hosted path.
+
+**Supported hardening controls and opt-outs:**
+
+Documented opt-out and disable controls are supported hardening controls. When a user sets a documented disable value such as `1`, `true`, or `yes`, Promptfoo should fail closed for the disabled behavior.
+
+- `PROMPTFOO_DISABLE_TELEMETRY` disables product analytics, telemetry events, and session replay. Account, license, consent, update checks, sharing, and hosted inference are separate features and must be documented separately.
+- `PROMPTFOO_DISABLE_REMOTE_GENERATION` disables Promptfoo-hosted generation/inference fallbacks, including red-team hosted generation, unless the user explicitly configures a different destination and the relevant documentation states how the controls interact.
+- `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` disables Promptfoo-hosted red-team generation paths while leaving non-red-team hosted generation controls unchanged.
+- Sharing and Cloud-upload controls govern eval result, trace, and media uploads. Cloud login alone should not be treated as consent to upload eval content unless the relevant Cloud feature clearly documents that behavior and provides an opt-out.
+
+**Local artifacts and logs:**
+
+Promptfoo stores local artifacts such as logs, cache entries, databases, trace data, media blobs, config snapshots, reports, and exported files under the user's local account. These local artifacts are not external destinations by themselves. Sensitive data in local artifacts can still be a product hardening or privacy bug, especially when it bypasses documented redaction/sanitization guidance, contains credentials unnecessarily, or is later uploaded, shared, exported, or exposed to other users.
 
 ## Hardening Recommendations
 
@@ -56,8 +81,8 @@ If you run Promptfoo in higher-risk contexts (CI, shared machines, third-party c
 - Avoid placing secrets in prompts, fixtures, or config files
 - Restrict network egress when running third-party code or adversarial eval content
 - In CI: do not run Promptfoo with secrets on untrusted PRs (e.g., from forks)
-- Do not expose the local web server to untrusted networks or the public internet
-- Use a reverse proxy with authentication if you need remote access to the web UI
+- Do not expose local developer interfaces to untrusted networks or the public internet
+- Use a reverse proxy with authentication if you need remote access to the web UI or MCP server
 - If you need cross-domain access to the local server, set `PROMPTFOO_CSRF_ALLOWED_ORIGINS` to a comma-separated list of trusted origins
 
 ## Supported Versions
@@ -131,7 +156,9 @@ Severity is assessed using [CVSS v4.0](https://www.first.org/cvss/v4.0/specifica
 
 - Code execution that bypasses a supported isolation boundary or hardening control: typically **Critical**
 - Secret or credential leakage to destinations not configured to participate in the selected eval path: typically **High**
+- Bypasses of documented privacy, telemetry, sharing, or remote-generation opt-outs that send data externally: typically **Medium–High**, depending on the data sent
 - Algorithmic DoS in CI pipelines causing significant resource exhaustion: typically **Medium–High**
+- Sensitive data written only to local logs, cache, traces, reports, or databases: typically **Low–Medium**, and higher if the artifact is uploaded, shared, exported, or exposed to another user or tenant
 - Web UI XSS requiring deliberate user interaction (for example, self-XSS): typically **Low** or no CVE (see Scope)
 
 ## Embargo and Non-Disclosure
@@ -152,11 +179,13 @@ We request CVEs through GitHub Security Advisories when appropriate. Final advis
 - Code execution that bypasses a supported hardening control or isolation boundary outside the documented local eval pipeline
 - Bypasses of Cloud/on-prem isolation boundaries
 - Secret or credential leakage to destinations not configured to participate in the selected eval path
+- Bypasses of documented opt-out controls that send secrets, credentials, or sensitive eval data to an external destination
 - Supply chain compromise affecting Promptfoo-published packages, dependencies, or build artifacts
 
 **CVE-eligible (case-by-case):**
 
 - Algorithmic DoS in CI pipelines with significant resource impact
+- Sensitive data exposure through local artifacts when those artifacts are uploaded, shared, exported, or exposed across users or tenants
 - Web UI XSS with demonstrable impact beyond self-XSS
 
 **We generally do not request a CVE for:**
@@ -164,6 +193,7 @@ We request CVEs through GitHub Security Advisories when appropriate. Final advis
 - Issues in explicitly configured custom code or templates in code-executing fields (e.g., JS/Python assertions, custom providers, transforms, hooks, plugins)
 - Adversarial eval content flowing through the configured template engine and eval pipeline (e.g., model output interpolated into grading prompts, `_conversation` history rendered or passed through built-in assertions/graders, variable values rendered through the standard Nunjucks pipeline, or data passed to configured providers)
 - Local API access issues within the documented trust model
+- Sensitive data present only in local logs, cache, databases, traces, reports, screenshots, or exported files generated by the user's own run, unless another supported boundary is crossed
 - Self-XSS requiring the user to paste payloads into their own console or UI
 - Quality, UX, or non-security functional bugs
 
@@ -199,6 +229,9 @@ When a fix is released, we will:
 - Data, secret, or credential leakage to destinations not configured to participate in the selected eval path
 - Path traversal or arbitrary file read/write that escapes the configured eval flow, documented file access behavior, or supported path restrictions
 - Vulnerabilities in CLI, config parsing, or web UI affecting confidentiality, integrity, or availability beyond the intended trust model described above
+- Default exposure of privileged local developer interfaces to untrusted networks, or bypasses of documented local-interface hardening controls
+- Bypasses of documented telemetry, remote-generation, sharing, Cloud-upload, or privacy opt-outs
+- Sensitive local artifacts that are uploaded, shared, exported, served to other users, or exposed across Cloud/on-prem tenant boundaries without the user's explicit action
 - Algorithmic complexity DoS (crafted input causing hang/crash with modest input size)
 
 **Out of scope:**
@@ -207,8 +240,10 @@ When a fix is released, we will:
 - Adversarial eval content flowing through the configured template engine, built-in assertions, graders, providers, transforms, reports, or model-output feedback loops. This includes model outputs, `_conversation` history, grader outputs, fixture values, and stored runtime values rendered or passed through Nunjucks or other configured eval pipeline steps
 - Code execution caused by interpolating runtime data into a code-executing field the user configured, such as `value: 'output === "{{expected}}"'` in a JavaScript assertion — use `context.vars.expected` or safe serialization when the value should remain data
 - Code execution via **direct local web API access** or **browser access to the OSS local server** (e.g., `curl`, scripts, SDKs, the bundled UI, or malicious webpages reaching `promptfoo view`) — the local server has the same trust level as the CLI and its CSRF/origin checks are best-effort hardening, not a supported security boundary
+- Direct access to the MCP server by a trusted local MCP client selected by the user, including tool behavior that is equivalent to running the CLI locally
 - Issues requiring the user to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges, including cases where adversarial model output is rendered or processed by built-in assertions or graders during that local run
 - Network requests to URLs, providers, graders, or Promptfoo services that were configured to receive the relevant eval data or credentials
+- Sensitive data present only in local logs, cache entries, databases, trace files, media blobs, screenshots, reports, or exports created by the user's own run, unless a separate supported boundary is crossed
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Third-party dependency issues that don't materially affect Promptfoo's security posture (report upstream)
 - Social engineering, phishing, or physical attacks
@@ -221,6 +256,8 @@ When a fix is released, we will:
 - "A third-party model returns template syntax that is rendered or processed by a built-in assertion or grader and appears in a grading prompt" → Expected behavior; the configured eval pipeline processes runtime data as part of normal operation. Run adversarial models with isolation and scoped credentials
 - "An HTTP provider fetches a URL produced from a prompt or test variable" → Expected behavior; provider requests are part of the configured eval flow
 - "The local web API executes provider transforms as code" → Expected behavior; the web API has the same trust model as the CLI
+- "A trusted local MCP client asks Promptfoo to run an eval or inspect a config" → Expected behavior; MCP tools have the same trust model as local CLI invocations unless a documented MCP hardening control is bypassed
+- "A prompt, response, or config value appears in a local log or report generated by my run" → Usually a hardening or privacy bug rather than a security-boundary bypass, unless the artifact is uploaded, shared, exported, or exposed to another user
 - "A malicious website can reach the local server if I replay browser headers with `curl`" → Not a valid browser repro, and local-server browser-origin claims are out of scope
 
 If unsure whether something is in scope, report it anyway.

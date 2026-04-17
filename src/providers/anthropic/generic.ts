@@ -32,6 +32,8 @@ interface AnthropicBaseOptions {
   apiKeyRequired?: boolean;
   headers?: Record<string, string>;
   cost?: number;
+  inputCost?: number;
+  outputCost?: number;
 }
 
 /**

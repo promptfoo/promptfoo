@@ -2,6 +2,7 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { sha256 } from '../../util/createHash';
 import { AwsBedrockGenericProvider } from './base';
 import { createBedrockRequestHandler, hasProxyEnv } from './util';
 import type {
@@ -399,6 +400,8 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
         ? `session-${crypto.randomUUID()}`
         : `session-${Date.now()}-${process.hrtime.bigint().toString(36)}`);
 
+    const inferenceConfig = this.buildInferenceConfig();
+
     // Build the complete input with all supported features
     const input: InvokeAgentCommandInput = {
       // Required fields
@@ -416,9 +419,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       // Advanced configurations - using type assertions for preview features
       // The AWS SDK types may not be fully up to date with all Bedrock Agents features
       // These configurations are validated by AWS at runtime
-      ...(this.buildInferenceConfig() && {
-        inferenceConfig: this.buildInferenceConfig(),
-      }),
+      ...(inferenceConfig && { inferenceConfig }),
       ...(this.config.guardrailConfiguration && {
         guardrailConfiguration: this.config.guardrailConfiguration,
       }),
@@ -440,11 +441,22 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
 
     // Cache key based on agent ID and prompt (excluding volatile fields)
     const cache = await getCache();
-    const cacheKey = `bedrock-agent:${this.config.agentId}:${JSON.stringify({
-      prompt,
-      inferenceConfig: this.buildInferenceConfig(),
-      knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations,
-    })}`;
+    const cacheKey = `bedrock-agent:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${sha256(
+      JSON.stringify({
+        prompt,
+        actionGroups: this.config.actionGroups,
+        enableTrace: this.config.enableTrace,
+        endSession: this.config.endSession,
+        guardrailConfiguration: this.config.guardrailConfiguration,
+        inferenceConfig,
+        inputDataConfig: this.config.inputDataConfig,
+        knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations,
+        memoryId: this.config.memoryId,
+        promptOverrideConfiguration: this.config.promptOverrideConfiguration,
+        sessionId: this.config.sessionId,
+        sessionState: this.config.sessionState,
+      }),
+    )}`;
 
     // Check cache
     if (isCacheEnabled()) {

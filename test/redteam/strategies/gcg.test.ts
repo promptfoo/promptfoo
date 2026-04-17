@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { getUserEmail, isLoggedIntoCloud } from '../../../src/globalConfig/accounts';
 import logger from '../../../src/logger';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import {
+  getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../../../src/redteam/remoteGeneration';
 import { addGcgTestCases, CONCURRENCY } from '../../../src/redteam/strategies/gcg';
 
 import type { TestCase } from '../../../src/types/index';
@@ -27,6 +31,9 @@ describe('gcg strategy', () => {
   const mockIsLoggedIntoCloud = vi.mocked(isLoggedIntoCloud);
   const mockNeverGenerateRemote = vi.mocked(neverGenerateRemote);
   const mockGetRemoteGenerationUrl = vi.mocked(getRemoteGenerationUrl);
+  const mockGetRemoteGenerationExplicitlyDisabledError = vi.mocked(
+    getRemoteGenerationExplicitlyDisabledError,
+  );
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -34,6 +41,10 @@ describe('gcg strategy', () => {
     mockIsLoggedIntoCloud.mockReturnValue(true);
     mockNeverGenerateRemote.mockReturnValue(false);
     mockGetRemoteGenerationUrl.mockReturnValue('http://test-url');
+    mockGetRemoteGenerationExplicitlyDisabledError.mockImplementation(
+      (strategyName) =>
+        `${strategyName} requires remote generation, which has been explicitly disabled.`,
+    );
   });
 
   const testCases: TestCase[] = [
@@ -97,7 +108,7 @@ describe('gcg strategy', () => {
     mockNeverGenerateRemote.mockReturnValue(true);
 
     await expect(addGcgTestCases(testCases, 'prompt', {})).rejects.toThrow(
-      'GCG strategy requires remote generation to be enabled',
+      'GCG strategy requires remote generation, which has been explicitly disabled.',
     );
   });
 

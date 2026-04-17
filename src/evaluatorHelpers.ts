@@ -51,7 +51,11 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   }
 }
 
-export function resolveVariables(variables: Record<string, VarValue>): Record<string, VarValue> {
+export function resolveVariables(
+  variables: Record<string, VarValue>,
+  skipResolveVars?: string[],
+  varsResolvedFromSkipped?: Set<string>,
+): Record<string, VarValue> {
   let resolved: boolean;
   const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
 
@@ -59,7 +63,11 @@ export function resolveVariables(variables: Record<string, VarValue>): Record<st
   do {
     resolved = true;
     for (const key of Object.keys(variables)) {
-      if (typeof variables[key] !== 'string') {
+      if (
+        skipResolveVars?.includes(key) ||
+        varsResolvedFromSkipped?.has(key) ||
+        typeof variables[key] !== 'string'
+      ) {
         continue;
       }
       const value = variables[key] as string;
@@ -71,6 +79,9 @@ export function resolveVariables(variables: Record<string, VarValue>): Record<st
           // logger.warn(`Variable "${varName}" not found for substitution.`);
         } else {
           variables[key] = value.replace(placeholder, variables[varName] as string);
+          if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
+            varsResolvedFromSkipped?.add(key);
+          }
           resolved = false; // Indicate that we've made a replacement and should check again
         }
       }
@@ -221,10 +232,10 @@ function detectMimeFromBase64(base64Data: string): string | null {
  * @param vars - Variables to substitute into the template
  * @param nunjucksFilters - Optional custom Nunjucks filters
  * @param provider - Optional API provider for context
- * @param skipRenderVars - Optional array of variable names to skip template rendering for.
- *                         This is critical for red team testing where injection variables
- *                         contain attack payloads (e.g., SSTI, XSS) that should NOT be
- *                         evaluated by Promptfoo's template engine before reaching the target.
+ * @param skipRenderVars - Optional array of variable names to skip special loading and template
+ *                         rendering for. This is critical for red team testing where injection
+ *                         variables contain attack payloads (e.g., SSTI, XSS) that should NOT be
+ *                         evaluated by Promptfoo before reaching the target.
  * @returns The rendered prompt string
  */
 export async function renderPrompt(
@@ -240,6 +251,10 @@ export async function renderPrompt(
 
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
+    if (skipRenderVars?.includes(varName)) {
+      continue;
+    }
+
     if (typeof value === 'string' && value.startsWith('file://')) {
       const basePath = cliState.basePath || '';
       const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
@@ -398,12 +413,13 @@ export async function renderPrompt(
 
   // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
   for (const key of Object.keys(vars)) {
-    if (typeof vars[key] === 'string') {
+    if (typeof vars[key] === 'string' && !skipRenderVars?.includes(key)) {
       vars[key] = (vars[key] as string).replace(/\n$/, '');
     }
   }
   // Resolve variable mappings
-  resolveVariables(vars);
+  const varsResolvedFromSkipped = new Set<string>();
+  resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
@@ -494,7 +510,11 @@ export async function renderPrompt(
     // Vars values can be template strings, so we need to render them first:
     const renderedVars = Object.fromEntries(
       Object.entries(vars).map(([key, value]) => {
-        if (typeof value !== 'string' || skipRenderVars?.includes(key)) {
+        if (
+          typeof value !== 'string' ||
+          skipRenderVars?.includes(key) ||
+          varsResolvedFromSkipped.has(key)
+        ) {
           return [key, value];
         }
 
