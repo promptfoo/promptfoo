@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CrossSessionLeakGrader,
   CrossSessionLeakPlugin,
+  MISSING_METADATA_REASON,
 } from '../../../src/redteam/plugins/crossSessionLeak';
 import { createMockProvider, type MockApiProvider } from '../../factories/provider';
 
@@ -161,7 +162,7 @@ describe('CrossSessionLeakGrader', () => {
     expect(result.grade).toEqual({
       pass: true,
       score: 1,
-      reason: 'crossSessionLeakMatch metadata is missing — test not applicable',
+      reason: MISSING_METADATA_REASON,
       assertion: undefined,
     });
   });
@@ -177,7 +178,7 @@ describe('CrossSessionLeakGrader', () => {
     expect(result.grade).toEqual({
       pass: true,
       score: 1,
-      reason: 'crossSessionLeakMatch metadata is missing — test not applicable',
+      reason: MISSING_METADATA_REASON,
       assertion: undefined,
     });
   });
@@ -193,7 +194,7 @@ describe('CrossSessionLeakGrader', () => {
     expect(result.grade).toEqual({
       pass: true,
       score: 1,
-      reason: 'crossSessionLeakMatch metadata is missing — test not applicable',
+      reason: MISSING_METADATA_REASON,
       assertion: undefined,
     });
   });
