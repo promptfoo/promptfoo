@@ -17,6 +17,7 @@ import {
   isRateLimited,
   isTransientError,
 } from '../src/util/fetch/index';
+import { withFetchRetryContext } from '../src/util/fetch/retryContext';
 import { sleep } from '../src/util/time';
 import { clearProxyEnv, createMockResponse, mockProcessEnv, PROXY_ENV_KEYS } from './util/utils';
 
@@ -1092,6 +1093,28 @@ describe('fetchWithRetries', () => {
     expect(sleep).not.toHaveBeenCalled();
   });
 
+  it('should honor retry context maxRetries when explicit argument is omitted', async () => {
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+
+    await expect(
+      withFetchRetryContext(0, () => fetchWithRetries('https://example.com', {}, 1000)),
+    ).rejects.toThrow('Request failed after 0 retries: Error: Network error');
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('should prefer explicit maxRetries over retry context', async () => {
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+
+    await expect(
+      withFetchRetryContext(0, () => fetchWithRetries('https://example.com', {}, 1000, 2)),
+    ).rejects.toThrow('Request failed after 2 retries: Error: Network error');
+
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(2);
+  });
+
   it('should make retries+1 total attempts', async () => {
     vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
@@ -1244,6 +1267,67 @@ describe('fetchWithRetries', () => {
     await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
       'Rate limited: 429 Too Many Requests',
     );
+  });
+
+  it('should fail fast on rate limit when maxRetries is 0 without honoring Retry-After', async () => {
+    const rateLimitResponse = createMockResponse({
+      status: 429,
+      statusText: 'Too Many Requests',
+      headers: new Headers({ 'Retry-After': '60' }),
+    });
+    vi.mocked(global.fetch).mockResolvedValue(rateLimitResponse);
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 0)).rejects.toThrow(
+      'Request failed after 0 retries: Rate limited: 429 Too Many Requests',
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    // Crucially, we must NOT sleep on the 60s Retry-After when no retries remain.
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('should still retry on 429 and return success when a later attempt succeeds', async () => {
+    const rateLimitResponse = createMockResponse({
+      status: 429,
+      statusText: 'Too Many Requests',
+      headers: new Headers({ 'Retry-After': '0' }),
+    });
+    const successResponse = createMockResponse({ ok: true });
+
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(rateLimitResponse)
+      .mockResolvedValueOnce(successResponse);
+    global.fetch = mockFetch;
+
+    const result = await fetchWithRetries('https://example.com', {}, 1000, 2);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(result).toBe(successResponse);
+    // handleRateLimit invokes sleep exactly once for the single retry before success.
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('should use the default maxRetries (4) when no context and no explicit arg', async () => {
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000)).rejects.toThrow(
+      'Request failed after 4 retries: Error: Network error',
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(5);
+  });
+
+  it('should let an inner retry context shadow an outer context', async () => {
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+
+    await expect(
+      withFetchRetryContext(0, () =>
+        withFetchRetryContext(2, () => fetchWithRetries('https://example.com', {}, 1000)),
+      ),
+    ).rejects.toThrow('Request failed after 2 retries: Error: Network error');
+
+    expect(global.fetch).toHaveBeenCalledTimes(3);
   });
 
   describe('Abort Signal Handling', () => {
@@ -1740,6 +1824,46 @@ describe('fetchWithProxy transient error retries', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result).toBe(transientResponse);
     expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('should disable transient retries when retry context maxRetries is 0', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+
+    const mockFetch = vi.fn().mockResolvedValueOnce(transientResponse);
+    global.fetch = mockFetch;
+
+    const result = await withFetchRetryContext(0, () => fetchWithProxy('https://example.com'));
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result).toBe(transientResponse);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('should let explicit disableTransientRetries=false override retry context maxRetries=0', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    const successResponse = createMockResponse({ ok: true });
+
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(successResponse);
+    global.fetch = mockFetch;
+
+    const result = await withFetchRetryContext(0, () =>
+      fetchWithProxy('https://example.com', {
+        disableTransientRetries: false,
+      }),
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(result).toBe(successResponse);
+    expect(sleep).toHaveBeenCalledTimes(1);
   });
 
   it('should retry on 524 A Timeout Occurred (Cloudflare)', async () => {

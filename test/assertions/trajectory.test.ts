@@ -162,6 +162,152 @@ describe('trajectory utilities', () => {
     ]);
   });
 
+  it('normalizes OpenAI Agents sandbox exec_command tool spans as commands', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'sandbox-command',
+          name: 'tool exec_command',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'exec_command',
+            'tool.arguments': '{"cmd":"cat repo/tickets/TICKET-014.md","workdir":"/tmp/ws"}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('command');
+    expect(steps[0].name).toBe('cat repo/tickets/TICKET-014.md');
+    expect(steps[0].args).toEqual({
+      cmd: 'cat repo/tickets/TICKET-014.md',
+      workdir: '/tmp/ws',
+    });
+    expect(steps[0].aliases).toEqual(
+      expect.arrayContaining(['tool exec_command', 'exec_command', 'cat']),
+    );
+  });
+
+  it('normalizes local_shell tool spans as commands using the command arg', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'local-shell-span',
+          name: 'tool local_shell',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'local_shell',
+            'tool.arguments': '{"command":"ls -la /tmp","timeout":30}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('command');
+    expect(steps[0].name).toBe('ls -la /tmp');
+    expect(steps[0].aliases).toEqual(
+      expect.arrayContaining(['tool local_shell', 'local_shell', 'ls']),
+    );
+  });
+
+  it('normalizes shell tool spans as commands', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'shell-span',
+          name: 'tool shell',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'shell',
+            'tool.arguments': '{"cmd":"echo hello"}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('command');
+    expect(steps[0].name).toBe('echo hello');
+    expect(steps[0].aliases).toEqual(expect.arrayContaining(['shell', 'echo']));
+  });
+
+  it('normalizes array-format command arguments from exec_command', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'array-cmd',
+          name: 'tool exec_command',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'exec_command',
+            'tool.arguments': '{"cmd":["python","-m","pytest"],"workdir":"/ws"}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('command');
+    expect(steps[0].name).toBe('python -m pytest');
+    expect(steps[0].aliases).toEqual(
+      expect.arrayContaining(['exec_command', 'python -m pytest', 'python']),
+    );
+  });
+
+  it('falls back to tool type when exec_command has no cmd or command arg', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'no-cmd',
+          name: 'tool exec_command',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'exec_command',
+            'tool.arguments': '{"workdir":"/tmp"}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('tool');
+    expect(steps[0].name).toBe('exec_command');
+  });
+
+  it('matches command tool names case-insensitively with whitespace trimming', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'cased-shell',
+          name: 'tool Shell',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': ' Shell ',
+            'tool.arguments': '{"cmd":"pwd"}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('command');
+    expect(steps[0].name).toBe('pwd');
+  });
+
   it('preserves original span order when timestamps are tied', () => {
     const steps = extractTrajectorySteps({
       ...mockTraceData,

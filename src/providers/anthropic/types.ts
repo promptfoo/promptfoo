@@ -88,6 +88,8 @@ export interface AnthropicMessageOptions {
   apiKeyRequired?: boolean;
   cache_control?: Anthropic.Messages.CacheControlEphemeral | null; // Top-level cache control - auto-applies to last cacheable block
   cost?: number;
+  inputCost?: number;
+  outputCost?: number;
   effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'; // Controls output quality/speed tradeoff
   extra_body?: Record<string, any>;
   headers?: Record<string, string>;
