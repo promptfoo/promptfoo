@@ -671,7 +671,8 @@ function getCombinedContextText(output: EvaluateTableOutput): string {
   return output.gradingResult.componentResults
     .map((result, index) => {
       const displayName = result.assertion?.metric || result.assertion?.type || 'unknown';
-      const value = result.assertion?.value || '';
+      const rawValue = result.metadata?.renderedAssertionValue ?? result.assertion?.value ?? '';
+      const value = typeof rawValue === 'object' ? JSON.stringify(rawValue, null, 2) : rawValue;
       return `Assertion ${index + 1} (${displayName}): ${value}`;
     })
     .join('\n\n');

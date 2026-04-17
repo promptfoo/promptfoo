@@ -13,12 +13,18 @@ import type { Assertion, GradingResult } from '@promptfoo/types';
 
 const COPY_FEEDBACK_DURATION_MS = 2000;
 const ASSERTION_VALUE_PREVIEW_LENGTH = 300;
+const ASSERTION_TEMPLATE_PREVIEW_LENGTH = 160;
 const ASSERTION_ROW_INDENT_PX = 24;
 
 interface AssertionResultRow {
   depth: number;
   result: GradingResult;
   rowId: string;
+}
+
+interface AssertionDisplayValue {
+  value: string;
+  templateValue?: string;
 }
 
 interface AssertionSetMetadata {
@@ -83,6 +89,10 @@ function getAssertionType(result: GradingResult): string {
     getAssertionSet(result)?.type ||
     (getChildResults(result).length > 0 ? 'assert-set' : '-')
   );
+}
+
+function stringifyAssertionValue(value: unknown): string {
+  return typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
 }
 
 function isMatchingAssertion(
@@ -170,15 +180,6 @@ function buildAssertionRows(
   return rows;
 }
 
-interface AssertionDisplayValue {
-  value: string;
-  templateValue?: string;
-}
-
-function stringifyAssertionValue(value: unknown): string {
-  return typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
-}
-
 function getDisplayValue(result: GradingResult): AssertionDisplayValue {
   // For context-related assertions, read the context value from metadata, if it exists
   // These assertions require special handling and should always use metadata.context
@@ -204,12 +205,11 @@ function getDisplayValue(result: GradingResult): AssertionDisplayValue {
       result.assertion?.value === undefined
         ? undefined
         : stringifyAssertionValue(result.assertion.value);
-    const templateValue =
-      rawAssertionValue && rawAssertionValue !== renderedValue ? rawAssertionValue : undefined;
 
     return {
       value: renderedValue,
-      templateValue,
+      templateValue:
+        rawAssertionValue && rawAssertionValue !== renderedValue ? rawAssertionValue : undefined,
     };
   }
 
