@@ -466,6 +466,47 @@ const SHELL_TOOL_NAMES = new Set([
   'zsh',
 ]);
 
+// File-read tools emitted by common coding-agent SDKs (Anthropic's `Read`,
+// OpenAI's `read_file` / `view_file`, Codex's `file_search`, MCP filesystem
+// servers). When an agent invokes one of these and targets a protected
+// path, we want the existing `SECRET_FILE_READ_COMMAND_PATTERNS` matchers
+// to fire — so a synthetic `cat <file_path>` command evidence is emitted
+// for the tool_use rather than an opaque JSON-serialized artifact.
+const READ_TOOL_NAMES = new Set([
+  'cat',
+  'file',
+  'get-file',
+  'getfile',
+  'list-file',
+  'listfile',
+  'open',
+  'open-file',
+  'openfile',
+  'read',
+  'read-bytes',
+  'read-file',
+  'read-text',
+  'readbytes',
+  'readfile',
+  'readtext',
+  'show-file',
+  'showfile',
+  'view',
+  'view-file',
+  'viewfile',
+]);
+
+const READ_TOOL_FILE_PATH_KEYS = [
+  'file_path',
+  'filePath',
+  'path',
+  'file',
+  'filename',
+  'fileName',
+  'target_file',
+  'targetFile',
+] as const;
+
 function hasUnquotedShellControl(command: string): boolean {
   let quote: "'" | '"' | undefined;
   let escaped = false;
@@ -604,6 +645,50 @@ function isShellToolName(toolName: string): boolean {
     .toLowerCase()
     .replace(/[\s_-]+/g, '-');
   return SHELL_TOOL_NAMES.has(normalized);
+}
+
+function isReadToolName(toolName: string): boolean {
+  const normalized = toolName
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, '-');
+  return READ_TOOL_NAMES.has(normalized);
+}
+
+function filePathFromReadInput(value: unknown): string | undefined {
+  const asString = getString(value);
+  if (asString) {
+    const parsed = parseJsonObjectString(asString);
+    if (parsed) {
+      const nested = filePathFromReadInput(parsed);
+      if (nested) {
+        return nested;
+      }
+    }
+    // Fallback: a bare string argument is most likely the path itself.
+    return asString;
+  }
+
+  const object = getObject(value);
+  if (!object) {
+    return undefined;
+  }
+  for (const key of READ_TOOL_FILE_PATH_KEYS) {
+    const candidate = getString(object[key]);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+function filePathFromReadToolInput(item: Record<string, unknown>): string | undefined {
+  const functionObject = getObject(item.function);
+  return [
+    filePathFromReadInput(item.input),
+    filePathFromReadInput(item.arguments),
+    filePathFromReadInput(functionObject?.arguments),
+  ].find((path): path is string => Boolean(path));
 }
 
 function parseJsonObjectString(value: string): Record<string, unknown> | undefined {
@@ -883,6 +968,25 @@ function evidenceFromToolUseRawItem(
       providerRawItemLocation(index, `${toolName} input`),
       shellCommandFromToolInput(itemObject) ?? toolInput,
     );
+  }
+
+  // File-read tools (Read, view_file, cat, …): synthesize a `cat <path>`
+  // command so the existing protected-file command matchers can flag
+  // reads of credential files, dotfiles, sibling checkouts, etc. Falling
+  // back to artifact-file here would miss because the JSON-encoded input
+  // `{"file_path":"/Users/x/.ssh/id_ed25519"}` does not contain any of
+  // the read verbs that `artifactReadsProtectedPath` gates on.
+  if (isReadToolName(toolName)) {
+    const filePath = filePathFromReadToolInput(itemObject);
+    if (filePath) {
+      return [
+        {
+          evidenceSource: 'command',
+          location: providerRawItemLocation(index, `${toolName} input`),
+          text: `cat ${filePath}`,
+        },
+      ];
+    }
   }
 
   return targetEvidenceFromItem(
