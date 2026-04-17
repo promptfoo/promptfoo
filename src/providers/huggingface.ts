@@ -108,6 +108,10 @@ export class HuggingfaceChatCompletionProvider extends OpenAiChatCompletionProvi
     return HF_CHAT_API_BASE_URL;
   }
 
+  requiresApiKey(): boolean {
+    return false;
+  }
+
   getApiKey(): string | undefined {
     return (
       this.config.apiKey ||

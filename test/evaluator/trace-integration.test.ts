@@ -1,13 +1,24 @@
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
 import { getTraceStore } from '../../src/tracing/store';
+import { createMockProvider } from '../factories/provider';
 
 import type Eval from '../../src/models/eval';
 import type { EvaluateOptions, TestSuite } from '../../src/types/index';
 
 // Mock dependencies
 vi.mock('../../src/tracing/store');
+const mockFlushOtel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockInitializeOtel = vi.hoisted(() => vi.fn());
+const mockShutdownOtel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+
+vi.mock('../../src/tracing/otelSdk', () => ({
+  flushOtel: mockFlushOtel,
+  initializeOtel: mockInitializeOtel,
+  shutdownOtel: mockShutdownOtel,
+}));
+
 vi.mock('../../src/tracing/otlpReceiver', () => ({
   startOTLPReceiver: vi.fn(),
   stopOTLPReceiver: vi.fn(),
@@ -56,8 +67,12 @@ describe('evaluator trace integration', () => {
   } as unknown as Eval;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     (getTraceStore as Mock).mockReturnValue(mockTraceStore);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('should pass traceId through to assertions when tracing is enabled', async () => {
@@ -85,13 +100,10 @@ describe('evaluator trace integration', () => {
 
     const testSuite: TestSuite = {
       providers: [
-        {
-          id: () => 'mock-provider',
-          callApi: vi.fn().mockResolvedValue({
-            output: 'Test response',
-            tokenUsage: {},
-          }),
-        },
+        createMockProvider({
+          id: 'mock-provider',
+          response: { output: 'Test response', tokenUsage: {} },
+        }),
       ],
       prompts: [{ raw: 'Test prompt', label: 'test' }],
       tests: [
@@ -121,7 +133,7 @@ describe('evaluator trace integration', () => {
             enabled: true,
             port: 4318,
             host: '0.0.0.0',
-            acceptFormats: ['application/x-protobuf'],
+            acceptFormats: ['protobuf'],
           },
         },
       },
@@ -138,7 +150,10 @@ describe('evaluator trace integration', () => {
     expect(evaluatorTracing.generateTraceContextIfNeeded).toHaveBeenCalled();
 
     // Verify trace was fetched for assertion
-    expect(mockTraceStore.getTrace).toHaveBeenCalledWith(testTraceId);
+    expect(mockTraceStore.getTrace).toHaveBeenCalledWith(testTraceId, {
+      sanitizeAttributes: false,
+    });
+    expect(mockFlushOtel).toHaveBeenCalled();
 
     // Verify result was added with passing assertion
     expect(mockEval.addResult).toHaveBeenCalledWith(
@@ -155,13 +170,10 @@ describe('evaluator trace integration', () => {
 
     const testSuite: TestSuite = {
       providers: [
-        {
-          id: () => 'mock-provider',
-          callApi: vi.fn().mockResolvedValue({
-            output: 'Test response',
-            tokenUsage: {},
-          }),
-        },
+        createMockProvider({
+          id: 'mock-provider',
+          response: { output: 'Test response', tokenUsage: {} },
+        }),
       ],
       prompts: [{ raw: 'Test prompt', label: 'test' }],
       tests: [
@@ -192,6 +204,7 @@ describe('evaluator trace integration', () => {
     // Verify trace was NOT created or fetched
     expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
     expect(mockTraceStore.getTrace).not.toHaveBeenCalled();
+    expect(mockFlushOtel).not.toHaveBeenCalled();
 
     // Verify result was added with passing assertion
     expect(mockEval.addResult).toHaveBeenCalledWith(
@@ -228,13 +241,10 @@ describe('evaluator trace integration', () => {
 
     const testSuite: TestSuite = {
       providers: [
-        {
-          id: () => 'mock-provider',
-          callApi: vi.fn().mockResolvedValue({
-            output: 'Test response',
-            tokenUsage: {},
-          }),
-        },
+        createMockProvider({
+          id: 'mock-provider',
+          response: { output: 'Test response', tokenUsage: {} },
+        }),
       ],
       prompts: [{ raw: 'Test prompt', label: 'test' }],
       tests: [
@@ -265,7 +275,9 @@ describe('evaluator trace integration', () => {
     await evaluate(testSuite, mockEval, options);
 
     // Verify trace was fetched with the correct traceId
-    expect(mockTraceStore.getTrace).toHaveBeenCalledWith(testTraceId);
+    expect(mockTraceStore.getTrace).toHaveBeenCalledWith(testTraceId, {
+      sanitizeAttributes: false,
+    });
 
     // Verify result was added with passing assertion
     expect(mockEval.addResult).toHaveBeenCalledWith(

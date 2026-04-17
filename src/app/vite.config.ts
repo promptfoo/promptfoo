@@ -1,68 +1,19 @@
-/// <reference types="vitest" />
+/// <reference types="vitest/config" />
 
 import { fileURLToPath } from 'node:url';
 import os from 'os';
 import path from 'path';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 import react from '@vitejs/plugin-react';
-import { defineConfig, type Plugin } from 'vitest/config';
+import { configDefaults } from 'vitest/config';
 import packageJson from '../../package.json' with { type: 'json' };
+import {
+  browserModulesPlugin,
+  reactCompilerPlugin,
+  vendorCodeSplittingGroups,
+} from './vite.shared';
 
-/**
- * Plugin to replace Node.js modules with browser-compatible versions.
- * This allows us to avoid bundling heavy Node polyfills by providing
- * lightweight browser implementations.
- */
-function browserModulesPlugin(): Plugin {
-  // Map of Node module paths to their browser replacements
-  const replacements: Array<{ nodePath: string; browserPath: string; patterns: string[] }> = [
-    {
-      // logger.ts uses fs, path, winston - replace with console-based logger
-      nodePath: path.resolve(__dirname, '../logger.ts'),
-      browserPath: path.resolve(__dirname, '../logger.browser.ts'),
-      patterns: ['./logger', '../logger', '/logger'],
-    },
-    {
-      // createHash.ts uses Node crypto - replace with pure JS SHA-256
-      nodePath: path.resolve(__dirname, '../util/createHash.ts'),
-      browserPath: path.resolve(__dirname, '../util/createHash.browser.ts'),
-      patterns: ['./createHash', '../createHash', '/createHash'],
-    },
-  ];
-
-  return {
-    name: 'browser-modules',
-    enforce: 'pre',
-    resolveId(source, importer) {
-      if (!importer) {
-        return null;
-      }
-
-      for (const { nodePath, browserPath, patterns } of replacements) {
-        // Check if source matches any of the patterns
-        const matches = patterns.some((p) => source === p || source.endsWith(p));
-        if (!matches) {
-          continue;
-        }
-
-        // Resolve the import path
-        const resolvedPath = path.resolve(path.dirname(importer), source);
-
-        // Check if it matches the node module path (with or without .ts extension)
-        if (
-          resolvedPath === nodePath ||
-          resolvedPath === nodePath.replace('.ts', '') ||
-          resolvedPath + '.ts' === nodePath
-        ) {
-          return browserPath;
-        }
-      }
-      return null;
-    },
-  };
-}
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Calculate max forks for test parallelization
 const cpuCount = os.cpus().length;
@@ -72,6 +23,42 @@ const maxForks = process.env.CI
   : Math.max(cpuCount - 2, 2); // Leave headroom for system locally
 
 const API_PORT = process.env.API_PORT || '15500';
+
+const ignoredTestConsolePatterns = [
+  /^Warning: .*not wrapped in act/,
+  /^An update to .*not wrapped in act/,
+  /^(Warning: )?The current testing environment is not configured to support act/,
+  /^Warning: Received NaN for the `children` attribute/,
+  /^Error checking ModelAudit installation:/,
+  /^Error loading eval:/,
+  /^Failed to fetch datasets:/,
+  /^Error parsing file:/,
+  /^deeply nested key "metrics\.score" returned undefined/,
+  /^Logout failed/,
+  /^Error during logout:/,
+  /^Error fetching user email:/,
+  /^Failed to parse YAML:/,
+  /^Invalid JSON configuration:/,
+  /^Error fetching eval data:/,
+  /^Error fetching metadata keys:/,
+  /^Error parsing CSV:/,
+  /^No worst strategy found for plugin/,
+  /^Failed to delete eval:/,
+  /^EnterpriseBanner: No evalId provided/,
+  /^Error checking cloud status:/,
+  /^Error setting email:/,
+  /^Error checking email status:/,
+  /^Error clearing email:/,
+  /^Error fetching cloud config:/,
+  /^Failed to copy text:/,
+  /^Failed to check share domain:/,
+  /^Failed to generate share URL/,
+  /^Error during target purpose discovery:/,
+];
+
+const showTestConsoleOutput =
+  process.env.PROMPTFOO_TEST_SHOW_OUTPUT === 'true' ||
+  process.env.PROMPTFOO_APP_TEST_SHOW_OUTPUT === 'true';
 
 // These environment variables are inherited from the parent process (main promptfoo server)
 // We set VITE_ prefixed variables here so Vite can expose them to the client code
@@ -84,19 +71,13 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // https://vitejs.dev/config/
-export default defineConfig({
+// Export a plain object here to avoid CI-only type conflicts from multiple Vite installs in the monorepo.
+export default {
   server: {
     port: 3000,
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
-  plugins: [
-    browserModulesPlugin(),
-    react({
-      babel: {
-        plugins: [['babel-plugin-react-compiler', {}]],
-      },
-    }),
-  ],
+  plugins: [browserModulesPlugin(), reactCompilerPlugin(), ...react()],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),
@@ -104,6 +85,10 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
+    // Pre-bundle react/compiler-runtime so Vite doesn't discover it late
+    // (injected by the React Compiler babel plugin) and trigger a full
+    // dep re-optimization that invalidates in-flight requests.
+    include: ['react/compiler-runtime'],
     exclude: ['react-syntax-highlighter'],
   },
   build: {
@@ -111,15 +96,10 @@ export default defineConfig({
     outDir: '../../dist/src/app',
     // Enable source maps for production debugging
     sourcemap: process.env.NODE_ENV === 'production' ? 'hidden' : true,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        // Manual chunking to split vendor libraries
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-charts': ['recharts', 'chart.js'],
-          'vendor-utils': ['js-yaml', 'diff'],
-          'vendor-syntax': ['prismjs'],
-          'vendor-markdown': ['react-markdown', 'remark-gfm'],
+        codeSplitting: {
+          groups: [...vendorCodeSplittingGroups],
         },
       },
     },
@@ -152,6 +132,24 @@ export default defineConfig({
     // Limit concurrent tests within each worker to prevent memory spikes
     maxConcurrency: 5,
 
+    // Keep ad hoc benchmarks out of ordinary unit-test runs; they print timing diagnostics by design.
+    exclude: [...configDefaults.exclude, 'src/**/__benchmarks__/**'],
+
+    // Run tests in random order to catch test isolation issues early.
+    sequence: {
+      shuffle: true,
+    },
+
+    onConsoleLog(log: string, type: 'stdout' | 'stderr') {
+      if (
+        !showTestConsoleOutput &&
+        type === 'stderr' &&
+        ignoredTestConsolePatterns.some((pattern) => pattern.test(log.trimStart()))
+      ) {
+        return false;
+      }
+    },
+
     // Fail fast on first error in CI
     bail: process.env.CI ? 1 : 0,
 
@@ -165,49 +163,12 @@ export default defineConfig({
         'src/**/*.d.ts',
         'src/**/*.test.ts',
         'src/**/*.test.tsx',
+        'src/**/*.spec.ts',
+        'src/**/*.spec.tsx',
         'src/setupTests.ts',
         'src/**/*.stories.tsx',
       ],
-      // Collect coverage for all files to identify untested files
-      // @ts-expect-error - 'all' is valid in Vitest v8 coverage but types are incomplete
       all: true,
-    },
-
-    // Suppress known MUI and React Testing Library warnings that don't indicate real problems
-    onConsoleLog(log: string, type: 'stdout' | 'stderr'): false | undefined {
-      if (type === 'stderr') {
-        const suppressPatterns = [
-          // Suppress act() warnings (we've fixed all fixable tests, these are library-level issues)
-          /An update to ForwardRef\(Tabs\) inside a test was not wrapped in act/,
-          /An update to ForwardRef\(TouchRipple\) inside a test was not wrapped in act/,
-          /An update to ForwardRef\(ButtonBase\) inside a test was not wrapped in act/,
-          /An update to ForwardRef\(FormControl\) inside a test was not wrapped in act/,
-          /An update to ForwardRef\(Tooltip\) inside a test was not wrapped in act/,
-          /An update to TransitionGroup inside a test was not wrapped in act/,
-          /An update to \w+ inside a test was not wrapped in act/,
-          /The current testing environment is not configured to support act/,
-
-          // Keep these suppressed (not fixable - library/DOM issues)
-          /validateDOMNesting/,
-          /MUI: You have provided an out-of-range value/,
-          /MUI: The `value` provided to the Tabs component is invalid/,
-          /Failed prop type: MUI/,
-          /ReactDOM\.render is no longer supported/,
-          /unmountComponentAtNode is deprecated/,
-          /A component is changing an? (?:uncontrolled|controlled) input to be (?:controlled|uncontrolled)/,
-          /Function components cannot be given refs/,
-          /React does not recognize the `.*` prop on a DOM element/,
-          /No worst strategy found for plugin/,
-
-          // Test data issues
-          /Received NaN for the.*children/, // Test data setup issue in ResultsTable.test.tsx
-          /Encountered two children with the same key/, // Fixed in component, but may appear in old tests
-        ];
-
-        if (suppressPatterns.some((pattern) => pattern.test(log))) {
-          return false; // Suppress this log
-        }
-      }
     },
   },
   define: {
@@ -221,4 +182,4 @@ export default defineConfig({
     ),
     'import.meta.env.VITE_PUBLIC_BASENAME': JSON.stringify(process.env.VITE_PUBLIC_BASENAME || ''),
   },
-});
+};

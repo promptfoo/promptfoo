@@ -12,6 +12,7 @@ export const BrowserBehavior = {
   SKIP: 2,
   OPEN_TO_REPORT: 3,
   OPEN_TO_REDTEAM_CREATE: 4,
+  OPEN_TO_EVAL_SETUP: 5,
 } as const;
 export type BrowserBehavior = (typeof BrowserBehavior)[keyof typeof BrowserBehavior];
 
@@ -22,6 +23,7 @@ export const BrowserBehaviorNames: Record<BrowserBehavior, string> = {
   [BrowserBehavior.SKIP]: 'SKIP',
   [BrowserBehavior.OPEN_TO_REPORT]: 'OPEN_TO_REPORT',
   [BrowserBehavior.OPEN_TO_REDTEAM_CREATE]: 'OPEN_TO_REDTEAM_CREATE',
+  [BrowserBehavior.OPEN_TO_EVAL_SETUP]: 'OPEN_TO_EVAL_SETUP',
 };
 
 // Cache for feature detection results to avoid repeated version checks
@@ -123,6 +125,8 @@ export async function openBrowser(
     url = `${baseUrl}/report`;
   } else if (browserBehavior === BrowserBehavior.OPEN_TO_REDTEAM_CREATE) {
     url = `${baseUrl}/redteam/setup`;
+  } else if (browserBehavior === BrowserBehavior.OPEN_TO_EVAL_SETUP) {
+    url = `${baseUrl}/setup`;
   }
 
   const doOpen = async () => {

@@ -53,14 +53,14 @@ export function DataTablePagination<TData>({
 
   return (
     <div className="flex items-center justify-between px-2">
-      <div className="text-sm text-muted-foreground">
+      <div className="text-sm text-gray-500 dark:text-gray-400">
         Showing {pageIndex * pageSize + 1} to {Math.min((pageIndex + 1) * pageSize, totalRows)} of{' '}
         {totalRows} rows
       </div>
 
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-2">
-          <p className="text-sm font-medium">Rows per page</p>
+          <p className="text-sm font-normal text-gray-500 dark:text-gray-400">Rows per page</p>
           <Select
             value={`${pageSize}`}
             onValueChange={(value) => {
@@ -98,7 +98,9 @@ export function DataTablePagination<TData>({
             Previous
           </Button>
           <div className="flex items-center gap-1 px-2">
-            <span className="text-sm font-medium whitespace-nowrap">Page</span>
+            <span className="text-sm font-normal text-gray-500 dark:text-gray-400 whitespace-nowrap">
+              Page
+            </span>
             <Input
               type="text"
               inputMode="numeric"
@@ -108,7 +110,9 @@ export function DataTablePagination<TData>({
               onBlur={handlePageInputBlur}
               className="h-8 w-12 text-center text-sm p-0"
             />
-            <span className="text-sm font-medium whitespace-nowrap">of {pageCount}</span>
+            <span className="text-sm font-normal text-gray-500 dark:text-gray-400 whitespace-nowrap">
+              of {pageCount}
+            </span>
           </div>
           <Button
             variant="outline"

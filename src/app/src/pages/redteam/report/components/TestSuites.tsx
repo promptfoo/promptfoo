@@ -6,7 +6,6 @@ import { Card } from '@app/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
-import { useTelemetry } from '@app/hooks/useTelemetry';
 import { formatASRForDisplay } from '@app/utils/redteam';
 import {
   categoryAliases,
@@ -67,7 +66,6 @@ const TestSuites = ({
   vulnerabilitiesDataGridRef,
 }: TestSuitesProps) => {
   const navigate = useNavigate();
-  const { recordEvent } = useTelemetry();
   const { severityFilter } = useReportStore();
   const [sortModel] = React.useState<SortingState>([{ id: 'riskScore', desc: true }]);
 
@@ -458,7 +456,7 @@ const TestSuites = ({
       {
         id: 'actions',
         header: 'Actions',
-        size: 220,
+        size: 100,
         enableSorting: false,
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
@@ -485,42 +483,15 @@ const TestSuites = ({
             >
               View logs
             </Button>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    // Track the mitigation button click
-                    recordEvent('feature_used', {
-                      feature: 'redteam_apply_mitigation_clicked',
-                      plugin: row.original.pluginName,
-                      evalId,
-                    });
-
-                    // Open email in new tab
-                    window.open(
-                      'mailto:inquiries@promptfoo.dev?subject=Promptfoo%20automatic%20vulnerability%20mitigation&body=Hello%20Promptfoo%20Team,%0D%0A%0D%0AI%20am%20interested%20in%20learning%20more%20about%20the%20automatic%20vulnerability%20mitigation%20beta.%20Please%20provide%20me%20with%20more%20details.%0D%0A%0D%0A',
-                      '_blank',
-                    );
-                  }}
-                >
-                  Apply mitigation
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                Temporarily disabled while in beta, click to contact us to enable
-              </TooltipContent>
-            </Tooltip>
           </div>
         ),
       },
     ],
-    [navigate, pluginsById, recordEvent, evalId],
+    [navigate, pluginsById, evalId],
   );
 
   return (
-    <div className="break-before-page print:break-before-always" ref={vulnerabilitiesDataGridRef}>
+    <div ref={vulnerabilitiesDataGridRef}>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-xl font-semibold">Vulnerabilities and Mitigations</h2>
         <Button onClick={exportToCSV} className="print:hidden">

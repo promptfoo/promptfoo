@@ -1,7 +1,8 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { ToastProvider } from '@app/contexts/ToastContext';
 import { useToast } from '@app/hooks/useToast';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerationProvider } from '../TestCaseGenerationProvider';
@@ -41,6 +42,14 @@ const renderComponent = () => {
       </ToastProvider>
     </TooltipProvider>,
   );
+};
+
+const getUploadInputForLabel = (label: HTMLElement) => {
+  const fileInput = label.closest('label')?.querySelector<HTMLInputElement>('input[type="file"]');
+  if (!fileInput) {
+    throw new Error('CSV upload input not found');
+  }
+  return fileInput;
 };
 
 describe('CustomPoliciesSection', () => {
@@ -158,6 +167,7 @@ describe('CustomPoliciesSection', () => {
 
   describe('CSV Upload', () => {
     it('should append new policies and show a success toast for a valid CSV upload', async () => {
+      const user = userEvent.setup();
       renderComponent();
 
       // Wait for component to be ready - use findByText since it's a label with asChild
@@ -169,12 +179,9 @@ describe('CustomPoliciesSection', () => {
         value: () => Promise.resolve(csvContent),
       });
 
-      const fileInput = uploadButton.closest('label')?.querySelector('input[type="file"]');
-      expect(fileInput).not.toBeNull();
+      const fileInput = getUploadInputForLabel(uploadButton);
 
-      fireEvent.change(fileInput!, {
-        target: { files: [file] },
-      });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockUpdateConfig).toHaveBeenCalled();
@@ -187,27 +194,33 @@ describe('CustomPoliciesSection', () => {
     });
 
     it('should disable the "Upload CSV" button and display "Uploading..." while processing, then re-enable and restore label', async () => {
+      const user = userEvent.setup();
       renderComponent();
 
       const csvContent = 'policy_text\n"Policy from CSV 1"';
       const file = new File([csvContent], 'policies.csv', { type: 'text/csv' });
+      let resolveFileText!: (value: string) => void;
       Object.defineProperty(file, 'text', {
-        value: () => Promise.resolve(csvContent),
+        value: () =>
+          new Promise<string>((resolve) => {
+            resolveFileText = resolve;
+          }),
       });
 
       // Wait for component to be ready
       const uploadLabel = await screen.findByText(/upload csv/i);
       const uploadButton = uploadLabel.closest('label');
-      const fileInput = uploadButton?.querySelector('input[type="file"]');
+      const fileInput = getUploadInputForLabel(uploadLabel);
 
-      fireEvent.change(fileInput!, {
-        target: { files: [file] },
-      });
+      const uploadPromise = user.upload(fileInput, file);
 
       // Wait for the "Uploading..." state to appear
       await waitFor(() => {
         expect(uploadButton).toHaveTextContent('Uploading...');
       });
+
+      resolveFileText(csvContent);
+      await uploadPromise;
 
       // Then wait for it to return to normal
       await waitFor(() => {
@@ -216,6 +229,7 @@ describe('CustomPoliciesSection', () => {
     });
 
     it('should show a warning toast when no valid policies are found in the CSV', async () => {
+      const user = userEvent.setup();
       renderComponent();
 
       const csvContent = 'policy_text\n\n\n';
@@ -226,12 +240,9 @@ describe('CustomPoliciesSection', () => {
 
       // Wait for component to be ready
       const uploadLabel = await screen.findByText(/upload csv/i);
-      const fileInput = uploadLabel.closest('label')?.querySelector('input[type="file"]');
-      expect(fileInput).not.toBeNull();
+      const fileInput = getUploadInputForLabel(uploadLabel);
 
-      fireEvent.change(fileInput!, {
-        target: { files: [file] },
-      });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -242,6 +253,7 @@ describe('CustomPoliciesSection', () => {
     });
 
     it('should show an error toast when a non-CSV file is uploaded with a .csv extension', async () => {
+      const user = userEvent.setup();
       renderComponent();
 
       const csvContent = 'This is not a CSV file. <?xml version="1.0"?>';
@@ -252,11 +264,9 @@ describe('CustomPoliciesSection', () => {
 
       // Wait for component to be ready
       const uploadLabel = await screen.findByText(/upload csv/i);
-      const fileInput = uploadLabel.closest('label')?.querySelector('input[type="file"]');
+      const fileInput = getUploadInputForLabel(uploadLabel);
 
-      fireEvent.change(fileInput!, {
-        target: { files: [file] },
-      });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -267,6 +277,7 @@ describe('CustomPoliciesSection', () => {
     });
 
     it('should show an error toast when a file cannot be read as text', async () => {
+      const user = userEvent.setup();
       renderComponent();
 
       const file = new File([''], 'test.csv', { type: 'text/csv' });
@@ -276,11 +287,9 @@ describe('CustomPoliciesSection', () => {
 
       // Wait for component to be ready
       const uploadLabel = await screen.findByText(/upload csv/i);
-      const fileInput = uploadLabel.closest('label')?.querySelector('input[type="file"]');
+      const fileInput = getUploadInputForLabel(uploadLabel);
 
-      fireEvent.change(fileInput!, {
-        target: { files: [file] },
-      });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(

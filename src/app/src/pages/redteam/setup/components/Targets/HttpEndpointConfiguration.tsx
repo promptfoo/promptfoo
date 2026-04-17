@@ -1,10 +1,9 @@
 import './syntax-highlighting.css';
-import 'prismjs/components/prism-clike';
-import 'prismjs/components/prism-javascript';
 
 import { useCallback, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
+import Editor from '@app/components/ui/code-editor';
 import {
   Dialog,
   DialogContent,
@@ -29,6 +28,7 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Switch } from '@app/components/ui/switch';
+import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import yaml from 'js-yaml';
@@ -43,8 +43,6 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import Prism from 'prismjs';
-import Editor from 'react-simple-code-editor';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import PostmanImportDialog from './PostmanImportDialog';
 import ResponseParserTestModal from './ResponseParserTestModal';

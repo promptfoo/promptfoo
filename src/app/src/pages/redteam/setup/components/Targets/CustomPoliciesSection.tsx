@@ -434,7 +434,7 @@ export const CustomPoliciesSection = () => {
       setSuggestedPolicies(generatedPolicies);
     } catch (error) {
       console.error('Error generating policies:', error);
-      let errorMessage = 'Failed to generate policies';
+      let errorMessage: string;
 
       if (error instanceof Error) {
         // Handle network errors

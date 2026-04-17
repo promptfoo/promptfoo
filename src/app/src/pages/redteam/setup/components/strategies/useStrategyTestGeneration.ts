@@ -5,6 +5,8 @@ import { type RedteamStrategyObject, type StrategyConfig } from '@promptfoo/redt
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
 
+import type { TargetPlugin } from '../testCaseGenerationTypes';
+
 const DEFAULT_TEST_GENERATION_PLUGIN: Plugin = 'harmful:hate';
 
 interface UseStrategyTestGenerationOptions {
@@ -36,25 +38,44 @@ export function useStrategyTestGeneration({
     return (found?.config ?? {}) as StrategyConfig;
   }, [config.strategies, strategyId]);
 
-  // Select a random plugin from the user's configured plugins, or fall back to default
-  const testGenerationPlugin = useMemo(() => {
-    const plugins = config.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) ?? [];
+  // Select a random plugin from the user's configured plugins, preserving any plugin config.
+  const testGenerationTargetPlugin = useMemo<TargetPlugin>(() => {
+    const plugins = config.plugins ?? [];
     if (plugins.length === 0) {
-      return DEFAULT_TEST_GENERATION_PLUGIN;
+      return {
+        id: DEFAULT_TEST_GENERATION_PLUGIN,
+        config: {},
+        isStatic: true,
+      };
     }
-    return plugins[Math.floor(Math.random() * plugins.length)] as Plugin;
+
+    const selectedPlugin = plugins[Math.floor(Math.random() * plugins.length)];
+    if (typeof selectedPlugin === 'string') {
+      return {
+        id: selectedPlugin as Plugin,
+        config: {},
+        isStatic: true,
+      };
+    }
+
+    return {
+      id: selectedPlugin.id as Plugin,
+      config: selectedPlugin.config ?? {},
+      isStatic: true,
+    };
   }, [config.plugins]);
 
   const handleTestCaseGeneration = useCallback(async () => {
-    await generateTestCase(
-      { id: testGenerationPlugin, config: {}, isStatic: true },
-      { id: strategyId, config: strategyConfig, isStatic: false },
-    );
-  }, [strategyConfig, generateTestCase, strategyId, testGenerationPlugin]);
+    await generateTestCase(testGenerationTargetPlugin, {
+      id: strategyId,
+      config: strategyConfig,
+      isStatic: false,
+    });
+  }, [strategyConfig, generateTestCase, strategyId, testGenerationTargetPlugin]);
 
   return {
     strategyConfig,
-    testGenerationPlugin,
+    testGenerationPlugin: testGenerationTargetPlugin.id,
     handleTestCaseGeneration,
     isGenerating,
     isCurrentStrategy: currentStrategy === strategyId,

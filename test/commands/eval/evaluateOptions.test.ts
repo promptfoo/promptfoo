@@ -323,7 +323,7 @@ describe('evaluateOptions behavior', () => {
       const options = evaluateMock.mock.calls[0][2];
       expect(options.cache).toBe(true); // Cache value is passed as-is
       expect(options.repeat).toBe(3); // Repeat value is correctly set
-      // Note: disableCache() is called globally but options.cache reflects the config
+      // Repeat no longer disables cache globally. Each repeat index uses its own cache namespace.
     });
 
     it('should handle undefined/null evaluateOptions gracefully', async () => {

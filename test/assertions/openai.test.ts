@@ -6,6 +6,7 @@ import { runAssertion } from '../../src/assertions/index';
 import { handleIsValidOpenAiToolsCall } from '../../src/assertions/openai';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { validateFunctionCall } from '../../src/providers/openai/util';
+import { createMockProvider } from '../factories/provider';
 
 import type { OpenAiTool } from '../../src/providers/openai/util';
 import type {
@@ -260,13 +261,10 @@ describe('OpenAI assertions', () => {
 
       mockedFs.readFileSync.mockReturnValue(mockYamlContent);
 
-      const fileProvider = {
-        id: () => 'test-provider',
-        config: {
-          functions: 'file://./test/fixtures/weather_functions.yaml',
-        },
-        callApi: async () => ({ output: '' }),
-      } as ApiProvider;
+      const fileProvider = createMockProvider({
+        config: { functions: 'file://./test/fixtures/weather_functions.yaml' },
+        response: { output: '' },
+      }) as ApiProvider;
 
       expect(() => {
         validateFunctionCall(functionOutput, fileProvider.config.functions, {});
@@ -672,13 +670,12 @@ describe('OpenAI assertions', () => {
       // Make sure the mock returns an array, not a string or object
       mocks.mockMaybeLoadToolsFromExternalFile.mockResolvedValue(mockParsedTools);
 
-      const fileProvider = {
-        id: () => 'test-provider',
+      const fileProvider = createMockProvider({
         config: {
           tools: 'file://./test/fixtures/weather_tools.json' as unknown as OpenAiTool[],
         },
-        callApi: async () => ({ output: '' }),
-      } as ApiProvider;
+        response: { output: '' },
+      }) as ApiProvider;
 
       const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,

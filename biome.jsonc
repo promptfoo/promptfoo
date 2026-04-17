@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.14/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.11/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -14,6 +14,7 @@
       "**/*.tsx",
       "**/*.json",
       "**/*.jsonc",
+      "**/*.grit",
       "**/*.mjs",
       "**/*.cjs",
       "!!drizzle",
@@ -22,7 +23,7 @@
       "!!**/dist",
       "!!**/build",
       "!!**/public",
-      "!!examples/multiple-turn-conversation/prompt.json",
+      "!!examples/config-multi-turn/prompt.json",
       "!!examples/openai-chat-history/prompt.json",
       "!!test/fixtures/rubric-json-template/**/*.json",
       // Excluded due to stack overflow crash in biome - see https://github.com/biomejs/biome/issues/8783
@@ -40,6 +41,7 @@
   "assist": {
     "actions": {
       "source": {
+        "noDuplicateClasses": "on",
         "organizeImports": {
           "level": "on",
           "options": {
@@ -99,7 +101,13 @@
         "noUselessRename": "error",
         "noUselessTernary": "error",
         "noUselessFragments": "error",
-        "useOptionalChain": "off"
+        "useOptionalChain": "off",
+        "noExcessiveCognitiveComplexity": {
+          "level": "warn",
+          "options": {
+            "maxAllowedComplexity": 30
+          }
+        }
       },
       "correctness": {
         "noUnusedVariables": "error",
@@ -152,6 +160,15 @@
         "noArrayIndexKey": "off",
         "noCommentText": "off",
         "noConfusingVoidType": "error",
+        "noDuplicateCase": "error",
+        "noDuplicateClassMembers": "error",
+        "noDuplicateElseIf": "error",
+        "noDuplicateJsxProps": "error",
+        "noDuplicateObjectKeys": "error",
+        "noDuplicateParameters": "error",
+        "noDuplicateTestHooks": "error",
+        "noFocusedTests": "error",
+        "noSkippedTests": "error",
         "noRedundantUseStrict": "error",
         "noThenProperty": "error",
         "useErrorMessage": "warn",
@@ -169,7 +186,8 @@
       },
       "nursery": {
         "noFloatingPromises": "error",
-        "noMisusedPromises": "error"
+        "noMisusedPromises": "error",
+        "noUselessTypeConversion": "error"
       }
     }
   },
@@ -209,7 +227,7 @@
   "overrides": [
     {
       "includes": [
-        "examples/multiple-turn-conversation/prompt.json",
+        "examples/config-multi-turn/prompt.json",
         "examples/openai-chat-history/prompt.json"
       ],
       "linter": {
@@ -220,7 +238,7 @@
       }
     },
     {
-      "includes": ["examples/custom-provider/vercelAiSdkExample.js"],
+      "includes": ["examples/provider-custom/basic/vercelAiSdkExample.js"],
       "linter": {
         "enabled": false
       },
@@ -267,6 +285,102 @@
           }
         }
       }
+    },
+    {
+      "includes": [
+        "test/**/*.test.ts",
+        "test/**/*.spec.ts",
+        "src/app/src/**/*.test.ts",
+        "src/app/src/**/*.test.tsx",
+        "src/app/src/**/*.spec.ts",
+        "src/app/src/**/*.spec.tsx",
+        // Keep in sync with legacyDirectProcessEnvMutationFiles in test/test-hygiene.test.ts.
+        // BEGIN direct process.env mutation legacy allowlist
+        "!!test/assertions/assertionResult.test.ts",
+        "!!test/assertions/trace.test.ts",
+        "!!test/cache.test.ts",
+        "!!test/code-scan-action/main.test.ts",
+        "!!test/commands/modelScan.test.ts",
+        "!!test/constants.test.ts",
+        "!!test/database.test.ts",
+        "!!test/envars.test.ts",
+        "!!test/evaluatorHelpers.test.ts",
+        "!!test/fetch.test.ts",
+        "!!test/globalConfig/cloud.test.ts",
+        "!!test/logger.test.ts",
+        "!!test/matchers/utils.test.ts",
+        "!!test/onboarding.test.ts",
+        "!!test/prompts/index.test.ts",
+        "!!test/providers.slack.test.ts",
+        "!!test/providers.test.ts",
+        "!!test/providers/anthropic/completion.test.ts",
+        "!!test/providers/anthropic/generic.test.ts",
+        "!!test/providers/anthropic/messages.test.ts",
+        "!!test/providers/azure/chat.test.ts",
+        "!!test/providers/azure/completion.test.ts",
+        "!!test/providers/azure/responses.test.ts",
+        "!!test/providers/bedrock.agents.test.ts",
+        "!!test/providers/bedrock/converse.test.ts",
+        "!!test/providers/bedrock/index.test.ts",
+        "!!test/providers/bedrock/knowledgeBase.test.ts",
+        "!!test/providers/claude-agent-sdk.test.ts",
+        "!!test/providers/cloudflare-ai.test.ts",
+        "!!test/providers/cloudflare-gateway.test.ts",
+        "!!test/providers/databricks.test.ts",
+        "!!test/providers/defaults.test.ts",
+        "!!test/providers/elevenlabs/agents/index.test.ts",
+        "!!test/providers/elevenlabs/alignment/index.test.ts",
+        "!!test/providers/elevenlabs/history/index.test.ts",
+        "!!test/providers/elevenlabs/isolation/index.test.ts",
+        "!!test/providers/elevenlabs/stt/index.test.ts",
+        "!!test/providers/elevenlabs/tts/index.test.ts",
+        "!!test/providers/google/ai.studio.test.ts",
+        "!!test/providers/google/auth.test.ts",
+        "!!test/providers/google/gemini-image.test.ts",
+        "!!test/providers/google/image.test.ts",
+        "!!test/providers/google/live.test.ts",
+        "!!test/providers/google/provider.test.ts",
+        "!!test/providers/google/video.test.ts",
+        "!!test/providers/groq/responses.test.ts",
+        "!!test/providers/huggingface.test.ts",
+        "!!test/providers/hyperbolic.test.ts",
+        "!!test/providers/index.test.ts",
+        "!!test/providers/litellm.test.ts",
+        "!!test/providers/openai-codex-sdk.e2e.test.ts",
+        "!!test/providers/openai-codex-sdk.test.ts",
+        "!!test/providers/openai/chat.test.ts",
+        "!!test/providers/openai/codexDefaults.test.ts",
+        "!!test/providers/openai/completion.test.ts",
+        "!!test/providers/openai/image.test.ts",
+        "!!test/providers/openai/index.test.ts",
+        "!!test/providers/openai/realtime.test.ts",
+        "!!test/providers/openclaw.test.ts",
+        "!!test/providers/openrouter.test.ts",
+        "!!test/providers/replicate.test.ts",
+        "!!test/providers/snowflake.test.ts",
+        "!!test/providers/truefoundry.test.ts",
+        "!!test/providers/xai/image.test.ts",
+        "!!test/providers/xai/voice.test.ts",
+        "!!test/redteam/extraction/entities.test.ts",
+        "!!test/redteam/extraction/purpose.test.ts",
+        "!!test/redteam/plugins/teenSafety.test.ts",
+        "!!test/redteam/providers/shared.test.ts",
+        "!!test/sagemaker.test.ts",
+        "!!test/telemetry.test.ts",
+        "!!test/tracing/evaluatorTracing.test.ts",
+        "!!test/util/apiHealth.test.ts",
+        "!!test/util/config/load.test.ts",
+        "!!test/util/env.test.ts",
+        "!!test/util/file.test.ts",
+        "!!test/util/json.test.ts",
+        "!!test/util/promptfooCommand.test.ts",
+        "!!test/util/render.test.ts",
+        "!!test/util/templates.test.ts",
+        "!!test/util/transform.test.ts",
+        "!!test/util/utils.test.ts"
+        // END direct process.env mutation legacy allowlist
+      ],
+      "plugins": ["./tools/biome/no-direct-process-env-mutation.grit"]
     },
     {
       "includes": ["src/app/**/*"],

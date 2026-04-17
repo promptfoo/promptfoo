@@ -50,6 +50,14 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
     return `[fal.ai Inference Provider ${this.modelName}]`;
   }
 
+  getApiKey(): string | undefined {
+    return this.apiKey;
+  }
+
+  requiresApiKey(): boolean {
+    return true;
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
