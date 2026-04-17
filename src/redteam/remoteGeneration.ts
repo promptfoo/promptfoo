@@ -106,9 +106,17 @@ export function getRemoteGenerationDisabledError(strategyName: string): string {
 }
 
 export function getRemoteGenerationExplicitlyDisabledError(strategyName: string): string {
+  const activeFlags = [
+    'PROMPTFOO_DISABLE_REMOTE_GENERATION',
+    'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION',
+  ].filter((flag) => getEnvBool(flag));
+  const unsetInstruction =
+    activeFlags.length > 0
+      ? `unset ${activeFlags.join(' and ')}`
+      : 'unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION (whichever is set)';
   return (
     `${strategyName} requires remote generation, which has been explicitly disabled. ` +
-    'To enable it, unset PROMPTFOO_DISABLE_REMOTE_GENERATION and PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION. ' +
+    `To enable it, ${unsetInstruction}. ` +
     'Once re-enabled, you can point at a self-hosted endpoint with PROMPTFOO_REMOTE_GENERATION_URL or use Promptfoo Cloud via `promptfoo auth login`.'
   );
 }

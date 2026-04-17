@@ -208,15 +208,45 @@ describe('shouldGenerateRemote', () => {
 });
 
 describe('remote generation error helpers', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
   it('should include the --remote recovery path when remote generation is implicitly disabled', () => {
     expect(getRemoteGenerationDisabledError('jailbreak:hydra strategy')).toBe(
       'jailbreak:hydra strategy requires remote generation, which is currently disabled for this configuration. To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, or log into Promptfoo Cloud with `promptfoo auth login`.',
     );
   });
 
-  it('should point to disable flags when remote generation is explicitly disabled', () => {
+  it('should list only the active disable flag when one flag is set', () => {
+    vi.mocked(getEnvBool).mockImplementation(
+      (key: string) => key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION',
+    );
+    expect(getRemoteGenerationExplicitlyDisabledError('Best-of-N strategy')).toBe(
+      'Best-of-N strategy requires remote generation, which has been explicitly disabled. To enable it, unset PROMPTFOO_DISABLE_REMOTE_GENERATION. Once re-enabled, you can point at a self-hosted endpoint with PROMPTFOO_REMOTE_GENERATION_URL or use Promptfoo Cloud via `promptfoo auth login`.',
+    );
+  });
+
+  it('should list only the redteam-specific flag when only that flag is set', () => {
+    vi.mocked(getEnvBool).mockImplementation(
+      (key: string) => key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION',
+    );
+    expect(getRemoteGenerationExplicitlyDisabledError('Best-of-N strategy')).toBe(
+      'Best-of-N strategy requires remote generation, which has been explicitly disabled. To enable it, unset PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION. Once re-enabled, you can point at a self-hosted endpoint with PROMPTFOO_REMOTE_GENERATION_URL or use Promptfoo Cloud via `promptfoo auth login`.',
+    );
+  });
+
+  it('should list both disable flags when both are set', () => {
+    vi.mocked(getEnvBool).mockReturnValue(true);
     expect(getRemoteGenerationExplicitlyDisabledError('Best-of-N strategy')).toBe(
       'Best-of-N strategy requires remote generation, which has been explicitly disabled. To enable it, unset PROMPTFOO_DISABLE_REMOTE_GENERATION and PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION. Once re-enabled, you can point at a self-hosted endpoint with PROMPTFOO_REMOTE_GENERATION_URL or use Promptfoo Cloud via `promptfoo auth login`.',
+    );
+  });
+
+  it('should fall back to a generic "whichever is set" hint when no flag is visible in env', () => {
+    vi.mocked(getEnvBool).mockReturnValue(false);
+    expect(getRemoteGenerationExplicitlyDisabledError('Best-of-N strategy')).toBe(
+      'Best-of-N strategy requires remote generation, which has been explicitly disabled. To enable it, unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION (whichever is set). Once re-enabled, you can point at a self-hosted endpoint with PROMPTFOO_REMOTE_GENERATION_URL or use Promptfoo Cloud via `promptfoo auth login`.',
     );
   });
 });
