@@ -159,7 +159,9 @@ describe('trace assertions', () => {
       });
 
       expect(result.pass).toBe(true);
-      expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id');
+      expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
+        sanitizeAttributes: false,
+      });
     });
 
     it('should retry until trace spans are available', async () => {
@@ -478,7 +480,9 @@ return {
       });
 
       expect(result.pass).toBe(true);
-      expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id');
+      expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
+        sanitizeAttributes: false,
+      });
     });
   });
 });
