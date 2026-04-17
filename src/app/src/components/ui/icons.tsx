@@ -40,7 +40,7 @@ export {
   Filter as FilterIcon,
   Folder as FolderIcon,
   FolderOpen as FolderOpenIcon,
-  GitBranch as GitHubIcon,
+  Github as GitHubIcon,
   Globe as GlobeIcon,
   Globe as LanguageIcon,
   HardDrive as HardDriveIcon,

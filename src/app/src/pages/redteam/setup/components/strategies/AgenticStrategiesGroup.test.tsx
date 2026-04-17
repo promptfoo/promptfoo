@@ -1,5 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgenticStrategiesGroup } from './AgenticStrategiesGroup';
 
@@ -283,8 +282,7 @@ describe('AgenticStrategiesGroup', () => {
       expect(goatCheckbox.checked).toBe(false);
     });
 
-    it('calls onToggle when a strategy checkbox is clicked', async () => {
-      const user = userEvent.setup();
+    it('calls onToggle when a strategy checkbox is clicked', () => {
       render(
         <AgenticStrategiesGroup
           isStrategyDisabled={mockIsStrategyDisabled}
@@ -299,16 +297,15 @@ describe('AgenticStrategiesGroup', () => {
       );
 
       const jailbreakCheckbox = screen.getByLabelText('Jailbreak');
-      await user.click(jailbreakCheckbox);
+      fireEvent.click(jailbreakCheckbox);
       expect(mockOnToggle).toHaveBeenCalledWith('jailbreak');
 
       const crescendoCheckbox = screen.getByLabelText('Crescendo');
-      await user.click(crescendoCheckbox);
+      fireEvent.click(crescendoCheckbox);
       expect(mockOnToggle).toHaveBeenCalledWith('crescendo');
     });
 
-    it('calls onConfigClick when a strategy config button is clicked', async () => {
-      const user = userEvent.setup();
+    it('calls onConfigClick when a strategy config button is clicked', () => {
       render(
         <AgenticStrategiesGroup
           isStrategyDisabled={mockIsStrategyDisabled}
@@ -323,11 +320,11 @@ describe('AgenticStrategiesGroup', () => {
       );
 
       const treeJailbreakConfigButton = screen.getByTestId('config-jailbreak:tree');
-      await user.click(treeJailbreakConfigButton);
+      fireEvent.click(treeJailbreakConfigButton);
       expect(mockOnConfigClick).toHaveBeenCalledWith('jailbreak:tree');
 
       const customConfigButton = screen.getByTestId('config-custom');
-      await user.click(customConfigButton);
+      fireEvent.click(customConfigButton);
       expect(mockOnConfigClick).toHaveBeenCalledWith('custom');
     });
   });
@@ -386,8 +383,7 @@ describe('AgenticStrategiesGroup', () => {
       expect(resetButton).not.toBeDisabled();
     });
 
-    it('calls onSelectNone with only selected agentic strategies when Reset All is clicked', async () => {
-      const user = userEvent.setup();
+    it('calls onSelectNone with only selected agentic strategies when Reset All is clicked', () => {
       render(
         <AgenticStrategiesGroup
           isStrategyDisabled={mockIsStrategyDisabled}
@@ -402,14 +398,13 @@ describe('AgenticStrategiesGroup', () => {
       );
 
       const resetButton = screen.getByText('Reset All');
-      await user.click(resetButton);
+      fireEvent.click(resetButton);
 
       // Should only pass the agentic strategies that are selected, not 'other-strategy'
       expect(mockOnSelectNone).toHaveBeenCalledWith(['jailbreak', 'crescendo', 'goat']);
     });
 
-    it('does not call onSelectNone when Reset All is clicked but no strategies are selected', async () => {
-      const user = userEvent.setup();
+    it('does not call onSelectNone when Reset All is clicked but no strategies are selected', () => {
       render(
         <AgenticStrategiesGroup
           isStrategyDisabled={mockIsStrategyDisabled}
@@ -426,12 +421,12 @@ describe('AgenticStrategiesGroup', () => {
       const resetButton = screen.getByText('Reset All');
       expect(resetButton).toBeDisabled();
 
-      await user.click(resetButton);
+      // Try to click anyway (shouldn't do anything)
+      fireEvent.click(resetButton);
       expect(mockOnSelectNone).not.toHaveBeenCalled();
     });
 
-    it('resets only strategies from both subsections when mixed selection exists', async () => {
-      const user = userEvent.setup();
+    it('resets only strategies from both subsections when mixed selection exists', () => {
       render(
         <AgenticStrategiesGroup
           isStrategyDisabled={mockIsStrategyDisabled}
@@ -446,7 +441,7 @@ describe('AgenticStrategiesGroup', () => {
       );
 
       const resetButton = screen.getByText('Reset All');
-      await user.click(resetButton);
+      fireEvent.click(resetButton);
 
       expect(mockOnSelectNone).toHaveBeenCalledWith([
         'jailbreak',
@@ -516,8 +511,7 @@ describe('AgenticStrategiesGroup', () => {
       ).toBeInTheDocument();
     });
 
-    it('handles undefined onSelectNone prop gracefully', async () => {
-      const user = userEvent.setup();
+    it('handles undefined onSelectNone prop gracefully', () => {
       // Use a function to ensure no error is thrown
       const renderWithoutError = () => {
         render(
@@ -545,7 +539,7 @@ describe('AgenticStrategiesGroup', () => {
       expect(resetButton).toBeInTheDocument();
 
       // Clicking reset shouldn't cause errors
-      await user.click(resetButton);
+      expect(() => fireEvent.click(resetButton)).not.toThrow();
     });
   });
 

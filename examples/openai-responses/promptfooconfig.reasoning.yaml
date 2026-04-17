@@ -27,12 +27,11 @@ providers:
       max_output_tokens: 1000
       reasoning:
         effort: 'medium'
-  - id: openai:responses:gpt-5.4
-    label: gpt-5.4-none-reasoning
+  - id: openai:responses:gpt-5
     config:
       max_output_tokens: 1000
       reasoning:
-        effort: 'none'
+        effort: 'minimal'
 
 tests:
   - vars:

@@ -9,7 +9,6 @@ import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
-  ImageOutput,
   ProviderResponse,
 } from '../../types/index';
 import type { OpenAiSharedOptions } from './types';
@@ -177,72 +176,10 @@ export function validateSizeForModel(
   return { valid: true };
 }
 
-function getMimeTypeForOutputFormat(outputFormat?: string): string {
-  switch (outputFormat) {
-    case 'jpeg':
-      return 'image/jpeg';
-    case 'webp':
-      return 'image/webp';
-    default:
-      return 'image/png';
-  }
-}
-
-function inferMimeTypeFromUrl(url: string): string | undefined {
-  try {
-    const pathname = new URL(url).pathname.toLowerCase();
-    if (pathname.endsWith('.jpg') || pathname.endsWith('.jpeg')) {
-      return 'image/jpeg';
-    }
-    if (pathname.endsWith('.webp')) {
-      return 'image/webp';
-    }
-    if (pathname.endsWith('.gif')) {
-      return 'image/gif';
-    }
-    if (pathname.endsWith('.svg')) {
-      return 'image/svg+xml';
-    }
-    if (pathname.endsWith('.png')) {
-      return 'image/png';
-    }
-  } catch {
-    // Ignore invalid URLs and fall back to undefined mime type.
-  }
-
-  return undefined;
-}
-
-export function buildStructuredImageOutputs(
-  data: any,
-  outputFormat?: string,
-): ImageOutput[] | undefined {
-  if (!Array.isArray(data.data) || data.data.length === 0) {
-    return undefined;
-  }
-
-  return data.data
-    .map((item: any): ImageOutput | null => {
-      if (item.b64_json) {
-        const mimeType = getMimeTypeForOutputFormat(outputFormat);
-        return { data: `data:${mimeType};base64,${item.b64_json}`, mimeType };
-      }
-
-      if (item.url) {
-        const mimeType = inferMimeTypeFromUrl(item.url);
-        return mimeType ? { data: item.url, mimeType } : { data: item.url };
-      }
-
-      return null;
-    })
-    .filter((item: ImageOutput | null): item is ImageOutput => item !== null);
-}
-
 export function formatOutput(
   data: any,
   prompt: string,
   responseFormat?: string,
-  outputFormat?: string,
 ): string | { error: string } {
   if (responseFormat === 'b64_json') {
     const b64Json = data.data[0].b64_json;
@@ -250,7 +187,7 @@ export function formatOutput(
       return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
     }
 
-    return `data:${getMimeTypeForOutputFormat(outputFormat)};base64,${b64Json}`;
+    return JSON.stringify(data);
   } else {
     const url = data.data[0].url;
     if (!url) {
@@ -389,7 +326,6 @@ export async function processApiResponse(
   latencyMs?: number,
   quality?: string,
   n: number = 1,
-  outputFormat?: string,
 ): Promise<ProviderResponse> {
   if (data.error) {
     await data?.deleteFromCache?.();
@@ -399,17 +335,15 @@ export async function processApiResponse(
   }
 
   try {
-    const formattedOutput = formatOutput(data, prompt, responseFormat, outputFormat);
+    const formattedOutput = formatOutput(data, prompt, responseFormat);
     if (typeof formattedOutput === 'object') {
       return formattedOutput;
     }
 
     const cost = cached ? 0 : calculateImageCost(model, size, quality, n);
-    const images = buildStructuredImageOutputs(data, outputFormat);
 
     return {
       output: formattedOutput,
-      images,
       cached,
       latencyMs,
       cost,
@@ -440,7 +374,9 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.requiresApiKey() && !this.getApiKey()) {
-      throw new Error(this.getMissingApiKeyErrorMessage());
+      throw new Error(
+        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
     }
 
     const config = {
@@ -510,7 +446,6 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       latencyMs,
       config.quality,
       config.n || 1,
-      'output_format' in config ? config.output_format : undefined,
     );
   }
 }

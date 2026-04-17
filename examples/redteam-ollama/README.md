@@ -4,7 +4,6 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-ollama
-cd redteam-ollama
 ```
 
 This example shows how to red team an Ollama model using promptfoo. For a detailed walkthrough, see the [blog post](https://promptfoo.dev/blog/red-team-ollama-model/).

@@ -4,7 +4,6 @@ import {
   createHyperbolicAudioProvider,
   HyperbolicAudioProvider,
 } from '../../../src/providers/hyperbolic/audio';
-import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache');
 
@@ -61,13 +60,10 @@ describe('HyperbolicAudioProvider', () => {
 
   describe('callApi', () => {
     it('should throw error if API key is not set', async () => {
-      const restoreEnv = mockProcessEnv({ HYPERBOLIC_API_KEY: undefined });
-      try {
-        const provider = new HyperbolicAudioProvider('melo');
-        await expect(provider.callApi('test')).rejects.toThrow('Hyperbolic API key is not set');
-      } finally {
-        restoreEnv();
-      }
+      // Ensure no API key is set in environment
+      delete process.env.HYPERBOLIC_API_KEY;
+      const provider = new HyperbolicAudioProvider('melo');
+      await expect(provider.callApi('test')).rejects.toThrow('Hyperbolic API key is not set');
     });
 
     it('should handle successful API call', async () => {

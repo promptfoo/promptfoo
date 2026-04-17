@@ -25,17 +25,14 @@ interface Task {
   };
   artifacts: TaskArtifact[];
   history: {
-    state: Task['status']['state'];
+    state: string;
     message: string;
     timestamp: string;
   }[];
-  metadata: Record<string, unknown>;
+  metadata: Record<string, any>;
 }
 
-type TaskKey = 'lead-qualification' | 'content-moderation';
-type TaskState = Task['status']['state'];
-
-const sampleTasks: Record<TaskKey, Task> = {
+const sampleTasks: Record<string, Task> = {
   'lead-qualification': {
     id: 'task-001',
     sessionId: 'session-001',
@@ -69,12 +66,7 @@ const sampleTasks: Record<TaskKey, Task> = {
   },
 };
 
-const sampleTaskEntries = Object.entries(sampleTasks) as Array<[TaskKey, Task]>;
-
-const taskStateSequences: Record<
-  TaskKey,
-  Array<{ state: TaskState; message: string; duration: number }>
-> = {
+const taskStateSequences = {
   'lead-qualification': [
     { state: 'submitted', message: 'New lead qualification task received', duration: 2000 },
     { state: 'working', message: 'Analyzing lead data and engagement metrics', duration: 3000 },
@@ -96,7 +88,7 @@ const taskStateSequences: Record<
   ],
 };
 
-const stateColors: Record<TaskState, string> = {
+const stateColors = {
   submitted: '#60a5fa',
   working: '#f59e0b',
   'input-required': '#7c3aed',
@@ -105,7 +97,7 @@ const stateColors: Record<TaskState, string> = {
   failed: '#ef4444',
 };
 
-const stateDescriptions: Record<TaskState, string> = {
+const stateDescriptions = {
   submitted: 'Task has been received but not yet started',
   working: 'Task is actively being processed',
   'input-required': 'Additional information needed from client',
@@ -117,8 +109,9 @@ const stateDescriptions: Record<TaskState, string> = {
 export default function A2ATaskSimulator() {
   const [selectedTask, setSelectedTask] = useState<Task>(sampleTasks['lead-qualification']);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [currentSequenceIndex, setCurrentSequenceIndex] = useState(0);
 
-  const resetTask = (taskKey: TaskKey) => {
+  const resetTask = (taskKey: string) => {
     const task = { ...sampleTasks[taskKey] };
     task.status = {
       state: 'submitted',
@@ -130,14 +123,15 @@ export default function A2ATaskSimulator() {
     return task;
   };
 
-  const handleTaskSelect = (taskKey: TaskKey) => {
+  const handleTaskSelect = (taskKey: string) => {
     if (isAnimating) {
       return;
     }
     setSelectedTask(resetTask(taskKey));
+    setCurrentSequenceIndex(0);
   };
 
-  const addHistoryEntry = (task: Task, newState: TaskState, message: string) => {
+  const addHistoryEntry = (task: Task, newState: string, message: string) => {
     return {
       ...task,
       history: [
@@ -149,7 +143,7 @@ export default function A2ATaskSimulator() {
         ...task.history,
       ],
       status: {
-        state: newState,
+        state: newState as Task['status']['state'],
         message,
         timestamp: new Date().toISOString(),
       },
@@ -202,7 +196,7 @@ export default function A2ATaskSimulator() {
 
     setIsAnimating(true);
     const taskKey =
-      sampleTaskEntries.find(([, task]) => task.id === selectedTask.id)?.[0] ??
+      Object.entries(sampleTasks).find(([_, task]) => task.id === selectedTask.id)?.[0] ||
       'lead-qualification';
     const sequence = taskStateSequences[taskKey];
 
@@ -215,6 +209,7 @@ export default function A2ATaskSimulator() {
         const updated = addHistoryEntry(prev, state, message);
         return generateArtifact(updated);
       });
+      setCurrentSequenceIndex(i);
     }
 
     setIsAnimating(false);
@@ -225,7 +220,7 @@ export default function A2ATaskSimulator() {
       <div className={styles.taskSelector}>
         <h4>Select Task Type to See Lifecycle</h4>
         <div className={styles.taskButtons}>
-          {sampleTaskEntries.map(([key, task]) => (
+          {Object.entries(sampleTasks).map(([key, task]) => (
             <button
               key={key}
               className={`${styles.taskButton} ${selectedTask.id === task.id ? styles.active : ''}`}
@@ -248,7 +243,7 @@ export default function A2ATaskSimulator() {
         <div className={styles.stateVisualizer}>
           <h5>Task Lifecycle States</h5>
           <div className={styles.states}>
-            {(Object.keys(stateDescriptions) as TaskState[]).map((state) => (
+            {Object.keys(stateDescriptions).map((state) => (
               <div
                 key={state}
                 className={`${styles.state} ${

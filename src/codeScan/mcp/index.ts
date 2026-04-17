@@ -7,11 +7,7 @@
 import type { ChildProcess } from 'child_process';
 
 import logger from '../../logger';
-import {
-  startFilesystemMcpServer,
-  stopFilesystemMcpServer,
-  waitForFilesystemMcpServerReady,
-} from './filesystem';
+import { startFilesystemMcpServer } from './filesystem';
 import { SocketIoMcpBridge } from './transport';
 import type { Socket } from 'socket.io-client';
 
@@ -46,27 +42,19 @@ export async function setupMcpBridge(
   // Start filesystem MCP server
   const mcpProcess = startFilesystemMcpServer(absoluteRepoPath);
 
-  try {
-    await waitForFilesystemMcpServerReady(mcpProcess);
-    logger.debug('Filesystem MCP server ready');
+  // Create MCP bridge using existing socket
+  const mcpBridge = new SocketIoMcpBridge(mcpProcess, socket, sessionId);
+  await mcpBridge.connect();
 
-    // Create MCP bridge using existing socket
-    const mcpBridge = new SocketIoMcpBridge(mcpProcess, socket, sessionId);
-    await mcpBridge.connect();
+  // Announce as runner with repository root for MCP roots/list
+  socket.emit('runner:hello', {
+    session_id: sessionId,
+    repo_root: absoluteRepoPath,
+  });
 
-    // Announce as runner with repository root for MCP roots/list
-    socket.emit('runner:hello', {
-      session_id: sessionId,
-      repo_root: absoluteRepoPath,
-    });
-
-    return {
-      mcpProcess,
-      mcpBridge,
-      sessionId,
-    };
-  } catch (error) {
-    await stopFilesystemMcpServer(mcpProcess);
-    throw error;
-  }
+  return {
+    mcpProcess,
+    mcpBridge,
+    sessionId,
+  };
 }

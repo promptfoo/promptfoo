@@ -243,8 +243,6 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
             <TooltipContent>Upload test cases from CSV or YAML</TooltipContent>
           </Tooltip>
 
-          <Button onClick={() => setTestCaseDialogOpen(true)}>Add Test Case</Button>
-
           {testCases.length === 0 && (
             <Button
               variant="secondary"
@@ -273,6 +271,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
               Add Example
             </Button>
           )}
+          <Button onClick={() => setTestCaseDialogOpen(true)}>Add Test Case</Button>
         </div>
       </div>
 

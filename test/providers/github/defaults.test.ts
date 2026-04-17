@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvString } from '../../../src/envars';
 import { getDefaultProviders } from '../../../src/providers/defaults';
-import { hasGoogleDefaultCredentials } from '../../../src/providers/google/util';
-import { hasCodexDefaultCredentials } from '../../../src/providers/openai/codexDefaults';
 
 vi.mock('../../../src/envars');
 vi.mock('../../../src/logger', () => ({
@@ -20,23 +18,12 @@ vi.mock('../../../src/providers/google/util', async (importOriginal) => {
     hasGoogleDefaultCredentials: vi.fn().mockResolvedValue(false),
   };
 });
-vi.mock('../../../src/providers/openai/codexDefaults', async (importOriginal) => {
-  return {
-    ...(await importOriginal<typeof import('../../../src/providers/openai/codexDefaults')>()),
-    hasCodexDefaultCredentials: vi.fn().mockReturnValue(false),
-  };
-});
 
 const mockedGetEnvString = vi.mocked(getEnvString);
-const mockedHasCodexDefaultCredentials = vi.mocked(hasCodexDefaultCredentials);
-const mockedHasGoogleDefaultCredentials = vi.mocked(hasGoogleDefaultCredentials);
 
 describe('GitHub Models Default Providers', () => {
   beforeEach(() => {
-    mockedGetEnvString.mockReset();
-    mockedHasCodexDefaultCredentials.mockReset();
-    mockedHasCodexDefaultCredentials.mockReturnValue(false);
-    mockedHasGoogleDefaultCredentials.mockResolvedValue(false);
+    vi.clearAllMocks();
   });
 
   it('should use GitHub token for github: model when only GITHUB_TOKEN is available', async () => {
@@ -74,7 +61,7 @@ describe('GitHub Models Default Providers', () => {
     const providers = await getDefaultProviders();
 
     // Should use OpenAI, not GitHub
-    expect(providers.gradingProvider.id()).toBe('openai:gpt-5.4-2026-03-05');
+    expect(providers.gradingProvider.id()).toBe('openai:gpt-5-2025-08-07');
   });
 
   it('should prefer Anthropic over GitHub when Anthropic is available', async () => {

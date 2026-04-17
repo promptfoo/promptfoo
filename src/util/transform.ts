@@ -7,38 +7,8 @@ import { safeJoin } from './pathUtils';
 import { getProcessShim } from './processShim';
 
 import type { Vars } from '../types/index';
-import type { TransformContext, TransformFunction } from '../types/transform';
 
-export const INLINE_FUNCTION_LABEL = '[inline function]';
-export const INLINE_STRING_LABEL = '[inline transform]';
-export const FILE_TRANSFORM_LABEL = '[file transform]';
-/** Error labels truncate inline string transforms past this length so they stay readable in logs. */
-const INLINE_STRING_LABEL_MAX_LENGTH = 80;
-
-/**
- * Every config field that accepts a `StringOrFunctionSchema`. Shared between the
- * runtime sanitizer in `src/index.ts` (which replaces function values with
- * markers before persistence) and `scripts/generateJsonSchema.ts` (which rewrites
- * these fields to string-only in the generated JSON schema).
- */
-export const TRANSFORM_KEYS = [
-  'transform',
-  'transformVars',
-  'contextTransform',
-  'postprocess',
-] as const;
-
-/**
- * Unwraps `transform()`'s `Transform failed (label): ...` wrapper and returns
- * the underlying message. Callers that add their own label wrapper (e.g.
- * `contextUtils.resolveContext`, SageMaker's error response) use this to avoid
- * stuttering two labels in the user-facing message.
- */
-export function getTransformErrorMessage(error: unknown): string {
-  const cause = (error as Error & { cause?: unknown })?.cause;
-  const raw = error instanceof Error && cause instanceof Error ? cause : error;
-  return raw instanceof Error ? raw.message : String(raw);
-}
+export type TransformContext = object;
 
 export const TransformInputType = {
   OUTPUT: 'output',
@@ -157,117 +127,63 @@ function getInlineTransformFunction(code: string, inputType: TransformInputType)
 async function getTransformFunction(
   codeOrFilepath: string,
   inputType: TransformInputType,
-): Promise<Function> {
+): Promise<Function | null> {
+  let transformFn: Function | null = null;
   if (codeOrFilepath.startsWith('file://')) {
     try {
-      return await getFileTransformFunction(codeOrFilepath);
+      transformFn = await getFileTransformFunction(codeOrFilepath);
     } catch (error) {
-      logger.error('Error loading transform function from file', {
-        error,
-        message: error instanceof Error ? error.message : String(error),
-        transform: getTransformLabel(codeOrFilepath),
-      });
+      logger.error(
+        `Error loading transform function from file: ${error instanceof Error ? error.message : String(error)}`,
+      );
       throw error;
     }
   } else {
     try {
-      return getInlineTransformFunction(codeOrFilepath, inputType);
+      transformFn = getInlineTransformFunction(codeOrFilepath, inputType);
     } catch (error) {
-      logger.error('Error creating inline transform function', {
-        error,
-        message: error instanceof Error ? error.message : String(error),
-        transform: getTransformLabel(codeOrFilepath),
-      });
+      logger.error(
+        `Error creating inline transform function: ${error instanceof Error ? error.message : String(error)}`,
+      );
       throw error;
     }
   }
+  return transformFn;
 }
 
 /**
- * Returns a human-readable label for a transform value, suitable for error messages.
+ * Transforms the output using a specified function or file.
  *
- * Inline string transforms are shown verbatim (single-line, truncated to
- * {@link INLINE_STRING_LABEL_MAX_LENGTH}) so users can see which expression failed.
- * Inline functions are shown by name only — their source is never rendered, to avoid
- * leaking implementation details via `Function.toString()` into logs and persisted errors.
- */
-export function getTransformLabel(t: string | TransformFunction | null | undefined): string {
-  if (t == null) {
-    return INLINE_STRING_LABEL;
-  }
-  if (typeof t === 'function') {
-    return t.name ? `${INLINE_FUNCTION_LABEL}: ${t.name}` : INLINE_FUNCTION_LABEL;
-  }
-  if (t.startsWith('file://')) {
-    return FILE_TRANSFORM_LABEL;
-  }
-  const singleLine = t.replace(/\s+/g, ' ').trim();
-  const truncated =
-    singleLine.length > INLINE_STRING_LABEL_MAX_LENGTH
-      ? `${singleLine.slice(0, INLINE_STRING_LABEL_MAX_LENGTH - 1)}…`
-      : singleLine;
-  return `${INLINE_STRING_LABEL}: ${truncated}`;
-}
-
-/**
- * Transforms the output using a specified function, inline code, or file reference.
- *
- * @param codeOrFilepathOrFn - A TransformFunction, inline JavaScript code, or a file path
- * starting with 'file://'. File paths can include a function name
- * (e.g., 'file://transform.js:myFunction'). Python files default to 'get_transform'.
- * @param transformInput - The input to transform. Can be a string, object, or undefined.
- * @param context - Context object passed to the transform function (vars, prompt, metadata).
- * @param validateReturn - If true (default), throws when the transform returns null/undefined.
- * @param inputType - Whether the first parameter is named 'output' or 'vars' in inline code.
+ * @param codeOrFilepath - The transformation function code or file path.
+ * If it starts with 'file://', it's treated as a file path. The file path can
+ * optionally include a function name (e.g., 'file://transform.js:myFunction').
+ * If no function name is provided for Python files, it defaults to 'get_transform'.
+ * For inline code, it's treated as JavaScript.
+ * @param transformInput - The output to be transformed. Can be a string or an object.
+ * @param context - A context object that will be passed to the transform function.
+ * @param validateReturn - Optional. If true, throws an error if the transform function doesn't return a value.
  * @returns A promise that resolves to the transformed output.
- * @throws When the transform is unloadable, throws, or (with `validateReturn`) returns null/undefined.
+ * @throws Error if the file format is unsupported or if the transform function
+ * doesn't return a value (unless validateReturn is false).
  */
 export async function transform(
-  codeOrFilepathOrFn: string | TransformFunction,
+  codeOrFilepath: string,
   transformInput: string | object | undefined,
   context: TransformContext,
   validateReturn: boolean = true,
   inputType: TransformInputType = TransformInputType.OUTPUT,
 ): Promise<any> {
-  const isDirectFunction = typeof codeOrFilepathOrFn === 'function';
-  const transformFn = isDirectFunction
-    ? codeOrFilepathOrFn
-    : await getTransformFunction(codeOrFilepathOrFn, inputType);
-
-  let ret: unknown;
-  try {
-    // String/file transforms receive a process shim so inline code can call
-    // `process.mainModule.require(...)` under ESM just like it would in CJS.
-    // Direct `TransformFunction` values execute in their real module scope and
-    // don't need the shim (and shouldn't see it as an implementation detail).
-    ret = isDirectFunction
-      ? await Promise.resolve(transformFn(transformInput, context))
-      : await Promise.resolve(transformFn(transformInput, context, getProcessShim()));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const label = getTransformLabel(codeOrFilepathOrFn);
-    logger.error('Error in transform function', {
-      error,
-      message,
-      transform: label,
-    });
-    // Wrap with the label so callers (and user-visible row errors) identify
-    // which transform blew up. Keep the original via `cause` so wrappers like
-    // `contextUtils.resolveContext` can unwrap and avoid double-labeling.
-    // (Assign `cause` separately so this file compiles under ES2020 targets,
-    // e.g. the frontend workspace; the `.cause` field is still set at runtime.)
-    if (error instanceof Error) {
-      const wrapped = new Error(`Transform failed (${label}): ${message}`);
-      (wrapped as Error & { cause?: unknown }).cause = error;
-      throw wrapped;
-    }
-    throw error;
+  const postprocessFn = await getTransformFunction(codeOrFilepath, inputType);
+  if (!postprocessFn) {
+    throw new Error(`Invalid transform function for ${codeOrFilepath}`);
   }
 
+  // Pass the process shim for ESM compatibility in inline transforms
+  // This allows inline code to use process.mainModule.require just like in CommonJS
+  const ret = await Promise.resolve(postprocessFn(transformInput, context, getProcessShim()));
+
   if (validateReturn && (ret === null || ret === undefined)) {
-    throw new Error(
-      `Transform function did not return a value\n\n${getTransformLabel(codeOrFilepathOrFn)}`,
-    );
+    throw new Error(`Transform function did not return a value\n\n${codeOrFilepath}`);
   }
 
   return ret;

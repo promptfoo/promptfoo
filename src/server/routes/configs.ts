@@ -1,24 +1,16 @@
 import { and, eq } from 'drizzle-orm';
 import { Router } from 'express';
-import { z } from 'zod';
 import { getDb } from '../../database/index';
 import { configsTable } from '../../database/tables';
 import logger from '../../logger';
-import { ConfigSchemas } from '../../types/api/configs';
 import type { Request, Response } from 'express';
 
 export const configsRouter = Router();
 
 configsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
-  const queryResult = ConfigSchemas.List.Query.safeParse(req.query);
-  if (!queryResult.success) {
-    res.status(400).json({ error: z.prettifyError(queryResult.error) });
-    return;
-  }
-
+  const db = await getDb();
   try {
-    const { type } = queryResult.data;
-    const db = await getDb();
+    const type = req.query.type as string;
     const query = db
       .select({
         id: configsTable.id,
@@ -37,7 +29,7 @@ configsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
     const configs = await query;
     logger.info(`Loaded ${configs.length} configs${type ? ` of type ${type}` : ''}`);
 
-    res.json(ConfigSchemas.List.Response.parse({ configs }));
+    res.json({ configs });
   } catch (error) {
     logger.error(`Error fetching configs: ${error}`);
     res.status(500).json({ error: 'Failed to fetch configs' });
@@ -45,25 +37,27 @@ configsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
-  const bodyResult = ConfigSchemas.Create.Request.safeParse(req.body);
-  if (!bodyResult.success) {
-    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
-    return;
-  }
-
+  const db = await getDb();
   try {
-    const { name, type, config } = bodyResult.data;
+    const { name, type, config } = req.body;
     const id = crypto.randomUUID();
-    const db = await getDb();
 
-    const [result] = await db.insert(configsTable).values({ id, name, type, config }).returning({
-      id: configsTable.id,
-      createdAt: configsTable.createdAt,
-    });
+    const [result] = await db
+      .insert(configsTable)
+      .values({
+        id,
+        name,
+        type,
+        config,
+      })
+      .returning({
+        id: configsTable.id,
+        createdAt: configsTable.createdAt,
+      });
 
     logger.info(`Saved config ${id} of type ${type}`);
 
-    res.json(ConfigSchemas.Create.Response.parse(result));
+    res.json(result);
   } catch (error) {
     logger.error(`Error saving config: ${error}`);
     res.status(500).json({ error: 'Failed to save config' });
@@ -71,15 +65,9 @@ configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> => {
-  const paramsResult = ConfigSchemas.ListByType.Params.safeParse(req.params);
-  if (!paramsResult.success) {
-    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
-    return;
-  }
-
+  const db = await getDb();
+  const type = req.params.type as string;
   try {
-    const { type } = paramsResult.data;
-    const db = await getDb();
     const configs = await db
       .select({
         id: configsTable.id,
@@ -93,7 +81,7 @@ configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> =
 
     logger.info(`Loaded ${configs.length} configs of type ${type}`);
 
-    res.json(ConfigSchemas.ListByType.Response.parse({ configs }));
+    res.json({ configs });
   } catch (error) {
     logger.error(`Error fetching configs: ${error}`);
     res.status(500).json({ error: 'Failed to fetch configs' });
@@ -101,28 +89,24 @@ configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> =
 });
 
 configsRouter.get('/:type/:id', async (req: Request, res: Response): Promise<void> => {
-  const paramsResult = ConfigSchemas.Get.Params.safeParse(req.params);
-  if (!paramsResult.success) {
-    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
-    return;
-  }
-
+  const db = await getDb();
+  const type = req.params.type as string;
+  const id = req.params.id as string;
   try {
-    const { type, id } = paramsResult.data;
-    const db = await getDb();
-    const [config] = await db
+    const config = await db
       .select()
       .from(configsTable)
       .where(and(eq(configsTable.type, type), eq(configsTable.id, id)))
       .limit(1);
 
-    if (!config) {
+    logger.info(`Loaded config ${id} of type ${type}`);
+
+    if (!config.length) {
       res.status(404).json({ error: 'Config not found' });
       return;
     }
 
-    logger.info(`Loaded config ${id} of type ${type}`);
-    res.json(ConfigSchemas.Get.Response.parse(config));
+    res.json(config[0]);
   } catch (error) {
     logger.error(`Error fetching config: ${error}`);
     res.status(500).json({ error: 'Failed to fetch config' });

@@ -78,11 +78,6 @@ describe('maybeFilePath', () => {
     expect(maybeFilePath('filename.txt')).toBe(true);
   });
 
-  it('should recognize function references when the path is not the first colon-delimited token', () => {
-    expect(maybeFilePath('label:path/to/filename.py:functionName')).toBe(true);
-    expect(maybeFilePath('label:path/to/filename.js:functionName')).toBe(true);
-  });
-
   // Additional tests
   it('should return false for empty strings', () => {
     expect(maybeFilePath('')).toBe(false);

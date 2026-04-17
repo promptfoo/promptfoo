@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mockProcessEnv } from '../../util/utils';
 
 // Mock modules before importing the module under test
 vi.mock('../../../src/envars', async (importOriginal) => {
@@ -8,8 +7,7 @@ vi.mock('../../../src/envars', async (importOriginal) => {
     ...actual,
     getEnvBool: vi.fn((key: string) => {
       if (key === 'PROMPTFOO_ENABLE_INTERACTIVE_UI') {
-        const flag = process.env.PROMPTFOO_ENABLE_INTERACTIVE_UI;
-        return flag === 'true';
+        return process.env.PROMPTFOO_ENABLE_INTERACTIVE_UI === 'true';
       }
       return false;
     }),
@@ -49,10 +47,7 @@ vi.mock('../../../src/ui/list/ListApp', () => ({
 }));
 
 describe('listRunner', () => {
-  let restoreEnv: () => void;
-
   beforeEach(async () => {
-    restoreEnv = mockProcessEnv({ PROMPTFOO_ENABLE_INTERACTIVE_UI: undefined });
     // Reset mocks with mockReset() for full test isolation (clears implementations too)
     const { shouldUseInkUI } = await import('../../../src/ui/interactiveCheck');
     const { renderInteractive } = await import('../../../src/ui/render');
@@ -74,7 +69,7 @@ describe('listRunner', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
-    restoreEnv();
+    delete process.env.PROMPTFOO_ENABLE_INTERACTIVE_UI;
   });
 
   describe('shouldUseInkList', () => {

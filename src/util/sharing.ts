@@ -26,8 +26,7 @@ export interface ShouldShareOptions {
  * 2. Explicit enable (CLI --share)
  * 3. Config file commandLineOptions.share
  * 4. Config file sharing setting
- * 5. Default: auto-share when cloud is enabled and sharing is not explicitly disabled
- *    (undefined means pre-migration user who hasn't re-authenticated, preserves old behavior)
+ * 5. Default: auto-share when cloud is enabled
  *
  * @param opts - Options containing CLI flags and config values
  * @returns true if results should be shared, false otherwise
@@ -56,9 +55,6 @@ export function shouldShareResults(opts: ShouldShareOptions): boolean {
     return Boolean(opts.configSharing);
   }
 
-  // Default: auto-share when cloud is enabled and sharing is not explicitly disabled.
-  // sharing=undefined means pre-migration user who hasn't re-authenticated yet,
-  // so we preserve the old auto-share behavior until they re-auth.
-  const sharing = cloudConfig.getSharing();
-  return cloudConfig.isEnabled() && sharing !== false;
+  // Default: auto-share when cloud is enabled
+  return cloudConfig.isEnabled();
 }

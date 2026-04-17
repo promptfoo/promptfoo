@@ -1,7 +1,6 @@
 import type { ComponentProps } from 'react';
 
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PromptEditor } from './PromptEditor';
 
@@ -15,14 +14,14 @@ const MockCodeDisplay = vi.fn(
     onCopy?: () => void;
     showCopyButton?: boolean;
   }) => (
-    <section aria-label="Prompt preview">
-      <pre>{content}</pre>
+    <div>
+      <div data-testid="mock-code-display">{content}</div>
       {showCopyButton && (
-        <button type="button" onClick={onCopy}>
-          Copy prompt
+        <button data-testid="copy-button" onClick={onCopy}>
+          Copy
         </button>
       )}
-    </section>
+    </div>
   ),
 );
 
@@ -54,9 +53,7 @@ describe('PromptEditor', () => {
   it('should render the prompt using CodeDisplay and show the edit button when editMode is false', () => {
     render(<PromptEditor {...defaultProps} />);
 
-    expect(screen.getByRole('region', { name: /prompt preview/i })).toHaveTextContent(
-      'This is the original prompt.',
-    );
+    expect(screen.getByTestId('mock-code-display')).toBeInTheDocument();
     expect(screen.getByText('This is the original prompt.')).toBeInTheDocument();
     expect(MockCodeDisplay).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -91,10 +88,10 @@ describe('PromptEditor', () => {
 
     expect(screen.queryByRole('button', { name: /edit & replay/i })).not.toBeInTheDocument();
 
-    expect(screen.queryByRole('region', { name: /prompt preview/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('mock-code-display')).not.toBeInTheDocument();
   });
 
-  it('should call onReplay when the Replay button is clicked in edit mode', async () => {
+  it('should call onReplay when the Replay button is clicked in edit mode', () => {
     const onReplayMock = vi.fn();
     defaultProps = {
       ...defaultProps,
@@ -105,27 +102,24 @@ describe('PromptEditor', () => {
     render(<PromptEditor {...defaultProps} />);
 
     const replayButton = screen.getByRole('button', { name: 'Replay' });
-    await userEvent.click(replayButton);
+    fireEvent.click(replayButton);
 
     expect(onReplayMock).toHaveBeenCalledTimes(1);
   });
 
-  it('should call onCancel, exit edit mode, and reset the prompt value when the Cancel button is clicked in edit mode', async () => {
+  it('should call onCancel, exit edit mode, and reset the prompt value when the Cancel button is clicked in edit mode', () => {
+    defaultProps.editMode = true;
     const onCancelMock = vi.fn();
     const onEditModeChangeMock = vi.fn();
     const onPromptChangeMock = vi.fn();
-    const props = {
-      ...defaultProps,
-      editMode: true,
-      onCancel: onCancelMock,
-      onEditModeChange: onEditModeChangeMock,
-      onPromptChange: onPromptChangeMock,
-    };
+    defaultProps.onCancel = onCancelMock;
+    defaultProps.onEditModeChange = onEditModeChangeMock;
+    defaultProps.onPromptChange = onPromptChangeMock;
 
-    render(<PromptEditor {...props} />);
+    render(<PromptEditor {...defaultProps} />);
 
     const cancelButton = screen.getByRole('button', { name: 'Cancel' });
-    await userEvent.click(cancelButton);
+    fireEvent.click(cancelButton);
 
     expect(onCancelMock).toHaveBeenCalledTimes(1);
     expect(onEditModeChangeMock).toHaveBeenCalledTimes(1);
@@ -134,8 +128,7 @@ describe('PromptEditor', () => {
     expect(onPromptChangeMock).toHaveBeenCalledWith('This is the original prompt.');
   });
 
-  it('should call onPromptChange with the new value when the TextField value changes in edit mode', async () => {
-    const user = userEvent.setup();
+  it('should call onPromptChange with the new value when the TextField value changes in edit mode', () => {
     const onPromptChange = vi.fn();
     defaultProps = {
       ...defaultProps,
@@ -147,9 +140,7 @@ describe('PromptEditor', () => {
     const textField = screen.getByRole('textbox');
     const newValue = 'This is the new prompt value.';
 
-    await user.click(textField);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste(newValue);
+    fireEvent.change(textField, { target: { value: newValue } });
 
     expect(onPromptChange).toHaveBeenCalledWith(newValue);
   });
@@ -163,27 +154,22 @@ describe('PromptEditor', () => {
     expect(alertElement.closest('div[role="alert"]')).toBeInTheDocument();
   });
 
-  it('should call onCopy when the Copy button in CodeDisplay is clicked (when not in edit mode)', async () => {
-    const props = {
-      ...defaultProps,
-      hoveredElement: 'prompt',
-    };
-    render(<PromptEditor {...props} />);
+  it('should call onCopy when the Copy button in CodeDisplay is clicked (when not in edit mode)', () => {
+    defaultProps.hoveredElement = 'prompt';
+    render(<PromptEditor {...defaultProps} />);
 
-    await userEvent.click(screen.getByRole('button', { name: /copy prompt/i }));
+    const copyButton = screen.getByTestId('copy-button');
+    fireEvent.click(copyButton);
 
-    expect(props.onCopy).toHaveBeenCalledTimes(1);
+    expect(defaultProps.onCopy).toHaveBeenCalledTimes(1);
   });
 
   it('should handle and display prompts exceeding maxRows in edit mode', () => {
     const longPrompt = 'This is a very long prompt.\n'.repeat(30);
-    const props = {
-      ...defaultProps,
-      editMode: true,
-      editedPrompt: longPrompt,
-    };
+    defaultProps.editMode = true;
+    defaultProps.editedPrompt = longPrompt;
 
-    render(<PromptEditor {...props} />);
+    render(<PromptEditor {...defaultProps} />);
 
     const textField = screen.getByRole('textbox');
     expect(textField).toBeInTheDocument();
@@ -202,8 +188,7 @@ describe('PromptEditor', () => {
     expect(replayButton).toBeDisabled();
   });
 
-  it('should handle and validate prompts with template variables when edited', async () => {
-    const user = userEvent.setup();
+  it('should handle and validate prompts with template variables when edited', () => {
     const onPromptChange = vi.fn();
     defaultProps = {
       ...defaultProps,
@@ -219,9 +204,7 @@ describe('PromptEditor', () => {
 
     const newPromptValue =
       'This is the edited prompt with a modified {{variable}} and a new {{another_variable}}.';
-    await user.click(textField);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste(newPromptValue);
+    fireEvent.change(textField, { target: { value: newPromptValue } });
 
     expect(onPromptChange).toHaveBeenCalledWith(newPromptValue);
   });
@@ -229,7 +212,7 @@ describe('PromptEditor', () => {
   it('should not show edit button when readOnly is true', () => {
     render(<PromptEditor {...defaultProps} readOnly={true} />);
 
-    expect(screen.getByRole('region', { name: /prompt preview/i })).toBeInTheDocument();
+    expect(screen.getByTestId('mock-code-display')).toBeInTheDocument();
     expect(screen.getByText('This is the original prompt.')).toBeInTheDocument();
 
     expect(screen.queryByRole('button', { name: /edit & replay/i })).not.toBeInTheDocument();

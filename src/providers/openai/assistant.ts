@@ -226,7 +226,9 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
-      throw new Error(this.getMissingApiKeyErrorMessage());
+      throw new Error(
+        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
     }
 
     const openai = new OpenAI({
@@ -255,7 +257,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         (await maybeLoadToolsFromExternalFile(this.assistantConfig.tools, context?.vars)) ||
         undefined,
       metadata: this.assistantConfig.metadata || undefined,
-      temperature: this.assistantConfig.temperature ?? undefined,
+      temperature: this.assistantConfig.temperature || undefined,
       tool_choice: this.assistantConfig.toolChoice || undefined,
       tool_resources: this.assistantConfig.tool_resources || undefined,
       thread: {

@@ -8,6 +8,10 @@ describe('Per-test configuration merging', () => {
   let mockProvider: ApiProvider;
   let mockPrompt: Prompt;
 
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   beforeEach(() => {
     vi.resetAllMocks();
 

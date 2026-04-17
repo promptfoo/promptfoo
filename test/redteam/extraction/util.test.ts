@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';
@@ -10,12 +10,8 @@ import {
   RedTeamGenerationResponse,
 } from '../../../src/redteam/extraction/util';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
-import {
-  createMockProvider,
-  createProviderResponse,
-  type MockApiProvider,
-} from '../../factories/provider';
-import { mockProcessEnv } from '../../util/utils';
+
+import type { ApiProvider } from '../../../src/types/index';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -42,14 +38,8 @@ vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('fetchRemoteGeneration', () => {
-  let restoreEnv: () => void;
-
   beforeAll(() => {
-    restoreEnv = mockProcessEnv({ PROMPTFOO_REMOTE_GENERATION_URL: undefined });
-  });
-
-  afterAll(() => {
-    restoreEnv();
+    delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
   });
 
   beforeEach(() => {
@@ -218,12 +208,13 @@ describe('RedTeamGenerationResponse', () => {
 });
 
 describe('Extraction Utils', () => {
-  let provider: MockApiProvider;
+  let provider: ApiProvider;
 
   beforeEach(() => {
-    provider = createMockProvider({
-      response: createProviderResponse({ output: 'test output' }),
-    });
+    provider = {
+      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+      id: vi.fn().mockReturnValue('test-provider'),
+    };
     vi.clearAllMocks();
   });
 

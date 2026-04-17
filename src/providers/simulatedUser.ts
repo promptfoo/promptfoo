@@ -207,7 +207,6 @@ export class SimulatedUser implements ApiProvider {
   }
 
   private async sendMessageToAgent(
-    prompt: string,
     messages: Message[],
     targetProvider: ApiProvider,
     context: CallApiContextParams,
@@ -215,9 +214,9 @@ export class SimulatedUser implements ApiProvider {
     invariant(context?.prompt?.raw, 'Expected context.prompt.raw to be set');
 
     // Include the assistant's prompt/instructions as a system message
-    const renderedPrompt = context.prompt.function
-      ? prompt
-      : getNunjucksEngine().renderString(context.prompt.raw, context.vars);
+    const agentPrompt = context.prompt.raw;
+    const agentVars = context.vars;
+    const renderedPrompt = getNunjucksEngine().renderString(agentPrompt, agentVars);
 
     // For stateful providers:
     //   - First turn (no sessionId): send system prompt + user message to establish session
@@ -251,7 +250,9 @@ export class SimulatedUser implements ApiProvider {
   }
 
   async callApi(
-    prompt: string,
+    // NOTE: The `prompt` parameter is not used directly; `context.prompt.raw` is used instead
+    // to extract the assistant's system instructions. The simulated user's instructions come from vars.
+    _prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
@@ -295,7 +296,7 @@ export class SimulatedUser implements ApiProvider {
       logger.debug(
         '[SimulatedUser] Initial messages end with user message, getting agent response first',
       );
-      agentResponse = await this.sendMessageToAgent(prompt, messages, targetProvider, context);
+      agentResponse = await this.sendMessageToAgent(messages, targetProvider, context);
 
       // Check for errors from agent response
       if (agentResponse.error) {
@@ -338,12 +339,7 @@ export class SimulatedUser implements ApiProvider {
 
       messages.push(lastMessage);
 
-      agentResponse = await this.sendMessageToAgent(
-        prompt,
-        messagesToUser,
-        targetProvider,
-        context,
-      );
+      agentResponse = await this.sendMessageToAgent(messagesToUser, targetProvider, context);
 
       // Check for errors from agent response
       if (agentResponse.error) {

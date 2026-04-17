@@ -4,7 +4,6 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-custom-strategy
-cd redteam-custom-strategy
 ```
 
 A simple example showing how to create a custom red team strategy that prepends "PLEASE" to test prompts.

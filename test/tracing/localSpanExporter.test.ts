@@ -33,7 +33,6 @@ describe('LocalSpanExporter', () => {
   });
 
   afterEach(() => {
-    vi.useRealTimers();
     vi.resetAllMocks();
   });
 
@@ -57,7 +56,7 @@ describe('LocalSpanExporter', () => {
         traceFlags: 1,
         isRemote: false,
       }),
-      // OpenTelemetry SDK 2.x uses parentSpanContext instead of parentSpanId
+      // SDK 2.x uses parentSpanContext instead of parentSpanId
       parentSpanContext: overrides.parentSpanId
         ? { traceId, spanId: overrides.parentSpanId, traceFlags: 1, isRemote: false }
         : undefined,
@@ -108,7 +107,7 @@ describe('LocalSpanExporter', () => {
             name: 'test-span',
           }),
         ],
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        { skipTraceCheck: false },
       );
     });
 
@@ -135,55 +134,21 @@ describe('LocalSpanExporter', () => {
       expect(mockAddSpans).toHaveBeenCalledTimes(2);
 
       // First call for trace-1 with 2 spans
-      expect(mockAddSpans).toHaveBeenNthCalledWith(
-        1,
+      expect(mockAddSpans).toHaveBeenCalledWith(
         'trace-1',
         expect.arrayContaining([
           expect.objectContaining({ spanId: 'span-1' }),
           expect.objectContaining({ spanId: 'span-2' }),
         ]),
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        { skipTraceCheck: false },
       );
 
       // Second call for trace-2 with 1 span
-      expect(mockAddSpans).toHaveBeenNthCalledWith(
-        2,
+      expect(mockAddSpans).toHaveBeenCalledWith(
         'trace-2',
         [expect.objectContaining({ spanId: 'span-3' })],
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        { skipTraceCheck: false },
       );
-    });
-
-    it('retries once when the trace record is not visible yet', async () => {
-      vi.useFakeTimers();
-      try {
-        const span = createMockSpan();
-
-        mockAddSpans
-          .mockResolvedValueOnce({ stored: false, reason: 'Trace trace-id-123 not found' })
-          .mockResolvedValueOnce({ stored: true });
-
-        const resultPromise = exportSpans([span]);
-        await vi.advanceTimersByTimeAsync(50);
-        const result = await resultPromise;
-
-        expect(result.code).toBe(ExportResultCode.SUCCESS);
-        expect(mockAddSpans).toHaveBeenCalledTimes(2);
-        expect(mockAddSpans).toHaveBeenNthCalledWith(
-          1,
-          'trace-id-123',
-          [expect.objectContaining({ spanId: 'span-id-456' })],
-          { skipTraceCheck: false, warnIfMissingTrace: false },
-        );
-        expect(mockAddSpans).toHaveBeenNthCalledWith(
-          2,
-          'trace-id-123',
-          [expect.objectContaining({ spanId: 'span-id-456' })],
-          { skipTraceCheck: false, warnIfMissingTrace: false },
-        );
-      } finally {
-        vi.useRealTimers();
-      }
     });
 
     it('should convert span times to milliseconds', async () => {

@@ -1,4 +1,4 @@
-import { matchesClassification } from '../matchers/classification';
+import { matchesClassification } from '../matchers';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';

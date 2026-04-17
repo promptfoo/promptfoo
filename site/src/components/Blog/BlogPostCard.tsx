@@ -25,7 +25,7 @@ interface BlogPostCardProps {
 export default function BlogPostCard({ post }: BlogPostCardProps): React.ReactElement {
   const { metadata } = post;
   const { title, date, permalink, tags, description } = metadata;
-  const { authors } = metadata;
+  const author = metadata.authors[0];
 
   // Format date as "Dec 12, 2025" style
   const formattedDate = new Date(date).toLocaleDateString('en-US', {
@@ -41,8 +41,6 @@ export default function BlogPostCard({ post }: BlogPostCardProps): React.ReactEl
   // Get first sentence of description for preview
   const preview = description ? description.split('. ')[0] + '.' : null;
 
-  const authorNames = authors.map((a) => a.name).join(' and ');
-
   return (
     <Link to={permalink} className={styles.blogPostCard}>
       {metadata.frontMatter.image && (
@@ -55,7 +53,7 @@ export default function BlogPostCard({ post }: BlogPostCardProps): React.ReactEl
         <h3 className={styles.title}>{title}</h3>
         {preview && <p className={styles.preview}>{preview}</p>}
         <div className={styles.blogPostMeta}>
-          {authorNames && <span className={styles.author}>{authorNames}</span>}
+          {author && <span className={styles.author}>{author.name}</span>}
           <span className={styles.date}>{formattedDate}</span>
         </div>
       </div>

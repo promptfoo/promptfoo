@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Vercel AI Gateway Example
+#
+# This example demonstrates using Vercel AI Gateway to access multiple
+# AI providers through a unified API with 0% markup.
+#
+# Required environment variables:
+#   VERCEL_AI_GATEWAY_API_KEY - Your Vercel AI Gateway API key
+#
+# Run with:
+#   npx promptfoo eval -c examples/vercel-ai-gateway/promptfooconfig.yaml
+
+description: Vercel AI Gateway multi-provider comparison
+
+prompts:
+  - 'Explain {{topic}} in simple terms, in about 2-3 sentences.'
+
+providers:
+  # OpenAI via Vercel AI Gateway
+  - id: vercel:openai/gpt-4o-mini
+    config:
+      temperature: 0.7
+      maxTokens: 200
+
+  # Anthropic via Vercel AI Gateway
+  - id: vercel:anthropic/claude-haiku-4.5
+    config:
+      temperature: 0.7
+      maxTokens: 200
+
+  # Google via Vercel AI Gateway
+  - id: vercel:google/gemini-2.5-flash
+    config:
+      temperature: 0.7
+      maxTokens: 200
+
+tests:
+  - vars:
+      topic: machine learning
+    assert:
+      - type: contains-any
+        value:
+          - algorithm
+          - data
+          - learn
+          - pattern
+
+  - vars:
+      topic: quantum computing
+    assert:
+      - type: contains-any
+        value:
+          - qubit
+          - quantum
+          - superposition
+          - computer
+
+  - vars:
+      topic: blockchain
+    assert:
+      - type: contains-any
+        value:
+          - block
+          - chain
+          - ledger
+          - decentralized

@@ -4,7 +4,6 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-minimal
-cd redteam-minimal
 ```
 
 A minimal red team setup demonstrating basic configuration and strategies.

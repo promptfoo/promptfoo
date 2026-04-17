@@ -1,6 +1,6 @@
 import fs from 'fs';
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getSysExecutable,
   runPython,
@@ -9,7 +9,6 @@ import {
   validatePythonPath,
 } from '../../src/python/pythonUtils';
 import { runPythonCode } from '../../src/python/wrapper';
-import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/esm');
 vi.mock('python-shell');
@@ -48,16 +47,9 @@ interface MixedTestResult {
   isExplicit: boolean;
 }
 describe('wrapper', () => {
-  let restoreEnv: () => void;
-
   beforeAll(() => {
-    restoreEnv = mockProcessEnv({ PROMPTFOO_PYTHON: undefined });
+    delete process.env.PROMPTFOO_PYTHON;
   });
-
-  afterAll(() => {
-    restoreEnv();
-  });
-
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(validatePythonPath).mockImplementation(

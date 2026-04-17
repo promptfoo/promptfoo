@@ -1,5 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PromptDialog from './PromptDialog';
 
@@ -19,7 +18,7 @@ describe('PromptDialog', () => {
   it("should render the dialog with the correct title, text, and buttons when 'open' is true", () => {
     render(<PromptDialog {...mockProps} />);
 
-    expect(screen.getByText('Add Prompt')).toBeInTheDocument();
+    expect(screen.getByText(`Edit Prompt ${mockProps.index + 1}`)).toBeInTheDocument();
 
     const textField = screen.getByRole('textbox');
     expect(textField).toBeInTheDocument();
@@ -30,51 +29,43 @@ describe('PromptDialog', () => {
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
   });
 
-  it('should update the text field value and internal state when the user types in the TextField', async () => {
-    const user = userEvent.setup();
+  it('should update the text field value and internal state when the user types in the TextField', () => {
     render(<PromptDialog {...mockProps} />);
     const textField = screen.getByRole('textbox');
     const newValue = 'This is a new test prompt.';
 
-    await user.click(textField);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste(newValue);
+    fireEvent.change(textField, { target: { value: newValue } });
 
     expect(textField).toHaveValue(newValue);
   });
 
-  it('should call onAdd with the current editingPrompt, clear the text field, and call onCancel when the Add button is clicked', async () => {
-    const user = userEvent.setup();
+  it('should call onAdd with the current editingPrompt, clear the text field, and call onCancel when the Add button is clicked', () => {
     render(<PromptDialog {...mockProps} />);
     const addButton = screen.getByRole('button', { name: 'Add' });
-    await user.click(addButton);
+    fireEvent.click(addButton);
 
     expect(mockProps.onAdd).toHaveBeenCalledWith(mockProps.prompt);
     expect(mockProps.onCancel).toHaveBeenCalled();
   });
 
-  it('should call onAdd, clear the text field, and focus the text field when the Add Another button is clicked', async () => {
-    const user = userEvent.setup();
+  it('should call onAdd, clear the text field, and focus the text field when the Add Another button is clicked', () => {
     render(<PromptDialog {...mockProps} />);
 
     const textField = screen.getByRole('textbox');
-    await user.click(textField);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste('New prompt text');
+    fireEvent.change(textField, { target: { value: 'New prompt text' } });
 
     const addButton = screen.getByRole('button', { name: 'Add Another' });
-    await user.click(addButton);
+    fireEvent.click(addButton);
 
     expect(mockProps.onAdd).toHaveBeenCalledWith('New prompt text');
     expect(textField).toHaveValue('');
     expect(textField).toHaveFocus();
   });
 
-  it('should call onCancel when the "Cancel" button is clicked', async () => {
-    const user = userEvent.setup();
+  it('should call onCancel when the "Cancel" button is clicked', () => {
     render(<PromptDialog {...mockProps} />);
     const cancelButton = screen.getByRole('button', { name: 'Cancel' });
-    await user.click(cancelButton);
+    fireEvent.click(cancelButton);
     expect(mockProps.onCancel).toHaveBeenCalledTimes(1);
   });
 

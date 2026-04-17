@@ -19,22 +19,16 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { ReasoningEffort } from '../openai/types';
-import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
 
 // Azure Responses API uses the v1 preview API version
 const AZURE_RESPONSES_API_VERSION = 'preview';
 
 export class AzureResponsesProvider extends AzureGenericProvider {
-  declare config: AzureChatResponsesOptions;
-
   private functionCallbackHandler = new FunctionCallbackHandler();
   private processor: ResponsesProcessor;
 
-  constructor(
-    deploymentName: string,
-    options: AzureProviderOptions<AzureChatResponsesOptions> = {},
-  ) {
-    super(deploymentName, options);
+  constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
+    super(...args);
 
     // Initialize the shared response processor
     this.processor = new ResponsesProcessor({
@@ -115,24 +109,14 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     }
 
     const isReasoningModel = this.isReasoningModel();
-    const maxOutputTokensDefault = config.omitDefaults
-      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
-        ? undefined
-        : getEnvInt('OPENAI_MAX_TOKENS')
-      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
-    const reasoningMaxOutputTokensDefault =
-      getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
     const maxOutputTokens =
       config.max_output_tokens ??
-      (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
+      (isReasoningModel
+        ? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS')
+        : getEnvInt('OPENAI_MAX_TOKENS', 1024));
 
-    const temperatureDefault = config.omitDefaults
-      ? getEnvString('OPENAI_TEMPERATURE') === undefined
-        ? undefined
-        : getEnvFloat('OPENAI_TEMPERATURE')
-      : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature = this.supportsTemperature()
-      ? (config.temperature ?? temperatureDefault)
+      ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
       : undefined;
     const reasoningEffort = isReasoningModel
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
@@ -184,9 +168,9 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     const body = {
       model: this.deploymentName,
       input,
-      ...(maxOutputTokens === undefined ? {} : { max_output_tokens: maxOutputTokens }),
+      ...(maxOutputTokens !== undefined ? { max_output_tokens: maxOutputTokens } : {}),
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
-      ...(temperature === undefined ? {} : { temperature }),
+      ...(temperature !== undefined ? { temperature } : {}),
       ...(instructions ? { instructions } : {}),
       ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }

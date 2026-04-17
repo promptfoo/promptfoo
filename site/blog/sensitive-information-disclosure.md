@@ -10,7 +10,7 @@ keywords:
     data leakage prevention,
     AI compliance,
     PII protection,
-    data protection,
+    GDPR compliance,
     AI data privacy,
     information security,
   ]

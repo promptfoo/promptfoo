@@ -1,6 +1,5 @@
 import { renderWithProviders } from '@app/utils/testutils';
-import { screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useResultsViewSettingsStore } from '../../store';
 import SettingsPanel from './SettingsPanel';
@@ -83,13 +82,12 @@ describe('SettingsPanel', () => {
       setter: 'setWordBreak' as const,
       expectedNewValue: 'break-all',
     },
-  ])('should update the $setter setting when the "$name" toggle is clicked', async ({
+  ])('should update the $setter setting when the "$name" toggle is clicked', ({
     name,
     initialState,
     setter,
     expectedNewValue,
   }) => {
-    const user = userEvent.setup();
     renderWithProviders(<SettingsPanel />);
 
     const toggle = screen.getByRole('checkbox', { name });
@@ -101,14 +99,13 @@ describe('SettingsPanel', () => {
       expect(toggle).not.toBeChecked();
     }
 
-    await user.click(toggle);
+    fireEvent.click(toggle);
 
     expect(mockStore[setter]).toHaveBeenCalledTimes(1);
     expect(mockStore[setter]).toHaveBeenCalledWith(expectedNewValue);
   });
 
   it('should call setMaxTextLength when slider value is committed via keyboard', async () => {
-    const user = userEvent.setup();
     renderWithProviders(<SettingsPanel />);
 
     const slider = screen.getByRole('slider', { name: /max text length/i });
@@ -117,7 +114,8 @@ describe('SettingsPanel', () => {
 
     // Focus the slider and use keyboard to change value
     slider.focus();
-    await user.keyboard('{End}');
+    // Pressing End key in Radix Slider goes to max value (1001)
+    fireEvent.keyDown(slider, { key: 'End' });
 
     // For Radix Slider, the store is called via onValueCommit after key events
     expect(mockStore.setMaxTextLength).toHaveBeenCalledWith(Number.POSITIVE_INFINITY);

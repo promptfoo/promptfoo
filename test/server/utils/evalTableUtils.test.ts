@@ -5,7 +5,6 @@ import {
   streamEvalCsv,
 } from '../../../src/server/utils/evalTableUtils';
 import { ResultFailureReason } from '../../../src/types/index';
-import { createCompletedPrompt } from '../../factories/eval';
 
 import type Eval from '../../../src/models/eval';
 import type {
@@ -26,16 +25,18 @@ describe('evalTableUtils', () => {
       head: {
         vars: ['var1', 'var2'],
         prompts: [
-          createCompletedPrompt('Test prompt {{var1}}', {
+          {
             provider: 'openai:gpt-4',
             label: 'Prompt 1',
+            raw: 'Test prompt {{var1}}',
             display: 'Test prompt',
-          }),
-          createCompletedPrompt('Another prompt {{var2}}', {
+          } as CompletedPrompt,
+          {
             provider: 'anthropic:claude',
             label: 'Prompt 2',
+            raw: 'Another prompt {{var2}}',
             display: 'Another prompt',
-          }),
+          } as CompletedPrompt,
         ],
       },
       body: [
@@ -452,16 +453,18 @@ describe('evalTableUtils', () => {
           head: {
             vars: ['var1'],
             prompts: [
-              createCompletedPrompt('Test prompt 1', {
+              {
                 provider: 'openai:gpt-4',
                 label: 'Prompt 1',
+                raw: 'Test prompt 1',
                 display: 'Test prompt 1',
-              }),
-              createCompletedPrompt('Test prompt 2', {
+              } as CompletedPrompt,
+              {
                 provider: 'anthropic:claude',
                 label: 'Prompt 2',
+                raw: 'Test prompt 2',
                 display: 'Test prompt 2',
-              }),
+              } as CompletedPrompt,
             ],
           },
           body: [
@@ -548,16 +551,18 @@ describe('evalTableUtils', () => {
           head: {
             vars: ['var1'],
             prompts: [
-              createCompletedPrompt('Test prompt 1', {
+              {
                 provider: 'openai:gpt-4',
                 label: 'Prompt 1',
+                raw: 'Test prompt 1',
                 display: 'Test prompt 1',
-              }),
-              createCompletedPrompt('Test prompt 2', {
+              } as CompletedPrompt,
+              {
                 provider: 'anthropic:claude',
                 label: 'Prompt 2',
+                raw: 'Test prompt 2',
                 display: 'Test prompt 2',
-              }),
+              } as CompletedPrompt,
             ],
           },
           body: [

@@ -5,14 +5,13 @@ import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert'
 import { Card } from '@app/components/ui/card';
 import { GlobeIcon, TerminalIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
-import { EVAL_ROUTES } from '@app/constants/routes';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { cn } from '@app/lib/utils';
 import useApiConfig from '@app/stores/apiConfig';
 import { CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import ThemeSelector from '../../components/ThemeSelector';
+import DarkModeToggle from '../../components/DarkMode';
 
 const DEFAULT_LOCAL_API_URL = 'http://localhost:15500';
 
@@ -21,6 +20,7 @@ export default function LauncherPage() {
   const [hasBeenConnected, setHasBeenConnected] = useState(false);
   const [isInitialConnection, setIsInitialConnection] = useState(true);
   const navigate = useNavigate();
+  const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const {
     data: { status: healthStatus },
     refetch: checkHealth,
@@ -36,8 +36,37 @@ export default function LauncherPage() {
   }, [apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl]);
 
   useEffect(() => {
+    const savedMode = localStorage.getItem('darkMode');
+    const prefersDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    setDarkMode(savedMode === null ? prefersDarkMode : savedMode === 'true');
+  }, []);
+
+  const toggleDarkMode = () => {
+    setDarkMode((prevMode) => {
+      if (prevMode === null) {
+        return prevMode;
+      }
+      const newMode = !prevMode;
+      localStorage.setItem('darkMode', String(newMode));
+      return newMode;
+    });
+  };
+
+  useEffect(() => {
+    if (darkMode === null) {
+      return;
+    }
+
+    if (darkMode) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+  }, [darkMode]);
+
+  useEffect(() => {
     // Simple delay to allow server startup, then start health checks
-    let interval: NodeJS.Timeout | undefined;
+    let interval: NodeJS.Timeout;
     const timeout = setTimeout(() => {
       checkHealth();
       interval = setInterval(() => {
@@ -61,13 +90,17 @@ export default function LauncherPage() {
       if (isInitialConnection) {
         setTimeout(() => {
           setIsInitialConnection(false);
-          navigate(EVAL_ROUTES.ROOT);
+          navigate('/eval');
         }, 1000);
       }
     } else if (healthStatus === 'blocked' || healthStatus === 'disabled') {
       setIsConnecting(true);
     }
   }, [healthStatus, navigate, isInitialConnection]);
+
+  if (darkMode === null) {
+    return null;
+  }
 
   const showConnectionWarning =
     hasBeenConnected && !isInitialConnection && healthStatus === 'blocked';
@@ -101,9 +134,9 @@ export default function LauncherPage() {
         </Alert>
       </div>
 
-      {/* Theme selector */}
+      {/* Dark mode toggle */}
       <div className="absolute right-4 top-4">
-        <ThemeSelector />
+        <DarkModeToggle onToggleDarkMode={toggleDarkMode} />
       </div>
 
       {/* Header section */}
@@ -189,7 +222,7 @@ export default function LauncherPage() {
           </div>
           <p className="mb-4 leading-relaxed text-muted-foreground">
             Safari and Brave block access to localhost by default. You need to install mkcert and
-            generate a self-signed certificate:
+            generate self-signed certificate:
           </p>
           <ol className="list-decimal space-y-4 pl-5">
             <li className="leading-relaxed">

@@ -6,7 +6,6 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-medical-agent
-cd redteam-medical-agent
 ```
 
 ## Features
@@ -88,7 +87,7 @@ This agent is vulnerable to various attack vectors that can be tested using prom
 2. Unauthorized access to medical records
 3. Prescription fraud
 4. Insurance information exposure
-5. Patient privacy control bypasses
+5. HIPAA compliance bypasses
 6. Medical misinformation vulnerabilities
 7. Social engineering attacks
 

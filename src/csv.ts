@@ -214,7 +214,11 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
       // Parse __config columns
       // Formats: __config:__expected:threshold or __config:__expected<N>:threshold
       const configParts = key.slice('__config:'.length).split(':');
-      if (configParts.length === 2) {
+      if (configParts.length !== 2) {
+        logger.warn(
+          `Invalid __config column format: "${key}". Expected format: __config:__expected:threshold or __config:__expected<N>:threshold`,
+        );
+      } else {
         const [expectedKey, configKey] = configParts;
 
         // Parse the expected key to determine which assertion(s) to target
@@ -265,10 +269,6 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
         }
 
         assertionConfigs[targetIndex][configKey] = parsedValue;
-      } else {
-        logger.warn(
-          `Invalid __config column format: "${key}". Expected format: __config:__expected:threshold or __config:__expected<N>:threshold`,
-        );
       }
     } else {
       vars[key] = value;

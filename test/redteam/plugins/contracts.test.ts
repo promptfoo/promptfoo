@@ -1,22 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ContractPlugin, ContractsGrader } from '../../../src/redteam/plugins/contracts';
-import {
-  createMockProvider,
-  createProviderResponse,
-  type MockApiProvider,
-} from '../../factories/provider';
+
+import type { ApiProvider } from '../../../src/types/index';
 
 vi.mock('../../../src/util/fetch/index.ts');
 
 describe('ContractPlugin', () => {
-  let mockProvider: MockApiProvider;
+  let mockProvider: ApiProvider;
 
   beforeEach(() => {
-    mockProvider = createMockProvider({
-      response: createProviderResponse({
+    mockProvider = {
+      id: () => 'test-provider',
+      callApi: vi.fn().mockResolvedValue({
         output: 'Prompt: Test prompt\nPrompt: Another test prompt',
       }),
-    });
+    };
   });
 
   it('should have canGenerateRemote set to true', () => {

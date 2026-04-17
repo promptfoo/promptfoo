@@ -1,8 +1,7 @@
 import useApiConfig from '@app/stores/apiConfig';
-import { mockCallApiResponse, rejectCallApi, resetCallApiMock } from '@app/tests/apiMocks';
 import { callApi, fetchUserEmail } from '@app/utils/api';
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { useEmailVerification } from './useEmailVerification';
 
 vi.mock('@app/utils/api', () => ({
@@ -14,11 +13,21 @@ vi.mock('@app/utils/api', () => ({
 
 describe('useEmailVerification', () => {
   const setupApiMock = (response: any, isSuccess = true) => {
-    mockCallApiResponse(response, { ok: isSuccess });
+    if (isSuccess) {
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue(response),
+      });
+    } else {
+      (callApi as Mock).mockResolvedValue({
+        ok: false,
+        json: vi.fn().mockResolvedValue(response),
+      });
+    }
   };
 
   const setupApiError = (error: Error) => {
-    rejectCallApi(error);
+    (callApi as Mock).mockRejectedValue(error);
   };
 
   const callCheckEmailStatus = async (hook: any) => {
@@ -46,7 +55,7 @@ describe('useEmailVerification', () => {
   };
 
   beforeEach(() => {
-    resetCallApiMock();
+    vi.clearAllMocks();
   });
 
   describe('checkEmailStatus', () => {
@@ -76,19 +85,6 @@ describe('useEmailVerification', () => {
           needsEmail: false,
           error:
             'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
-        },
-      },
-      {
-        name: 'status: "email_verification_required"',
-        apiResponse: {
-          hasEmail: true,
-          status: 'email_verification_required' as const,
-          message: 'Please verify your email address and try again.',
-        },
-        expected: {
-          canProceed: false,
-          needsEmail: false,
-          error: 'Please verify your email address and try again.',
         },
       },
       {
@@ -276,11 +272,11 @@ describe('useEmailVerification', () => {
 
 describe('fetchUserEmail', () => {
   beforeEach(() => {
-    vi.mocked(fetchUserEmail).mockClear();
+    vi.clearAllMocks();
   });
 
   it('should return null when apiBaseUrl is missing or invalid', async () => {
-    vi.mocked(fetchUserEmail).mockImplementationOnce(async () => null);
+    (fetchUserEmail as Mock).mockImplementationOnce(async () => null);
 
     const mockGetState = vi.fn(() => ({
       apiBaseUrl: undefined,

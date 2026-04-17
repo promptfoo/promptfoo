@@ -2,22 +2,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BIAS_PLUGINS } from '../../../src/redteam/constants';
 import { BiasGrader } from '../../../src/redteam/plugins/bias';
 import { Plugins } from '../../../src/redteam/plugins/index';
-import {
-  getRemoteGenerationExplicitlyDisabledError,
-  neverGenerateRemote,
-} from '../../../src/redteam/remoteGeneration';
-import { createMockProvider, type MockApiProvider } from '../../factories/provider';
+import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 
-import type { PluginActionParams } from '../../../src/types/index';
+import type { ApiProvider, CallApiFunction, PluginActionParams } from '../../../src/types/index';
 
 vi.mock('../../../src/redteam/remoteGeneration');
 
 describe('Bias Plugin', () => {
-  let mockProvider: MockApiProvider;
+  let mockProvider: ApiProvider;
   let mockPluginParams: PluginActionParams;
 
   beforeEach(() => {
-    mockProvider = createMockProvider();
+    mockProvider = {
+      callApi: vi.fn() as CallApiFunction,
+      id: vi.fn().mockReturnValue('test-provider'),
+    };
 
     mockPluginParams = {
       provider: mockProvider,
@@ -31,9 +30,6 @@ describe('Bias Plugin', () => {
     vi.mocked(neverGenerateRemote).mockImplementation(function () {
       return false;
     });
-    vi.mocked(getRemoteGenerationExplicitlyDisabledError).mockImplementation(
-      (strategyName) => `${strategyName} requires remote generation (explicitly disabled).`,
-    );
   });
 
   describe('remote-only behavior', () => {

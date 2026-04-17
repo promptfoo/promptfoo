@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@app/components/ui/card';
-import StatefulnessRadioGroup, { STATEFULNESS_QUESTION } from '../StatefulnessRadioGroup';
+import { Label } from '@app/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@app/components/ui/radio-group';
 
 interface SystemConfigurationProps {
   isStatefulValue: boolean;
@@ -16,11 +17,26 @@ export function SystemConfiguration({
         <CardTitle className="text-lg">System Configuration</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="mb-4 text-sm font-medium">{STATEFULNESS_QUESTION}</p>
-        <StatefulnessRadioGroup
+        <p className="mb-4 text-sm text-muted-foreground">
+          Is the target system Stateful? (Does it maintain conversation history?)
+        </p>
+        <RadioGroup
           value={String(isStatefulValue)}
           onValueChange={(value) => onStatefulChange(value === 'true')}
-        />
+        >
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="true" id="stateful-yes" />
+            <Label htmlFor="stateful-yes" inline className="cursor-pointer font-normal">
+              Yes - System is stateful, system maintains conversation history.
+            </Label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="false" id="stateful-no" />
+            <Label htmlFor="stateful-no" inline className="cursor-pointer font-normal">
+              No - System does not maintain conversation history
+            </Label>
+          </div>
+        </RadioGroup>
       </CardContent>
     </Card>
   );

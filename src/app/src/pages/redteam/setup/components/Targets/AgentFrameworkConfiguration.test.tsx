@@ -1,7 +1,5 @@
-import { mockClipboard } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
-import { screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 
@@ -14,8 +12,7 @@ vi.mock('../../../hooks/useTelemetry', () => ({
 }));
 
 describe('AgentFrameworkConfiguration', () => {
-  it('should call updateCustomTarget with the correct field and value when the Provider ID input is changed by the user', async () => {
-    const user = userEvent.setup();
+  it('should call updateCustomTarget with the correct field and value when the Provider ID input is changed by the user', () => {
     const mockUpdateCustomTarget = vi.fn();
     const selectedTarget: ProviderOptions = {
       id: '',
@@ -35,9 +32,7 @@ describe('AgentFrameworkConfiguration', () => {
     const providerIdInput = screen.getByRole('textbox', {
       name: /Provider ID \(Python file path\)/i,
     });
-    await user.click(providerIdInput);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste(newPath);
+    fireEvent.change(providerIdInput, { target: { value: newPath } });
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', newPath);
@@ -65,7 +60,6 @@ describe('AgentFrameworkConfiguration', () => {
   });
 
   it('should handle clipboard API unavailability gracefully', async () => {
-    const user = userEvent.setup();
     const mockUpdateCustomTarget = vi.fn();
     const selectedTarget: ProviderOptions = {
       id: '',
@@ -74,7 +68,11 @@ describe('AgentFrameworkConfiguration', () => {
     const agentType = 'langchain';
 
     const writeTextMock = vi.fn().mockRejectedValue(new Error('Clipboard API not available'));
-    mockClipboard({ writeText: writeTextMock as Clipboard['writeText'] });
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: writeTextMock,
+      },
+    });
 
     renderWithProviders(
       <AgentFrameworkConfiguration
@@ -85,16 +83,15 @@ describe('AgentFrameworkConfiguration', () => {
     );
 
     const generateButton = screen.getByRole('button', { name: /Generate Template File/i });
-    await user.click(generateButton);
+    fireEvent.click(generateButton);
 
     const copyButton = await screen.findByRole('button', { name: /Copy Template/i });
-    await user.click(copyButton);
+    fireEvent.click(copyButton);
 
     expect(writeTextMock).toHaveBeenCalledTimes(1);
   });
 
-  it('should call updateCustomTarget even with an invalid Provider ID format', async () => {
-    const user = userEvent.setup();
+  it('should call updateCustomTarget even with an invalid Provider ID format', () => {
     const mockUpdateCustomTarget = vi.fn();
     const selectedTarget: ProviderOptions = {
       id: '',
@@ -114,16 +111,13 @@ describe('AgentFrameworkConfiguration', () => {
     const providerIdInput = screen.getByRole('textbox', {
       name: /Provider ID \(Python file path\)/i,
     });
-    await user.click(providerIdInput);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste(invalidPath);
+    fireEvent.change(providerIdInput, { target: { value: invalidPath } });
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', invalidPath);
   });
 
-  it('should call updateCustomTarget with the provided invalid file path when the Provider ID input is changed', async () => {
-    const user = userEvent.setup();
+  it('should call updateCustomTarget with the provided invalid file path when the Provider ID input is changed', () => {
     const mockUpdateCustomTarget = vi.fn();
     const selectedTarget: ProviderOptions = {
       id: '',
@@ -143,9 +137,7 @@ describe('AgentFrameworkConfiguration', () => {
     const providerIdInput = screen.getByRole('textbox', {
       name: /Provider ID \(Python file path\)/i,
     });
-    await user.click(providerIdInput);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste(invalidPath);
+    fireEvent.change(providerIdInput, { target: { value: invalidPath } });
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', invalidPath);

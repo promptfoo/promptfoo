@@ -29,7 +29,7 @@ export default function EventsPage(): React.ReactElement {
 
   // Filter events based on selected filters
   const filteredEvents = useMemo(() => {
-    let result: Event[];
+    let result: Event[] = [...events];
 
     // Apply status filter
     if (statusFilter === 'upcoming') {

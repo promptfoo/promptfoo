@@ -1,22 +1,14 @@
 import { Router } from 'express';
-import { z } from 'zod';
 import logger from '../../logger';
 import { getTraceStore } from '../../tracing/store';
-import { TracesSchemas } from '../../types/api/traces';
 import type { Request, Response } from 'express';
 
 export const tracesRouter = Router();
 
 // Get traces for a specific evaluation
 tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response) => {
-  const paramsResult = TracesSchemas.GetByEval.Params.safeParse(req.params);
-  if (!paramsResult.success) {
-    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
-    return;
-  }
-
   try {
-    const { evaluationId } = paramsResult.data;
+    const evaluationId = req.params.evaluationId as string;
     logger.debug(`[TracesRoute] Fetching traces for evaluation ${evaluationId}`);
 
     const traceStore = getTraceStore();
@@ -32,14 +24,8 @@ tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response
 
 // Get a specific trace by ID
 tracesRouter.get('/:traceId', async (req: Request, res: Response) => {
-  const paramsResult = TracesSchemas.Get.Params.safeParse(req.params);
-  if (!paramsResult.success) {
-    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
-    return;
-  }
-
   try {
-    const { traceId } = paramsResult.data;
+    const traceId = req.params.traceId as string;
     logger.debug(`[TracesRoute] Fetching trace ${traceId}`);
 
     const traceStore = getTraceStore();

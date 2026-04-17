@@ -1,5 +1,6 @@
 import { faker } from '@faker-js/faker';
 import { z } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import {
   findCustomerById,
   getTopProducts,
@@ -9,8 +10,6 @@ import {
   mockOrders,
   mockProducts,
 } from '../data/mockData.js';
-
-const toInputJsonSchema = (schema) => z.toJSONSchema(schema, { io: 'input', target: 'draft-7' });
 
 const getFinancialSummarySchema = z.object({
   startDate: z.string().describe('Start date for the report (ISO 8601)'),
@@ -96,27 +95,27 @@ export const analyticsTools = [
   {
     name: 'get_financial_summary',
     description: 'Get financial summary report for a date range',
-    inputSchema: toInputJsonSchema(getFinancialSummarySchema),
+    inputSchema: zodToJsonSchema(getFinancialSummarySchema),
   },
   {
     name: 'get_inventory_report',
     description: 'Get detailed inventory report with valuation',
-    inputSchema: toInputJsonSchema(getInventoryReportSchema),
+    inputSchema: zodToJsonSchema(getInventoryReportSchema),
   },
   {
     name: 'get_sales_report',
     description: 'Get sales analytics report grouped by various dimensions',
-    inputSchema: toInputJsonSchema(getSalesReportSchema),
+    inputSchema: zodToJsonSchema(getSalesReportSchema),
   },
   {
     name: 'get_employee_report',
     description: 'Get employee analytics and payroll report',
-    inputSchema: toInputJsonSchema(getEmployeeReportSchema),
+    inputSchema: zodToJsonSchema(getEmployeeReportSchema),
   },
   {
     name: 'get_kpi_metrics',
     description: 'Get key performance indicators for the business',
-    inputSchema: toInputJsonSchema(getKPIMetricsSchema),
+    inputSchema: zodToJsonSchema(getKPIMetricsSchema),
   },
 ];
 

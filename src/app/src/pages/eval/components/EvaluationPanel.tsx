@@ -7,168 +7,11 @@ import {
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
 import { cn } from '@app/lib/utils';
-import { Check, ChevronDown, CircleCheck, CircleX, Copy, CornerDownRight } from 'lucide-react';
+import { Check, ChevronDown, CircleCheck, CircleX, Copy } from 'lucide-react';
 import { ellipsize } from '../../../../../util/text';
-import type { Assertion, GradingResult } from '@promptfoo/types';
+import type { GradingResult } from '@promptfoo/types';
 
 const COPY_FEEDBACK_DURATION_MS = 2000;
-const ASSERTION_VALUE_PREVIEW_LENGTH = 300;
-const ASSERTION_ROW_INDENT_PX = 24;
-
-interface AssertionResultRow {
-  depth: number;
-  result: GradingResult;
-  rowId: string;
-}
-
-interface AssertionSetMetadata {
-  type: 'assert-set';
-  assertionCount?: number;
-  assert?: Assertion[];
-  metric?: string;
-  threshold?: number;
-  weight?: number;
-}
-
-function getChildResults(result: GradingResult): GradingResult[] {
-  return (
-    result.componentResults?.filter((childResult): childResult is GradingResult =>
-      Boolean(childResult),
-    ) ?? []
-  );
-}
-
-function isAssertionSetMetadata(value: unknown): value is AssertionSetMetadata {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const metadata = value as Record<string, unknown>;
-  const assertionCount = metadata.assertionCount;
-
-  return (
-    metadata.type === 'assert-set' &&
-    (assertionCount === undefined ||
-      (typeof assertionCount === 'number' &&
-        Number.isInteger(assertionCount) &&
-        assertionCount >= 0)) &&
-    (metadata.assert === undefined || Array.isArray(metadata.assert)) &&
-    (metadata.metric === undefined || typeof metadata.metric === 'string') &&
-    (metadata.threshold === undefined || typeof metadata.threshold === 'number') &&
-    (metadata.weight === undefined || typeof metadata.weight === 'number')
-  );
-}
-
-function getAssertionSet(result: GradingResult): AssertionSetMetadata | undefined {
-  const assertionSet = result.metadata?.assertionSet;
-  return isAssertionSetMetadata(assertionSet) ? assertionSet : undefined;
-}
-
-function getAssertionSetCount(result: GradingResult): number | undefined {
-  const assertionSet = getAssertionSet(result);
-  if (!assertionSet) {
-    return undefined;
-  }
-
-  return assertionSet.assertionCount ?? assertionSet.assert?.length;
-}
-
-function getMetric(result: GradingResult): string {
-  return result.assertion?.metric || getAssertionSet(result)?.metric || '';
-}
-
-function getAssertionType(result: GradingResult): string {
-  return (
-    result.assertion?.type ||
-    getAssertionSet(result)?.type ||
-    (getChildResults(result).length > 0 ? 'assert-set' : '-')
-  );
-}
-
-function isMatchingAssertion(
-  expected: Assertion | undefined,
-  actual: Assertion | undefined,
-): boolean {
-  return JSON.stringify(actual ?? null) === JSON.stringify(expected ?? null);
-}
-
-function isMatchingResultTree(
-  expected: GradingResult,
-  actual: GradingResult | undefined,
-  inheritedAssertion?: Assertion,
-): boolean {
-  if (!actual) {
-    return false;
-  }
-
-  const expectedAssertion = expected.assertion ?? inheritedAssertion;
-  const actualAssertion = actual.assertion ?? inheritedAssertion;
-  const expectedChildren = getChildResults(expected);
-  const actualChildren = getChildResults(actual);
-
-  return (
-    expected.pass === actual.pass &&
-    expected.score === actual.score &&
-    expected.reason === actual.reason &&
-    isMatchingAssertion(expectedAssertion, actualAssertion) &&
-    expectedChildren.length === actualChildren.length &&
-    expectedChildren.every((childResult, childIndex) =>
-      isMatchingResultTree(childResult, actualChildren[childIndex], expectedAssertion),
-    )
-  );
-}
-
-function normalizeAssertionResults(gradingResults: GradingResult[]): GradingResult[] {
-  const normalizedResults: GradingResult[] = [];
-  let index = 0;
-
-  while (index < gradingResults.length) {
-    const result = gradingResults[index];
-    if (!result) {
-      index += 1;
-      continue;
-    }
-
-    normalizedResults.push(result);
-
-    const childResults = getChildResults(result);
-    const hasFlattenedDuplicates =
-      childResults.length > 0 &&
-      childResults.every((childResult, childIndex) =>
-        isMatchingResultTree(childResult, gradingResults[index + childIndex + 1], result.assertion),
-      );
-
-    index += hasFlattenedDuplicates ? childResults.length + 1 : 1;
-  }
-
-  return normalizedResults;
-}
-
-function buildAssertionRows(
-  gradingResults: GradingResult[],
-  depth = 0,
-  parentRowId = '',
-): AssertionResultRow[] {
-  const rows: AssertionResultRow[] = [];
-  const normalizedResults = normalizeAssertionResults(gradingResults);
-
-  for (let index = 0; index < normalizedResults.length; index++) {
-    const result = normalizedResults[index];
-    if (!result) {
-      continue;
-    }
-
-    const rowId = parentRowId ? `${parentRowId}-${index}` : `${index}`;
-    rows.push({ depth, result, rowId });
-
-    const childResults = getChildResults(result);
-    if (childResults.length > 0) {
-      rows.push(...buildAssertionRows(childResults, depth + 1, rowId));
-    }
-  }
-
-  return rows;
-}
 
 function getValue(result: GradingResult): string {
   // For context-related assertions, read the context value from metadata, if it exists
@@ -189,28 +32,16 @@ function getValue(result: GradingResult): string {
     return result.metadata.renderedAssertionValue;
   }
 
-  if (result.assertion?.value !== undefined) {
-    return typeof result.assertion.value === 'object'
+  // Otherwise, return the assertion value
+  return result.assertion?.value
+    ? typeof result.assertion.value === 'object'
       ? JSON.stringify(result.assertion.value, null, 2)
-      : String(result.assertion.value);
-  }
-
-  const assertionSet = getAssertionSet(result);
-  if (assertionSet) {
-    const assertionCount = getAssertionSetCount(result) ?? getChildResults(result).length;
-    return `${assertionCount} nested assertion${assertionCount === 1 ? '' : 's'}`;
-  }
-
-  const childResultCount = getChildResults(result).length;
-  if (childResultCount > 0) {
-    return `${childResultCount} nested assertion${childResultCount === 1 ? '' : 's'}`;
-  }
-
-  return '-';
+      : String(result.assertion.value)
+    : '-';
 }
 
 function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
-  const [expandedValues, setExpandedValues] = useState<{ [key: string]: boolean }>({});
+  const [expandedValues, setExpandedValues] = useState<{ [key: number]: boolean }>({});
   const [copiedAssertions, setCopiedAssertions] = useState<{ [key: string]: boolean }>({});
   const [hoveredAssertion, setHoveredAssertion] = useState<string | null>(null);
 
@@ -218,11 +49,10 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
     return null;
   }
 
-  const assertionRows = buildAssertionRows(gradingResults);
-  const hasMetrics = assertionRows.some(({ result }) => getMetric(result));
+  const hasMetrics = gradingResults.some((result) => result?.assertion?.metric);
 
-  const toggleExpand = (rowId: string) => {
-    setExpandedValues((prev) => ({ ...prev, [rowId]: !prev[rowId] }));
+  const toggleExpand = (index: number) => {
+    setExpandedValues((prev) => ({ ...prev, [index]: !prev[index] }));
   };
 
   const copyAssertionToClipboard = async (key: string, text: string, e: React.MouseEvent) => {
@@ -249,26 +79,19 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
           </tr>
         </thead>
         <tbody>
-          {assertionRows.map(({ depth, result, rowId }) => {
+          {gradingResults.map((result, i) => {
+            if (!result) {
+              return null;
+            }
+
             const value = getValue(result);
-            const truncatedValue = ellipsize(value, ASSERTION_VALUE_PREVIEW_LENGTH);
-            const isExpanded = expandedValues[rowId] || false;
-            const valueKey = `value-${rowId}`;
-            const reasonKey = `reason-${rowId}`;
-            const hasChildren = getChildResults(result).length > 0;
-            const assertionType = getAssertionType(result);
-            const metric = getMetric(result);
-            const indentationStyle = { paddingLeft: depth * ASSERTION_ROW_INDENT_PX };
+            const truncatedValue = ellipsize(value, 300);
+            const isExpanded = expandedValues[i] || false;
+            const valueKey = `value-${i}`;
 
             return (
-              <tr
-                key={rowId}
-                className={cn(
-                  'border-b border-border last:border-0 hover:bg-muted/30',
-                  hasChildren && 'bg-muted/20',
-                )}
-              >
-                {hasMetrics && <td className="px-4 py-3">{metric}</td>}
+              <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/30">
+                {hasMetrics && <td className="px-4 py-3">{result.assertion?.metric || ''}</td>}
                 <td className="px-4 py-3">
                   {result.pass ? (
                     <CircleCheck className="size-5 text-emerald-600 dark:text-emerald-400" />
@@ -277,38 +100,21 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                   )}
                 </td>
                 <td className="px-4 py-3 tabular-nums">{result.score?.toFixed(2)}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2" style={indentationStyle}>
-                    {depth > 0 && (
-                      <CornerDownRight className="size-4 shrink-0 text-muted-foreground" />
-                    )}
-                    <span
-                      className={cn(
-                        'rounded-md border border-border bg-background px-2 py-1 font-mono text-xs text-foreground',
-                        hasChildren && 'bg-muted/60 font-semibold',
-                      )}
-                    >
-                      {assertionType}
-                    </span>
-                  </div>
-                </td>
+                <td className="px-4 py-3 font-mono text-xs">{result.assertion?.type || ''}</td>
                 <td
                   className="relative px-4 py-3 whitespace-pre-wrap cursor-pointer max-w-md"
-                  onClick={() => toggleExpand(rowId)}
+                  onClick={() => toggleExpand(i)}
                   onMouseEnter={() => setHoveredAssertion(valueKey)}
                   onMouseLeave={() => setHoveredAssertion(null)}
                 >
-                  <div className="flex items-start gap-2" style={indentationStyle}>
-                    {depth > 0 && <span className="mt-2 h-px w-4 shrink-0 bg-border" />}
-                    <span className="break-words">{isExpanded ? value : truncatedValue}</span>
-                  </div>
+                  <span className="break-words">{isExpanded ? value : truncatedValue}</span>
                   {(hoveredAssertion === valueKey || copiedAssertions[valueKey]) && (
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={(e) => copyAssertionToClipboard(valueKey, value, e)}
                       className="absolute right-2 top-2 size-7 bg-background shadow-sm hover:shadow"
-                      aria-label={`Copy assertion value ${rowId}`}
+                      aria-label={`Copy assertion value ${i}`}
                     >
                       {copiedAssertions[valueKey] ? (
                         <Check className="size-3.5" />
@@ -320,23 +126,23 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                 </td>
                 <td
                   className="relative px-4 py-3 whitespace-pre-wrap max-w-md"
-                  onMouseEnter={() => setHoveredAssertion(reasonKey)}
+                  onMouseEnter={() => setHoveredAssertion(`reason-${i}`)}
                   onMouseLeave={() => setHoveredAssertion(null)}
                 >
                   <span className="break-words">{result.reason}</span>
                   {result.reason &&
-                    (hoveredAssertion === reasonKey || copiedAssertions[reasonKey]) && (
+                    (hoveredAssertion === `reason-${i}` || copiedAssertions[`reason-${i}`]) && (
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={(e) => {
                           e.stopPropagation();
-                          copyAssertionToClipboard(reasonKey, result.reason || '', e);
+                          copyAssertionToClipboard(`reason-${i}`, result.reason || '', e);
                         }}
                         className="absolute right-2 top-2 size-7 bg-background shadow-sm hover:shadow"
-                        aria-label={`Copy assertion reason ${rowId}`}
+                        aria-label={`Copy assertion reason ${i}`}
                       >
-                        {copiedAssertions[reasonKey] ? (
+                        {copiedAssertions[`reason-${i}`] ? (
                           <Check className="size-3.5" />
                         ) : (
                           <Copy className="size-3.5" />
@@ -379,7 +185,7 @@ function GradingPromptSection({ gradingResults }: { gradingResults?: GradingResu
       <h4 className="mb-2 text-sm font-medium">Grading Prompts</h4>
       <div className="space-y-2">
         {promptsWithData.map((result, i) => (
-          <Collapsible key={i} open={Boolean(openItems[i])} onOpenChange={() => toggleItem(i)}>
+          <Collapsible key={i} open={openItems[i]} onOpenChange={() => toggleItem(i)}>
             <div className="rounded-lg border border-border">
               <CollapsibleTrigger asChild>
                 <button className="flex w-full items-center justify-between px-4 py-3 text-sm hover:bg-muted/50 transition-colors">

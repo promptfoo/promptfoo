@@ -62,9 +62,9 @@ export class StoreErrorBoundary extends Component<Props, State> {
             onClick={this.handleRetry}
             sx={{
               mt: 2,
-              backgroundColor: 'var(--ifm-color-primary-darker)',
+              backgroundColor: '#1a1a2e',
               '&:hover': {
-                backgroundColor: 'var(--ifm-color-primary-darkest)',
+                backgroundColor: '#2a2a4e',
               },
             }}
           >
@@ -76,8 +76,7 @@ export class StoreErrorBoundary extends Component<Props, State> {
               sx={{
                 mt: 3,
                 p: 2,
-                backgroundColor: 'var(--ifm-background-surface-color)',
-                border: '1px solid var(--ifm-color-emphasis-300)',
+                backgroundColor: '#f5f5f5',
                 borderRadius: 1,
                 fontSize: '0.75rem',
                 maxWidth: '100%',

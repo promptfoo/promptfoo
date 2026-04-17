@@ -6,7 +6,6 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-deepseek
-cd redteam-deepseek
 ```
 
 ## Environment Variables

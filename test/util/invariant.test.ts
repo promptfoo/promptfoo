@@ -26,8 +26,7 @@ describe('invariant', () => {
   });
 
   it('should work for type narrowing', () => {
-    const getValue = (): string | null => 'test';
-    const value = getValue();
+    const value: string | null = 'test';
 
     // This should compile without type errors
     invariant(value !== null, 'Value should not be null');

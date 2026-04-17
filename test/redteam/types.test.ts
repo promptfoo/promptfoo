@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
 import { StrategyConfigSchema } from '../../src/redteam/types';
-import { createMockProvider } from '../factories/provider';
 
 import type {
   BaseRedteamMetadata,
@@ -16,6 +15,7 @@ import type {
   SavedRedteamConfig,
   SynthesizeOptions,
 } from '../../src/redteam/types';
+import type { ApiProvider } from '../../src/types/providers';
 
 describe('redteam types', () => {
   it('should create valid RedteamPluginObject', () => {
@@ -69,7 +69,10 @@ describe('redteam types', () => {
   });
 
   it('should create valid PluginActionParams', () => {
-    const provider = createMockProvider({ response: { output: 'test' } });
+    const provider: ApiProvider = {
+      id: () => 'test-provider',
+      callApi: async () => ({ output: 'test' }),
+    };
 
     const params: PluginActionParams = {
       provider,

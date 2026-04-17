@@ -4,7 +4,6 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-indirect-web-pwn
-cd redteam-indirect-web-pwn
 ```
 
 ## Introduction

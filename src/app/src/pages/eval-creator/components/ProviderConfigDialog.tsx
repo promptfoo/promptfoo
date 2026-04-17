@@ -189,7 +189,7 @@ const ProviderConfigDialog = ({
                   <Input
                     id={key}
                     type={typeof value === 'number' ? 'number' : 'text'}
-                    value={String(value)}
+                    value={value === undefined ? '' : String(value)}
                     onChange={handleChange}
                     className={cn(isRequired && !isValid && 'border-destructive')}
                   />

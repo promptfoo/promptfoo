@@ -89,6 +89,7 @@ describe('Named Function Provider Smoke Tests', () => {
           (output.toLowerCase().includes('not found') ||
             output.toLowerCase().includes('no such file'))
         ) {
+          console.warn('Skipping Python named function test - Python not available');
           return;
         }
       }

@@ -6,15 +6,14 @@ import CodeBlock from '@theme/CodeBlock';
 import styles from './styles.module.css';
 
 export default function HomepageInfo(): React.ReactElement {
-  type TabId = 'evaluations' | 'security';
-  const [activeTab, setActiveTab] = useState<TabId>('security');
+  const [activeTab, setActiveTab] = useState('security');
 
-  const tabs: Array<{ id: TabId; label: string; mobileLabel: string }> = [
+  const tabs = [
     { id: 'evaluations', label: 'Quality evaluations', mobileLabel: 'Evaluations' },
     { id: 'security', label: 'Pre-deployment security scans', mobileLabel: 'Security' },
   ];
 
-  const config: Array<{ id: TabId; code: string; image: string }> = [
+  const config = [
     {
       id: 'evaluations',
       code: `
@@ -67,7 +66,7 @@ targets:
     },
   ];
 
-  const activeConfig = config.find((item) => item.id === activeTab) ?? config[0];
+  const activeConfig = config.find((item) => item.id === activeTab);
 
   return (
     <div className={styles.infoContainer}>

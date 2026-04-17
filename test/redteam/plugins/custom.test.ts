@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CustomPlugin, loadCustomPluginDefinition } from '../../../src/redteam/plugins/custom';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
-import { createMockProvider, type MockApiProvider } from '../../factories/provider';
+
+import type { ApiProvider, CallApiFunction } from '../../../src/types/index';
 
 vi.mock('../../../src/util/file', async (importOriginal) => {
   return {
@@ -12,10 +13,13 @@ vi.mock('../../../src/util/file', async (importOriginal) => {
 
 describe('CustomPlugin', () => {
   let plugin: CustomPlugin;
-  let mockProvider: MockApiProvider;
+  let mockProvider: ApiProvider;
 
   beforeEach(() => {
-    mockProvider = createMockProvider();
+    mockProvider = {
+      callApi: vi.fn() as CallApiFunction,
+      id: vi.fn().mockReturnValue('test-provider'),
+    };
 
     vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
       return {

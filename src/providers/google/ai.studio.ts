@@ -13,7 +13,6 @@ import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
-  normalizeSafetySettings,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -27,15 +26,6 @@ import type { CompletionOptions } from './types';
 import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
-const GENERATE_CONTENT_MODEL_PREFIXES = ['gemini', 'gemma', 'codegemma', 'paligemma'];
-
-function usesGenerateContentApi(modelName: string): boolean {
-  return GENERATE_CONTENT_MODEL_PREFIXES.some((prefix) => modelName.startsWith(prefix));
-}
-
-function shouldBustCache(context?: CallApiContextParams): boolean {
-  return context?.bustCache ?? context?.debug ?? false;
-}
 
 class AIStudioGenericProvider implements ApiProvider {
   modelName: string;
@@ -254,7 +244,8 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       );
     }
 
-    if (usesGenerateContentApi(this.modelName)) {
+    const isGemini = this.modelName.startsWith('gemini');
+    if (isGemini) {
       return this.callGemini(prompt, context);
     }
 
@@ -272,7 +263,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       temperature: config.temperature,
       topP: config.topP,
       topK: config.topK,
-      safetySettings: normalizeSafetySettings(config.safetySettings),
+      safetySettings: config.safetySettings,
       stopSequences: config.stopSequences,
       maxOutputTokens: config.maxOutputTokens,
     };
@@ -293,7 +284,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         } as RequestInit,
         REQUEST_TIMEOUT_MS,
         'json',
-        shouldBustCache(context),
+        context?.bustCache ?? context?.debug,
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
       return {
@@ -339,9 +330,9 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       // Calculate cost (only for non-cached responses)
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
-        data.usageMetadata?.candidatesTokenCount == null
-          ? undefined
-          : data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0);
+        data.usageMetadata?.candidatesTokenCount != null
+          ? data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0)
+          : undefined;
       const cost = cached
         ? undefined
         : calculateGoogleCost(
@@ -406,7 +397,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         }),
         ...config.generationConfig,
       },
-      safetySettings: normalizeSafetySettings(config.safetySettings),
+      safetySettings: config.safetySettings,
       ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
@@ -443,7 +434,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         } as RequestInit,
         REQUEST_TIMEOUT_MS,
         'json',
-        shouldBustCache(context),
+        false,
       )) as {
         data: GeminiResponseData;
         cached: boolean;
@@ -511,9 +502,9 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       // Calculate cost (only for non-cached responses)
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
-        data.usageMetadata?.candidatesTokenCount == null
-          ? undefined
-          : data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0);
+        data.usageMetadata?.candidatesTokenCount != null
+          ? data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0)
+          : undefined;
       const cost = cached
         ? undefined
         : calculateGoogleCost(

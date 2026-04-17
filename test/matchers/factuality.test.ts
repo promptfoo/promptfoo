@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesFactuality } from '../../src/matchers/llmGrading';
+import { matchesFactuality } from '../../src/matchers';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
-import { createMockProvider } from '../factories/provider';
-import { mockProcessEnv } from '../util/utils';
 
 import type { GradingConfig } from '../../src/types/index';
 
@@ -275,7 +273,10 @@ The submitted answer may either be a subset or superset of the expert answer, or
 
     const grading = {
       rubricPrompt: customPrompt,
-      provider: createMockProvider({ callApi: mockCallApi }),
+      provider: {
+        id: () => 'test-provider',
+        callApi: mockCallApi,
+      },
     };
 
     const result = await matchesFactuality(input, expected, output, grading);
@@ -316,35 +317,33 @@ The submitted answer may either be a subset or superset of the expert answer, or
   });
 
   it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {
-    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
-    try {
-      const input = 'Input {{ var }}';
-      const expected = 'Expected {{ var }}';
-      const output = 'Output {{ var }}';
-      const grading: GradingConfig = {
-        provider: DefaultGradingProvider,
-      };
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    const input = 'Input {{ var }}';
+    const expected = 'Expected {{ var }}';
+    const output = 'Output {{ var }}';
+    const grading: GradingConfig = {
+      provider: DefaultGradingProvider,
+    };
 
-      vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
-        output: '{"category": "A", "reason": "The submitted answer is correct."}',
-        tokenUsage: { total: 10, prompt: 5, completion: 5 },
-      });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: '{"category": "A", "reason": "The submitted answer is correct."}',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
 
-      await matchesFactuality(input, expected, output, grading);
+    await matchesFactuality(input, expected, output, grading);
 
-      expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          vars: expect.objectContaining({
-            input: 'Input {{ var }}',
-            ideal: 'Expected {{ var }}',
-            completion: 'Output {{ var }}',
-          }),
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        vars: expect.objectContaining({
+          input: 'Input {{ var }}',
+          ideal: 'Expected {{ var }}',
+          completion: 'Output {{ var }}',
         }),
-      );
-    } finally {
-      restoreEnv();
-    }
+      }),
+    );
+
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = undefined;
   });
 
   it('should correctly substitute variables in custom rubricPrompt', async () => {
@@ -367,7 +366,10 @@ Choose: (A) subset, (B) superset, (C) same, (D) disagree, (E) differ but factual
 
     const grading = {
       rubricPrompt: customPrompt,
-      provider: createMockProvider({ callApi: mockCallApi }),
+      provider: {
+        id: () => 'test-provider',
+        callApi: mockCallApi,
+      },
     };
 
     const result = await matchesFactuality(input, expected, output, grading);

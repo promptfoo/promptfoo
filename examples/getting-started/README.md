@@ -4,7 +4,6 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example getting-started
-cd getting-started
 ```
 
 This is a simple example that demonstrates the basic functionality of promptfoo. It tests two different translation prompts across multiple language models.
@@ -30,7 +29,7 @@ promptfoo eval
 This example:
 
 - Tests two different ways to phrase a translation prompt
-- Compares outputs between GPT-5.2 and GPT-5 Mini
+- Compares outputs between GPT-4.1 and o4-mini
 - Uses two test cases with different languages and inputs
 
 The configuration in `promptfooconfig.yaml` shows:

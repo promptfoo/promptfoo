@@ -1,6 +1,5 @@
 import { callApi } from '@app/utils/api';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import SessionsTab from './SessionsTab';
 import type { ProviderOptions } from '@promptfoo/types';
@@ -66,8 +65,7 @@ describe('SessionsTab', () => {
 
   describe('SessionEndpointConfig component functions', () => {
     describe('updateHeaders', () => {
-      it('should convert header array to object and filter empty keys', async () => {
-        const user = userEvent.setup();
+      it('should convert header array to object and filter empty keys', () => {
         const onUpdate = vi.fn();
         render(
           <SessionsTab
@@ -91,12 +89,9 @@ describe('SessionsTab', () => {
         const headerKeyInputs = screen.getAllByPlaceholderText('Header name');
         const headerValueInputs = screen.getAllByPlaceholderText('Header value');
 
-        await user.click(headerKeyInputs[0]);
-        await user.keyboard('{Control>}a{/Control}');
-        await user.paste('Authorization');
-        await user.click(headerValueInputs[0]);
-        await user.keyboard('{Control>}a{/Control}');
-        await user.paste('Bearer token');
+        // Change first header key
+        fireEvent.change(headerKeyInputs[0], { target: { value: 'Authorization' } });
+        fireEvent.change(headerValueInputs[0], { target: { value: 'Bearer token' } });
 
         expect(onUpdate).toHaveBeenCalledWith(
           'session',
@@ -108,8 +103,7 @@ describe('SessionsTab', () => {
         );
       });
 
-      it('should filter out headers with empty keys', async () => {
-        const user = userEvent.setup();
+      it('should filter out headers with empty keys', () => {
         const onUpdate = vi.fn();
         render(
           <SessionsTab
@@ -130,13 +124,13 @@ describe('SessionsTab', () => {
 
         // Add a new header
         const addHeaderButton = screen.getByRole('button', { name: /add header/i });
-        await user.click(addHeaderButton);
+        fireEvent.click(addHeaderButton);
 
         // Find the last header value input and update it without a key
         const headerValueInputs = screen.getAllByPlaceholderText('Header value');
-        await user.click(headerValueInputs[headerValueInputs.length - 1]);
-        await user.keyboard('{Control>}a{/Control}');
-        await user.paste('some value');
+        fireEvent.change(headerValueInputs[headerValueInputs.length - 1], {
+          target: { value: 'some value' },
+        });
 
         // The session update should have headers as undefined if all keys are empty
         const lastCall = onUpdate.mock.calls[onUpdate.mock.calls.length - 1];
@@ -151,8 +145,7 @@ describe('SessionsTab', () => {
     });
 
     describe('addHeader', () => {
-      it('should add a new empty header to the list', async () => {
-        const user = userEvent.setup();
+      it('should add a new empty header to the list', () => {
         const onUpdate = vi.fn();
         render(
           <SessionsTab
@@ -175,7 +168,7 @@ describe('SessionsTab', () => {
         const initialCount = initialHeaderInputs.length;
 
         const addHeaderButton = screen.getByRole('button', { name: /add header/i });
-        await user.click(addHeaderButton);
+        fireEvent.click(addHeaderButton);
 
         const updatedHeaderInputs = screen.getAllByPlaceholderText('Header name');
         expect(updatedHeaderInputs.length).toBe(initialCount + 1);
@@ -183,8 +176,7 @@ describe('SessionsTab', () => {
     });
 
     describe('removeHeader', () => {
-      it('should remove a header at the specified index', async () => {
-        const user = userEvent.setup();
+      it('should remove a header at the specified index', () => {
         const onUpdate = vi.fn();
         render(
           <SessionsTab
@@ -214,14 +206,14 @@ describe('SessionsTab', () => {
 
         const initialCount = removeButtons.length;
 
-        await user.click(removeButtons[0]);
+        // Click first remove button
+        fireEvent.click(removeButtons[0]);
 
         const updatedHeaderInputs = screen.getAllByPlaceholderText('Header name');
         expect(updatedHeaderInputs.length).toBeLessThan(initialCount);
       });
 
-      it('should keep at least one empty header when removing the last header', async () => {
-        const user = userEvent.setup();
+      it('should keep at least one empty header when removing the last header', () => {
         const onUpdate = vi.fn();
         render(
           <SessionsTab
@@ -246,7 +238,8 @@ describe('SessionsTab', () => {
           return svg?.classList.contains('lucide-trash-2');
         });
 
-        await user.click(removeButtons[0]);
+        // Remove all headers
+        fireEvent.click(removeButtons[0]);
 
         // Should still have at least one header input
         const headerInputs = screen.getAllByPlaceholderText('Header name');
@@ -255,8 +248,7 @@ describe('SessionsTab', () => {
     });
 
     describe('updateHeader', () => {
-      it('should update header key at specific index', async () => {
-        const user = userEvent.setup();
+      it('should update header key at specific index', () => {
         const onUpdate = vi.fn();
         render(
           <SessionsTab
@@ -277,9 +269,7 @@ describe('SessionsTab', () => {
         );
 
         const headerKeyInputs = screen.getAllByPlaceholderText('Header name');
-        await user.click(headerKeyInputs[0]);
-        await user.keyboard('{Control>}a{/Control}');
-        await user.paste('X-Custom-Header');
+        fireEvent.change(headerKeyInputs[0], { target: { value: 'X-Custom-Header' } });
 
         expect(onUpdate).toHaveBeenCalledWith(
           'session',
@@ -291,8 +281,7 @@ describe('SessionsTab', () => {
         );
       });
 
-      it('should update header value at specific index', async () => {
-        const user = userEvent.setup();
+      it('should update header value at specific index', () => {
         const onUpdate = vi.fn();
         render(
           <SessionsTab
@@ -313,17 +302,14 @@ describe('SessionsTab', () => {
         );
 
         const headerValueInputs = screen.getAllByPlaceholderText('Header value');
-        await user.click(headerValueInputs[0]);
-        await user.keyboard('{Control>}a{/Control}');
-        await user.paste('text/plain');
+        fireEvent.change(headerValueInputs[0], { target: { value: 'text/plain' } });
 
         expect(onUpdate).toHaveBeenCalled();
       });
     });
 
     describe('Body onChange handler', () => {
-      it('should parse valid JSON and update session body', async () => {
-        const user = userEvent.setup();
+      it('should parse valid JSON and update session body', () => {
         const onUpdate = vi.fn();
         render(
           <SessionsTab
@@ -345,9 +331,7 @@ describe('SessionsTab', () => {
         const bodyTextarea = screen.getByPlaceholderText(/client_id/);
         const validJson = '{"apiKey": "test123"}';
 
-        await user.click(bodyTextarea);
-        await user.keyboard('{Control>}a{/Control}');
-        await user.paste(validJson);
+        fireEvent.change(bodyTextarea, { target: { value: validJson } });
 
         expect(onUpdate).toHaveBeenCalledWith(
           'session',
@@ -357,8 +341,7 @@ describe('SessionsTab', () => {
         );
       });
 
-      it('should keep invalid JSON as string', async () => {
-        const user = userEvent.setup();
+      it('should keep invalid JSON as string', () => {
         const onUpdate = vi.fn();
         render(
           <SessionsTab
@@ -380,9 +363,7 @@ describe('SessionsTab', () => {
         const bodyTextarea = screen.getByPlaceholderText(/client_id/);
         const invalidJson = '{"apiKey": incomplete';
 
-        await user.click(bodyTextarea);
-        await user.keyboard('{Control>}a{/Control}');
-        await user.paste(invalidJson);
+        fireEvent.change(bodyTextarea, { target: { value: invalidJson } });
 
         expect(onUpdate).toHaveBeenCalledWith(
           'session',
@@ -420,8 +401,7 @@ describe('SessionsTab', () => {
   });
 
   describe('SessionsTab session source radio handler', () => {
-    it('should update sessionSource to client and clear sessionParser and session config', async () => {
-      const user = userEvent.setup();
+    it('should update sessionSource to client and clear sessionParser and session config', () => {
       const onUpdate = vi.fn();
       render(
         <SessionsTab
@@ -438,15 +418,14 @@ describe('SessionsTab', () => {
       );
 
       const clientRadio = screen.getByRole('radio', { name: /client-generated session id/i });
-      await user.click(clientRadio);
+      fireEvent.click(clientRadio);
 
       expect(onUpdate).toHaveBeenCalledWith('sessionSource', 'client');
       expect(onUpdate).toHaveBeenCalledWith('sessionParser', undefined);
       expect(onUpdate).toHaveBeenCalledWith('session', undefined);
     });
 
-    it('should initialize session config when switching to endpoint source', async () => {
-      const user = userEvent.setup();
+    it('should initialize session config when switching to endpoint source', () => {
       const onUpdate = vi.fn();
       render(
         <SessionsTab
@@ -462,7 +441,7 @@ describe('SessionsTab', () => {
       );
 
       const endpointRadio = screen.getByRole('radio', { name: /separate session endpoint/i });
-      await user.click(endpointRadio);
+      fireEvent.click(endpointRadio);
 
       expect(onUpdate).toHaveBeenCalledWith('sessionSource', 'endpoint');
       expect(onUpdate).toHaveBeenCalledWith('session', {
@@ -472,8 +451,7 @@ describe('SessionsTab', () => {
       });
     });
 
-    it('should not reinitialize session config if already present when switching to endpoint', async () => {
-      const user = userEvent.setup();
+    it('should not reinitialize session config if already present when switching to endpoint', () => {
       const onUpdate = vi.fn();
       const existingSession = {
         url: 'https://api.example.com/auth',
@@ -496,7 +474,7 @@ describe('SessionsTab', () => {
       );
 
       const endpointRadio = screen.getByRole('radio', { name: /separate session endpoint/i });
-      await user.click(endpointRadio);
+      fireEvent.click(endpointRadio);
 
       expect(onUpdate).toHaveBeenCalledWith('sessionSource', 'endpoint');
       // Should not call updateCustomTarget with 'session' since it already exists
@@ -507,7 +485,6 @@ describe('SessionsTab', () => {
 
   describe('runSessionTest', () => {
     it('should call API with correct provider configuration', async () => {
-      const user = userEvent.setup();
       const mockResponse = {
         ok: true,
         json: vi.fn().mockResolvedValue({
@@ -526,7 +503,7 @@ describe('SessionsTab', () => {
       );
 
       const testButton = screen.getByRole('button', { name: /test session/i });
-      await user.click(testButton);
+      fireEvent.click(testButton);
 
       await waitFor(() => {
         expect(callApi).toHaveBeenCalledWith(
@@ -541,7 +518,6 @@ describe('SessionsTab', () => {
     });
 
     it('should display success message when test passes', async () => {
-      const user = userEvent.setup();
       const mockResponse = {
         ok: true,
         json: vi.fn().mockResolvedValue({
@@ -563,7 +539,7 @@ describe('SessionsTab', () => {
       );
 
       const testButton = screen.getByRole('button', { name: /test session/i });
-      await user.click(testButton);
+      fireEvent.click(testButton);
 
       await waitFor(() => {
         expect(screen.getByText('Session Test Passed')).toBeInTheDocument();
@@ -574,7 +550,6 @@ describe('SessionsTab', () => {
     });
 
     it('should display error message when test fails', async () => {
-      const user = userEvent.setup();
       const mockResponse = {
         ok: false,
         status: 400,
@@ -594,7 +569,7 @@ describe('SessionsTab', () => {
       );
 
       const testButton = screen.getByRole('button', { name: /test session/i });
-      await user.click(testButton);
+      fireEvent.click(testButton);
 
       await waitFor(() => {
         expect(screen.getByText('Session Test Failed')).toBeInTheDocument();
@@ -605,7 +580,6 @@ describe('SessionsTab', () => {
     });
 
     it('should handle API call exceptions', async () => {
-      const user = userEvent.setup();
       (callApi as Mock).mockRejectedValue(new Error('Network error'));
 
       render(
@@ -617,7 +591,7 @@ describe('SessionsTab', () => {
       );
 
       const testButton = screen.getByRole('button', { name: /test session/i });
-      await user.click(testButton);
+      fireEvent.click(testButton);
 
       await waitFor(() => {
         expect(screen.getByText('Session Test Failed')).toBeInTheDocument();
@@ -628,7 +602,6 @@ describe('SessionsTab', () => {
     });
 
     it('should set isTestRunning state during API call', async () => {
-      const user = userEvent.setup();
       const mockResponse = {
         ok: true,
         json: vi.fn().mockResolvedValue({
@@ -652,7 +625,7 @@ describe('SessionsTab', () => {
       );
 
       const testButton = screen.getByRole('button', { name: /test session/i });
-      await user.click(testButton);
+      fireEvent.click(testButton);
 
       // Button should show "Testing..." immediately
       expect(screen.getByText('Testing...')).toBeInTheDocument();
@@ -665,7 +638,6 @@ describe('SessionsTab', () => {
 
   describe('handleDialogConfirm', () => {
     it('should close dialog and run test with selected variable', async () => {
-      const user = userEvent.setup();
       const mockResponse = {
         ok: true,
         json: vi.fn().mockResolvedValue({
@@ -690,7 +662,7 @@ describe('SessionsTab', () => {
       );
 
       const testButton = screen.getByRole('button', { name: /test session/i });
-      await user.click(testButton);
+      fireEvent.click(testButton);
 
       // Dialog should open
       await waitFor(() => {
@@ -699,7 +671,7 @@ describe('SessionsTab', () => {
 
       // Click confirm in dialog
       const confirmButton = screen.getByRole('button', { name: /confirm/i });
-      await user.click(confirmButton);
+      fireEvent.click(confirmButton);
 
       // Dialog should close
       await waitFor(() => {
@@ -714,8 +686,7 @@ describe('SessionsTab', () => {
   });
 
   describe('handleTestSessionClick', () => {
-    it('should open variable selection dialog when multiple inputs exist', async () => {
-      const user = userEvent.setup();
+    it('should open variable selection dialog when multiple inputs exist', () => {
       render(
         <SessionsTab
           selectedTarget={{
@@ -730,13 +701,12 @@ describe('SessionsTab', () => {
       );
 
       const testButton = screen.getByRole('button', { name: /test session/i });
-      await user.click(testButton);
+      fireEvent.click(testButton);
 
       expect(screen.getByTestId('variable-selection-dialog')).toBeInTheDocument();
     });
 
     it('should run test directly when no inputs exist', async () => {
-      const user = userEvent.setup();
       const mockResponse = {
         ok: true,
         json: vi.fn().mockResolvedValue({
@@ -755,7 +725,7 @@ describe('SessionsTab', () => {
       );
 
       const testButton = screen.getByRole('button', { name: /test session/i });
-      await user.click(testButton);
+      fireEvent.click(testButton);
 
       // Should not show dialog
       expect(screen.queryByTestId('variable-selection-dialog')).not.toBeInTheDocument();
@@ -766,8 +736,7 @@ describe('SessionsTab', () => {
       });
     });
 
-    it('should pre-select first variable if none selected', async () => {
-      const user = userEvent.setup();
+    it('should pre-select first variable if none selected', () => {
       render(
         <SessionsTab
           selectedTarget={{
@@ -782,7 +751,7 @@ describe('SessionsTab', () => {
       );
 
       const testButton = screen.getByRole('button', { name: /test session/i });
-      await user.click(testButton);
+      fireEvent.click(testButton);
 
       // Dialog should be shown (implies variable was pre-selected)
       expect(screen.getByTestId('variable-selection-dialog')).toBeInTheDocument();
@@ -791,7 +760,6 @@ describe('SessionsTab', () => {
 
   describe('Test result details rendering', () => {
     it('should render chat messages from test result details', async () => {
-      const user = userEvent.setup();
       const mockResponse = {
         ok: true,
         json: vi.fn().mockResolvedValue({
@@ -817,7 +785,7 @@ describe('SessionsTab', () => {
       );
 
       const testButton = screen.getByRole('button', { name: /test session/i });
-      await user.click(testButton);
+      fireEvent.click(testButton);
 
       // Wait for the test result to appear
       await waitFor(() => {
@@ -826,7 +794,7 @@ describe('SessionsTab', () => {
 
       // Expand the details section
       const detailsTrigger = screen.getByText('Session Test Details');
-      await user.click(detailsTrigger);
+      fireEvent.click(detailsTrigger);
 
       // Now check messages are rendered
       await waitFor(() => {
@@ -840,7 +808,6 @@ describe('SessionsTab', () => {
     });
 
     it('should display session details from test result', async () => {
-      const user = userEvent.setup();
       const mockResponse = {
         ok: true,
         json: vi.fn().mockResolvedValue({
@@ -866,7 +833,7 @@ describe('SessionsTab', () => {
       );
 
       const testButton = screen.getByRole('button', { name: /test session/i });
-      await user.click(testButton);
+      fireEvent.click(testButton);
 
       // Wait for test result
       await waitFor(() => {
@@ -875,7 +842,7 @@ describe('SessionsTab', () => {
 
       // Expand details
       const detailsTrigger = screen.getByText('Session Test Details');
-      await user.click(detailsTrigger);
+      fireEvent.click(detailsTrigger);
 
       await waitFor(() => {
         expect(screen.getByText('session-abc-123')).toBeInTheDocument();
@@ -888,7 +855,6 @@ describe('SessionsTab', () => {
     });
 
     it('should expand details automatically on test failure', async () => {
-      const user = userEvent.setup();
       const mockResponse = {
         ok: false,
         status: 400,
@@ -911,7 +877,7 @@ describe('SessionsTab', () => {
       );
 
       const testButton = screen.getByRole('button', { name: /test session/i });
-      await user.click(testButton);
+      fireEvent.click(testButton);
 
       await waitFor(() => {
         // Details should be expanded (trigger should be visible)
@@ -1040,7 +1006,6 @@ describe('SessionsTab', () => {
 
   describe('Clear test result on configuration change', () => {
     it('should clear test result when stateful radio changes', async () => {
-      const user = userEvent.setup();
       const mockResponse = {
         ok: true,
         json: vi.fn().mockResolvedValue({
@@ -1059,22 +1024,21 @@ describe('SessionsTab', () => {
       );
 
       const testButton = screen.getByRole('button', { name: /test session/i });
-      await user.click(testButton);
+      fireEvent.click(testButton);
 
       await waitFor(() => {
         expect(screen.getByText('Session Test Passed')).toBeInTheDocument();
       });
 
       // Change stateful setting
-      const statefulRadio = screen.getByLabelText(/No .+ Promptfoo should resend/);
-      await user.click(statefulRadio);
+      const statefulRadio = screen.getByRole('radio', { name: /no - my system is not stateful/i });
+      fireEvent.click(statefulRadio);
 
       // Test result should be cleared
       expect(screen.queryByText('Session Test Passed')).not.toBeInTheDocument();
     });
 
     it('should clear test result when session source changes', async () => {
-      const user = userEvent.setup();
       const mockResponse = {
         ok: true,
         json: vi.fn().mockResolvedValue({
@@ -1093,7 +1057,7 @@ describe('SessionsTab', () => {
       );
 
       const testButton = screen.getByRole('button', { name: /test session/i });
-      await user.click(testButton);
+      fireEvent.click(testButton);
 
       await waitFor(() => {
         expect(screen.getByText('Session Test Passed')).toBeInTheDocument();
@@ -1101,7 +1065,7 @@ describe('SessionsTab', () => {
 
       // Change session source
       const clientRadio = screen.getByRole('radio', { name: /client-generated session id/i });
-      await user.click(clientRadio);
+      fireEvent.click(clientRadio);
 
       // Test result should be cleared
       expect(screen.queryByText('Session Test Passed')).not.toBeInTheDocument();

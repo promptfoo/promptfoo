@@ -1,6 +1,6 @@
 ---
 sidebar_position: 2
-sidebar_label: Getting started
+sidebar_label: Quickstart
 description: Start red teaming LLMs in minutes by scanning 50+ vulnerabilities including jailbreaks, prompt injection, and data exfiltration
 ---
 
@@ -9,7 +9,7 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import styles from '@site/src/pages/quickstart.module.css';
 
-# Getting started
+# Quickstart
 
 Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for red teaming gen AI applications.
 

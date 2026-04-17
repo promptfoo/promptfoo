@@ -1,6 +1,6 @@
 import { cn } from '@app/lib/utils';
 
-interface PageContainerProps extends React.ComponentProps<'div'> {
+interface PageContainerProps {
   children: React.ReactNode;
   className?: string;
 }
@@ -17,10 +17,8 @@ interface PageContainerProps extends React.ComponentProps<'div'> {
  * </PageContainer>
  * ```
  */
-export function PageContainer({ children, className, ...props }: PageContainerProps) {
+export function PageContainer({ children, className }: PageContainerProps) {
   return (
-    <div className={cn('min-h-screen bg-zinc-50 dark:bg-zinc-950', className)} {...props}>
-      {children}
-    </div>
+    <div className={cn('min-h-screen bg-zinc-50 dark:bg-zinc-950', className)}>{children}</div>
   );
 }

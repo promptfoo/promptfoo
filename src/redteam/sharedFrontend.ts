@@ -64,9 +64,6 @@ export function getUnifiedConfig(
     redteam: {
       purpose: config.purpose,
       numTests: config.numTests,
-      ...(config.maxCharsPerMessage && {
-        maxCharsPerMessage: config.maxCharsPerMessage,
-      }),
       ...(config.provider && { provider: config.provider }),
       ...(config.maxConcurrency && { maxConcurrency: config.maxConcurrency }),
       ...(config.language && { language: config.language }),

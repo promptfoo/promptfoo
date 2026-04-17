@@ -9,19 +9,6 @@ import type {
   ProviderResponse,
 } from '../types/index';
 
-function formatVoyageApiError(status: number, statusText: string, data: any): string {
-  const responseText =
-    typeof data === 'string'
-      ? data
-      : typeof data?.error === 'string'
-        ? data.error
-        : typeof data?.error?.message === 'string'
-          ? data.error.message
-          : JSON.stringify(data);
-  const errorPrefix = status === 429 ? 'Voyage API rate limit exceeded' : 'Voyage API error';
-  return `${errorPrefix}: ${status} ${statusText || 'Unknown error'}\n${responseText}`;
-}
-
 export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
   modelName: string;
   config: any;
@@ -35,10 +22,6 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
 
   id() {
     return `voyage:${this.modelName}`;
-  }
-
-  requiresApiKey(): boolean {
-    return true;
   }
 
   getApiKey(): string | undefined {
@@ -76,12 +59,14 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
     };
 
     let data,
-      cached = false,
-      status: number | undefined,
-      statusText = '',
+      _cached = false,
       latencyMs: number | undefined;
     try {
-      ({ data, cached, status, statusText, latencyMs } = (await fetchWithCache(
+      ({
+        data,
+        cached: _cached,
+        latencyMs,
+      } = (await fetchWithCache(
         `${this.getApiUrl()}/embeddings`,
         {
           method: 'POST',
@@ -99,12 +84,6 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
       throw err;
     }
 
-    if (status !== undefined && (status < 200 || status >= 300)) {
-      const errorMessage = formatVoyageApiError(status, statusText, data);
-      logger.error(errorMessage);
-      throw new Error(errorMessage);
-    }
-
     try {
       const embedding = data?.data?.[0]?.embedding;
       if (!embedding) {
@@ -112,15 +91,14 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
       }
       return {
         embedding,
-        cached,
         latencyMs,
         tokenUsage: {
-          total: data?.usage?.total_tokens,
+          total: data.usage.total_tokens,
           numRequests: 1,
         },
       };
     } catch (err) {
-      logger.error(typeof data?.error?.message === 'string' ? data.error.message : String(err));
+      logger.error(data.error.message);
       throw err;
     }
   }

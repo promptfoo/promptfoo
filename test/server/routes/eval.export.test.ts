@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, Mock, MockedFunction, vi } from 'vitest';
-import { createCompletedPrompt, createEvaluateTableOutput } from '../../factories/eval';
 import type { Request, Response } from 'express';
+
+import type { CompletedPrompt } from '../../../src/types/index';
 
 // Mock dependencies first
 vi.mock('../../../src/database', async (importOriginal) => {
@@ -43,11 +44,12 @@ describe('evalRouter - GET /:id/table with export formats', () => {
     head: {
       vars: ['var1', 'var2'],
       prompts: [
-        createCompletedPrompt('test prompt', {
+        {
           provider: 'openai',
           label: 'prompt1',
+          raw: 'test prompt',
           display: 'test',
-        }),
+        } as CompletedPrompt,
       ],
     },
     body: [
@@ -56,14 +58,16 @@ describe('evalRouter - GET /:id/table with export formats', () => {
         testIdx: 0,
         vars: ['value1', 'value2'],
         outputs: [
-          createEvaluateTableOutput({
+          {
+            pass: true,
             text: 'output text',
+            cost: 0,
+            failureReason: undefined,
             id: 'output-id',
             latencyMs: 100,
             provider: 'openai:gpt-3.5-turbo',
             gradingResult: {
               pass: true,
-              score: 1,
               reason: 'Test passed',
               comment: 'Good response',
             },
@@ -74,7 +78,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
                 { role: 'assistant', content: 'response' },
               ],
             },
-          }),
+          },
         ],
       },
     ],
@@ -417,7 +421,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
     const emptyTable = {
       head: {
         vars: ['var1'],
-        prompts: [createCompletedPrompt('test', { provider: 'openai', label: 'test' })],
+        prompts: [{ provider: 'openai', label: 'test' } as CompletedPrompt],
       },
       body: [],
       totalCount: 0,

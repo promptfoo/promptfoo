@@ -94,15 +94,11 @@ function TabsTrigger({
   children,
   icon,
   iconPosition = 'start',
-  style,
   ...props
 }: TabsTriggerProps) {
-  const triggerStyle = props.disabled ? style : { ...style, cursor: 'pointer' };
-
   return (
     <TabsPrimitive.Trigger
       ref={ref}
-      style={triggerStyle}
       className={cn(
         // Base styles
         'inline-flex cursor-pointer items-center whitespace-nowrap text-sm font-medium transition-all',
@@ -158,5 +154,5 @@ function TabsContent({
   );
 }
 
-export type { TabsListProps, TabsListVariant, TabsProps, TabsTriggerProps };
-export { Tabs, TabsContent, TabsList, TabsTrigger };
+export { Tabs, TabsList, TabsTrigger, TabsContent };
+export type { TabsProps, TabsListVariant, TabsListProps, TabsTriggerProps };

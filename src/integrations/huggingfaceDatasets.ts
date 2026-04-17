@@ -239,15 +239,15 @@ export async function fetchHuggingFaceDataset(
       requestParams.set('offset', offset.toString());
 
       const remainingUserLimit =
-        userLimit === undefined ? undefined : Math.max(userLimit - offset, 0);
+        userLimit !== undefined ? Math.max(userLimit - offset, 0) : undefined;
       const remainingDatasetRows =
-        totalRows === undefined ? undefined : Math.max(totalRows - offset, 0);
+        totalRows !== undefined ? Math.max(totalRows - offset, 0) : undefined;
       const requestedLength =
-        remainingUserLimit === undefined
-          ? remainingDatasetRows === undefined
-            ? pageSize
-            : Math.min(pageSize, remainingDatasetRows)
-          : Math.min(pageSize, remainingUserLimit);
+        remainingUserLimit !== undefined
+          ? Math.min(pageSize, remainingUserLimit)
+          : remainingDatasetRows !== undefined
+            ? Math.min(pageSize, remainingDatasetRows)
+            : pageSize;
 
       if (requestedLength <= 0) {
         logger.debug(

@@ -1,4 +1,3 @@
-import { getEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
@@ -159,22 +158,11 @@ export function createLiteLLMProvider(
   // Prepare LiteLLM-specific configuration
   const config = options.config?.config || {};
 
-  // Resolve apiBaseUrl: config > provider env > context env > process env > default
-  const resolvedApiBaseUrl =
-    config.apiBaseUrl ||
-    options.config?.env?.LITELLM_API_BASE ||
-    options.env?.LITELLM_API_BASE ||
-    getEnvString('LITELLM_API_BASE') ||
-    'http://0.0.0.0:4000';
-
   // Build the config object with proper defaults
-  // omitDefaults: true ensures temperature/max_tokens are not sent unless explicitly
-  // configured, allowing the LiteLLM proxy to apply its own model-specific defaults.
   const litellmConfigDefaults: LiteLLMCompletionOptions = {
     apiKeyEnvar: 'LITELLM_API_KEY',
     apiKeyRequired: false,
-    apiBaseUrl: resolvedApiBaseUrl,
-    omitDefaults: true,
+    apiBaseUrl: 'http://0.0.0.0:4000',
   };
 
   // Merge configs, with explicit config values taking precedence

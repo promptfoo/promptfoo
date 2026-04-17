@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
-import { act, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EstimatedProbesDisplay from './EstimatedProbesDisplay';
 
 import type { Config } from '../types';
@@ -20,7 +20,6 @@ vi.mock('./strategies/utils', () => ({
 import { getEstimatedProbes } from './strategies/utils';
 
 const mockGetEstimatedProbes = vi.mocked(getEstimatedProbes);
-let timers: TestTimers;
 
 const mockConfig: Config = {
   description: 'Test Configuration',
@@ -42,27 +41,10 @@ const mockConfig: Config = {
 
 describe('EstimatedProbesDisplay', () => {
   beforeEach(() => {
-    timers = useTestTimers();
     vi.clearAllMocks();
     // Default mock return value
     mockGetEstimatedProbes.mockReturnValue(150);
   });
-
-  afterEach(() => {
-    restoreTestTimers();
-  });
-
-  const showTooltip = () => {
-    const infoIcon = document.querySelector('svg.lucide-info');
-    expect(infoIcon).toBeInTheDocument();
-
-    infoIcon!.dispatchEvent(new MouseEvent('pointermove', { bubbles: true }));
-    act(() => {
-      timers.advanceBy(700);
-    });
-
-    return screen.getByRole('tooltip');
-  };
 
   describe('Basic rendering', () => {
     it('renders the "Estimated Probes:" label', () => {
@@ -196,22 +178,43 @@ describe('EstimatedProbesDisplay', () => {
 
   describe('Tooltip functionality', () => {
     it('displays default tooltip content on hover', async () => {
+      const user = userEvent.setup();
       renderWithProviders(<EstimatedProbesDisplay config={mockConfig} />);
 
-      expect(showTooltip()).toHaveTextContent(
-        'Probes are the number of requests to the target application. ' +
-          'This is calculated based on your selected plugins, strategies, and number of test cases.',
-      );
+      const infoIcon = document.querySelector('svg.lucide-info');
+      expect(infoIcon).toBeInTheDocument();
+
+      if (infoIcon) {
+        await user.hover(infoIcon);
+
+        await waitFor(() => {
+          const tooltip = screen.getByRole('tooltip');
+          expect(tooltip).toHaveTextContent(
+            'Probes are the number of requests to the target application. ' +
+              'This is calculated based on your selected plugins, strategies, and number of test cases.',
+          );
+        });
+      }
     });
 
     it('displays custom tooltip content when provided', async () => {
+      const user = userEvent.setup();
       const customTooltip = 'Custom tooltip explaining probe calculation';
 
       renderWithProviders(
         <EstimatedProbesDisplay config={mockConfig} tooltipContent={customTooltip} />,
       );
 
-      expect(showTooltip()).toHaveTextContent(customTooltip);
+      const infoIcon = document.querySelector('svg.lucide-info');
+
+      if (infoIcon) {
+        await user.hover(infoIcon);
+
+        await waitFor(() => {
+          const tooltip = screen.getByRole('tooltip');
+          expect(tooltip).toHaveTextContent(customTooltip);
+        });
+      }
     });
 
     it('info icon is rendered correctly', () => {

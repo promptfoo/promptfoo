@@ -67,12 +67,7 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
 
         <div className="space-y-6 py-4">
           <div className="space-y-2">
-            <div className="flex items-baseline gap-1.5">
-              <Label htmlFor="test-case-description" className="text-lg font-semibold">
-                Description
-              </Label>
-              <span className="text-xs text-muted-foreground">(optional)</span>
-            </div>
+            <Label htmlFor="test-case-description">Description</Label>
             <Input
               id="test-case-description"
               placeholder="Enter a description for this test case"

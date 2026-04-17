@@ -28,7 +28,7 @@ func main() {
 	}
 
 	// Get the function by name using reflection
-	var f reflect.Value
+	f := reflect.ValueOf(nil)
 	switch functionName {
 	case "call_api", "CallApi":
 		// Use the CallApi function defined in the user's code

@@ -3,9 +3,8 @@ import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
-import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { callApi } from '@app/utils/api';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Review from './Review';
@@ -91,111 +90,6 @@ vi.mock('@app/pages/eval-creator/components/YamlEditor', () => ({
   ),
 }));
 
-vi.mock('@app/components/ui/collapsible', async () => {
-  const React = await import('react');
-  const CollapsibleContext = React.createContext({
-    open: false,
-    onOpenChange: (_open: boolean) => {},
-  });
-
-  return {
-    Collapsible: ({
-      open = false,
-      onOpenChange = () => {},
-      children,
-    }: {
-      open?: boolean;
-      onOpenChange?: (open: boolean) => void;
-      children: React.ReactNode;
-    }) => (
-      <CollapsibleContext.Provider value={{ open, onOpenChange }}>
-        <div data-state={open ? 'open' : 'closed'}>{children}</div>
-      </CollapsibleContext.Provider>
-    ),
-    CollapsibleContent: ({ children }: { children: React.ReactNode }) => {
-      const { open } = React.useContext(CollapsibleContext);
-      if (!open) {
-        return null;
-      }
-      return <div data-state="open">{children}</div>;
-    },
-    CollapsibleTrigger: ({
-      children,
-      ...props
-    }: React.ButtonHTMLAttributes<HTMLButtonElement> & { children: React.ReactNode }) => {
-      const { open, onOpenChange } = React.useContext(CollapsibleContext);
-      return (
-        <button
-          type="button"
-          {...props}
-          aria-expanded={open}
-          data-state={open ? 'open' : 'closed'}
-          onClick={(event) => {
-            props.onClick?.(event);
-            onOpenChange(!open);
-          }}
-        >
-          {children}
-        </button>
-      );
-    },
-  };
-});
-
-vi.mock('@app/components/ui/tooltip', async () => {
-  const React = await import('react');
-  const TooltipContext = React.createContext({
-    open: false,
-    setOpen: (_open: boolean) => {},
-  });
-
-  return {
-    TooltipProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    Tooltip: ({ children }: { children: React.ReactNode }) => {
-      const [open, setOpen] = React.useState(false);
-      return (
-        <TooltipContext.Provider value={{ open, setOpen }}>{children}</TooltipContext.Provider>
-      );
-    },
-    TooltipContent: ({ children }: { children: React.ReactNode }) => {
-      const { open } = React.useContext(TooltipContext);
-      if (!open) {
-        return null;
-      }
-      return <div role="tooltip">{children}</div>;
-    },
-    TooltipTrigger: ({
-      asChild,
-      children,
-    }: {
-      asChild?: boolean;
-      children: React.ReactElement<{
-        onMouseLeave?: React.MouseEventHandler;
-        onMouseOver?: React.MouseEventHandler;
-      }>;
-    }) => {
-      const { setOpen } = React.useContext(TooltipContext);
-      if (!asChild || !React.isValidElement(children)) {
-        return (
-          <span onMouseLeave={() => setOpen(false)} onMouseOver={() => setOpen(true)}>
-            {children}
-          </span>
-        );
-      }
-      return React.cloneElement(children, {
-        onMouseLeave: (event: React.MouseEvent) => {
-          children.props.onMouseLeave?.(event);
-          setOpen(false);
-        },
-        onMouseOver: (event: React.MouseEvent) => {
-          children.props.onMouseOver?.(event);
-          setOpen(true);
-        },
-      });
-    },
-  };
-});
-
 vi.mock('@promptfoo/redteam/sharedFrontend', () => ({
   getUnifiedConfig: vi.fn().mockReturnValue({
     description: 'Test config',
@@ -226,27 +120,12 @@ vi.mock('../hooks/useRedTeamConfig', () => ({
 }));
 
 describe('Review Component', () => {
-  let timers: TestTimers;
-
-  const clickElement = (element: Element) => {
-    act(() => {
-      element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    });
-  };
-
-  const hoverElement = (element: Element) => {
-    act(() => {
-      element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true }));
-    });
-  };
-
   const defaultConfig = {
     description: 'Test Configuration',
     plugins: [],
     strategies: [],
     purpose: 'Test purpose',
     numTests: 10,
-    maxCharsPerMessage: 250,
     maxConcurrency: 4,
     target: { id: 'test-target', config: {} },
     applicationDefinition: {},
@@ -256,7 +135,7 @@ describe('Review Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    timers = useTestTimers();
+    vi.useFakeTimers();
 
     // Reset the mock to return a connected state by default
     vi.mocked(useApiHealth).mockReturnValue({
@@ -291,7 +170,14 @@ describe('Review Component', () => {
   });
 
   afterEach(() => {
-    restoreTestTimers({ runPending: true });
+    // Only run pending timers if fake timers are active
+    // This prevents errors when child describe blocks use real timers
+    try {
+      vi.runOnlyPendingTimers();
+    } catch {
+      // Ignore error if timers are not mocked
+    }
+    vi.useRealTimers();
   });
 
   describe('Component Integration', () => {
@@ -325,30 +211,7 @@ describe('Review Component', () => {
       expect(descriptionField).toHaveValue('Test Configuration');
     });
 
-    it('renders the max chars per message field in Run Options and persists changes', async () => {
-      renderWithProviders(
-        <Review
-          navigateToPlugins={vi.fn()}
-          navigateToStrategies={vi.fn()}
-          navigateToPurpose={vi.fn()}
-        />,
-      );
-
-      const maxCharsPerMessageInput = screen.getByLabelText('Max chars per message');
-      expect(maxCharsPerMessageInput).toBeInTheDocument();
-      expect(maxCharsPerMessageInput).toHaveValue(250);
-
-      timers.useRealTimers();
-      const user = userEvent.setup();
-      await user.clear(maxCharsPerMessageInput);
-      await user.type(maxCharsPerMessageInput, '180');
-      await user.tab();
-      timers.useFakeTimers();
-
-      expect(mockUpdateConfig).toHaveBeenCalledWith('maxCharsPerMessage', 180);
-    });
-
-    it('renders DefaultTestVariables component inside CollapsibleContent when expanded', async () => {
+    it('renders DefaultTestVariables component inside CollapsibleContent when expanded', () => {
       renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
@@ -359,7 +222,7 @@ describe('Review Component', () => {
 
       // First expand the Advanced Configuration accordion
       const advancedConfigButton = screen.getByRole('button', { name: /advanced configuration/i });
-      clickElement(advancedConfigButton);
+      fireEvent.click(advancedConfigButton);
 
       const defaultTestVariables = screen.getByTestId('default-test-variables');
       // CollapsibleContent uses data-state attribute
@@ -425,7 +288,7 @@ describe('Review Component', () => {
       const accordionSummary = screen.getByText('Advanced Configuration').closest('button');
 
       if (accordionSummary) {
-        clickElement(accordionSummary);
+        fireEvent.click(accordionSummary);
       }
 
       expect(
@@ -446,11 +309,11 @@ describe('Review Component', () => {
     );
 
     const accordionSummary = screen.getByRole('button', { name: /advanced configuration/i });
-    clickElement(accordionSummary);
+    fireEvent.click(accordionSummary);
 
     // Advance timers for any animations/transitions
     await act(async () => {
-      await timers.advanceByAsync(100);
+      await vi.advanceTimersByTimeAsync(100);
     });
 
     const defaultTestVariables = screen.getByTestId('default-test-variables');
@@ -488,7 +351,7 @@ Application Details:
     expect(sectionTitles.length).toBe(1);
   });
 
-  it('handles extremely long section headers and content without breaking layout', async () => {
+  it('handles extremely long section headers and content without breaking layout', () => {
     const longHeader = 'This is an extremely long section header that should wrap appropriately:';
     const longContent =
       'This is an extremely long section content that should wrap appropriately. '.repeat(50);
@@ -512,10 +375,10 @@ Application Details:
     const applicationDetailsButton = screen.getByRole('button', {
       name: /application details/i,
     });
-    clickElement(applicationDetailsButton);
+    fireEvent.click(applicationDetailsButton);
 
     const sectionHeaderElement = screen.getByText(longHeader.slice(0, -1));
-    clickElement(sectionHeaderElement);
+    fireEvent.click(sectionHeaderElement);
 
     expect(
       screen.getByText((content) => {
@@ -642,6 +505,10 @@ Application Details:
     });
 
     it('should show tooltip message when hovering over disabled button due to blocked API', async () => {
+      // Use real timers for userEvent to work correctly with Radix tooltips
+      vi.useRealTimers();
+      const user = userEvent.setup();
+
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'blocked', message: null },
         refetch: vi.fn(),
@@ -657,12 +524,14 @@ Application Details:
       );
 
       const button = screen.getByRole('button', { name: /run now/i });
-      hoverElement(button);
+      await user.hover(button);
 
-      const tooltip = screen.getByRole('tooltip');
-      expect(tooltip).toHaveTextContent(
-        /Cannot connect to Promptfoo Cloud\. Please check your network/i,
-      );
+      await waitFor(() => {
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(
+          /Cannot connect to Promptfoo Cloud\. Please check your network/i,
+        );
+      });
     });
 
     it('should display warning alert when API is blocked', () => {
@@ -771,6 +640,10 @@ Application Details:
     });
 
     it('should show tooltip message when hovering over disabled button due to disabled API', async () => {
+      // Use real timers for userEvent to work correctly with Radix tooltips
+      vi.useRealTimers();
+      const user = userEvent.setup();
+
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'disabled', message: null },
         refetch: vi.fn(),
@@ -786,15 +659,21 @@ Application Details:
       );
 
       const button = screen.getByRole('button', { name: /run now/i });
-      hoverElement(button);
+      await user.hover(button);
 
-      const tooltip = screen.getByRole('tooltip');
-      expect(tooltip).toHaveTextContent(
-        /Remote generation is disabled\. Running red team evaluations/i,
-      );
+      await waitFor(() => {
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(
+          /Remote generation is disabled\. Running red team evaluations/i,
+        );
+      });
     });
 
     it('should show tooltip message when hovering over disabled button due to unknown API status', async () => {
+      // Use real timers for userEvent to work correctly with Radix tooltips
+      vi.useRealTimers();
+      const user = userEvent.setup();
+
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'unknown', message: null },
         refetch: vi.fn(),
@@ -810,10 +689,12 @@ Application Details:
       );
 
       const button = screen.getByRole('button', { name: /run now/i });
-      hoverElement(button);
+      await user.hover(button);
 
-      const tooltip = screen.getByRole('tooltip');
-      expect(tooltip).toHaveTextContent(/checking connection to promptfoo cloud/i);
+      await waitFor(() => {
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(/checking connection to promptfoo cloud/i);
+      });
     });
 
     it('should not show tooltip when API is connected', async () => {
@@ -835,7 +716,10 @@ Application Details:
       const buttonWrapper = button.parentElement;
 
       if (buttonWrapper) {
-        hoverElement(buttonWrapper);
+        fireEvent.mouseOver(buttonWrapper);
+
+        // Wait a bit to ensure tooltip would have time to appear if it was going to
+        await vi.advanceTimersByTimeAsync(100);
 
         // Check that no tooltip is shown (check for various tooltip text patterns)
         expect(screen.queryByText(/cannot connect to promptfoo cloud/i)).not.toBeInTheDocument();
@@ -863,7 +747,10 @@ Application Details:
       const buttonWrapper = button.parentElement;
 
       if (buttonWrapper) {
-        hoverElement(buttonWrapper);
+        fireEvent.mouseOver(buttonWrapper);
+
+        // Wait a bit to ensure tooltip would have time to appear if it was going to
+        await vi.advanceTimersByTimeAsync(100);
 
         // Check that no tooltip is shown
         expect(screen.queryByText(/cannot connect to promptfoo cloud/i)).not.toBeInTheDocument();
@@ -911,7 +798,6 @@ Application Details:
     });
 
     it('should disable button when isRunning is true regardless of API status', async () => {
-      const user = userEvent.setup({ delay: null });
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
@@ -935,7 +821,8 @@ Application Details:
       const runButton = screen.getByRole('button', { name: /run now/i });
       expect(runButton).toBeEnabled();
 
-      await user.click(runButton);
+      // Click the button to start running
+      fireEvent.click(runButton);
 
       // Wait for the button to update to "Running..." state
       await waitFor(() => {
@@ -948,7 +835,6 @@ Application Details:
     });
 
     it('should show "Running..." text when isRunning is true', async () => {
-      const user = userEvent.setup({ delay: null });
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
@@ -971,7 +857,8 @@ Application Details:
       // Initially button should show "Run Now"
       expect(screen.getByRole('button', { name: /run now/i })).toBeInTheDocument();
 
-      await user.click(screen.getByRole('button', { name: /run now/i }));
+      // Click the button to start running
+      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
 
       // Wait for the button text to change to "Running..."
       await waitFor(() => {
@@ -981,7 +868,6 @@ Application Details:
     });
 
     it('should show Cancel button when isRunning is true', async () => {
-      const user = userEvent.setup({ delay: null });
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
@@ -1004,7 +890,8 @@ Application Details:
       // Initially Cancel button should not be present
       expect(screen.queryByRole('button', { name: /cancel/i })).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole('button', { name: /run now/i }));
+      // Click the Run Now button to start running
+      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
 
       // Wait for the Cancel button to appear
       await waitFor(() => {
@@ -1015,7 +902,6 @@ Application Details:
     });
 
     it('should not show tooltip when button is disabled due to isRunning', async () => {
-      const user = userEvent.setup({ delay: null });
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
@@ -1035,7 +921,8 @@ Application Details:
         />,
       );
 
-      await user.click(screen.getByRole('button', { name: /run now/i }));
+      // Click the Run Now button to start running
+      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
 
       // Wait for the button to be in running state
       await waitFor(() => {
@@ -1046,7 +933,10 @@ Application Details:
       const buttonWrapper = runningButton.parentElement;
 
       if (buttonWrapper) {
-        await user.hover(buttonWrapper);
+        fireEvent.mouseOver(buttonWrapper);
+
+        // Wait a bit to ensure tooltip would have time to appear if it was going to
+        await new Promise((resolve) => setTimeout(resolve, 100));
 
         // Check that no tooltip is shown
         expect(screen.queryByText(/cannot connect to promptfoo cloud/i)).not.toBeInTheDocument();
@@ -1056,7 +946,6 @@ Application Details:
     });
 
     it('should disable button when both isRunning is true and API is blocked', async () => {
-      const user = userEvent.setup({ delay: null });
       // Start with API connected so we can trigger running state
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'connected', message: null },
@@ -1077,7 +966,8 @@ Application Details:
         />,
       );
 
-      await user.click(screen.getByRole('button', { name: /run now/i }));
+      // Click the Run Now button to start running
+      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
 
       // Wait for running state
       await waitFor(() => {
@@ -1250,7 +1140,8 @@ Application Details:
     });
 
     it('should update tooltip message when API health status changes', async () => {
-      const user = userEvent.setup({ delay: null });
+      const user = userEvent.setup();
+
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'blocked', message: null },
         refetch: vi.fn(),
@@ -1267,8 +1158,12 @@ Application Details:
 
       const button = screen.getByRole('button', { name: /run now/i });
 
+      // First check tooltip for blocked state
       await user.hover(button);
-      expect(screen.getByRole('tooltip')).toHaveTextContent(/cannot connect to promptfoo cloud/i);
+      await waitFor(() => {
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(/cannot connect to promptfoo cloud/i);
+      });
 
       // Change to disabled state and rerender
       vi.mocked(useApiHealth).mockReturnValue({
@@ -1285,8 +1180,11 @@ Application Details:
         />,
       );
 
-      await user.hover(screen.getByRole('button', { name: /run now/i }));
-      expect(screen.getByRole('tooltip')).toHaveTextContent(/remote generation is disabled/i);
+      // Tooltip should update with new message (still hovering)
+      await waitFor(() => {
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(/remote generation is disabled/i);
+      });
 
       // Change to unknown state and rerender
       vi.mocked(useApiHealth).mockReturnValue({
@@ -1303,10 +1201,11 @@ Application Details:
         />,
       );
 
-      await user.hover(screen.getByRole('button', { name: /run now/i }));
-      expect(screen.getByRole('tooltip')).toHaveTextContent(
-        /checking connection to promptfoo cloud/i,
-      );
+      // Tooltip should update with new message (still hovering)
+      await waitFor(() => {
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(/checking connection to promptfoo cloud/i);
+      });
     });
   });
 
@@ -1468,7 +1367,6 @@ Application Details:
     });
 
     it('should call setJob when starting a new job', async () => {
-      const user = userEvent.setup({ delay: null });
       vi.mocked(callApi).mockImplementation(async (url: string, _options?: any) => {
         if (url === '/redteam/status') {
           return {
@@ -1511,7 +1409,8 @@ Application Details:
         expect(screen.getByRole('button', { name: /run now/i })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('button', { name: /run now/i }));
+      // Click Run Now
+      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
 
       // Wait for job to start
       await waitFor(() => {
@@ -1520,7 +1419,6 @@ Application Details:
     });
 
     it('should call clearJob when cancelling a job', async () => {
-      const user = userEvent.setup({ delay: null });
       vi.mocked(callApi).mockImplementation(async (url: string, _options?: any) => {
         if (url === '/redteam/status') {
           return {
@@ -1569,14 +1467,16 @@ Application Details:
         expect(screen.getByRole('button', { name: /run now/i })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('button', { name: /run now/i }));
+      // Click Run Now
+      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
 
       // Wait for Cancel button to appear
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('button', { name: /cancel/i }));
+      // Click Cancel
+      fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
 
       // Should call clearJob
       await waitFor(() => {

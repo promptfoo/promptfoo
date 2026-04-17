@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { getConfigDirectoryPath, setConfigDirectoryPath } from '../../../src/util/config/manage';
 import { writePromptfooConfig } from '../../../src/util/config/writer';
-import { mockProcessEnv } from '../../util/utils';
 
 import type { UnifiedConfig } from '../../../src/types/index';
 
@@ -52,18 +51,16 @@ vi.mock('../../../src/logger', () => ({
 describe('config', () => {
   const mockHomedir = '/mock/home';
   const defaultConfigPath = path.join(mockHomedir, '.promptfoo');
-  let restoreEnv: () => void;
 
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue(mockHomedir);
     mockFs.existsSync.mockReturnValue(false);
-    restoreEnv = mockProcessEnv({ PROMPTFOO_CONFIG_DIR: undefined });
+    delete process.env.PROMPTFOO_CONFIG_DIR;
     setConfigDirectoryPath(undefined);
   });
 
   afterEach(() => {
-    restoreEnv();
     setConfigDirectoryPath(undefined);
   });
 
@@ -102,13 +99,9 @@ describe('config', () => {
     it('overrides the environment variable', () => {
       const envPath = '/env/path';
       const newPath = '/new/path';
-      const restoreConfigDir = mockProcessEnv({ PROMPTFOO_CONFIG_DIR: envPath });
-      try {
-        setConfigDirectoryPath(newPath);
-        expect(getConfigDirectoryPath()).toBe(newPath);
-      } finally {
-        restoreConfigDir();
-      }
+      process.env.PROMPTFOO_CONFIG_DIR = envPath;
+      setConfigDirectoryPath(newPath);
+      expect(getConfigDirectoryPath()).toBe(newPath);
     });
   });
 });

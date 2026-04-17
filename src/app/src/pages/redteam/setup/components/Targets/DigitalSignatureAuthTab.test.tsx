@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DigitalSignatureAuthTab from './tabs/DigitalSignatureAuthTab';
@@ -39,8 +39,7 @@ describe('DigitalSignatureAuthTab', () => {
     };
   });
 
-  it('should update signatureValidityMs when a valid number is entered', async () => {
-    const user = userEvent.setup();
+  it('should update signatureValidityMs when a valid number is entered', () => {
     renderWithTooltipProvider(
       <DigitalSignatureAuthTab
         selectedTarget={selectedTarget}
@@ -51,9 +50,7 @@ describe('DigitalSignatureAuthTab', () => {
     const validityInput = screen.getByLabelText('Signature Validity (ms)');
     const newValidityValue = 60000;
 
-    await user.click(validityInput);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(newValidityValue));
+    fireEvent.change(validityInput, { target: { value: String(newValidityValue) } });
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -62,8 +59,7 @@ describe('DigitalSignatureAuthTab', () => {
     });
   });
 
-  it('should update signatureRefreshBufferMs in selectedTarget.config.signatureAuth when a valid number is entered', async () => {
-    const user = userEvent.setup();
+  it('should update signatureRefreshBufferMs in selectedTarget.config.signatureAuth when a valid number is entered', () => {
     renderWithTooltipProvider(
       <DigitalSignatureAuthTab
         selectedTarget={selectedTarget}
@@ -74,9 +70,7 @@ describe('DigitalSignatureAuthTab', () => {
     const refreshBufferInput = screen.getByLabelText('Signature Refresh Buffer (ms)');
     const newRefreshBufferValue = 30000;
 
-    await user.click(refreshBufferInput);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(newRefreshBufferValue));
+    fireEvent.change(refreshBufferInput, { target: { value: String(newRefreshBufferValue) } });
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -85,8 +79,7 @@ describe('DigitalSignatureAuthTab', () => {
     });
   });
 
-  it('should update signatureRefreshBufferMs when set to 0', async () => {
-    const user = userEvent.setup();
+  it('should update signatureRefreshBufferMs when set to 0', () => {
     renderWithTooltipProvider(
       <DigitalSignatureAuthTab
         selectedTarget={selectedTarget}
@@ -95,9 +88,7 @@ describe('DigitalSignatureAuthTab', () => {
     );
 
     const refreshBufferInput = screen.getByLabelText('Signature Refresh Buffer (ms)');
-    await user.click(refreshBufferInput);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste('0');
+    fireEvent.change(refreshBufferInput, { target: { value: '0' } });
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -106,8 +97,7 @@ describe('DigitalSignatureAuthTab', () => {
     });
   });
 
-  it('should update signatureValidityMs when a negative value is entered', async () => {
-    const user = userEvent.setup();
+  it('should update signatureValidityMs when a negative value is entered', () => {
     renderWithTooltipProvider(
       <DigitalSignatureAuthTab
         selectedTarget={selectedTarget}
@@ -118,9 +108,7 @@ describe('DigitalSignatureAuthTab', () => {
     const validityInput = screen.getByLabelText('Signature Validity (ms)');
     const negativeValidityValue = -60000;
 
-    await user.click(validityInput);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(negativeValidityValue));
+    fireEvent.change(validityInput, { target: { value: String(negativeValidityValue) } });
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -129,8 +117,7 @@ describe('DigitalSignatureAuthTab', () => {
     });
   });
 
-  it('should handle extremely large values for signatureValidityMs without errors', async () => {
-    const user = userEvent.setup();
+  it('should handle extremely large values for signatureValidityMs without errors', () => {
     renderWithTooltipProvider(
       <DigitalSignatureAuthTab
         selectedTarget={selectedTarget}
@@ -141,9 +128,7 @@ describe('DigitalSignatureAuthTab', () => {
     const validityInput = screen.getByLabelText('Signature Validity (ms)');
     const largeValidityValue = Number.MAX_SAFE_INTEGER;
 
-    await user.click(validityInput);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(largeValidityValue));
+    fireEvent.change(validityInput, { target: { value: String(largeValidityValue) } });
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -152,8 +137,7 @@ describe('DigitalSignatureAuthTab', () => {
     });
   });
 
-  it('should handle decimal values entered in Signature Validity (ms)', async () => {
-    const user = userEvent.setup();
+  it('should handle decimal values entered in Signature Validity (ms)', () => {
     renderWithTooltipProvider(
       <DigitalSignatureAuthTab
         selectedTarget={selectedTarget}
@@ -164,9 +148,7 @@ describe('DigitalSignatureAuthTab', () => {
     const validityInput = screen.getByLabelText('Signature Validity (ms)');
     const decimalValue = 300.5;
 
-    await user.click(validityInput);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(decimalValue));
+    fireEvent.change(validityInput, { target: { value: String(decimalValue) } });
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -175,8 +157,7 @@ describe('DigitalSignatureAuthTab', () => {
     });
   });
 
-  it('should update signatureRefreshBufferMs even when it is larger than signatureValidityMs', async () => {
-    const user = userEvent.setup();
+  it('should update signatureRefreshBufferMs even when it is larger than signatureValidityMs', () => {
     selectedTarget = {
       id: 'http-provider',
       config: {
@@ -198,9 +179,7 @@ describe('DigitalSignatureAuthTab', () => {
     const refreshBufferInput = screen.getByLabelText('Signature Refresh Buffer (ms)');
     const newRefreshBufferValue = 2000;
 
-    await user.click(refreshBufferInput);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(newRefreshBufferValue));
+    fireEvent.change(refreshBufferInput, { target: { value: String(newRefreshBufferValue) } });
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -227,8 +206,7 @@ describe('DigitalSignatureAuthTab', () => {
   });
 
   describe('Enable/Disable Toggle', () => {
-    it('should enable signatureAuth when toggle is turned on', async () => {
-      const user = userEvent.setup();
+    it('should enable signatureAuth when toggle is turned on', () => {
       selectedTarget = {
         id: 'http-provider',
         config: {},
@@ -242,7 +220,7 @@ describe('DigitalSignatureAuthTab', () => {
       );
 
       const enableSwitch = screen.getByLabelText('Enable signature authentication');
-      await user.click(enableSwitch);
+      fireEvent.click(enableSwitch);
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
         enabled: true,
@@ -251,8 +229,7 @@ describe('DigitalSignatureAuthTab', () => {
       });
     });
 
-    it('should disable signatureAuth when toggle is turned off', async () => {
-      const user = userEvent.setup();
+    it('should disable signatureAuth when toggle is turned off', () => {
       renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
@@ -261,7 +238,7 @@ describe('DigitalSignatureAuthTab', () => {
       );
 
       const enableSwitch = screen.getByLabelText('Enable signature authentication');
-      await user.click(enableSwitch);
+      fireEvent.click(enableSwitch);
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', undefined);
     });
@@ -340,8 +317,7 @@ describe('DigitalSignatureAuthTab', () => {
   });
 
   describe('PEM Key Input Type Selection', () => {
-    it('should update keyInputType to path when File Path option is clicked', async () => {
-      const user = userEvent.setup();
+    it('should update keyInputType to path when File Path option is clicked', () => {
       renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
@@ -353,7 +329,7 @@ describe('DigitalSignatureAuthTab', () => {
       const filePathText = screen.getByText('File Path');
       const filePathCard = filePathText.closest('.cursor-pointer');
       if (filePathCard) {
-        await user.click(filePathCard);
+        fireEvent.click(filePathCard);
       }
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -363,8 +339,7 @@ describe('DigitalSignatureAuthTab', () => {
       });
     });
 
-    it('should update keyInputType to base64 when Base64 Key String option is clicked', async () => {
-      const user = userEvent.setup();
+    it('should update keyInputType to base64 when Base64 Key String option is clicked', () => {
       renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
@@ -376,7 +351,7 @@ describe('DigitalSignatureAuthTab', () => {
       const base64Text = screen.getByText('Base64 Key String');
       const base64Card = base64Text.closest('.cursor-pointer');
       if (base64Card) {
-        await user.click(base64Card);
+        fireEvent.click(base64Card);
       }
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
@@ -400,8 +375,7 @@ describe('DigitalSignatureAuthTab', () => {
       };
     });
 
-    it('should update keystorePath when value is entered', async () => {
-      const user = userEvent.setup();
+    it('should update keystorePath when value is entered', () => {
       renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
@@ -410,9 +384,7 @@ describe('DigitalSignatureAuthTab', () => {
       );
 
       const keystorePathInput = screen.getByLabelText('Keystore File');
-      await user.click(keystorePathInput);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('/path/to/keystore.jks');
+      fireEvent.change(keystorePathInput, { target: { value: '/path/to/keystore.jks' } });
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
         enabled: true,
@@ -426,8 +398,7 @@ describe('DigitalSignatureAuthTab', () => {
       });
     });
 
-    it('should update keystorePassword when value is entered', async () => {
-      const user = userEvent.setup();
+    it('should update keystorePassword when value is entered', () => {
       renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
@@ -436,9 +407,7 @@ describe('DigitalSignatureAuthTab', () => {
       );
 
       const keystorePasswordInput = screen.getByLabelText('Keystore Password');
-      await user.click(keystorePasswordInput);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('testPassword');
+      fireEvent.change(keystorePasswordInput, { target: { value: 'testPassword' } });
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
         enabled: true,
@@ -447,8 +416,7 @@ describe('DigitalSignatureAuthTab', () => {
       });
     });
 
-    it('should update keyAlias when value is entered', async () => {
-      const user = userEvent.setup();
+    it('should update keyAlias when value is entered', () => {
       renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
@@ -457,9 +425,7 @@ describe('DigitalSignatureAuthTab', () => {
       );
 
       const keyAliasInput = screen.getByLabelText('Key Alias');
-      await user.click(keyAliasInput);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('myalias');
+      fireEvent.change(keyAliasInput, { target: { value: 'myalias' } });
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
         enabled: true,
@@ -482,8 +448,7 @@ describe('DigitalSignatureAuthTab', () => {
       };
     });
 
-    it('should update pfxPath when value is entered', async () => {
-      const user = userEvent.setup();
+    it('should update pfxPath when value is entered', () => {
       renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
@@ -492,9 +457,7 @@ describe('DigitalSignatureAuthTab', () => {
       );
 
       const pfxPathInput = screen.getByLabelText('PFX/P12 Certificate File');
-      await user.click(pfxPathInput);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('/path/to/cert.pfx');
+      fireEvent.change(pfxPathInput, { target: { value: '/path/to/cert.pfx' } });
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
         enabled: true,
@@ -511,8 +474,7 @@ describe('DigitalSignatureAuthTab', () => {
       });
     });
 
-    it('should update pfxPassword when value is entered', async () => {
-      const user = userEvent.setup();
+    it('should update pfxPassword when value is entered', () => {
       renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
@@ -521,9 +483,7 @@ describe('DigitalSignatureAuthTab', () => {
       );
 
       const pfxPasswordInput = screen.getByLabelText('PFX Password');
-      await user.click(pfxPasswordInput);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('testPassword');
+      fireEvent.change(pfxPasswordInput, { target: { value: 'testPassword' } });
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
         enabled: true,
@@ -532,8 +492,7 @@ describe('DigitalSignatureAuthTab', () => {
       });
     });
 
-    it('should update pfxMode to separate when Separate CRT/KEY Files is selected', async () => {
-      const user = userEvent.setup();
+    it('should update pfxMode to separate when Separate CRT/KEY Files is selected', () => {
       renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
@@ -542,7 +501,7 @@ describe('DigitalSignatureAuthTab', () => {
       );
 
       const separateOption = screen.getByLabelText('Separate CRT/KEY Files');
-      await user.click(separateOption);
+      fireEvent.click(separateOption);
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
         enabled: true,
@@ -553,8 +512,7 @@ describe('DigitalSignatureAuthTab', () => {
       });
     });
 
-    it('should update certPath when value is entered in separate mode', async () => {
-      const user = userEvent.setup();
+    it('should update certPath when value is entered in separate mode', () => {
       selectedTarget = {
         id: 'http-provider',
         config: {
@@ -574,9 +532,7 @@ describe('DigitalSignatureAuthTab', () => {
       );
 
       const certPathInput = screen.getByLabelText('Certificate File (CRT)');
-      await user.click(certPathInput);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('/path/to/cert.crt');
+      fireEvent.change(certPathInput, { target: { value: '/path/to/cert.crt' } });
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
         enabled: true,
@@ -595,8 +551,7 @@ describe('DigitalSignatureAuthTab', () => {
       });
     });
 
-    it('should update keyPath when value is entered in separate mode', async () => {
-      const user = userEvent.setup();
+    it('should update keyPath when value is entered in separate mode', () => {
       selectedTarget = {
         id: 'http-provider',
         config: {
@@ -616,9 +571,7 @@ describe('DigitalSignatureAuthTab', () => {
       );
 
       const keyPathInput = screen.getByLabelText('Private Key File (KEY)');
-      await user.click(keyPathInput);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('/path/to/private.key');
+      fireEvent.change(keyPathInput, { target: { value: '/path/to/private.key' } });
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
         enabled: true,
@@ -630,8 +583,7 @@ describe('DigitalSignatureAuthTab', () => {
   });
 
   describe('PEM Configuration Fields', () => {
-    it('should update privateKeyPath when value is entered for path input type', async () => {
-      const user = userEvent.setup();
+    it('should update privateKeyPath when value is entered for path input type', () => {
       selectedTarget = {
         id: 'http-provider',
         config: {
@@ -651,9 +603,7 @@ describe('DigitalSignatureAuthTab', () => {
       );
 
       const privateKeyPathInput = screen.getByLabelText('Private Key File Path');
-      await user.click(privateKeyPathInput);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('/path/to/private.key');
+      fireEvent.change(privateKeyPathInput, { target: { value: '/path/to/private.key' } });
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
         enabled: true,
@@ -670,8 +620,7 @@ describe('DigitalSignatureAuthTab', () => {
       });
     });
 
-    it('should update privateKey when value is entered for base64 input type', async () => {
-      const user = userEvent.setup();
+    it('should update privateKey when value is entered for base64 input type', () => {
       selectedTarget = {
         id: 'http-provider',
         config: {
@@ -697,9 +646,7 @@ describe('DigitalSignatureAuthTab', () => {
         (el) => (el as HTMLTextAreaElement).tagName === 'TEXTAREA',
       ) as HTMLTextAreaElement;
       expect(privateKeyInput).toBeDefined();
-      await user.click(privateKeyInput);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('LS0tLS1CRUdJTi...');
+      fireEvent.change(privateKeyInput, { target: { value: 'LS0tLS1CRUdJTi...' } });
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
         enabled: true,
@@ -718,8 +665,7 @@ describe('DigitalSignatureAuthTab', () => {
   });
 
   describe('Signature Configuration Fields', () => {
-    it('should update signatureDataTemplate when value is entered', async () => {
-      const user = userEvent.setup();
+    it('should update signatureDataTemplate when value is entered', () => {
       renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
@@ -728,9 +674,9 @@ describe('DigitalSignatureAuthTab', () => {
       );
 
       const templateInput = screen.getByLabelText('Signature Data Template');
-      await user.click(templateInput);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('promptfoo-app{{signatureTimestamp}}');
+      fireEvent.change(templateInput, {
+        target: { value: 'promptfoo-app{{signatureTimestamp}}' },
+      });
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
         enabled: true,
@@ -739,8 +685,7 @@ describe('DigitalSignatureAuthTab', () => {
       });
     });
 
-    it('should update signatureAlgorithm when value is entered', async () => {
-      const user = userEvent.setup();
+    it('should update signatureAlgorithm when value is entered', () => {
       renderWithTooltipProvider(
         <DigitalSignatureAuthTab
           selectedTarget={selectedTarget}
@@ -749,9 +694,7 @@ describe('DigitalSignatureAuthTab', () => {
       );
 
       const algorithmInput = screen.getByLabelText('Signature Algorithm');
-      await user.click(algorithmInput);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('SHA512');
+      fireEvent.change(algorithmInput, { target: { value: 'SHA512' } });
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
         enabled: true,

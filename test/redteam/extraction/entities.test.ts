@@ -4,11 +4,8 @@ import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';
 import { extractEntities } from '../../../src/redteam/extraction/entities';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
-import {
-  createMockProvider,
-  createProviderResponse,
-  type MockApiProvider,
-} from '../../factories/provider';
+
+import type { ApiProvider } from '../../../src/types/index';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -42,7 +39,7 @@ vi.mock('../../../src/redteam/remoteGeneration', async () => ({
 }));
 
 describe('Entities Extractor', () => {
-  let provider: MockApiProvider;
+  let provider: ApiProvider;
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeAll(() => {
@@ -52,9 +49,10 @@ describe('Entities Extractor', () => {
   beforeEach(() => {
     process.env = { ...originalEnv };
     delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
-    provider = createMockProvider({
-      response: createProviderResponse({ output: 'Entity: Apple\nEntity: Google' }),
-    });
+    provider = {
+      callApi: vi.fn().mockResolvedValue({ output: 'Entity: Apple\nEntity: Google' }),
+      id: vi.fn().mockReturnValue('test-provider'),
+    };
     vi.clearAllMocks();
     vi.mocked(getRemoteGenerationUrl).mockImplementation(function () {
       return 'https://api.promptfoo.app/api/v1/task';

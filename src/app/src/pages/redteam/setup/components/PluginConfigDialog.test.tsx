@@ -1,5 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PluginConfigDialog from './PluginConfigDialog';
 
@@ -63,7 +62,6 @@ describe('PluginConfigDialog - OSS', () => {
     });
 
     it('saves graderGuidance when Save is clicked', async () => {
-      const user = userEvent.setup();
       render(
         <PluginConfigDialog
           open={true}
@@ -75,12 +73,12 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       const guidanceField = screen.getByPlaceholderText(/For this financial app/);
-      await user.click(guidanceField);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('Our brand names are not competitor mentions');
+      fireEvent.change(guidanceField, {
+        target: { value: 'Our brand names are not competitor mentions' },
+      });
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
-      await user.click(saveButton);
+      fireEvent.click(saveButton);
 
       await waitFor(() => {
         expect(mockOnSave).toHaveBeenCalledWith(
@@ -93,7 +91,6 @@ describe('PluginConfigDialog - OSS', () => {
     });
 
     it('removes empty graderGuidance when saving', async () => {
-      const user = userEvent.setup();
       render(
         <PluginConfigDialog
           open={true}
@@ -105,7 +102,7 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
-      await user.click(saveButton);
+      fireEvent.click(saveButton);
 
       await waitFor(() => {
         const savedConfig = mockOnSave.mock.calls[0][1];
@@ -114,7 +111,6 @@ describe('PluginConfigDialog - OSS', () => {
     });
 
     it('preserves other config fields when saving graderGuidance', async () => {
-      const user = userEvent.setup();
       render(
         <PluginConfigDialog
           open={true}
@@ -126,12 +122,12 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       const guidanceField = screen.getByPlaceholderText(/For this financial app/);
-      await user.click(guidanceField);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('BOLA guidance');
+      fireEvent.change(guidanceField, {
+        target: { value: 'BOLA guidance' },
+      });
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
-      await user.click(saveButton);
+      fireEvent.click(saveButton);
 
       await waitFor(() => {
         expect(mockOnSave).toHaveBeenCalledWith(

@@ -1,4 +1,4 @@
-# redteam-beavertails (BeaverTails Red Team Testing)
+# BeaverTails Red Team Testing
 
 This example demonstrates how to use the BeaverTails plugin for red team testing, including subcategory filtering.
 
@@ -12,7 +12,6 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-beavertails
-cd redteam-beavertails
 ```
 
 ## Configuration Files

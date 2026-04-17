@@ -8,12 +8,7 @@ import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import {
-  getRemoteGenerationExplicitlyDisabledError,
-  getRemoteGenerationUrl,
-  neverGenerateRemote,
-} from '../remoteGeneration';
-import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import { getSessionId } from '../util';
 
 import type {
@@ -51,7 +46,7 @@ export default class BestOfNProvider implements ApiProvider {
     } = {},
   ) {
     if (neverGenerateRemote()) {
-      throw new Error(getRemoteGenerationExplicitlyDisabledError('Best-of-N strategy'));
+      throw new Error(`Best-of-N strategy requires remote generation to be enabled`);
     }
 
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
@@ -119,33 +114,6 @@ export default class BestOfNProvider implements ApiProvider {
             return;
           }
 
-          if (typeof candidatePrompt !== 'string') {
-            logger.warn('[Best-of-N] Skipping non-string candidate prompt from remote generation', {
-              component: 'Best-of-N',
-              event: 'SkippingCandidatePrompt',
-              reason: 'non-string',
-              candidatePromptType: typeof candidatePrompt,
-            });
-            return;
-          }
-
-          const unsafeCandidateScheme = /^\s*(file:\/\/|package:)/i
-            .exec(candidatePrompt)?.[1]
-            .toLowerCase();
-          if (unsafeCandidateScheme) {
-            const schemeLabel = unsafeCandidateScheme.startsWith('file') ? 'file://' : 'package:';
-            logger.warn(
-              `[Best-of-N] Skipping unsafe ${schemeLabel} candidate prompt from remote generation`,
-              {
-                component: 'Best-of-N',
-                event: 'SkippingCandidatePrompt',
-                reason:
-                  schemeLabel === 'file://' ? 'unsafe-file-protocol' : 'unsafe-package-protocol',
-              },
-            );
-            return;
-          }
-
           const targetVars = {
             ...context.vars,
             [this.config.injectVar]: candidatePrompt,
@@ -156,13 +124,10 @@ export default class BestOfNProvider implements ApiProvider {
             targetVars,
             context.filters,
             targetProvider,
-            [this.config.injectVar], // Skip special loading and template rendering for the injection variable
+            [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
           );
 
           try {
-            // TODO(ian): Pass the strategy/plugin metadata maxCharsPerMessage limit here so
-            // plugin-scoped caps are enforced even when no top-level redteam cap is configured.
-            throwIfTargetPromptExceedsMaxChars(renderedPrompt);
             const response = await targetProvider.callApi(renderedPrompt, context, options);
             const sessionId = getSessionId(response, context);
             if (sessionId) {
@@ -183,7 +148,6 @@ export default class BestOfNProvider implements ApiProvider {
             }
           } catch (err) {
             logger.debug(`[Best-of-N] Candidate failed: ${err}`);
-            lastResponse = { error: String(err) };
             currentStep++;
           }
         },

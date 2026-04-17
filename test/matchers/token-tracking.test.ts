@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesGEval, matchesLlmRubric } from '../../src/matchers/llmGrading';
-import { matchesAnswerRelevance } from '../../src/matchers/rag';
+import { matchesAnswerRelevance, matchesGEval, matchesLlmRubric } from '../../src/matchers';
 import { loadApiProvider } from '../../src/providers/index';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 

@@ -3,14 +3,16 @@ import {
   ProviderReferenceValidationError,
   validateTestProviderReferences,
 } from '../../src/util/validateTestProviderReferences';
-import { createMockProvider } from '../factories/provider';
 
 import type { Scenario, TestCase } from '../../src/types/index';
 import type { ApiProvider } from '../../src/types/providers';
 
 describe('validateTestProviderReferences', () => {
   const createProvider = (id: string, label?: string): ApiProvider =>
-    createMockProvider({ id, label });
+    ({
+      id: () => id,
+      label,
+    }) as ApiProvider;
 
   const providers = [
     createProvider('openai:gpt-4', 'smart-model'),

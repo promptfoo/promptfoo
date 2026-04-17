@@ -1,6 +1,4 @@
-import { mockClipboard } from '@app/tests/browserMocks';
-import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PromptDialog from './PromptDialog';
@@ -133,18 +131,13 @@ const mockSelectedPromptThreeEvals: ServerPromptWithMetadata = {
 };
 
 describe('PromptDialog', () => {
-  const clickElement = (element: Element) => {
-    act(() => {
-      element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    });
-  };
-
   beforeEach(() => {
-    useTestTimers();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
-    restoreTestTimers({ runPending: true });
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
   });
 
   it('should render the dialog with prompt details, prompt text, and eval history when openDialog is true and a valid selectedPrompt is provided', () => {
@@ -199,7 +192,11 @@ describe('PromptDialog', () => {
   it('should copy the prompt text to clipboard and show the Snackbar when the copy button is clicked', async () => {
     const handleClose = vi.fn();
     const writeTextMock = vi.fn().mockResolvedValue(undefined);
-    mockClipboard({ writeText: writeTextMock as Clipboard['writeText'] });
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: writeTextMock,
+      },
+    });
 
     render(
       <MemoryRouter>
@@ -215,7 +212,7 @@ describe('PromptDialog', () => {
     // CopyButton has aria-label="Copy"
     const copyButton = screen.getByRole('button', { name: 'Copy' });
 
-    clickElement(copyButton);
+    fireEvent.click(copyButton);
 
     expect(writeTextMock).toHaveBeenCalledWith(mockSelectedPromptNoEvals.prompt.raw);
 
@@ -223,7 +220,7 @@ describe('PromptDialog', () => {
     // The button itself changes its icon to show copy success
   });
 
-  it('should call handleClose when the close button is clicked', async () => {
+  it('should call handleClose when the close button is clicked', () => {
     const handleClose = vi.fn();
 
     render(
@@ -241,7 +238,7 @@ describe('PromptDialog', () => {
     const closeButtons = screen.getAllByRole('button', { name: 'Close' });
     const footerCloseButton = closeButtons.find((btn) => btn.textContent === 'Close');
     expect(footerCloseButton).toBeDefined();
-    clickElement(footerCloseButton!);
+    fireEvent.click(footerCloseButton!);
 
     expect(handleClose).toHaveBeenCalled();
   });
@@ -463,7 +460,7 @@ describe('PromptDialog', () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const mockWriteText = vi.fn().mockRejectedValue(new Error('Failed to copy'));
-    mockClipboard({ writeText: mockWriteText as Clipboard['writeText'] });
+    Object.assign(navigator, { clipboard: { writeText: mockWriteText } });
 
     render(
       <MemoryRouter>
@@ -478,7 +475,7 @@ describe('PromptDialog', () => {
 
     // CopyButton has aria-label="Copy"
     const copyButton = screen.getByRole('button', { name: 'Copy' });
-    clickElement(copyButton);
+    fireEvent.click(copyButton);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);

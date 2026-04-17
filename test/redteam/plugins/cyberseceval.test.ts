@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CyberSecEvalPlugin } from '../../../src/redteam/plugins/cyberseceval';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
-import { createMockProvider, type MockApiProvider } from '../../factories/provider';
+
+import type { ApiProvider, CallApiFunction } from '../../../src/types/index';
 
 vi.mock('../../../src/util/fetch', async (importOriginal) => {
   return {
@@ -12,10 +13,13 @@ vi.mock('../../../src/util/fetch', async (importOriginal) => {
 
 describe('CyberSecEvalPlugin', () => {
   let plugin: CyberSecEvalPlugin;
-  let mockProvider: MockApiProvider;
+  let mockProvider: ApiProvider;
 
   beforeEach(() => {
-    mockProvider = createMockProvider();
+    mockProvider = {
+      callApi: vi.fn() as CallApiFunction,
+      id: vi.fn().mockReturnValue('test-provider'),
+    };
     plugin = new CyberSecEvalPlugin(mockProvider, 'test-purpose', 'testVar');
 
     // Mock successful response

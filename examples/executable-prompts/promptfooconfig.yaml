@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# This configuration demonstrates executable scripts as prompt generators
+
+description: 'Testing executable prompts with multiple languages and use cases'
+
+prompts:
+  # Basic shell script prompt
+  - label: 'Shell Basic'
+    raw: exec:./prompt-generator.sh
+
+  # Ruby template-based prompt
+  - label: 'Ruby Template'
+    raw: exec:./template-prompt.rb
+
+providers:
+  # This just repeats the prompt back to the user
+  - echo
+
+  # Uncomment to use real providers
+  # - openai:gpt-3.5-turbo
+  # - anthropic:claude-3-haiku-20240307
+
+tests:
+  - vars:
+      name: Alice
+      task: 'Help me understand recursion'
+  - vars:
+      name: Bob
+      task: 'Why is the sky blue'

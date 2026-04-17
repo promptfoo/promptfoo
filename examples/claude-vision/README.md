@@ -4,10 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example claude-vision
-cd claude-vision
 ```
-
-## Usage
 
 Getting Started with claude 3.5 sonnet via Anthropic and/or AWS Bedrock
 
@@ -18,7 +15,7 @@ To get started, set your environment variables:
 
 Then run:
 
-```bash
+```
 promptfoo eval
 ```
 

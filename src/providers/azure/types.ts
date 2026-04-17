@@ -103,17 +103,6 @@ export interface AzureCompletionOptions {
   mcp?: MCPConfig;
 }
 
-/**
- * Options shared by Azure chat and responses providers.
- */
-export interface AzureChatResponsesOptions extends AzureCompletionOptions {
-  /**
-   * When true, omit hardcoded defaults for temperature, max_tokens, top_p, etc.
-   * Only values explicitly set via config or environment variables will be sent.
-   */
-  omitDefaults?: boolean;
-}
-
 export interface AzureModelCost {
   id: string;
   cost: {
@@ -155,10 +144,8 @@ export type AzureAssistantOptions = AzureCompletionOptions &
     retryOptions?: RetryOptions;
   };
 
-export interface AzureProviderOptions<
-  TConfig extends AzureCompletionOptions = AzureCompletionOptions,
-> {
-  config?: TConfig;
+export interface AzureProviderOptions {
+  config?: AzureCompletionOptions;
   id?: string;
   env?: EnvOverrides;
 }

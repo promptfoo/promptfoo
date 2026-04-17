@@ -205,7 +205,6 @@ export const FOUNDERS: Founder[] = [
 export const COMPANY_INFO = {
   founded: '2024',
   headquarters: 'San Francisco, California',
-  affiliation: 'OpenAI',
-  earlySupporters: 'Insight Partners, Andreessen Horowitz, and industry leaders',
+  investors: 'Insight Partners, Andreessen Horowitz, and industry leaders',
   contactEmail: 'inquiries@promptfoo.dev',
 };

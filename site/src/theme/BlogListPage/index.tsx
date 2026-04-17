@@ -93,7 +93,7 @@ function BlogListPageContent(props: Props): React.ReactElement {
 function FeaturedBlogPost({ post }: { post: PropBlogPostContent }): React.ReactElement {
   const { metadata } = post;
   const { title, date, permalink, tags, description } = metadata;
-  const { authors } = metadata;
+  const author = metadata.authors[0];
 
   const formattedDate = new Date(date).toLocaleDateString('en-US', {
     timeZone: 'UTC',
@@ -109,8 +109,6 @@ function FeaturedBlogPost({ post }: { post: PropBlogPostContent }): React.ReactE
   const previewDescription = description
     ? description.split('. ').slice(0, 2).join('. ') + (description.includes('. ') ? '.' : '')
     : null;
-
-  const authorNames = authors.map((a) => a.name).join(' and ');
 
   return (
     <Link to={permalink} className={styles.featuredPostLink}>
@@ -128,9 +126,9 @@ function FeaturedBlogPost({ post }: { post: PropBlogPostContent }): React.ReactE
           </div>
           {previewDescription && <p className={styles.preview}>{previewDescription}</p>}
           <div className={styles.featuredPostMeta}>
-            {authorNames && (
+            {author && (
               <span className={styles.author}>
-                {authorNames} · {formattedDate}
+                {author.name} · {formattedDate}
               </span>
             )}
           </div>

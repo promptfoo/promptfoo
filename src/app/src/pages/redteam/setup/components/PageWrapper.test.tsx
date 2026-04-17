@@ -1,15 +1,12 @@
 import React from 'react';
 
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import PageWrapper from './PageWrapper';
 
-describe('PageWrapper', () => {
-  beforeEach(() => {
-    vi.spyOn(React, 'useEffect').mockImplementation((f) => f());
-  });
+vi.spyOn(React, 'useEffect').mockImplementation((f) => f());
 
+describe('PageWrapper', () => {
   describe('Header Content', () => {
     it('should render the provided title and description in the header when given appropriate props', () => {
       const testTitle = 'My Test Page';
@@ -45,8 +42,7 @@ describe('PageWrapper', () => {
   });
 
   describe('Navigation Buttons', () => {
-    it('should render the Next and Back buttons when onNext and onBack props are provided, and clicking them should call the respective handlers', async () => {
-      const user = userEvent.setup();
+    it('should render the Next and Back buttons when onNext and onBack props are provided, and clicking them should call the respective handlers', () => {
       const onNext = vi.fn();
       const onBack = vi.fn();
       const nextLabel = 'Go Forward';
@@ -67,10 +63,10 @@ describe('PageWrapper', () => {
       const nextButton = screen.getByRole('button', { name: nextLabel });
       const backButton = screen.getByRole('button', { name: backLabel });
 
-      await user.click(nextButton);
+      fireEvent.click(nextButton);
       expect(onNext).toHaveBeenCalledTimes(1);
 
-      await user.click(backButton);
+      fireEvent.click(backButton);
       expect(onBack).toHaveBeenCalledTimes(1);
     });
 

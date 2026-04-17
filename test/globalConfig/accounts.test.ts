@@ -1,6 +1,6 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvString, isCI } from '../../src/envars';
 import {
   checkEmailStatus,
@@ -49,13 +49,7 @@ vi.mock('../../src/logger');
 
 describe('accounts', () => {
   beforeEach(() => {
-    vi.stubEnv('PROMPTFOO_API_KEY', undefined);
     vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    vi.resetAllMocks();
-    vi.unstubAllEnvs();
   });
 
   describe('getUserId', () => {
@@ -202,13 +196,12 @@ describe('accounts', () => {
   });
 
   describe('getAuthor', () => {
-    it('should use override when not logged into cloud', () => {
-      vi.mocked(getEnvString).mockReturnValue('');
-      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
-      expect(getAuthor('override@example.com')).toBe('override@example.com');
+    it('should return env var if set', () => {
+      vi.mocked(getEnvString).mockReturnValue('author@env.com');
+      expect(getAuthor()).toBe('author@env.com');
     });
 
-    it('should fall back to user email when no override and not logged into cloud', () => {
+    it('should fall back to user email if no env var', () => {
       vi.mocked(getEnvString).mockReturnValue('');
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
@@ -217,61 +210,10 @@ describe('accounts', () => {
       expect(getAuthor()).toBe('test@example.com');
     });
 
-    it('should fall back to env var when no override and no user email', () => {
-      vi.mocked(getEnvString).mockReturnValue('author@env.com');
-      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
-      expect(getAuthor()).toBe('author@env.com');
-    });
-
     it('should return null if no author found', () => {
       vi.mocked(getEnvString).mockReturnValue('');
-      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
-      expect(getAuthor()).toBeNull();
-    });
-
-    it('should prefer cloud identity over override when logged into cloud', () => {
-      vi.mocked(getEnvString).mockReturnValue('');
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
-        account: { email: 'cloud@example.com' },
-        cloud: { apiKey: 'test-api-key' },
-      });
-      expect(getAuthor('override@example.com')).toBe('cloud@example.com');
-    });
-
-    it('should prefer cloud identity over env var when logged into cloud', () => {
-      vi.mocked(getEnvString).mockReturnValue('author@env.com');
-      vi.mocked(readGlobalConfig).mockReturnValue({
-        id: 'test-id',
-        account: { email: 'cloud@example.com' },
-        cloud: { apiKey: 'test-api-key' },
-      });
-      expect(getAuthor()).toBe('cloud@example.com');
-    });
-
-    it('should fall back to override when logged into cloud but no stored email', () => {
-      vi.mocked(getEnvString).mockReturnValue('');
-      vi.mocked(readGlobalConfig).mockReturnValue({
-        id: 'test-id',
-        cloud: { apiKey: 'test-api-key' },
-      });
-      expect(getAuthor('override@example.com')).toBe('override@example.com');
-    });
-
-    it('should fall back to env var when logged into cloud but no stored email', () => {
-      vi.mocked(getEnvString).mockReturnValue('author@env.com');
-      vi.mocked(readGlobalConfig).mockReturnValue({
-        id: 'test-id',
-        cloud: { apiKey: 'test-api-key' },
-      });
-      expect(getAuthor()).toBe('author@env.com');
-    });
-
-    it('should return null when logged into cloud, no stored email, no override, no env', () => {
-      vi.mocked(getEnvString).mockReturnValue('');
-      vi.mocked(readGlobalConfig).mockReturnValue({
-        id: 'test-id',
-        cloud: { apiKey: 'test-api-key' },
       });
       expect(getAuthor()).toBeNull();
     });
@@ -368,20 +310,28 @@ describe('accounts', () => {
   });
 
   describe('checkEmailStatusAndMaybeExit', () => {
-    let mockExit: ReturnType<typeof vi.spyOn>;
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
 
     beforeEach(() => {
       vi.clearAllMocks();
-      mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     });
 
-    it('should bypass email verification checks for the CI placeholder email', async () => {
+    it('should use CI email when in CI environment', async () => {
       vi.mocked(isCI).mockReturnValue(true);
+
+      const mockResponse = new Response(JSON.stringify({ status: 'ok' }), {
+        status: 200,
+        statusText: 'OK',
+      });
+      vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
       await checkEmailStatusAndMaybeExit();
 
-      expect(fetchWithTimeout).not.toHaveBeenCalled();
-      expect(mockExit).not.toHaveBeenCalled();
+      expect(fetchWithTimeout).toHaveBeenCalledWith(
+        expect.stringContaining('/api/users/status?email=ci-placeholder%40promptfoo.dev'),
+        undefined,
+        500,
+      );
     });
 
     it('should use user email when not in CI environment', async () => {
@@ -424,37 +374,6 @@ describe('accounts', () => {
       expect(mockExit).toHaveBeenCalledWith(1);
       expect(logger.error).toHaveBeenCalledWith(
         'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
-      );
-    });
-
-    it('should exit if email verification is required', async () => {
-      vi.mocked(isCI).mockReturnValue(false);
-      vi.mocked(readGlobalConfig).mockReturnValue({
-        id: 'test-id',
-        account: { email: 'test@example.com' },
-      });
-
-      const mockResponse = new Response(
-        JSON.stringify({
-          status: 'email_verification_required',
-          error: 'Please verify your email address and try again.',
-        }),
-        {
-          status: 200,
-          statusText: 'OK',
-        },
-      );
-      vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
-
-      await checkEmailStatusAndMaybeExit();
-
-      expect(mockExit).toHaveBeenCalledWith(1);
-      expect(logger.error).toHaveBeenCalledWith(
-        'Please verify your email address and try again.',
-        expect.objectContaining({
-          status: 'email_verification_required',
-          hasEmail: true,
-        }),
       );
     });
 
@@ -537,12 +456,22 @@ describe('accounts', () => {
       });
     });
 
-    it('should treat the CI placeholder email as pre-validated', async () => {
+    it('should use CI email when in CI environment', async () => {
       vi.mocked(isCI).mockReturnValue(true);
+
+      const mockResponse = new Response(JSON.stringify({ status: 'ok' }), {
+        status: 200,
+        statusText: 'OK',
+      });
+      vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
       const result = await checkEmailStatus();
 
-      expect(fetchWithTimeout).not.toHaveBeenCalled();
+      expect(fetchWithTimeout).toHaveBeenCalledWith(
+        expect.stringContaining('/api/users/status?email=ci-placeholder%40promptfoo.dev'),
+        undefined,
+        500,
+      );
       expect(result).toEqual({
         status: 'ok',
         hasEmail: true,
@@ -641,21 +570,6 @@ describe('accounts', () => {
         });
       });
 
-      it('should skip remote validation for the CI placeholder email', async () => {
-        vi.mocked(isCI).mockReturnValue(true);
-
-        const result = await checkEmailStatus({ validate: true });
-
-        expect(fetchWithTimeout).not.toHaveBeenCalled();
-        expect(telemetry.saveConsent).not.toHaveBeenCalled();
-        expect(result).toEqual({
-          status: 'ok',
-          hasEmail: true,
-          email: 'ci-placeholder@promptfoo.dev',
-          message: undefined,
-        });
-      });
-
       it('should call saveConsent for invalid email when validate is true', async () => {
         const mockResponse = new Response(JSON.stringify({ status: 'risky_email' }), {
           status: 200,
@@ -668,30 +582,6 @@ describe('accounts', () => {
         expect(telemetry.saveConsent).toHaveBeenCalledWith('test@example.com', {
           source: 'filteredInvalidEmail',
         });
-      });
-
-      it('should not mark email as validated when verification is required', async () => {
-        const mockResponse = new Response(
-          JSON.stringify({
-            status: 'email_verification_required',
-            error: 'Please verify your email address and try again.',
-          }),
-          {
-            status: 200,
-            statusText: 'OK',
-          },
-        );
-        vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
-
-        const result = await checkEmailStatus({ validate: true });
-
-        expect(result).toEqual({
-          status: 'email_verification_required',
-          hasEmail: true,
-          email: 'test@example.com',
-          message: 'Please verify your email address and try again.',
-        });
-        expect(telemetry.saveConsent).not.toHaveBeenCalled();
       });
 
       it('should not call saveConsent when validate is not provided', async () => {

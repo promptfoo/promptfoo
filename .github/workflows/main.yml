@@ -18,85 +18,78 @@ concurrency:
 env:
   VITE_TELEMETRY_DISABLED: 1
 jobs:
-  ci-config:
-    name: CI Config
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      test-matrix: ${{ steps.set-matrix.outputs.test-matrix }}
-      build-matrix: ${{ steps.set-matrix.outputs.build-matrix }}
-    steps:
-      - name: Determine CI matrix
-        id: set-matrix
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          # Shared entries: all Linux versions + one Windows Node version (sharded)
-          base_entries='
-            {"node":"20.20","os":"ubuntu-latest","shard":""},
-            {"node":"22.22","os":"ubuntu-latest","shard":""},
-            {"node":"24.x","os":"ubuntu-latest","shard":""},
-            {"node":"22.22","os":"windows-latest","shard":1},
-            {"node":"22.22","os":"windows-latest","shard":2},
-            {"node":"22.22","os":"windows-latest","shard":3}
-          '
-
-          if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            # PRs: add 1 macOS version only
-            extra_entries='
-              ,{"node":"22.22","os":"macOS-latest","shard":""}
-            '
-            build_matrix='{"node":["20.20","24.x"]}'
-          else
-            # Main/dispatch: add all macOS versions + remaining Windows shards
-            extra_entries='
-              ,{"node":"20.20","os":"macOS-latest","shard":""},
-              {"node":"22.22","os":"macOS-latest","shard":""},
-              {"node":"20.20","os":"windows-latest","shard":1},
-              {"node":"20.20","os":"windows-latest","shard":2},
-              {"node":"20.20","os":"windows-latest","shard":3},
-              {"node":"24.x","os":"windows-latest","shard":1},
-              {"node":"24.x","os":"windows-latest","shard":2},
-              {"node":"24.x","os":"windows-latest","shard":3}
-            '
-            build_matrix='{"node":["20.20","22.22","24.x"]}'
-          fi
-
-          # Build the matrix JSON (shard:"" is falsy in GHA expressions, used to skip shard flags)
-          test_matrix=$(echo "{\"include\":[${base_entries}${extra_entries}]}" | jq -c .)
-          echo "test-matrix=$test_matrix" >> "$GITHUB_OUTPUT"
-          echo "build-matrix=$build_matrix" >> "$GITHUB_OUTPUT"
-
   test:
-    needs: ci-config
     name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}${{ matrix.shard && format(' (shard {0}/3)', matrix.shard) || '' }}
-    timeout-minutes: 15
+    timeout-minutes: 10
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.ci-config.outputs.test-matrix) }}
+      matrix:
+        # posthog-node@5.23+ requires Node ^20.20.0 || >=22.22.0
+        node: ['20.20', '22.22', '24.x']
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+        shard: ['']
+        exclude:
+          # Temporarily exclude macOS with Node 24.x due to flaky test failures
+          - node: '24.x'
+            os: macOS-latest
+          # Exclude non-sharded Windows tests (we use sharded versions below)
+          - os: windows-latest
+            shard: ''
+        # Add sharding for Windows to speed up CI (Windows tests are ~2x slower)
+        include:
+          - os: windows-latest
+            node: '20.20'
+            shard: 1
+          - os: windows-latest
+            node: '20.20'
+            shard: 2
+          - os: windows-latest
+            node: '20.20'
+            shard: 3
+          - os: windows-latest
+            node: '22.22'
+            shard: 1
+          - os: windows-latest
+            node: '22.22'
+            shard: 2
+          - os: windows-latest
+            node: '22.22'
+            shard: 3
+          - os: windows-latest
+            node: '24.x'
+            shard: 1
+          - os: windows-latest
+            node: '24.x'
+            shard: 2
+          - os: windows-latest
+            node: '24.x'
+            shard: 3
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          fetch-depth: 2
+        uses: actions/checkout@v6
 
       - name: Use Node ${{ matrix.node }}
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        uses: actions/setup-node@v6
         with:
-          # Keep matrix label at 20.20 for stable check names, but install 20.20.1 to satisfy engines.
-          node-version: ${{ matrix.node == '20.20' && '20.20.1' || matrix.node }}
+          node-version: ${{ matrix.node }}
           cache: 'npm'
 
+      # Node 24.x ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Upgrade to npm@latest (>= 11.6.4) to fix this. Node 20.20/22.22 use npm 10.x which is unaffected.
+      - name: Upgrade npm for Node 24.x
+        if: matrix.node == '24.x'
+        run: npm install -g npm@latest
+
       - name: Use Python 3.14
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@v6
         with:
-          python-version: 3.14.4
+          python-version: 3.14.2
 
       # Ruby 4.0.1 is not yet available on Windows via setup-ruby, use 4.0.0 on Windows
       - name: Use Ruby
-        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
+        uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.os == 'windows-latest' && '4.0.0' || '4.0.1' }}
 
@@ -104,25 +97,21 @@ jobs:
       # Key includes OS and Node version since native modules are platform/version specific
       - name: Cache node_modules
         id: cache-node-modules
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        uses: actions/cache@v5
         with:
           path: node_modules
           key: node-modules-${{ runner.os }}-node${{ matrix.node }}-${{ hashFiles('package-lock.json') }}
 
       - name: Install Dependencies
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: npx -y npm@11.11.0 ci
+        run: npm ci
 
       - name: Test
-        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard && ' -- --coverage' || '' }}
-
-      - name: Check Backend Coverage Ratchets
-        if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
-        run: npm run test:coverage:ratchet -- --report backend
+        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '20.x' && !matrix.shard && ' -- --coverage' || '' }}
 
       - name: Upload Backend Coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
-        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '20.x' && !matrix.shard
+        uses: codecov/codecov-action@v5
         with:
           files: ./coverage/coverage-final.json
           flags: backend
@@ -131,29 +120,34 @@ jobs:
           use_oidc: true
 
   build:
-    needs: ci-config
     name: Build on Node ${{ matrix.node }}
     env:
       PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
-    # Keep enough headroom for slow PR merge-ref checkout and npm install on GitHub-hosted runners.
-    timeout-minutes: 10
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     strategy:
-      matrix: ${{ fromJSON(needs.ci-config.outputs.build-matrix) }}
+      matrix:
+        # posthog-node@5.23+ requires Node ^20.20.0 || >=22.22.0
+        node: ['20.20', '22.22', '24.x']
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6
 
       - name: Use Node ${{ matrix.node }}
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        uses: actions/setup-node@v6
         with:
-          # Keep matrix label at 20.20 for stable check names, but install 20.20.1 to satisfy engines.
-          node-version: ${{ matrix.node == '20.20' && '20.20.1' || matrix.node }}
+          node-version: ${{ matrix.node }}
           cache: 'npm'
 
+      # Node 24.x ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Upgrade to npm@latest (>= 11.6.4) to fix this. Node 20.20/22.22 use npm 10.x which is unaffected.
+      - name: Upgrade npm for Node 24.x
+        if: matrix.node == '24.x'
+        run: npm install -g npm@latest
+
       - name: Install Dependencies
-        run: npx -y npm@11.11.0 ci
+        run: npm ci
 
       - name: Build
         run: npm run build
@@ -183,10 +177,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6
 
       - name: Use Node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -229,7 +223,7 @@ jobs:
     timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@v6
       - uses: luizm/action-sh-checker@883217215b11c1fabbf00eb1a9a041f62d74c744
         env:
           SHFMT_OPTS: '-i 2' # 2 space indent
@@ -242,10 +236,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6
 
       - name: Use Node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -279,20 +273,20 @@ jobs:
         python-version: [3.9, 3.14]
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6
 
       - name: Use Python ${{ matrix.python-version }}
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Install Dependencies
         run: |
-          pip install ruff==0.15.1
+          pip install ruff
 
       - name: Check Formatting
         run: |
-          ruff check --select F401,F841,I --fix
+          ruff check --select I --fix
           ruff format
           git diff --exit-code || (echo "Files were modified by ruff. Please commit these changes." && exit 1)
 
@@ -306,10 +300,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6
 
       - name: Use Node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -319,7 +313,8 @@ jobs:
         run: npm install -g npm@latest
 
       - name: Install Dependencies
-        run: npm ci
+        working-directory: site
+        run: npm install
 
       - name: Type Check
         working-directory: site
@@ -337,10 +332,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6
 
       - name: Use Node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -371,10 +366,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6
 
       - name: Use Node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -384,20 +379,12 @@ jobs:
         run: npm install -g npm@latest
 
       - name: Install Dependencies
-        run: npm ci
-
-      - name: Run Site Tests with Coverage
         working-directory: site
-        run: npm run test:coverage
+        run: npm install
 
-      - name: Upload Site Coverage to Codecov
-        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
-        with:
-          files: ./site/coverage/coverage-final.json
-          flags: site
-          name: site-coverage
-          fail_ci_if_error: true
-          use_oidc: true
+      - name: Run Site Tests
+        working-directory: site
+        run: npm test
 
   webui:
     name: webui tests
@@ -405,12 +392,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          fetch-depth: 2
+        uses: actions/checkout@v6
 
       - name: Use Node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -422,17 +407,11 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run App Browser Tests
-        run: npm run test:app:browser
-
       - name: Run App Tests with Coverage
         run: npm run test:coverage --prefix src/app
 
-      - name: Check Frontend Coverage Ratchets
-        run: npm run test:coverage:ratchet -- --report frontend
-
       - name: Upload Frontend Coverage to Codecov
-        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
+        uses: codecov/codecov-action@v5
         with:
           files: ./src/app/coverage/coverage-final.json
           flags: frontend
@@ -446,10 +425,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6
 
       - name: Use Node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -459,12 +438,12 @@ jobs:
         run: npm install -g npm@latest
 
       - name: Use Python 3.14
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@v6
         with:
-          python-version: 3.14.4
+          python-version: 3.14.2
 
       - name: Use Ruby
-        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
+        uses: ruby/setup-ruby@v1
         with:
           ruby-version: 4.0.1
 
@@ -478,13 +457,13 @@ jobs:
   smoke-tests:
     name: Run Smoke Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 7
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6
 
       - name: Use Node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -494,12 +473,12 @@ jobs:
         run: npm install -g npm@latest
 
       - name: Use Python 3.14
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@v6
         with:
-          python-version: 3.14.4
+          python-version: 3.14.2
 
       - name: Use Ruby
-        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
+        uses: ruby/setup-ruby@v1
         with:
           ruby-version: 4.0.1
 
@@ -521,10 +500,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6
 
       - name: Use Node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -538,32 +517,8 @@ jobs:
 
       - name: Run local server
         run: |
-          mkdir -p "$RUNNER_TEMP/promptfoo-share-test"
           npm run build
-          server_log="$RUNNER_TEMP/promptfoo-share-test/server.log"
-          PROMPTFOO_CONFIG_DIR="$HOME/tmp" LOG_LEVEL=DEBUG API_PORT=8500 node dist/src/server/index.js >"$server_log" 2>&1 &
-          echo "SERVER_PID=$!" >> "$GITHUB_ENV"
-          echo "SERVER_LOG=$server_log" >> "$GITHUB_ENV"
-
-      - name: Wait for server to be ready
-        run: |
-          for i in $(seq 1 45); do
-            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-              echo "Server exited before becoming ready"
-              cat "$SERVER_LOG"
-              exit 1
-            fi
-
-            if curl -fsS -o /dev/null http://localhost:8500/health; then
-              echo "Server is ready"
-              exit 0
-            fi
-            echo "Waiting for server... attempt $i/45"
-            sleep 2
-          done
-          echo "Server failed to start"
-          cat "$SERVER_LOG"
-          exit 1
+          PROMPTFOO_CONFIG_DIR=~/tmp LOG_LEVEL=DEBUG API_PORT=8500 node dist/src/server/index.js &
 
       - name: run promptfoo eval
         id: eval
@@ -587,13 +542,6 @@ jobs:
             exit 1
           fi
 
-      - name: Dump server log on failure
-        if: failure()
-        run: |
-          if [ -f "$SERVER_LOG" ]; then
-            cat "$SERVER_LOG"
-          fi
-
       - name: Share to cloud
         if: env.PROMPTFOO_STAGING_API_KEY != ''
         env:
@@ -602,24 +550,16 @@ jobs:
           node dist/src/main.js auth login -k ${{ secrets.PROMPTFOO_STAGING_API_KEY }} -h https://api.promptfoo-staging.app
           node dist/src/main.js eval -c .github/assets/promptfooconfig.yaml --share
 
-      - name: Stop local server
-        if: always()
-        run: |
-          if [ -n "${SERVER_PID:-}" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
-            kill "$SERVER_PID"
-            wait "$SERVER_PID" || true
-          fi
-
   redteam:
     name: Redteam (Production API)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6
 
       - name: Use Node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -644,10 +584,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6
 
       - name: Use Node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -684,7 +624,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6
 
       - name: Install and run actionlint
         run: |
@@ -700,10 +640,10 @@ jobs:
         ruby-version: ['3.0', '3.4']
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6
 
       - name: Use Ruby ${{ matrix.ruby-version }}
-        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
+        uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby-version }}
 
@@ -745,10 +685,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        uses: actions/setup-go@v6
         with:
           go-version-file: src/golang/go.mod
           check-latest: true

@@ -1,8 +1,5 @@
-import * as path from 'path';
-
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
-import cliState from '../../src/cliState';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../src/assertions/index';
 import { getTraceStore } from '../../src/tracing/store';
 
 import type {
@@ -58,42 +55,15 @@ vi.mock('../../src/python/wrapper', () => ({
 }));
 
 describe('trace assertions', () => {
-  const originalBasePath = cliState.basePath;
-  const originalTraceFetchEnv = {
-    PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS,
-    PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS,
-    PROMPTFOO_TRACE_FETCH_STABLE_POLLS: process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS,
-  };
   const mockTraceStore = {
     getTrace: vi.fn(),
   };
 
-  const restoreTraceFetchEnv = () => {
-    for (const [name, value] of Object.entries(originalTraceFetchEnv)) {
-      if (value === undefined) {
-        delete process.env[name];
-      } else {
-        process.env[name] = value;
-      }
-    }
-  };
-
   beforeEach(() => {
-    mockTraceStore.getTrace.mockReset();
     vi.clearAllMocks();
-    restoreTraceFetchEnv();
-    process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS = '0';
-    process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS = '1';
     vi.mocked(getTraceStore).mockReturnValue(
       mockTraceStore as unknown as ReturnType<typeof getTraceStore>,
     );
-  });
-
-  afterEach(() => {
-    cliState.basePath = originalBasePath;
-    restoreTraceFetchEnv();
-    vi.resetAllMocks();
-    vi.useRealTimers();
   });
 
   const mockTest: AtomicTestCase = {
@@ -130,15 +100,6 @@ describe('trace assertions', () => {
   };
 
   describe('javascript assertions with trace', () => {
-    it('should treat ruby assertions as trace-aware', () => {
-      expect(
-        assertionUsesTrace({
-          type: 'ruby',
-          value: 'context.trace && context.trace.spans.length > 0',
-        }),
-      ).toBe(true);
-    });
-
     it('should pass trace data to javascript assertion', async () => {
       mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
 
@@ -159,90 +120,7 @@ describe('trace assertions', () => {
       });
 
       expect(result.pass).toBe(true);
-      expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
-        sanitizeAttributes: false,
-      });
-    });
-
-    it('should retry until trace spans are available', async () => {
-      process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS = '3';
-      process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS = '0';
-      process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS = '1';
-
-      mockTraceStore.getTrace
-        .mockResolvedValueOnce({
-          ...mockTraceData,
-          spans: [],
-        })
-        .mockResolvedValueOnce(mockTraceData);
-
-      const assertion: Assertion = {
-        type: 'javascript',
-        value: 'context.trace?.spans?.length === 2',
-      };
-
-      const result: GradingResult = await runAssertion({
-        assertion,
-        test: mockTest,
-        providerResponse: mockProviderResponse,
-        traceId: 'test-trace-id',
-      });
-
-      expect(result.pass).toBe(true);
-      expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(2);
-    });
-
-    it('should use default retry timing when trace fetch env vars are unset', async () => {
-      delete process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS;
-      delete process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS;
-      vi.useFakeTimers();
-
-      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
-
-      const resultPromise = runAssertion({
-        assertion: {
-          type: 'javascript',
-          value: 'context.trace?.spans?.length === 2',
-        },
-        test: mockTest,
-        providerResponse: mockProviderResponse,
-        traceId: 'test-trace-id',
-      });
-
-      await vi.advanceTimersByTimeAsync(250);
-      const result = await resultPromise;
-
-      expect(result.pass).toBe(true);
-      expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(2);
-    });
-
-    it('should wait for span count to stabilize', async () => {
-      process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS = '4';
-      process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS = '0';
-      process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS = '2';
-
-      mockTraceStore.getTrace
-        .mockResolvedValueOnce({
-          ...mockTraceData,
-          spans: [mockTraceData.spans[0]],
-        })
-        .mockResolvedValueOnce(mockTraceData)
-        .mockResolvedValueOnce(mockTraceData);
-
-      const assertion: Assertion = {
-        type: 'javascript',
-        value: 'context.trace?.spans?.length === 2',
-      };
-
-      const result: GradingResult = await runAssertion({
-        assertion,
-        test: mockTest,
-        providerResponse: mockProviderResponse,
-        traceId: 'test-trace-id',
-      });
-
-      expect(result.pass).toBe(true);
-      expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(3);
+      expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id');
     });
 
     it('should handle missing trace gracefully', async () => {
@@ -258,55 +136,6 @@ describe('trace assertions', () => {
         test: mockTest,
         providerResponse: mockProviderResponse,
         traceId: 'non-existent-trace',
-      });
-
-      expect(result.pass).toBe(true);
-    });
-
-    it('should reuse a preloaded missing trace instead of retrying once per assertion', async () => {
-      process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS = '2';
-      process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS = '0';
-      process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS = '1';
-
-      mockTraceStore.getTrace.mockResolvedValue(null);
-
-      const result = await runAssertions({
-        test: {
-          ...mockTest,
-          assert: [
-            {
-              type: 'javascript',
-              value: 'context.trace === undefined',
-            },
-            {
-              type: 'javascript',
-              value: 'context.trace === undefined',
-            },
-          ],
-        },
-        providerResponse: mockProviderResponse,
-        traceId: 'non-existent-trace',
-      });
-
-      expect(result.pass).toBe(true);
-      expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(2);
-    });
-
-    it('should pass trace data to file:// scripts for non-trace assertion types', async () => {
-      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
-      cliState.basePath = path.resolve(__dirname, '../fixtures/file-script-assertions');
-
-      const result: GradingResult = await runAssertion({
-        assertion: {
-          type: 'equals',
-          value: 'file://rubric-generator.cjs:traceSpanName',
-        },
-        test: mockTest,
-        providerResponse: {
-          ...mockProviderResponse,
-          output: 'http.request',
-        },
-        traceId: 'test-trace-id',
       });
 
       expect(result.pass).toBe(true);
@@ -480,9 +309,7 @@ return {
       });
 
       expect(result.pass).toBe(true);
-      expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
-        sanitizeAttributes: false,
-      });
+      expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id');
     });
   });
 });

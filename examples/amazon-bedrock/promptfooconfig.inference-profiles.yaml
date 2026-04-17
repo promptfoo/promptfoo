@@ -1,0 +1,145 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'AWS Bedrock Application Inference Profiles Example'
+
+prompts:
+  - 'Write a comprehensive analysis of {{topic}} in 3 paragraphs'
+  - 'Create a creative story about {{topic}} with an unexpected twist'
+  - |
+    Answer the following question step by step:
+    {{question}}
+
+providers:
+  # Application Inference Profiles - Multi-region, automatic failover
+  # These require the inferenceModelType configuration parameter
+
+  # Claude inference profile - optimized for high availability
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-ha-profile
+    label: 'Claude HA Profile'
+    config:
+      inferenceModelType: 'claude' # Required for inference profiles
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 1024
+      anthropic_version: 'bedrock-2023-05-31'
+
+  # Llama inference profile - latest version (defaults to Llama 4)
+  - id: bedrock:arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/llama-latest-profile
+    label: 'Llama Latest Profile'
+    config:
+      inferenceModelType: 'llama' # Defaults to latest Llama version (v4)
+      region: 'us-west-2'
+      max_gen_len: 1024
+      temperature: 0.7
+      top_p: 0.9
+
+  # Llama 3.3 specific inference profile
+  - id: bedrock:arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/llama33-profile
+    label: 'Llama 3.3 Profile'
+    config:
+      inferenceModelType: 'llama3.3' # Specific Llama 3.3 version
+      region: 'us-west-2'
+      max_gen_len: 1024
+      temperature: 0.6
+
+  # Nova inference profile - cost optimized
+  - id: bedrock:arn:aws:bedrock:eu-west-1:123456789012:application-inference-profile/nova-cost-optimized
+    label: 'Nova Cost-Optimized Profile'
+    config:
+      inferenceModelType: 'nova'
+      region: 'eu-west-1'
+      interfaceConfig:
+        max_new_tokens: 1024
+        temperature: 0.7
+        top_p: 0.95
+        top_k: 50
+
+  # Mistral inference profile
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/mistral-profile
+    label: 'Mistral Profile'
+    config:
+      inferenceModelType: 'mistral'
+      region: 'us-east-1'
+      max_tokens: 1024
+      temperature: 0.7
+      top_p: 0.9
+
+  # DeepSeek inference profile with thinking capability
+  - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/deepseek-reasoning
+    label: 'DeepSeek Reasoning Profile'
+    config:
+      inferenceModelType: 'deepseek'
+      region: 'us-east-1'
+      max_tokens: 2048
+      temperature: 0.5
+      showThinking: true # Include thinking process in output
+
+  # OpenAI models via Bedrock inference profile
+  - id: bedrock:arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/openai-gpt-profile
+    label: 'OpenAI GPT Profile'
+    config:
+      inferenceModelType: 'openai'
+      region: 'us-west-2'
+      max_completion_tokens: 1024
+      temperature: 0.7
+      reasoning_effort: 'medium' # Control reasoning depth
+
+  # Comparison with direct model IDs (no inference profile)
+  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    label: 'Claude Direct (No Profile)'
+    config:
+      region: 'us-east-1'
+      temperature: 0.7
+      max_tokens: 1024
+
+tests:
+  - vars:
+      topic: 'artificial intelligence in healthcare'
+      question: 'How do neural networks learn from data?'
+
+  - vars:
+      topic: 'climate change and renewable energy'
+      question: 'What are the main differences between supervised and unsupervised learning?'
+
+  - vars:
+      topic: 'the future of space exploration'
+      question: 'Explain quantum computing to a 10-year-old'
+
+  # Test with custom grading using an inference profile
+  - vars:
+      topic: 'blockchain technology'
+      question: 'How does encryption work in modern communications?'
+    options:
+      # Use an inference profile for grading assertions
+      provider:
+        id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/grading-profile
+        config:
+          inferenceModelType: 'claude'
+          temperature: 0 # Low temperature for consistent grading
+          max_tokens: 512
+    assert:
+      - type: llm-rubric
+        value: 'The response should be comprehensive, technically accurate, and well-structured'
+      - type: contains
+        value: 'technology'
+      - type: min-length
+        value: 200
+
+# Default grading configuration using an inference profile
+defaultTest:
+  options:
+    provider:
+      id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/default-grading
+      config:
+        inferenceModelType: 'claude'
+        region: 'us-east-1'
+        temperature: 0
+        max_tokens: 256
+  assert:
+    - type: cost
+      threshold: 0.002 # Maximum cost per test
+    - type: latency
+      threshold: 10000 # Maximum 10 seconds
+    - type: not-contains
+      value: 'I cannot'
+    - type: not-contains
+      value: 'As an AI'

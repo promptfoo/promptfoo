@@ -9,6 +9,7 @@ const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
 describe('MCP Stdio Server', () => {
   let child: ChildProcess | undefined;
   let timeoutId: NodeJS.Timeout | undefined;
+  let killTimeoutId: NodeJS.Timeout | undefined;
 
   beforeAll(() => {
     if (!fs.existsSync(CLI_PATH)) {
@@ -20,6 +21,10 @@ describe('MCP Stdio Server', () => {
     if (timeoutId) {
       clearTimeout(timeoutId);
       timeoutId = undefined;
+    }
+    if (killTimeoutId) {
+      clearTimeout(killTimeoutId);
+      killTimeoutId = undefined;
     }
     if (child) {
       child.removeAllListeners();

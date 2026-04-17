@@ -239,7 +239,7 @@ export default function SuggestionsDialog({
                 ) : (
                   suggestion.action === 'replace-prompt' && (
                     <Collapsible
-                      open={Boolean(expandedItems[index])}
+                      open={expandedItems[index]}
                       onOpenChange={() => toggleExpanded(index)}
                     >
                       <CollapsibleTrigger asChild>

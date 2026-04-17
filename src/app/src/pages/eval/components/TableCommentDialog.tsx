@@ -31,10 +31,10 @@ const CommentDialog = ({
         <DialogHeader>
           <DialogTitle>Edit Comment</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-2 min-w-0 overflow-hidden">
+        <div className="space-y-4 py-2">
           <pre
             data-testid="context-text"
-            className="p-4 mb-4 whitespace-pre-wrap break-words font-inherit bg-muted rounded text-xs"
+            className="p-4 mb-4 whitespace-pre-wrap break-words font-inherit bg-muted rounded"
           >
             {contextText}
           </pre>

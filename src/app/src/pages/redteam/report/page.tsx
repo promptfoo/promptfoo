@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 
+import PylonChat from '@app/components/PylonChat';
 import { Spinner } from '@app/components/ui/spinner';
 import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
@@ -42,5 +43,10 @@ export default function ReportPage() {
     return null;
   }
 
-  return <UserProvider>{evalId ? <Report /> : <ReportIndex />}</UserProvider>;
+  return (
+    <UserProvider>
+      {evalId ? <Report /> : <ReportIndex />}
+      <PylonChat />
+    </UserProvider>
+  );
 }

@@ -27,21 +27,13 @@ export interface ParsedTrace {
   span: SpanData;
 }
 
-export interface TraceAttributeSanitizationOptions {
-  sanitizeAttributes?: boolean;
-}
-
-export interface TraceSpanQueryOptions extends TraceAttributeSanitizationOptions {
+export interface TraceSpanQueryOptions {
   earliestStartTime?: number;
   maxSpans?: number;
   maxDepth?: number;
   includeInternalSpans?: boolean;
   spanFilter?: string[];
-}
-
-export interface AddSpansOptions {
-  skipTraceCheck?: boolean;
-  warnIfMissingTrace?: boolean;
+  sanitizeAttributes?: boolean;
 }
 
 const SENSITIVE_ATTRIBUTE_KEYS = [
@@ -55,39 +47,6 @@ const SENSITIVE_ATTRIBUTE_KEYS = [
   'password',
   'passphrase',
 ];
-
-const NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS = SENSITIVE_ATTRIBUTE_KEYS.map((key) =>
-  key.replace(/[^a-z0-9]/g, ''),
-);
-
-const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
-  'gen_ai.request.max_tokens',
-  'gen_ai.usage.input_tokens',
-  'gen_ai.usage.output_tokens',
-  'gen_ai.usage.total_tokens',
-  'gen_ai.usage.cached_tokens',
-  'gen_ai.usage.reasoning_tokens',
-  'gen_ai.usage.accepted_prediction_tokens',
-  'gen_ai.usage.rejected_prediction_tokens',
-  'gen_ai.usage.cache_read_input_tokens',
-  'gen_ai.usage.cache_creation_input_tokens',
-]);
-
-function isSensitiveAttributeKey(key: string): boolean {
-  const lowerKey = key.toLowerCase();
-  if (SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey)) {
-    return false;
-  }
-
-  const normalizedKey = lowerKey.replace(/[^a-z0-9]/g, '');
-
-  return SENSITIVE_ATTRIBUTE_KEYS.some((sensitiveKey, index) => {
-    return (
-      lowerKey.includes(sensitiveKey) ||
-      normalizedKey.includes(NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS[index])
-    );
-  });
-}
 
 function sanitizeAttributes(
   attributes: Record<string, any> | null | undefined,
@@ -111,7 +70,8 @@ function sanitizeAttributes(
 
   const sanitized: Record<string, any> = {};
   for (const [key, value] of Object.entries(attributes)) {
-    if (isSensitiveAttributeKey(key)) {
+    const lowerKey = key.toLowerCase();
+    if (SENSITIVE_ATTRIBUTE_KEYS.some((sensitiveKey) => lowerKey.includes(sensitiveKey))) {
       sanitized[key] = '<redacted>';
       continue;
     }
@@ -119,28 +79,6 @@ function sanitizeAttributes(
   }
 
   return sanitized;
-}
-
-function serializeSpan(
-  span: typeof spansTable.$inferSelect,
-  shouldSanitizeAttributes = true,
-): SpanData {
-  const rawAttributes = span.attributes ?? undefined;
-
-  return {
-    spanId: span.spanId,
-    parentSpanId: span.parentSpanId ?? undefined,
-    name: span.name,
-    startTime: span.startTime,
-    endTime: span.endTime ?? undefined,
-    attributes: rawAttributes
-      ? shouldSanitizeAttributes
-        ? sanitizeAttributes(rawAttributes)
-        : rawAttributes
-      : undefined,
-    statusCode: span.statusCode ?? undefined,
-    statusMessage: span.statusMessage ?? undefined,
-  };
 }
 
 function computeDepth(
@@ -213,7 +151,7 @@ export class TraceStore {
   async addSpans(
     traceId: string,
     spans: SpanData[],
-    options?: AddSpansOptions,
+    options?: { skipTraceCheck?: boolean },
   ): Promise<{ stored: boolean; reason?: string }> {
     try {
       logger.debug(`[TraceStore] Adding ${spans.length} spans to trace ${traceId}`);
@@ -231,14 +169,10 @@ export class TraceStore {
           .limit(1);
 
         if (trace.length === 0) {
-          const message =
+          logger.warn(
             `[TraceStore] Trace ${traceId} not found, skipping ${spans.length} spans. ` +
-            `This may indicate spans arrived before trace was created.`;
-          if (options?.warnIfMissingTrace === false) {
-            logger.debug(message);
-          } else {
-            logger.warn(message);
-          }
+              `This may indicate spans arrived before trace was created.`,
+          );
           return { stored: false, reason: `Trace ${traceId} not found` };
         }
         logger.debug(`[TraceStore] Trace ${traceId} found, proceeding with span insertion`);
@@ -270,12 +204,7 @@ export class TraceStore {
     }
   }
 
-  async getTracesByEvaluation(
-    evaluationId: string,
-    options: TraceAttributeSanitizationOptions = {},
-  ): Promise<TraceData[]> {
-    const { sanitizeAttributes: shouldSanitize = true } = options;
-
+  async getTracesByEvaluation(evaluationId: string): Promise<any[]> {
     try {
       logger.debug(`[TraceStore] Fetching traces for evaluation ${evaluationId}`);
       const db = this.getDatabase();
@@ -298,11 +227,8 @@ export class TraceStore {
           logger.debug(`[TraceStore] Found ${spans.length} spans for trace ${trace.traceId}`);
 
           return {
-            traceId: trace.traceId,
-            evaluationId: trace.evaluationId,
-            testCaseId: trace.testCaseId,
-            metadata: trace.metadata ?? undefined,
-            spans: spans.map((span) => serializeSpan(span, shouldSanitize)),
+            ...trace,
+            spans,
           };
         }),
       );
@@ -315,12 +241,7 @@ export class TraceStore {
     }
   }
 
-  async getTrace(
-    traceId: string,
-    options: TraceAttributeSanitizationOptions = {},
-  ): Promise<TraceData | null> {
-    const { sanitizeAttributes: shouldSanitize = true } = options;
-
+  async getTrace(traceId: string): Promise<any | null> {
     try {
       logger.debug(`[TraceStore] Fetching trace ${traceId}`);
       const db = this.getDatabase();
@@ -342,11 +263,8 @@ export class TraceStore {
       logger.debug(`[TraceStore] Found ${spans.length} spans for trace ${traceId}`);
 
       return {
-        traceId: trace.traceId,
-        evaluationId: trace.evaluationId,
-        testCaseId: trace.testCaseId,
-        metadata: trace.metadata ?? undefined,
-        spans: spans.map((span) => serializeSpan(span, shouldSanitize)),
+        ...trace,
+        spans,
       };
     } catch (error) {
       logger.error(`[TraceStore] Failed to get trace: ${error}`);

@@ -1,5 +1,4 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mockGlobal } from '../util/utils';
 
 // Mock process properties before importing the module
 const mockProcess: {
@@ -21,18 +20,16 @@ const mockProcess: {
 };
 
 describe('render utilities', () => {
-  let restoreProcess: (() => void) | undefined;
-
   beforeAll(() => {
-    restoreProcess = mockGlobal('process', {
+    vi.stubGlobal('process', {
       ...process,
       stdout: mockProcess.stdout,
       env: mockProcess.env,
-    } as NodeJS.Process);
+    });
   });
 
   afterAll(() => {
-    restoreProcess?.();
+    vi.unstubAllGlobals();
   });
 
   afterEach(() => {

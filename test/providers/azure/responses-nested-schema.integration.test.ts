@@ -10,9 +10,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
-import { mockProcessEnv } from '../../util/utils';
 
 // Only mock the network layer, not file operations
 vi.mock('../../../src/cache');
@@ -23,7 +22,6 @@ const mockFetchWithCache = vi.mocked(fetchWithCache);
 describe('Azure Responses - Nested Schema Loading Integration', () => {
   const tempDir = path.join(__dirname, '.temp-nested-schema-test');
   let authHeadersValue: Record<string, string>;
-  let restoreEnv: () => void;
 
   beforeAll(() => {
     // Create temp directory and test files
@@ -78,10 +76,9 @@ describe('Azure Responses - Nested Schema Loading Integration', () => {
   beforeEach(() => {
     vi.resetAllMocks();
 
-    restoreEnv = mockProcessEnv({
-      AZURE_API_KEY: 'test-key',
-      AZURE_API_HOST: 'test.openai.azure.com',
-    });
+    // Mock environment variables
+    process.env.AZURE_API_KEY = 'test-key';
+    process.env.AZURE_API_HOST = 'test.openai.azure.com';
     authHeadersValue = { 'api-key': 'test-key' };
 
     // Mock the auth headers getter
@@ -117,10 +114,6 @@ describe('Azure Responses - Nested Schema Loading Integration', () => {
       status: 200,
       statusText: 'OK',
     });
-  });
-
-  afterEach(() => {
-    restoreEnv();
   });
 
   it('should load nested schema from file reference (regression test for Azure bug)', async () => {

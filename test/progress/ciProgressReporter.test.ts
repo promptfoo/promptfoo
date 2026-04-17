@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { CIProgressReporter } from '../../src/progress/ciProgressReporter';
-import { mockConsole, mockProcessEnv } from '../util/utils';
 
 // Mock the logger
 vi.mock('../../src/logger', () => ({
@@ -11,21 +10,21 @@ vi.mock('../../src/logger', () => ({
   },
 }));
 
-describe('CIProgressReporter', () => {
-  let consoleLogMock: ReturnType<typeof mockConsole>;
-  let restoreEnv: () => void;
+// Mock console.log for GitHub Actions annotations
+const originalConsoleLog = console.log;
+const consoleLogMock = vi.fn();
 
+describe('CIProgressReporter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    consoleLogMock = mockConsole('log');
-    restoreEnv = mockProcessEnv({ GITHUB_ACTIONS: undefined });
+    console.log = consoleLogMock;
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    consoleLogMock.mockRestore();
-    restoreEnv();
+    console.log = originalConsoleLog;
+    delete process.env.GITHUB_ACTIONS;
   });
 
   it('should log start message', () => {
@@ -90,20 +89,16 @@ describe('CIProgressReporter', () => {
   });
 
   it('should emit GitHub Actions annotations when GITHUB_ACTIONS is set', () => {
-    const restoreGithubActions = mockProcessEnv({ GITHUB_ACTIONS: 'true' });
-    try {
-      const reporter = new CIProgressReporter(100);
+    process.env.GITHUB_ACTIONS = 'true';
+    const reporter = new CIProgressReporter(100);
 
-      reporter.update(25);
-      expect(consoleLogMock).toHaveBeenCalledWith('::notice::Evaluation 25% complete');
+    reporter.update(25);
+    expect(consoleLogMock).toHaveBeenCalledWith('::notice::Evaluation 25% complete');
 
-      reporter.finish();
-      expect(consoleLogMock).toHaveBeenCalledWith(
-        expect.stringContaining('::notice::Evaluation completed: 25/100 tests in'),
-      );
-    } finally {
-      restoreGithubActions();
-    }
+    reporter.finish();
+    expect(consoleLogMock).toHaveBeenCalledWith(
+      expect.stringContaining('::notice::Evaluation completed: 25/100 tests in'),
+    );
   });
 
   it('should handle errors', () => {
@@ -114,15 +109,11 @@ describe('CIProgressReporter', () => {
   });
 
   it('should emit GitHub Actions error annotation', () => {
-    const restoreGithubActions = mockProcessEnv({ GITHUB_ACTIONS: 'true' });
-    try {
-      const reporter = new CIProgressReporter(100);
+    process.env.GITHUB_ACTIONS = 'true';
+    const reporter = new CIProgressReporter(100);
 
-      reporter.error('Test error');
-      expect(consoleLogMock).toHaveBeenCalledWith('::error::Test error');
-    } finally {
-      restoreGithubActions();
-    }
+    reporter.error('Test error');
+    expect(consoleLogMock).toHaveBeenCalledWith('::error::Test error');
   });
 
   it('should clear interval on finish', () => {

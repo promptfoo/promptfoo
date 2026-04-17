@@ -1,18 +1,20 @@
-import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, Mocked, MockInstance, vi } from 'vitest';
 import { MemoryPoisoningProvider } from '../../../../src/redteam/providers/agentic/memoryPoisoning';
-import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 
-import type { CallApiContextParams } from '../../../../src/types/providers';
+import type { ApiProvider, CallApiContextParams } from '../../../../src/types/providers';
 
 describe('MemoryPoisoningProvider', () => {
   let provider: MemoryPoisoningProvider;
-  let mockTargetProvider: MockApiProvider;
+  let mockTargetProvider: Mocked<ApiProvider>;
   let mockFetch: MockInstance;
 
   beforeEach(() => {
     provider = new MemoryPoisoningProvider({});
 
-    mockTargetProvider = createMockProvider();
+    mockTargetProvider = {
+      id: vi.fn(),
+      callApi: vi.fn(),
+    };
 
     mockFetch = vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
   });

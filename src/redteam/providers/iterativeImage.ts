@@ -348,13 +348,13 @@ async function runRedteamConversation({
         promptIdx: context?.promptIdx,
       });
       lastResponse = targetResponse;
-      // Count the target request even when the target returns an error.
-      accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
       if (targetResponse.error) {
         logger.debug(`Iteration ${i + 1}: Target provider error: ${targetResponse.error}`);
         // Keep lastResponse with its output so final result can surface mapped output while marking error
         continue;
       }
+
+      accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
       const urlRegex = /(https?:\/\/[^\s)]+)/g;
       const url = targetResponse.output.match(urlRegex);
@@ -388,10 +388,7 @@ async function runRedteamConversation({
             undefined,
             options,
           );
-          // Vision analysis calls are internal and should not count as target probes.
-          accumulateResponseTokenUsage(totalTokenUsage, visionResponse, {
-            countAsRequest: false,
-          });
+          accumulateResponseTokenUsage(totalTokenUsage, visionResponse);
 
           if (visionProvider.delay) {
             await sleep(visionProvider.delay);

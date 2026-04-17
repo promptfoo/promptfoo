@@ -1,6 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RiskCategories from './RiskCategories';
 import { useReportStore } from './store';
@@ -36,7 +35,8 @@ describe('RiskCategories', () => {
     vi.clearAllMocks();
     mockUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 1,
-
+      showPercentagesOnRiskCards: false,
+      setShowPercentagesOnRiskCards: vi.fn(),
       severityFilter: null,
       setSeverityFilter: vi.fn(),
     });
@@ -98,8 +98,7 @@ describe('RiskCategories', () => {
     expect(screen.getByText('RBAC Implementation')).toBeInTheDocument();
   });
 
-  it('should open drawer when a plugin is clicked', async () => {
-    const user = userEvent.setup();
+  it('should open drawer when a plugin is clicked', () => {
     const mockProps = createMockProps({
       categoryStats: {
         'sql-injection': { pass: 8, total: 10 },
@@ -110,7 +109,7 @@ describe('RiskCategories', () => {
 
     // Click on a plugin (already expanded by default)
     const pluginButton = screen.getByRole('button', { name: /SQL Injection/i });
-    await user.click(pluginButton);
+    fireEvent.click(pluginButton);
 
     // Should show the drawer
     expect(screen.getByTestId('mock-drawer')).toBeInTheDocument();
@@ -119,7 +118,8 @@ describe('RiskCategories', () => {
   it('should show check icon for passing categories and X icon for failing', () => {
     mockUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 1, // 100% required to pass
-
+      showPercentagesOnRiskCards: false,
+      setShowPercentagesOnRiskCards: vi.fn(),
       severityFilter: null,
       setSeverityFilter: vi.fn(),
     });
@@ -191,8 +191,7 @@ describe('RiskCategories', () => {
     expect(screen.queryByText('RBAC')).not.toBeInTheDocument();
   });
 
-  it('should pass correct data to drawer when plugin is clicked', async () => {
-    const user = userEvent.setup();
+  it('should pass correct data to drawer when plugin is clicked', () => {
     const mockProps = createMockProps({
       categoryStats: {
         'sql-injection': { pass: 8, total: 10 },
@@ -207,7 +206,8 @@ describe('RiskCategories', () => {
 
     renderWithProviders(<RiskCategories {...mockProps} />);
 
-    await user.click(screen.getByRole('button', { name: /SQL Injection/i }));
+    // Click plugin (already expanded by default)
+    fireEvent.click(screen.getByRole('button', { name: /SQL Injection/i }));
 
     // Drawer should be opened with the correct category
     const drawer = screen.getByTestId('mock-drawer');
@@ -232,8 +232,7 @@ describe('RiskCategories', () => {
     expect(screen.getByText('Trust & Safety')).toBeInTheDocument();
   });
 
-  it('should collapse category when clicked', async () => {
-    const user = userEvent.setup();
+  it('should collapse category when clicked', () => {
     const mockProps = createMockProps({
       categoryStats: {
         'sql-injection': { pass: 8, total: 10 },
@@ -248,7 +247,8 @@ describe('RiskCategories', () => {
     const pluginRow = screen.getByText('SQL Injection').closest('button');
     expect(pluginRow).toBeVisible();
 
-    await user.click(categoryButton);
+    // Click to collapse - the CollapsibleContent should get data-state="closed"
+    fireEvent.click(categoryButton);
 
     // The content element should have data-state="closed" and be hidden via CSS
     // (forceMount keeps it in DOM for print support, but CSS hides it)

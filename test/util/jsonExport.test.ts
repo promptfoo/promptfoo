@@ -1,9 +1,9 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { writeOutput } from '../../src/util/index';
-import { createTempDir, removeTempDir } from './utils';
 
 // Mock dependencies
 vi.mock('../../src/database', () => ({
@@ -29,7 +29,7 @@ describe('JSON export with improved error handling', () => {
   let mockEval: any;
 
   beforeEach(() => {
-    tempDir = createTempDir('promptfoo-json-test-');
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-json-test-'));
     tempFilePath = path.join(tempDir, 'test-export.json');
 
     mockEval = {
@@ -47,7 +47,10 @@ describe('JSON export with improved error handling', () => {
   });
 
   afterEach(() => {
-    removeTempDir(tempDir);
+    if (fs.existsSync(tempFilePath)) {
+      fs.unlinkSync(tempFilePath);
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
     vi.clearAllMocks();
   });
 

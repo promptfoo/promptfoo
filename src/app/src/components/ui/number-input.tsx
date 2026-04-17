@@ -97,7 +97,6 @@ function NumberInput({
 
   const hasError = Boolean(error);
   const errorMessage = typeof error === 'string' ? error : undefined;
-  const displayValue = typeof value === 'number' && Number.isNaN(value) ? '' : (value ?? '');
 
   return (
     <div className={cn('flex flex-col', fullWidth && 'w-full')}>
@@ -113,7 +112,7 @@ function NumberInput({
         <input
           id={inputId}
           type="number"
-          value={displayValue}
+          value={value ?? ''}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onWheel={handleWheel}

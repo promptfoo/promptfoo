@@ -18,31 +18,6 @@ interface ParentAssertionSet {
   assertionSet: AssertionSet;
 }
 
-function buildAssertionSetMetadata(assertionSet: AssertionSet) {
-  return {
-    type: assertionSet.type,
-    assertionCount: assertionSet.assert.length,
-    ...(assertionSet.metric !== undefined && { metric: assertionSet.metric }),
-    ...(assertionSet.threshold !== undefined && { threshold: assertionSet.threshold }),
-    ...(assertionSet.weight !== undefined && { weight: assertionSet.weight }),
-  };
-}
-
-function mergeMetadata(
-  baseMetadata: GradingResult['metadata'],
-  incomingMetadata: GradingResult['metadata'],
-): GradingResult['metadata'] | undefined {
-  if (!baseMetadata && !incomingMetadata) {
-    return undefined;
-  }
-
-  return {
-    ...incomingMetadata,
-    ...baseMetadata,
-    ...(baseMetadata?.assertionSet && { assertionSet: baseMetadata.assertionSet }),
-  };
-}
-
 export class AssertionsResult {
   static noAssertsResult(): GradingResult {
     return {
@@ -63,7 +38,6 @@ export class AssertionsResult {
   private failedReason: string | undefined;
   private componentResults: GradingResult[] = [];
   private namedScores: Record<string, number> = {};
-  private namedScoreWeights: Record<string, number> = {};
   private result: GradingResult | null = null;
   private failedContentSafetyChecks: boolean = false;
 
@@ -105,19 +79,13 @@ export class AssertionsResult {
     }
 
     if (metric) {
-      this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score * weight;
-      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] || 0) + weight;
+      this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score;
     }
 
     if (result.namedScores) {
       Object.entries(result.namedScores).forEach(([metricName, score]) => {
         if (metricName !== metric) {
-          const incomingWeight = result.namedScoreWeights?.[metricName] ?? 1;
-          const weightedIncomingWeight = incomingWeight * weight;
-          this.namedScores[metricName] =
-            (this.namedScores[metricName] || 0) + score * weightedIncomingWeight;
-          this.namedScoreWeights[metricName] =
-            (this.namedScoreWeights[metricName] || 0) + weightedIncomingWeight;
+          this.namedScores[metricName] = (this.namedScores[metricName] || 0) + score;
         }
       });
     }
@@ -182,32 +150,18 @@ export class AssertionsResult {
       }
     });
 
-    const normalizedNamedScores: Record<string, number> = {};
-    for (const [key, value] of Object.entries(this.namedScores)) {
-      const totalWeight = this.namedScoreWeights[key] ?? 0;
-      normalizedNamedScores[key] = totalWeight > 0 ? value / totalWeight : 0;
-    }
-
-    const hasNamedScoreWeights = Object.keys(this.namedScoreWeights).length > 0;
-
     this.result = {
       pass,
       score,
       reason,
-      namedScores: normalizedNamedScores,
-      ...(hasNamedScoreWeights ? { namedScoreWeights: this.namedScoreWeights } : {}),
+      namedScores: this.namedScores,
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
-      ...(this._parentAssertionSet && {
-        metadata: {
-          assertionSet: buildAssertionSetMetadata(this._parentAssertionSet.assertionSet),
-        },
-      }),
     };
 
     if (scoringFunction) {
       try {
-        const scoringResult = await scoringFunction(normalizedNamedScores, {
+        const scoringResult = await scoringFunction(this.namedScores, {
           threshold: this.threshold,
           parentAssertionSet: this._parentAssertionSet,
           componentResults: flattenedComponentResults,
@@ -219,9 +173,6 @@ export class AssertionsResult {
         this.result = {
           ...this.result,
           ...scoringResult,
-          ...((this.result.metadata || scoringResult.metadata) && {
-            metadata: mergeMetadata(this.result.metadata, scoringResult.metadata),
-          }),
         };
       } catch (err) {
         this.result.pass = false;

@@ -1,7 +1,6 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { toDataUri } from '../../util/dataUrl';
 import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import {
@@ -281,7 +280,7 @@ export class GoogleImageProvider implements ApiProvider {
       };
     }
 
-    const imageOutputs: { data: string; mimeType: string }[] = [];
+    const imageOutputs = [];
     let totalCost = 0;
 
     // Get cost per image from model prices
@@ -294,10 +293,8 @@ export class GoogleImageProvider implements ApiProvider {
       const mimeType = imageData.mimeType || 'image/png';
 
       if (base64Image) {
-        imageOutputs.push({
-          data: toDataUri(mimeType, base64Image),
-          mimeType,
-        });
+        // Return as markdown image with data URL
+        imageOutputs.push(`![Generated Image](data:${mimeType};base64,${base64Image})`);
         totalCost += costPerImage;
       }
     }
@@ -309,10 +306,7 @@ export class GoogleImageProvider implements ApiProvider {
     }
 
     return {
-      // First image as raw data URI for blob externalization
-      output: imageOutputs[0].data,
-      // All images in structured field for UI rendering
-      images: imageOutputs,
+      output: imageOutputs.join('\n\n'),
       cached,
       latencyMs,
       cost: totalCost,

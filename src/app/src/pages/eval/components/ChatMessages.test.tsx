@@ -52,8 +52,11 @@ describe('ChatMessages', () => {
 
     render(<ChatMessages messages={mockMessages} />);
 
-    const alert = screen.getByRole('alert');
-    expect(alert.textContent?.startsWith('This is a very long message.')).toBe(true);
+    expect(
+      screen.getByText((_content, element) => {
+        return element?.textContent?.startsWith('This is a very long message.') ?? false;
+      }),
+    ).toBeInTheDocument();
   });
 
   it('should render audio player when message has audio data', () => {

@@ -31,16 +31,17 @@ export function generateTable(
         text = ellipsize(text, tableCellMaxLength);
         if (pass) {
           return chalk.green('[PASS] ') + text;
+        } else if (!pass) {
+          // color everything red up until '---'
+          return (
+            chalk.red(failureType === ResultFailureReason.ASSERT ? '[FAIL] ' : '[ERROR] ') +
+            text
+              .split('---')
+              .map((c, idx) => (idx === 0 ? chalk.red.bold(c) : c))
+              .join('---')
+          );
         }
-
-        // Color everything red up until '---'.
-        return (
-          chalk.red(failureType === ResultFailureReason.ASSERT ? '[FAIL] ' : '[ERROR] ') +
-          text
-            .split('---')
-            .map((c, idx) => (idx === 0 ? chalk.red.bold(c) : c))
-            .join('---')
-        );
+        return text;
       }),
     ]);
   }

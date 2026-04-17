@@ -1,4 +1,4 @@
-import { matchesPiScore } from '../matchers/llmGrading';
+import { matchesPiScore } from '../matchers';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';

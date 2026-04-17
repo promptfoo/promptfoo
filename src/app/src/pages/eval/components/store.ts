@@ -11,7 +11,6 @@ import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
-import logger from '../../../../../logger';
 import { hasHumanRating } from './utils';
 import type { Policy, PolicyObject } from '@promptfoo/redteam/types';
 import type {
@@ -667,7 +666,7 @@ export const useTableStore = create<TableState>()(
       });
 
       try {
-        logger.debug('[EvalStore] Fetching eval table data', { evalId: id, options });
+        console.log(`Fetching data for eval ${id} with options:`, options);
 
         const url = new URL(
           `/eval/${id}/table`,
@@ -700,8 +699,10 @@ export const useTableStore = create<TableState>()(
           );
         });
 
-        // Remove the origin as it was only added to satisfy the URL constructor.
-        const resp = await callApi(url.toString().replace(window.location.origin, ''));
+        const resp = await callApi(
+          // Remove the origin as it was only added to satisfy the URL constructor.
+          url.toString().replace(window.location.origin, ''),
+        );
 
         if (resp.ok) {
           const data = (await resp.json()) as EvalTableDTO;

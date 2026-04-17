@@ -17,17 +17,9 @@ interface PromptDialogProps {
   index: number;
   onAdd: (prompt: string) => void;
   onCancel: () => void;
-  isEditing?: boolean;
 }
 
-const PromptDialog = ({
-  open,
-  prompt,
-  index,
-  onAdd,
-  onCancel,
-  isEditing = false,
-}: PromptDialogProps) => {
+const PromptDialog = ({ open, prompt, index, onAdd, onCancel }: PromptDialogProps) => {
   const [editingPrompt, setEditingPrompt] = React.useState(prompt);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
@@ -49,7 +41,7 @@ const PromptDialog = ({
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{isEditing ? `Edit Prompt ${index + 1}` : 'Add Prompt'}</DialogTitle>
+          <DialogTitle>Edit Prompt {index + 1}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-2 py-4">
@@ -71,13 +63,11 @@ const PromptDialog = ({
           <Button variant="outline" onClick={onCancel}>
             Cancel
           </Button>
-          {!isEditing && (
-            <Button variant="secondary" onClick={() => handleAdd(false)} disabled={!editingPrompt}>
-              Add Another
-            </Button>
-          )}
+          <Button variant="secondary" onClick={() => handleAdd(false)} disabled={!editingPrompt}>
+            Add Another
+          </Button>
           <Button onClick={() => handleAdd(true)} disabled={!editingPrompt}>
-            {isEditing ? 'Save' : 'Add'}
+            Add
           </Button>
         </DialogFooter>
       </DialogContent>

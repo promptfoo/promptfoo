@@ -1,12 +1,6 @@
 import React from 'react';
 
-import {
-  createMockResponse,
-  getCallApiMock,
-  mockCallApiResponse,
-  rejectCallApi,
-  resetCallApiMock,
-} from '@app/tests/apiMocks';
+import { callApi } from '@app/utils/api';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -24,7 +18,7 @@ describe('useApiHealth', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    resetCallApiMock();
+    vi.clearAllMocks();
     queryClient = new QueryClient({
       defaultOptions: {
         queries: {
@@ -48,7 +42,10 @@ describe('useApiHealth', () => {
   });
 
   it('handles successful health check', async () => {
-    mockCallApiResponse({ status: 'OK', message: 'Cloud API is healthy' });
+    vi.mocked(callApi).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ status: 'OK', message: 'Cloud API is healthy' }),
+    } as Response);
 
     const { result } = renderHook(() => useApiHealth(), { wrapper });
 
@@ -64,7 +61,10 @@ describe('useApiHealth', () => {
   });
 
   it('handles failed health check', async () => {
-    mockCallApiResponse({ status: 'ERROR', message: 'API is not accessible' });
+    vi.mocked(callApi).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ status: 'ERROR', message: 'API is not accessible' }),
+    } as Response);
 
     const { result } = renderHook(() => useApiHealth(), { wrapper });
 
@@ -80,7 +80,7 @@ describe('useApiHealth', () => {
   });
 
   it('handles network errors', async () => {
-    rejectCallApi(new Error('Network error'));
+    vi.mocked(callApi).mockRejectedValueOnce(new Error('Network error'));
 
     const { result } = renderHook(() => useApiHealth(), { wrapper });
 
@@ -96,7 +96,10 @@ describe('useApiHealth', () => {
   });
 
   it('handles disabled status from API', async () => {
-    mockCallApiResponse({ status: 'DISABLED', message: 'Remote generation is disabled' });
+    vi.mocked(callApi).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ status: 'DISABLED', message: 'Remote generation is disabled' }),
+    } as Response);
 
     const { result } = renderHook(() => useApiHealth(), { wrapper });
 
@@ -113,11 +116,10 @@ describe('useApiHealth', () => {
 
   it('updates status when API response changes', async () => {
     // First call succeeds
-    getCallApiMock()
-      .mockResolvedValueOnce(createMockResponse({ status: 'OK', message: 'Cloud API is healthy' }))
-      .mockResolvedValueOnce(
-        createMockResponse({ status: 'ERROR', message: 'API is not accessible' }),
-      );
+    vi.mocked(callApi).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ status: 'OK', message: 'Cloud API is healthy' }),
+    } as Response);
 
     const { result } = renderHook(() => useApiHealth(), { wrapper });
 
@@ -127,6 +129,12 @@ describe('useApiHealth', () => {
     await waitFor(() => {
       expect(result.current.data.status).toBe('connected');
     });
+
+    // Second call fails
+    vi.mocked(callApi).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ status: 'ERROR', message: 'API is not accessible' }),
+    } as Response);
 
     await result.current.refetch();
 
@@ -142,7 +150,7 @@ describe('useApiHealth', () => {
       resolvePromise = resolve;
     });
 
-    getCallApiMock().mockReturnValue(slowPromise);
+    vi.mocked(callApi).mockReturnValue(slowPromise);
 
     const { result } = renderHook(() => useApiHealth(), { wrapper });
 
@@ -167,7 +175,10 @@ describe('useApiHealth', () => {
     });
 
     // Resolve the promise
-    resolvePromise!(createMockResponse({ status: 'OK', message: 'test' }));
+    resolvePromise!({
+      ok: true,
+      json: () => Promise.resolve({ status: 'OK', message: 'test' }),
+    } as Response);
 
     // Wait for the refetch to complete
     await refetchPromise;

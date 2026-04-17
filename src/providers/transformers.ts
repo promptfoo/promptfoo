@@ -11,19 +11,7 @@ interface TransformersBaseOptions {
    * Device to run the model on.
    * @default 'auto'
    */
-  device?:
-    | 'auto'
-    | 'cpu'
-    | 'gpu'
-    | 'wasm'
-    | 'webgpu'
-    | 'cuda'
-    | 'dml'
-    | 'coreml'
-    | 'webnn'
-    | 'webnn-npu'
-    | 'webnn-gpu'
-    | 'webnn-cpu';
+  device?: 'auto' | 'cpu' | 'gpu' | 'wasm' | 'webgpu' | 'cuda' | 'dml';
 
   /**
    * Data type / quantization level for the model.
@@ -203,15 +191,11 @@ async function getOrCreatePipeline(
     const pipelineOptions: Record<string, unknown> = {
       progress_callback: (progress: {
         status: string;
-        name?: string;
         file?: string;
         progress?: number;
-        loaded?: number;
-        total?: number;
-        task?: string;
         model?: string;
       }) => {
-        if (progress.status === 'progress' && progress.file) {
+        if (progress.status === 'downloading' && progress.file) {
           const percent = progress.progress?.toFixed(1) || '?';
           logger.debug(`[Transformers] Downloading ${progress.file}: ${percent}%`);
         } else if (progress.status === 'ready') {

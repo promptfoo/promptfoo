@@ -1,14 +1,18 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
-import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
 import styles from './gartner-security-2026.module.css';
 
 export default function GartnerSecurity2026(): React.ReactElement {
-  useForcedTheme('dark');
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    return () => {
+      document.documentElement.removeAttribute('data-theme');
+    };
+  }, []);
 
   const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
     e.preventDefault();

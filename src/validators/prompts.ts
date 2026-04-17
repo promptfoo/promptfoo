@@ -13,7 +13,6 @@ const PromptFunctionSchema = z.custom<PromptFunction>((v) => typeof v === 'funct
 export const PromptSchema = z.object({
   id: z.string().optional(),
   raw: z.string(),
-  template: z.string().optional(),
   /**
    * @deprecated in > 0.59.0. Use `label` instead.
    */

@@ -15,7 +15,7 @@
 /* Hero Banner */
 .heroBanner {
   position: relative;
-  height: 600px;
+  height: 480px;
   overflow: hidden;
 }
 
@@ -25,9 +25,8 @@
   left: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   object-position: center top;
-  background: #1a3d2e;
 }
 
 .bannerOverlay {
@@ -342,8 +341,6 @@
   border-radius: 12px;
   padding: 1.5rem;
   transition: all 0.3s ease;
-  text-decoration: none;
-  display: block;
 }
 
 .spiritCard:hover,

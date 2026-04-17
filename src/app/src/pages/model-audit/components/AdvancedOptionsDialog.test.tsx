@@ -1,5 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdvancedOptionsDialog from './AdvancedOptionsDialog';
 
@@ -56,8 +55,7 @@ describe('AdvancedOptionsDialog', () => {
     expect(screen.getByRole('switch', { name: /Strict Mode/ })).toBeChecked();
   });
 
-  it('adds a blacklist pattern', async () => {
-    const user = userEvent.setup();
+  it('adds a blacklist pattern', () => {
     render(
       <AdvancedOptionsDialog
         open={true}
@@ -67,16 +65,13 @@ describe('AdvancedOptionsDialog', () => {
       />,
     );
     const input = screen.getByLabelText('Add pattern');
-    await user.click(input);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste('new-pattern');
-    await user.click(screen.getByRole('button', { name: 'Add' }));
+    fireEvent.change(input, { target: { value: 'new-pattern' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
     expect(screen.getByText('new-pattern')).toBeInTheDocument();
     expect(input).toHaveValue('');
   });
 
-  it('removes a blacklist pattern', async () => {
-    const user = userEvent.setup();
+  it('removes a blacklist pattern', () => {
     const initialOptions = { ...defaultScanOptions, blacklist: ['pattern1', 'pattern2'] };
     render(
       <AdvancedOptionsDialog
@@ -89,13 +84,12 @@ describe('AdvancedOptionsDialog', () => {
     expect(screen.getByText('pattern1')).toBeInTheDocument();
     // Find the delete button for pattern1 using the aria-label
     const deleteButton = screen.getByRole('button', { name: 'Remove pattern1' });
-    await user.click(deleteButton);
+    fireEvent.click(deleteButton);
     expect(screen.queryByText('pattern1')).not.toBeInTheDocument();
     expect(screen.getByText('pattern2')).toBeInTheDocument();
   });
 
-  it('updates timeout value', async () => {
-    const user = userEvent.setup();
+  it('updates timeout value', () => {
     render(
       <AdvancedOptionsDialog
         open={true}
@@ -105,14 +99,11 @@ describe('AdvancedOptionsDialog', () => {
       />,
     );
     const timeoutInput = screen.getByDisplayValue('3600');
-    await user.click(timeoutInput);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste('1800');
+    fireEvent.change(timeoutInput, { target: { value: '1800' } });
     expect(timeoutInput).toHaveValue(1800);
   });
 
-  it('updates maxSize value', async () => {
-    const user = userEvent.setup();
+  it('updates maxSize value', () => {
     render(
       <AdvancedOptionsDialog
         open={true}
@@ -122,14 +113,11 @@ describe('AdvancedOptionsDialog', () => {
       />,
     );
     const maxSizeInput = screen.getByPlaceholderText('e.g., 1GB, 500MB');
-    await user.click(maxSizeInput);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste('1GB');
+    fireEvent.change(maxSizeInput, { target: { value: '1GB' } });
     expect(maxSizeInput).toHaveValue('1GB');
   });
 
-  it('toggles strict mode', async () => {
-    const user = userEvent.setup();
+  it('toggles strict mode', () => {
     render(
       <AdvancedOptionsDialog
         open={true}
@@ -140,12 +128,11 @@ describe('AdvancedOptionsDialog', () => {
     );
     const strictModeSwitch = screen.getByRole('switch', { name: /Strict Mode/ });
     expect(strictModeSwitch).not.toBeChecked();
-    await user.click(strictModeSwitch);
+    fireEvent.click(strictModeSwitch);
     expect(strictModeSwitch).toBeChecked();
   });
 
-  it('calls onOptionsChange and onClose when Save Options is clicked', async () => {
-    const user = userEvent.setup();
+  it('calls onOptionsChange and onClose when Save Options is clicked', () => {
     render(
       <AdvancedOptionsDialog
         open={true}
@@ -154,7 +141,7 @@ describe('AdvancedOptionsDialog', () => {
         onOptionsChange={mockOnOptionsChange}
       />,
     );
-    await user.click(screen.getByRole('button', { name: 'Save Options' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Options' }));
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         blacklist: [],
@@ -166,8 +153,7 @@ describe('AdvancedOptionsDialog', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onClose but not onOptionsChange when Cancel is clicked', async () => {
-    const user = userEvent.setup();
+  it('calls onClose but not onOptionsChange when Cancel is clicked', () => {
     render(
       <AdvancedOptionsDialog
         open={true}
@@ -176,7 +162,7 @@ describe('AdvancedOptionsDialog', () => {
         onOptionsChange={mockOnOptionsChange}
       />,
     );
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(mockOnClose).toHaveBeenCalledTimes(1);
     expect(mockOnOptionsChange).not.toHaveBeenCalled();
   });
@@ -239,8 +225,7 @@ describe('AdvancedOptionsDialog', () => {
     expect(onOptionsChange).toHaveBeenCalledWith(expect.objectContaining({ timeout: 45 }));
   });
 
-  it('should handle invalid maxSize formats and pass them to onOptionsChange', async () => {
-    const user = userEvent.setup();
+  it('should handle invalid maxSize formats and pass them to onOptionsChange', () => {
     const onOptionsChange = vi.fn();
     const invalidSize = 'ABC';
 
@@ -254,12 +239,10 @@ describe('AdvancedOptionsDialog', () => {
     );
 
     const input = screen.getByPlaceholderText('e.g., 1GB, 500MB');
-    await user.click(input);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste(invalidSize);
+    fireEvent.change(input, { target: { value: invalidSize } });
 
     const saveButton = screen.getByText('Save Options');
-    await user.click(saveButton);
+    fireEvent.click(saveButton);
 
     expect(onOptionsChange).toHaveBeenCalledTimes(1);
     expect(onOptionsChange).toHaveBeenCalledWith(
@@ -289,7 +272,7 @@ describe('AdvancedOptionsDialog', () => {
     await user.type(timeoutInput, String(largeTimeoutValue));
 
     const saveButton = screen.getByText('Save Options');
-    await user.click(saveButton);
+    fireEvent.click(saveButton);
 
     expect(onOptionsChange).toHaveBeenCalledTimes(1);
     expect(onOptionsChange).toHaveBeenCalledWith(
@@ -299,8 +282,7 @@ describe('AdvancedOptionsDialog', () => {
     );
   });
 
-  it('should not add an empty pattern to localOptions.blacklist when the user tries to add an empty string', async () => {
-    const user = userEvent.setup();
+  it('should not add an empty pattern to localOptions.blacklist when the user tries to add an empty string', () => {
     const onOptionsChange = vi.fn();
     const initialScanOptions: ScanOptions = {
       blacklist: [],
@@ -320,18 +302,15 @@ describe('AdvancedOptionsDialog', () => {
     const addButton = screen.getByRole('button', { name: 'Add' });
     const chipBefore = screen.queryAllByRole('button', { name: 'delete' });
 
-    await user.click(blacklistInput);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste('   ');
-    await user.click(addButton);
+    fireEvent.change(blacklistInput, { target: { value: '   ' } });
+    fireEvent.click(addButton);
 
     const chipAfter = screen.queryAllByRole('button', { name: 'delete' });
     expect(chipAfter.length).toBe(chipBefore.length);
     expect(blacklistInput).toHaveValue('   ');
   });
 
-  it('should not persist changes when the dialog is closed without saving', async () => {
-    const user = userEvent.setup();
+  it('should not persist changes when the dialog is closed without saving', () => {
     const onClose = vi.fn();
     const onOptionsChange = vi.fn();
     const initialScanOptions: ScanOptions = {
@@ -349,13 +328,11 @@ describe('AdvancedOptionsDialog', () => {
     );
 
     const timeoutInput = screen.getByRole('spinbutton');
-    await user.click(timeoutInput);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste('600');
+    fireEvent.change(timeoutInput, { target: { value: '600' } });
     expect(timeoutInput).toHaveValue(600);
 
     const cancelButton = screen.getByText('Cancel');
-    await user.click(cancelButton);
+    fireEvent.click(cancelButton);
 
     expect(onOptionsChange).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();

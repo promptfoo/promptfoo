@@ -15,36 +15,18 @@ import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
 import type { VarValue } from '../../types/shared';
-import type { CompletionOptions, Content, FunctionCall, Part, Schema, Tool } from './types';
+import type { Content, FunctionCall, Part, Schema, Tool } from './types';
 
 /**
- * Normalizes safety settings to use the correct Google API field name `threshold`.
- * Accepts the legacy `probability` field for backwards compatibility and maps it to `threshold`.
- */
-export function normalizeSafetySettings(
-  safetySettings: CompletionOptions['safetySettings'],
-): { category: string; threshold: string }[] | undefined {
-  if (!safetySettings) {
-    return undefined;
-  }
-  return safetySettings.map(({ category, threshold, probability }) => ({
-    category,
-    threshold: threshold || probability || '',
-  }));
-}
-
-/**
- * Calculates the cost for a Google API call.
+ * Calculates the cost for a Google AI Studio API call.
  *
  * Handles tiered pricing for models where cost varies by prompt size.
  * For example, Gemini Pro models have higher rates for prompts >200k tokens.
- * Some models (e.g. Gemini 2.0 Flash) have different pricing on Vertex AI.
  *
  * @param modelName - The name of the model used
  * @param config - Provider configuration (may contain custom cost override)
  * @param promptTokens - Number of tokens in the prompt
  * @param completionTokens - Number of tokens in the completion
- * @param isVertexMode - Whether the call was made via Vertex AI (uses Vertex pricing when available)
  * @returns The calculated cost in dollars, or undefined if it cannot be calculated
  */
 export function calculateGoogleCost(
@@ -52,23 +34,15 @@ export function calculateGoogleCost(
   config: ProviderConfig,
   promptTokens?: number,
   completionTokens?: number,
-  isVertexMode?: boolean,
 ): number | undefined {
-  const model = GOOGLE_MODELS.find((m) => m.id === modelName);
-
   // Check for tiered pricing (higher rates above token threshold)
   if (promptTokens != null && completionTokens != null) {
+    const model = GOOGLE_MODELS.find((m) => m.id === modelName);
     if (model?.tieredCost && promptTokens > model.tieredCost.threshold) {
-      const inputCost = config.inputCost ?? config.cost ?? model.tieredCost.above.input;
-      const outputCost = config.outputCost ?? config.cost ?? model.tieredCost.above.output;
-      return inputCost * promptTokens + outputCost * completionTokens;
-    }
-
-    // Use Vertex-specific pricing when available
-    if (isVertexMode && model?.vertexCost) {
-      const inputCost = config.inputCost ?? config.cost ?? model.vertexCost.input;
-      const outputCost = config.outputCost ?? config.cost ?? model.vertexCost.output;
-      return inputCost * promptTokens + outputCost * completionTokens;
+      const inputCost = config.cost ?? model.tieredCost.above.input;
+      const outputCost = config.cost ?? model.tieredCost.above.output;
+      const cost = inputCost * promptTokens + outputCost * completionTokens;
+      return cost;
     }
   }
 
@@ -212,6 +186,11 @@ export function maybeCoerceToGeminiFormat(
     let systemInst = undefined;
     if (typeof contents === 'object' && 'system_instruction' in contents) {
       systemInst = contents.system_instruction;
+      // We need to modify the contents to remove system_instruction
+      // since it's already extracted to systemInst
+      if (typeof contents === 'object' && 'contents' in contents) {
+        contents = contents.contents;
+      }
       coerced = true;
     }
 
@@ -356,8 +335,6 @@ export function maybeCoerceToGeminiFormat(
 // These were previously implemented here but are now centralized in auth.ts
 export {
   clearCachedAuth,
-  determineGoogleVertexMode,
-  getGoogleApiKey,
   getGoogleClient,
   hasGoogleDefaultCredentials,
   loadCredentials,
@@ -763,7 +740,7 @@ function processImagesInContents(
  * @param contextVars - Variables for Nunjucks template rendering
  * @returns Processed Content object or undefined
  */
-export function parseConfigSystemInstruction(
+function parseConfigSystemInstruction(
   configSystemInstruction: Content | string | undefined,
   contextVars?: Record<string, VarValue>,
 ): Content | undefined {

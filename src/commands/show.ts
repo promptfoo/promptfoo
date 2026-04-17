@@ -82,7 +82,6 @@ export async function handleEval(id: string) {
   const eval_ = await Eval.findById(id);
   if (!eval_) {
     logger.error(`No evaluation found with ID ${id}`);
-    logger.info(`Run ${chalk.green('promptfoo list evals')} to see available evaluation IDs.`);
     process.exitCode = 1;
     return;
   }
@@ -185,7 +184,6 @@ export async function showCommand(program: Command) {
           return handleEval(latestEval.id);
         }
         logger.error('No eval found');
-        logger.info(`Run ${chalk.green('promptfoo eval')} to create one.`);
         process.exitCode = 1;
         return;
       }
@@ -206,9 +204,6 @@ export async function showCommand(program: Command) {
       }
 
       logger.error(`No resource found with ID ${id}`);
-      logger.info(
-        `Run ${chalk.green('promptfoo list evals')}, ${chalk.green('promptfoo list prompts')}, or ${chalk.green('promptfoo list datasets')} to see available IDs.`,
-      );
       process.exitCode = 1;
     });
 
@@ -222,7 +217,6 @@ export async function showCommand(program: Command) {
           return handleEval(latestEval.id);
         }
         logger.error('No eval found');
-        logger.info(`Run ${chalk.green('promptfoo eval')} to create one.`);
         process.exitCode = 1;
         return;
       }

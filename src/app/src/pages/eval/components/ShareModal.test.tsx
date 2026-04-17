@@ -1,4 +1,3 @@
-import { mockClipboard, mockDocumentExecCommand, mockWindowOpen } from '@app/tests/browserMocks';
 import { callApi } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -9,6 +8,15 @@ import ShareModal from './ShareModal';
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
 }));
+
+// Mock document.execCommand for copy functionality
+Object.assign(navigator, {
+  clipboard: {
+    writeText: vi.fn(),
+  },
+});
+
+global.document.execCommand = vi.fn();
 
 describe('ShareModal', () => {
   const mockOnClose = vi.fn();
@@ -24,8 +32,6 @@ describe('ShareModal', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClipboard();
-    mockDocumentExecCommand();
     // Mock successful domain check by default
     mockCallApi.mockResolvedValue(
       Response.json({
@@ -126,19 +132,6 @@ describe('ShareModal', () => {
     });
   });
 
-  it('does not rerun the domain check after share URL generation fails', async () => {
-    mockOnShare.mockRejectedValueOnce(new Error('Failed to generate share URL'));
-
-    render(<ShareModal {...defaultProps} />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Failed to generate share URL')).toBeInTheDocument();
-    });
-
-    expect(mockCallApi).toHaveBeenCalledTimes(1);
-    expect(mockCallApi).toHaveBeenCalledWith('/results/share/check-domain?id=test-eval-id');
-  });
-
   it('calls onClose when close button is clicked', async () => {
     const testUrl = 'https://promptfoo.app/eval/test-id';
     mockOnShare.mockResolvedValue(testUrl);
@@ -165,7 +158,9 @@ describe('ShareModal', () => {
       }),
     );
 
-    const mockOpen = mockWindowOpen();
+    // Mock window.open
+    const mockOpen = vi.fn();
+    vi.stubGlobal('open', mockOpen);
 
     render(<ShareModal {...defaultProps} />);
 

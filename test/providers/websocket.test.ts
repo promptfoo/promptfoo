@@ -43,35 +43,6 @@ describe('WebSocketProvider', () => {
   let mockWs: Mocked<WebSocket>;
   let provider: WebSocketProvider;
 
-  const emitWebSocketEvents = (
-    ...events: Array<
-      | { type: 'open' }
-      | { type: 'message'; data: unknown }
-      | { type: 'error'; error?: Error; message?: string }
-    >
-  ) => {
-    websocketMocks.setFactory(() => {
-      const ws = mockWs;
-      queueMicrotask(() => {
-        for (const event of events) {
-          if (event.type === 'open') {
-            ws.onopen?.({ type: 'open', target: ws } as WebSocket.Event);
-          } else if (event.type === 'message') {
-            ws.onmessage?.({ data: event.data } as WebSocket.MessageEvent);
-          } else {
-            const error = event.error ?? new Error(event.message ?? 'connection failed');
-            ws.onerror?.({
-              type: 'error',
-              error,
-              message: event.message ?? error.message,
-            } as WebSocket.ErrorEvent);
-          }
-        }
-      });
-      return ws;
-    });
-  };
-
   beforeEach(() => {
     mockWs = {
       on: vi.fn(),
@@ -115,10 +86,18 @@ describe('WebSocketProvider', () => {
       },
     });
 
-    emitWebSocketEvents(
-      { type: 'open' },
-      { type: 'message', data: JSON.stringify({ result: 'test' }) },
-    );
+    // Mock WebSocket to handle the connection properly
+    websocketMocks.setFactory(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({ result: 'test' }),
+          } as WebSocket.MessageEvent);
+        }, 10);
+      }, 10);
+      return mockWs;
+    });
 
     // Trigger the WebSocket connection by calling callApi
     await provider.callApi('test prompt');
@@ -135,10 +114,18 @@ describe('WebSocketProvider', () => {
       },
     });
 
-    emitWebSocketEvents(
-      { type: 'open' },
-      { type: 'message', data: JSON.stringify({ result: 'test' }) },
-    );
+    // Mock WebSocket to handle the connection properly
+    websocketMocks.setFactory(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        setTimeout(() => {
+          mockWs.onmessage?.({
+            data: JSON.stringify({ result: 'test' }),
+          } as WebSocket.MessageEvent);
+        }, 10);
+      }, 10);
+      return mockWs;
+    });
 
     // Trigger the WebSocket connection by calling callApi
     const response = await provider.callApi('test prompt');
@@ -162,7 +149,15 @@ describe('WebSocketProvider', () => {
   it('should send message and handle response', async () => {
     const responseData = { result: 'test response' };
 
-    emitWebSocketEvents({ type: 'open' }, { type: 'message', data: JSON.stringify(responseData) });
+    websocketMocks.setFactory(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        setTimeout(() => {
+          mockWs.onmessage?.({ data: JSON.stringify(responseData) } as WebSocket.MessageEvent);
+        }, 10);
+      }, 10);
+      return mockWs;
+    });
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({ output: responseData });
@@ -170,7 +165,16 @@ describe('WebSocketProvider', () => {
   });
 
   it('should handle WebSocket errors', async () => {
-    emitWebSocketEvents({ type: 'error', error: new Error('connection failed') });
+    websocketMocks.setFactory(() => {
+      setTimeout(() => {
+        mockWs.onerror?.({
+          type: 'error',
+          error: new Error('connection failed'),
+          message: 'connection failed',
+        } as WebSocket.ErrorEvent);
+      }, 10);
+      return mockWs;
+    });
 
     await expect(provider.callApi('test prompt')).rejects.toThrow('WebSocket error');
     expect(mockWs.close).toHaveBeenCalled();
@@ -184,23 +188,20 @@ describe('WebSocketProvider', () => {
       },
     });
 
-    vi.useFakeTimers();
-    try {
-      const responsePromise = expect(provider.callApi('test prompt')).rejects.toThrow(
-        'WebSocket request timed out',
-      );
-
-      await vi.runAllTimersAsync();
-
-      await responsePromise;
-      expect(mockWs.close).toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
+    await expect(provider.callApi('test prompt')).rejects.toThrow('WebSocket request timed out');
+    expect(mockWs.close).toHaveBeenCalled();
   });
 
   it('should handle non-JSON response', async () => {
-    emitWebSocketEvents({ type: 'open' }, { type: 'message', data: 'plain text response' });
+    websocketMocks.setFactory(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        setTimeout(() => {
+          mockWs.onmessage?.({ data: 'plain text response' } as WebSocket.MessageEvent);
+        }, 10);
+      }, 10);
+      return mockWs;
+    });
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({ output: 'plain text response' });
@@ -215,7 +216,15 @@ describe('WebSocketProvider', () => {
       },
     });
 
-    emitWebSocketEvents({ type: 'open' }, { type: 'message', data: 'test' });
+    websocketMocks.setFactory(() => {
+      setTimeout(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        setTimeout(() => {
+          mockWs.onmessage?.({ data: 'test' } as WebSocket.MessageEvent);
+        }, 10);
+      }, 10);
+      return mockWs;
+    });
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({ output: 'transformed-test' });
@@ -244,11 +253,18 @@ describe('WebSocketProvider', () => {
         },
       });
 
-      emitWebSocketEvents(
-        { type: 'open' },
-        { type: 'message', data: chunks[0] },
-        { type: 'message', data: chunks[1] },
-      );
+      websocketMocks.setFactory(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          setTimeout(() => {
+            mockWs.onmessage?.({ data: chunks[0] } as WebSocket.MessageEvent);
+            setTimeout(() => {
+              mockWs.onmessage?.({ data: chunks[1] } as WebSocket.MessageEvent);
+            }, 5);
+          }, 5);
+        }, 5);
+        return mockWs;
+      });
 
       const response = await provider.callApi('ignored');
       expect(response).toEqual({ output: 'hello world' });
@@ -269,7 +285,15 @@ describe('WebSocketProvider', () => {
         },
       });
 
-      emitWebSocketEvents({ type: 'open' }, { type: 'message', data: 'chunk' });
+      websocketMocks.setFactory(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          setTimeout(() => {
+            mockWs.onmessage?.({ data: 'chunk' } as WebSocket.MessageEvent);
+          }, 5);
+        }, 5);
+        return mockWs;
+      });
 
       const response = await provider.callApi('ignored');
       expect(response).toEqual({ output: 'chunk' });
@@ -291,7 +315,15 @@ describe('WebSocketProvider', () => {
         },
       });
 
-      emitWebSocketEvents({ type: 'open' }, { type: 'message', data: 'chunk' });
+      websocketMocks.setFactory(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          setTimeout(() => {
+            mockWs.onmessage?.({ data: 'chunk' } as WebSocket.MessageEvent);
+          }, 5);
+        }, 5);
+        return mockWs;
+      });
 
       const context = { vars: { x: 1 }, debug: true } as any;
       const response = await provider.callApi('ignored', context);
@@ -313,7 +345,15 @@ describe('WebSocketProvider', () => {
         },
       });
 
-      emitWebSocketEvents({ type: 'open' }, { type: 'message', data: 'chunk' });
+      websocketMocks.setFactory(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          setTimeout(() => {
+            mockWs.onmessage?.({ data: 'chunk' } as WebSocket.MessageEvent);
+          }, 5);
+        }, 5);
+        return mockWs;
+      });
 
       await expect(provider.callApi('test')).rejects.toThrow(
         'Error executing streamResponse function: Error in stream response function: Stream processing failed',
@@ -330,7 +370,15 @@ describe('WebSocketProvider', () => {
         },
       });
 
-      emitWebSocketEvents({ type: 'open' }, { type: 'message', data: 'chunk' });
+      websocketMocks.setFactory(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          setTimeout(() => {
+            mockWs.onmessage?.({ data: 'chunk' } as WebSocket.MessageEvent);
+          }, 5);
+        }, 5);
+        return mockWs;
+      });
 
       await expect(provider.callApi('test')).rejects.toThrow(
         'Error executing streamResponse function: Error executing streamResponse function: String transform failed',
@@ -347,7 +395,15 @@ describe('WebSocketProvider', () => {
         },
       });
 
-      emitWebSocketEvents({ type: 'open' }, { type: 'message', data: 'chunk' });
+      websocketMocks.setFactory(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          setTimeout(() => {
+            mockWs.onmessage?.({ data: 'chunk' } as WebSocket.MessageEvent);
+          }, 5);
+        }, 5);
+        return mockWs;
+      });
 
       await expect(provider.callApi('test')).rejects.toThrow(
         'Error executing streamResponse function:',
@@ -369,7 +425,15 @@ describe('WebSocketProvider', () => {
         },
       });
 
-      emitWebSocketEvents({ type: 'open' }, { type: 'message', data: 'chunk' });
+      websocketMocks.setFactory(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          setTimeout(() => {
+            mockWs.onmessage?.({ data: 'chunk' } as WebSocket.MessageEvent);
+          }, 5);
+        }, 5);
+        return mockWs;
+      });
 
       await expect(provider.callApi('test')).rejects.toThrow(
         'Error executing streamResponse function:',
@@ -390,7 +454,15 @@ describe('WebSocketProvider', () => {
         },
       });
 
-      emitWebSocketEvents({ type: 'open' }, { type: 'message', data: 'chunk' });
+      websocketMocks.setFactory(() => {
+        setTimeout(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          setTimeout(() => {
+            mockWs.onmessage?.({ data: 'chunk' } as WebSocket.MessageEvent);
+          }, 5);
+        }, 5);
+        return mockWs;
+      });
 
       await expect(provider.callApi('test')).rejects.toThrow(
         'Error executing streamResponse function: Error in stream response function: String error instead of Error object',

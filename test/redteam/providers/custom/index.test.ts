@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
-import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 
 import type { Message } from '../../../../src/redteam/providers/shared';
 
@@ -17,11 +16,6 @@ const mockApplyRuntimeTransforms = vi.hoisted(() =>
     image: undefined,
   })),
 );
-
-vi.mock('../../../../src/globalConfig/accounts', async (importOriginal) => ({
-  ...(await importOriginal()),
-  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
-}));
 
 vi.mock('../../../../src/providers/promptfoo', async (importOriginal) => {
   return {
@@ -115,20 +109,28 @@ describe('MemorySystem', () => {
 
 describe('CustomProvider', () => {
   let customProvider: CustomProvider;
-  let mockRedTeamProvider: MockApiProvider;
-  let mockScoringProvider: MockApiProvider;
-  let mockTargetProvider: MockApiProvider;
+  let mockRedTeamProvider: any;
+  let mockScoringProvider: any;
+  let mockTargetProvider: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
     // Create fresh mocks for each test
-    mockRedTeamProvider = createMockProvider({ id: 'mock-redteam', delay: 0 });
-    mockRedTeamProvider.callApi.mockReset();
-    mockScoringProvider = createMockProvider({ id: 'mock-scoring', delay: 0 });
-    mockScoringProvider.callApi.mockReset();
-    mockTargetProvider = createMockProvider({ id: 'mock-target' });
-    mockTargetProvider.callApi.mockReset();
+    mockRedTeamProvider = {
+      id: () => 'mock-redteam',
+      callApi: vi.fn(),
+      delay: 0,
+    };
+    mockScoringProvider = {
+      id: () => 'mock-scoring',
+      callApi: vi.fn(),
+      delay: 0,
+    };
+    mockTargetProvider = {
+      id: () => 'mock-target',
+      callApi: vi.fn(),
+    };
 
     customProvider = new CustomProvider({
       injectVar: 'objective',
@@ -143,11 +145,7 @@ describe('CustomProvider', () => {
     vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (options) {
       // When the provider is already an object (not a string), return it for jsonOnly requests
       // For non-jsonOnly requests (scoring), return the scoring provider
-      if (
-        options.provider &&
-        typeof options.provider === 'object' &&
-        'callApi' in options.provider
-      ) {
+      if (options.provider && typeof options.provider === 'object') {
         return options.jsonOnly ? options.provider : mockScoringProvider;
       }
       return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
@@ -222,20 +220,6 @@ describe('CustomProvider', () => {
     expect((provider as any).maxBacktracks).toBe(10); // DEFAULT_MAX_BACKTRACKS
     expect((provider as any).stateful).toBe(false); // Default false
     expect(provider.config.continueAfterSuccess).toBe(false); // Default false
-  });
-
-  it('should preserve explicit zero values for maxTurns and maxBacktracks', () => {
-    const provider = new CustomProvider({
-      injectVar: 'objective',
-      strategyText: 'Custom strategy',
-      maxTurns: 0,
-      maxBacktracks: 0,
-      redteamProvider: mockRedTeamProvider,
-      stateful: false,
-    });
-
-    expect((provider as any).maxTurns).toBe(0);
-    expect((provider as any).maxBacktracks).toBe(0);
   });
 
   it('should include sessionId from context vars when response is missing it', async () => {

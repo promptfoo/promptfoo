@@ -1,4 +1,3 @@
-import { isLoggedIntoCloud } from '../../globalConfig/accounts';
 import { REDTEAM_SIMULATED_USER_TASK_ID } from '../../providers/promptfoo';
 import { type Message, SimulatedUser } from '../../providers/simulatedUser';
 import invariant from '../../util/invariant';
@@ -21,17 +20,11 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
   constructor(config: Config) {
     invariant(config.injectVar, 'Expected injectVar to be set');
 
-    let maxTurns = config.maxTurns ?? 5;
-    // Cap turns for unauthenticated users
-    if (!isLoggedIntoCloud()) {
-      maxTurns = Math.min(maxTurns, 10);
-    }
-
     super({
       id: PROVIDER_ID,
       config: {
         instructions: `{{${config.injectVar}}}`,
-        maxTurns,
+        maxTurns: config.maxTurns ?? 5,
         stateful: config.stateful ?? false,
       },
     });

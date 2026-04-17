@@ -1,4 +1,4 @@
-import { matchesFactuality } from '../matchers/llmGrading';
+import { matchesFactuality } from '../matchers';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';

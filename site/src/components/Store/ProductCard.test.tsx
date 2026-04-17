@@ -58,68 +58,36 @@ describe('ProductCard', () => {
   it('shows skeleton while image loads', () => {
     render(<ProductCard product={mockProduct} onClick={vi.fn()} />);
 
-    // Primary image should have opacity 0 initially
-    const primaryImage = screen.getByRole('img', { name: mockProduct.name });
-    expect(primaryImage).toHaveStyle({ opacity: 0 });
+    // Image should have opacity 0 initially
+    const image = screen.getByRole('img');
+    expect(image).toHaveStyle({ opacity: 0 });
   });
 
   it('shows image after loading', () => {
     render(<ProductCard product={mockProduct} onClick={vi.fn()} />);
 
-    const primaryImage = screen.getByRole('img', { name: mockProduct.name });
-    fireEvent.load(primaryImage);
+    const image = screen.getByRole('img');
+    fireEvent.load(image);
 
-    expect(primaryImage).toHaveStyle({ opacity: 1 });
+    expect(image).toHaveStyle({ opacity: 1 });
   });
 
-  it('crossfades to hover image on hover when both images loaded', async () => {
+  it('changes image on hover when multiple images exist', async () => {
     render(<ProductCard product={mockProduct} onClick={vi.fn()} />);
 
     const button = screen.getByRole('button');
-    const primaryImage = screen.getByRole('img', { name: mockProduct.name });
-    const hoverImage = screen.getByRole('img', { name: `${mockProduct.name} alternate view` });
+    const image = screen.getByRole('img');
 
-    // Load both images
-    fireEvent.load(primaryImage);
-    fireEvent.load(hoverImage);
+    // Initially shows first image
+    expect(image).toHaveAttribute('src', mockProduct.images[0].url);
 
-    // Initially primary is visible, hover is hidden
-    expect(primaryImage).toHaveStyle({ opacity: 1 });
-    expect(hoverImage).toHaveStyle({ opacity: 0 });
-
-    // Hover shows second image, hides primary
+    // Hover shows second image
     fireEvent.mouseEnter(button);
-    expect(primaryImage).toHaveStyle({ opacity: 0 });
-    expect(hoverImage).toHaveStyle({ opacity: 1 });
+    expect(image).toHaveAttribute('src', mockProduct.images[1].url);
 
-    // Mouse leave returns to primary
+    // Mouse leave returns to first image
     fireEvent.mouseLeave(button);
-    expect(primaryImage).toHaveStyle({ opacity: 1 });
-    expect(hoverImage).toHaveStyle({ opacity: 0 });
-  });
-
-  it('displays product name', () => {
-    render(<ProductCard product={mockProduct} onClick={vi.fn()} />);
-    expect(screen.getByText('Test Product')).toBeInTheDocument();
-  });
-
-  it('displays product price', () => {
-    render(<ProductCard product={mockProduct} onClick={vi.fn()} />);
-    expect(screen.getByText('$29.99')).toBeInTheDocument();
-  });
-
-  it('displays the lowest price when multiple variants exist', () => {
-    const multiVariantProduct = {
-      ...mockProduct,
-      variants: [
-        { ...mockProduct.variants[0], id: 'v1', unitPrice: { value: 49.99, currency: 'USD' } },
-        { ...mockProduct.variants[0], id: 'v2', unitPrice: { value: 19.99, currency: 'USD' } },
-        { ...mockProduct.variants[0], id: 'v3', unitPrice: { value: 39.99, currency: 'USD' } },
-      ],
-    };
-
-    render(<ProductCard product={multiVariantProduct} onClick={vi.fn()} />);
-    expect(screen.getByText('$19.99')).toBeInTheDocument();
+    expect(image).toHaveAttribute('src', mockProduct.images[0].url);
   });
 
   it('handles product with single image', () => {

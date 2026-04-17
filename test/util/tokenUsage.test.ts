@@ -40,13 +40,6 @@ describe('TokenUsageTracker', () => {
 
     expect(tracked).toEqual({
       ...usage,
-      completionDetails: {
-        reasoning: 20,
-        acceptedPrediction: 15,
-        rejectedPrediction: 5,
-        cacheReadInputTokens: 0,
-        cacheCreationInputTokens: 0,
-      },
       assertions: {
         ...usage.assertions,
         numRequests: 0,
@@ -54,8 +47,6 @@ describe('TokenUsageTracker', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
-          cacheReadInputTokens: 0,
-          cacheCreationInputTokens: 0,
         },
       },
     });
@@ -121,8 +112,6 @@ describe('TokenUsageTracker', () => {
         reasoning: 60,
         acceptedPrediction: 45,
         rejectedPrediction: 15,
-        cacheReadInputTokens: 0,
-        cacheCreationInputTokens: 0,
       },
       assertions: {
         total: 90,
@@ -134,8 +123,6 @@ describe('TokenUsageTracker', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
-          cacheReadInputTokens: 0,
-          cacheCreationInputTokens: 0,
         },
       },
     });
@@ -197,8 +184,6 @@ describe('TokenUsageTracker', () => {
         reasoning: 60,
         acceptedPrediction: 45,
         rejectedPrediction: 15,
-        cacheReadInputTokens: 0,
-        cacheCreationInputTokens: 0,
       },
       assertions: {
         total: 90,
@@ -210,8 +195,6 @@ describe('TokenUsageTracker', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
-          cacheReadInputTokens: 0,
-          cacheCreationInputTokens: 0,
         },
       },
     });

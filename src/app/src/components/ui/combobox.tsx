@@ -19,13 +19,6 @@ interface ComboboxProps extends Omit<React.ComponentProps<'input'>, 'onChange' |
   emptyMessage?: string;
   clearable?: boolean;
   label?: string;
-  /** Where to render the label: "above" (default) renders externally, "inline" renders stacked inside the trigger like SelectTrigger */
-  labelPosition?: 'above' | 'inline';
-  renderOption?: (
-    option: ComboboxOption,
-    isSelected: boolean,
-    isHighlighted: boolean,
-  ) => React.ReactNode;
 }
 
 function Combobox({
@@ -37,8 +30,6 @@ function Combobox({
   disabled = false,
   clearable = true,
   label,
-  labelPosition = 'above',
-  renderOption,
   className,
   ...props
 }: ComboboxProps) {
@@ -217,32 +208,17 @@ function Combobox({
   const showDropdown = open && options.length > 0;
   const showClearButton = clearable && !!value && !disabled;
   const inputId = `${listboxId}-input`;
-  const isInlineLabel = label && labelPosition === 'inline';
 
   return (
     <div className="flex flex-col">
-      {label && labelPosition === 'above' && (
+      {label && (
         <label htmlFor={inputId} className="mb-1.5 text-xs font-medium text-muted-foreground">
           {label}
         </label>
       )}
       <Popover open={showDropdown}>
         <PopoverAnchor asChild>
-          <div
-            className={cn(
-              'relative',
-              isInlineLabel &&
-                'flex flex-col rounded-md border border-input bg-white dark:bg-zinc-900 ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
-            )}
-          >
-            {isInlineLabel && (
-              <label
-                htmlFor={inputId}
-                className="px-3 pt-1.5 text-[10px] text-muted-foreground uppercase tracking-wide cursor-pointer"
-              >
-                {label}
-              </label>
-            )}
+          <div className="relative">
             <input
               {...props}
               id={inputId}
@@ -265,18 +241,9 @@ function Combobox({
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
               className={cn(
-                'overflow-hidden text-ellipsis',
-                isInlineLabel
-                  ? cn(
-                      'flex w-full bg-transparent px-3 pb-1.5 text-sm text-foreground',
-                      'placeholder:text-muted-foreground focus-visible:outline-none',
-                      'disabled:cursor-not-allowed disabled:opacity-50',
-                    )
-                  : cn(
-                      'flex h-10 w-full rounded-md border border-input bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-foreground ring-offset-background',
-                      'placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                      'disabled:cursor-not-allowed disabled:opacity-50',
-                    ),
+                'flex h-10 w-full rounded-md border border-input bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-foreground ring-offset-background',
+                'placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                'disabled:cursor-not-allowed disabled:opacity-50',
                 showClearButton ? 'pr-16' : 'pr-8',
                 className,
               )}
@@ -304,12 +271,7 @@ function Combobox({
                 aria-label={open ? 'Close dropdown' : 'Open dropdown'}
                 tabIndex={-1}
               >
-                <ChevronDown
-                  className={cn(
-                    'h-4 w-4 opacity-50 transition-transform duration-200',
-                    open && 'rotate-180',
-                  )}
-                />
+                <ChevronDown className="h-4 w-4 opacity-50" />
               </button>
             </div>
           </div>
@@ -357,17 +319,11 @@ function Combobox({
                   <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
                     {option.value === value && <Check className="h-4 w-4" />}
                   </span>
-                  {renderOption ? (
-                    renderOption(option, option.value === value, index === highlightedIndex)
-                  ) : (
-                    <>
-                      <span className="truncate">{option.label}</span>
-                      {option.description && (
-                        <span className="ml-2 text-muted-foreground truncate">
-                          · {option.description}
-                        </span>
-                      )}
-                    </>
+                  <span className="truncate">{option.label}</span>
+                  {option.description && (
+                    <span className="ml-2 text-muted-foreground truncate">
+                      · {option.description}
+                    </span>
                   )}
                 </button>
               ))

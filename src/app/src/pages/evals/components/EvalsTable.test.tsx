@@ -1,6 +1,5 @@
 import { callApi } from '@app/utils/api';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalsTable from './EvalsTable';
@@ -193,7 +192,6 @@ describe('EvalsTable', () => {
   });
 
   it('should call onEvalSelected when a row is clicked', async () => {
-    const user = userEvent.setup();
     const mockResponse = {
       ok: true,
       json: vi.fn().mockResolvedValue({ data: mockEvals }),
@@ -212,13 +210,12 @@ describe('EvalsTable', () => {
       expect(screen.getByTestId('data-table')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByTestId('select-eval-1'));
+    fireEvent.click(screen.getByTestId('select-eval-1'));
 
     expect(onEvalSelected).toHaveBeenCalledWith('eval-1');
   });
 
   it('should delete selected evals when delete button is clicked', async () => {
-    const user = userEvent.setup();
     const mockResponse = {
       ok: true,
       json: vi.fn().mockResolvedValue({ data: mockEvals }),
@@ -242,15 +239,16 @@ describe('EvalsTable', () => {
       expect(screen.getByTestId('data-table')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByTestId('checkbox-eval-1'));
+    // Select an eval
+    fireEvent.click(screen.getByTestId('checkbox-eval-1'));
 
     // Click delete button
     const deleteButton = await screen.findByTestId('delete-selected-button');
-    await user.click(deleteButton);
+    fireEvent.click(deleteButton);
 
     // Confirm deletion
     const confirmDelete = await screen.findByRole('button', { name: /^Delete$/ });
-    await user.click(confirmDelete);
+    fireEvent.click(confirmDelete);
 
     await waitFor(() => {
       expect(mockCall).toHaveBeenCalledWith('/eval', {
@@ -264,7 +262,6 @@ describe('EvalsTable', () => {
   });
 
   it('should not delete evals when user cancels the confirmation dialog', async () => {
-    const user = userEvent.setup();
     const mockResponse = {
       ok: true,
       json: vi.fn().mockResolvedValue({ data: mockEvals }),
@@ -283,15 +280,16 @@ describe('EvalsTable', () => {
       expect(screen.getByTestId('data-table')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByTestId('checkbox-eval-1'));
+    // Select an eval
+    fireEvent.click(screen.getByTestId('checkbox-eval-1'));
 
     // Click delete button
     const deleteButton = await screen.findByTestId('delete-selected-button');
-    await user.click(deleteButton);
+    fireEvent.click(deleteButton);
 
     // Cancel deletion
     const cancelButton = await screen.findByRole('button', { name: 'Cancel' });
-    await user.click(cancelButton);
+    fireEvent.click(cancelButton);
 
     // DELETE API should not have been called
     expect(mockCall).not.toHaveBeenCalledWith(
@@ -301,7 +299,6 @@ describe('EvalsTable', () => {
   });
 
   it('should show delete button only when evals are selected', async () => {
-    const user = userEvent.setup();
     const mockResponse = {
       ok: true,
       json: vi.fn().mockResolvedValue({ data: mockEvals }),
@@ -322,13 +319,15 @@ describe('EvalsTable', () => {
     // Delete button should not be visible initially
     expect(screen.queryByTestId('delete-selected-button')).toBeNull();
 
-    await user.click(screen.getByTestId('checkbox-eval-1'));
+    // Select an eval
+    fireEvent.click(screen.getByTestId('checkbox-eval-1'));
 
     // Delete button should now be visible
     const deleteButton = await screen.findByTestId('delete-selected-button');
     expect(deleteButton).toBeInTheDocument();
 
-    await user.click(screen.getByTestId('checkbox-eval-1'));
+    // Deselect the eval
+    fireEvent.click(screen.getByTestId('checkbox-eval-1'));
 
     // Delete button should disappear
     await waitFor(() => {
@@ -337,7 +336,6 @@ describe('EvalsTable', () => {
   });
 
   it('should handle API errors during deletion gracefully', async () => {
-    const user = userEvent.setup();
     const mockResponse = {
       ok: true,
       json: vi.fn().mockResolvedValue({ data: mockEvals }),
@@ -366,13 +364,13 @@ describe('EvalsTable', () => {
       expect(screen.getByTestId('data-table')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByTestId('checkbox-eval-1'));
+    fireEvent.click(screen.getByTestId('checkbox-eval-1'));
 
     const deleteButton = await screen.findByTestId('delete-selected-button');
-    await user.click(deleteButton);
+    fireEvent.click(deleteButton);
 
     const confirmDelete = await screen.findByRole('button', { name: /^Delete$/ });
-    await user.click(confirmDelete);
+    fireEvent.click(confirmDelete);
 
     await waitFor(() => {
       expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to delete evals:', expect.any(Error));

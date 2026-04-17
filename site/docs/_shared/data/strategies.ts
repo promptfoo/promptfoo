@@ -9,7 +9,6 @@ export interface Strategy {
   asrIncrease: string;
   link?: string;
   recommended?: boolean;
-  isRemote?: boolean;
 }
 
 export const strategies: Strategy[] = [
@@ -45,7 +44,6 @@ export const strategies: Strategy[] = [
     cost: 'High',
     asrIncrease: '40-60%',
     link: '/docs/red-team/strategies/best-of-n/',
-    isRemote: true,
   },
   {
     category: 'Dynamic (Single-Turn)',
@@ -57,7 +55,6 @@ export const strategies: Strategy[] = [
     cost: 'Medium',
     asrIncrease: '40-60%',
     link: '/docs/red-team/strategies/citation/',
-    isRemote: true,
   },
   {
     category: 'Dynamic (Single-Turn)',
@@ -69,7 +66,6 @@ export const strategies: Strategy[] = [
     cost: 'Medium',
     asrIncrease: '40-60%',
     link: '/docs/red-team/strategies/authoritative-markup-injection/',
-    isRemote: true,
   },
   {
     category: 'Dynamic (Single-Turn)',
@@ -82,7 +78,6 @@ export const strategies: Strategy[] = [
     asrIncrease: '60-80%',
     link: '/docs/red-team/strategies/composite-jailbreaks/',
     recommended: true,
-    isRemote: true,
   },
   {
     category: 'Dynamic (Single-Turn)',
@@ -94,7 +89,6 @@ export const strategies: Strategy[] = [
     cost: 'High',
     asrIncrease: '0-10%',
     link: '/docs/red-team/strategies/gcg/',
-    isRemote: true,
   },
   {
     category: 'Dynamic (Single-Turn)',
@@ -119,7 +113,6 @@ export const strategies: Strategy[] = [
     asrIncrease: '70-90%',
     link: '/docs/red-team/strategies/meta/',
     recommended: true,
-    isRemote: true,
   },
   {
     category: 'Dynamic (Single-Turn)',
@@ -131,7 +124,6 @@ export const strategies: Strategy[] = [
     cost: 'Medium',
     asrIncrease: '40-60%',
     link: '/docs/red-team/strategies/likert/',
-    isRemote: true,
   },
   {
     category: 'Dynamic (Single-Turn)',
@@ -176,7 +168,6 @@ export const strategies: Strategy[] = [
     cost: 'High',
     asrIncrease: '70-90%',
     link: '/docs/red-team/strategies/goat/',
-    isRemote: true,
   },
   {
     category: 'Multi-turn',
@@ -188,7 +179,6 @@ export const strategies: Strategy[] = [
     cost: 'High',
     asrIncrease: '70-90%',
     link: '/docs/red-team/strategies/hydra/',
-    isRemote: true,
   },
   {
     category: 'Multi-turn',
@@ -232,7 +222,6 @@ export const strategies: Strategy[] = [
     cost: 'Low',
     asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/audio/',
-    isRemote: true,
   },
   {
     category: 'Static (Single-Turn)',

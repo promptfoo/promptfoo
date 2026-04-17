@@ -1,4 +1,8 @@
-import '@app/lib/prism';
+import 'prismjs/components/prism-http';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-yaml';
+import 'prismjs/components/prism-clike';
+import 'prismjs/components/prism-javascript';
 import 'prismjs/themes/prism.css';
 
 import React from 'react';

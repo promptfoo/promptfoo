@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleLlmRubric } from '../../src/assertions/llmRubric';
-import { matchesLlmRubric } from '../../src/matchers/llmGrading';
+import { matchesLlmRubric } from '../../src/matchers';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
-vi.mock('../../src/matchers/llmGrading');
+vi.mock('../../src/matchers');
 
 describe('handleLlmRubric', () => {
   beforeEach(() => {

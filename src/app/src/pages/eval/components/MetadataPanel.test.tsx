@@ -1,8 +1,6 @@
-import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { renderWithProviders } from '@app/utils/testutils';
-import { screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { MetadataPanel } from './MetadataPanel';
 
 import type { ExpandedMetadataState } from './MetadataPanel';
@@ -20,18 +18,19 @@ describe('MetadataPanel', () => {
     onApplyFilter: mockOnApplyFilter,
   };
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('should filter out metadata keys present in HIDDEN_METADATA_KEYS', () => {
-    const hiddenMetadata = Object.fromEntries(
-      HIDDEN_METADATA_KEYS.map((key) => [key, `${key} value`]),
-    );
+  it('should filter out metadata keys present in HIDDEN_METADATA_KEYS, including newly added keys', () => {
     const mockMetadata = {
       stringKey: 'stringValue',
-      ...hiddenMetadata,
+      citations: [{ source: 'doc1', content: 'citation content' }],
+      _promptfooFileMetadata: { fileName: 'test.txt', size: 1024 },
+      newHiddenKey: 'hiddenValue',
     };
+
+    vi.mock('@app/constants', () => {
+      return {
+        HIDDEN_METADATA_KEYS: ['citations', '_promptfooFileMetadata', 'newHiddenKey'],
+      };
+    });
 
     renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
@@ -40,9 +39,11 @@ describe('MetadataPanel', () => {
     expect(screen.getByText('stringKey')).toBeInTheDocument();
     expect(screen.getByText('stringValue')).toBeInTheDocument();
 
-    for (const hiddenKey of HIDDEN_METADATA_KEYS) {
-      expect(screen.queryByText(hiddenKey)).not.toBeInTheDocument();
-    }
+    expect(screen.queryByText('citations')).not.toBeInTheDocument();
+    expect(screen.queryByText('_promptfooFileMetadata')).not.toBeInTheDocument();
+    expect(screen.queryByText('newHiddenKey')).not.toBeInTheDocument();
+
+    vi.restoreAllMocks();
   });
 
   it('should handle malformed URLs by rendering them as plain text instead of a link', () => {
@@ -150,8 +151,7 @@ describe('MetadataPanel', () => {
     expect(linkElement).toHaveAttribute('href', 'https://www.example.com');
   });
 
-  it('should display a truncated value for long metadata strings and expand on click', async () => {
-    const user = userEvent.setup();
+  it('should display a truncated value for long metadata strings and expand on click', () => {
     const longString = 'This is a very long string. '.repeat(50);
     const mockMetadata = {
       longKey: longString,
@@ -173,7 +173,7 @@ describe('MetadataPanel', () => {
     expect(truncatedValue).toBeInTheDocument();
     expect(truncatedValue.textContent?.length).toBeLessThanOrEqual(300);
 
-    await user.click(truncatedValue);
+    fireEvent.click(truncatedValue);
 
     const updatedExpandedMetadata: ExpandedMetadataState = {
       longKey: { expanded: true, lastClickTime: Date.now() },
@@ -191,8 +191,7 @@ describe('MetadataPanel', () => {
     expect(fullValue).toBeInTheDocument();
   });
 
-  it('should call onCopy with the correct key and value when the copy icon is clicked, and show a checkmark icon if the field is marked as copied', async () => {
-    const user = userEvent.setup();
+  it('should call onCopy with the correct key and value when the copy icon is clicked, and show a checkmark icon if the field is marked as copied', () => {
     const mockMetadata = {
       testKey: 'testValue',
     };
@@ -206,13 +205,12 @@ describe('MetadataPanel', () => {
     );
 
     const copyButton = screen.getByRole('button', { name: 'Copy metadata value for testKey' });
-    await user.click(copyButton);
+    fireEvent.click(copyButton);
 
     expect(mockOnCopy).toHaveBeenCalledWith('testKey', 'testValue');
   });
 
-  it('should call onApplyFilter with the correct field and value when the filter icon is clicked', async () => {
-    const user = userEvent.setup();
+  it('should call onApplyFilter with the correct field and value when the filter icon is clicked', () => {
     const mockMetadata = {
       testField: 'testValue',
     };
@@ -220,7 +218,7 @@ describe('MetadataPanel', () => {
     renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     const filterButton = screen.getByRole('button', { name: 'Filter by testField' });
-    await user.click(filterButton);
+    fireEvent.click(filterButton);
 
     expect(mockOnApplyFilter).toHaveBeenCalledWith('testField', 'testValue');
   });

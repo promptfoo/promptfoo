@@ -60,7 +60,7 @@ function PricingTable() {
         'Priority support & SLA guarantees',
       ],
       cta: 'Schedule Demo',
-      ctaLink: '/contact/',
+      ctaLink: 'https://cal.com/team/promptfoo/intro2',
       highlighted: true,
     },
     {
@@ -408,7 +408,7 @@ function DemoCTA() {
       <h2>Ready to get started?</h2>
       <p>Schedule a demo to see how Promptfoo can help secure your LLM applications.</p>
       <Link
-        to="/contact/"
+        to="https://cal.com/team/promptfoo/intro2"
         className={clsx('button', 'button--lg', 'button--primary', styles.demoButton)}
       >
         Schedule a Demo

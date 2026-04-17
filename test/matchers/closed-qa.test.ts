@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesClosedQa } from '../../src/matchers/llmGrading';
+import { matchesClosedQa } from '../../src/matchers';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
-import { createMockProvider } from '../factories/provider';
-import { mockProcessEnv } from '../util/utils';
 
 import type { GradingConfig } from '../../src/types/index';
 
@@ -125,37 +123,35 @@ describe('matchesClosedQa', () => {
   });
 
   it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {
-    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
-    try {
-      const input = 'Input {{ var }}';
-      const expected = 'Expected {{ var }}';
-      const output = 'Output {{ var }}';
-      const grading: GradingConfig = {
-        provider: DefaultGradingProvider,
-      };
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    const input = 'Input {{ var }}';
+    const expected = 'Expected {{ var }}';
+    const output = 'Output {{ var }}';
+    const grading: GradingConfig = {
+      provider: DefaultGradingProvider,
+    };
 
-      vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
-        output: 'Y',
-        tokenUsage: { total: 10, prompt: 5, completion: 5 },
-      });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      output: 'Y',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
 
-      await matchesClosedQa(input, expected, output, grading);
+    await matchesClosedQa(input, expected, output, grading);
 
-      expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('Input {{ var }}'),
-        expect.any(Object),
-      );
-      expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('Expected {{ var }}'),
-        expect.any(Object),
-      );
-      expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('Output {{ var }}'),
-        expect.any(Object),
-      );
-    } finally {
-      restoreEnv();
-    }
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Input {{ var }}'),
+      expect.any(Object),
+    );
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Expected {{ var }}'),
+      expect.any(Object),
+    );
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Output {{ var }}'),
+      expect.any(Object),
+    );
+
+    process.env.PROMPTFOO_DISABLE_TEMPLATING = undefined;
   });
 
   it('should correctly substitute variables in custom rubricPrompt', async () => {
@@ -177,7 +173,10 @@ Does the answer meet the criteria? Answer Y or N.`;
 
     const grading = {
       rubricPrompt: customPrompt,
-      provider: createMockProvider({ callApi: mockCallApi }),
+      provider: {
+        id: () => 'test-provider',
+        callApi: mockCallApi,
+      },
     };
 
     const result = await matchesClosedQa(input, expected, output, grading);

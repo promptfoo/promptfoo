@@ -204,37 +204,6 @@ After running an evaluation, view traces in the web UI:
 3. Click the magnifying glass (🔎) icon on any test result
 4. Scroll to the "Trace Timeline" section
 
-### 4. Assert on Traced Workflows
-
-Once traces are flowing into Promptfoo, you can evaluate what the agent actually did, not just the final answer:
-
-```yaml
-tests:
-  - vars:
-      order_id: '123'
-    assert:
-      - type: trajectory:tool-used
-        value: search_orders
-
-      - type: trajectory:tool-args-match
-        value:
-          name: search_orders
-          args:
-            order_id: '{{ order_id }}'
-
-      - type: trajectory:tool-sequence
-        value:
-          steps:
-            - search_orders
-            - compose_reply
-
-      - type: trajectory:goal-success
-        value: 'Determine the shipping status for order {{ order_id }} and tell the user whether it has shipped'
-        provider: openai:gpt-5-mini
-```
-
-Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments, into command trajectory steps. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
-
 ## Configuration Reference
 
 ### Basic Configuration
@@ -300,7 +269,7 @@ tracing:
 
 ### JavaScript/TypeScript
 
-For complete provider implementation details, see the [JavaScript Provider documentation](/docs/providers/custom-api/). For tracing-specific examples, see the [OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/javascript).
+For complete provider implementation details, see the [JavaScript Provider documentation](/docs/providers/custom-api/). For tracing-specific examples, see the [OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing).
 
 Key points:
 
@@ -308,11 +277,10 @@ Key points:
 - Extract the W3C trace context from `traceparent`
 - Create child spans for each operation
 - Set appropriate span attributes and status
-- Add tool-oriented attributes like `tool.name` or `function.name` when you want to use trajectory assertions
 
 ### Python
 
-For complete provider implementation details, see the [Python Provider documentation](/docs/providers/python/). For a working example with protobuf tracing, see the [Python OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/python). For a framework-specific example that exports OpenAI Agents SDK traces into Promptfoo, see the [OpenAI Agents Python SDK guide](/docs/guides/evaluate-openai-agents-python).
+For complete provider implementation details, see the [Python Provider documentation](/docs/providers/python/). For a working example with protobuf tracing, see the [Python OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing-python).
 
 :::note
 
@@ -334,7 +302,7 @@ provider.add_span_processor(SimpleSpanProcessor(exporter))
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer(__name__)
 
-def call_api(prompt, options, context):
+def call_api(prompt, context):
     # Extract trace context
     if 'traceparent' in context:
         ctx = extract({"traceparent": context["traceparent"]})
@@ -348,8 +316,6 @@ def call_api(prompt, options, context):
     return {"output": your_llm_call(prompt)}
 ```
 
-If you only need provider-level timing for a Python provider, enable the wrapper OTEL path by installing the Python OpenTelemetry packages and setting `PROMPTFOO_ENABLE_OTEL=true`. Add custom child spans only when you want internal workflow visibility such as tools, searches, or multi-step agent trajectories.
-
 ## Trace Visualization
 
 Promptfoo includes a built-in trace viewer that displays all collected telemetry data. Since Promptfoo functions as an OTLP receiver, you can view traces directly without configuring external tools like Jaeger or Grafana Tempo.
@@ -361,7 +327,7 @@ The web UI displays traces as a hierarchical timeline showing:
 - **Status indicators**: Success (green), error (red), or unset (gray)
 - **Hover details**: Span attributes, duration, and timestamps
 - **Relative timing**: See which operations run in parallel vs. sequentially
-- **Expandable details**: Click any span to reveal span attributes and metadata
+- **Expandable details**: Click any span to reveal full attribute information
 - **Export functionality**: Download traces as JSON for external analysis
 
 ### Understanding the Timeline
@@ -388,11 +354,9 @@ Click the expand icon on any span to reveal a detailed attributes panel showing:
 - **Start** and **End** timestamps with precision
 - **Duration** in a human-readable format
 - **Status** (OK, ERROR, or UNSET)
-- **Span attributes** including GenAI attributes, custom attributes, and Promptfoo-specific data
+- **All span attributes** including GenAI attributes, custom attributes, and Promptfoo-specific data
 
 This is useful for inspecting the full request/response bodies (`promptfoo.request.body` and `promptfoo.response.body`) and debugging provider behavior.
-
-Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. GenAI token counters such as `gen_ai.usage.input_tokens` remain visible. Avoid placing secrets in custom span attributes because raw attributes may still be retained in the local trace store for internal evaluation workflows.
 
 ### Exporting Traces
 
@@ -400,7 +364,7 @@ Click the **Export Traces** button to download all traces for the current evalua
 
 - Evaluation ID and test case ID
 - Export timestamp
-- Trace data with spans and redacted attributes
+- Complete trace data with all spans and attributes
 
 The exported JSON can be imported into external tools like Jaeger, Grafana Tempo, or custom analysis scripts.
 
@@ -704,8 +668,8 @@ For more details on red team testing with tracing, see [How to Red Team LLM Agen
 
 ## Next Steps
 
-- Explore the [OpenTelemetry tracing example (JavaScript)](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/javascript)
-- Explore the [OpenTelemetry tracing example (Python)](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/python) - uses protobuf format
+- Explore the [OpenTelemetry tracing example (JavaScript)](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing)
+- Explore the [OpenTelemetry tracing example (Python)](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing-python) - uses protobuf format
 - Try the [red team tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-tracing-example)
 - Set up forwarding to your observability platform
 - Add custom instrumentation for your use case

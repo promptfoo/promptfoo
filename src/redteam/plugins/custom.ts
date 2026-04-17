@@ -5,7 +5,7 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { getNunjucksEngine } from '../../util/templates';
 import { RedteamPluginBase } from './base';
 
-import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../types/index';
+import type { ApiProvider, Assertion, TestCase } from '../../types/index';
 
 const CustomPluginDefinitionSchema = z.strictObject({
   generator: z.string().min(1, 'Generator must not be empty').trim(),
@@ -45,14 +45,8 @@ export class CustomPlugin extends RedteamPluginBase {
     return this.definition.id || `promptfoo:redteam:custom`;
   }
 
-  constructor(
-    provider: ApiProvider,
-    purpose: string,
-    injectVar: string,
-    filePath: string,
-    config: PluginConfig = {},
-  ) {
-    super(provider, purpose, injectVar, config);
+  constructor(provider: ApiProvider, purpose: string, injectVar: string, filePath: string) {
+    super(provider, purpose, injectVar);
     this.definition = loadCustomPluginDefinition(filePath);
   }
 

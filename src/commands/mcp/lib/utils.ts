@@ -47,18 +47,10 @@ export function withTimeout<T>(
   timeoutMs: number,
   errorMessage: string,
 ): Promise<T> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-
   return Promise.race([
     promise,
-    new Promise<T>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
-    }),
-  ]).finally(() => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-  });
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(errorMessage)), timeoutMs)),
+  ]);
 }
 
 /**
@@ -123,7 +115,7 @@ export function assertNotNull<T>(value: T | null | undefined, message?: string):
  * Type-safe array filtering that removes null/undefined values
  */
 export function filterNonNull<T>(array: (T | null | undefined)[]): T[] {
-  return array.filter((item): item is T => item != null);
+  return array.filter((item): item is T => Boolean(item));
 }
 
 /**
@@ -201,18 +193,11 @@ export function formatDuration(ms: number): string {
 }
 
 /**
- * Truncate text to specified length with ellipsis.
- * The returned string is guaranteed to be at most maxLength characters.
+ * Truncate text to specified length with ellipsis
  */
 export function truncateText(text: string, maxLength: number): string {
-  if (maxLength <= 0) {
-    return '';
-  }
   if (text.length <= maxLength) {
     return text;
-  }
-  if (maxLength <= 3) {
-    return text.slice(0, maxLength);
   }
   return text.slice(0, maxLength - 3) + '...';
 }

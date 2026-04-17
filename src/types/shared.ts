@@ -5,8 +5,6 @@ export const CompletionTokenDetailsSchema = z.object({
   reasoning: z.number().optional(),
   acceptedPrediction: z.number().optional(),
   rejectedPrediction: z.number().optional(),
-  cacheReadInputTokens: z.number().optional(),
-  cacheCreationInputTokens: z.number().optional(),
 });
 
 export type CompletionTokenDetails = z.infer<typeof CompletionTokenDetailsSchema>;

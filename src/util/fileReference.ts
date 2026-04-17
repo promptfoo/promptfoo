@@ -71,7 +71,7 @@ export async function processConfigFileReferences(
   config: any,
   basePath: string = '',
 ): Promise<any> {
-  if (config === null || config === undefined) {
+  if (!config) {
     return config;
   }
 
@@ -90,7 +90,7 @@ export async function processConfigFileReferences(
   }
 
   // Handle objects
-  if (typeof config === 'object') {
+  if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
     for (const [key, value] of Object.entries(config)) {
       result[key] = await processConfigFileReferences(value, basePath);

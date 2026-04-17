@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Dynamic variables with JS/Python'
+
+prompts:
+  - |
+    {{system_prompt}}
+
+    User: {{query}}
+
+providers:
+  - openai:responses:gpt-5.1
+
+tests:
+  - vars:
+      role: support
+      query: 'Help! My mass spectrometer is making weird noises and sparking!'
+      system_prompt: file://load_prompt.py
+    assert:
+      - type: llm-rubric
+        value: empathetic and offers to help troubleshoot
+
+  - vars:
+      role: sales
+      query: 'How much for 10,000 rubber ducks? Asking for a friend.'
+      system_prompt: file://load_prompt.py
+    assert:
+      - type: llm-rubric
+        value: discusses pricing or bulk orders
+
+  - vars:
+      role: technical
+      query: 'My AI keeps responding in haiku. How do I make it stop?'
+      system_prompt: file://load_prompt.py
+    assert:
+      - type: llm-rubric
+        value: technical guidance with actionable steps

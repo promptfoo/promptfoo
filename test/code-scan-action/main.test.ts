@@ -1,118 +1,97 @@
 /**
  * Main Entry Point Tests
  *
- * Tests for the GitHub Action main entry point, specifically the CLI args construction.
+ * Tests for the GitHub Action main entry point, specifically the CLI args construction
  */
 
+import * as core from '@actions/core';
+import * as exec from '@actions/exec';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mockProcessEnv } from '../util/utils';
 
-const mocks = vi.hoisted(() => {
-  const core = {
-    getInput: vi.fn(),
-    getIDToken: vi.fn(),
-    info: vi.fn(),
-    warning: vi.fn(),
-    error: vi.fn(),
-    setFailed: vi.fn(),
-  };
+// Mock @actions/core
+vi.mock('@actions/core', () => ({
+  getInput: vi.fn(),
+  getIDToken: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
+  error: vi.fn(),
+  setFailed: vi.fn(),
+}));
 
-  const exec = {
-    exec: vi.fn(),
-  };
+// Mock @actions/exec
+vi.mock('@actions/exec', () => ({
+  exec: vi.fn(),
+}));
 
-  const github = {
-    context: {
-      repo: {
-        owner: 'test-owner',
-        repo: 'test-repo',
-      },
-      payload: {
-        pull_request: {
-          number: 123,
-          head: {
-            sha: 'abc123',
-          },
+// Mock @actions/github
+vi.mock('@actions/github', () => ({
+  context: {
+    repo: {
+      owner: 'test-owner',
+      repo: 'test-repo',
+    },
+    payload: {
+      pull_request: {
+        number: 123,
+        head: {
+          sha: 'abc123',
         },
       },
     },
-    getOctokit: vi.fn(),
-  };
+  },
+  getOctokit: vi.fn(),
+}));
 
-  const actionGithub = {
-    getGitHubContext: vi.fn(),
-    getPRFiles: vi.fn(),
-  };
+// Mock the github module from code-scan-action
+vi.mock('../../code-scan-action/src/github', () => ({
+  getGitHubContext: vi.fn().mockReturnValue({
+    owner: 'test-owner',
+    repo: 'test-repo',
+    number: 123,
+    sha: 'abc123',
+  }),
+  getPRFiles: vi.fn().mockResolvedValue([{ path: 'src/index.ts', status: 'modified' }]),
+}));
 
-  const config = {
-    generateConfigFile: vi.fn(),
-  };
+// Mock the config module
+vi.mock('../../code-scan-action/src/config', () => ({
+  generateConfigFile: vi.fn().mockReturnValue('/tmp/test-config.yaml'),
+}));
 
-  const fs = {
-    unlinkSync: vi.fn(),
-  };
-
-  return {
-    actionGithub,
-    config,
-    core,
-    exec,
-    fs,
-    github,
-  };
-});
-
-// The action package owns its @actions/* dependencies outside the root test resolver,
-// so mock both the bare specifiers and the nested ESM entrypoints used by main.ts.
-vi.mock('@actions/core', () => mocks.core);
-vi.mock('../../code-scan-action/node_modules/@actions/core/lib/core.js', () => mocks.core);
-
-vi.mock('@actions/exec', () => mocks.exec);
-vi.mock('../../code-scan-action/node_modules/@actions/exec/lib/exec.js', () => mocks.exec);
-
-vi.mock('@actions/github', () => mocks.github);
-vi.mock('../../code-scan-action/node_modules/@actions/github/lib/github.js', () => mocks.github);
-
-vi.mock('../../code-scan-action/src/github', () => mocks.actionGithub);
-vi.mock('../../code-scan-action/src/config', () => mocks.config);
-
+// Mock fs
 vi.mock('fs', async () => {
   const actual = await vi.importActual('fs');
   return {
     ...actual,
-    unlinkSync: mocks.fs.unlinkSync,
+    unlinkSync: vi.fn(),
   };
 });
 
+// Store original env
 const originalEnv = { ...process.env };
 
-interface PromptfooExecCall {
-  args: string[];
-  options?: { env?: Record<string, string> };
-}
+describe('code-scan-action main', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Reset environment
+    process.env = { ...originalEnv };
+    process.env.GITHUB_WORKSPACE = '/test/workspace';
 
-interface NpmExecCall {
-  options?: { env?: Record<string, string> };
-}
+    // Default mock implementations
+    vi.mocked(core.getInput).mockImplementation((name: string) => {
+      if (name === 'github-token') {
+        return 'fake-token';
+      }
+      if (name === 'min-severity' || name === 'minimum-severity') {
+        return 'medium';
+      }
+      return '';
+    });
 
-function setupMocks() {
-  mocks.core.getInput.mockImplementation((name: string) => {
-    if (name === 'github-token') {
-      return 'fake-token';
-    }
-    if (name === 'min-severity' || name === 'minimum-severity') {
-      return 'medium';
-    }
-    return '';
-  });
-  mocks.core.getIDToken.mockResolvedValue('fake-oidc-token');
+    vi.mocked(core.getIDToken).mockResolvedValue('fake-oidc-token');
 
-  mocks.exec.exec.mockImplementation(
-    async (
-      command: string,
-      _args: string[] | undefined,
-      options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
-    ) => {
+    // Mock exec to simulate successful CLI run with empty results
+    vi.mocked(exec.exec).mockImplementation(async (command, _args, options) => {
       if (command === 'promptfoo' && options?.listeners?.stdout) {
         const response = JSON.stringify({
           success: true,
@@ -122,148 +101,253 @@ function setupMocks() {
         options.listeners.stdout(Buffer.from(response));
       }
       return 0;
-    },
-  );
-
-  mocks.github.getOctokit.mockReturnValue({
-    rest: {
-      pulls: {
-        get: vi.fn().mockResolvedValue({
-          data: { base: { ref: 'main' } },
-        }),
-      },
-    },
-  });
-
-  mocks.actionGithub.getGitHubContext.mockResolvedValue({
-    owner: 'test-owner',
-    repo: 'test-repo',
-    number: 123,
-    sha: 'abc123',
-  });
-  mocks.actionGithub.getPRFiles.mockResolvedValue([{ path: 'src/index.ts', status: 'modified' }]);
-  mocks.config.generateConfigFile.mockReturnValue('/tmp/test-config.yaml');
-}
-
-async function importActionAndGetPromptfooCall(): Promise<PromptfooExecCall> {
-  await import('../../code-scan-action/src/main');
-
-  const call = await vi.waitFor(() => {
-    const promptfooCall = mocks.exec.exec.mock.calls.find(
-      ([command, args]) => command === 'promptfoo' && Array.isArray(args),
-    );
-
-    if (!promptfooCall || !Array.isArray(promptfooCall[1])) {
-      throw new Error('promptfoo exec call not found');
-    }
-
-    return promptfooCall;
-  });
-
-  return {
-    args: call[1],
-    options: call[2] as PromptfooExecCall['options'],
-  };
-}
-
-async function importActionAndGetNpmInstallCall(): Promise<NpmExecCall> {
-  await import('../../code-scan-action/src/main');
-
-  const call = await vi.waitFor(() => {
-    const npmCall = mocks.exec.exec.mock.calls.find(
-      ([command, args]) =>
-        command === 'npm' &&
-        Array.isArray(args) &&
-        args[0] === 'install' &&
-        args[1] === '-g' &&
-        args[2] === 'promptfoo',
-    );
-
-    if (!npmCall) {
-      throw new Error('npm install exec call not found');
-    }
-
-    return npmCall;
-  });
-
-  return {
-    options: call[2] as NpmExecCall['options'],
-  };
-}
-
-function expectCliArg(args: string[], name: string, value: string): void {
-  const argIndex = args.indexOf(name);
-  expect(argIndex).toBeGreaterThan(-1);
-  expect(args[argIndex + 1]).toBe(value);
-}
-
-function expectSanitizedExecEnv(options: PromptfooExecCall['options'] | NpmExecCall['options']) {
-  expect(options?.env).toEqual(expect.any(Object));
-  expect(options?.env?.NPM_CONFIG_BEFORE).toBeUndefined();
-  expect(options?.env?.npm_config_before).toBeUndefined();
-}
-
-describe('code-scan-action main', () => {
-  let restoreEnv: () => void;
-
-  beforeEach(() => {
-    vi.resetAllMocks();
-    vi.resetModules();
-    restoreEnv = mockProcessEnv(
-      { ...originalEnv, GITHUB_WORKSPACE: '/test/workspace' },
-      { clear: true },
-    );
-    setupMocks();
+    });
   });
 
   afterEach(() => {
-    restoreEnv();
-    vi.clearAllMocks();
+    process.env = originalEnv;
   });
 
   describe('CLI args construction', () => {
     it('should pass --base with GITHUB_BASE_REF when set', async () => {
       process.env.GITHUB_BASE_REF = 'feat/my-feature-branch';
 
-      const { args } = await importActionAndGetPromptfooCall();
+      vi.resetModules();
 
-      expectCliArg(args, '--base', 'feat/my-feature-branch');
+      vi.doMock('@actions/core', () => ({
+        getInput: vi.fn().mockImplementation((name: string) => {
+          if (name === 'github-token') {
+            return 'fake-token';
+          }
+          if (name === 'min-severity' || name === 'minimum-severity') {
+            return 'medium';
+          }
+          return '';
+        }),
+        getIDToken: vi.fn().mockResolvedValue('fake-oidc-token'),
+        info: vi.fn(),
+        warning: vi.fn(),
+        error: vi.fn(),
+        setFailed: vi.fn(),
+      }));
+
+      vi.doMock('@actions/exec', () => ({
+        exec: vi.fn().mockImplementation(async (command: string, _args: string[], options: any) => {
+          if (command === 'promptfoo' && options?.listeners?.stdout) {
+            const response = JSON.stringify({
+              success: true,
+              comments: [],
+              commentsPosted: false,
+            });
+            options.listeners.stdout(Buffer.from(response));
+          }
+          return 0;
+        }),
+      }));
+
+      vi.doMock('@actions/github', () => ({
+        context: {
+          repo: { owner: 'test-owner', repo: 'test-repo' },
+          payload: { pull_request: { number: 123, head: { sha: 'abc123' } } },
+        },
+        getOctokit: vi.fn(),
+      }));
+
+      vi.doMock('../../code-scan-action/src/github', () => ({
+        getGitHubContext: vi.fn().mockReturnValue({
+          owner: 'test-owner',
+          repo: 'test-repo',
+          number: 123,
+          sha: 'abc123',
+        }),
+        getPRFiles: vi.fn().mockResolvedValue([{ path: 'src/index.ts', status: 'modified' }]),
+      }));
+
+      vi.doMock('../../code-scan-action/src/config', () => ({
+        generateConfigFile: vi.fn().mockReturnValue('/tmp/test-config.yaml'),
+      }));
+
+      const execMock = (await import('@actions/exec')).exec;
+
+      // Import fresh module (this triggers run() as a side effect)
+      await import('../../code-scan-action/src/main');
+
+      const execCalls = vi.mocked(execMock).mock.calls;
+      const promptfooCalls = execCalls.filter(
+        (call) => call[0] === 'promptfoo' && Array.isArray(call[1]),
+      );
+
+      expect(promptfooCalls.length).toBeGreaterThan(0);
+
+      const cliArgs = promptfooCalls[0][1] as string[];
+      const baseIndex = cliArgs.indexOf('--base');
+
+      expect(baseIndex).toBeGreaterThan(-1);
+      expect(cliArgs[baseIndex + 1]).toBe('feat/my-feature-branch');
     });
 
     it('should pass --base with "main" when GITHUB_BASE_REF is not set', async () => {
       delete process.env.GITHUB_BASE_REF;
 
-      const { args } = await importActionAndGetPromptfooCall();
+      // Reset module cache to re-run with new env
+      vi.resetModules();
 
-      expectCliArg(args, '--base', 'main');
+      // Re-mock dependencies after reset
+      vi.doMock('@actions/core', () => ({
+        getInput: vi.fn().mockImplementation((name: string) => {
+          if (name === 'github-token') {
+            return 'fake-token';
+          }
+          if (name === 'min-severity' || name === 'minimum-severity') {
+            return 'medium';
+          }
+          return '';
+        }),
+        getIDToken: vi.fn().mockResolvedValue('fake-oidc-token'),
+        info: vi.fn(),
+        warning: vi.fn(),
+        error: vi.fn(),
+        setFailed: vi.fn(),
+      }));
+
+      vi.doMock('@actions/exec', () => ({
+        exec: vi.fn().mockImplementation(async (command: string, _args: string[], options: any) => {
+          if (command === 'promptfoo' && options?.listeners?.stdout) {
+            const response = JSON.stringify({
+              success: true,
+              comments: [],
+              commentsPosted: false,
+            });
+            options.listeners.stdout(Buffer.from(response));
+          }
+          return 0;
+        }),
+      }));
+
+      vi.doMock('@actions/github', () => ({
+        context: {
+          repo: { owner: 'test-owner', repo: 'test-repo' },
+          payload: { pull_request: { number: 123, head: { sha: 'abc123' } } },
+        },
+        getOctokit: vi.fn().mockReturnValue({
+          rest: {
+            pulls: {
+              get: vi.fn().mockResolvedValue({
+                data: { base: { ref: 'main' } },
+              }),
+            },
+          },
+        }),
+      }));
+
+      vi.doMock('../../code-scan-action/src/github', () => ({
+        getGitHubContext: vi.fn().mockReturnValue({
+          owner: 'test-owner',
+          repo: 'test-repo',
+          number: 123,
+          sha: 'abc123',
+        }),
+        getPRFiles: vi.fn().mockResolvedValue([{ path: 'src/index.ts', status: 'modified' }]),
+      }));
+
+      vi.doMock('../../code-scan-action/src/config', () => ({
+        generateConfigFile: vi.fn().mockReturnValue('/tmp/test-config.yaml'),
+      }));
+
+      const execMock = (await import('@actions/exec')).exec;
+
+      // Import fresh module
+      await import('../../code-scan-action/src/main');
+
+      const execCalls = vi.mocked(execMock).mock.calls;
+      const promptfooCalls = execCalls.filter(
+        (call) => call[0] === 'promptfoo' && Array.isArray(call[1]),
+      );
+
+      expect(promptfooCalls.length).toBeGreaterThan(0);
+
+      const cliArgs = promptfooCalls[0][1] as string[];
+      const baseIndex = cliArgs.indexOf('--base');
+
+      expect(baseIndex).toBeGreaterThan(-1);
+      expect(cliArgs[baseIndex + 1]).toBe('main');
     });
 
     it('should pass --base for stacked PR base branches', async () => {
+      // Simulate a stacked PR where base is another feature branch
       process.env.GITHUB_BASE_REF = 'feat/openai-sora-video-provider';
 
-      const { args } = await importActionAndGetPromptfooCall();
+      vi.resetModules();
 
-      expectCliArg(args, '--base', 'feat/openai-sora-video-provider');
-    });
+      vi.doMock('@actions/core', () => ({
+        getInput: vi.fn().mockImplementation((name: string) => {
+          if (name === 'github-token') {
+            return 'fake-token';
+          }
+          if (name === 'min-severity' || name === 'minimum-severity') {
+            return 'medium';
+          }
+          return '';
+        }),
+        getIDToken: vi.fn().mockResolvedValue('fake-oidc-token'),
+        info: vi.fn(),
+        warning: vi.fn(),
+        error: vi.fn(),
+        setFailed: vi.fn(),
+      }));
 
-    it('should not pass NPM_CONFIG_BEFORE to the promptfoo scan command', async () => {
-      process.env.GITHUB_BASE_REF = 'main';
-      process.env.NPM_CONFIG_BEFORE = '2026-03-29T00:00:00.000Z';
-      process.env.npm_config_before = '2026-03-29T00:00:00.000Z';
+      vi.doMock('@actions/exec', () => ({
+        exec: vi.fn().mockImplementation(async (command: string, _args: string[], options: any) => {
+          if (command === 'promptfoo' && options?.listeners?.stdout) {
+            const response = JSON.stringify({
+              success: true,
+              comments: [],
+              commentsPosted: false,
+            });
+            options.listeners.stdout(Buffer.from(response));
+          }
+          return 0;
+        }),
+      }));
 
-      const { options } = await importActionAndGetPromptfooCall();
+      vi.doMock('@actions/github', () => ({
+        context: {
+          repo: { owner: 'test-owner', repo: 'test-repo' },
+          payload: { pull_request: { number: 123, head: { sha: 'abc123' } } },
+        },
+        getOctokit: vi.fn(),
+      }));
 
-      expectSanitizedExecEnv(options);
-    });
+      vi.doMock('../../code-scan-action/src/github', () => ({
+        getGitHubContext: vi.fn().mockReturnValue({
+          owner: 'test-owner',
+          repo: 'test-repo',
+          number: 123,
+          sha: 'abc123',
+        }),
+        getPRFiles: vi.fn().mockResolvedValue([{ path: 'src/index.ts', status: 'modified' }]),
+      }));
 
-    it('should not pass NPM_CONFIG_BEFORE to npm install', async () => {
-      process.env.GITHUB_BASE_REF = 'main';
-      process.env.NPM_CONFIG_BEFORE = '2026-03-29T00:00:00.000Z';
-      process.env.npm_config_before = '2026-03-29T00:00:00.000Z';
+      vi.doMock('../../code-scan-action/src/config', () => ({
+        generateConfigFile: vi.fn().mockReturnValue('/tmp/test-config.yaml'),
+      }));
 
-      const { options } = await importActionAndGetNpmInstallCall();
+      const execMock = (await import('@actions/exec')).exec;
 
-      expectSanitizedExecEnv(options);
+      await import('../../code-scan-action/src/main');
+
+      const execCalls = vi.mocked(execMock).mock.calls;
+      const promptfooCalls = execCalls.filter(
+        (call) => call[0] === 'promptfoo' && Array.isArray(call[1]),
+      );
+
+      expect(promptfooCalls.length).toBeGreaterThan(0);
+
+      const cliArgs = promptfooCalls[0][1] as string[];
+      const baseIndex = cliArgs.indexOf('--base');
+
+      expect(baseIndex).toBeGreaterThan(-1);
+      expect(cliArgs[baseIndex + 1]).toBe('feat/openai-sora-video-provider');
     });
   });
 });

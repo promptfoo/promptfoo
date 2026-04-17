@@ -8,26 +8,26 @@ import { handleGEval } from '../../src/assertions/geval';
 import { runCompareAssertion } from '../../src/assertions/index';
 import { handleLlmRubric } from '../../src/assertions/llmRubric';
 import { handleModelGradedClosedQa } from '../../src/assertions/modelGradedClosedQa';
-import { matchesSelectBest } from '../../src/matchers/comparison';
-import {
-  matchesClosedQa,
-  matchesFactuality,
-  matchesGEval,
-  matchesLlmRubric,
-} from '../../src/matchers/llmGrading';
 import {
   matchesAnswerRelevance,
+  matchesClosedQa,
   matchesContextFaithfulness,
   matchesContextRecall,
   matchesContextRelevance,
-} from '../../src/matchers/rag';
-import { createMockProvider } from '../factories/provider';
+  matchesFactuality,
+  matchesGEval,
+  matchesLlmRubric,
+  matchesSelectBest,
+} from '../../src/matchers';
 
-import type { AssertionParams, CallApiContextParams } from '../../src/types/index';
+import type {
+  ApiProvider,
+  AssertionParams,
+  CallApiContextParams,
+  ProviderResponse,
+} from '../../src/types/index';
 
-vi.mock('../../src/matchers/comparison');
-vi.mock('../../src/matchers/llmGrading');
-vi.mock('../../src/matchers/rag');
+vi.mock('../../src/matchers');
 vi.mock('../../src/assertions/contextUtils', () => ({
   resolveContext: vi.fn().mockResolvedValue('mocked context'),
 }));
@@ -37,7 +37,10 @@ describe('Context Propagation in Model-Graded Assertions', () => {
     vi.resetAllMocks();
   });
 
-  const mockProvider = createMockProvider({ response: {} });
+  const mockProvider: ApiProvider = {
+    id: () => 'test-provider',
+    callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
+  };
 
   const mockCallApiContext: CallApiContextParams = {
     originalProvider: mockProvider,

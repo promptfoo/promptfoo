@@ -54,14 +54,13 @@ describe('ReportPage', () => {
   const mockedUseNavigate = vi.mocked(useNavigate);
 
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
 
     mockedUseUserStore.mockReturnValue({
       email: 'test@example.com',
       isLoading: false,
       fetchEmail: vi.fn(),
     });
-    mockedUseNavigate.mockReturnValue(vi.fn());
   });
 
   it('should render the Report component when evalId is present in the URL search parameters', () => {

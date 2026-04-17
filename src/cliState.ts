@@ -1,5 +1,3 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
-
 import type { UnifiedConfig } from './types/index';
 
 interface CliState {
@@ -47,32 +45,8 @@ interface CliState {
 
   // Maximum concurrency from CLI -j flag (propagated to providers like Python)
   maxConcurrency?: number;
-
-  withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T>;
 }
 
-const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
-let globalMaxConcurrency: number | undefined;
-
-const state: CliState = {
-  get maxConcurrency() {
-    const store = maxConcurrencyContext.getStore();
-    if (store) {
-      return store.maxConcurrency;
-    }
-    return globalMaxConcurrency;
-  },
-  set maxConcurrency(value: number | undefined) {
-    const store = maxConcurrencyContext.getStore();
-    if (store) {
-      store.maxConcurrency = value;
-      return;
-    }
-    globalMaxConcurrency = value;
-  },
-  withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T> {
-    return maxConcurrencyContext.run({ maxConcurrency }, fn);
-  },
-};
+const state: CliState = {};
 
 export default state;

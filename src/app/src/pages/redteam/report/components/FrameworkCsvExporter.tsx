@@ -3,7 +3,6 @@ import { DownloadIcon } from '@app/components/ui/icons';
 import { formatASRForDisplay } from '@promptfoo/app/src/utils/redteam';
 import {
   ALIASED_PLUGIN_MAPPINGS,
-  DOD_AI_ETHICS_PRINCIPLE_NAMES,
   FRAMEWORK_NAMES,
   type FrameworkComplianceId,
   OWASP_API_TOP_10_NAMES,
@@ -51,12 +50,8 @@ const CSVExporter = ({
     frameworksToShow.forEach((frameworkId) => {
       const framework = FRAMEWORK_NAMES[frameworkId];
 
-      if (
-        frameworkId === 'owasp:api' ||
-        frameworkId === 'owasp:llm' ||
-        frameworkId === 'dod:ai:ethics'
-      ) {
-        // Add data for categorized frameworks
+      if (frameworkId === 'owasp:api' || frameworkId === 'owasp:llm') {
+        // Add data for categorized OWASP frameworks
         Object.entries(ALIASED_PLUGIN_MAPPINGS[frameworkId]).forEach(
           ([categoryId, { plugins: categoryPlugins }]) => {
             const categoryNumber = categoryId.split(':').pop();
@@ -65,9 +60,7 @@ const CSVExporter = ({
                 ? OWASP_LLM_TOP_10_NAMES[Number.parseInt(categoryNumber) - 1]
                 : categoryNumber && frameworkId === 'owasp:api'
                   ? OWASP_API_TOP_10_NAMES[Number.parseInt(categoryNumber) - 1]
-                  : categoryNumber && frameworkId === 'dod:ai:ethics'
-                    ? DOD_AI_ETHICS_PRINCIPLE_NAMES[Number.parseInt(categoryNumber) - 1]
-                    : `Category ${categoryNumber}`;
+                  : `Category ${categoryNumber}`;
 
             // Expand plugins if needed
             const expandedPlugins = expandPluginCollections(categoryPlugins, categoryStats);

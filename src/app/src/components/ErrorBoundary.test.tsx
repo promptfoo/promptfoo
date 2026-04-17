@@ -25,6 +25,7 @@ describe('ErrorBoundary', () => {
 
       const ErrorComponent = () => {
         throw new Error('Test error');
+        return null;
       };
 
       // Suppress console errors for this test since we're intentionally throwing an error
@@ -54,6 +55,7 @@ describe('ErrorBoundary', () => {
 
       const ErrorThrowingComponent = () => {
         throw new Error('Test Error');
+        return null;
       };
 
       // Suppress console errors for this test since we're intentionally throwing an error

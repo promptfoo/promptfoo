@@ -9,7 +9,6 @@ import {
   supportsImageInput,
   type TextInput,
 } from '../../../src/providers/openai/moderation';
-import { getOpenAiMissingApiKeyMessage } from './shared';
 
 vi.mock('../../../src/cache');
 vi.mock('../../../src/logger');
@@ -175,25 +174,8 @@ describe('OpenAiModerationProvider', () => {
 
       // Verify we got an error response with the expected message
       expect(result).toHaveProperty('error');
-      expect(result.error).toContain(getOpenAiMissingApiKeyMessage());
+      expect(result.error).toContain('OpenAI API key is not set');
       expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('API error'));
-    });
-
-    it('should use custom apiKeyEnvar in missing API key errors', async () => {
-      const provider = new OpenAiModerationProvider('text-moderation-latest', {
-        config: {
-          apiKeyEnvar: 'CUSTOM_MODERATION_API_KEY',
-        },
-        env: {
-          OPENAI_API_KEY: undefined,
-          CUSTOM_MODERATION_API_KEY: undefined,
-        },
-      });
-      vi.spyOn(provider, 'getApiKey').mockReturnValue('');
-
-      const result = await provider.callModerationApi('user', 'assistant');
-
-      expect(result.error).toContain(getOpenAiMissingApiKeyMessage('CUSTOM_MODERATION_API_KEY'));
     });
 
     it('should handle empty results from API', async () => {

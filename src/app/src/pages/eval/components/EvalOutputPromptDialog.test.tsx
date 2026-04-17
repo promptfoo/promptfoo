@@ -1,9 +1,7 @@
 import * as ReactDOM from 'react-dom/client';
 
-import { mockClipboard } from '@app/tests/browserMocks';
-import { useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
@@ -159,11 +157,10 @@ describe('EvalOutputPromptDialog', () => {
   });
 
   it('copies prompt to clipboard when copy button is clicked', async () => {
-    const user = userEvent.setup();
-    const clipboard = {
+    const mockClipboard = {
       writeText: vi.fn().mockResolvedValue(undefined),
     };
-    mockClipboard({ writeText: clipboard.writeText as Clipboard['writeText'] });
+    Object.assign(navigator, { clipboard: mockClipboard });
 
     renderWithProviders(<EvalOutputPromptDialog {...defaultProps} />);
 
@@ -172,14 +169,15 @@ describe('EvalOutputPromptDialog', () => {
     const promptContainer = promptText.closest('.relative');
     expect(promptContainer).toBeInTheDocument();
 
-    await user.hover(promptContainer!);
+    // Trigger hover to make copy button visible
+    fireEvent.mouseEnter(promptContainer!);
 
     // Wait for the copy button to appear after hover
     const copyButton = await screen.findByRole('button', { name: /^copy\s*$/i });
     expect(copyButton).toBeInTheDocument();
     await userEvent.click(copyButton);
 
-    expect(clipboard.writeText).toHaveBeenCalledWith('Test prompt');
+    expect(mockClipboard.writeText).toHaveBeenCalledWith('Test prompt');
     // Wait for Check icon to appear after state update (use document.body because Sheet uses portals)
     await waitFor(() => {
       expect(document.body.querySelector('svg.lucide-check')).toBeInTheDocument();
@@ -187,11 +185,10 @@ describe('EvalOutputPromptDialog', () => {
   });
 
   it('copies assertion value to clipboard when copy button is clicked', async () => {
-    const user = userEvent.setup();
-    const clipboard = {
+    const mockClipboard = {
       writeText: vi.fn().mockResolvedValue(undefined),
     };
-    mockClipboard({ writeText: clipboard.writeText as Clipboard['writeText'] });
+    Object.assign(navigator, { clipboard: mockClipboard });
 
     renderWithProviders(<EvalOutputPromptDialog {...defaultProps} />);
 
@@ -202,14 +199,14 @@ describe('EvalOutputPromptDialog', () => {
     // Trigger the hover event on the value cell to make the copy button visible
     const valueCell = screen.getByText('expected value').closest('td');
     if (valueCell) {
-      await user.hover(valueCell);
+      fireEvent.mouseEnter(valueCell);
     }
 
     // Get the button by its aria-label
     const copyButton = screen.getByLabelText('Copy assertion value 0');
     await userEvent.click(copyButton);
 
-    expect(clipboard.writeText).toHaveBeenCalledWith('expected value');
+    expect(mockClipboard.writeText).toHaveBeenCalledWith('expected value');
     // Wait for Check icon to appear after state update (use document.body because Sheet uses portals)
     await waitFor(() => {
       expect(document.body.querySelector('svg.lucide-check')).toBeInTheDocument();
@@ -347,7 +344,7 @@ describe('EvalOutputPromptDialog', () => {
 
   it('handles unmounting during drawer transition', async () => {
     // This test needs fake timers to control transition timing
-    const timers = useTestTimers();
+    vi.useFakeTimers();
 
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -355,34 +352,24 @@ describe('EvalOutputPromptDialog', () => {
     const transitionDuration = { enter: 320, exit: 250 };
 
     const root = ReactDOM.createRoot(container);
-    let isUnmounted = false;
+    root.render(<EvalOutputPromptDialog {...defaultProps} />);
 
-    try {
-      root.render(<EvalOutputPromptDialog {...defaultProps} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
 
-      await act(async () => {
-        await timers.advanceByAsync(50);
-      });
+    act(() => {
+      root.unmount();
+    });
 
-      act(() => {
-        root.unmount();
-        isUnmounted = true;
-      });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(transitionDuration.enter);
+    });
 
-      await act(async () => {
-        await timers.advanceByAsync(transitionDuration.enter);
-      });
+    expect(true).toBe(true);
 
-      expect(true).toBe(true);
-    } finally {
-      if (!isUnmounted) {
-        act(() => {
-          root.unmount();
-        });
-      }
-      container.remove();
-      timers.restore({ runPending: true });
-    }
+    document.body.removeChild(container);
+    vi.useRealTimers();
   });
 
   it('passes the promptIndex prop to DebuggingPanel when provided', async () => {
@@ -621,8 +608,6 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
 
   it('maintains expanded state if second click is after threshold', async () => {
     const longValue = 'a'.repeat(400);
-    let now = 1_000;
-    const dateNowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
     const propsWithLongValue = {
       ...defaultProps,
       metadata: {
@@ -641,14 +626,13 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
 
     expect(screen.getByText(longValue)).toBeInTheDocument();
 
-    // Advance logical time beyond the double-click threshold without a real delay.
-    now += 310;
+    // Wait just over the double-click threshold (300ms) using real delay
+    await new Promise((resolve) => setTimeout(resolve, 310));
 
     // Second click should keep it expanded (not counted as double-click)
     await user.click(cell);
 
     expect(screen.getByText(longValue)).toBeInTheDocument();
-    dateNowSpy.mockRestore();
   });
 
   it('should reset filters, apply the selected metadata filter, and close the dialog when the filter button is clicked in the Metadata tab', async () => {

@@ -39,7 +39,18 @@ import {
   makeDefaultPolicyName,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
-import { BarChart2, ChevronDown, Eye, Info, Play, Save, Search, Sliders, X } from 'lucide-react';
+import {
+  BarChart2,
+  ChevronDown,
+  Eye,
+  Info,
+  Play,
+  Save,
+  Search,
+  Sliders,
+  Square,
+  X,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
@@ -196,8 +207,10 @@ export default function Review({
 
   // Recover job state on mount (e.g., after navigation)
   // Wait for Zustand to hydrate from localStorage before checking savedJobId
+  // Using "use no memo" - this effect intentionally runs once after hydration with limited deps
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
+    'use no memo';
     if (!_hasHydrated || hasAttemptedRecovery.current) {
       return;
     }
@@ -844,7 +857,7 @@ export default function Review({
         <div className="mt-6 rounded-lg border border-border shadow-sm">
           {/* Application Details */}
           <Collapsible open={isPurposeExpanded} onOpenChange={setIsPurposeExpanded}>
-            <CollapsibleTrigger className="flex w-full items-center justify-between border-b border-border p-4 hover:bg-muted/50">
+            <CollapsibleTrigger className="flex w-full items-center justify-between border-b p-4 hover:bg-muted/50">
               <div className="flex items-center gap-2">
                 <Info className="size-4 text-muted-foreground" />
                 <h3 className="text-lg font-semibold">Application Details</h3>
@@ -926,7 +939,7 @@ export default function Review({
                 {parsedPurposeSections.length > 0 ? (
                   <div className="mt-2 space-y-4">
                     {parsedPurposeSections.map((section, index) => (
-                      <div key={index} className="overflow-hidden rounded-lg border border-border">
+                      <div key={index} className="overflow-hidden rounded-lg border">
                         <button
                           type="button"
                           onClick={() => togglePurposeSection(section.title)}
@@ -1005,7 +1018,7 @@ export default function Review({
 
           {/* Advanced Configuration */}
           <Collapsible open={isAdvancedConfigExpanded} onOpenChange={setIsAdvancedConfigExpanded}>
-            <CollapsibleTrigger className="flex w-full items-center justify-between border-b border-border p-4 hover:bg-muted/50">
+            <CollapsibleTrigger className="flex w-full items-center justify-between border-b p-4 hover:bg-muted/50">
               <div className="flex items-center gap-2">
                 <Sliders className="size-4 text-muted-foreground" />
                 <h3 className="text-lg font-semibold">Advanced Configuration</h3>
@@ -1049,7 +1062,6 @@ export default function Review({
               <div className="p-4 pt-0">
                 <RunOptionsContent
                   numTests={config.numTests}
-                  maxCharsPerMessage={config.maxCharsPerMessage}
                   runOptions={{
                     maxConcurrency: config.maxConcurrency,
                     delay: config.target.config.delay,
@@ -1147,7 +1159,7 @@ export default function Review({
                 </Tooltip>
                 {isRunning && (
                   <Button variant="destructive" onClick={handleCancel} className="gap-2">
-                    <X className="size-4" />
+                    <Square className="size-4" />
                     Cancel
                   </Button>
                 )}

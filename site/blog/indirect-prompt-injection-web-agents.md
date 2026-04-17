@@ -2,6 +2,7 @@
 title: 'Indirect Prompt Injection in Web-Browsing Agents'
 description: 'Test if AI browsing agents follow malicious instructions or leak data with the indirect-web-pwn strategy.'
 image: /img/docs/indirect-web-pwn-architecture.png
+featured: true
 keywords:
   [
     indirect prompt injection,

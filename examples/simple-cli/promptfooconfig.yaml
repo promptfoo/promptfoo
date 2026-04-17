@@ -6,7 +6,7 @@ prompts:
   - 'Translate this to conversational {{language}}: {{body}}'
 
 providers:
-  - openai:chat:gpt-5.4-mini
+  - openai:gpt-5-mini
 
 tests:
   - vars:

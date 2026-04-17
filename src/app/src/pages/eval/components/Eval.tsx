@@ -17,7 +17,6 @@ import { ResultsFilter, useResultsViewSettingsStore, useTableStore } from './sto
 import './Eval.css';
 
 import { useToast } from '@app/hooks/useToast';
-import logger from '../../../../../logger';
 import { useFilterMode } from './FilterModeProvider';
 
 interface EvalOptions {
@@ -197,7 +196,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     }
 
     if (fetchId) {
-      logger.debug('[Eval] Fetching eval by id', { fetchId });
+      console.log('Eval init: Fetching eval by id', { fetchId });
       const run = async () => {
         const success = await loadEvalById(fetchId);
         if (success) {
@@ -209,7 +208,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       };
       run();
     } else if (IS_RUNNING_LOCALLY) {
-      logger.debug('[Eval] Using local server websocket', {});
+      console.log('Eval init: Using local server websocket');
 
       // Determine socket path based on deployment configuration:
       // - If apiBaseUrl points to a different origin, use default /socket.io (remote server manages its own)
@@ -246,7 +245,7 @@ export default function Eval({ fetchId }: EvalOptions) {
        */
       const handleResultsFile = async (data: ResultsFile | { evalId?: string } | null) => {
         if (!data) {
-          logger.debug('[Eval] No eval data available', {});
+          console.log('No eval data available');
           setTable(null);
           setConfig(null);
           setEvalId('');
@@ -270,7 +269,7 @@ export default function Eval({ fetchId }: EvalOptions) {
 
       socket
         .on('init', async (data) => {
-          logger.debug('[Eval] Initialized socket connection', { data });
+          console.log('Initialized socket connection', data);
           await handleResultsFile(data);
         })
         /**
@@ -278,7 +277,7 @@ export default function Eval({ fetchId }: EvalOptions) {
          * result has been received.
          */
         .on('update', async (data) => {
-          logger.debug('[Eval] Received data update', { data });
+          console.log('Received data update', data);
           await handleResultsFile(data);
         });
 
@@ -287,7 +286,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         setIsStreaming(false);
       };
     } else {
-      logger.debug('[Eval] Fetching eval via recent', {});
+      console.log('Eval init: Fetching eval via recent');
       // Fetch from server
       const run = async () => {
         const evals = await fetchRecentFileEvals();
@@ -309,7 +308,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       };
       run();
     }
-    logger.debug('[Eval] Resetting comparison mode', {});
+    console.log('Eval init: Resetting comparison mode');
     setInComparisonMode(false);
     setComparisonEvalIds([]);
   }, [
@@ -373,7 +372,11 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   return (
     <ShiftKeyProvider>
-      {isRedteam && evalId && <EnterpriseBanner evalId={evalId} className="mb-4 mt-4 mx-4" />}
+      {isRedteam && evalId && (
+        <div className="mb-4 mt-4 mx-4">
+          <EnterpriseBanner evalId={evalId} />
+        </div>
+      )}
       <ResultsView
         defaultEvalId={defaultEvalId}
         recentEvals={recentEvals}

@@ -233,13 +233,11 @@ tests:
     assert:
       - type: javascript
         value: |
-          // Check Bedrock-native trace metadata for action group usage
-          context.providerResponse?.metadata?.trace?.some(t =>
+          // Check trace for tool usage
+          metadata?.trace?.some(t => 
             t.actionGroupTrace?.actionGroupName === 'calculator'
           )
 ```
-
-`enableTrace` exposes Amazon Bedrock's native agent trace in `context.providerResponse.metadata.trace`. That is separate from Promptfoo's OpenTelemetry `context.trace`. Use JavaScript assertions against `metadata.trace` for Bedrock-specific action group details, and use [Promptfoo tracing](/docs/tracing/) plus trajectory assertions when you want OTEL-based workflow checks.
 
 ## Authentication
 
@@ -383,8 +381,8 @@ tests:
     assert:
       - type: javascript
         value: |
-          // Verify the weather API was called via Bedrock trace metadata
-          context.providerResponse?.metadata?.trace?.some(trace =>
+          // Verify the weather API was called
+          metadata?.trace?.some(trace =>
             trace.actionGroupTrace?.actionGroupName === 'weather-api'
           )
 ```

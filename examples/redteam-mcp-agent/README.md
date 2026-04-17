@@ -1,4 +1,4 @@
-# redteam-mcp-agent (Red Team MCP Agent)
+# redteam-mcp-agent
 
 This example demonstrates how to red team test AI agents that integrate with Model Context Protocol (MCP) servers. It creates a custom OpenAI-based ReAct agent provider that can interact with MCP servers, allowing you to test agent behavior when given access to potentially malicious tools.
 
@@ -6,7 +6,6 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-mcp-agent
-cd redteam-mcp-agent
 ```
 
 ## Overview
@@ -59,7 +58,7 @@ npx promptfoo@latest redteam run
 
 ## Project Structure
 
-```text
+```
 redteam-mcp-agent/
 ├── src/
 │   ├── openai-agent-provider.js  # Custom OpenAI agent provider
@@ -218,7 +217,7 @@ Update the model in the provider configuration:
 config:
   model: "gpt-4o-mini"  # More cost-effective option
   # or
-  model: "openai:chat:gpt-5.4"      # Latest OpenAI model
+  model: "openai:gpt-5"      # Latest OpenAI model
 ```
 
 ## Security Considerations

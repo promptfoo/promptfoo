@@ -10,7 +10,7 @@
 
 import { Profiler, useState } from 'react';
 
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 // Test components that simulate common patterns
@@ -104,12 +104,6 @@ function createMetricsCollector(): {
   };
 }
 
-function benchmarkClick(element: HTMLElement) {
-  act(() => {
-    element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-  });
-}
-
 describe('React Compiler Performance Benchmarks', () => {
   beforeEach(() => {
     cleanup();
@@ -119,7 +113,7 @@ describe('React Compiler Performance Benchmarks', () => {
     cleanup();
   });
 
-  it('measures callback stability impact on list re-renders', () => {
+  it('measures callback stability impact on list re-renders', async () => {
     const { metrics, onRender } = createMetricsCollector();
 
     render(
@@ -131,11 +125,10 @@ describe('React Compiler Performance Benchmarks', () => {
     // Initial render
     expect(metrics.renderCount).toBe(1);
 
-    // Trigger multiple state updates — use low-level dispatch to avoid
-    // userEvent overhead distorting the benchmark.
+    // Trigger multiple state updates
     const button = screen.getByTestId('increment');
     for (let i = 0; i < 10; i++) {
-      benchmarkClick(button);
+      fireEvent.click(button);
     }
 
     // With React Compiler, children should NOT re-render when callbacks are stable
@@ -152,7 +145,7 @@ describe('React Compiler Performance Benchmarks', () => {
     expect(metrics.renderCount).toBeGreaterThan(0);
   });
 
-  it('measures expensive child memoization', () => {
+  it('measures expensive child memoization', async () => {
     const { metrics, onRender } = createMetricsCollector();
 
     render(
@@ -163,11 +156,10 @@ describe('React Compiler Performance Benchmarks', () => {
 
     const initialActualDuration = metrics.totalActualDuration;
 
-    // Trigger state updates that should NOT affect expensive child — use
-    // low-level dispatch to avoid userEvent overhead distorting the benchmark.
+    // Trigger state updates that should NOT affect expensive child
     const button = screen.getByTestId('increment');
     for (let i = 0; i < 5; i++) {
-      benchmarkClick(button);
+      fireEvent.click(button);
     }
 
     const updateDuration = metrics.totalActualDuration - initialActualDuration;

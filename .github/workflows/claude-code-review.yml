@@ -1,0 +1,114 @@
+name: Claude Code Review
+
+on:
+  pull_request_target:
+    types: [opened, ready_for_review, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  claude-review:
+    # Skip for bot PRs and fork PRs due to OIDC token limitations in pull_request_target
+    # Fork PRs fail because the actor in OIDC context is the fork contributor (read-only)
+    if: |
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.user.type != 'Bot' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Pass event data as env vars to avoid shell injection via ${{ }} interpolation
+    env:
+      EVENT_ACTION: ${{ github.event.action }}
+      EVENT_BEFORE: ${{ github.event.before }}
+      EVENT_AFTER: ${{ github.event.after }}
+      PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+      REPOSITORY: ${{ github.repository }}
+
+    steps:
+      # Checkout main branch to get workflow helper files (script, prompt template)
+      # We use the default ref (main) because pull_request_target runs workflow from base
+      # but the base.sha might be older than when helper files were added
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # Need full history for incremental diffs
+          persist-credentials: false
+
+      - name: Fetch PR commits for diff comparison
+        run: |
+          # Validate SHA format before using in git commands
+          validate_sha() {
+            local sha="$1"
+            local name="$2"
+            if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::Invalid $name SHA format"
+              exit 1
+            fi
+          }
+
+          validate_sha "$PR_BASE_SHA" "base"
+          validate_sha "$PR_HEAD_SHA" "head"
+
+          # Fetch both base and head SHAs
+          git fetch origin "$PR_BASE_SHA" "$PR_HEAD_SHA"
+
+          # Verify the fetches succeeded
+          if ! git rev-parse --verify "$PR_BASE_SHA^{commit}" >/dev/null 2>&1; then
+            echo "::error::Failed to fetch PR base SHA"
+            exit 1
+          fi
+          if ! git rev-parse --verify "$PR_HEAD_SHA^{commit}" >/dev/null 2>&1; then
+            echo "::error::Failed to fetch PR head SHA"
+            exit 1
+          fi
+
+      - name: Determine review scope
+        id: review_scope
+        run: .github/scripts/determine-review-scope.sh
+
+      - name: Prepare review prompt
+        id: prompt
+        run: |
+          # Read the prompt template and substitute variables
+          PROMPT=$(cat .github/prompts/claude-code-review.md)
+          PROMPT="${PROMPT//\{\{PR_NUMBER\}\}/$PR_NUMBER}"
+          PROMPT="${PROMPT//\{\{REPOSITORY\}\}/$REPOSITORY}"
+          PROMPT="${PROMPT//\{\{PR_TITLE\}\}/$PR_TITLE}"
+          PROMPT="${PROMPT//\{\{PR_AUTHOR\}\}/$PR_AUTHOR}"
+          PROMPT="${PROMPT//\{\{REVIEW_SCOPE\}\}/${{ steps.review_scope.outputs.scope }}}"
+          PROMPT="${PROMPT//\{\{BASE_SHA\}\}/${{ steps.review_scope.outputs.base_sha }}}"
+          PROMPT="${PROMPT//\{\{HEAD_SHA\}\}/${{ steps.review_scope.outputs.head_sha }}}"
+
+          # Write to env file for multiline output
+          {
+            echo "REVIEW_PROMPT<<PROMPT_EOF"
+            echo "$PROMPT"
+            echo "PROMPT_EOF"
+          } >> "$GITHUB_ENV"
+
+          # Log for debugging
+          echo "Review scope: ${{ steps.review_scope.outputs.scope }}"
+          echo "Base SHA: ${{ steps.review_scope.outputs.base_sha }}"
+          echo "Head SHA: ${{ steps.review_scope.outputs.head_sha }}"
+
+      - name: Run Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: ${{ env.REVIEW_PROMPT }}
+          show_full_output: true
+          allowed_bots: use-tusk
+          claude_args: '--model opus --max-turns 30 --allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(git diff:*),Bash(git show:*),Bash(gh api:*)"'

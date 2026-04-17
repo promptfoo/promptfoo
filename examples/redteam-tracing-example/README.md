@@ -1,11 +1,4 @@
-# redteam-tracing-example (Red Team Tracing)
-
-You can run this example with:
-
-```bash
-npx promptfoo@latest init --example redteam-tracing-example
-cd redteam-tracing-example
-```
+# Red Team Tracing Example
 
 This example demonstrates how to use tracing with red team strategies to provide attackers and graders with visibility into the internal operations of your LLM application.
 
@@ -205,7 +198,7 @@ tests:
 
 When `includeInAttack: true`, the attacker receives a trace summary like:
 
-```text
+```
 Trace 0af76519 • 5 spans
 
 Execution Flow:
@@ -353,7 +346,7 @@ See the example configurations:
 
 - `promptfooconfig.yaml` - Basic tracing setup
 - `promptfooconfig.advanced.yaml` - Advanced configuration
-- `promptfooconfig-simple.yaml` - Simplified configuration
+- `promptfooconfig.strategies.yaml` - Strategy-specific settings
 
 ## Troubleshooting
 

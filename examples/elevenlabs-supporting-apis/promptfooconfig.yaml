@@ -1,0 +1,177 @@
+# yaml-language-server: $schema=../../site/static/config-schema.json
+description: ElevenLabs Supporting APIs reference
+# NOTE: This is a reference/documentation example showing API configuration patterns.
+# For working examples, see individual provider directories (elevenlabs-isolation, elevenlabs-alignment, etc.)
+
+prompts:
+  - 'Reference example for ElevenLabs supporting APIs'
+
+providers:
+  # Conversation History - Retrieve specific conversation
+  - id: elevenlabs:history
+    label: History - Get Conversation
+    # Note: This requires a valid conversation ID from a previous agent interaction
+
+  # Conversation History - List conversations for agent
+  - id: elevenlabs:history
+    label: History - List Conversations
+    config:
+      agentId: agent_example_456 # Replace with your agent ID
+
+  # Audio Isolation - Remove background noise
+  - id: elevenlabs:isolation
+    label: Audio Isolation (MP3 128kbps)
+    config:
+      outputFormat: mp3_44100_128
+
+  # Audio Isolation - High quality output
+  - id: elevenlabs:isolation
+    label: Audio Isolation (MP3 192kbps)
+    config:
+      outputFormat: mp3_44100_192
+
+  # Forced Alignment - JSON format
+  - id: elevenlabs:alignment
+    label: Alignment - JSON Output
+    # Returns complete alignment data with word and character timestamps
+
+  # Forced Alignment - SRT subtitles
+  - id: elevenlabs:alignment
+    label: Alignment - SRT Subtitles
+    # Returns SRT format suitable for video subtitles
+
+  # Forced Alignment - VTT subtitles
+  - id: elevenlabs:alignment
+    label: Alignment - VTT Subtitles
+    # Returns WebVTT format for web players
+
+# Test variables for demonstration
+# In real usage, these would be provided via --vars or context
+defaultTest:
+  vars:
+    # For conversation history (requires real conversation ID from an agent)
+    conversationId: conv_example_123 # Placeholder - won't work without real ID
+    agentId: agent_example_456 # Placeholder - won't work without real ID
+
+    # For audio isolation - using real audio from elevenlabs-stt example
+    audioFile: ../elevenlabs-stt/audio/sample1.mp3
+
+    # For forced alignment
+    transcript: Welcome to ElevenLabs. This is a test.
+    format: srt # json, srt, or vtt
+
+tests:
+  # NOTE: These tests are for documentation/reference only.
+  # They require real conversation IDs, audio files, and video files to run.
+  # For working tests, see individual provider examples (elevenlabs-isolation, elevenlabs-alignment, etc.)
+
+  # Conversation History Tests
+  - description: Conversation retrieval succeeds
+    vars:
+      conversationId: conv_example_123
+    assert:
+      - type: javascript
+        value: |
+          const result = JSON.parse(output);
+          return result.conversationId || result.conversation_id;
+
+  - description: Conversation list returns results
+    vars:
+      agentId: agent_example_456
+    assert:
+      - type: javascript
+        value: |
+          const result = JSON.parse(output);
+          return result.total_conversations !== undefined;
+
+  # Audio Isolation Tests
+  - description: Audio isolation completes successfully
+    vars:
+      audioFile: ./audio/noisy-recording.mp3
+    assert:
+      - type: javascript
+        value: output.includes('isolated successfully') || output.includes('audio')
+      - type: latency
+        threshold: 60000 # 1 minute for audio processing
+
+  - description: Isolated audio is smaller than original
+    vars:
+      audioFile: ./audio/noisy-recording.mp3
+    assert:
+      - type: javascript
+        value: |
+          const result = JSON.parse(output);
+          return result.metadata?.isolatedSizeBytes < result.metadata?.originalSizeBytes;
+
+  # Forced Alignment Tests
+  - description: Alignment generates word timestamps
+    vars:
+      audioFile: ./audio/speech.mp3
+      transcript: Welcome to ElevenLabs
+      format: json
+    assert:
+      - type: javascript
+        value: |
+          const result = JSON.parse(output);
+          return result.word_alignments && result.word_alignments.length > 0;
+
+  - description: SRT format is valid
+    vars:
+      audioFile: ./audio/speech.mp3
+      transcript: Welcome to ElevenLabs
+      format: srt
+    assert:
+      - type: javascript
+        value: |
+          // SRT should have sequence numbers and timestamps
+          return output.includes('-->') && /^\d+$/m.test(output);
+
+  - description: VTT format includes header
+    vars:
+      audioFile: ./audio/speech.mp3
+      transcript: Welcome to ElevenLabs
+      format: vtt
+    assert:
+      - type: javascript
+        value: output.startsWith('WEBVTT')
+
+  - description: Alignment latency is reasonable
+    vars:
+      audioFile: ./audio/speech.mp3
+      transcript: Welcome to ElevenLabs
+    assert:
+      - type: latency
+        threshold: 120000 # 2 minutes for alignment
+
+  # Advanced: Pipeline tests
+  - description: 'Pipeline: Isolation → STT works'
+    # First isolate audio, then transcribe
+    vars:
+      audioFile: ./audio/noisy-recording.mp3
+    assert:
+      - type: javascript
+        value: |
+          // Check that isolation metadata is present
+          const result = JSON.parse(output);
+          return result.metadata?.isolatedSizeBytes > 0;
+
+  - description: 'Pipeline: TTS → Alignment works'
+    # Generate audio, then create subtitles
+    vars:
+      audioFile: ./audio/generated-speech.mp3
+      transcript: This is generated speech from ElevenLabs TTS
+    assert:
+      - type: javascript
+        value: |
+          const result = JSON.parse(output);
+          return result.word_alignments?.length > 0 || output.includes('-->');
+
+  - description: 'Pipeline: Agent → History works'
+    # Run agent conversation, then retrieve history
+    vars:
+      conversationId: conv_recent_123
+    assert:
+      - type: javascript
+        value: |
+          const result = JSON.parse(output);
+          return result.history || result.conversation_id;

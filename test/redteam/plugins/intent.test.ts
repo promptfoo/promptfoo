@@ -3,13 +3,17 @@ import * as path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
-import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
+import { matchesLlmRubric } from '../../../src/matchers';
 import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';
-import { createMockProvider } from '../../factories/provider';
 
-import type { AtomicTestCase, TestCase } from '../../../src/types/index';
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiFunction,
+  TestCase,
+} from '../../../src/types/index';
 
-vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
+vi.mock('../../../src/matchers', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     matchesLlmRubric: vi.fn(),
@@ -62,7 +66,10 @@ vi.mock('glob', async (importOriginal) => {
 vi.mock('better-sqlite3');
 
 describe('IntentPlugin', () => {
-  const mockProvider = createMockProvider();
+  const mockProvider: ApiProvider = {
+    id: () => 'test-provider',
+    callApi: vi.fn() as CallApiFunction,
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -310,18 +317,11 @@ describe('IntentPlugin', () => {
       intent: ['intent1', 'intent2'],
     });
 
-    vi.useFakeTimers();
-    try {
-      const start = Date.now();
-      const testsPromise = plugin.generateTests(1, 100);
+    const start = Date.now();
+    await plugin.generateTests(1, 100);
+    const duration = Date.now() - start;
 
-      await vi.runAllTimersAsync();
-      await testsPromise;
-
-      expect(Date.now() - start).toBeGreaterThanOrEqual(100);
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(duration).toBeGreaterThanOrEqual(100);
   });
 
   it('should handle concurrent intent extractions', async () => {

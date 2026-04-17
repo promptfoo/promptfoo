@@ -1,7 +1,5 @@
-import { mockObjectUrl, mockWindowLocation } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
-import { screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, screen } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TestSuites from './TestSuites';
@@ -15,11 +13,6 @@ vi.mock('@app/hooks/useTelemetry', () => ({
     recordEvent: vi.fn(),
   }),
 }));
-
-function mockCsvDownloadApis() {
-  mockObjectUrl('blob:test');
-  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
-}
 
 describe('TestSuites Component', () => {
   const mockNavigate = vi.fn();
@@ -45,7 +38,10 @@ describe('TestSuites Component', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    mockWindowLocation({ search: '?evalId=test-eval-123' });
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { search: '?evalId=test-eval-123' },
+    });
   });
 
   it('should render empty state message when categoryStats is empty', () => {
@@ -161,17 +157,19 @@ describe('TestSuites Component Navigation', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    mockWindowLocation({ search: '?evalId=test-eval-123' });
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { search: '?evalId=test-eval-123' },
+    });
   });
 
-  it('should navigate to eval page with correct search params when clicking View logs', async () => {
-    const user = userEvent.setup();
+  it('should navigate to eval page with correct search params when clicking View logs', () => {
     renderWithProviders(<TestSuites {...defaultProps} />);
 
     const viewLogsButtons = screen.getAllByText('View logs');
     const viewLogsButton = viewLogsButtons[0];
 
-    await user.click(viewLogsButton);
+    fireEvent.click(viewLogsButton);
 
     const expectedFilter = encodeURIComponent(
       JSON.stringify([
@@ -187,14 +185,13 @@ describe('TestSuites Component Navigation', () => {
     );
   });
 
-  it('should navigate to eval page with a JSON-encoded filter and mode=failures when attackSuccessRate > 0', async () => {
-    const user = userEvent.setup();
+  it('should navigate to eval page with a JSON-encoded filter and mode=failures when attackSuccessRate > 0', () => {
     renderWithProviders(<TestSuites {...defaultProps} />);
 
     const viewLogsButtons = screen.getAllByText('View logs');
     const viewLogsButton = viewLogsButtons[0];
 
-    await user.click(viewLogsButton);
+    fireEvent.click(viewLogsButton);
 
     const expectedFilter = encodeURIComponent(
       JSON.stringify([
@@ -209,28 +206,26 @@ describe('TestSuites Component Navigation', () => {
       `/eval/test-eval-123?filter=${expectedFilter}&mode=failures`,
     );
   });
-  it('should not navigate again when browser back button is used', async () => {
-    const user = userEvent.setup();
+  it('should not navigate again when browser back button is used', () => {
     renderWithProviders(<TestSuites {...defaultProps} />);
 
     const viewLogsButtons = screen.getAllByText('View logs');
     const viewLogsButton = viewLogsButtons[0];
 
-    await user.click(viewLogsButton);
+    fireEvent.click(viewLogsButton);
 
     window.history.back();
 
     expect(mockNavigate).toHaveBeenCalledTimes(1);
   });
 
-  it('should navigate to eval page with correctly encoded search params when pluginId contains special characters', async () => {
-    const user = userEvent.setup();
+  it('should navigate to eval page with correctly encoded search params when pluginId contains special characters', () => {
     renderWithProviders(<TestSuites {...defaultProps} />);
 
     const viewLogsButtons = screen.getAllByText('View logs');
     const viewLogsButton = viewLogsButtons[1];
 
-    await user.click(viewLogsButton);
+    fireEvent.click(viewLogsButton);
 
     const expectedFilter = encodeURIComponent(
       JSON.stringify([
@@ -244,6 +239,27 @@ describe('TestSuites Component Navigation', () => {
     expect(mockNavigate).toHaveBeenCalledWith(
       `/eval/test-eval-123?filter=${expectedFilter}&mode=failures`,
     );
+  });
+
+  it('should open email in new tab when clicking Apply mitigation', () => {
+    const mockOpen = vi.fn();
+    const originalOpen = window.open;
+    window.open = mockOpen;
+
+    renderWithProviders(<TestSuites {...defaultProps} />);
+
+    const applyMitigationButtons = screen.getAllByText('Apply mitigation');
+    const applyMitigationButton = applyMitigationButtons[0];
+
+    fireEvent.click(applyMitigationButton);
+
+    expect(mockOpen).toHaveBeenCalledWith(
+      'mailto:inquiries@promptfoo.dev?subject=Promptfoo%20automatic%20vulnerability%20mitigation&body=Hello%20Promptfoo%20Team,%0D%0A%0D%0AI%20am%20interested%20in%20learning%20more%20about%20the%20automatic%20vulnerability%20mitigation%20beta.%20Please%20provide%20me%20with%20more%20details.%0D%0A%0D%0A',
+      '_blank',
+    );
+
+    // Restore original window.open
+    window.open = originalOpen;
   });
 });
 
@@ -271,17 +287,19 @@ describe('TestSuites Component Navigation with Missing EvalId', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    mockWindowLocation({ search: '' });
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { search: '' },
+    });
   });
 
-  it('should navigate to eval page without evalId when evalId is missing from URL parameters', async () => {
-    const user = userEvent.setup();
+  it('should navigate to eval page without evalId when evalId is missing from URL parameters', () => {
     renderWithProviders(<TestSuites {...defaultProps} />);
 
     const viewLogsButtons = screen.getAllByText('View logs');
     const viewLogsButton = viewLogsButtons[0];
 
-    await user.click(viewLogsButton);
+    fireEvent.click(viewLogsButton);
 
     const expectedFilter = encodeURIComponent(
       JSON.stringify([
@@ -328,7 +346,10 @@ describe('TestSuites Component Filtering', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    mockWindowLocation({ search: '?evalId=test-eval-123' });
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { search: '?evalId=test-eval-123' },
+    });
   });
 
   it('should filter out subcategories with zero total tests', () => {
@@ -364,7 +385,8 @@ describe('TestSuites Component CSV Export', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    mockCsvDownloadApis();
+    // Mock URL.createObjectURL globally
+    global.URL.createObjectURL = vi.fn(() => 'blob:test');
   });
 
   afterEach(() => {
@@ -410,7 +432,10 @@ describe('TestSuites Component - Zero Attack Success Rate', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    mockWindowLocation({ search: '?evalId=test-eval-123' });
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { search: '?evalId=test-eval-123' },
+    });
   });
 
   it('should correctly display 0.00% attack success rate', () => {
@@ -435,15 +460,14 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    mockCsvDownloadApis();
+    global.URL.createObjectURL = vi.fn(() => 'blob:test');
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('should correctly escape special characters in CSV export', async () => {
-    const user = userEvent.setup();
+  it('should correctly escape special characters in CSV export', () => {
     const specialDescription = 'This is a test description with "quotes", commas, and\nnewlines.';
 
     const categoryStatsWithSpecialChars = {
@@ -470,7 +494,7 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
     );
 
     const exportButton = screen.getByText('Export vulnerabilities to CSV');
-    await user.click(exportButton);
+    fireEvent.click(exportButton);
 
     const mockCreateObjectURL = vi.mocked(URL.createObjectURL);
     expect(mockCreateObjectURL).toHaveBeenCalled();
@@ -500,11 +524,13 @@ describe('TestSuites Component - Large Filter Object', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    mockWindowLocation({ search: '?evalId=test-eval-123' });
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { search: '?evalId=test-eval-123' },
+    });
   });
 
-  it('should navigate with a large filter object without exceeding URL length limits', async () => {
-    const user = userEvent.setup();
+  it('should navigate with a large filter object without exceeding URL length limits', () => {
     const _largeFilter = {
       items: Array.from({ length: 500 }, (_, i) => ({
         id: `filter-${i}`,
@@ -532,7 +558,7 @@ describe('TestSuites Component - Large Filter Object', () => {
     const viewLogsButtons = screen.getAllByText('View logs');
     const viewLogsButton = viewLogsButtons[0];
 
-    await user.click(viewLogsButton);
+    fireEvent.click(viewLogsButton);
 
     expect(mockNavigate).toHaveBeenCalledTimes(1);
 
@@ -577,17 +603,19 @@ describe('TestSuites Component Navigation with Special Characters in Plugin ID',
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    mockWindowLocation({ search: '?evalId=test-eval-123' });
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { search: '?evalId=test-eval-123' },
+    });
   });
 
-  it('should navigate to eval page with correctly encoded search params when pluginId contains special characters', async () => {
-    const user = userEvent.setup();
+  it('should navigate to eval page with correctly encoded search params when pluginId contains special characters', () => {
     renderWithProviders(<TestSuites {...defaultProps} />);
 
     const viewLogsButtons = screen.getAllByText('View logs');
     const viewLogsButton = viewLogsButtons[0];
 
-    await user.click(viewLogsButton);
+    fireEvent.click(viewLogsButton);
 
     const expectedFilter = encodeURIComponent(
       JSON.stringify([
@@ -630,17 +658,19 @@ describe('TestSuites Component - Zero Attack Success Rate Navigation', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    mockWindowLocation({ search: '?evalId=test-eval-123' });
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { search: '?evalId=test-eval-123' },
+    });
   });
 
-  it('should navigate to eval page with mode=passes when attackSuccessRate is 0', async () => {
-    const user = userEvent.setup();
+  it('should navigate to eval page with mode=passes when attackSuccessRate is 0', () => {
     renderWithProviders(<TestSuites {...defaultProps} />);
 
     const viewLogsButtons = screen.getAllByText('View logs');
     const viewLogsButton = viewLogsButtons[0];
 
-    await user.click(viewLogsButton);
+    fireEvent.click(viewLogsButton);
 
     const expectedFilter = encodeURIComponent(
       JSON.stringify([

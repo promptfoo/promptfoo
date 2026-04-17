@@ -7,7 +7,6 @@ import { Check, Copy } from 'lucide-react';
 interface CopyButtonProps extends Omit<React.ComponentProps<'button'>, 'value'> {
   value: string;
   iconSize?: string;
-  title?: string;
 }
 
 export function CopyButton({

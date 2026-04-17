@@ -46,14 +46,8 @@ userRouter.get('/id', async (_req: Request, res: Response): Promise<void> => {
 });
 
 userRouter.post('/email', async (req: Request, res: Response): Promise<void> => {
-  const bodyResult = UserSchemas.Update.Request.safeParse(req.body);
-  if (!bodyResult.success) {
-    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
-    return;
-  }
-
-  const { email } = bodyResult.data;
   try {
+    const { email } = UserSchemas.Update.Request.parse(req.body);
     setUserEmail(email);
     res.json(
       UserSchemas.Update.Response.parse({
@@ -71,7 +65,11 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
     });
   } catch (error) {
     logger.error(`Error setting email: ${error}`);
-    res.status(500).json({ error: 'Failed to update email' });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: z.prettifyError(error) });
+    } else {
+      res.status(500).json({ error: String(error) });
+    }
   }
 });
 
@@ -87,8 +85,8 @@ userRouter.put('/email/clear', async (_req: Request, res: Response): Promise<voi
 
 userRouter.get('/email/status', async (req: Request, res: Response): Promise<void> => {
   try {
-    // Schema uses z.unknown() for backward compat — accepts any shape, coerces to boolean
-    const { validate } = UserSchemas.EmailStatus.Query.parse(req.query);
+    // Extract validate query parameter
+    const validate = req.query.validate === 'true';
     const result = await checkEmailStatus({ validate });
 
     res.json(
@@ -101,20 +99,19 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
     );
   } catch (error) {
     logger.error(`Error checking email status: ${error}`);
-    res.status(500).json({ error: 'Failed to check email status' });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: z.prettifyError(error) });
+    } else {
+      res.status(500).json({ error: 'Failed to check email status' });
+    }
   }
 });
 
 // New API key authentication endpoint that mirrors CLI behavior
 userRouter.post('/login', async (req: Request, res: Response): Promise<void> => {
-  const bodyResult = UserSchemas.Login.Request.safeParse(req.body);
-  if (!bodyResult.success) {
-    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
-    return;
-  }
-
-  const { apiKey, apiHost } = bodyResult.data;
   try {
+    const { apiKey, apiHost } = UserSchemas.Login.Request.parse(req.body);
+
     const host = apiHost || cloudConfig.getApiHost();
 
     // Use the same validation logic as CLI
@@ -158,8 +155,12 @@ userRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
     logger.error(
       `Error during API key login: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
-    // Don't expose internal error details to client
-    res.status(401).json({ error: 'Invalid API key or authentication failed' });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: z.prettifyError(error) });
+    } else {
+      // Don't expose internal error details to client
+      res.status(401).json({ error: 'Invalid API key or authentication failed' });
+    }
   }
 });
 

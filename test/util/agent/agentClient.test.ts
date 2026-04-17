@@ -87,7 +87,6 @@ describe('createAgentClient', () => {
 
   beforeEach(() => {
     fakeSocket = createFakeSocket();
-    mockIo.mockReset();
     mockIo.mockReturnValue(fakeSocket);
   });
 

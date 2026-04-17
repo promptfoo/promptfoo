@@ -26,8 +26,7 @@ import {
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
 import { renderVarsInObject } from './util/index';
 import invariant from './util/invariant';
-import { filterFiniteScores } from './util/numeric';
-import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
+import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
@@ -51,23 +50,15 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   }
 }
 
-export function resolveVariables(
-  variables: Record<string, VarValue>,
-  skipResolveVars?: string[],
-  varsResolvedFromSkipped?: Set<string>,
-): Record<string, VarValue> {
-  let resolved: boolean;
+export function resolveVariables(variables: Record<string, VarValue>): Record<string, VarValue> {
+  let resolved = true;
   const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
 
   let iterations = 0;
   do {
     resolved = true;
     for (const key of Object.keys(variables)) {
-      if (
-        skipResolveVars?.includes(key) ||
-        varsResolvedFromSkipped?.has(key) ||
-        typeof variables[key] !== 'string'
-      ) {
+      if (typeof variables[key] !== 'string') {
         continue;
       }
       const value = variables[key] as string;
@@ -79,9 +70,6 @@ export function resolveVariables(
           // logger.warn(`Variable "${varName}" not found for substitution.`);
         } else {
           variables[key] = value.replace(placeholder, variables[varName] as string);
-          if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
-            varsResolvedFromSkipped?.add(key);
-          }
           resolved = false; // Indicate that we've made a replacement and should check again
         }
       }
@@ -102,15 +90,6 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
     return `{% raw %}${prompt}{% endraw %}`;
   }
   return prompt;
-}
-
-function referencesUndefinedVariables(template: string, vars: Record<string, VarValue>): boolean {
-  return extractVariablesFromTemplate(template).some((variableName) => {
-    const rootVariableName = /^([A-Za-z_]\w*)/.exec(variableName)?.[1];
-    return Boolean(
-      rootVariableName && rootVariableName !== 'env' && vars[rootVariableName] === undefined,
-    );
-  });
 }
 
 /**
@@ -232,10 +211,10 @@ function detectMimeFromBase64(base64Data: string): string | null {
  * @param vars - Variables to substitute into the template
  * @param nunjucksFilters - Optional custom Nunjucks filters
  * @param provider - Optional API provider for context
- * @param skipRenderVars - Optional array of variable names to skip special loading and template
- *                         rendering for. This is critical for red team testing where injection
- *                         variables contain attack payloads (e.g., SSTI, XSS) that should NOT be
- *                         evaluated by Promptfoo before reaching the target.
+ * @param skipRenderVars - Optional array of variable names to skip template rendering for.
+ *                         This is critical for red team testing where injection variables
+ *                         contain attack payloads (e.g., SSTI, XSS) that should NOT be
+ *                         evaluated by Promptfoo's template engine before reaching the target.
  * @returns The rendered prompt string
  */
 export async function renderPrompt(
@@ -251,10 +230,6 @@ export async function renderPrompt(
 
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
-    if (skipRenderVars?.includes(varName)) {
-      continue;
-    }
-
     if (typeof value === 'string' && value.startsWith('file://')) {
       const basePath = cliState.basePath || '';
       const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
@@ -361,14 +336,9 @@ export async function renderPrompt(
       }
     } else if (isPackagePath(value)) {
       const basePath = cliState.basePath || '';
-      const requiredModule = await loadFromPackage(value, basePath);
-      if (typeof requiredModule !== 'function') {
-        throw new Error(
-          `Variable source malformed: ${value} must export a function. Received: ${typeof requiredModule}`,
-        );
-      }
-
-      const javascriptOutput = (await requiredModule(varName, basePrompt, vars, provider)) as {
+      const javascriptOutput = (await (
+        await loadFromPackage(value, basePath)
+      )(varName, basePrompt, vars, provider)) as {
         output?: string;
         error?: string;
       };
@@ -413,13 +383,12 @@ export async function renderPrompt(
 
   // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
   for (const key of Object.keys(vars)) {
-    if (typeof vars[key] === 'string' && !skipRenderVars?.includes(key)) {
+    if (typeof vars[key] === 'string') {
       vars[key] = (vars[key] as string).replace(/\n$/, '');
     }
   }
   // Resolve variable mappings
-  const varsResolvedFromSkipped = new Set<string>();
-  resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
+  resolveVariables(vars);
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
@@ -509,21 +478,12 @@ export async function renderPrompt(
   } catch {
     // Vars values can be template strings, so we need to render them first:
     const renderedVars = Object.fromEntries(
-      Object.entries(vars).map(([key, value]) => {
-        if (
-          typeof value !== 'string' ||
-          skipRenderVars?.includes(key) ||
-          varsResolvedFromSkipped.has(key)
-        ) {
-          return [key, value];
-        }
-
-        if (referencesUndefinedVariables(value, vars)) {
-          return [key, value];
-        }
-
-        return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];
-      }),
+      Object.entries(vars).map(([key, value]) => [
+        key,
+        typeof value === 'string' && !skipRenderVars?.includes(key)
+          ? nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)
+          : value,
+      ]),
     );
 
     // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
@@ -560,15 +520,11 @@ export type BeforeEachExtensionHookContext = {
 /**
  * Context passed to afterEach extension hooks.
  * Called after each test case is evaluated.
- *
- * When the hook returns the modified context, `result.namedScores`,
- * `result.metadata`, and `result.response.metadata` will be shallow-merged
- * into the evaluation result and persisted.
  */
 export type AfterEachExtensionHookContext = {
   /** The test case that was evaluated */
   test: TestCase;
-  /** The result of the evaluation (namedScores, metadata, and response.metadata are mutable) */
+  /** The result of the evaluation */
   result: EvaluateResult;
 };
 
@@ -708,11 +664,10 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
     try {
       if (useNewCallingConvention) {
         // NEW convention: fn(context, { hookName })
-        // Use updatedContext so each extension sees changes from previous extensions
-        extensionReturnValue = await transform(extension, updatedContext, { hookName }, false);
+        extensionReturnValue = await transform(extension, context, { hookName }, false);
       } else {
         // LEGACY convention: fn(hookName, context) - backwards compatible with pre-v0.102 hooks
-        extensionReturnValue = await transform(extension, hookName, updatedContext, false);
+        extensionReturnValue = await transform(extension, hookName, context, false);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -730,7 +685,7 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
         case 'beforeAll': {
           (updatedContext as BeforeAllExtensionHookContext) = {
             suite: {
-              ...(updatedContext as BeforeAllExtensionHookContext).suite,
+              ...(context as BeforeAllExtensionHookContext).suite,
               // Mutable properties:
               prompts: extensionReturnValue.suite.prompts,
               providerPromptMap: extensionReturnValue.suite.providerPromptMap,
@@ -750,41 +705,6 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
           };
           break;
         }
-        case 'afterEach': {
-          if (extensionReturnValue.result) {
-            const currentResult = (updatedContext as AfterEachExtensionHookContext).result;
-            const mergedResponse =
-              currentResult.response && extensionReturnValue.result.response?.metadata
-                ? {
-                    ...currentResult.response,
-                    metadata: {
-                      ...currentResult.response.metadata,
-                      ...extensionReturnValue.result.response.metadata,
-                    },
-                  }
-                : currentResult.response;
-            const validScores = filterFiniteScores(extensionReturnValue.result.namedScores || {});
-            (updatedContext as AfterEachExtensionHookContext) = {
-              test: (updatedContext as AfterEachExtensionHookContext).test,
-              result: {
-                ...currentResult,
-                namedScores: {
-                  ...currentResult.namedScores,
-                  ...validScores,
-                },
-                metadata: {
-                  ...currentResult.metadata,
-                  ...(extensionReturnValue.result.metadata || {}),
-                },
-                response: mergedResponse,
-              },
-            };
-          }
-          break;
-        }
-        // No case for 'afterAll': it runs after results are persisted and is
-        // intended for side effects (monitoring, cleanup). Return values are
-        // intentionally ignored since there is no downstream consumer.
       }
     }
   }

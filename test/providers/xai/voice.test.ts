@@ -377,10 +377,10 @@ describe('XAI Voice Provider', () => {
     });
 
     afterEach(() => {
-      if (originalEnvValue === undefined) {
-        delete process.env.XAI_API_BASE_URL;
-      } else {
+      if (originalEnvValue !== undefined) {
         process.env.XAI_API_BASE_URL = originalEnvValue;
+      } else {
+        delete process.env.XAI_API_BASE_URL;
       }
     });
 

@@ -18,26 +18,28 @@ With promptfoo, you can:
 
 The goal: **test-driven LLM development**, not trial-and-error.
 
-:::tip Get Started
+<div style={{ border: '1px solid #90EE90', borderRadius: '4px', padding: '1rem', paddingTop: '2rem', backgroundColor: '#F0FFF0', marginBottom: '1rem', color: '#000000' }}>
+
+**Get Started:**
 
 - [**Red teaming**](/docs/red-team/quickstart) - Scan for security vulnerabilities and compliance risks
 - [**Evaluations**](/docs/getting-started) - Test quality and accuracy of your prompts, models, and applications
 
-:::
+</div>
 
 promptfoo produces matrix views that let you quickly evaluate outputs across many prompts.
 
 Here's an example of a side-by-side comparison of multiple prompts and inputs:
 
-![Side-by-side evaluation of LLM prompt quality](/img/docs/self-grading-results.jpg)
+![Side-by-side evaluation of LLM prompt quality](https://github.com/promptfoo/promptfoo/assets/310310/ce5a7817-da82-4484-b26d-32474f1cabc5)
 
 It works on the command line too.
 
-![promptfoo command line evaluation](/img/docs/self-grading-cli.jpg)
+![LLM prompt quality evaluation with PASS/FAIL expectations](https://user-images.githubusercontent.com/310310/236690475-b05205e8-483e-4a6d-bb84-41c2b06a1247.png)
 
 Promptfoo also produces high-level vulnerability and risk reports:
 
-![gen ai red team](/img/docs/redteam-dashboard.jpg)
+![gen ai red team](/img/riskreport-1@2x.png)
 
 ## Why choose promptfoo?
 
@@ -63,8 +65,4 @@ Test-driven prompt engineering is much more effective than trial-and-error.
 4. **Analyze results**: Set up automatic requirements, or review results in a structured format/web UI. Use these results to select the best model and prompt for your use case.
 5. **Feedback loop**: As you gather more examples and user feedback, continue to expand your test cases.
 
-<div style={{backgroundColor: 'var(--ifm-background-surface-color)', padding: '1rem', borderRadius: '8px'}}>
-
 ![llm evaluation flow](/img/llm-evaluation-flow.svg)
-
-</div>

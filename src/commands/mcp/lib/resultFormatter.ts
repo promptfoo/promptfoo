@@ -1,5 +1,4 @@
 import { ResultFailureReason as ResultFailureReasonEnum } from '../../../types/index';
-import { truncateText } from './utils';
 
 import type {
   EvaluateResult,
@@ -82,6 +81,16 @@ export interface PaginationInfo {
   offset: number;
   hasMore: boolean;
   returnedCount: number;
+}
+
+/**
+ * Truncate text to specified length with ellipsis
+ */
+function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return text.slice(0, maxLength) + '...';
 }
 
 /**

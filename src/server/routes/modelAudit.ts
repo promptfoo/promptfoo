@@ -4,14 +4,11 @@ import os from 'os';
 import path from 'path';
 
 import { Router } from 'express';
-import { z } from 'zod';
 import { checkModelAuditInstalled } from '../../commands/modelScan';
 import logger from '../../logger';
 import ModelAudit from '../../models/modelAudit';
 import telemetry from '../../telemetry';
-import { ModelAuditSchemas } from '../../types/api/modelAudit';
 import { parseModelAuditArgs } from '../../util/modelAuditCliParser';
-import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 import type { ModelAuditScanResults } from '../../types/modelAudit';
@@ -21,31 +18,23 @@ export const modelAuditRouter = Router();
 // Check if modelaudit is installed
 modelAuditRouter.get('/check-installed', async (_req: Request, res: Response): Promise<void> => {
   try {
+    // First try to check if the modelaudit CLI is available
     const { installed, version } = await checkModelAuditInstalled();
-    res.json(
-      ModelAuditSchemas.CheckInstalled.Response.parse({ installed, version, cwd: process.cwd() }),
-    );
+    res.json({ installed, version, cwd: process.cwd() });
   } catch {
-    res.json(
-      ModelAuditSchemas.CheckInstalled.Response.parse({
-        installed: false,
-        version: null,
-        cwd: process.cwd(),
-      }),
-    );
+    res.json({ installed: false, version: null, cwd: process.cwd() });
   }
 });
 
 // Check path type
 modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promise<void> => {
-  const bodyResult = ModelAuditSchemas.CheckPath.Request.safeParse(req.body);
-  if (!bodyResult.success) {
-    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
-    return;
-  }
-
   try {
-    const { path: inputPath } = bodyResult.data;
+    const { path: inputPath } = req.body;
+
+    if (!inputPath) {
+      res.status(400).json({ error: 'No path provided' });
+      return;
+    }
 
     // Handle home directory expansion
     let expandedPath = inputPath;
@@ -59,7 +48,7 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
 
     // Check if path exists
     if (!fs.existsSync(absolutePath)) {
-      res.json(ModelAuditSchemas.CheckPath.Response.parse({ exists: false, type: null }));
+      res.json({ exists: false, type: null });
       return;
     }
 
@@ -67,29 +56,27 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
     const stats = fs.statSync(absolutePath);
     const type = stats.isDirectory() ? 'directory' : 'file';
 
-    res.json(
-      ModelAuditSchemas.CheckPath.Response.parse({
-        exists: true,
-        type,
-        absolutePath,
-        name: path.basename(absolutePath),
-      }),
-    );
+    res.json({
+      exists: true,
+      type,
+      absolutePath,
+      name: path.basename(absolutePath),
+    });
   } catch (error) {
-    sendError(res, 500, 'Failed to check path', error);
+    logger.error(`Error checking path: ${error}`);
+    res.status(500).json({ error: String(error) });
   }
 });
 
 // Run model scan
 modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void> => {
-  const bodyResult = ModelAuditSchemas.Scan.Request.safeParse(req.body);
-  if (!bodyResult.success) {
-    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
-    return;
-  }
-
   try {
-    const { paths, options } = bodyResult.data;
+    const { paths, options = {} } = req.body;
+
+    if (!paths || !Array.isArray(paths) || paths.length === 0) {
+      res.status(400).json({ error: 'No paths provided' });
+      return;
+    }
 
     // Check if modelaudit is installed
     const { installed } = await checkModelAuditInstalled();
@@ -155,9 +142,9 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     telemetry.record('webui_api', {
       event: 'model_scan',
       pathCount: paths.length,
-      hasBlacklist: (options.blacklist?.length ?? 0) > 0,
-      timeout: options.timeout ?? 0,
-      verbose: options.verbose ?? false,
+      hasBlacklist: options.blacklist?.length > 0,
+      timeout: options.timeout,
+      verbose: options.verbose,
       persist,
     });
 
@@ -213,15 +200,16 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         suggestion = 'Check that modelaudit is executable and you have the necessary permissions';
       }
 
-      logger.error('Failed to start modelaudit', {
-        error: error.message,
-        command: 'modelaudit',
-        args,
-        paths: resolvedPaths,
-      });
       safeRespond(500, {
         error: errorMessage,
-        suggestion,
+        originalError: error.message,
+        suggestion: suggestion,
+        debug: {
+          command: 'modelaudit',
+          args: args,
+          paths: resolvedPaths,
+          cwd: process.cwd(),
+        },
       });
     });
 
@@ -321,16 +309,18 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           }
         }
 
-        logger.error('Model scan failed', {
-          exitCode: code,
-          stderr: stderr || undefined,
-          command: 'modelaudit',
-          args,
-          paths: resolvedPaths,
-        });
         safeRespond(500, {
           error: errorMessage,
+          exitCode: code,
+          stderr: stderr || undefined,
+          stdout: stdout || undefined,
           ...errorDetails,
+          debug: {
+            command: 'modelaudit',
+            args: args,
+            paths: resolvedPaths,
+            cwd: process.cwd(),
+          },
         });
         return;
       }
@@ -338,17 +328,18 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       try {
         const jsonOutput = stdout.trim();
         if (!jsonOutput) {
-          logger.error('No output from model scan', {
-            stderr: stderr || undefined,
-            command: 'modelaudit',
-            args,
-            paths: resolvedPaths,
-            exitCode: code,
-          });
           safeRespond(500, {
             error: 'No output received from model scan',
+            stderr: stderr || undefined,
             suggestion:
               'The scan may have failed silently. Check that the model files are valid and accessible.',
+            debug: {
+              command: 'modelaudit',
+              args: args,
+              paths: resolvedPaths,
+              cwd: process.cwd(),
+              exitCode: code,
+            },
           });
           return;
         }
@@ -357,19 +348,21 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         try {
           scanResults = JSON.parse(jsonOutput);
         } catch (parseError) {
-          logger.error('Failed to parse model scan output', {
-            parseError,
-            output: jsonOutput.substring(0, 1000),
-            stderr: stderr || undefined,
-            command: 'modelaudit',
-            args,
-            paths: resolvedPaths,
-            exitCode: code,
-          });
+          logger.error(`Failed to parse model scan output: ${parseError}`);
           safeRespond(500, {
             error: 'Failed to parse scan results - invalid JSON output',
+            parseError: String(parseError),
+            output: jsonOutput.substring(0, 1000), // Include first 1000 chars for debugging
+            stderr: stderr || undefined,
             suggestion:
               'The model scan may have produced invalid output. Check the raw output for error messages.',
+            debug: {
+              command: 'modelaudit',
+              args: args,
+              paths: resolvedPaths,
+              cwd: process.cwd(),
+              exitCode: code,
+            },
           });
           return;
         }
@@ -380,7 +373,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           try {
             const audit = await ModelAudit.create({
               name: options.name || `API scan ${new Date().toISOString()}`,
-              author: options.author ?? undefined,
+              author: options.author || null,
               modelPath: resolvedPaths.join(', '),
               results: {
                 ...scanResults,
@@ -414,41 +407,56 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           persisted: persist && !!auditId,
         });
       } catch (error) {
-        logger.error('Error processing model scan results', { error });
+        logger.error(`Error processing model scan results: ${error}`);
         safeRespond(500, {
           error: 'Error processing scan results',
+          details: String(error),
         });
       }
     });
   } catch (error) {
-    sendError(res, 500, 'Failed to start model scan', error);
+    logger.error(`Error in model scan endpoint: ${error}`);
+    res.status(500).json({ error: String(error) });
   }
 });
 
+// Valid sort fields and order values for the /scans endpoint
+const VALID_SORT_FIELDS = ['createdAt', 'name', 'modelPath'] as const;
+const VALID_SORT_ORDERS = ['asc', 'desc'] as const;
+type SortField = (typeof VALID_SORT_FIELDS)[number];
+type SortOrder = (typeof VALID_SORT_ORDERS)[number];
+
 // Get all model scans with pagination support
 modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void> => {
-  const queryResult = ModelAuditSchemas.ListScans.Query.safeParse(req.query);
-  if (!queryResult.success) {
-    res.status(400).json({ error: z.prettifyError(queryResult.error) });
-    return;
-  }
-
   try {
-    const { limit, offset, sort, order, search } = queryResult.data;
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 100), 100);
+    const offset = Math.max(0, parseInt(req.query.offset as string) || 0);
+    const sortParam = (req.query.sort as string) || 'createdAt';
+    const orderParam = (req.query.order as string) || 'desc';
+    const search = req.query.search as string | undefined;
+
+    // Validate sort field against allowlist
+    const sort: SortField = VALID_SORT_FIELDS.includes(sortParam as SortField)
+      ? (sortParam as SortField)
+      : 'createdAt';
+
+    // Validate order against allowlist
+    const order: SortOrder = VALID_SORT_ORDERS.includes(orderParam as SortOrder)
+      ? (orderParam as SortOrder)
+      : 'desc';
 
     const audits = await ModelAudit.getMany(limit, offset, sort, order, search);
     const total = await ModelAudit.count(search);
 
-    res.json(
-      ModelAuditSchemas.ListScans.Response.parse({
-        scans: audits.map((audit) => audit.toJSON()),
-        total,
-        limit,
-        offset,
-      }),
-    );
+    res.json({
+      scans: audits.map((audit) => audit.toJSON()),
+      total,
+      limit,
+      offset,
+    });
   } catch (error) {
-    sendError(res, 500, 'Failed to fetch model scans', error);
+    logger.error(`Error fetching model audits: ${error}`);
+    res.status(500).json({ error: String(error) });
   }
 });
 
@@ -464,44 +472,34 @@ modelAuditRouter.get('/scans/latest', async (_req: Request, res: Response): Prom
       return;
     }
 
-    res.json(ModelAuditSchemas.GetLatestScan.Response.parse(audits[0].toJSON()));
+    res.json(audits[0].toJSON());
   } catch (error) {
-    sendError(res, 500, 'Failed to fetch latest model scan', error);
+    logger.error(`Error fetching latest model audit: ${error}`);
+    res.status(500).json({ error: String(error) });
   }
 });
 
 // Get specific model scan by ID (must be after /scans/latest)
 modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<void> => {
-  const paramsResult = ModelAuditSchemas.GetScan.Params.safeParse(req.params);
-  if (!paramsResult.success) {
-    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
-    return;
-  }
-
   try {
-    const audit = await ModelAudit.findById(paramsResult.data.id);
+    const audit = await ModelAudit.findById(req.params.id as string);
 
     if (!audit) {
       res.status(404).json({ error: 'Model scan not found' });
       return;
     }
 
-    res.json(ModelAuditSchemas.GetScan.Response.parse(audit.toJSON()));
+    res.json(audit.toJSON());
   } catch (error) {
-    sendError(res, 500, 'Failed to fetch model scan', error);
+    logger.error(`Error fetching model audit: ${error}`);
+    res.status(500).json({ error: String(error) });
   }
 });
 
 // Delete model scan
 modelAuditRouter.delete('/scans/:id', async (req: Request, res: Response): Promise<void> => {
-  const paramsResult = ModelAuditSchemas.DeleteScan.Params.safeParse(req.params);
-  if (!paramsResult.success) {
-    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
-    return;
-  }
-
   try {
-    const audit = await ModelAudit.findById(paramsResult.data.id);
+    const audit = await ModelAudit.findById(req.params.id as string);
 
     if (!audit) {
       res.status(404).json({ error: 'Model scan not found' });
@@ -509,13 +507,9 @@ modelAuditRouter.delete('/scans/:id', async (req: Request, res: Response): Promi
     }
 
     await audit.delete();
-    res.json(
-      ModelAuditSchemas.DeleteScan.Response.parse({
-        success: true,
-        message: 'Model scan deleted successfully',
-      }),
-    );
+    res.json({ success: true, message: 'Model scan deleted successfully' });
   } catch (error) {
-    sendError(res, 500, 'Failed to delete model scan', error);
+    logger.error(`Error deleting model audit: ${error}`);
+    res.status(500).json({ error: String(error) });
   }
 });

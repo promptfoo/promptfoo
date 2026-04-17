@@ -133,10 +133,11 @@ describe('Strategy IDs', () => {
       const directPath = path.join(strategyDir, `${strategy}.ts`);
 
       const fileExists = fs.existsSync(expectedPath) || fs.existsSync(directPath);
-      expect(
-        fileExists,
-        `Strategy implementation not found for ${strategy}. Checked paths: ${expectedPath} and ${directPath}`,
-      ).toBe(true);
+      if (!fileExists) {
+        console.error(`Strategy implementation not found for: ${strategy}`);
+        console.error(`Checked paths: ${expectedPath} and ${directPath}`);
+      }
+      expect(fileExists).toBe(true);
     });
   });
 });

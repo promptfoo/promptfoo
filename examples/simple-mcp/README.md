@@ -1,4 +1,4 @@
-# simple-mcp (Simple MCP Provider)
+# Simple MCP (Model Context Protocol) Provider Example
 
 This example demonstrates how to use the MCP provider for evaluating MCP servers. The MCP provider is designed for direct tool calling evaluation rather than text generation, making it ideal for testing tool behavior, security vulnerabilities, and edge cases.
 
@@ -8,7 +8,6 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example simple-mcp
-cd simple-mcp
 ```
 
 ## Getting Started

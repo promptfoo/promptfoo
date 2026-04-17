@@ -6,7 +6,6 @@
 import safeStringify from 'fast-safe-stringify';
 
 const MAX_DEPTH = 4;
-const DUMMY_BASE = 'http://placeholder';
 
 export const REDACTED = '[REDACTED]';
 
@@ -37,8 +36,6 @@ export const SECRET_FIELD_NAMES = new Set([
   'authtoken',
   'clientsecret',
   'webhooksecret',
-  'anthropicapikey',
-  'awsbearertokenbedrock',
   'authorization',
   'auth',
   'bearer',
@@ -167,11 +164,11 @@ function isClassInstance(obj: any): boolean {
 /**
  * Parse and sanitize JSON strings, also check if the string looks like a secret
  */
-function sanitizeJsonString(str: string, depth: number, maxDepth: number): string {
+function sanitizeJsonString(str: string, depth: number): string {
   try {
     const parsed = JSON.parse(str);
     if (parsed && typeof parsed === 'object') {
-      const sanitized = recursiveSanitize(parsed, depth, maxDepth);
+      const sanitized = recursiveSanitize(parsed, depth);
       return JSON.stringify(sanitized);
     }
   } catch {
@@ -186,7 +183,7 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
 /**
  * Sanitize plain object fields
  */
-function sanitizePlainObject(obj: any, depth: number, maxDepth: number): any {
+function sanitizePlainObject(obj: any, depth: number): any {
   const sanitized: any = {};
   for (const [key, value] of Object.entries(obj)) {
     if (key === 'url' && typeof value === 'string') {
@@ -197,7 +194,7 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number): any {
       // Redact values that look like secrets (API keys, tokens, etc.)
       sanitized[key] = REDACTED;
     } else {
-      sanitized[key] = recursiveSanitize(value, depth + 1, maxDepth);
+      sanitized[key] = recursiveSanitize(value, depth + 1);
     }
   }
   return sanitized;
@@ -206,14 +203,14 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number): any {
 /**
  * Recursively sanitize an object, redacting secret fields at any depth
  */
-function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH): any {
+function recursiveSanitize(obj: any, depth = 0): any {
   if (typeof obj === 'function') {
     return `[Function] ${obj.name}`;
   }
 
   // Handle strings - check if they're JSON and sanitize if so
   if (typeof obj === 'string') {
-    return sanitizeJsonString(obj, depth, maxDepth);
+    return sanitizeJsonString(obj, depth);
   }
 
   // Handle primitives and null/undefined
@@ -222,13 +219,13 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH): any {
   }
 
   // Enforce depth limit for objects and arrays
-  if (depth > maxDepth) {
+  if (depth > MAX_DEPTH) {
     return '[...]';
   }
 
   // Handle arrays
   if (Array.isArray(obj)) {
-    return obj.map((item) => recursiveSanitize(item, depth + 1, maxDepth));
+    return obj.map((item) => recursiveSanitize(item, depth + 1));
   }
 
   // Handle class instances
@@ -238,7 +235,7 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH): any {
   }
 
   // Handle plain objects
-  return sanitizePlainObject(obj, depth, maxDepth);
+  return sanitizePlainObject(obj, depth);
 }
 
 /**
@@ -252,10 +249,9 @@ export function sanitizeObject(
   options: {
     context?: string;
     throwOnError?: boolean;
-    maxDepth?: number;
   } = {},
 ): any {
-  const { context = 'object', throwOnError = false, maxDepth = MAX_DEPTH } = options;
+  const { context = 'object', throwOnError = false } = options;
 
   try {
     // Handle null/undefined
@@ -265,7 +261,7 @@ export function sanitizeObject(
 
     // Handle strings - check if they're JSON and sanitize if so
     if (typeof obj === 'string') {
-      return sanitizeJsonString(obj, 0, maxDepth);
+      return sanitizeJsonString(obj, 0);
     }
 
     // Handle other primitives
@@ -297,7 +293,7 @@ export function sanitizeObject(
     );
 
     // Apply recursive sanitization with depth limiting
-    return recursiveSanitize(safeObj, 0, maxDepth);
+    return recursiveSanitize(safeObj);
   } catch (error) {
     if (throwOnError) {
       throw error;
@@ -339,10 +335,7 @@ export function sanitizeUrl(url: string): string {
       return url;
     }
 
-    // Handle path-only URLs (e.g., /api/openai/completion from raw HTTP request mode).
-    // new URL() requires a fully qualified URL, so prepend a dummy base for parsing.
-    const isPathOnly = url.startsWith('/') && !url.startsWith('//');
-    const parsedUrl = isPathOnly ? new URL(url, DUMMY_BASE) : new URL(url);
+    const parsedUrl = new URL(url);
 
     // Create a copy for sanitization to avoid modifying the original URL
     // Use href instead of toString() for better cross-platform compatibility
@@ -367,11 +360,6 @@ export function sanitizeUrl(url: string): string {
       // If search params handling fails, continue without sanitizing them
       // using console since logger would create a circular dependency
       console.warn(`Failed to sanitize URL parameters ${url}: ${paramError}`);
-    }
-
-    // For path-only URLs, return just the path (+ search + hash), not the dummy base
-    if (isPathOnly) {
-      return sanitizedUrl.pathname + sanitizedUrl.search + sanitizedUrl.hash;
     }
 
     return sanitizedUrl.toString();

@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiCompletionProvider } from '../../../src/providers/openai/completion';
-import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 vi.mock('../../../src/cache');
 vi.mock('../../../src/logger');
@@ -89,37 +88,12 @@ describe('OpenAI Provider', () => {
           },
         });
 
-        await expect(provider.callApi('Test prompt')).rejects.toThrow(
-          getOpenAiMissingApiKeyMessage(),
-        );
+        await expect(provider.callApi('Test prompt')).rejects.toThrow('OpenAI API key is not set');
       } finally {
-        restoreEnvVar('OPENAI_API_KEY', originalApiKey);
-      }
-    });
-
-    it('should use custom apiKeyEnvar in missing API key errors', async () => {
-      const originalApiKey = process.env.OPENAI_API_KEY;
-      const originalCustomApiKey = process.env.CUSTOM_OPENAI_KEY;
-      delete process.env.OPENAI_API_KEY;
-      delete process.env.CUSTOM_OPENAI_KEY;
-
-      try {
-        const provider = new OpenAiCompletionProvider('text-davinci-003', {
-          config: {
-            apiKeyEnvar: 'CUSTOM_OPENAI_KEY',
-          },
-          env: {
-            OPENAI_API_KEY: undefined,
-            CUSTOM_OPENAI_KEY: undefined,
-          },
-        });
-
-        await expect(provider.callApi('Test prompt')).rejects.toThrow(
-          getOpenAiMissingApiKeyMessage('CUSTOM_OPENAI_KEY'),
-        );
-      } finally {
-        restoreEnvVar('OPENAI_API_KEY', originalApiKey);
-        restoreEnvVar('CUSTOM_OPENAI_KEY', originalCustomApiKey);
+        // Restore the original env var
+        if (originalApiKey) {
+          process.env.OPENAI_API_KEY = originalApiKey;
+        }
       }
     });
 

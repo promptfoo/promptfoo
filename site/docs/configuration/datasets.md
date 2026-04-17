@@ -43,7 +43,7 @@ tests:
       location: 'Great Barrier Reef'
 ```
 
-Alternatively, you can specify your [prompts as CSV](/docs/configuration/prompts#csv-files-csv):
+Alternatively, you can specify your [prompts as CSV](/docs/configuration/prompts#csv-prompts):
 
 ```yaml
 prompts: file://travel-guide-prompts.csv

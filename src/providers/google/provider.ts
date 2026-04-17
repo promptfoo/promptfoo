@@ -29,7 +29,6 @@ import {
   getCandidate,
   getGoogleClient,
   loadCredentials,
-  normalizeSafetySettings,
 } from './util';
 
 import type {
@@ -308,7 +307,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         ...(config.maxOutputTokens !== undefined && { maxOutputTokens: config.maxOutputTokens }),
         ...config.generationConfig,
       },
-      safetySettings: normalizeSafetySettings(config.safetySettings),
+      safetySettings: config.safetySettings,
       ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       // Vertex AI uses camelCase (systemInstruction), AI Studio uses snake_case (system_instruction)
@@ -575,20 +574,16 @@ export class GoogleProvider extends GoogleGenericProvider {
             c.groundingMetadata || c.groundingChunks || c.groundingSupports || c.webSearchQueries,
         );
 
+      // Calculate cost only for AI Studio mode (Vertex AI pricing differs)
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
-        tokenUsage.completion == null
-          ? undefined
-          : tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
-      const cost = cached
-        ? undefined
-        : calculateGoogleCost(
-            this.modelName,
-            config,
-            tokenUsage.prompt,
-            completionForCost,
-            this.isVertexMode,
-          );
+        tokenUsage.completion != null
+          ? tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0)
+          : undefined;
+      const cost =
+        !this.isVertexMode && !cached
+          ? calculateGoogleCost(this.modelName, config, tokenUsage.prompt, completionForCost)
+          : undefined;
 
       const response: ProviderResponse = {
         output,

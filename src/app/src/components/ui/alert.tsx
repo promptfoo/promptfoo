@@ -94,4 +94,4 @@ function AlertContent({
   return <div ref={ref} className={cn('flex-1', className)} {...props} />;
 }
 
-export { Alert, AlertContent, AlertDescription, AlertTitle };
+export { Alert, AlertTitle, AlertDescription, AlertContent };

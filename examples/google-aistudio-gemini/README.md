@@ -1,13 +1,12 @@
-# google-aistudio-gemini (Google AI Studio (Gemini and Gemma) Example)
+# google-aistudio-gemini (Google AI Studio (Gemini) Example)
 
 You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example google-aistudio-gemini
-cd google-aistudio-gemini
 ```
 
-This example demonstrates using Google's Gemini and Gemma models with promptfoo to evaluate math puzzle-solving capabilities.
+This example demonstrates using Google's Gemini models with promptfoo to evaluate math puzzle solving capabilities.
 
 ## Prerequisites
 
@@ -16,10 +15,8 @@ This example demonstrates using Google's Gemini and Gemma models with promptfoo 
 
 ## Available Models
 
-The example tests across multiple Gemini and Gemma models:
+The example tests across multiple Gemini models:
 
-- **Gemma 4 31B IT** - Open model with strong reasoning, coding, and agentic capabilities
-- **Gemma 4 26B A4B IT** - Smaller open Gemma 4 model for lower-latency reasoning and coding evals
 - **Gemini 2.5 Pro** - Latest stable model with enhanced reasoning, coding, and multimodal understanding
 - **Gemini 2.5 Flash** - Latest stable Flash model with enhanced reasoning and thinking capabilities
 - **Gemini 2.5 Flash-Lite** - Most cost-efficient and fastest 2.5 model, optimized for high-volume, latency-sensitive tasks
@@ -67,7 +64,7 @@ promptfoo init --example google-aistudio-gemini
 2. Run the examples:
 
 ```sh
-# Basic math puzzle evaluation across multiple Gemini and Gemma models
+# Basic math puzzle evaluation across multiple Gemini models
 promptfoo eval
 
 # Image understanding and comparison evaluation

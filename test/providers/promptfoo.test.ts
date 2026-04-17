@@ -29,14 +29,6 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
 });
 
 describe('PromptfooHarmfulCompletionProvider', () => {
-  const options = {
-    harmCategory: 'test-category',
-    n: 1,
-    purpose: 'test-purpose',
-  };
-
-  let provider: PromptfooHarmfulCompletionProvider;
-
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(getUserEmail).mockImplementation(function () {
@@ -48,6 +40,17 @@ describe('PromptfooHarmfulCompletionProvider', () => {
     vi.mocked(getEnvBool).mockImplementation(function () {
       return false;
     });
+  });
+
+  const options = {
+    harmCategory: 'test-category',
+    n: 1,
+    purpose: 'test-purpose',
+  };
+
+  let provider: PromptfooHarmfulCompletionProvider;
+
+  beforeEach(() => {
     provider = new PromptfooHarmfulCompletionProvider(options);
   });
 
@@ -171,14 +174,6 @@ describe('PromptfooHarmfulCompletionProvider', () => {
 });
 
 describe('PromptfooChatCompletionProvider', () => {
-  const options = {
-    jsonOnly: true,
-    preferSmallModel: false,
-    task: 'crescendo' as const,
-  };
-
-  let provider: PromptfooChatCompletionProvider;
-
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(getUserEmail).mockImplementation(function () {
@@ -190,6 +185,17 @@ describe('PromptfooChatCompletionProvider', () => {
     vi.mocked(getEnvBool).mockImplementation(function () {
       return false;
     });
+  });
+
+  const options = {
+    jsonOnly: true,
+    preferSmallModel: false,
+    task: 'crescendo' as const,
+  };
+
+  let provider: PromptfooChatCompletionProvider;
+
+  beforeEach(() => {
     provider = new PromptfooChatCompletionProvider(options);
   });
 
@@ -304,13 +310,6 @@ describe('PromptfooChatCompletionProvider', () => {
 });
 
 describe('PromptfooSimulatedUserProvider', () => {
-  const options = {
-    id: 'test-agent',
-    instructions: 'test instructions',
-  };
-
-  let provider: PromptfooSimulatedUserProvider;
-
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(getUserEmail).mockImplementation(function () {
@@ -319,6 +318,16 @@ describe('PromptfooSimulatedUserProvider', () => {
     vi.mocked(getEnvBool).mockImplementation(function () {
       return false;
     });
+  });
+
+  const options = {
+    id: 'test-agent',
+    instructions: 'test instructions',
+  };
+
+  let provider: PromptfooSimulatedUserProvider;
+
+  beforeEach(() => {
     provider = new PromptfooSimulatedUserProvider(options, 'test-id');
   });
 

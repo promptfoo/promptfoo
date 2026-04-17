@@ -29,7 +29,7 @@ import type {
 } from './testCaseGenerationTypes';
 
 // Re-export types for backward compatibility
-export type { GeneratedTestCase, TargetPlugin, TargetResponse, TargetStrategy };
+export type { GeneratedTestCase, TargetResponse, TargetPlugin, TargetStrategy };
 
 const DEFAULT_PLUGIN = 'harmful:hate';
 
@@ -93,18 +93,6 @@ function getHistory(
   return history;
 }
 
-function getPreviewLanguage(language?: Config['language']): string | undefined {
-  if (!language) {
-    return undefined;
-  }
-
-  if (Array.isArray(language)) {
-    return language.find((candidate) => candidate.trim().length > 0);
-  }
-
-  return language.trim().length > 0 ? language : undefined;
-}
-
 /**
  * POSTS to the `/redteam/generate-test` endpoint to generate test case(s) for the given plugin and strategy.
  * @param count - Number of test cases to generate (1-10, default 1). Ignored for multi-turn strategies.
@@ -113,26 +101,12 @@ async function callTestGenerationApi(
   plugin: TargetPlugin,
   strategy: TargetStrategy,
   purpose: string | null = null,
-  language: Config['language'] = undefined,
   abortController: AbortController,
   history: ConversationMessage[] = [],
   turn: number = 0,
   maxTurns: number = 1,
   count: number = 1,
 ) {
-  const previewLanguage = getPreviewLanguage(language);
-  const pluginLanguage = getPreviewLanguage(plugin.config.language);
-  const pluginWithLanguage =
-    previewLanguage && !pluginLanguage
-      ? {
-          ...plugin,
-          config: {
-            ...plugin.config,
-            language: previewLanguage,
-          },
-        }
-      : plugin;
-
   return callApi('/redteam/generate-test', {
     method: 'POST',
     headers: {
@@ -141,7 +115,7 @@ async function callTestGenerationApi(
       Pragma: 'no-cache',
     },
     body: JSON.stringify({
-      plugin: pluginWithLanguage,
+      plugin,
       strategy,
       config: { applicationDefinition: { purpose } },
       history,
@@ -281,7 +255,6 @@ export const TestCaseGenerationProvider: React.FC<{
           plugin,
           strategy,
           redTeamConfig.applicationDefinition.purpose ?? null,
-          redTeamConfig.language,
           abortController,
           history,
           currentTurn,
@@ -446,7 +419,6 @@ export const TestCaseGenerationProvider: React.FC<{
           targetPlugin,
           targetStrategy,
           redTeamConfig.applicationDefinition.purpose ?? null,
-          redTeamConfig.language,
           abortController,
           [], // No history for batch generation
           0,
@@ -480,7 +452,7 @@ export const TestCaseGenerationProvider: React.FC<{
         throw error;
       }
     },
-    [redTeamConfig.applicationDefinition?.purpose, redTeamConfig.language, recordEvent],
+    [redTeamConfig.applicationDefinition?.purpose, recordEvent],
   );
 
   /**

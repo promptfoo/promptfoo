@@ -5,18 +5,7 @@ set -euo pipefail
 rm -f promptfoo-errors.log redteam.yaml
 
 # Run the CLI tool and capture the output
-# Use a temp file so we can display output on failure (logger writes to stdout)
-generate_output_file=$(mktemp)
-if ! npm run bin redteam generate -- -c test/redteam/integration/promptfooconfig.yaml --force >"$generate_output_file" 2>&1; then
-  echo "ERROR: promptfoo redteam generate failed"
-  echo "--- Output ---"
-  cat "$generate_output_file"
-  echo "--- End Output ---"
-  rm -f "$generate_output_file"
-  exit 1
-fi
-output=$(cat "$generate_output_file")
-rm -f "$generate_output_file"
+output=$(npm run bin redteam generate -- -c test/redteam/integration/promptfooconfig.yaml --force)
 
 echo "Done running promptfoo redteam generate"
 
@@ -41,25 +30,15 @@ fi
 
 echo "Running promptfoo redteam eval"
 export PROMPTFOO_AUTHOR="ci-placeholder@promptfoo.dev"
-eval_output_file=$(mktemp)
-set +e
-npm run bin redteam eval >"$eval_output_file" 2>&1
-exit_code=$?
-set -e
-output=$(cat "$eval_output_file")
-rm -f "$eval_output_file"
-
-if [ $exit_code -ne 0 ]; then
+output=$(npm run bin redteam eval) || {
+  exit_code=$?
   if [ $exit_code -eq 100 ]; then
     echo "Got exit code 100 - this is acceptable"
   else
     echo "Command failed with exit code $exit_code"
-    echo "--- Output ---"
-    echo "$output"
-    echo "--- End Output ---"
     exit $exit_code
   fi
-fi
+}
 echo "Done running promptfoo redteam eval"
 
 echo "Checking for errors in promptfoo-errors.log"

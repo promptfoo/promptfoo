@@ -3,8 +3,7 @@
  * This tests the exact issue from #3784: function providers in defaultTest.options.provider
  */
 import { describe, expect, it, vi } from 'vitest';
-import { getGradingProvider } from '../../src/matchers/providers';
-import { createMockProvider } from '../factories/provider';
+import { getGradingProvider } from '../../src/matchers';
 
 import type { ApiProvider, ProviderType } from '../../src/types/providers';
 
@@ -16,14 +15,13 @@ describe('Function Provider Integration - Issue #3784', () => {
     });
     mockFunctionProvider.label = 'test-grader';
 
-    // This is what resolveProvider returns for function providers.
-    // Use a plain object here because the test asserts callApi identity.
+    // This is what resolveProvider returns for function providers
     const resolvedProvider: ApiProvider = {
       id: () => mockFunctionProvider.label,
       callApi: mockFunctionProvider,
     };
 
-    // Now pass it through getGradingProvider (this is what matcher provider helpers do)
+    // Now pass it through getGradingProvider (this is what matchers.ts does)
     const gradingProvider = await getGradingProvider(
       'text' as ProviderType,
       resolvedProvider,
@@ -42,10 +40,10 @@ describe('Function Provider Integration - Issue #3784', () => {
       return { output: `Response for: ${prompt}` };
     });
 
-    const resolvedProvider = createMockProvider({
-      id: 'custom-grader',
+    const resolvedProvider: ApiProvider = {
+      id: () => 'custom-grader',
       callApi: mockFunctionProvider,
-    });
+    };
 
     const gradingProvider = await getGradingProvider(
       'text' as ProviderType,
@@ -66,10 +64,10 @@ describe('Function Provider Integration - Issue #3784', () => {
     });
 
     // No label, so resolveProvider uses 'custom-function'
-    const resolvedProvider = createMockProvider({
-      id: 'custom-function',
+    const resolvedProvider: ApiProvider = {
+      id: () => 'custom-function',
       callApi: mockFunctionProvider,
-    });
+    };
 
     const gradingProvider = await getGradingProvider(
       'text' as ProviderType,
@@ -84,10 +82,10 @@ describe('Function Provider Integration - Issue #3784', () => {
   it('should correctly identify as ApiProvider based on type check', async () => {
     const mockFunctionProvider: any = vi.fn(async () => ({ output: 'test' }));
 
-    const resolvedProvider = createMockProvider({
-      id: 'test',
+    const resolvedProvider: ApiProvider = {
+      id: () => 'test',
       callApi: mockFunctionProvider,
-    });
+    };
 
     // This is the exact check from getGradingProvider line 120
     const isApiProviderCheck =

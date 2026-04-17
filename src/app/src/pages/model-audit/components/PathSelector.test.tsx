@@ -1,7 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { callApi } from '@app/utils/api';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useModelAuditConfigStore } from '../stores';
 import PathSelector from './PathSelector';
@@ -27,7 +26,6 @@ describe('PathSelector', () => {
 
   describe('handleAddPath', () => {
     it('should call onAddPath with the correct path, type, and name when the API confirms the path exists', async () => {
-      const user = userEvent.setup();
       const pathToAdd = '/path/to/model.pkl';
       const apiResponse = {
         exists: true,
@@ -48,10 +46,8 @@ describe('PathSelector', () => {
       const input = screen.getByLabelText('Add model path');
       const addButton = screen.getByRole('button', { name: 'Add' });
 
-      await user.click(input);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste(pathToAdd);
-      await user.click(addButton);
+      fireEvent.change(input, { target: { value: pathToAdd } });
+      fireEvent.click(addButton);
 
       await waitFor(() => {
         expect(mockCallApi).toHaveBeenCalledWith('/model-audit/check-path', {
@@ -74,7 +70,6 @@ describe('PathSelector', () => {
     });
 
     it('should call onAddPath with the guessed type and name when the API call fails', async () => {
-      const user = userEvent.setup();
       const pathToAdd = '/path/to/model.pkl';
       mockCallApi.mockRejectedValue(new Error('API Error'));
 
@@ -87,10 +82,8 @@ describe('PathSelector', () => {
       const input = screen.getByLabelText('Add model path');
       const addButton = screen.getByRole('button', { name: 'Add' });
 
-      await user.click(input);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste(pathToAdd);
-      await user.click(addButton);
+      fireEvent.change(input, { target: { value: pathToAdd } });
+      fireEvent.click(addButton);
 
       await waitFor(() => {
         expect(mockCallApi).toHaveBeenCalledWith('/model-audit/check-path', {
@@ -113,7 +106,6 @@ describe('PathSelector', () => {
     });
 
     it('should call onAddPath with the guessed type and name when a user enters a path that does not exist according to the API', async () => {
-      const user = userEvent.setup();
       const pathToAdd = '/path/to/nonexistent/directory/';
       mockCallApi.mockResolvedValue({
         ok: true,
@@ -129,10 +121,8 @@ describe('PathSelector', () => {
       const input = screen.getByLabelText('Add model path');
       const addButton = screen.getByRole('button', { name: 'Add' });
 
-      await user.click(input);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste(pathToAdd);
-      await user.click(addButton);
+      fireEvent.change(input, { target: { value: pathToAdd } });
+      fireEvent.click(addButton);
 
       await waitFor(() => {
         expect(mockCallApi).toHaveBeenCalledWith('/model-audit/check-path', {
@@ -155,7 +145,6 @@ describe('PathSelector', () => {
     });
 
     it('should call onAddPath with the guessed type and name when the API returns malformed data', async () => {
-      const user = userEvent.setup();
       const pathToAdd = '/path/to/model.pkl';
       const apiResponse = {};
       mockCallApi.mockResolvedValue({
@@ -172,10 +161,8 @@ describe('PathSelector', () => {
       const input = screen.getByLabelText('Add model path');
       const addButton = screen.getByRole('button', { name: 'Add' });
 
-      await user.click(input);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste(pathToAdd);
-      await user.click(addButton);
+      fireEvent.change(input, { target: { value: pathToAdd } });
+      fireEvent.click(addButton);
 
       await waitFor(() => {
         expect(mockCallApi).toHaveBeenCalledWith('/model-audit/check-path', {
@@ -198,8 +185,7 @@ describe('PathSelector', () => {
     });
   });
 
-  it('should call onRemovePath with the correct index when the delete button for a selected path is clicked', async () => {
-    const user = userEvent.setup();
+  it('should call onRemovePath with the correct index when the delete button for a selected path is clicked', () => {
     const paths = [
       { path: '/path/to/model1', type: 'file' as 'file' | 'directory', name: 'model1' },
       { path: '/path/to/model2', type: 'directory' as 'file' | 'directory', name: 'model2' },
@@ -213,14 +199,13 @@ describe('PathSelector', () => {
 
     // Find the delete button for the first path
     const deleteButton = screen.getByLabelText('Remove model1');
-    await user.click(deleteButton);
+    fireEvent.click(deleteButton);
 
     expect(onRemovePath).toHaveBeenCalledTimes(1);
     expect(onRemovePath).toHaveBeenCalledWith(0);
   });
 
-  it('should call clearRecentScans when the clear recent scans button is clicked and there are more than three recent scans', async () => {
-    const user = userEvent.setup();
+  it('should call clearRecentScans when the clear recent scans button is clicked and there are more than three recent scans', () => {
     const clearRecentScansMock = vi.fn();
     mockUseModelAuditConfigStore.mockReturnValue({
       recentScans: [
@@ -240,7 +225,7 @@ describe('PathSelector', () => {
     );
 
     const clearButton = screen.getByText('Clear All');
-    await user.click(clearButton);
+    fireEvent.click(clearButton);
 
     expect(clearRecentScansMock).toHaveBeenCalledTimes(1);
   });

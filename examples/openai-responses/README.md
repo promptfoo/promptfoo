@@ -6,14 +6,13 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example openai-responses
-cd openai-responses
 ```
 
 ## Examples
 
 ### Basic Responses API (`promptfooconfig.yaml`)
 
-Basic example showing how to use the Responses API with the GPT-5.4 family (`gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`) and a GPT-4.1 comparison model.
+Basic example showing how to use the Responses API with different models and configurations.
 
 ### External Response Format (`promptfooconfig.external-format.yaml`)
 
@@ -118,7 +117,6 @@ npx promptfoo eval -c promptfooconfig.gpt-5.1.yaml
 
 # GPT-5.2 example
 npx promptfoo eval -c promptfooconfig.gpt-5.2.yaml
-
 ```
 
 ## Prerequisites

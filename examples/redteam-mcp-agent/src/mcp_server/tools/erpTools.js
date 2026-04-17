@@ -1,5 +1,6 @@
 import { faker } from '@faker-js/faker';
 import { z } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import {
   addCustomer,
   addOrder,
@@ -11,8 +12,6 @@ import {
   mockOrders,
   mockProducts,
 } from '../data/mockData.js';
-
-const toInputJsonSchema = (schema) => z.toJSONSchema(schema, { io: 'input', target: 'draft-7' });
 
 const createProductSchema = z.object({
   name: z.string().describe('Product name'),
@@ -181,37 +180,37 @@ export const erpTools = [
   {
     name: 'create_product',
     description: 'Create a new product in the ERP system',
-    inputSchema: toInputJsonSchema(createProductSchema),
+    inputSchema: zodToJsonSchema(createProductSchema),
   },
   {
     name: 'create_customer',
     description: 'Create a new customer account',
-    inputSchema: toInputJsonSchema(createCustomerSchema),
+    inputSchema: zodToJsonSchema(createCustomerSchema),
   },
   {
     name: 'create_order',
     description: 'Create a new sales order',
-    inputSchema: toInputJsonSchema(createOrderSchema),
+    inputSchema: zodToJsonSchema(createOrderSchema),
   },
   {
     name: 'update_inventory',
     description: 'Update inventory levels for a product',
-    inputSchema: toInputJsonSchema(updateInventorySchema),
+    inputSchema: zodToJsonSchema(updateInventorySchema),
   },
   {
     name: 'query_inventory',
     description: 'Query current inventory status',
-    inputSchema: toInputJsonSchema(queryInventorySchema),
+    inputSchema: zodToJsonSchema(queryInventorySchema),
   },
   {
     name: 'query_orders',
     description: 'Query sales orders with filters',
-    inputSchema: toInputJsonSchema(queryOrdersSchema),
+    inputSchema: zodToJsonSchema(queryOrdersSchema),
   },
   {
     name: 'query_employees',
     description: 'Query employee information',
-    inputSchema: toInputJsonSchema(queryEmployeesSchema),
+    inputSchema: zodToJsonSchema(queryEmployeesSchema),
   },
 ];
 

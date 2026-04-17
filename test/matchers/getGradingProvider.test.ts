@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
-import { getGradingProvider } from '../../src/matchers/providers';
+import { getGradingProvider } from '../../src/matchers';
 import { loadApiProvider } from '../../src/providers/index';
-import { createMockProvider } from '../factories/provider';
 
 vi.mock('../../src/providers', () => ({
   loadApiProvider: vi.fn(),
@@ -11,7 +10,10 @@ vi.mock('../../src/providers', () => ({
 vi.mock('../../src/cliState');
 
 describe('getGradingProvider', () => {
-  const mockProvider = createMockProvider();
+  const mockProvider = {
+    id: () => 'test-provider',
+    callApi: vi.fn(),
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -35,13 +37,6 @@ describe('getGradingProvider', () => {
 
     it('should use provider when specified as ApiProvider object', async () => {
       const result = await getGradingProvider('text', mockProvider, null);
-
-      expect(result).toBe(mockProvider);
-      expect(loadApiProvider).not.toHaveBeenCalled();
-    });
-
-    it('should treat null provider as unspecified', async () => {
-      const result = await getGradingProvider('text', null as any, mockProvider);
 
       expect(result).toBe(mockProvider);
       expect(loadApiProvider).not.toHaveBeenCalled();
@@ -108,7 +103,10 @@ describe('getGradingProvider', () => {
 
   describe('defaultTest.options.provider fallback', () => {
     it('should use defaultTest.options.provider when no provider specified', async () => {
-      const azureProvider = createMockProvider({ id: 'azureopenai:chat:gpt-4' });
+      const azureProvider = {
+        id: () => 'azureopenai:chat:gpt-4',
+        callApi: vi.fn(),
+      };
 
       (cliState as any).config = {
         defaultTest: {
@@ -129,7 +127,10 @@ describe('getGradingProvider', () => {
     });
 
     it('should use defaultTest.provider when options.provider not specified', async () => {
-      const azureProvider = createMockProvider({ id: 'azureopenai:chat:gpt-4' });
+      const azureProvider = {
+        id: () => 'azureopenai:chat:gpt-4',
+        callApi: vi.fn(),
+      };
 
       (cliState as any).config = {
         defaultTest: {
@@ -147,55 +148,11 @@ describe('getGradingProvider', () => {
       expect(result).toBe(azureProvider);
     });
 
-    it('should skip defaultTest.provider when it is promptfoo:simulated-user', async () => {
-      const defaultProvider = createMockProvider({ id: 'default-provider' });
-
-      (cliState as any).config = {
-        defaultTest: {
-          provider: {
-            id: 'promptfoo:simulated-user',
-            config: {
-              maxTurns: 3,
-            },
-          },
-        },
-      };
-
-      const result = await getGradingProvider('text', undefined, defaultProvider);
-
-      expect(loadApiProvider).not.toHaveBeenCalled();
-      expect(result).toBe(defaultProvider);
-    });
-
-    it('should fall back to defaultTest.options.provider when defaultTest.provider is promptfoo:simulated-user', async () => {
-      const azureProvider = createMockProvider({ id: 'azureopenai:chat:gpt-4' });
-
-      (cliState as any).config = {
-        defaultTest: {
-          provider: {
-            id: 'promptfoo:simulated-user',
-            config: {
-              maxTurns: 3,
-            },
-          },
-          options: {
-            provider: 'azureopenai:chat:gpt-4',
-          },
-        },
-      };
-
-      vi.mocked(loadApiProvider).mockResolvedValue(azureProvider);
-
-      const result = await getGradingProvider('text', undefined, null);
-
-      expect(loadApiProvider).toHaveBeenCalledWith('azureopenai:chat:gpt-4', {
-        basePath: undefined,
-      });
-      expect(result).toBe(azureProvider);
-    });
-
     it('should use defaultTest.options.provider.text when specified', async () => {
-      const azureProvider = createMockProvider({ id: 'azureopenai:chat:gpt-4' });
+      const azureProvider = {
+        id: () => 'azureopenai:chat:gpt-4',
+        callApi: vi.fn(),
+      };
 
       (cliState as any).config = {
         defaultTest: {
@@ -218,7 +175,10 @@ describe('getGradingProvider', () => {
     });
 
     it('should prefer defaultTest.provider over defaultTest.options.provider', async () => {
-      const azureProvider = createMockProvider({ id: 'azureopenai:chat:gpt-4' });
+      const azureProvider = {
+        id: () => 'azureopenai:chat:gpt-4',
+        callApi: vi.fn(),
+      };
 
       (cliState as any).config = {
         defaultTest: {
@@ -240,7 +200,10 @@ describe('getGradingProvider', () => {
     });
 
     it('should fall back to defaultProvider when no defaultTest provider configured', async () => {
-      const defaultProvider = createMockProvider({ id: 'default-provider' });
+      const defaultProvider = {
+        id: () => 'default-provider',
+        callApi: vi.fn(),
+      };
 
       (cliState as any).config = {
         defaultTest: {},
@@ -253,7 +216,10 @@ describe('getGradingProvider', () => {
     });
 
     it('should fall back to defaultProvider when cliState.config is undefined', async () => {
-      const defaultProvider = createMockProvider({ id: 'default-provider' });
+      const defaultProvider = {
+        id: () => 'default-provider',
+        callApi: vi.fn(),
+      };
 
       (cliState as any).config = undefined;
 
@@ -272,7 +238,10 @@ describe('getGradingProvider', () => {
     });
 
     it('should work with full Azure provider configuration', async () => {
-      const azureProvider = createMockProvider({ id: 'azureopenai:chat:gpt-4o' });
+      const azureProvider = {
+        id: () => 'azureopenai:chat:gpt-4o',
+        callApi: vi.fn(),
+      };
 
       (cliState as any).config = {
         defaultTest: {
@@ -312,7 +281,10 @@ describe('getGradingProvider', () => {
 
   describe('explicit provider takes precedence over defaultTest', () => {
     it('should use explicit provider over defaultTest.options.provider', async () => {
-      const explicitProvider = createMockProvider({ id: 'explicit-provider' });
+      const explicitProvider = {
+        id: () => 'explicit-provider',
+        callApi: vi.fn(),
+      };
 
       (cliState as any).config = {
         defaultTest: {
@@ -331,7 +303,10 @@ describe('getGradingProvider', () => {
     });
 
     it('should use explicit provider object over defaultTest', async () => {
-      const explicitProvider = createMockProvider({ id: 'explicit-provider' });
+      const explicitProvider = {
+        id: () => 'explicit-provider',
+        callApi: vi.fn(),
+      };
 
       (cliState as any).config = {
         defaultTest: {
@@ -368,7 +343,10 @@ describe('getGradingProvider', () => {
 
   describe('backwards compatibility', () => {
     it('should maintain existing behavior when defaultTest not configured', async () => {
-      const defaultProvider = createMockProvider({ id: 'default-provider' });
+      const defaultProvider = {
+        id: () => 'default-provider',
+        callApi: vi.fn(),
+      };
 
       // No defaultTest in config
       (cliState as any).config = {};
@@ -380,7 +358,10 @@ describe('getGradingProvider', () => {
     });
 
     it('should maintain existing behavior with explicit provider', async () => {
-      const explicitProvider = createMockProvider({ id: 'explicit-provider' });
+      const explicitProvider = {
+        id: () => 'explicit-provider',
+        callApi: vi.fn(),
+      };
 
       (cliState as any).config = {
         defaultTest: {

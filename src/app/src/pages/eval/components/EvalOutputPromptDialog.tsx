@@ -511,20 +511,10 @@ export default function EvalOutputPromptDialog({
             {/* Messages Panel */}
             {hasMessagesData && (
               <TabsContent value="messages" className="mt-0">
-                {parsedMessages.length > 0 && (
-                  <ChatMessages
-                    messages={parsedMessages}
-                    displayTurnCount={parsedMessages.length > 2}
-                    maxTurns={Math.ceil(parsedMessages.length / 2)}
-                  />
-                )}
+                {parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
                 {redteamHistoryMessages.length > 0 && (
                   <div className={parsedMessages.length > 0 ? 'mt-6' : ''}>
-                    <ChatMessages
-                      messages={redteamHistoryMessages}
-                      displayTurnCount={redteamHistoryMessages.length > 2}
-                      maxTurns={Math.ceil(redteamHistoryMessages.length / 2)}
-                    />
+                    <ChatMessages messages={redteamHistoryMessages} />
                   </div>
                 )}
               </TabsContent>

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfirmEvalNameDialog } from './ConfirmEvalNameDialog';
@@ -274,49 +274,40 @@ describe('ConfirmEvalNameDialog', () => {
   });
 
   describe('User Input Edge Cases', () => {
-    it('should call onConfirm with the trimmed value when input contains leading/trailing whitespace', async () => {
-      const user = userEvent.setup();
+    it('should call onConfirm with the trimmed value when input contains leading/trailing whitespace', () => {
       render(<ConfirmEvalNameDialog {...defaultProps} />);
       const input = screen.getByLabelText('Name') as HTMLInputElement;
-      await user.click(input);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('  Test Name  ');
+      fireEvent.change(input, { target: { value: '  Test Name  ' } });
       const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-      await user.click(confirmButton);
+      fireEvent.click(confirmButton);
       expect(mockOnConfirm).toHaveBeenCalledWith('Test Name');
     });
 
     it('should disable confirm button and prevent onConfirm when name contains only whitespace', async () => {
-      const user = userEvent.setup();
       render(<ConfirmEvalNameDialog {...defaultProps} />);
       const input = screen.getByLabelText('Name') as HTMLInputElement;
       const confirmButton = screen.getByRole('button', { name: 'Confirm' });
 
-      await user.click(input);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('   \t\n  ');
+      fireEvent.change(input, { target: { value: '   \t\n  ' } });
       expect(confirmButton).toBeDisabled();
 
-      await user.click(confirmButton);
+      fireEvent.click(confirmButton);
       expect(mockOnConfirm).not.toHaveBeenCalled();
     });
   });
 
   describe('Error Handling', () => {
     it('displays error message and remains open when onConfirm throws an error', async () => {
-      const user = userEvent.setup();
       const errorMessage = 'Failed to confirm';
       mockOnConfirm.mockRejectedValue(new Error(errorMessage));
 
       render(<ConfirmEvalNameDialog {...defaultProps} />);
 
       const input = screen.getByLabelText('Name') as HTMLInputElement;
-      await user.click(input);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('New Name');
+      fireEvent.change(input, { target: { value: 'New Name' } });
 
       const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-      await user.click(confirmButton);
+      fireEvent.click(confirmButton);
 
       await waitFor(() => {
         expect(screen.getByText(errorMessage)).toBeInTheDocument();
@@ -328,19 +319,16 @@ describe('ConfirmEvalNameDialog', () => {
     });
 
     it('displays "Operation failed" when onConfirm throws a non-Error object', async () => {
-      const user = userEvent.setup();
       const errorMessage = 'Operation failed';
       mockOnConfirm.mockRejectedValue('Non-error object');
 
       render(<ConfirmEvalNameDialog {...defaultProps} onConfirm={mockOnConfirm} />);
 
       const input = screen.getByLabelText('Name') as HTMLInputElement;
-      await user.click(input);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('New Name');
+      fireEvent.change(input, { target: { value: 'New Name' } });
 
       const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-      await user.click(confirmButton);
+      fireEvent.click(confirmButton);
 
       await screen.findByText(errorMessage);
 
@@ -348,23 +336,18 @@ describe('ConfirmEvalNameDialog', () => {
     });
 
     it('clears error state when input field is modified after an error', async () => {
-      const user = userEvent.setup();
       mockOnConfirm.mockImplementation(() => Promise.reject(new Error('Test Error')));
       render(<ConfirmEvalNameDialog {...defaultProps} />);
 
       const input = screen.getByLabelText('Name') as HTMLInputElement;
-      await user.click(input);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('Changed Name');
+      fireEvent.change(input, { target: { value: 'Changed Name' } });
 
       const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-      await user.click(confirmButton);
+      fireEvent.click(confirmButton);
 
       await screen.findByText('Test Error');
 
-      await user.click(input);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('New Name');
+      fireEvent.change(input, { target: { value: 'New Name' } });
 
       expect(screen.queryByText('Test Error')).toBeNull();
     });
@@ -372,7 +355,6 @@ describe('ConfirmEvalNameDialog', () => {
 
   describe('Loading State', () => {
     it('disables buttons and shows loading indicator while confirm action is in progress', async () => {
-      const user = userEvent.setup();
       let resolveConfirm: () => void;
       const confirmPromise = new Promise<void>((resolve) => {
         resolveConfirm = resolve;
@@ -389,12 +371,10 @@ describe('ConfirmEvalNameDialog', () => {
       );
 
       const input = screen.getByLabelText('Name') as HTMLInputElement;
-      await user.click(input);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('New Name');
+      fireEvent.change(input, { target: { value: 'New Name' } });
 
       const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-      await user.click(confirmButton);
+      fireEvent.click(confirmButton);
 
       await waitFor(() => {
         expect(screen.getByText('Processing...')).toBeInTheDocument();
@@ -411,7 +391,6 @@ describe('ConfirmEvalNameDialog', () => {
 
   describe('Timing of onClose callback', () => {
     it('should call onClose only after onConfirm promise resolves', async () => {
-      const user = userEvent.setup();
       const newName = 'New Eval Name';
 
       let resolveConfirmPromise: () => void;
@@ -431,12 +410,10 @@ describe('ConfirmEvalNameDialog', () => {
       );
 
       const input = screen.getByLabelText('Name') as HTMLInputElement;
-      await user.click(input);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste(newName);
+      fireEvent.change(input, { target: { value: newName } });
 
       const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-      await user.click(confirmButton);
+      fireEvent.click(confirmButton);
 
       expect(mockOnConfirm).toHaveBeenCalledTimes(1);
       expect(mockOnConfirm).toHaveBeenCalledWith(newName);
@@ -453,49 +430,39 @@ describe('ConfirmEvalNameDialog', () => {
   });
 
   describe('Cancel Button', () => {
-    it('should invoke onClose and not onConfirm when Cancel button is clicked after input field is modified', async () => {
-      const user = userEvent.setup();
+    it('should invoke onClose and not onConfirm when Cancel button is clicked after input field is modified', () => {
       render(<ConfirmEvalNameDialog {...defaultProps} />);
       const input = screen.getByLabelText('Name') as HTMLInputElement;
-      await user.click(input);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('New Name');
+      fireEvent.change(input, { target: { value: 'New Name' } });
       const cancelButton = screen.getByRole('button', { name: 'Cancel' });
-      await user.click(cancelButton);
+      fireEvent.click(cancelButton);
       expect(mockOnClose).toHaveBeenCalledTimes(1);
       expect(mockOnConfirm).not.toHaveBeenCalled();
     });
   });
 
   describe('Keyboard interaction', () => {
-    it('should trigger the confirm action when Enter is pressed in the input field', async () => {
-      const user = userEvent.setup();
+    it('should trigger the confirm action when Enter is pressed in the input field', () => {
       render(<ConfirmEvalNameDialog {...defaultProps} />);
       const inputElement = screen.getByLabelText('Name');
 
-      await user.click(inputElement);
-      await user.keyboard('{Control>}a{/Control}');
-      await user.paste('New Name');
-      inputElement.focus();
-      await user.keyboard('{Enter}');
+      fireEvent.change(inputElement, { target: { value: 'New Name' } });
+      fireEvent.keyDown(inputElement, { key: 'Enter', code: 'Enter', charCode: 13 });
 
       expect(mockOnConfirm).toHaveBeenCalledWith('New Name');
     });
   });
 
   it('should prevent closing via onClose when isLoading is true', async () => {
-    const user = userEvent.setup();
     const delayedConfirm = vi.fn((_newName: string) => new Promise<void>(() => {}));
 
     render(<ConfirmEvalNameDialog {...defaultProps} onConfirm={delayedConfirm} />);
 
     const input = screen.getByLabelText('Name');
-    await user.click(input);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste('New Name');
+    fireEvent.change(input, { target: { value: 'New Name' } });
 
     const confirmButton = screen.getByText('Confirm');
-    await user.click(confirmButton);
+    fireEvent.click(confirmButton);
 
     await screen.findByText('Processing...');
 
@@ -506,14 +473,11 @@ describe('ConfirmEvalNameDialog', () => {
   });
 
   it('should call onConfirm with the trimmed name and then call onClose when the confirm button is clicked and the name is valid', async () => {
-    const user = userEvent.setup();
     render(<ConfirmEvalNameDialog {...defaultProps} />);
     const input = screen.getByLabelText('Name') as HTMLInputElement;
-    await user.click(input);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste('   New Name   ');
+    fireEvent.change(input, { target: { value: '   New Name   ' } });
     const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-    await user.click(confirmButton);
+    fireEvent.click(confirmButton);
     expect(mockOnConfirm).toHaveBeenCalledWith('New Name');
     // Wait for onClose to be called (dialog closes after successful confirmation)
     await waitFor(() => {

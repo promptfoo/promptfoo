@@ -1,6 +1,5 @@
 import { renderWithProviders } from '@app/utils/testutils';
-import { screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
@@ -31,8 +30,7 @@ describe('WebSocketEndpointConfiguration', () => {
     },
   };
 
-  it('calls updateWebSocketTarget on URL change', async () => {
-    const user = userEvent.setup();
+  it('calls updateWebSocketTarget on URL change', () => {
     const update = vi.fn();
 
     renderWithProviders(
@@ -44,15 +42,12 @@ describe('WebSocketEndpointConfiguration', () => {
     );
 
     const urlField = screen.getByLabelText('WebSocket URL');
-    await user.click(urlField);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste('wss://foo.bar');
+    fireEvent.change(urlField, { target: { value: 'wss://foo.bar' } });
 
     expect(update).toHaveBeenCalledWith('url', 'wss://foo.bar');
   });
 
-  it('calls updateWebSocketTarget on Message Template change', async () => {
-    const user = userEvent.setup();
+  it('calls updateWebSocketTarget on Message Template change', () => {
     const update = vi.fn();
 
     renderWithProviders(
@@ -64,15 +59,12 @@ describe('WebSocketEndpointConfiguration', () => {
     );
 
     const msgField = screen.getByLabelText('Message Template');
-    await user.click(msgField);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste('Hey {{name}}');
+    fireEvent.change(msgField, { target: { value: 'Hey {{name}}' } });
 
     expect(update).toHaveBeenCalledWith('messageTemplate', 'Hey {{name}}');
   });
 
-  it('calls updateWebSocketTarget on Response Transform change', async () => {
-    const user = userEvent.setup();
+  it('calls updateWebSocketTarget on Response Transform change', () => {
     const update = vi.fn();
 
     const nonStreamingProvider: ProviderOptions = {
@@ -89,15 +81,12 @@ describe('WebSocketEndpointConfiguration', () => {
     );
 
     const transformField = screen.getByLabelText('Response Transform');
-    await user.click(transformField);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste('json.data.result');
+    fireEvent.change(transformField, { target: { value: 'json.data.result' } });
 
     expect(update).toHaveBeenCalledWith('transformResponse', 'json.data.result');
   });
 
-  it('calls updateWebSocketTarget on Stream Response Transform change', async () => {
-    const user = userEvent.setup();
+  it('calls updateWebSocketTarget on Stream Response Transform change', () => {
     const update = vi.fn();
 
     renderWithProviders(
@@ -109,15 +98,12 @@ describe('WebSocketEndpointConfiguration', () => {
     );
 
     const streamTransformField = screen.getByLabelText('Stream Response Transform');
-    await user.click(streamTransformField);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste('chunk => chunk');
+    fireEvent.change(streamTransformField, { target: { value: 'chunk => chunk' } });
 
     expect(update).toHaveBeenCalledWith('streamResponse', 'chunk => chunk');
   });
 
-  it('calls updateWebSocketTarget on Timeout change', async () => {
-    const user = userEvent.setup();
+  it('calls updateWebSocketTarget on Timeout change', () => {
     const update = vi.fn();
 
     renderWithProviders(
@@ -129,9 +115,7 @@ describe('WebSocketEndpointConfiguration', () => {
     );
 
     const timeoutField = screen.getByLabelText('Timeout (ms)');
-    await user.click(timeoutField);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste(String(25000));
+    fireEvent.change(timeoutField, { target: { value: 25000 } });
 
     expect(update).toHaveBeenCalledWith('timeoutMs', 25000);
   });
@@ -170,8 +154,7 @@ describe('WebSocketEndpointConfiguration', () => {
     expect(screen.queryByLabelText('Response Transform')).not.toBeInTheDocument();
   });
 
-  it('toggling streaming switch updates config and toggles visible inputs', async () => {
-    const user = userEvent.setup();
+  it('toggling streaming switch updates config and toggles visible inputs', () => {
     const update = vi.fn();
     const nonStreamingProvider: ProviderOptions = {
       ...baseProvider,
@@ -192,7 +175,7 @@ describe('WebSocketEndpointConfiguration', () => {
 
     // Toggle on
     const switchEl = screen.getByRole('switch');
-    await user.click(switchEl);
+    fireEvent.click(switchEl);
 
     expect(update).toHaveBeenCalledWith('streamResponse', expect.any(String));
     expect(update).toHaveBeenCalledWith('transformResponse', undefined);
@@ -203,7 +186,7 @@ describe('WebSocketEndpointConfiguration', () => {
 
     // Toggle off
     update.mockClear();
-    await user.click(switchEl);
+    fireEvent.click(switchEl);
 
     expect(update).toHaveBeenCalledWith('transformResponse', expect.any(String));
     expect(update).toHaveBeenCalledWith('streamResponse', undefined);
@@ -213,8 +196,7 @@ describe('WebSocketEndpointConfiguration', () => {
     expect(screen.queryByLabelText('Stream Response Transform')).not.toBeInTheDocument();
   });
 
-  it('onBlur sets default when timeoutMs is undefined/NaN/0, and does not when valid', async () => {
-    const user = userEvent.setup();
+  it('onBlur sets default when timeoutMs is undefined/NaN/0, and does not when valid', () => {
     const update = vi.fn();
 
     // Case 1: undefined -> should set to default
@@ -232,8 +214,7 @@ describe('WebSocketEndpointConfiguration', () => {
     );
 
     const timeoutField1 = screen.getByLabelText('Timeout (ms)');
-    await user.click(timeoutField1);
-    await user.tab();
+    fireEvent.blur(timeoutField1);
 
     // we can't import the constant here easily; just assert it sets something when undefined
     expect(update).toHaveBeenCalledWith('timeoutMs', expect.any(Number));
@@ -253,8 +234,7 @@ describe('WebSocketEndpointConfiguration', () => {
       />,
     );
     const timeoutField2 = screen.getByLabelText('Timeout (ms)');
-    await user.click(timeoutField2);
-    await user.tab();
+    fireEvent.blur(timeoutField2);
     expect(update).toHaveBeenCalledWith('timeoutMs', expect.any(Number));
 
     // Case 3: zero -> should set to default
@@ -272,8 +252,7 @@ describe('WebSocketEndpointConfiguration', () => {
       />,
     );
     const timeoutField3 = screen.getByLabelText('Timeout (ms)');
-    await user.click(timeoutField3);
-    await user.tab();
+    fireEvent.blur(timeoutField3);
     expect(update).toHaveBeenCalledWith('timeoutMs', expect.any(Number));
 
     // Case 4: valid value -> should not change on blur
@@ -291,8 +270,7 @@ describe('WebSocketEndpointConfiguration', () => {
       />,
     );
     const timeoutField4 = screen.getByLabelText('Timeout (ms)');
-    await user.click(timeoutField4);
-    await user.tab();
+    fireEvent.blur(timeoutField4);
     expect(update).not.toHaveBeenCalled();
   });
 });

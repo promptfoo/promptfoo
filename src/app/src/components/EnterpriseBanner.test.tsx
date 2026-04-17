@@ -1,4 +1,3 @@
-import { mockCallApiResponse, rejectCallApi, resetCallApiMock } from '@app/tests/apiMocks';
 import { callApi } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,11 +9,14 @@ describe('EnterpriseBanner', () => {
   const mockCallApi = vi.mocked(callApi);
 
   beforeEach(() => {
-    resetCallApiMock();
+    vi.clearAllMocks();
   });
 
   it('should render the community edition banner when evalId is provided and cloud is not enabled', async () => {
-    mockCallApiResponse({ isCloudEnabled: false });
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ isCloudEnabled: false }),
+    } as Response);
 
     render(<EnterpriseBanner evalId="test-eval-123" />);
 
@@ -32,7 +34,10 @@ describe('EnterpriseBanner', () => {
   });
 
   it('should not render anything when evalId is provided and cloud is enabled', async () => {
-    mockCallApiResponse({ isCloudEnabled: true });
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ isCloudEnabled: true }),
+    } as Response);
 
     const { container } = render(<EnterpriseBanner evalId="test-eval-123" />);
 
@@ -46,7 +51,10 @@ describe('EnterpriseBanner', () => {
   });
 
   it('should render the community edition banner when no evalId is provided', async () => {
-    mockCallApiResponse({ isCloudEnabled: false });
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ isCloudEnabled: false }),
+    } as Response);
 
     render(<EnterpriseBanner />);
 
@@ -63,7 +71,10 @@ describe('EnterpriseBanner', () => {
   });
 
   it('should render the community edition banner when the API call returns a non-OK response', async () => {
-    mockCallApiResponse({}, { ok: false });
+    mockCallApi.mockResolvedValue({
+      ok: false,
+      json: () => Promise.resolve({}),
+    } as Response);
 
     render(<EnterpriseBanner evalId="test-eval-123" />);
 
@@ -81,7 +92,7 @@ describe('EnterpriseBanner', () => {
   });
 
   it('should render the community edition banner when the API call throws an exception', async () => {
-    rejectCallApi(new Error('Network error'));
+    mockCallApi.mockRejectedValue(new Error('Network error'));
 
     render(<EnterpriseBanner evalId="test-eval-123" />);
 

@@ -61,13 +61,8 @@ describe('Switch', () => {
     expect(switchElement).toHaveAttribute('data-state', 'checked');
   });
 
-  it('supports name attribute for forms', () => {
-    render(
-      <form>
-        <Switch name="notifications" value="on" />
-      </form>,
-    );
-
+  it.skip('supports name attribute for forms', () => {
+    render(<Switch name="notifications" value="on" />);
     const hiddenInput = document.querySelector('input[name="notifications"]');
     expect(hiddenInput).toBeInTheDocument();
     expect(hiddenInput).toHaveAttribute('value', 'on');

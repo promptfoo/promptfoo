@@ -10,9 +10,8 @@ import {
   resultIsForTestCase,
   varsMatch,
 } from '../../src/util/comparison';
-import { createEvaluateResult } from '../factories/eval';
 
-import type { TestCase } from '../../src/types/index';
+import type { EvaluateResult, TestCase } from '../../src/types/index';
 
 describe('varsMatch', () => {
   it('true with both undefined', () => {
@@ -46,10 +45,12 @@ describe('resultIsForTestCase', () => {
       key: 'value',
     },
   };
-  const result = createEvaluateResult({
-    provider: 'provider' as any,
-    vars: { key: 'value' },
-  });
+  const result = {
+    provider: 'provider',
+    vars: {
+      key: 'value',
+    },
+  } as any as EvaluateResult;
 
   it('is true', async () => {
     expect(resultIsForTestCase(result, testCase)).toBe(true);
@@ -74,10 +75,10 @@ describe('resultIsForTestCase', () => {
       vars: { key: 'value' },
     };
 
-    const resultWithNullProvider = createEvaluateResult({
-      provider: null as any,
+    const resultWithNullProvider = {
+      provider: null,
       vars: { key: 'value' },
-    });
+    } as any as EvaluateResult;
 
     // Should match because we can't compare when result provider is missing
     expect(resultIsForTestCase(resultWithNullProvider, testCaseWithProvider)).toBe(true);
@@ -89,10 +90,10 @@ describe('resultIsForTestCase', () => {
       vars: { key: 'value' },
     };
 
-    const resultWithUndefinedProvider = createEvaluateResult({
-      provider: undefined as any,
+    const resultWithUndefinedProvider = {
+      provider: undefined,
       vars: { key: 'value' },
-    });
+    } as any as EvaluateResult;
 
     expect(resultIsForTestCase(resultWithUndefinedProvider, testCaseWithProvider)).toBe(true);
   });
@@ -102,10 +103,10 @@ describe('resultIsForTestCase', () => {
       vars: { key: 'value' },
     };
 
-    const resultWithProvider = createEvaluateResult({
+    const resultWithProvider = {
       provider: { id: 'some-provider' },
       vars: { key: 'value' },
-    });
+    } as any as EvaluateResult;
 
     expect(resultIsForTestCase(resultWithProvider, testCaseNoProvider)).toBe(true);
   });
@@ -120,10 +121,10 @@ describe('resultIsForTestCase', () => {
       vars: { key: 'value' },
     };
 
-    const resultWithTargetProvider = createEvaluateResult({
+    const resultWithTargetProvider = {
       provider: { id: 'openai:gpt-4' },
       vars: { key: 'value' },
-    });
+    } as any as EvaluateResult;
 
     // Both providers present and different → no match (strict comparison)
     expect(resultIsForTestCase(resultWithTargetProvider, testCaseWithAgenticProvider)).toBe(false);
@@ -141,10 +142,10 @@ describe('resultIsForTestCase', () => {
   });
 
   it('matches when test provider is label and result provider has label and id', async () => {
-    const labelledResult = createEvaluateResult({
+    const labelledResult = {
       provider: { id: 'file://provider.js', label: 'provider' },
       vars: { key: 'value' },
-    });
+    } as any as EvaluateResult;
 
     expect(resultIsForTestCase(labelledResult, testCase)).toBe(true);
   });
@@ -155,10 +156,10 @@ describe('resultIsForTestCase', () => {
       vars: { key: 'value' },
     };
 
-    const absolutePathResult = createEvaluateResult({
+    const absolutePathResult = {
       provider: { id: `file://${path.join(process.cwd(), 'provider.js')}` },
       vars: { key: 'value' },
-    });
+    } as any as EvaluateResult;
 
     expect(resultIsForTestCase(absolutePathResult, relativePathTestCase)).toBe(true);
   });
@@ -169,10 +170,10 @@ describe('resultIsForTestCase', () => {
       vars: { key: 'value' },
     };
 
-    const absolutePathResult = createEvaluateResult({
-      provider: `file://${path.join(process.cwd(), 'provider.js')}` as any,
+    const absolutePathResult = {
+      provider: `file://${path.join(process.cwd(), 'provider.js')}`,
       vars: { key: 'value' },
-    });
+    } as any as EvaluateResult;
 
     expect(resultIsForTestCase(absolutePathResult, noPathTestCase)).toBe(true);
   });
@@ -188,8 +189,8 @@ describe('resultIsForTestCase', () => {
       },
     };
 
-    const result = createEvaluateResult({
-      provider: 'provider' as any,
+    const result = {
+      provider: 'provider',
       vars: {
         input: 'hello',
         language: 'en',
@@ -201,7 +202,7 @@ describe('resultIsForTestCase', () => {
           language: 'en',
         },
       },
-    });
+    } as any as EvaluateResult;
 
     // Should match because _conversation is filtered out
     expect(resultIsForTestCase(result, testCase)).toBe(true);
@@ -218,14 +219,14 @@ describe('resultIsForTestCase', () => {
       },
     };
 
-    const result = createEvaluateResult({
-      provider: 'provider' as any,
+    const result = {
+      provider: 'provider',
       vars: {
         input: 'hello',
         language: 'en',
         _conversation: [],
       },
-    });
+    } as any as EvaluateResult;
 
     // Should match because both have same vars after filtering
     expect(resultIsForTestCase(result, testCase)).toBe(true);
@@ -242,14 +243,14 @@ describe('resultIsForTestCase', () => {
       },
     };
 
-    const result = createEvaluateResult({
-      provider: 'provider' as any,
+    const result = {
+      provider: 'provider',
       vars: {
         prompt: 'test prompt',
         goal: 'test goal',
         sessionId: 'goat-session-abc123', // Added by GOAT provider during evaluation
       },
-    });
+    } as any as EvaluateResult;
 
     // Should match because sessionId is filtered out
     expect(resultIsForTestCase(result, testCase)).toBe(true);
@@ -263,14 +264,14 @@ describe('resultIsForTestCase', () => {
       },
     };
 
-    const result = createEvaluateResult({
-      provider: 'provider' as any,
+    const result = {
+      provider: 'provider',
       vars: {
         input: 'hello',
         _conversation: [{ role: 'user', content: 'hi' }],
         sessionId: 'session-xyz789',
       },
-    });
+    } as any as EvaluateResult;
 
     // Should match because both runtime vars are filtered out
     expect(resultIsForTestCase(result, testCase)).toBe(true);
@@ -286,13 +287,13 @@ describe('resultIsForTestCase', () => {
       },
     };
 
-    const result = createEvaluateResult({
-      provider: 'provider' as any,
+    const result = {
+      provider: 'provider',
       vars: {
         prompt: 'test',
         sessionId: 'different-runtime-session',
       },
-    });
+    } as any as EvaluateResult;
 
     // Should match because sessionId is filtered from both sides
     expect(resultIsForTestCase(result, testCase)).toBe(true);

@@ -46,7 +46,6 @@ describe('HttpProvider with TLS Configuration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockReadFileSync.mockReset();
 
     // Setup default mock response
     mockFetchWithCache.mockResolvedValue({

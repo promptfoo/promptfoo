@@ -254,7 +254,6 @@ module.exports = router;`,
   };
 
   // Initialize with some starter files
-  // biome-ignore lint/correctness/useExhaustiveDependencies: sampleFiles is a static object recreated each render
   useEffect(() => {
     setFiles(useHiddenChars ? sampleFiles.malicious : sampleFiles.normal);
   }, [useHiddenChars]);
@@ -804,7 +803,8 @@ module.exports = { validateUser, validatePasswordStrength };`;
   // Handle selecting a predefined prompt
   const handlePromptSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedValue = e.target.value;
-    if (prompts.some((prompt) => prompt.id === selectedValue)) {
+    const selectedPromptObj = prompts.find((p) => p.id === selectedValue);
+    if (selectedPromptObj) {
       setSelectedPrompt(selectedValue);
     } else {
       setSelectedPrompt('');
@@ -869,11 +869,15 @@ module.exports = { validateUser, validatePasswordStrength };`;
               <div className={styles.editorHeader}>
                 <span className={styles.tabTitle}>{selectedFile.name}</span>
               </div>
-              <pre className={`${styles.codeArea} ${isEditing ? styles.editing : ''}`}>
+              <pre
+                className={`${styles.codeArea} ${isEditing && selectedFile ? styles.editing : ''}`}
+              >
                 <code
-                  dangerouslySetInnerHTML={formatCodeWithHighlightedInstructions(
-                    selectedFile.content,
-                  )}
+                  dangerouslySetInnerHTML={
+                    selectedFile
+                      ? formatCodeWithHighlightedInstructions(selectedFile.content)
+                      : { __html: '' }
+                  }
                 />
               </pre>
               {useHiddenChars && selectedFile?.isMalicious && showMaliciousCode && (
@@ -922,7 +926,7 @@ module.exports = { validateUser, validatePasswordStrength };`;
             <select
               className={styles.promptSelect}
               value={selectedPrompt}
-              onChange={handlePromptSelect}
+              onChange={(e) => setSelectedPrompt(e.target.value)}
             >
               <option value="">Select a prompt...</option>
               {prompts.map((prompt) => (

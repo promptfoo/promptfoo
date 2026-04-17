@@ -20,9 +20,7 @@ describe('SlackProvider', () => {
   let mockWebClient: any;
 
   beforeEach(() => {
-    vi.useFakeTimers();
     vi.clearAllMocks();
-    slackMocks.webClientImpl.mockReset();
     process.env.SLACK_BOT_TOKEN = 'xoxb-test-token';
 
     mockWebClient = {
@@ -38,8 +36,6 @@ describe('SlackProvider', () => {
   });
 
   afterEach(() => {
-    vi.useRealTimers();
-    vi.clearAllMocks();
     delete process.env.SLACK_BOT_TOKEN;
   });
 
@@ -135,9 +131,7 @@ describe('SlackProvider', () => {
           ],
         } as any);
 
-      const resultPromise = provider.callApi('Test prompt');
-      await vi.runAllTimersAsync();
-      const result = await resultPromise;
+      const result = await provider.callApi('Test prompt');
 
       expect(mockWebClient.chat.postMessage).toHaveBeenCalledWith({
         channel: 'C123',
@@ -193,9 +187,7 @@ describe('SlackProvider', () => {
         messages: [],
       } as any);
 
-      const resultPromise = provider.callApi('Test prompt');
-      await vi.runAllTimersAsync();
-      const result = await resultPromise;
+      const result = await provider.callApi('Test prompt');
 
       expect(result.error).toContain('Timeout waiting for Slack response');
     });
@@ -287,9 +279,7 @@ describe('SlackProvider', () => {
           ],
         } as any);
 
-      const resultPromise = provider.callApi('Test prompt');
-      await vi.runAllTimersAsync();
-      const result = await resultPromise;
+      const result = await provider.callApi('Test prompt');
 
       expect(result.output).toBe('Correct user');
       expect(result.metadata?.waitForUser).toBe('U456');
@@ -343,9 +333,7 @@ describe('SlackProvider', () => {
         }
       });
 
-      const resultPromise = provider.callApi('Test prompt');
-      await vi.runAllTimersAsync();
-      const result = await resultPromise;
+      const result = await provider.callApi('Test prompt');
 
       expect(result.output).toBe('First response\n\nSecond response');
     });
@@ -466,9 +454,7 @@ describe('SlackProvider', () => {
           ],
         });
 
-      const resultPromise = provider.callApi('Test prompt');
-      await vi.runAllTimersAsync();
-      const result = await resultPromise;
+      const result = await provider.callApi('Test prompt');
 
       expect(result.output).toBe('Response');
       expect(result.metadata).toBeDefined();

@@ -1,7 +1,6 @@
-import { mockCallApiResponse, resetCallApiMock } from '@app/tests/apiMocks';
+import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportIndex from './ReportIndex';
@@ -105,13 +104,15 @@ const mockData: EvalSummary[] = [
 
 describe('ReportIndex', () => {
   beforeEach(() => {
-    resetCallApiMock();
-    vi.mocked(useNavigate).mockReturnValue(vi.fn());
+    vi.clearAllMocks();
   });
 
   describe('ReportsTable rendering', () => {
     it('should render all rows and columns with correct values for a given EvalSummary[] data', async () => {
-      mockCallApiResponse({ data: mockData });
+      vi.mocked(callApi).mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: mockData }),
+      } as Response);
 
       render(
         <MemoryRouter>
@@ -138,7 +139,10 @@ describe('ReportIndex', () => {
     });
 
     it('should render the toolbar', async () => {
-      mockCallApiResponse({ data: mockData });
+      vi.mocked(callApi).mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: mockData }),
+      } as Response);
 
       render(
         <MemoryRouter>
@@ -167,7 +171,10 @@ describe('ReportIndex', () => {
         },
       ];
 
-      mockCallApiResponse({ data: mockDataNoProviders });
+      vi.mocked(callApi).mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: mockDataNoProviders }),
+      } as Response);
 
       render(
         <MemoryRouter>
@@ -195,7 +202,10 @@ describe('ReportIndex', () => {
           description: '',
         },
       ];
-      mockCallApiResponse({ data: mockDataNoDescription });
+      vi.mocked(callApi).mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: mockDataNoDescription }),
+      } as Response);
 
       render(
         <MemoryRouter>
@@ -211,8 +221,10 @@ describe('ReportIndex', () => {
 
   describe('ReportsTable navigation', () => {
     it('should navigate to /reports?evalId={evalId} when a row is clicked', async () => {
-      const user = userEvent.setup();
-      mockCallApiResponse({ data: mockData });
+      vi.mocked(callApi).mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: mockData }),
+      } as Response);
 
       const navigate = vi.fn();
       vi.mocked(useNavigate).mockReturnValue(navigate);
@@ -228,7 +240,7 @@ describe('ReportIndex', () => {
       });
 
       const linkElement = screen.getByRole('link', { name: 'My First Redteam Report' });
-      await user.click(linkElement);
+      fireEvent.click(linkElement);
 
       expect(navigate).toHaveBeenCalledWith('/reports?evalId=eval-1');
     });

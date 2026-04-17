@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { matchesClassification } from '../../src/matchers/classification';
+import { matchesClassification } from '../../src/matchers';
 import { HuggingfaceTextClassificationProvider } from '../../src/providers/huggingface';
-import { createMockProvider } from '../factories/provider';
 
 import type {
   ApiProvider,
@@ -78,36 +77,6 @@ describe('matchesClassification', () => {
       pass: true,
       reason: `Maximum classification score 0.60 >= ${threshold}`,
       score: 0.6,
-    });
-  });
-
-  it('should fail with a maximum-score reason when expected is undefined', async () => {
-    const output = 'Sample output';
-    const threshold = 0.9;
-
-    const grader = new TestGrader();
-    const grading: GradingConfig = {
-      provider: grader,
-    };
-
-    await expect(matchesClassification(undefined, output, threshold, grading)).resolves.toEqual({
-      pass: false,
-      reason: `Maximum classification score 0.60 < ${threshold}`,
-      score: 0.6,
-    });
-  });
-
-  it('should fail cleanly when expected is undefined and no scores are returned', async () => {
-    const grading: GradingConfig = {
-      provider: Object.assign(createMockProvider({ id: 'empty-classification-provider' }), {
-        callClassificationApi: vi.fn().mockResolvedValue({ classification: {} }),
-      }),
-    };
-
-    await expect(matchesClassification(undefined, 'Sample output', 0.5, grading)).resolves.toEqual({
-      pass: false,
-      reason: 'No classification scores returned',
-      score: 0,
     });
   });
 

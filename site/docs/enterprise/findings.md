@@ -9,7 +9,7 @@ keywords:
 
 # Findings and Reports
 
-[Promptfoo Enterprise](/docs/enterprise/) allows you to review findings and reports from scans within the Promptfoo Enterprise application.
+Promptfoo Enterprise allows you to review findings and reports from scans within the Promptfoo application.
 
 ## How Grading Works
 

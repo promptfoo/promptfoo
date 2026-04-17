@@ -1,7 +1,5 @@
-import { mockWindowOpen } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
-import { screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, screen } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
@@ -83,16 +81,17 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    mockWindowOpen();
+    // Mock window.open
+    global.window.open = vi.fn();
   });
 
-  it('should navigate to eval page when clicking View All Logs button', async () => {
-    const user = userEvent.setup();
+  it('should navigate to eval page when clicking View All Logs button', () => {
     renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
 
     const viewAllLogsButton = screen.getByText('View All Logs');
 
-    await user.click(viewAllLogsButton);
+    // Test normal click - should use navigate
+    fireEvent.click(viewAllLogsButton);
 
     const expectedUrl =
       '/eval/test-eval-123?filter=%5B%7B%22type%22%3A%22plugin%22%2C%22operator%22%3A%22equals%22%2C%22value%22%3A%22bola%22%7D%5D';
@@ -100,15 +99,13 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     expect(window.open).not.toHaveBeenCalled();
   });
 
-  it('should open in new tab when ctrl/cmd clicking View All Logs button', async () => {
-    const user = userEvent.setup();
+  it('should open in new tab when ctrl/cmd clicking View All Logs button', () => {
     renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
 
     const viewAllLogsButton = screen.getByText('View All Logs');
 
-    await user.keyboard('{Control>}');
-    await user.click(viewAllLogsButton);
-    await user.keyboard('{/Control}');
+    // Test Ctrl+click - should open new tab
+    fireEvent.click(viewAllLogsButton, { ctrlKey: true });
 
     const expectedUrl =
       '/eval/test-eval-123?filter=%5B%7B%22type%22%3A%22plugin%22%2C%22operator%22%3A%22equals%22%2C%22value%22%3A%22bola%22%7D%5D';
@@ -118,23 +115,21 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     // Reset mocks
     vi.clearAllMocks();
 
-    await user.keyboard('{Meta>}');
-    await user.click(viewAllLogsButton);
-    await user.keyboard('{/Meta}');
+    // Test Cmd+click (Mac) - should also open new tab
+    fireEvent.click(viewAllLogsButton, { metaKey: true });
 
     expect(window.open).toHaveBeenCalledWith(expectedUrl, '_blank');
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it('should close drawer when close button is clicked', async () => {
-    const user = userEvent.setup();
+  it('should close drawer when close button is clicked', () => {
     const onCloseMock = vi.fn();
     const props = { ...defaultProps, onClose: onCloseMock };
 
     renderWithProviders(<RiskCategoryDrawer {...props} />);
 
     const closeButton = screen.getByRole('button', { name: 'Close' });
-    await user.click(closeButton);
+    fireEvent.click(closeButton);
 
     expect(onCloseMock).toHaveBeenCalled();
   });

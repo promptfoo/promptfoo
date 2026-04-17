@@ -1,7 +1,6 @@
 import { renderWithProviders } from '@app/utils/testutils';
 import { Severity } from '@promptfoo/redteam/constants';
-import { screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SeverityCard from './SeverityCard';
 
@@ -57,10 +56,9 @@ describe('SeverityCard', () => {
       { severity: Severity.Medium, displayName: 'Medium' },
       { severity: Severity.Low, displayName: 'Low' },
       { severity: Severity.Informational, displayName: 'Informational' },
-    ])('should call navigateToIssues when clicked with navigateOnClick enabled for $displayName', async ({
+    ])('should call navigateToIssues when clicked with navigateOnClick enabled for $displayName', ({
       severity,
     }) => {
-      const user = userEvent.setup();
       renderWithProviders(
         <SeverityCard
           severity={severity}
@@ -71,7 +69,7 @@ describe('SeverityCard', () => {
       );
 
       const cardButton = screen.getByRole('button');
-      await user.click(cardButton);
+      fireEvent.click(cardButton);
 
       expect(mockNavigateToIssues).toHaveBeenCalledTimes(1);
       expect(mockNavigateToIssues).toHaveBeenCalledWith({ severity });
@@ -221,8 +219,7 @@ describe('SeverityCard', () => {
   });
 
   describe('Keyboard Navigation', () => {
-    it('should trigger navigateToIssues on Enter key', async () => {
-      const user = userEvent.setup();
+    it('should trigger navigateToIssues on Enter key', () => {
       renderWithProviders(
         <SeverityCard
           severity={Severity.Critical}
@@ -233,14 +230,12 @@ describe('SeverityCard', () => {
       );
 
       const cardButton = screen.getByRole('button');
-      cardButton.focus();
-      await user.keyboard('{Enter}');
+      fireEvent.keyDown(cardButton, { key: 'Enter' });
 
       expect(mockNavigateToIssues).toHaveBeenCalledWith({ severity: Severity.Critical });
     });
 
-    it('should trigger navigateToIssues on Space key', async () => {
-      const user = userEvent.setup();
+    it('should trigger navigateToIssues on Space key', () => {
       renderWithProviders(
         <SeverityCard
           severity={Severity.High}
@@ -251,8 +246,7 @@ describe('SeverityCard', () => {
       );
 
       const cardButton = screen.getByRole('button');
-      cardButton.focus();
-      await user.keyboard(' ');
+      fireEvent.keyDown(cardButton, { key: ' ' });
 
       expect(mockNavigateToIssues).toHaveBeenCalledWith({ severity: Severity.High });
     });

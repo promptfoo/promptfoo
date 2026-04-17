@@ -1,14 +1,12 @@
-import { mockClipboard } from '@app/tests/browserMocks';
-import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import {
   type AssertionType,
   type EvaluateTableOutput,
   ResultFailureReason,
 } from '@promptfoo/types';
-import { act, screen, waitFor } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCell';
 
@@ -27,64 +25,39 @@ const renderWithProviders = (ui: React.ReactElement) => {
   return baseRender(<ShiftKeyProvider>{ui}</ShiftKeyProvider>);
 };
 
-const dispatchClick = (element: Element) => {
-  element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-};
-
-const defaultResultsViewSettings = {
-  prettifyJson: false,
-  renderMarkdown: true,
-  showPassFail: true,
-  showPassReasons: false,
-  showPrompts: true,
-  maxImageWidth: 256,
-  maxImageHeight: 256,
-};
-
-const defaultTableStoreState = {
-  shouldHighlightSearchText: false,
-};
-
-const mockResultsViewSettings = {
-  ...defaultResultsViewSettings,
-};
-
-const mockTableStoreState = {
-  ...defaultTableStoreState,
-};
-
-const resetMockStoreState = () => {
-  Object.assign(mockResultsViewSettings, defaultResultsViewSettings);
-  Object.assign(mockTableStoreState, defaultTableStoreState);
-};
-
-beforeEach(() => {
-  resetMockStoreState();
-});
-
-afterEach(() => {
-  resetMockStoreState();
-  restoreTestTimers();
-});
-
-const mockClipboardWriteText = () => {
-  const clipboard = {
-    writeText: vi.fn().mockResolvedValue(undefined),
-  };
-
-  mockClipboard({ writeText: clipboard.writeText as Clipboard['writeText'] });
-
-  return clipboard;
-};
-
 vi.mock('./store', () => ({
-  useResultsViewSettingsStore: () => mockResultsViewSettings,
-  useTableStore: () => mockTableStoreState,
+  useResultsViewSettingsStore: () => ({
+    prettifyJson: false,
+    renderMarkdown: true,
+    showPassFail: true,
+    showPassReasons: false,
+    showPrompts: true,
+    maxImageWidth: 256,
+    maxImageHeight: 256,
+  }),
+  useTableStore: () => ({
+    shouldHighlightSearchText: false,
+  }),
 }));
 
 vi.mock('../../../hooks/useShiftKey', () => ({
   useShiftKey: () => true,
 }));
+
+// Use fake timers with shouldAdvanceTime to automatically advance time
+// This prevents "window is not defined" errors from timers firing after test cleanup
+beforeAll(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+});
+
+afterAll(() => {
+  vi.useRealTimers();
+});
+
+// Clear all pending timers after each test to prevent cross-test interference
+afterEach(() => {
+  vi.clearAllTimers();
+});
 
 interface MockEvalOutputCellProps extends EvalOutputCellProps {
   firstOutput: EvaluateTableOutput;
@@ -94,7 +67,6 @@ interface MockEvalOutputCellProps extends EvalOutputCellProps {
 
 describe('EvalOutputCell', () => {
   const mockOnRating = vi.fn();
-  let timers: TestTimers | undefined;
 
   const defaultProps: MockEvalOutputCellProps = {
     firstOutput: {
@@ -163,33 +135,11 @@ describe('EvalOutputCell', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resetMockStoreState();
-  });
-
-  afterEach(() => {
-    timers?.restore();
-    timers = undefined;
-  });
-
-  it('handles outputs without text without throwing', () => {
-    const propsWithoutText: MockEvalOutputCellProps = {
-      ...defaultProps,
-      output: {
-        ...defaultProps.output,
-        namedScores: undefined as unknown as Record<string, number>,
-        pass: undefined as unknown as boolean,
-        score: undefined as unknown as number,
-        text: undefined as unknown as string,
-      },
-    };
-
-    expect(() => renderWithProviders(<EvalOutputCell {...propsWithoutText} />)).not.toThrow();
   });
 
   it('passes metadata correctly to the dialog', async () => {
-    const user = userEvent.setup();
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
-    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+    await userEvent.click(screen.getByRole('button', { name: /view output and test details/i }));
 
     const dialogComponent = screen.getByTestId('dialog-component');
     expect(dialogComponent).toBeInTheDocument();
@@ -234,7 +184,6 @@ describe('EvalOutputCell', () => {
   });
 
   it('preserves existing metadata citations', async () => {
-    const user = userEvent.setup();
     const propsWithMetadataCitations = {
       ...defaultProps,
       output: {
@@ -247,7 +196,7 @@ describe('EvalOutputCell', () => {
     };
 
     renderWithProviders(<EvalOutputCell {...propsWithMetadataCitations} />);
-    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+    await userEvent.click(screen.getByRole('button', { name: /view output and test details/i }));
 
     const dialogComponent = screen.getByTestId('dialog-component');
     const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
@@ -272,41 +221,16 @@ describe('EvalOutputCell', () => {
   });
 
   it('combines assertion contexts in comment dialog', async () => {
-    const user = userEvent.setup();
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
-    await user.click(screen.getByRole('button', { name: /edit comment/i }));
+    await userEvent.click(screen.getByRole('button', { name: /edit comment/i }));
 
     const dialogContent = screen.getByTestId('context-text');
     expect(dialogContent).toHaveTextContent('Assertion 1 (accuracy): expected value');
     expect(dialogContent).toHaveTextContent('Assertion 2 (relevance): another value');
   });
 
-  it('falls back to overall grading result when component results are empty', async () => {
-    const propsWithEmptyComponentResults: MockEvalOutputCellProps = {
-      ...defaultProps,
-      output: {
-        ...defaultProps.output,
-        gradingResult: {
-          comment: 'Initial comment',
-          componentResults: [],
-          pass: true,
-          reason: 'Test reason',
-          score: 0.8,
-        },
-      },
-    };
-
-    renderWithProviders(<EvalOutputCell {...propsWithEmptyComponentResults} />);
-
-    expect(screen.getByText('PASS')).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: /edit comment/i }));
-    expect(screen.getByTestId('context-text')).toHaveTextContent('Test output text');
-  });
-
   it('uses assertion type when metric is not available', async () => {
-    const user = userEvent.setup();
     const propsWithoutMetrics: MockEvalOutputCellProps = {
       ...defaultProps,
       output: {
@@ -333,32 +257,30 @@ describe('EvalOutputCell', () => {
 
     renderWithProviders(<EvalOutputCell {...propsWithoutMetrics} />);
 
-    await user.click(screen.getByRole('button', { name: /edit comment/i }));
+    await userEvent.click(screen.getByRole('button', { name: /edit comment/i }));
 
     const dialogContent = screen.getByTestId('context-text');
     expect(dialogContent).toHaveTextContent('Assertion 1 (contains): expected value');
   });
 
   it('handles comment updates', async () => {
-    const user = userEvent.setup();
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
-    await user.click(screen.getByRole('button', { name: /edit comment/i }));
+    await userEvent.click(screen.getByRole('button', { name: /edit comment/i }));
 
     const commentInput = screen.getByRole('textbox');
-    await user.click(commentInput);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste('New comment');
-    await user.click(screen.getByText('Save'));
+    await userEvent.clear(commentInput);
+    await userEvent.type(commentInput, 'New comment');
+
+    await userEvent.click(screen.getByText('Save'));
 
     expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, 'New comment');
   });
 
   it('handles highlight toggle', async () => {
-    const user = userEvent.setup();
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
-    await user.click(screen.getByLabelText('Toggle test highlight'));
+    await userEvent.click(screen.getByLabelText('Toggle test highlight'));
     expect(mockOnRating).toHaveBeenNthCalledWith(
       1,
       undefined,
@@ -366,13 +288,12 @@ describe('EvalOutputCell', () => {
       '!highlight Initial comment',
     );
 
-    await user.click(screen.getByLabelText('Toggle test highlight'));
+    await userEvent.click(screen.getByLabelText('Toggle test highlight'));
 
     expect(mockOnRating).toHaveBeenNthCalledWith(2, undefined, undefined, 'Initial comment');
   });
 
   it('falls back to output text when no component results', async () => {
-    const user = userEvent.setup();
     const propsWithoutResults: MockEvalOutputCellProps = {
       ...defaultProps,
       output: {
@@ -389,7 +310,7 @@ describe('EvalOutputCell', () => {
 
     renderWithProviders(<EvalOutputCell {...propsWithoutResults} />);
 
-    await user.click(screen.getByRole('button', { name: /edit comment/i }));
+    await userEvent.click(screen.getByRole('button', { name: /edit comment/i }));
 
     const dialogContent = screen.getByTestId('context-text');
     expect(dialogContent).toHaveTextContent('Test output text');
@@ -666,164 +587,88 @@ describe('EvalOutputCell', () => {
     expect(imgElement.getAttribute('src')).toMatch(/^data:image\/svg\+xml;base64,/);
   });
 
-  it('deduplicates markdown main image from structured images list', () => {
-    const propsWithMarkdownImageAndStructuredImages: MockEvalOutputCellProps = {
-      ...defaultProps,
-      output: {
-        ...defaultProps.output,
-        text: '![Main image](https://example.com/main.png)',
-        images: [
-          { data: 'https://example.com/main.png', mimeType: 'image/png' },
-          { data: 'https://example.com/secondary.png', mimeType: 'image/png' },
-        ],
-      },
-    };
-
-    const { container } = renderWithProviders(
-      <EvalOutputCell {...propsWithMarkdownImageAndStructuredImages} />,
-    );
-
-    const renderedSources = [...container.querySelectorAll('img')]
-      .map((img) => img.getAttribute('src'))
-      .filter((src): src is string => Boolean(src));
-
-    expect(renderedSources).toEqual([
-      'https://example.com/main.png',
-      'https://example.com/secondary.png',
-    ]);
-  });
-
-  it('deduplicates inline image from structured images list', () => {
-    const dataUri =
-      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-    const propsWithInlineAndStructuredImages: MockEvalOutputCellProps = {
-      ...defaultProps,
-      output: {
-        ...defaultProps.output,
-        text: dataUri,
-        images: [
-          { data: dataUri, mimeType: 'image/png' },
-          { data: 'https://example.com/secondary-inline.png', mimeType: 'image/png' },
-        ],
-      },
-    };
-
-    const { container } = renderWithProviders(
-      <EvalOutputCell {...propsWithInlineAndStructuredImages} />,
-    );
-
-    const renderedSources = [...container.querySelectorAll('img')]
-      .map((img) => img.getAttribute('src'))
-      .filter((src): src is string => Boolean(src));
-
-    expect(renderedSources).toEqual([dataUri, 'https://example.com/secondary-inline.png']);
-  });
-
-  it('falls back to text when all structured images are invalid/skipped', () => {
-    const propsWithInvalidStructuredImages: MockEvalOutputCellProps = {
-      ...defaultProps,
-      output: {
-        ...defaultProps.output,
-        text: 'Fallback text should still render',
-        images: [{}, {}],
-      },
-    };
-
-    const { container } = renderWithProviders(
-      <EvalOutputCell {...propsWithInvalidStructuredImages} />,
-    );
-
-    expect(screen.getByText('Fallback text should still render')).toBeInTheDocument();
-    expect(container.querySelectorAll('img')).toHaveLength(0);
-  });
-
   it('allows copying row link to clipboard', async () => {
-    const user = userEvent.setup();
-    const clipboard = mockClipboardWriteText();
-    const expectedUrl = new URL(window.location.href);
-    expectedUrl.searchParams.set('rowId', '1');
+    const originalClipboard = navigator.clipboard;
+    const mockClipboard = {
+      writeText: vi.fn().mockResolvedValue(undefined),
+    };
+    Object.defineProperty(navigator, 'clipboard', {
+      value: mockClipboard,
+      configurable: true,
+      writable: true,
+    });
+
+    const originalURL = global.URL;
+    const mockUrl = {
+      toString: vi.fn().mockReturnValue('https://example.com/?rowId=1'),
+      searchParams: {
+        set: vi.fn(),
+      },
+    };
+    global.URL = class MockURL {
+      constructor() {
+        return mockUrl;
+      }
+    } as unknown as typeof URL;
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
     const shareButton = screen.getByLabelText('Copy link to output');
     expect(shareButton).toBeInTheDocument();
 
-    await user.click(shareButton);
+    await userEvent.click(shareButton);
 
-    await waitFor(() => {
-      expect(clipboard.writeText).toHaveBeenCalledWith(expectedUrl.toString());
+    expect(mockUrl.searchParams.set).toHaveBeenCalledWith('rowId', '1');
+
+    expect(mockClipboard.writeText).toHaveBeenCalled();
+
+    Object.defineProperty(navigator, 'clipboard', {
+      value: originalClipboard,
+      configurable: true,
+      writable: true,
     });
+    global.URL = originalURL;
   });
 
   it('shows checkmark after copying link', async () => {
-    timers = useTestTimers();
-    const clipboard = mockClipboardWriteText();
+    const originalClipboard = navigator.clipboard;
+    const mockClipboard = {
+      writeText: vi.fn().mockResolvedValue(undefined),
+    };
+    Object.defineProperty(navigator, 'clipboard', {
+      value: mockClipboard,
+      configurable: true,
+      writable: true,
+    });
+
+    const mockUrl = {
+      toString: vi.fn().mockReturnValue('https://example.com/?rowId=1'),
+      searchParams: {
+        set: vi.fn(),
+      },
+    };
+    const originalURL = global.URL;
+    global.URL = class MockURL {
+      constructor() {
+        return mockUrl;
+      }
+    } as unknown as typeof URL;
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
     const shareButton = screen.getByRole('button', { name: /Copy link to output/i });
     expect(shareButton).toBeInTheDocument();
 
-    await act(async () => {
-      dispatchClick(shareButton);
-      await clipboard.writeText.mock.results[0]?.value;
+    await userEvent.click(shareButton);
+
+    expect(mockClipboard.writeText).toHaveBeenCalled();
+
+    Object.defineProperty(navigator, 'clipboard', {
+      value: originalClipboard,
+      configurable: true,
+      writable: true,
     });
-
-    expect(clipboard.writeText).toHaveBeenCalled();
-    expect(shareButton.querySelector('.lucide-check')).toBeInTheDocument();
-
-    act(() => {
-      timers?.advanceBy(3000);
-    });
-
-    expect(shareButton.querySelector('.lucide-link')).toBeInTheDocument();
-  });
-
-  it('clears the link feedback timer on unmount after copying link', async () => {
-    timers = useTestTimers();
-    const clipboard = mockClipboardWriteText();
-
-    const { unmount } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
-
-    await act(async () => {
-      dispatchClick(screen.getByRole('button', { name: /Copy link to output/i }));
-      await clipboard.writeText.mock.results[0]?.value;
-    });
-
-    expect(timers.getTimerCount()).toBe(1);
-
-    unmount();
-
-    expect(timers.getTimerCount()).toBe(0);
-  });
-
-  it('does not schedule link feedback after unmount if clipboard resolves late', async () => {
-    timers = useTestTimers();
-    let resolveClipboardWrite: () => void = () => {};
-    const writeTextPromise = new Promise<void>((resolve) => {
-      resolveClipboardWrite = resolve;
-    });
-    const clipboard = {
-      writeText: vi.fn().mockReturnValue(writeTextPromise),
-    };
-
-    mockClipboard({ writeText: clipboard.writeText as Clipboard['writeText'] });
-
-    const { unmount } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
-
-    act(() => {
-      dispatchClick(screen.getByRole('button', { name: /Copy link to output/i }));
-    });
-    expect(clipboard.writeText).toHaveBeenCalled();
-
-    unmount();
-
-    await act(async () => {
-      resolveClipboardWrite();
-      await writeTextPromise;
-    });
-
-    expect(timers.getTimerCount()).toBe(0);
+    global.URL = originalURL;
   });
 
   it('displays the token usage tooltip with reasoning tokens', () => {
@@ -850,66 +695,20 @@ describe('EvalOutputCell', () => {
     expect(tooltipElement).toBeInTheDocument();
   });
 
-  it('displays total and prompt/completion token counts when reasoning tokens are absent', () => {
-    const propsWithStandardTokens: MockEvalOutputCellProps = {
-      ...defaultProps,
-      output: {
-        ...defaultProps.output,
-        tokenUsage: {
-          prompt: 11,
-          completion: 22,
-          total: 33,
-        },
-      },
-    };
-
-    renderWithProviders(<EvalOutputCell {...propsWithStandardTokens} />);
-
-    expect(screen.getByText('33 (11+22)')).toBeInTheDocument();
-  });
-
-  it('renders JSON diffs with added and removed fragments when showDiffs is enabled', () => {
-    const { container } = renderWithProviders(
-      <EvalOutputCell
-        {...defaultProps}
-        firstOutput={{
-          ...defaultProps.firstOutput,
-          text: '{"status":"old"}',
-        }}
-        output={{
-          ...defaultProps.output,
-          text: '{"status":"new"}',
-        }}
-        showDiffs={true}
-      />,
-    );
-
-    expect(container.querySelector('del')?.textContent).toContain('old');
-    expect(container.querySelector('ins')?.textContent).toContain('new');
-  });
-
-  it('renders word diffs for non-JSON outputs without sentence punctuation', () => {
-    const { container } = renderWithProviders(
-      <EvalOutputCell
-        {...defaultProps}
-        firstOutput={{
-          ...defaultProps.firstOutput,
-          text: 'alpha beta',
-        }}
-        output={{
-          ...defaultProps.output,
-          text: 'alpha gamma',
-        }}
-        showDiffs={true}
-      />,
-    );
-
-    expect(container.querySelector('del')?.textContent).toContain('beta');
-    expect(container.querySelector('ins')?.textContent).toContain('gamma');
-  });
-
   it('does not highlight text when shouldHighlightSearchText is true but searchText is empty', () => {
-    mockTableStoreState.shouldHighlightSearchText = true;
+    vi.mock('./store', () => ({
+      useResultsViewSettingsStore: () => ({
+        prettifyJson: false,
+        renderMarkdown: true,
+        showPassFail: true,
+        showPrompts: true,
+        maxImageWidth: 256,
+        maxImageHeight: 256,
+      }),
+      useTableStore: () => ({
+        shouldHighlightSearchText: true,
+      }),
+    }));
 
     const { container } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
     const highlightedText = container.querySelector('.search-highlight');
@@ -924,59 +723,6 @@ describe('EvalOutputCell', () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} searchText={invalidRegex} />);
 
     expect(screen.getByText('Test output text')).toBeInTheDocument();
-  });
-
-  it('preserves media rendering while search highlighting is active', () => {
-    mockTableStoreState.shouldHighlightSearchText = true;
-    const dataUri = 'data:image/png;base64,primary-image-data';
-
-    const { container } = renderWithProviders(
-      <EvalOutputCell
-        {...defaultProps}
-        output={{
-          ...defaultProps.output,
-          text: dataUri,
-        }}
-        searchText="primary"
-      />,
-    );
-
-    expect(screen.getByRole('img')).toHaveAttribute('src', dataUri);
-    expect(container.querySelector('.search-highlight')).toBeNull();
-  });
-
-  it('ignores zero-length regex matches without hanging', () => {
-    mockTableStoreState.shouldHighlightSearchText = true;
-
-    const { container } = renderWithProviders(
-      <EvalOutputCell {...defaultProps} searchText="(?=Test)" />,
-    );
-
-    expect(screen.getByText('Test output text')).toBeInTheDocument();
-    expect(container.querySelector('.search-highlight')).toBeNull();
-  });
-
-  it('preserves diff output when searchText is an invalid regex', () => {
-    mockTableStoreState.shouldHighlightSearchText = true;
-
-    const { container } = renderWithProviders(
-      <EvalOutputCell
-        {...defaultProps}
-        firstOutput={{
-          ...defaultProps.firstOutput,
-          text: 'alpha beta',
-        }}
-        output={{
-          ...defaultProps.output,
-          text: 'alpha gamma',
-        }}
-        showDiffs={true}
-        searchText="("
-      />,
-    );
-
-    expect(container.querySelector('del')?.textContent).toContain('beta');
-    expect(container.querySelector('ins')?.textContent).toContain('gamma');
   });
 
   it('handles zero-length regex matches gracefully', () => {
@@ -1193,8 +939,20 @@ describe('EvalOutputCell search highlighting boundary conditions', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resetMockStoreState();
-    mockTableStoreState.shouldHighlightSearchText = true;
+
+    vi.mock('./store', () => ({
+      useResultsViewSettingsStore: () => ({
+        prettifyJson: false,
+        renderMarkdown: true,
+        showPassFail: true,
+        showPrompts: true,
+        maxImageWidth: 256,
+        maxImageHeight: 256,
+      }),
+      useTableStore: () => ({
+        shouldHighlightSearchText: true,
+      }),
+    }));
   });
 
   it('should highlight when searchText matches the beginning of the output text', () => {
@@ -1300,10 +1058,20 @@ describe('EvalOutputCell with prettified JSON', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resetMockStoreState();
-    mockResultsViewSettings.prettifyJson = true;
-    mockResultsViewSettings.renderMarkdown = false;
-    mockTableStoreState.shouldHighlightSearchText = true;
+
+    vi.mock('./store', () => ({
+      useResultsViewSettingsStore: () => ({
+        prettifyJson: true,
+        renderMarkdown: false,
+        showPassFail: true,
+        showPrompts: true,
+        maxImageWidth: 256,
+        maxImageHeight: 256,
+      }),
+      useTableStore: () => ({
+        shouldHighlightSearchText: true,
+      }),
+    }));
   });
 
   it('highlights search matches in prettified JSON content', () => {
@@ -1365,49 +1133,45 @@ describe('EvalOutputCell highlight toggle functionality', () => {
   });
 
   it('toggles highlight on when comment does not start with !highlight', async () => {
-    const user = userEvent.setup();
     const props = createPropsWithComment('Regular comment');
     renderWithProviders(<EvalOutputCell {...props} />);
 
     // Click the highlight toggle button (only visible when shift is pressed)
     const highlightButton = screen.getByLabelText('Toggle test highlight');
-    await user.click(highlightButton);
+    await userEvent.click(highlightButton);
 
     // Verify that onRating was called with the highlighted comment
     expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, '!highlight Regular comment');
   });
 
   it('toggles highlight off when comment starts with !highlight', async () => {
-    const user = userEvent.setup();
     const props = createPropsWithComment('!highlight Already highlighted comment');
     renderWithProviders(<EvalOutputCell {...props} />);
 
     const highlightButton = screen.getByLabelText('Toggle test highlight');
-    await user.click(highlightButton);
+    await userEvent.click(highlightButton);
 
     // Verify that onRating was called with the unhighlighted comment
     expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, 'Already highlighted comment');
   });
 
   it('handles empty comment when toggling highlight on', async () => {
-    const user = userEvent.setup();
     const props = createPropsWithComment('');
     renderWithProviders(<EvalOutputCell {...props} />);
 
     const highlightButton = screen.getByLabelText('Toggle test highlight');
-    await user.click(highlightButton);
+    await userEvent.click(highlightButton);
 
     // Verify that onRating was called with just the highlight prefix
     expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, '!highlight');
   });
 
   it('handles comment with only !highlight when toggling off', async () => {
-    const user = userEvent.setup();
     const props = createPropsWithComment('!highlight');
     renderWithProviders(<EvalOutputCell {...props} />);
 
     const highlightButton = screen.getByLabelText('Toggle test highlight');
-    await user.click(highlightButton);
+    await userEvent.click(highlightButton);
 
     // Verify that onRating was called with empty string
     expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, '');
@@ -1489,13 +1253,12 @@ describe('EvalOutputCell highlight toggle functionality', () => {
   });
 
   it('maintains comment state correctly through multiple toggles', async () => {
-    const user = userEvent.setup();
     // Test toggling ON from regular comment
     const regularProps = createPropsWithComment('Original comment');
     const { rerender } = renderWithProviders(<EvalOutputCell {...regularProps} />);
 
     const highlightButton = screen.getByLabelText('Toggle test highlight');
-    await user.click(highlightButton);
+    await userEvent.click(highlightButton);
     expect(mockOnRating).toHaveBeenNthCalledWith(
       1,
       undefined,
@@ -1509,88 +1272,8 @@ describe('EvalOutputCell highlight toggle functionality', () => {
     rerender(<EvalOutputCell {...highlightedProps} />);
 
     const highlightButtonAfterRerender = screen.getByLabelText('Toggle test highlight');
-    await user.click(highlightButtonAfterRerender);
+    await userEvent.click(highlightButtonAfterRerender);
     expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, 'Original comment');
-  });
-
-  it('preserves a locally toggled highlight when rating changes immediately afterward', async () => {
-    const props = createPropsWithComment('Original comment');
-    renderWithProviders(<EvalOutputCell {...props} />);
-
-    await userEvent.click(screen.getByLabelText('Toggle test highlight'));
-    mockOnRating.mockClear();
-
-    await userEvent.click(screen.getByLabelText('Mark test failed'));
-
-    await waitFor(() => {
-      expect(mockOnRating).toHaveBeenCalledWith(false, undefined, '!highlight Original comment');
-    });
-  });
-
-  it('does not persist a canceled comment draft when rating changes afterward', async () => {
-    const user = userEvent.setup();
-    const props = createPropsWithComment('Original comment');
-    renderWithProviders(<EvalOutputCell {...props} />);
-
-    await user.click(screen.getByRole('button', { name: /edit comment/i }));
-    const commentInput = screen.getByRole('textbox');
-    await user.clear(commentInput);
-    await user.type(commentInput, 'Canceled draft');
-    await user.click(screen.getByRole('button', { name: /cancel/i }));
-    mockOnRating.mockClear();
-
-    await user.click(screen.getByLabelText('Mark test failed'));
-
-    await waitFor(() => {
-      expect(mockOnRating).toHaveBeenCalledWith(false, undefined, 'Original comment');
-    });
-  });
-
-  it('uses a saved comment edit when rating changes before the parent refreshes', async () => {
-    const user = userEvent.setup();
-    const props = createPropsWithComment('Original comment');
-    renderWithProviders(<EvalOutputCell {...props} />);
-
-    await user.click(screen.getByRole('button', { name: /edit comment/i }));
-    const commentInput = screen.getByRole('textbox');
-    await user.clear(commentInput);
-    await user.type(commentInput, 'Saved edit');
-    await user.click(screen.getByRole('button', { name: /save/i }));
-    mockOnRating.mockClear();
-
-    await user.click(screen.getByLabelText('Mark test failed'));
-
-    await waitFor(() => {
-      expect(mockOnRating).toHaveBeenCalledWith(false, undefined, 'Saved edit');
-    });
-  });
-
-  it('resets unsaved local comment text when switching to another output with the same comment value', async () => {
-    const user = userEvent.setup();
-    const firstProps = createPropsWithComment('');
-    const secondProps = {
-      ...firstProps,
-      output: {
-        ...firstProps.output,
-        id: 'second-output',
-      },
-    };
-
-    const { rerender } = renderWithProviders(<EvalOutputCell {...firstProps} />);
-
-    await user.click(screen.getByRole('button', { name: /edit comment/i }));
-    const commentInput = screen.getByRole('textbox');
-    await user.type(commentInput, 'Unsaved local note');
-    expect(commentInput).toHaveValue('Unsaved local note');
-
-    rerender(<EvalOutputCell {...secondProps} />);
-    mockOnRating.mockClear();
-
-    await user.click(screen.getByLabelText('Mark test failed'));
-
-    await waitFor(() => {
-      expect(mockOnRating).toHaveBeenCalledWith(false, undefined, '');
-    });
   });
 });
 
@@ -1887,7 +1570,6 @@ describe('EvalOutputCell cell highlighting styling', () => {
   });
 
   it('maintains text visibility during highlight state transitions', async () => {
-    const user = userEvent.setup();
     let currentComment = 'Regular comment';
     const props = createPropsWithComment(currentComment);
     const { container, rerender } = renderWithProviders(<EvalOutputCell {...props} />);
@@ -1899,7 +1581,7 @@ describe('EvalOutputCell cell highlighting styling', () => {
 
     // Toggle highlight ON
     const highlightButton = screen.getByLabelText('Toggle test highlight');
-    await user.click(highlightButton);
+    await userEvent.click(highlightButton);
 
     // Simulate the state change by re-rendering with highlighted comment
     currentComment = '!highlight Regular comment';
@@ -1919,7 +1601,7 @@ describe('EvalOutputCell cell highlighting styling', () => {
 
     // Toggle highlight OFF
     const newHighlightButton = screen.getByLabelText('Toggle test highlight');
-    await user.click(newHighlightButton);
+    await userEvent.click(newHighlightButton);
 
     // Simulate state change back to non-highlighted
     const unhighlightedProps = createPropsWithComment('Regular comment');
@@ -2579,7 +2261,6 @@ describe('EvalOutputCell inline image lightbox', () => {
   });
 
   it('opens lightbox when clicking on inline image and closes when clicking lightbox', async () => {
-    const user = userEvent.setup();
     // Use a data URI which triggers the inline image rendering path (not markdown)
     const dataUri =
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
@@ -2631,15 +2312,16 @@ describe('EvalOutputCell inline image lightbox', () => {
     const imgElement = screen.getByRole('img');
     expect(imgElement).toBeInTheDocument();
 
-    await user.click(imgElement);
+    // Open lightbox
+    await userEvent.click(imgElement);
     expect(container.querySelector('.lightbox')).toBeInTheDocument();
 
-    await user.click(container.querySelector('.lightbox')!);
+    // Close lightbox
+    await userEvent.click(container.querySelector('.lightbox')!);
     expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
   });
 
   it('toggleLightbox maintains stable behavior across multiple toggles', async () => {
-    const user = userEvent.setup();
     // Use a data URI which triggers the inline image rendering path
     const dataUri =
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
@@ -2690,19 +2372,24 @@ describe('EvalOutputCell inline image lightbox', () => {
 
     const imgElement = screen.getByRole('img');
 
-    await user.click(imgElement);
+    // Toggle open
+    await userEvent.click(imgElement);
     expect(container.querySelector('.lightbox')).toBeInTheDocument();
 
-    await user.click(container.querySelector('.lightbox')!);
+    // Toggle closed
+    await userEvent.click(container.querySelector('.lightbox')!);
     expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
 
-    await user.click(imgElement);
+    // Toggle open again (tests useCallback stability with functional update)
+    await userEvent.click(imgElement);
     expect(container.querySelector('.lightbox')).toBeInTheDocument();
 
-    await user.click(container.querySelector('.lightbox')!);
+    // Toggle closed again
+    await userEvent.click(container.querySelector('.lightbox')!);
     expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
 
-    await user.click(imgElement);
+    // Toggle once more to ensure the pattern continues to work
+    await userEvent.click(imgElement);
     expect(container.querySelector('.lightbox')).toBeInTheDocument();
   });
 });

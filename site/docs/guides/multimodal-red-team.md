@@ -125,7 +125,7 @@ targets:
 
 defaultTest:
   vars:
-    image: file://aldrin_apollo_11.jpg
+    image: file://sample_image.jpg
     format: jpg
 redteam:
   purpose: >-
@@ -436,7 +436,7 @@ The VLGuard plugin provides an alternative dataset for multi-modal safety testin
 description: VLGuard Multi-Modal Model Evaluation
 
 targets:
-  - id: openai:gpt-5
+  - id: openai:gpt-4o
     label: multimodal-model
 
 prompts:

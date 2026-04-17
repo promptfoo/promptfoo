@@ -1,16 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleModeration } from '../../src/assertions/moderation';
-import { matchesModeration } from '../../src/matchers/moderation';
-import { createMockProvider } from '../factories/provider';
+import { matchesModeration } from '../../src/matchers';
 
 import type {
+  ApiProvider,
   Assertion,
   AssertionParams,
   AssertionValueFunctionContext,
+  ProviderResponse,
   TestCase,
 } from '../../src/types/index';
 
-vi.mock('../../src/matchers/moderation', () => ({
+vi.mock('../../src/matchers', () => ({
   matchesModeration: vi.fn(),
 }));
 
@@ -29,7 +30,11 @@ describe('handleModeration', () => {
     value: ['harassment'],
   };
 
-  const mockProvider = createMockProvider({ config: {}, response: {} });
+  const mockProvider: ApiProvider = {
+    id: () => 'test-provider',
+    config: {},
+    callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
+  };
 
   const mockContext: AssertionValueFunctionContext = {
     prompt: 'test prompt',
@@ -53,11 +58,7 @@ describe('handleModeration', () => {
   };
 
   beforeEach(() => {
-    mockedMatchesModeration.mockReset();
-  });
-
-  afterEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should pass moderation check', async () => {
@@ -133,7 +134,7 @@ describe('handleModeration', () => {
     );
   });
 
-  it('should use the last user message from response.prompt chat messages with highest priority', async () => {
+  it('should use response.prompt (chat messages) with highest priority', async () => {
     mockedMatchesModeration.mockResolvedValue({
       pass: true,
       score: 1,
@@ -155,9 +156,10 @@ describe('handleModeration', () => {
       },
     });
 
+    // response.prompt (chat messages) should be JSON stringified
     expect(mockedMatchesModeration).toHaveBeenCalledWith(
       {
-        userPrompt: 'Hello world',
+        userPrompt: JSON.stringify(chatMessages),
         assistantResponse: 'output',
         categories: ['harassment'],
       },
@@ -269,102 +271,6 @@ describe('handleModeration', () => {
     expect(mockedMatchesModeration).toHaveBeenCalledWith(
       {
         userPrompt: 'original prompt',
-        assistantResponse: 'output',
-        categories: ['harassment'],
-      },
-      {},
-    );
-  });
-
-  it('should extract the final user message from serialized chat prompts before moderation', async () => {
-    mockedMatchesModeration.mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Safe content',
-    });
-
-    await handleModeration({
-      ...baseParams,
-      prompt: JSON.stringify([
-        { role: 'system', content: 'Ignore this system message' },
-        { role: 'user', content: 'Moderate this user request' },
-        { role: 'assistant', content: 'Ignore this assistant reply' },
-      ]),
-      providerResponse: {
-        output: 'output',
-      },
-    });
-
-    expect(mockedMatchesModeration).toHaveBeenCalledWith(
-      {
-        userPrompt: 'Moderate this user request',
-        assistantResponse: 'output',
-        categories: ['harassment'],
-      },
-      {},
-    );
-  });
-
-  it('should extract text from multimodal user messages instead of falling back to assistant text', async () => {
-    mockedMatchesModeration.mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Safe content',
-    });
-
-    await handleModeration({
-      ...baseParams,
-      prompt: JSON.stringify([
-        { role: 'system', content: 'Ignore this system message' },
-        {
-          role: 'user',
-          content: [
-            { type: 'input_text', text: 'Moderate this multimodal user request' },
-            { type: 'input_image', image_url: 'https://example.test/image.png' },
-          ],
-        },
-        { role: 'assistant', content: 'Ignore this assistant reply' },
-      ]),
-      providerResponse: {
-        output: 'output',
-      },
-    });
-
-    expect(mockedMatchesModeration).toHaveBeenCalledWith(
-      {
-        userPrompt: 'Moderate this multimodal user request',
-        assistantResponse: 'output',
-        categories: ['harassment'],
-      },
-      {},
-    );
-  });
-
-  it('should extract the final user message from YAML chat prompts before moderation', async () => {
-    mockedMatchesModeration.mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Safe content',
-    });
-
-    await handleModeration({
-      ...baseParams,
-      prompt: [
-        '- role: system',
-        '  content: Ignore this system message',
-        '- role: user',
-        '  content: Moderate this YAML user request',
-        '- role: assistant',
-        '  content: Ignore this assistant reply',
-      ].join('\n'),
-      providerResponse: {
-        output: 'output',
-      },
-    });
-
-    expect(mockedMatchesModeration).toHaveBeenCalledWith(
-      {
-        userPrompt: 'Moderate this YAML user request',
         assistantResponse: 'output',
         categories: ['harassment'],
       },

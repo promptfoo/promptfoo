@@ -11,7 +11,6 @@ export interface GlobalConfig {
     apiHost?: string;
     apiKey?: string;
     currentOrganizationId?: string;
-    sharing?: boolean;
     currentTeamId?: string;
     teams?: {
       [organizationId: string]: {

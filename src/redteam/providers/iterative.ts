@@ -1,7 +1,6 @@
 import dedent from 'dedent';
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
-import { isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
@@ -35,7 +34,6 @@ import {
   checkPenalizedPhrases,
   createIterationContext,
   externalizeResponseForRedteamHistory,
-  getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
   type TargetResponse,
@@ -554,7 +552,7 @@ export async function runRedteamConversation({
           targetResponse.output,
           iterationTest,
           gradingProvider,
-          getGraderAssertionValue(assertToUse),
+          assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
           additionalRubric,
           undefined,
           gradingContext,
@@ -609,7 +607,7 @@ export async function runRedteamConversation({
       continue;
     }
 
-    let currentScore: number;
+    let currentScore = 1;
     let previousScore = bestResponse ? highestScore : 0;
     try {
       const parsed =
@@ -782,12 +780,8 @@ class RedteamIterativeProvider implements ApiProvider {
     this.injectVar = config.injectVar;
     this.inputs = config.inputs as Record<string, string> | undefined;
 
-    const configuredIterations =
+    this.numIterations =
       Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
-    this.numIterations = isLoggedIntoCloud()
-      ? configuredIterations
-      : Math.min(configuredIterations, 10);
-
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );

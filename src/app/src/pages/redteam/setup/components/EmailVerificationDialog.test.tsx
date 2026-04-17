@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react';
 
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
@@ -161,14 +161,12 @@ describe('EmailVerificationDialog', () => {
   });
 
   it('handles Enter key submission', async () => {
-    const user = userEvent.setup();
     renderComponent();
 
     const emailInput = screen.getByLabelText('Work Email Address');
     await userEvent.type(emailInput, 'test@example.com');
 
-    emailInput.focus();
-    await user.keyboard('{Enter}');
+    fireEvent.keyDown(emailInput, { key: 'Enter' });
 
     await waitFor(() => {
       expect(mockSaveEmail).toHaveBeenCalledWith('test@example.com');

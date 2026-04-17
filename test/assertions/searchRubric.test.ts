@@ -1,11 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleSearchRubric } from '../../src/assertions/searchRubric';
-import { matchesSearchRubric } from '../../src/matchers/search';
-import { createMockProvider } from '../factories/provider';
+import { matchesSearchRubric } from '../../src/matchers';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
-vi.mock('../../src/matchers/search');
+vi.mock('../../src/matchers');
 
 describe('handleSearchRubric', () => {
   beforeEach(() => {
@@ -165,7 +164,10 @@ describe('handleSearchRubric', () => {
   });
 
   it('should pass provider to matchesSearchRubric', async () => {
-    const mockProvider = createMockProvider();
+    const mockProvider = {
+      id: () => 'test-provider',
+      callApi: vi.fn(),
+    };
 
     const params: AssertionParams = {
       ...defaultParams,

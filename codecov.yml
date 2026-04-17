@@ -30,6 +30,7 @@ ignore:
   - '**/*.test.tsx'
   - '**/*.d.ts'
   - 'src/app/**/*' # Frontend has separate coverage
+  - 'site/**/*' # Documentation site - no coverage tracking
   - 'examples/**/*'
   - 'drizzle/**/*'
   - 'scripts/**/*'
@@ -53,8 +54,4 @@ flags:
   frontend:
     paths:
       - src/app/src/
-    carryforward: true
-  site:
-    paths:
-      - site/src/
     carryforward: true

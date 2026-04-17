@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithRetries } from '../src/util/fetch/index';
-import { mockGlobal } from './util/utils';
 
 const mockedFetchResponse = (ok: boolean, response: object, headers: object = {}) => {
   const responseText = JSON.stringify(response);
@@ -29,18 +28,16 @@ const mockedSetTimeout = (reqTimeout: number) =>
 const mockFetch = vi.fn();
 
 describe('fetchWithRetries', () => {
-  let restoreFetch: (() => void) | undefined;
-
   beforeEach(() => {
     vi.useFakeTimers();
-    restoreFetch = mockGlobal('fetch', mockFetch);
+    // Use stubGlobal which properly replaces the global fetch for all modules
+    vi.stubGlobal('fetch', mockFetch);
   });
 
   afterEach(() => {
     mockFetch.mockReset();
     vi.useRealTimers();
-    restoreFetch?.();
-    restoreFetch = undefined;
+    vi.unstubAllGlobals();
   });
 
   it('should fetch data', async () => {

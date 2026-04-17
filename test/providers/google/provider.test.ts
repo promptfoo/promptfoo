@@ -207,15 +207,6 @@ describe('GoogleProvider', () => {
       expect(endpoint).toContain('/v1alpha/');
     });
 
-    it('should use v1beta for gemini-3.1 models', () => {
-      const gemini31Provider = new GoogleProvider('gemini-3.1-pro-preview', {
-        config: { apiKey: 'test-key' },
-      });
-
-      const endpoint = gemini31Provider.getApiEndpoint('generateContent');
-      expect(endpoint).toContain('/v1beta/');
-    });
-
     it('should allow explicit apiVersion override in AI Studio mode', () => {
       // Test that config.apiVersion takes precedence over auto-detection
       const overrideProvider = new GoogleProvider('gemini-pro', {
@@ -362,15 +353,7 @@ describe('GoogleProvider', () => {
       });
 
       it('should call API using Google client for OAuth mode', async () => {
-        const getProjectIdSpy = vi
-          .spyOn(provider as any, 'getProjectId')
-          .mockResolvedValue('my-project');
-
-        try {
-          await provider.callApi('test prompt');
-        } finally {
-          getProjectIdSpy.mockRestore();
-        }
+        await provider.callApi('test prompt');
 
         expect(vi.mocked(util.getGoogleClient)).toHaveBeenCalled();
       });
@@ -598,46 +581,17 @@ describe('GoogleProvider', () => {
       expect(result.cost).toBeCloseTo(1.25e-5, 10);
     });
 
-    it('should return cost for Vertex AI mode with known model', async () => {
+    it('should return undefined cost for Vertex AI mode', async () => {
       const provider = new GoogleProvider('gemini-pro', {
-        config: { vertexai: true, apiKey: 'test-vertex-key' },
+        config: { vertexai: true, projectId: 'my-project' },
       });
 
-      vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
-        ok: true,
-        json: vi.fn().mockResolvedValue({
-          candidates: [{ content: { parts: [{ text: 'response' }] } }],
-          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 20, totalTokenCount: 30 },
-        }),
-      } as any);
+      await provider.callApi('test prompt');
 
+      // getGoogleClient mock returns default response with usageMetadata
+      // but cost should be undefined because Vertex AI pricing differs
       const result = await provider.callApi('test prompt');
-      // gemini-pro: input 0.5/1e6, output 1.5/1e6
-      // 10 prompt + 20 completion = 0.000035
-      expect(result.cost).toBeCloseTo(0.000035, 10);
-    });
-
-    it('should use Vertex-specific pricing when it differs from AI Studio', async () => {
-      const provider = new GoogleProvider('gemini-2.0-flash', {
-        config: { vertexai: true, apiKey: 'test-vertex-key' },
-      });
-
-      vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
-        ok: true,
-        json: vi.fn().mockResolvedValue({
-          candidates: [{ content: { parts: [{ text: 'response' }] } }],
-          usageMetadata: {
-            promptTokenCount: 1000,
-            candidatesTokenCount: 500,
-            totalTokenCount: 1500,
-          },
-        }),
-      } as any);
-
-      const result = await provider.callApi('test prompt');
-      // Vertex pricing for gemini-2.0-flash: input $0.15/1M, output $0.60/1M
-      // 1000 * 0.15/1e6 + 500 * 0.60/1e6 = 0.00045
-      expect(result.cost).toBeCloseTo(0.00045, 10);
+      expect(result.cost).toBeUndefined();
     });
 
     it('should return undefined cost for cached responses', async () => {

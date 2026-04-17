@@ -1,4 +1,4 @@
-# azure/openai (Azure OpenAI)
+# openai (Azure OpenAI)
 
 This example demonstrates how to use Azure OpenAI with promptfoo, including text generation and vision capabilities.
 
@@ -6,7 +6,6 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example azure/openai
-cd azure/openai
 ```
 
 ## Environment Variables
