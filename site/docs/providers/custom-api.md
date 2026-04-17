@@ -157,6 +157,16 @@ See the [vercel-ai-sdk example](https://github.com/promptfoo/promptfoo/tree/main
 
 When using [image](/docs/red-team/strategies/image), [audio](/docs/red-team/strategies/audio), or [video](/docs/red-team/strategies/video) red team strategies, Promptfoo embeds base64-encoded media data into the template variable named by `redteam.injectVar`. Custom providers must extract this data from `context.vars` and forward it to the API.
 
+The rendered `prompt` also contains the base64 string, but `context.vars` is safer because it preserves variable boundaries and avoids parsing a very long prompt. The variable name is whatever you configure in `redteam.injectVar`; it can be `image`, `audio`, `media`, or any other template variable.
+
+| Strategy | `context.vars[redteam.injectVar]`                        | Extra context                                                   | Forwarding notes                                                                                                                                                                                                                   |
+| -------- | -------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `image`  | Raw PNG base64, no `data:` prefix                        | `context.vars.image_text`, `context.test.metadata.originalText` | Wrap as `data:image/png;base64,...` for APIs that expect data URLs.                                                                                                                                                                |
+| `audio`  | Raw MP3 base64 from remote generation, no `data:` prefix | `context.test.metadata.originalText`                            | Requires remote generation. Forward with MIME type `audio/mpeg` or your provider's equivalent audio format.                                                                                                                        |
+| `video`  | Raw MP4 base64 when local FFmpeg generation succeeds     | `context.vars.video_text`, `context.test.metadata.originalText` | Install FFmpeg and set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` or `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true` for real MP4 bytes. If generation falls back, the value may decode to the original text instead of an MP4. |
+
+Audio and video have opposite generation requirements today: audio requires remote generation, while real MP4 video requires the local FFmpeg path. Run separate scans if you need to verify both remote audio and local MP4 handling.
+
 ```javascript title="multimodalProvider.js"
 module.exports = class MultimodalProvider {
   id() {
@@ -173,7 +183,9 @@ module.exports = class MultimodalProvider {
     const question = context.vars.question || 'Describe this image';
 
     // The image strategy provides raw PNG base64. Wrap it as a data URL for OpenAI-compatible APIs.
-    const imageUrl = `data:image/png;base64,${imageBase64}`;
+    const imageUrl = imageBase64.startsWith('data:')
+      ? imageBase64
+      : `data:image/png;base64,${imageBase64}`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -214,7 +226,7 @@ module.exports = class MultimodalProvider {
 
 :::
 
-The image strategy generates PNG bytes. Audio strategy values are raw MP3 base64 from remote generation, and video strategy values are raw MP4 base64 when FFmpeg succeeds. Static image variables and dataset-driven image plugins may already provide a `data:` URL or a different MIME type, so check the value before prepending `data:image/png;base64,`. Avoid logging full media strings; screenshots, audio, and video can be large or sensitive.
+Avoid logging full media strings; screenshots, audio, and video can be large or sensitive. For debugging, log length, detected MIME type, a hash, or the first few bytes after decoding instead of the full base64 payload.
 
 See the [Python provider multimodal docs](/docs/providers/python#handling-multimodal-content) for a detailed explanation and YAML config example.
 

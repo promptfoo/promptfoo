@@ -644,6 +644,16 @@ The media content is available in two places:
 
 Reading from `context['vars']` is simpler than parsing the rendered prompt.
 
+The variable name is whatever you configure in `redteam.injectVar`; it can be `image`, `audio`, `media`, or any other template variable.
+
+| Strategy | `context['vars'][inject_var]`                            | Extra context                                                                  | Forwarding notes                                                                                                                                                                                                                   |
+| -------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `image`  | Raw PNG base64, no `data:` prefix                        | `context['vars']['image_text']`, `context['test']['metadata']['originalText']` | Wrap as `data:image/png;base64,...` for APIs that expect data URLs.                                                                                                                                                                |
+| `audio`  | Raw MP3 base64 from remote generation, no `data:` prefix | `context['test']['metadata']['originalText']`                                  | Requires remote generation. Forward with MIME type `audio/mpeg` or your provider's equivalent audio format.                                                                                                                        |
+| `video`  | Raw MP4 base64 when local FFmpeg generation succeeds     | `context['vars']['video_text']`, `context['test']['metadata']['originalText']` | Install FFmpeg and set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` or `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true` for real MP4 bytes. If generation falls back, the value may decode to the original text instead of an MP4. |
+
+Audio and video have opposite generation requirements today: audio requires remote generation, while real MP4 video requires the local FFmpeg path. Run separate scans if you need to verify both remote audio and local MP4 handling.
+
 ```python title="multimodal_provider.py"
 import os
 import requests
@@ -657,7 +667,11 @@ def call_api(prompt, options, context):
     question = context['vars'].get('question', 'Describe this image')
 
     # The image strategy provides raw PNG base64. Wrap it as a data URL for OpenAI-compatible APIs.
-    image_url = f'data:image/png;base64,{image_base64}'
+    image_url = (
+        image_base64
+        if image_base64.startswith('data:')
+        else f'data:image/png;base64,{image_base64}'
+    )
 
     response = requests.post(
         'https://api.openai.com/v1/chat/completions',
@@ -716,7 +730,7 @@ redteam:
 
 :::
 
-The image strategy generates PNG bytes. Audio strategy values are raw MP3 base64 from remote generation, and video strategy values are raw MP4 base64 when FFmpeg succeeds. Static image variables and dataset-driven image plugins may already provide a `data:` URL or a different MIME type, so check the value before prepending `data:image/png;base64,`. Avoid logging full media strings; screenshots, audio, and video can be large or sensitive.
+Static variables and dataset-driven media may already provide a `data:` URL or a different MIME type, so check the value before prepending `data:image/png;base64,`. Avoid logging full media strings; screenshots, audio, and video can be large or sensitive. For debugging, log length, detected MIME type, a hash, or the first few bytes after decoding instead of the full base64 payload.
 
 See the [multimodal red team guide](/docs/guides/multimodal-red-team) for more configuration examples.
 
