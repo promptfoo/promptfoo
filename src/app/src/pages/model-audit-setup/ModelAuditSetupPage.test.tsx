@@ -1,10 +1,12 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { callApi } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useModelAuditConfigStore, useModelAuditHistoryStore } from '../model-audit/stores';
 import ModelAuditSetupPage from './ModelAuditSetupPage';
 
+vi.mock('@app/utils/api');
 vi.mock('../model-audit/stores');
 
 // Mock the child components to simplify testing
@@ -28,7 +30,21 @@ vi.mock('../model-audit/components/ResultsTab', () => ({
 }));
 
 vi.mock('../model-audit/components/AdvancedOptionsDialog', () => ({
-  default: () => <div data-testid="options-dialog" />,
+  default: ({
+    scannerCatalog = [],
+    isLoadingScanners = false,
+    scannerCatalogError = null,
+  }: {
+    scannerCatalog?: Array<{ id: string }>;
+    isLoadingScanners?: boolean;
+    scannerCatalogError?: string | null;
+  }) => (
+    <div data-testid="options-dialog">
+      <span data-testid="scanner-count">{scannerCatalog.length}</span>
+      <span data-testid="scanner-loading">{String(isLoadingScanners)}</span>
+      <span data-testid="scanner-error">{scannerCatalogError ?? ''}</span>
+    </div>
+  ),
 }));
 
 vi.mock('../model-audit/components/ScannedFilesDialog', () => ({
@@ -45,6 +61,7 @@ vi.mock('react-router-dom', async () => {
 });
 
 describe('ModelAuditSetupPage', () => {
+  const mockCallApi = vi.mocked(callApi);
   const mockUseConfigStore = vi.mocked(useModelAuditConfigStore);
   const mockUseHistoryStore = vi.mocked(useModelAuditHistoryStore);
 
@@ -118,6 +135,11 @@ describe('ModelAuditSetupPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCallApi.mockReset();
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ scanners: [] }),
+    } as Response);
     mockCheckInstallation.mockResolvedValue(undefined);
     mockUseConfigStore.mockReturnValue(getDefaultConfigState() as any);
     mockUseHistoryStore.mockReturnValue(getDefaultHistoryState() as any);
@@ -211,5 +233,37 @@ describe('ModelAuditSetupPage', () => {
 
     expect(screen.getByTestId('results-tab')).toBeInTheDocument();
     expect(screen.getByText('Scan Results')).toBeInTheDocument();
+  });
+
+  it('should load scanner catalog when the options dialog is open', async () => {
+    mockCallApi.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          scanners: [
+            {
+              id: 'pickle',
+              class: 'PickleScanner',
+              description: 'Scans pickle files',
+              extensions: ['.pkl'],
+              dependencies: [],
+            },
+          ],
+        }),
+    } as Response);
+    mockUseConfigStore.mockReturnValue({
+      ...getDefaultConfigState(),
+      showOptionsDialog: true,
+    } as any);
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scanners');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('scanner-count')).toHaveTextContent('1');
+    });
+    expect(screen.getByTestId('scanner-error')).toBeEmptyDOMElement();
   });
 });

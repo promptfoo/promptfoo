@@ -84,8 +84,7 @@ modelAuditRouter.get('/scanners', async (_req: Request, res: Response): Promise<
     ]);
 
     if (code !== null && code !== 0) {
-      logger.error('ModelAudit scanner listing failed', { code, stderr });
-      res.status(500).json({ error: 'Failed to list ModelAudit scanners' });
+      sendError(res, 500, 'Failed to list ModelAudit scanners', { code, stderr });
       return;
     }
 

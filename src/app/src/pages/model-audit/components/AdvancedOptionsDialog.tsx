@@ -18,7 +18,6 @@ import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
 import { Spinner } from '@app/components/ui/spinner';
 import { Switch } from '@app/components/ui/switch';
-import { callApi } from '@app/utils/api';
 
 import type { ScannerCatalogEntry, ScanOptions } from '../ModelAudit.types';
 
@@ -27,6 +26,9 @@ interface AdvancedOptionsDialogProps {
   onClose: () => void;
   scanOptions: ScanOptions;
   onOptionsChange: (options: ScanOptions) => void;
+  scannerCatalog?: ScannerCatalogEntry[];
+  isLoadingScanners?: boolean;
+  scannerCatalogError?: string | null;
 }
 
 const defaultScanOptions: ScanOptions = {
@@ -43,12 +45,12 @@ export default function AdvancedOptionsDialog({
   onClose,
   scanOptions,
   onOptionsChange,
+  scannerCatalog = [],
+  isLoadingScanners = false,
+  scannerCatalogError = null,
 }: AdvancedOptionsDialogProps) {
   const [blacklistInput, setBlacklistInput] = useState('');
   const [scannerFilter, setScannerFilter] = useState('');
-  const [scannerCatalog, setScannerCatalog] = useState<ScannerCatalogEntry[]>([]);
-  const [isLoadingScanners, setIsLoadingScanners] = useState(false);
-  const [scannerCatalogError, setScannerCatalogError] = useState<string | null>(null);
   const [localOptions, setLocalOptions] = useState({
     ...defaultScanOptions,
     ...scanOptions,
@@ -62,47 +64,6 @@ export default function AdvancedOptionsDialog({
       ...scanOptions,
     });
   }, [scanOptions, open]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    let cancelled = false;
-    setIsLoadingScanners(true);
-    setScannerCatalogError(null);
-
-    callApi('/model-audit/scanners')
-      .then(async (response) => {
-        if (!response.ok) {
-          const errorBody = await response.json().catch(() => null);
-          throw new Error(errorBody?.error || 'Unable to load scanner catalog');
-        }
-        return response.json();
-      })
-      .then((data) => {
-        if (cancelled) {
-          return;
-        }
-        setScannerCatalog(Array.isArray(data.scanners) ? data.scanners : []);
-      })
-      .catch((error) => {
-        if (cancelled) {
-          return;
-        }
-        setScannerCatalog([]);
-        setScannerCatalogError(error instanceof Error ? error.message : 'Unable to load scanners');
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsLoadingScanners(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
 
   const handleAddBlacklist = () => {
     if (blacklistInput.trim()) {
