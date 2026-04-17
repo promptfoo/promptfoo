@@ -220,9 +220,9 @@ describe('Transformation integration (real transform)', () => {
     const { runAssertions } = await import('../src/assertions');
     const runAssertionsSpy = vi.mocked(runAssertions);
     // Let the assertion runner see the assertion so we can verify its transform executed.
-    runAssertionsSpy.mockImplementation(async ({ test: _test, providerResponse }) => {
+    runAssertionsSpy.mockImplementation(async ({ providerResponse }) => {
       return providerResponse.output === '((  raw  ))'
-        ? { pass: true, score: 1, namedScores: {} }
+        ? { pass: true, score: 1, namedScores: {}, reason: 'chain ok' }
         : { pass: false, score: 0, reason: `unexpected: ${providerResponse.output}` };
     });
 
