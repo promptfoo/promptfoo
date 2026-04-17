@@ -23,6 +23,7 @@ import { isApiProvider } from './types/providers';
 import { maybeLoadFromExternalFile } from './util/file';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util/index';
 import { readTests } from './util/testCaseReader';
+import { INLINE_FUNCTION_LABEL } from './util/transform';
 
 import type {
   EvaluateOptions,
@@ -99,24 +100,58 @@ function withSerializableProvider<T extends Record<string, unknown>>(record: T):
   };
 }
 
-function toSerializableAssertion(assertion: unknown): unknown {
+/**
+ * Function-valued transforms are first-class at runtime but are silently dropped
+ * by `JSON.stringify`. Persisted eval configs (drizzle-stored) must never retain
+ * a function reference, so replace every `transform`-like field with a
+ * `[inline function]: name` marker. Non-function values pass through unchanged.
+ *
+ * `droppedRef.value` is flipped to `true` the first time a function is replaced
+ * so the caller can emit a single warning instead of logging per field.
+ */
+const TRANSFORM_KEYS = ['transform', 'transformVars', 'contextTransform', 'postprocess'] as const;
+
+function replaceFunctionTransforms<T extends Record<string, unknown>>(
+  record: T,
+  droppedRef: { value: boolean },
+): T {
+  let result: T | undefined;
+  for (const key of TRANSFORM_KEYS) {
+    const value = record[key];
+    if (typeof value !== 'function') {
+      continue;
+    }
+    const fn = value as { name?: string };
+    if (!result) {
+      result = { ...record };
+    }
+    (result as Record<string, unknown>)[key] = fn.name
+      ? `${INLINE_FUNCTION_LABEL}: ${fn.name}`
+      : INLINE_FUNCTION_LABEL;
+    droppedRef.value = true;
+  }
+  return result ?? record;
+}
+
+function toSerializableAssertion(assertion: unknown, droppedRef: { value: boolean }): unknown {
   if (!isRecord(assertion)) {
     return assertion;
   }
 
   let sanitizedAssertion = withSerializableProvider(assertion);
+  sanitizedAssertion = replaceFunctionTransforms(sanitizedAssertion, droppedRef);
 
   if (Array.isArray(assertion.assert)) {
     sanitizedAssertion = {
       ...sanitizedAssertion,
-      assert: assertion.assert.map(toSerializableAssertion),
+      assert: assertion.assert.map((a) => toSerializableAssertion(a, droppedRef)),
     };
   }
 
   return sanitizedAssertion;
 }
 
-function toSerializableTestCase(test: unknown): unknown {
+function toSerializableTestCase(test: unknown, droppedRef: { value: boolean }): unknown {
   if (!isRecord(test)) {
     return test;
   }
@@ -124,7 +159,8 @@ function toSerializableTestCase(test: unknown): unknown {
   let sanitizedTest = withSerializableProvider(test);
 
   if (isRecord(test.options)) {
-    const options = withSerializableProvider(test.options);
+    let options = withSerializableProvider(test.options);
+    options = replaceFunctionTransforms(options, droppedRef);
     if (options !== test.options) {
       sanitizedTest = {
         ...sanitizedTest,
@@ -136,14 +172,14 @@ function toSerializableTestCase(test: unknown): unknown {
   if (Array.isArray(test.assert)) {
     sanitizedTest = {
       ...sanitizedTest,
-      assert: test.assert.map(toSerializableAssertion),
+      assert: test.assert.map((a) => toSerializableAssertion(a, droppedRef)),
     };
   }
 
   return sanitizedTest;
 }
 
-function toSerializableScenario(scenario: unknown): unknown {
+function toSerializableScenario(scenario: unknown, droppedRef: { value: boolean }): unknown {
   if (!isRecord(scenario)) {
     return scenario;
   }
@@ -154,7 +190,7 @@ function toSerializableScenario(scenario: unknown): unknown {
 
   return {
     ...scenario,
-    tests: scenario.tests.map(toSerializableTestCase),
+    tests: scenario.tests.map((t) => toSerializableTestCase(t, droppedRef)),
   };
 }
 
@@ -162,18 +198,27 @@ function createSerializableUnifiedConfig(
   testSuite: EvaluateTestSuite,
   prompts: TestSuite['prompts'],
 ): Partial<UnifiedConfig> {
-  return {
+  const droppedRef = { value: false };
+  const config = {
     ...testSuite,
     providers: toSerializableProviderRef(testSuite.providers),
-    defaultTest: toSerializableTestCase(testSuite.defaultTest),
+    defaultTest: toSerializableTestCase(testSuite.defaultTest, droppedRef),
     tests: Array.isArray(testSuite.tests)
-      ? testSuite.tests.map(toSerializableTestCase)
+      ? testSuite.tests.map((t) => toSerializableTestCase(t, droppedRef))
       : testSuite.tests,
     scenarios: Array.isArray(testSuite.scenarios)
-      ? testSuite.scenarios.map(toSerializableScenario)
+      ? testSuite.scenarios.map((s) => toSerializableScenario(s, droppedRef))
       : testSuite.scenarios,
     prompts,
   } as Partial<UnifiedConfig>;
+
+  if (droppedRef.value && testSuite.writeLatestResults) {
+    logger.warn(
+      'Function-valued transform(s) in testSuite were replaced with "[inline function]" markers in the persisted config. Re-running the saved eval will not invoke them; use string expressions or file:// references if you need the config to round-trip.',
+    );
+  }
+
+  return config;
 }
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
