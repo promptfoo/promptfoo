@@ -220,11 +220,18 @@ export async function transform(
       : await Promise.resolve(transformFn(transformInput, context, getProcessShim()));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const label = getTransformLabel(codeOrFilepathOrFn);
     logger.error('Error in transform function', {
       error,
       message,
-      transform: getTransformLabel(codeOrFilepathOrFn),
+      transform: label,
     });
+    // Wrap with the label so callers (and user-visible row errors) identify
+    // which transform blew up. Keep the original via `cause` so wrappers like
+    // `contextUtils.resolveContext` can unwrap and avoid double-labeling.
+    if (error instanceof Error) {
+      throw new Error(`Transform failed (${label}): ${message}`, { cause: error });
+    }
     throw error;
   }
 

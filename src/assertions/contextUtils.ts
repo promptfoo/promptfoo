@@ -71,10 +71,14 @@ export async function resolveContext(
 
       contextValue = transformed;
     } catch (error) {
+      // `transform()` wraps errors with its own `Transform failed (label): ...`
+      // prefix and stashes the original on `.cause`. Prefer the raw cause here so
+      // the user-facing message reads `Failed to transform context ... : <raw>`
+      // instead of double-labeling with a stutter.
+      const rawError = error instanceof Error && error.cause instanceof Error ? error.cause : error;
+      const message = rawError instanceof Error ? rawError.message : String(rawError);
       throw new Error(
-        `Failed to transform context using expression '${transformLabel}': ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `Failed to transform context using expression '${transformLabel}': ${message}`,
       );
     }
   }

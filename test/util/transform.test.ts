@@ -481,6 +481,27 @@ describe('util', () => {
         );
       });
 
+      it('wraps thrown errors with the transform label and preserves the original via cause', async () => {
+        const original = new Error('raw user error');
+        const fn: TransformFunction = () => {
+          throw original;
+        };
+
+        try {
+          await transform(fn, 'test', { vars: {}, prompt: {} });
+          throw new Error('expected transform to throw');
+        } catch (err) {
+          expect(err).toBeInstanceOf(Error);
+          const e = err as Error & { cause?: unknown };
+          // Wrapped message includes the label AND the original error text.
+          expect(e.message).toContain('Transform failed (');
+          expect(e.message).toContain(INLINE_FUNCTION_LABEL);
+          expect(e.message).toContain('raw user error');
+          // The original error is attached via the standard `cause` chain.
+          expect(e.cause).toBe(original);
+        }
+      });
+
       it('resolves thenables returned by inline functions', async () => {
         // Bare thenable built via Object.defineProperty to dodge the `noThenProperty`
         // lint rule; verifies `transform()` awaits anything Promise-like.
