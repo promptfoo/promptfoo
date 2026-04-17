@@ -17,6 +17,8 @@ keywords:
     UnsafeBench,
     VLGuard,
     audio strategy,
+    custom providers,
+    base64 media,
   ]
 ---
 
@@ -548,7 +550,7 @@ npx promptfoo@latest redteam run -c promptfooconfig.yaml
 
 ## Using Custom Providers
 
-Custom [Python](/docs/providers/python) and [JavaScript](/docs/providers/custom-api) providers receive media data in `context.vars` (`context['vars']` in Python). Read variables directly rather than parsing the rendered prompt:
+Custom [Python](/docs/providers/python) and [JavaScript](/docs/providers/custom-api) providers receive media data in the variable named by `redteam.injectVar`. Read `context.vars` (`context['vars']` in Python) directly rather than parsing the rendered prompt, which may contain a long inline base64 string:
 
 ```python
 def call_api(prompt, options, context):
@@ -558,8 +560,12 @@ def call_api(prompt, options, context):
 ```
 
 :::warning
+
 Always set `injectVar` explicitly for multimodal prompts. It defaults to the **last** template variable, which may not be the media variable. With `{{image}} {{question}}`, the default is `question`.
+
 :::
+
+The image strategy produces raw PNG base64. APIs such as OpenAI-compatible vision endpoints usually expect a data URL, so wrap it as `data:image/png;base64,...` before forwarding it.
 
 See the [Python provider](/docs/providers/python#handling-multimodal-content) and [JavaScript provider](/docs/providers/custom-api#handling-multimodal-content) docs for complete examples.
 

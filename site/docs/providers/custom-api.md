@@ -155,7 +155,7 @@ See the [vercel-ai-sdk example](https://github.com/promptfoo/promptfoo/tree/main
 
 ### Handling Multimodal Content
 
-When using [image](/docs/red-team/strategies/image), [audio](/docs/red-team/strategies/audio), or [video](/docs/red-team/strategies/video) red team strategies, promptfoo embeds base64-encoded media data into template variables. Custom providers must extract this data from `context.vars` and forward it to the API.
+When using [image](/docs/red-team/strategies/image), [audio](/docs/red-team/strategies/audio), or [video](/docs/red-team/strategies/video) red team strategies, Promptfoo embeds base64-encoded media data into the template variable named by `redteam.injectVar`. Custom providers must extract this data from `context.vars` and forward it to the API.
 
 ```javascript title="multimodalProvider.js"
 module.exports = class MultimodalProvider {
@@ -164,20 +164,25 @@ module.exports = class MultimodalProvider {
   }
 
   async callApi(prompt, context) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return { error: 'OPENAI_API_KEY is required' };
+    }
+
     const imageBase64 = context.vars.image || '';
     const question = context.vars.question || 'Describe this image';
 
-    // The image strategy provides raw base64 — wrap it as a data URL for OpenAI
+    // The image strategy provides raw PNG base64. Wrap it as a data URL for OpenAI-compatible APIs.
     const imageUrl = `data:image/png;base64,${imageBase64}`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-5',
         messages: [
           {
             role: 'user',
@@ -190,15 +195,26 @@ module.exports = class MultimodalProvider {
       }),
     });
 
+    if (!response.ok) {
+      return { error: `OpenAI API error ${response.status}: ${await response.text()}` };
+    }
+
     const result = await response.json();
-    return { output: result.choices[0].message.content };
+    const output = result.choices?.[0]?.message?.content;
+    return output
+      ? { output }
+      : { error: `OpenAI API returned no output: ${JSON.stringify(result)}` };
   }
 };
 ```
 
 :::note
+
 `injectVar` defaults to the **last** template variable in your prompt. With `{{image}} {{question}}`, it defaults to `question` — not `image`. Always set `injectVar` explicitly when using media strategies.
+
 :::
+
+The image strategy generates PNG bytes. Audio strategy values are raw MP3 base64 from remote generation, and video strategy values are raw MP4 base64 when FFmpeg succeeds. Static image variables and dataset-driven image plugins may already provide a `data:` URL or a different MIME type, so check the value before prepending `data:image/png;base64,`. Avoid logging full media strings; screenshots, audio, and video can be large or sensitive.
 
 See the [Python provider multimodal docs](/docs/providers/python#handling-multimodal-content) for a detailed explanation and YAML config example.
 

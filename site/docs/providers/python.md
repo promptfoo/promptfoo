@@ -635,7 +635,7 @@ def call_api(prompt, options, context):
 
 ### Handling Multimodal Content
 
-When using [image](/docs/red-team/strategies/image), [audio](/docs/red-team/strategies/audio), or [video](/docs/red-team/strategies/video) red team strategies, promptfoo embeds base64-encoded media data into your template variables. Built-in providers handle this automatically, but custom providers must extract and forward the media data manually.
+When using [image](/docs/red-team/strategies/image), [audio](/docs/red-team/strategies/audio), or [video](/docs/red-team/strategies/video) red team strategies, Promptfoo embeds base64-encoded media data into the template variable named by `redteam.injectVar`. Built-in providers handle this automatically, but custom providers must extract and forward the media data manually.
 
 The media content is available in two places:
 
@@ -649,17 +649,21 @@ import os
 import requests
 
 def call_api(prompt, options, context):
+    api_key = os.environ.get('OPENAI_API_KEY')
+    if not api_key:
+        return {'error': 'OPENAI_API_KEY is required'}
+
     image_base64 = context['vars'].get('image', '')
     question = context['vars'].get('question', 'Describe this image')
 
-    # The image strategy provides raw base64 — wrap it as a data URL for OpenAI
+    # The image strategy provides raw PNG base64. Wrap it as a data URL for OpenAI-compatible APIs.
     image_url = f'data:image/png;base64,{image_base64}'
 
     response = requests.post(
         'https://api.openai.com/v1/chat/completions',
-        headers={'Authorization': f'Bearer {os.environ["OPENAI_API_KEY"]}'},
+        headers={'Authorization': f'Bearer {api_key}'},
         json={
-            'model': 'gpt-4o',
+            'model': 'gpt-5',
             'messages': [{
                 'role': 'user',
                 'content': [
@@ -670,30 +674,49 @@ def call_api(prompt, options, context):
         },
     )
 
+    if not response.ok:
+        return {'error': f'OpenAI API error {response.status_code}: {response.text}'}
+
     result = response.json()
-    return {
-        'output': result['choices'][0]['message']['content'],
-    }
+    output = result.get('choices', [{}])[0].get('message', {}).get('content')
+    if output:
+        return {'output': output}
+    return {'error': f'OpenAI API returned no output: {result}'}
 ```
 
 Example config:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - python:multimodal_provider.py
+  - id: file://multimodal_provider.py
 
 prompts:
   - '{{image}} {{question}}'
 
+defaultTest:
+  vars:
+    question: Describe this image.
+
 redteam:
+  purpose: A vision assistant that answers questions about images.
   injectVar: image
+  plugins:
+    - harmful:hate
   strategies:
     - image
+    - id: basic
+      config:
+        enabled: false
 ```
 
 :::note
+
 `injectVar` defaults to the **last** template variable in your prompt. With `{{image}} {{question}}`, it defaults to `question` — not `image`. Always set `injectVar` explicitly when using media strategies.
+
 :::
+
+The image strategy generates PNG bytes. Audio strategy values are raw MP3 base64 from remote generation, and video strategy values are raw MP4 base64 when FFmpeg succeeds. Static image variables and dataset-driven image plugins may already provide a `data:` URL or a different MIME type, so check the value before prepending `data:image/png;base64,`. Avoid logging full media strings; screenshots, audio, and video can be large or sensitive.
 
 See the [multimodal red team guide](/docs/guides/multimodal-red-team) for more configuration examples.
 
