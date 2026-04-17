@@ -1022,7 +1022,7 @@ export const TestSuiteSchema = z.object({
               enabled: z.boolean(),
               port: z.number(),
               host: z.string().optional(),
-              acceptFormats: z.array(z.string()),
+              acceptFormats: z.array(z.string()).optional(),
             })
             .optional(),
           grpc: z

@@ -1188,4 +1188,25 @@ describe('TestSuiteSchema', () => {
       expect(result.data!.defaultTest).toBeUndefined();
     });
   });
+
+  describe('tracing validation', () => {
+    it('should accept OTLP HTTP config without acceptFormats', () => {
+      const suite = {
+        ...baseTestSuite,
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              host: '0.0.0.0',
+              port: 44329,
+            },
+          },
+        },
+      };
+
+      const result = TestSuiteSchema.safeParse(suite);
+      expect(result.success).toBe(true);
+    });
+  });
 });
