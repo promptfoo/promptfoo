@@ -13,7 +13,7 @@ import { mockProcessEnv } from './util/utils';
 import type { EnvVarKey } from '../src/envars';
 
 describe('envars', () => {
-  const originalEnv = process.env;
+  const originalEnv = { ...process.env };
   const originalCliState = { ...cliState };
 
   beforeEach(() => {
