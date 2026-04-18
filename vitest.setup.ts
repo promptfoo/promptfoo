@@ -12,23 +12,27 @@ import { afterAll, afterEach, vi } from 'vitest';
 const TEST_CONFIG_DIR = path.join('.local', 'vitest', 'config', `worker-${process.pid}`);
 
 // Set up test environment variables
-process.env.NODE_ENV = 'test';
-process.env.CODEX_HOME = './.local/vitest/codex-home';
-process.env.PROMPTFOO_CACHE_TYPE = 'memory';
-process.env.IS_TESTING = 'true';
-process.env.PROMPTFOO_CONFIG_DIR = TEST_CONFIG_DIR;
+Object.assign(process.env, {
+  NODE_ENV: 'test',
+  CODEX_HOME: './.local/vitest/codex-home',
+  PROMPTFOO_CACHE_TYPE: 'memory',
+  IS_TESTING: 'true',
+  PROMPTFOO_CONFIG_DIR: TEST_CONFIG_DIR,
+});
 
 // Set mock API keys to prevent authentication errors during tests
 // These are dummy values that allow provider instantiation without real credentials
-process.env.ANTHROPIC_API_KEY = 'test-anthropic-api-key';
-process.env.AZURE_OPENAI_API_HOST = 'test.openai.azure.com';
-process.env.AZURE_OPENAI_API_KEY = 'test-azure-api-key';
-process.env.AZURE_API_KEY = 'test-azure-api-key';
-process.env.HF_API_TOKEN = 'test-hf-token';
-process.env.OPENAI_API_KEY = 'test-openai-api-key';
+Object.assign(process.env, {
+  ANTHROPIC_API_KEY: 'test-anthropic-api-key',
+  AZURE_OPENAI_API_HOST: 'test.openai.azure.com',
+  AZURE_OPENAI_API_KEY: 'test-azure-api-key',
+  AZURE_API_KEY: 'test-azure-api-key',
+  HF_API_TOKEN: 'test-hf-token',
+  OPENAI_API_KEY: 'test-openai-api-key',
+});
 
 // Clean up any remote generation URL
-delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
+Reflect.deleteProperty(process.env, 'PROMPTFOO_REMOTE_GENERATION_URL');
 
 /**
  * Global cleanup after each test to prevent memory leaks.
