@@ -647,6 +647,8 @@ const requestMedia = requestMediaEntry?.media;
 const requestExample = objectSample(document, requestMedia, 'requestBody application/json');
 const requestExampleIsArray = Array.isArray(requestExample);
 const requestExampleArrayItemIsObject = requestExampleIsArray && isPlainRecord(requestExample[0]);
+const requestExampleIsScalar =
+  requestExample !== undefined && !requestExampleIsArray && !isPlainRecord(requestExample);
 const requestSchema = schemaFromMedia(document, requestMedia);
 const requestIsFormUrlEncoded = isFormUrlEncodedMediaType(requestMediaEntry?.mediaType || '');
 const requestIsMultipart = isMultipartMediaType(requestMediaEntry?.mediaType || '');
@@ -669,6 +671,7 @@ const requestBodyArrayItemIsObject = requestArrayItemSchema
   ? requestArrayItemIsObject
   : requestExampleArrayItemIsObject;
 const effectiveRequestSchema = requestArrayItemSchema || requestSchema;
+const requestBodyIsScalar = !effectiveRequestSchema && requestExampleIsScalar;
 const requestProperties =
   requestArrayItemSchema && !requestArrayItemIsObject
     ? { message: requestArrayItemSchema }
@@ -681,7 +684,9 @@ const requestExampleFields = isPlainRecord(requestExample)
     ? requestExample[0]
     : Array.isArray(requestExample) && requestExample.length > 0
       ? { message: requestExample[0] }
-      : {};
+      : requestExampleIsScalar
+        ? { message: requestExample }
+        : {};
 const bodyFields = effectiveRequestSchema
   ? (requestIsText || (requestArrayItemSchema && !requestArrayItemIsObject)
       ? ['message']
@@ -755,7 +760,7 @@ if (bodyFields.length > 0) {
     providerConfig.multipart = {
       parts: bodyFields.map((name) => multipartPart(document, name, requestProperties[name])),
     };
-  } else if (requestIsText) {
+  } else if (requestIsText || requestBodyIsScalar) {
     providerConfig.body = inputTemplate(bodyFields[0]);
   } else if (requestBodyIsArray) {
     providerConfig.body = [

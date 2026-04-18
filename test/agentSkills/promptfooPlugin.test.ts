@@ -1375,6 +1375,57 @@ function openApiTextPlainSpec() {
   };
 }
 
+function openApiScalarExampleRequestSpec() {
+  const response = {
+    '200': {
+      description: 'Scalar request response',
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              output: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+  };
+  return {
+    openapi: '3.1.0',
+    paths: {
+      '/json-scalar-chat': {
+        post: {
+          operationId: 'jsonScalarChat',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                example: 'Say exactly PONG.',
+              },
+            },
+          },
+          responses: response,
+        },
+      },
+      '/text-scalar-chat': {
+        post: {
+          operationId: 'textScalarChat',
+          requestBody: {
+            required: true,
+            content: {
+              'text/plain': {
+                example: 'Say exactly PONG.',
+              },
+            },
+          },
+          responses: response,
+        },
+      },
+    },
+  };
+}
+
 function openApiArrayRequestSpec() {
   return {
     openapi: '3.1.0',
@@ -3803,6 +3854,50 @@ describe('promptfoo-provider-setup skill', () => {
     }
   });
 
+  it('preserves scalar OpenAPI request examples without schemas for provider configs', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-provider-'));
+    const specPath = path.join(tempDir, 'openapi.yaml');
+    try {
+      fs.writeFileSync(specPath, yaml.dump(openApiScalarExampleRequestSpec()));
+      for (const [operationId, contentType] of [
+        ['jsonScalarChat', 'application/json'],
+        ['textScalarChat', 'text/plain'],
+      ]) {
+        const generated = yaml.load(
+          execFileSync(
+            'node',
+            [
+              path.join(providerSkillRoot, 'scripts', 'openapi-operation-to-config.mjs'),
+              '--spec',
+              specPath,
+              '--operation-id',
+              operationId,
+              '--base-url-env',
+              'SCALAR_API_BASE_URL',
+            ],
+            { cwd: repoRoot, encoding: 'utf8' },
+          ),
+        );
+        expectRecord(generated, `Generated ${operationId} provider config`);
+        const [provider] = generated.providers as unknown[];
+        expectRecord(provider, `Generated ${operationId} provider`);
+        expectRecord(provider.config, `Generated ${operationId} provider config block`);
+        expect(provider.config.headers).toEqual({
+          'Content-Type': contentType,
+        });
+        expect(provider.config.body).toBe('{{prompt}}');
+        expect(provider.config.transformResponse).toBe('json.output');
+        const [test] = generated.tests as unknown[];
+        expectRecord(test, `Generated ${operationId} provider test`);
+        expect(test.vars).toEqual({
+          message: 'Say exactly PONG.',
+        });
+      }
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('uses OpenAPI root array request bodies for provider configs', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-provider-'));
     const specPath = path.join(tempDir, 'openapi.yaml');
@@ -5642,6 +5737,57 @@ describe('promptfoo-redteam-setup skill', () => {
           message: 'Say exactly PONG.',
         },
       });
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves scalar OpenAPI request examples without schemas for redteam configs', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-redteam-'));
+    const specPath = path.join(tempDir, 'openapi.yaml');
+    try {
+      fs.writeFileSync(specPath, yaml.dump(openApiScalarExampleRequestSpec()));
+      for (const [operationId, contentType] of [
+        ['jsonScalarChat', 'application/json'],
+        ['textScalarChat', 'text/plain'],
+      ]) {
+        const generated = yaml.load(
+          execFileSync(
+            'node',
+            [
+              path.join(
+                redteamSetupSkillRoot,
+                'scripts',
+                'openapi-operation-to-redteam-config.mjs',
+              ),
+              '--spec',
+              specPath,
+              '--operation-id',
+              operationId,
+              '--base-url-env',
+              'SCALAR_API_BASE_URL',
+            ],
+            { cwd: repoRoot, encoding: 'utf8' },
+          ),
+        );
+        expectRecord(generated, `Generated ${operationId} redteam config`);
+        const [target] = generated.targets as unknown[];
+        expectRecord(target, `Generated ${operationId} redteam target`);
+        expectRecord(target.config, `Generated ${operationId} redteam target config`);
+        expect(target.config.headers).toEqual({
+          'Content-Type': contentType,
+        });
+        expect(target.config.body).toBe('{{message}}');
+        expect(target.config.transformResponse).toBe('json.output');
+        expect(target.inputs).toEqual({
+          message: 'User-controlled message or instruction to the target.',
+        });
+        expect(generated.defaultTest).toEqual({
+          vars: {
+            message: 'Say exactly PONG.',
+          },
+        });
+      }
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
