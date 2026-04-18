@@ -152,6 +152,8 @@ const processEnvPropertyDeletePattern = String.raw`\bdelete\s+${processEnvProper
 const directProcessEnvMutationPattern = new RegExp(
   `(?:${processEnvObjectAssignmentPattern}|${processEnvPropertyAssignmentPattern}|${processEnvPropertyDeletePattern})`,
 );
+const processEnvReferenceSnapshotPattern =
+  /\b(?:const|let|var)\s+[^=\n]*\boriginal[A-Za-z0-9_]*\s*=\s*process\.env\s*;|\boriginal[A-Za-z0-9_]*\s*=\s*process\.env\s*;/i;
 
 function findTestFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -187,6 +189,17 @@ function hasDirectProcessEnvMutation(source: string) {
     const trimmed = line.trim();
     return (
       trimmed.length > 0 && !trimmed.startsWith('//') && directProcessEnvMutationPattern.test(line)
+    );
+  });
+}
+
+function hasProcessEnvReferenceSnapshot(source: string) {
+  return source.split(/\r?\n/).some((line) => {
+    const trimmed = line.trim();
+    return (
+      trimmed.length > 0 &&
+      !trimmed.startsWith('//') &&
+      processEnvReferenceSnapshotPattern.test(line)
     );
   });
 }
@@ -429,6 +442,23 @@ describe('root test hygiene', () => {
     expect(hasDirectProcessEnvMutation(source)).toBe(false);
   });
 
+  it.each([
+    'const originalEnv = process.env;',
+    'originalEnv = process.env;',
+    'const ORIGINAL_ENV = process.env;',
+  ])('detects process.env reference snapshots in %s', (source) => {
+    expect(hasProcessEnvReferenceSnapshot(source)).toBe(true);
+  });
+
+  it.each([
+    'const originalEnv = { ...process.env };',
+    'const originalApiKey = process.env.OPENAI_API_KEY;',
+    'const envReference = process.env;',
+    '// const originalEnv = process.env;',
+  ])('allows copied snapshots or read-only env access in %s', (source) => {
+    expect(hasProcessEnvReferenceSnapshot(source)).toBe(false);
+  });
+
   it('keeps new root tests from adding hoisted persistent mocks without reset', () => {
     const unapprovedFiles = findFilesMatchingPolicy(hasHoistedPersistentMockWithoutReset)
       .filter((file) => !legacyHoistedPersistentMockFiles.has(file))
@@ -456,6 +486,14 @@ describe('root test hygiene', () => {
         (file) =>
           `${file}: use mockProcessEnv() or vi.stubEnv() instead of direct process.env mutation`,
       );
+
+    expect(unapprovedFiles).toEqual([]);
+  });
+
+  it('keeps new root tests from snapshotting process.env by reference', () => {
+    const unapprovedFiles = findFilesMatchingPolicy(hasProcessEnvReferenceSnapshot).map(
+      (file) => `${file}: snapshot process.env with { ...process.env } instead of by reference`,
+    );
 
     expect(unapprovedFiles).toEqual([]);
   });
