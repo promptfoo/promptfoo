@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
 import { checkModelAuditInstalled, modelScanCommand } from '../../src/commands/modelScan';
 import logger from '../../src/logger';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('child_process');
 vi.mock('../../src/logger');
@@ -1060,7 +1061,7 @@ describe('Sharing behavior', () => {
   afterEach(() => {
     mockExit.mockRestore();
     process.exitCode = 0;
-    delete process.env.PROMPTFOO_DISABLE_SHARING;
+    mockProcessEnv({ PROMPTFOO_DISABLE_SHARING: undefined });
   });
 
   // Helper to create a mock scan process that returns valid JSON results
@@ -1097,7 +1098,7 @@ describe('Sharing behavior', () => {
   }
 
   it('should not share when PROMPTFOO_DISABLE_SHARING env var is set', async () => {
-    process.env.PROMPTFOO_DISABLE_SHARING = 'true';
+    mockProcessEnv({ PROMPTFOO_DISABLE_SHARING: 'true' });
     cloudConfigIsEnabledMock.mockReturnValue(true);
     isModelAuditSharingEnabledMock.mockReturnValue(true);
 
