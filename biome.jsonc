@@ -296,7 +296,6 @@
         "src/app/src/**/*.spec.tsx",
         // Keep in sync with legacyDirectProcessEnvMutationFiles in test/test-hygiene.test.ts.
         // BEGIN direct process.env mutation legacy allowlist
-        "!!test/providers/google/ai.studio.test.ts",
         "!!test/providers/google/auth.test.ts",
         "!!test/providers/google/gemini-image.test.ts",
         "!!test/providers/google/image.test.ts",
