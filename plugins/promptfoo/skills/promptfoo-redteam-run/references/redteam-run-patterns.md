@@ -87,6 +87,21 @@ Run the generated probes with the deterministic grader:
 npm run local -- redteam eval -c redteam.yaml -o /tmp/redteam-results.json --no-cache --no-share --no-progress-bar
 ```
 
+### Symptom: "Could not extract JSON from llm-rubric response"
+
+Every generated test returns `gradingResult.reason: "Could not extract JSON from
+llm-rubric response"` when the default remote grader cannot reach a real LLM
+(missing `OPENAI_API_KEY`, offline CI, sandboxed shell). This is a **grader
+transport failure**, not a target vulnerability, and the Attack Success Rate
+(`failures / (successes + failures)`) will read 100% for a reason unrelated to
+the target.
+
+The deterministic-grader pattern above is the fix: wire `redteam.provider` to a
+local `file://` grader that returns a JSON `{ pass, score, reason }` envelope,
+then rerun. This keeps QA reproducible without LLM credentials. Switch back to
+the default grader only when a real LLM is available and you want semantic
+judgment.
+
 ## Inspect JSON Output
 
 ```bash

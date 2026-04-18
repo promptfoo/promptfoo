@@ -131,6 +131,26 @@ Inspect the output JSON for `results.stats`, `response.output`, `score`,
 ```
 
 ```yaml
+# WRONG: unquoted JS expression that starts with [ or { is parsed as YAML flow
+- type: javascript
+  value: ['billing', 'technical'].includes(output.category)
+
+# BETTER: quote any assertion value that begins with [, {, *, &, or !
+- type: javascript
+  value: "['billing', 'technical'].includes(output.category)"
+```
+
+```yaml
+# WRONG: inline prompts that contain JSON-like braces are misread as file paths
+prompts:
+  - 'Classify: {{text}}. Return {"category": "..."} JSON.'
+
+# BETTER: move non-trivial prompts (JSON examples, multi-line, quotes) to a file
+prompts:
+  - file://./prompts/classify.txt
+```
+
+```yaml
 # WRONG: reparsing JSON in every assertion
 assert:
   - type: javascript
