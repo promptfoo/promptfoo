@@ -55,6 +55,7 @@ import RedteamImageIterativeProvider from '../../src/redteam/providers/iterative
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { createMockProvider } from '../factories/provider';
+import { mockProcessEnv } from '../util/utils';
 
 import type { ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
 
@@ -185,15 +186,15 @@ beforeEach(() => {
 describe('call provider apis', () => {
   beforeEach(() => {
     // Set Azure environment variables for Azure provider tests
-    process.env.AZURE_API_HOST = 'test.openai.azure.com';
-    process.env.AZURE_API_KEY = 'test-api-key';
+    mockProcessEnv({ AZURE_API_HOST: 'test.openai.azure.com' });
+    mockProcessEnv({ AZURE_API_KEY: 'test-api-key' });
   });
 
   afterEach(async () => {
     vi.clearAllMocks();
     await clearCache();
-    delete process.env.AZURE_API_HOST;
-    delete process.env.AZURE_API_KEY;
+    mockProcessEnv({ AZURE_API_HOST: undefined });
+    mockProcessEnv({ AZURE_API_KEY: undefined });
   });
 
   it('AzureOpenAiCompletionProvider callApi', async () => {
@@ -528,7 +529,7 @@ describe('loadApiProvider', () => {
       'TEST_MISSING_VAR_7079',
     ];
     for (const key of keysToClean) {
-      delete process.env[key];
+      mockProcessEnv({ [key]: undefined });
     }
   });
 
@@ -1155,8 +1156,8 @@ describe('loadApiProvider', () => {
   });
 
   it('supports templating in provider URL', async () => {
-    process.env.MY_HOST = 'api.example.com';
-    process.env.MY_PORT = '8080';
+    mockProcessEnv({ MY_HOST: 'api.example.com' });
+    mockProcessEnv({ MY_PORT: '8080' });
 
     const provider = await loadApiProvider('https://{{ env.MY_HOST }}:{{ env.MY_PORT }}/query', {
       options: {
@@ -1166,8 +1167,8 @@ describe('loadApiProvider', () => {
       },
     });
     expect(provider.id()).toBe('https://api.example.com:8080/query');
-    delete process.env.MY_HOST;
-    delete process.env.MY_PORT;
+    mockProcessEnv({ MY_HOST: undefined });
+    mockProcessEnv({ MY_PORT: undefined });
   });
 
   it('supports templating in provider URL with context env overrides', async () => {
@@ -1187,11 +1188,11 @@ describe('loadApiProvider', () => {
   });
 
   it('resolves env templates in provider IDs loaded from file references', async () => {
-    process.env.TEST_TENANT_7079 = 'tenant-a';
-    process.env.TEST_APPLICATION_7079 = 'myapp';
-    process.env.TEST_BASE_URL_7079 = 'example.com';
-    process.env.TEST_SERVICE_7079 = 'users';
-    process.env.TEST_VERSION_7079 = 'v3';
+    mockProcessEnv({ TEST_TENANT_7079: 'tenant-a' });
+    mockProcessEnv({ TEST_APPLICATION_7079: 'myapp' });
+    mockProcessEnv({ TEST_BASE_URL_7079: 'example.com' });
+    mockProcessEnv({ TEST_SERVICE_7079: 'users' });
+    mockProcessEnv({ TEST_VERSION_7079: 'v3' });
 
     const mockYamlContent = dedent`
       id: 'https://{{env.TEST_TENANT_7079}}-{{env.TEST_APPLICATION_7079}}.{{env.TEST_BASE_URL_7079}}/api/{{env.TEST_SERVICE_7079}}/{{env.TEST_VERSION_7079}}'
@@ -1204,16 +1205,16 @@ describe('loadApiProvider', () => {
     expect(providers).toHaveLength(1);
     expect(providers[0].id()).toBe('https://tenant-a-myapp.example.com/api/users/v3');
 
-    delete process.env.TEST_TENANT_7079;
-    delete process.env.TEST_APPLICATION_7079;
-    delete process.env.TEST_BASE_URL_7079;
-    delete process.env.TEST_SERVICE_7079;
-    delete process.env.TEST_VERSION_7079;
+    mockProcessEnv({ TEST_TENANT_7079: undefined });
+    mockProcessEnv({ TEST_APPLICATION_7079: undefined });
+    mockProcessEnv({ TEST_BASE_URL_7079: undefined });
+    mockProcessEnv({ TEST_SERVICE_7079: undefined });
+    mockProcessEnv({ TEST_VERSION_7079: undefined });
   });
 
   it('preserves undefined env templates in provider IDs loaded from file references', async () => {
-    process.env.TEST_APPLICATION_7079 = 'myapp';
-    process.env.TEST_BASE_URL_7079 = 'example.com';
+    mockProcessEnv({ TEST_APPLICATION_7079: 'myapp' });
+    mockProcessEnv({ TEST_BASE_URL_7079: 'example.com' });
 
     const mockYamlContent = dedent`
       id: 'https://{{env.TEST_APPLICATION_7079}}-{{env.TEST_MISSING_VAR_7079}}.{{env.TEST_BASE_URL_7079}}/api'
@@ -1226,13 +1227,13 @@ describe('loadApiProvider', () => {
     expect(providers).toHaveLength(1);
     expect(providers[0].id()).toBe('https://myapp-{{env.TEST_MISSING_VAR_7079}}.example.com/api');
 
-    delete process.env.TEST_APPLICATION_7079;
-    delete process.env.TEST_BASE_URL_7079;
+    mockProcessEnv({ TEST_APPLICATION_7079: undefined });
+    mockProcessEnv({ TEST_BASE_URL_7079: undefined });
   });
 
   it('resolves env templates when file:// providers are pre-resolved via resolveProviderConfigs', async () => {
-    process.env.TEST_APP_7079_RESOLVED = 'myapp';
-    process.env.TEST_URL_7079_RESOLVED = 'example.com';
+    mockProcessEnv({ TEST_APP_7079_RESOLVED: 'myapp' });
+    mockProcessEnv({ TEST_URL_7079_RESOLVED: 'example.com' });
 
     const mockYamlContent = dedent`
       id: 'https://{{env.TEST_APP_7079_RESOLVED}}.{{env.TEST_URL_7079_RESOLVED}}/api/v1'
@@ -1250,16 +1251,16 @@ describe('loadApiProvider', () => {
     expect(providers).toHaveLength(1);
     expect(providers[0].id()).toBe('https://myapp.example.com/api/v1');
 
-    delete process.env.TEST_APP_7079_RESOLVED;
-    delete process.env.TEST_URL_7079_RESOLVED;
+    mockProcessEnv({ TEST_APP_7079_RESOLVED: undefined });
+    mockProcessEnv({ TEST_URL_7079_RESOLVED: undefined });
   });
 
   it('resolves env templates in HTTP provider URL and config from file reference (#7079)', async () => {
-    process.env.TEST_APP_7079_HTTP = 'myapp';
-    process.env.TEST_BASE_7079_HTTP = 'example.com';
-    process.env.TEST_SVC_7079_HTTP = 'users';
-    process.env.TEST_VER_7079_HTTP = 'v3';
-    process.env.TEST_SESSION_7079_HTTP = 'abc123';
+    mockProcessEnv({ TEST_APP_7079_HTTP: 'myapp' });
+    mockProcessEnv({ TEST_BASE_7079_HTTP: 'example.com' });
+    mockProcessEnv({ TEST_SVC_7079_HTTP: 'users' });
+    mockProcessEnv({ TEST_VER_7079_HTTP: 'v3' });
+    mockProcessEnv({ TEST_SESSION_7079_HTTP: 'abc123' });
 
     const mockYamlContent = dedent`
       id: 'https://{{env.TEST_APP_7079_HTTP}}.{{env.TEST_BASE_7079_HTTP}}/api/{{env.TEST_SVC_7079_HTTP}}/{{env.TEST_VER_7079_HTTP}}'
@@ -1274,11 +1275,11 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('https://myapp.example.com/api/users/v3');
     expect(provider.config.headers?.Cookie).toBe('SESSION=abc123');
 
-    delete process.env.TEST_APP_7079_HTTP;
-    delete process.env.TEST_BASE_7079_HTTP;
-    delete process.env.TEST_SVC_7079_HTTP;
-    delete process.env.TEST_VER_7079_HTTP;
-    delete process.env.TEST_SESSION_7079_HTTP;
+    mockProcessEnv({ TEST_APP_7079_HTTP: undefined });
+    mockProcessEnv({ TEST_BASE_7079_HTTP: undefined });
+    mockProcessEnv({ TEST_SVC_7079_HTTP: undefined });
+    mockProcessEnv({ TEST_VER_7079_HTTP: undefined });
+    mockProcessEnv({ TEST_SESSION_7079_HTTP: undefined });
   });
 
   it('lets explicit env overrides win for providers loaded from file references', async () => {
@@ -1341,8 +1342,8 @@ describe('loadApiProvider', () => {
   it('preserves merged env overrides for Abliteration providers', async () => {
     const originalAblitKey = process.env.ABLIT_KEY;
     const originalAblitApiBaseUrl = process.env.ABLIT_API_BASE_URL;
-    delete process.env.ABLIT_KEY;
-    delete process.env.ABLIT_API_BASE_URL;
+    mockProcessEnv({ ABLIT_KEY: undefined });
+    mockProcessEnv({ ABLIT_API_BASE_URL: undefined });
 
     try {
       const provider = (await loadApiProvider('abliteration:abliterated-model', {
@@ -1362,15 +1363,15 @@ describe('loadApiProvider', () => {
       expect(provider.getApiKey()).toBe('provider-key');
     } finally {
       if (originalAblitKey === undefined) {
-        delete process.env.ABLIT_KEY;
+        mockProcessEnv({ ABLIT_KEY: undefined });
       } else {
-        process.env.ABLIT_KEY = originalAblitKey;
+        mockProcessEnv({ ABLIT_KEY: originalAblitKey });
       }
 
       if (originalAblitApiBaseUrl === undefined) {
-        delete process.env.ABLIT_API_BASE_URL;
+        mockProcessEnv({ ABLIT_API_BASE_URL: undefined });
       } else {
-        process.env.ABLIT_API_BASE_URL = originalAblitApiBaseUrl;
+        mockProcessEnv({ ABLIT_API_BASE_URL: originalAblitApiBaseUrl });
       }
     }
   });
@@ -1401,8 +1402,8 @@ describe('loadApiProvider', () => {
   });
 
   it('passes provider env overrides through the registry to Claude Agent SDK providers', async () => {
-    delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.CLAUDE_CODE_USE_VERTEX;
+    mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+    mockProcessEnv({ CLAUDE_CODE_USE_VERTEX: undefined });
 
     const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
       options: {
@@ -1610,7 +1611,7 @@ describe('loadApiProvider', () => {
   });
 
   it('renders label using Nunjucks', async () => {
-    process.env.someVariable = 'foo';
+    mockProcessEnv({ someVariable: 'foo' });
     const providerOptions = {
       id: 'openai:chat:gpt-4o',
       config: {},
@@ -1621,9 +1622,9 @@ describe('loadApiProvider', () => {
   });
 
   it('renders environment variables in provider config while preserving runtime vars', async () => {
-    process.env.MY_DEPLOYMENT = 'test-deployment';
-    process.env.AZURE_ENDPOINT = 'test.openai.azure.com';
-    process.env.API_VERSION = '2024-02-15';
+    mockProcessEnv({ MY_DEPLOYMENT: 'test-deployment' });
+    mockProcessEnv({ AZURE_ENDPOINT: 'test.openai.azure.com' });
+    mockProcessEnv({ API_VERSION: '2024-02-15' });
 
     const providerOptions = {
       config: {
@@ -1647,9 +1648,9 @@ describe('loadApiProvider', () => {
       message: '{{ vars.userMessage }}',
     });
 
-    delete process.env.MY_DEPLOYMENT;
-    delete process.env.AZURE_ENDPOINT;
-    delete process.env.API_VERSION;
+    mockProcessEnv({ MY_DEPLOYMENT: undefined });
+    mockProcessEnv({ AZURE_ENDPOINT: undefined });
+    mockProcessEnv({ API_VERSION: undefined });
   });
 
   it('loadApiProvider with xai', async () => {

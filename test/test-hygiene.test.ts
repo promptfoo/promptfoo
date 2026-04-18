@@ -121,7 +121,6 @@ const allowedSkippedTests: AllowedSkip[] = [
 const legacyHoistedPersistentMockFiles = new Set<string>();
 
 const legacyDirectProcessEnvMutationFiles = new Set([
-  'providers/index.test.ts',
   'providers/litellm.test.ts',
   'providers/openai-codex-sdk.e2e.test.ts',
   'providers/openai-codex-sdk.test.ts',
