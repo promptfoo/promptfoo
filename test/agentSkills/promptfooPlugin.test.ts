@@ -108,6 +108,10 @@ function readText(filePath: string) {
   return fs.readFileSync(filePath, 'utf8').replace(/\r\n?/g, '\n');
 }
 
+function toPosixPath(filePath: string) {
+  return filePath.split(path.sep).join('/');
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -1528,7 +1532,7 @@ describe('promptfoo Codex plugin package', () => {
 
   it('keeps the Codex plugin bundle file inventory intentionally small', () => {
     const packagedFiles = listFiles(pluginRoot, () => true)
-      .map((filePath) => path.relative(pluginRoot, filePath))
+      .map((filePath) => toPosixPath(path.relative(pluginRoot, filePath)))
       .sort();
 
     expect(packagedFiles).toEqual([
