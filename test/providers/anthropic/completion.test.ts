@@ -13,7 +13,7 @@ vi.mock('proxy-agent', async (importOriginal) => {
   };
 });
 
-const originalEnv = process.env;
+const originalEnv = { ...process.env };
 const TEST_API_KEY = 'test-api-key';
 
 describe('AnthropicCompletionProvider', () => {
