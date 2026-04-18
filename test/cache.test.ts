@@ -192,7 +192,7 @@ const mockFetchWithRetriesResponse = (
 };
 
 describe('cache configuration', () => {
-  const originalEnv = process.env;
+  const originalEnv = { ...process.env };
   let mkdirSyncMock: MockInstance;
   let existsSyncMock: MockInstance;
 
