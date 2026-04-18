@@ -101,7 +101,7 @@ describe('Telemetry', () => {
   let sendEventSpy: MockInstance;
 
   beforeEach(() => {
-    originalEnv = process.env;
+    originalEnv = { ...process.env };
     mockProcessEnv({ ...originalEnv }, { clear: true });
     mockProcessEnv({ PROMPTFOO_POSTHOG_KEY: 'test-key' });
 
