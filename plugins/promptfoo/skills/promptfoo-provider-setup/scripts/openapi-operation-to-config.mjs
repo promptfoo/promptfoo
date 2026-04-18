@@ -548,6 +548,7 @@ function inferAuths(document, operation) {
     return [];
   }
 
+  let partiallySupportedAuths;
   for (const requirement of securityRequirements) {
     const requirementRecord = asRecord(requirement, 'security requirement');
     const requirementNames = Object.keys(requirementRecord);
@@ -557,8 +558,7 @@ function inferAuths(document, operation) {
     const auths = [];
     for (const name of requirementNames) {
       if (!(name in securitySchemes)) {
-        auths.length = 0;
-        break;
+        continue;
       }
       const scheme = asRecord(
         resolveRef(document, securitySchemes[name]),
@@ -566,17 +566,19 @@ function inferAuths(document, operation) {
       );
       const auth = authFromScheme(scheme);
       if (!auth) {
-        auths.length = 0;
-        break;
+        continue;
       }
       auths.push(auth);
     }
     if (auths.length === requirementNames.length) {
       return auths;
     }
+    if (auths.length > 0 && !partiallySupportedAuths) {
+      partiallySupportedAuths = auths;
+    }
   }
 
-  return [];
+  return partiallySupportedAuths ?? [];
 }
 
 function authValue(tokenEnv, prefix) {

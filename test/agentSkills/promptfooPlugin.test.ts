@@ -568,6 +568,28 @@ function openApiConjunctiveAuthSpec() {
           },
         },
       },
+      '/partial-conjunctive-search': {
+        get: {
+          operationId: 'partialConjunctiveSearch',
+          security: [{ BearerToken: [], UnsupportedMtls: [] }],
+          parameters: [{ name: 'q', in: 'query', schema: { type: 'string' } }],
+          responses: {
+            '200': {
+              description: 'Partial conjunctive auth response',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      answer: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
       '/explicit-no-auth-search': {
         get: {
           operationId: 'explicitNoAuthSearch',
@@ -3225,6 +3247,41 @@ describe('promptfoo-provider-setup skill', () => {
         'X-API-Key': '{{env.CONJUNCTIVE_API_TOKEN}}',
       });
 
+      const partialConjunctiveAuthOutput = execFileSync(
+        'node',
+        [
+          path.join(providerSkillRoot, 'scripts', 'openapi-operation-to-config.mjs'),
+          '--spec',
+          conjunctiveAuthSpecPath,
+          '--operation-id',
+          'partialConjunctiveSearch',
+          '--base-url-env',
+          'CONJUNCTIVE_API_BASE_URL',
+          '--token-env',
+          'CONJUNCTIVE_API_TOKEN',
+        ],
+        { cwd: repoRoot, encoding: 'utf8' },
+      );
+      const partialConjunctiveAuthGenerated = yaml.load(partialConjunctiveAuthOutput);
+      expectRecord(
+        partialConjunctiveAuthGenerated,
+        'Generated OpenAPI partial conjunctive auth config',
+      );
+      const partialConjunctiveAuthProvider = (
+        partialConjunctiveAuthGenerated.providers as unknown[]
+      )[0];
+      expectRecord(
+        partialConjunctiveAuthProvider,
+        'Generated OpenAPI partial conjunctive auth provider',
+      );
+      expectRecord(
+        partialConjunctiveAuthProvider.config,
+        'Generated OpenAPI partial conjunctive auth provider config',
+      );
+      expect(partialConjunctiveAuthProvider.config.headers).toEqual({
+        Authorization: 'Bearer {{env.CONJUNCTIVE_API_TOKEN}}',
+      });
+
       for (const operationId of [
         'explicitNoAuthSearch',
         'emptyRequirementSearch',
@@ -5017,6 +5074,45 @@ describe('promptfoo-redteam-setup skill', () => {
       expect(fallbackConjunctiveAuthTarget.config.headers).toEqual({
         Authorization: 'Bearer {{env.CONJUNCTIVE_API_TOKEN}}',
         'X-API-Key': '{{env.CONJUNCTIVE_API_TOKEN}}',
+      });
+
+      const partialConjunctiveAuthGenerated = yaml.load(
+        execFileSync(
+          'node',
+          [
+            path.join(redteamSetupSkillRoot, 'scripts', 'openapi-operation-to-redteam-config.mjs'),
+            '--spec',
+            conjunctiveAuthSpecPath,
+            '--operation-id',
+            'partialConjunctiveSearch',
+            '--base-url-env',
+            'CONJUNCTIVE_API_BASE_URL',
+            '--token-env',
+            'CONJUNCTIVE_API_TOKEN',
+            '--generator-provider',
+            'file://test/fixtures/agent-skills/redteam-setup-live-http/openapi-redteam-generator.mjs',
+          ],
+          { cwd: repoRoot, encoding: 'utf8' },
+        ),
+      );
+      expectRecord(
+        partialConjunctiveAuthGenerated,
+        'Generated OpenAPI partial conjunctive auth redteam config',
+      );
+      const [partialConjunctiveAuthTarget] = partialConjunctiveAuthGenerated.targets as unknown[];
+      expectRecord(
+        partialConjunctiveAuthTarget,
+        'Generated OpenAPI partial conjunctive auth redteam target',
+      );
+      expectRecord(
+        partialConjunctiveAuthTarget.config,
+        'Generated OpenAPI partial conjunctive auth redteam target config',
+      );
+      expect(partialConjunctiveAuthTarget.config.headers).toEqual({
+        Authorization: 'Bearer {{env.CONJUNCTIVE_API_TOKEN}}',
+      });
+      expect(partialConjunctiveAuthTarget.inputs).toEqual({
+        q: 'User-controlled message or instruction to the target.',
       });
 
       for (const operationId of [
