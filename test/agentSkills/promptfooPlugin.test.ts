@@ -515,6 +515,9 @@ function openApiConjunctiveAuthSpec() {
           in: 'cookie',
           name: 'csrf_token',
         },
+        UnsupportedMtls: {
+          type: 'mutualTLS',
+        },
       },
     },
     paths: {
@@ -526,6 +529,31 @@ function openApiConjunctiveAuthSpec() {
           responses: {
             '200': {
               description: 'Conjunctive auth response',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      answer: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/fallback-conjunctive-search': {
+        get: {
+          operationId: 'fallbackConjunctiveSearch',
+          security: [
+            { BearerToken: [], UnsupportedMtls: [] },
+            { BearerToken: [], HeaderApiKey: [] },
+          ],
+          parameters: [{ name: 'q', in: 'query', schema: { type: 'string' } }],
+          responses: {
+            '200': {
+              description: 'Fallback conjunctive auth response',
               content: {
                 'application/json': {
                   schema: {
@@ -3015,6 +3043,42 @@ describe('promptfoo-provider-setup skill', () => {
       expect(conjunctiveAuthProvider.config.queryParams).toEqual({
         q: '{{prompt}}',
       });
+
+      const fallbackConjunctiveAuthOutput = execFileSync(
+        'node',
+        [
+          path.join(providerSkillRoot, 'scripts', 'openapi-operation-to-config.mjs'),
+          '--spec',
+          conjunctiveAuthSpecPath,
+          '--operation-id',
+          'fallbackConjunctiveSearch',
+          '--base-url-env',
+          'CONJUNCTIVE_API_BASE_URL',
+          '--token-env',
+          'CONJUNCTIVE_API_TOKEN',
+        ],
+        { cwd: repoRoot, encoding: 'utf8' },
+      );
+      const fallbackConjunctiveAuthGenerated = yaml.load(fallbackConjunctiveAuthOutput);
+      expectRecord(
+        fallbackConjunctiveAuthGenerated,
+        'Generated OpenAPI fallback conjunctive auth config',
+      );
+      const fallbackConjunctiveAuthProvider = (
+        fallbackConjunctiveAuthGenerated.providers as unknown[]
+      )[0];
+      expectRecord(
+        fallbackConjunctiveAuthProvider,
+        'Generated OpenAPI fallback conjunctive auth provider',
+      );
+      expectRecord(
+        fallbackConjunctiveAuthProvider.config,
+        'Generated OpenAPI fallback conjunctive auth provider config',
+      );
+      expect(fallbackConjunctiveAuthProvider.config.headers).toEqual({
+        Authorization: 'Bearer {{env.CONJUNCTIVE_API_TOKEN}}',
+        'X-API-Key': '{{env.CONJUNCTIVE_API_TOKEN}}',
+      });
     } finally {
       fs.rmSync(conjunctiveAuthTempDir, { recursive: true, force: true });
     }
@@ -4700,6 +4764,43 @@ describe('promptfoo-redteam-setup skill', () => {
       });
       expect(conjunctiveAuthTarget.inputs).toEqual({
         q: 'User-controlled message or instruction to the target.',
+      });
+
+      const fallbackConjunctiveAuthGenerated = yaml.load(
+        execFileSync(
+          'node',
+          [
+            path.join(redteamSetupSkillRoot, 'scripts', 'openapi-operation-to-redteam-config.mjs'),
+            '--spec',
+            conjunctiveAuthSpecPath,
+            '--operation-id',
+            'fallbackConjunctiveSearch',
+            '--base-url-env',
+            'CONJUNCTIVE_API_BASE_URL',
+            '--token-env',
+            'CONJUNCTIVE_API_TOKEN',
+            '--generator-provider',
+            'file://test/fixtures/agent-skills/redteam-setup-live-http/openapi-redteam-generator.mjs',
+          ],
+          { cwd: repoRoot, encoding: 'utf8' },
+        ),
+      );
+      expectRecord(
+        fallbackConjunctiveAuthGenerated,
+        'Generated OpenAPI fallback conjunctive auth redteam config',
+      );
+      const [fallbackConjunctiveAuthTarget] = fallbackConjunctiveAuthGenerated.targets as unknown[];
+      expectRecord(
+        fallbackConjunctiveAuthTarget,
+        'Generated OpenAPI fallback conjunctive auth redteam target',
+      );
+      expectRecord(
+        fallbackConjunctiveAuthTarget.config,
+        'Generated OpenAPI fallback conjunctive auth redteam target config',
+      );
+      expect(fallbackConjunctiveAuthTarget.config.headers).toEqual({
+        Authorization: 'Bearer {{env.CONJUNCTIVE_API_TOKEN}}',
+        'X-API-Key': '{{env.CONJUNCTIVE_API_TOKEN}}',
       });
     } finally {
       fs.rmSync(conjunctiveAuthTempDir, { recursive: true, force: true });

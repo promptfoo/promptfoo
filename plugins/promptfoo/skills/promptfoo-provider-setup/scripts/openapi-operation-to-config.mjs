@@ -535,21 +535,25 @@ function inferAuths(document, operation) {
 
   for (const requirement of securityRequirements) {
     const requirementRecord = asRecord(requirement, 'security requirement');
+    const requirementNames = Object.keys(requirementRecord);
     const auths = [];
-    for (const name of Object.keys(requirementRecord)) {
+    for (const name of requirementNames) {
       if (!(name in securitySchemes)) {
-        continue;
+        auths.length = 0;
+        break;
       }
       const scheme = asRecord(
         resolveRef(document, securitySchemes[name]),
         `securitySchemes.${name}`,
       );
       const auth = authFromScheme(scheme);
-      if (auth) {
-        auths.push(auth);
+      if (!auth) {
+        auths.length = 0;
+        break;
       }
+      auths.push(auth);
     }
-    if (auths.length > 0) {
+    if (auths.length === requirementNames.length && auths.length > 0) {
       return auths;
     }
   }
