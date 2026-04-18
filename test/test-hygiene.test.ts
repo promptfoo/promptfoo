@@ -121,7 +121,6 @@ const allowedSkippedTests: AllowedSkip[] = [
 const legacyHoistedPersistentMockFiles = new Set<string>();
 
 const legacyDirectProcessEnvMutationFiles = new Set([
-  'providers/bedrock/index.test.ts',
   'providers/bedrock/knowledgeBase.test.ts',
   'providers/claude-agent-sdk.test.ts',
   'providers/cloudflare-ai.test.ts',
