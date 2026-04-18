@@ -288,15 +288,18 @@
     },
     {
       "includes": [
-        "test/**/*.test.ts",
-        "test/**/*.spec.ts",
-        "src/app/src/**/*.test.ts",
-        "src/app/src/**/*.test.tsx",
-        "src/app/src/**/*.spec.ts",
-        "src/app/src/**/*.spec.tsx"
-        // Keep in sync with legacyDirectProcessEnvMutationFiles in test/test-hygiene.test.ts.
-        // BEGIN direct process.env mutation legacy allowlist
-        // END direct process.env mutation legacy allowlist
+        "*.js",
+        "*.jsx",
+        "*.ts",
+        "*.tsx",
+        "*.mjs",
+        "*.cjs",
+        "**/*.js",
+        "**/*.jsx",
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.mjs",
+        "**/*.cjs"
       ],
       "plugins": ["./tools/biome/no-direct-process-env-mutation.grit"]
     },
