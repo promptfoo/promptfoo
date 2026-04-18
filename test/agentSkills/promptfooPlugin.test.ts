@@ -568,6 +568,80 @@ function openApiAllOfSpec() {
   };
 }
 
+function openApiRepeatedRefSpec() {
+  return {
+    openapi: '3.1.0',
+    components: {
+      schemas: {
+        SharedIdentity: {
+          type: 'object',
+          required: ['user_id'],
+          properties: {
+            user_id: { type: 'string', example: 'repeat-user' },
+          },
+        },
+        SharedMessage: {
+          type: 'object',
+          required: ['message'],
+          properties: {
+            message: { type: 'string' },
+          },
+        },
+        RepeatedRefRequest: {
+          allOf: [
+            { $ref: '#/components/schemas/SharedIdentity' },
+            { $ref: '#/components/schemas/SharedIdentity' },
+            { $ref: '#/components/schemas/SharedMessage' },
+          ],
+        },
+        OutputPart: {
+          type: 'object',
+          properties: {
+            answer: { type: 'string' },
+          },
+        },
+        TracePart: {
+          type: 'object',
+          properties: {
+            trace_id: { type: 'string' },
+          },
+        },
+        RepeatedRefResponse: {
+          allOf: [
+            { $ref: '#/components/schemas/OutputPart' },
+            { $ref: '#/components/schemas/OutputPart' },
+            { $ref: '#/components/schemas/TracePart' },
+          ],
+        },
+      },
+    },
+    paths: {
+      '/repeated-ref-note': {
+        post: {
+          operationId: 'createRepeatedRefNote',
+          requestBody: {
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/RepeatedRefRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'Repeated ref response',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/RepeatedRefResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
 function openApiVariantSpec() {
   return {
     openapi: '3.1.0',
@@ -3479,6 +3553,46 @@ describe('promptfoo-provider-setup skill', () => {
     }
   });
 
+  it('allows repeated non-cyclic OpenAPI refs for provider configs', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-provider-'));
+    const specPath = path.join(tempDir, 'openapi.yaml');
+    try {
+      fs.writeFileSync(specPath, yaml.dump(openApiRepeatedRefSpec()));
+      const generated = yaml.load(
+        execFileSync(
+          'node',
+          [
+            path.join(providerSkillRoot, 'scripts', 'openapi-operation-to-config.mjs'),
+            '--spec',
+            specPath,
+            '--operation-id',
+            'createRepeatedRefNote',
+            '--base-url-env',
+            'REPEATED_REF_API_BASE_URL',
+          ],
+          { cwd: repoRoot, encoding: 'utf8' },
+        ),
+      );
+      expectRecord(generated, 'Generated repeated-ref provider config');
+      const [provider] = generated.providers as unknown[];
+      expectRecord(provider, 'Generated repeated-ref provider');
+      expectRecord(provider.config, 'Generated repeated-ref provider config block');
+      expect(provider.config.body).toEqual({
+        user_id: '{{user_id}}',
+        message: '{{prompt}}',
+      });
+      expect(provider.config.transformResponse).toBe('json.answer');
+      const [test] = generated.tests as unknown[];
+      expectRecord(test, 'Generated repeated-ref provider test');
+      expect(test.vars).toEqual({
+        user_id: 'repeat-user',
+        message: 'Say exactly PONG.',
+      });
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('uses the first OpenAPI oneOf/anyOf variant for provider config drafts', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-provider-'));
     const specPath = path.join(tempDir, 'openapi.yaml');
@@ -4126,6 +4240,12 @@ describe('promptfoo-redteam-setup skill', () => {
   });
 
   it('ships an OpenAPI helper script that drafts a redteam setup config', () => {
+    const script = readText(
+      path.join(redteamSetupSkillRoot, 'scripts', 'openapi-operation-to-redteam-config.mjs'),
+    );
+    expect(script).toContain('--generator-provider file://redteam-generator.mjs');
+    expect(script).not.toContain('--generator-provider file://grader.mjs');
+
     const runHelper = (operationId: string, extraArgs: string[] = []) =>
       execFileSync(
         'node',
@@ -5040,6 +5160,50 @@ describe('promptfoo-redteam-setup skill', () => {
           user_id: 'allof-user',
           message: 'Say exactly PONG.',
           note_type: 'internal-note',
+        },
+      });
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('allows repeated non-cyclic OpenAPI refs for redteam configs', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-redteam-'));
+    const specPath = path.join(tempDir, 'openapi.yaml');
+    try {
+      fs.writeFileSync(specPath, yaml.dump(openApiRepeatedRefSpec()));
+      const generated = yaml.load(
+        execFileSync(
+          'node',
+          [
+            path.join(redteamSetupSkillRoot, 'scripts', 'openapi-operation-to-redteam-config.mjs'),
+            '--spec',
+            specPath,
+            '--operation-id',
+            'createRepeatedRefNote',
+            '--base-url-env',
+            'REPEATED_REF_API_BASE_URL',
+          ],
+          { cwd: repoRoot, encoding: 'utf8' },
+        ),
+      );
+      expectRecord(generated, 'Generated repeated-ref redteam config');
+      const [target] = generated.targets as unknown[];
+      expectRecord(target, 'Generated repeated-ref redteam target');
+      expectRecord(target.config, 'Generated repeated-ref redteam target config');
+      expect(target.config.body).toEqual({
+        user_id: '{{user_id}}',
+        message: '{{message}}',
+      });
+      expect(target.config.transformResponse).toBe('json.answer');
+      expect(target.inputs).toEqual({
+        user_id: 'Caller identity or tenancy field: user_id.',
+        message: 'User-controlled message or instruction to the target.',
+      });
+      expect(generated.defaultTest).toEqual({
+        vars: {
+          user_id: 'repeat-user',
+          message: 'Say exactly PONG.',
         },
       });
     } finally {

@@ -45,7 +45,8 @@ function resolveRef(document, schema, seen = new Set()) {
   if (seen.has(schema.$ref)) {
     usage(`Circular OpenAPI ref detected: ${schema.$ref}`);
   }
-  seen.add(schema.$ref);
+  const activeRefs = new Set(seen);
+  activeRefs.add(schema.$ref);
   const parts = schema.$ref
     .replace(/^#\//, '')
     .split('/')
@@ -58,7 +59,7 @@ function resolveRef(document, schema, seen = new Set()) {
     }
     current = currentRecord[part];
   }
-  return resolveRef(document, current, seen);
+  return resolveRef(document, current, activeRefs);
 }
 
 function getJsonMediaEntry(document, content) {

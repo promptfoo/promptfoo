@@ -12,7 +12,7 @@ function usage(message) {
     console.error(message);
   }
   console.error(
-    'Usage: node openapi-operation-to-redteam-config.mjs --spec openapi.yaml --operation-id op --base-url-env API_BASE_URL [--token-env API_TOKEN] [--auth-header Authorization] [--auth-prefix Bearer|none|custom] [--generator-provider file://grader.mjs] [--label label] [--policy text] [--num-tests 1] [--smoke-test true] [--smoke-assert PONG] [--output promptfooconfig.yaml]',
+    'Usage: node openapi-operation-to-redteam-config.mjs --spec openapi.yaml --operation-id op --base-url-env API_BASE_URL [--token-env API_TOKEN] [--auth-header Authorization] [--auth-prefix Bearer|none|custom] [--generator-provider file://redteam-generator.mjs] [--label label] [--policy text] [--num-tests 1] [--smoke-test true] [--smoke-assert PONG] [--output promptfooconfig.yaml]',
   );
   process.exit(1);
 }
@@ -47,7 +47,8 @@ function resolveRef(document, schema, seen = new Set()) {
   if (seen.has(schema.$ref)) {
     usage(`Circular OpenAPI ref detected: ${schema.$ref}`);
   }
-  seen.add(schema.$ref);
+  const activeRefs = new Set(seen);
+  activeRefs.add(schema.$ref);
   const parts = schema.$ref
     .replace(/^#\//, '')
     .split('/')
@@ -60,7 +61,7 @@ function resolveRef(document, schema, seen = new Set()) {
     }
     current = currentRecord[part];
   }
-  return resolveRef(document, current, seen);
+  return resolveRef(document, current, activeRefs);
 }
 
 function getJsonMediaEntry(document, content) {
