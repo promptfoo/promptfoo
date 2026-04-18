@@ -307,15 +307,16 @@ See `site/AGENTS.md` for documentation guidelines.
 
 Read these when relevant to your task:
 
-| Document                               | When to Read                   |
-| -------------------------------------- | ------------------------------ |
-| `docs/agents/pr-conventions.md`        | Creating pull requests         |
-| `docs/agents/git-workflow.md`          | Git operations                 |
-| `docs/agents/dependency-management.md` | Updating packages              |
-| `docs/agents/logging.md`               | Adding logging to code         |
-| `docs/agents/python.md`                | Python providers/scripts       |
-| `docs/agents/database-security.md`     | Writing database queries       |
-| `src/app/AGENTS.md`                    | Frontend React development     |
-| `src/providers/AGENTS.md`              | Adding/modifying LLM providers |
-| `test/AGENTS.md`                       | Writing tests                  |
-| `site/AGENTS.md`                       | Documentation site changes     |
+| Document                               | When to Read                              |
+| -------------------------------------- | ----------------------------------------- |
+| `docs/agents/pr-conventions.md`        | Creating pull requests                    |
+| `docs/agents/git-workflow.md`          | Git operations                            |
+| `docs/agents/dependency-management.md` | Updating packages                         |
+| `docs/agents/logging.md`               | Adding logging to code                    |
+| `docs/agents/python.md`                | Python providers/scripts                  |
+| `docs/agents/database-security.md`     | Writing database queries                  |
+| `src/app/AGENTS.md`                    | Frontend React development                |
+| `src/providers/AGENTS.md`              | Adding/modifying LLM providers            |
+| `test/AGENTS.md`                       | Writing tests                             |
+| `site/AGENTS.md`                       | Documentation site changes                |
+| `.github/AGENTS.md`                    | GitHub Actions / release workflow changes |
