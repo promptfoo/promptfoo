@@ -296,7 +296,6 @@
         "src/app/src/**/*.spec.tsx",
         // Keep in sync with legacyDirectProcessEnvMutationFiles in test/test-hygiene.test.ts.
         // BEGIN direct process.env mutation legacy allowlist
-        "!!test/constants.test.ts",
         "!!test/database.test.ts",
         "!!test/envars.test.ts",
         "!!test/evaluatorHelpers.test.ts",
