@@ -9,7 +9,7 @@ import type { DatabricksMosaicAiProviderOptions } from '../../src/providers/data
 vi.mock('../../src/logger');
 
 describe('Databricks Foundation Model APIs Provider', () => {
-  const originalEnv = process.env;
+  const originalEnv = { ...process.env };
   const workspaceUrl = 'https://test-workspace.cloud.databricks.com';
   const defaultOptions: DatabricksMosaicAiProviderOptions = {
     config: {
