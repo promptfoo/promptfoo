@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sanitizeProvider } from '../../../src/models/evalResult';
+import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import {
   createMockProvider,
   createProviderResponse,
@@ -25,6 +26,10 @@ vi.mock('../../../src/globalConfig/accounts', () => ({
 }));
 
 vi.mock('../../../src/redteam/remoteGeneration', () => ({
+  getRemoteGenerationExplicitlyDisabledError: vi.fn(
+    (strategyName) =>
+      `${strategyName} requires remote generation, which has been explicitly disabled.`,
+  ),
   getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.api/generate'),
   neverGenerateRemote: vi.fn().mockReturnValue(false),
 }));
@@ -41,6 +46,8 @@ describe('BestOfNProvider - Runtime Behavior', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(neverGenerateRemote).mockReset();
+    vi.mocked(neverGenerateRemote).mockReturnValue(false);
     mockRenderPrompt.mockReset();
     mockRenderPrompt.mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -136,6 +143,34 @@ describe('BestOfNProvider - Runtime Behavior', () => {
   });
 
   it.each([
+    42,
+    true,
+    null,
+    { prompt: 'candidate 0' },
+  ])('should skip non-string candidate prompt from remote generation: %j', async (invalidPrompt) => {
+    const provider = new BestOfNProvider({
+      injectVar: 'input',
+    });
+    const context = createMockContext(mockTargetProvider);
+
+    mockFetchWithProxy.mockResolvedValue({
+      json: async () => ({
+        modifiedPrompts: [invalidPrompt, 'candidate 2'],
+      }),
+    });
+
+    await provider.callApi('test prompt', context);
+
+    expect(mockRenderPrompt).toHaveBeenCalledTimes(1);
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
+      'candidate 2',
+      expect.any(Object),
+      undefined,
+    );
+  });
+
+  it.each([
     'file://etc/passwd',
     ' FILE://etc/passwd',
     '\tFiLe://etc/passwd',
@@ -190,6 +225,8 @@ describe('BestOfNProvider - Config Serialization', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(neverGenerateRemote).mockReset();
+    vi.mocked(neverGenerateRemote).mockReturnValue(false);
     const module = await import('../../../src/redteam/providers/bestOfN');
     BestOfNProvider = module.default;
   });
@@ -222,6 +259,14 @@ describe('BestOfNProvider - Config Serialization', () => {
     });
 
     expect(provider.config.maxConcurrency).toBe(3);
+  });
+
+  it('should throw an actionable error when remote generation is explicitly disabled', () => {
+    vi.mocked(neverGenerateRemote).mockReturnValue(true);
+
+    expect(() => new BestOfNProvider({ injectVar: 'query' })).toThrow(
+      'Best-of-N strategy requires remote generation, which has been explicitly disabled.',
+    );
   });
 
   it('should preserve config through sanitizeProvider for database storage', () => {

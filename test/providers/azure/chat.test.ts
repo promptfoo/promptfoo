@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -28,12 +29,12 @@ const originalOpenAiFrequencyPenalty = process.env.OPENAI_FREQUENCY_PENALTY;
 describe('AzureChatCompletionProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.OPENAI_TEMPERATURE;
-    delete process.env.OPENAI_MAX_TOKENS;
-    delete process.env.OPENAI_MAX_COMPLETION_TOKENS;
-    delete process.env.OPENAI_TOP_P;
-    delete process.env.OPENAI_PRESENCE_PENALTY;
-    delete process.env.OPENAI_FREQUENCY_PENALTY;
+    mockProcessEnv({ OPENAI_TEMPERATURE: undefined });
+    mockProcessEnv({ OPENAI_MAX_TOKENS: undefined });
+    mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: undefined });
+    mockProcessEnv({ OPENAI_TOP_P: undefined });
+    mockProcessEnv({ OPENAI_PRESENCE_PENALTY: undefined });
+    mockProcessEnv({ OPENAI_FREQUENCY_PENALTY: undefined });
     vi.spyOn(AzureChatCompletionProvider.prototype as any, 'getAuthHeaders').mockResolvedValue({
       'api-key': 'test-key',
     });
@@ -42,34 +43,34 @@ describe('AzureChatCompletionProvider', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     if (originalOpenAiTemperature === undefined) {
-      delete process.env.OPENAI_TEMPERATURE;
+      mockProcessEnv({ OPENAI_TEMPERATURE: undefined });
     } else {
-      process.env.OPENAI_TEMPERATURE = originalOpenAiTemperature;
+      mockProcessEnv({ OPENAI_TEMPERATURE: originalOpenAiTemperature });
     }
     if (originalOpenAiMaxTokens === undefined) {
-      delete process.env.OPENAI_MAX_TOKENS;
+      mockProcessEnv({ OPENAI_MAX_TOKENS: undefined });
     } else {
-      process.env.OPENAI_MAX_TOKENS = originalOpenAiMaxTokens;
+      mockProcessEnv({ OPENAI_MAX_TOKENS: originalOpenAiMaxTokens });
     }
     if (originalOpenAiMaxCompletionTokens === undefined) {
-      delete process.env.OPENAI_MAX_COMPLETION_TOKENS;
+      mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: undefined });
     } else {
-      process.env.OPENAI_MAX_COMPLETION_TOKENS = originalOpenAiMaxCompletionTokens;
+      mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: originalOpenAiMaxCompletionTokens });
     }
     if (originalOpenAiTopP === undefined) {
-      delete process.env.OPENAI_TOP_P;
+      mockProcessEnv({ OPENAI_TOP_P: undefined });
     } else {
-      process.env.OPENAI_TOP_P = originalOpenAiTopP;
+      mockProcessEnv({ OPENAI_TOP_P: originalOpenAiTopP });
     }
     if (originalOpenAiPresencePenalty === undefined) {
-      delete process.env.OPENAI_PRESENCE_PENALTY;
+      mockProcessEnv({ OPENAI_PRESENCE_PENALTY: undefined });
     } else {
-      process.env.OPENAI_PRESENCE_PENALTY = originalOpenAiPresencePenalty;
+      mockProcessEnv({ OPENAI_PRESENCE_PENALTY: originalOpenAiPresencePenalty });
     }
     if (originalOpenAiFrequencyPenalty === undefined) {
-      delete process.env.OPENAI_FREQUENCY_PENALTY;
+      mockProcessEnv({ OPENAI_FREQUENCY_PENALTY: undefined });
     } else {
-      process.env.OPENAI_FREQUENCY_PENALTY = originalOpenAiFrequencyPenalty;
+      mockProcessEnv({ OPENAI_FREQUENCY_PENALTY: originalOpenAiFrequencyPenalty });
     }
   });
 
@@ -267,11 +268,11 @@ describe('AzureChatCompletionProvider', () => {
     });
 
     it('should use env defaults with omitDefaults when OPENAI env vars are set', async () => {
-      process.env.OPENAI_TEMPERATURE = '0.5';
-      process.env.OPENAI_MAX_TOKENS = '2048';
-      process.env.OPENAI_TOP_P = '0.9';
-      process.env.OPENAI_PRESENCE_PENALTY = '0.1';
-      process.env.OPENAI_FREQUENCY_PENALTY = '0.2';
+      mockProcessEnv({ OPENAI_TEMPERATURE: '0.5' });
+      mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
+      mockProcessEnv({ OPENAI_TOP_P: '0.9' });
+      mockProcessEnv({ OPENAI_PRESENCE_PENALTY: '0.1' });
+      mockProcessEnv({ OPENAI_FREQUENCY_PENALTY: '0.2' });
 
       provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
@@ -759,8 +760,8 @@ describe('AzureChatCompletionProvider', () => {
     });
 
     it('should prefer OPENAI_MAX_COMPLETION_TOKENS over OPENAI_MAX_TOKENS for reasoning models', async () => {
-      process.env.OPENAI_MAX_COMPLETION_TOKENS = '4096';
-      process.env.OPENAI_MAX_TOKENS = '2048';
+      mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: '4096' });
+      mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
 
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
@@ -776,7 +777,7 @@ describe('AzureChatCompletionProvider', () => {
     });
 
     it('should fall back to OPENAI_MAX_TOKENS for reasoning models when OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
-      process.env.OPENAI_MAX_TOKENS = '2048';
+      mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
 
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {

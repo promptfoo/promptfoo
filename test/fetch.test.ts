@@ -114,13 +114,13 @@ vi.mock('../src/envars', () => {
     }),
     getEnvBool: vi.fn().mockImplementation((key: string, defaultValue: boolean = false) => {
       if (key === 'PROMPTFOO_RETRY_5XX_ENABLED') {
-        return process.env.PROMPTFOO_RETRY_5XX_ENABLED === 'true' || false;
+        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX_ENABLED === 'true' || false;
       }
       if (key === 'PROMPTFOO_INSECURE_SSL') {
-        return process.env.PROMPTFOO_INSECURE_SSL === 'true' || false;
+        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_INSECURE_SSL === 'true' || false;
       }
       if (key === 'PROMPTFOO_RETRY_5XX') {
-        return process.env.PROMPTFOO_RETRY_5XX === 'true' || false;
+        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX === 'true' || false;
       }
       return defaultValue;
     }),
@@ -336,8 +336,8 @@ describe('fetchWithProxy', () => {
     const mockCertContent = 'mock-cert-content';
     const mockProxyUrl = 'http://proxy.example.com';
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.PROMPTFOO_CA_CERT_PATH = mockCertPath;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ PROMPTFOO_CA_CERT_PATH: mockCertPath });
 
     vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'PROMPTFOO_CA_CERT_PATH') {
@@ -392,8 +392,8 @@ describe('fetchWithProxy', () => {
     const mockCertPath = path.normalize('/path/to/nonexistent.pem');
     const mockProxyUrl = 'http://proxy.example.com';
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.PROMPTFOO_CA_CERT_PATH = mockCertPath;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ PROMPTFOO_CA_CERT_PATH: mockCertPath });
 
     vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'PROMPTFOO_CA_CERT_PATH') {
@@ -443,8 +443,8 @@ describe('fetchWithProxy', () => {
   it('should disable SSL verification when PROMPTFOO_INSECURE_SSL is true', async () => {
     const mockProxyUrl = 'http://proxy.example.com';
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.PROMPTFOO_INSECURE_SSL = 'true';
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ PROMPTFOO_INSECURE_SSL: 'true' });
 
     vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'HTTPS_PROXY') {
@@ -489,8 +489,8 @@ describe('fetchWithProxy', () => {
     const mockCertContent = 'mock-cert-content';
     const mockProxyUrl = 'http://proxy.example.com';
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.PROMPTFOO_CA_CERT_PATH = mockCertPath;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ PROMPTFOO_CA_CERT_PATH: mockCertPath });
 
     cliState.basePath = mockBasePath;
 
@@ -613,7 +613,7 @@ describe('fetchWithProxy', () => {
       clearProxyEnv();
 
       Object.entries(testCase.env).forEach(([key, value]) => {
-        process.env[key] = value;
+        mockProcessEnv({ [key]: value });
       });
 
       await fetchWithProxy('http://example.com');
@@ -653,7 +653,7 @@ describe('fetchWithProxy', () => {
       clearProxyEnv();
 
       Object.entries(testCase.env).forEach(([key, value]) => {
-        process.env[key] = value;
+        mockProcessEnv({ [key]: value });
       });
 
       await fetchWithProxy('https://example.com');
@@ -690,8 +690,8 @@ describe('fetchWithProxy', () => {
   it('should use proxy for domains not in NO_PROXY', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'localhost,internal.example.com';
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'localhost,internal.example.com' });
 
     await fetchWithProxy('https://api.example.com/v1');
 
@@ -765,7 +765,7 @@ describe('fetchWithProxy', () => {
 
   it('should create a dedicated ProxyAgent dispatcher per proxy URL and maxConcurrency value', async () => {
     const mockProxyUrl = 'http://proxy.example.com';
-    process.env.HTTPS_PROXY = mockProxyUrl;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
 
     cliState.maxConcurrency = 2;
     await fetchWithProxy('https://example.com/api/low');
@@ -1401,8 +1401,8 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should respect NO_PROXY for localhost URLs', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTP_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'localhost';
+    mockProcessEnv({ HTTP_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'localhost' });
 
     await fetchWithProxy('http://localhost:3000/api');
 
@@ -1412,8 +1412,8 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should respect NO_PROXY for 127.0.0.1', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTP_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = '127.0.0.1';
+    mockProcessEnv({ HTTP_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: '127.0.0.1' });
 
     await fetchWithProxy('http://127.0.0.1:3000/api');
 
@@ -1424,27 +1424,27 @@ describe('fetchWithProxy with NO_PROXY', () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
     const noProxyList = 'example.org,localhost,internal.example.com';
 
-    process.env.HTTP_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = noProxyList;
+    mockProcessEnv({ HTTP_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: noProxyList });
 
     await fetchWithProxy('http://localhost:3000/api');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = noProxyList;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: noProxyList });
     await fetchWithProxy('https://example.org/api');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = noProxyList;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: noProxyList });
     await fetchWithProxy('https://internal.example.com/api');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = noProxyList;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: noProxyList });
     await fetchWithProxy('https://example.com/api');
     expect(ProxyAgent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1460,8 +1460,8 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should use proxy for domains not in NO_PROXY', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'localhost,internal.example.com';
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'localhost,internal.example.com' });
 
     await fetchWithProxy('https://api.example.com/v1');
 
@@ -1479,19 +1479,19 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should handle wildcard patterns in NO_PROXY', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = '*.example.org,localhost';
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: '*.example.org,localhost' });
 
     await fetchWithProxy('https://api.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
-    process.env.HTTPS_PROXY = mockProxyUrl;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
     await fetchWithProxy('https://subdomain.api.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
-    process.env.HTTPS_PROXY = mockProxyUrl;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
     await fetchWithProxy('https://example.com/v1');
     expect(ProxyAgent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1503,24 +1503,24 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should handle domain suffix patterns in NO_PROXY', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = '.example.org,localhost';
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: '.example.org,localhost' });
 
     await fetchWithProxy('https://api.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
-    process.env.HTTPS_PROXY = mockProxyUrl;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
     await fetchWithProxy('https://subdomain.api.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
-    process.env.HTTPS_PROXY = mockProxyUrl;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
     await fetchWithProxy('https://abc.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
-    process.env.HTTPS_PROXY = mockProxyUrl;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
     await fetchWithProxy('https://abc.example.com/v1');
     expect(ProxyAgent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1532,8 +1532,8 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should handle URLs without schemes', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTP_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'localhost,example.org';
+    mockProcessEnv({ HTTP_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'localhost,example.org' });
 
     await fetchWithProxy('localhost:3000');
     expect(ProxyAgent).not.toHaveBeenCalled();
@@ -1546,8 +1546,8 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should properly parse URLs with credentials when checking against NO_PROXY', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTP_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'api.example.org';
+    mockProcessEnv({ HTTP_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'api.example.org' });
 
     await fetchWithProxy('https://username:password@api.example.org/v1');
 
@@ -1565,9 +1565,9 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should handle bad URL inputs gracefully when checking NO_PROXY', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTP_PROXY = mockProxyUrl;
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'localhost';
+    mockProcessEnv({ HTTP_PROXY: mockProxyUrl });
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'localhost' });
 
     await fetchWithProxy(':::not-a-valid-url:::');
 
@@ -1577,8 +1577,8 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should use lowercase for NO_PROXY checks', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'LOCALHOST,API.EXAMPLE.ORG';
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'LOCALHOST,API.EXAMPLE.ORG' });
 
     await fetchWithProxy('http://localhost:3000');
     expect(ProxyAgent).not.toHaveBeenCalled();
@@ -1591,8 +1591,8 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should handle URL objects and Request objects', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTP_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'localhost,example.org';
+    mockProcessEnv({ HTTP_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'localhost,example.org' });
 
     const urlObj = new URL('http://localhost:3000');
     await fetchWithProxy(urlObj.toString());
@@ -1600,16 +1600,16 @@ describe('fetchWithProxy with NO_PROXY', () => {
 
     vi.clearAllMocks();
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'localhost,example.org';
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'localhost,example.org' });
     const request = new Request('https://example.org/api');
     await fetchWithProxy(request);
     expect(ProxyAgent).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
 
-    process.env.HTTP_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'localhost,example.org';
+    mockProcessEnv({ HTTP_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'localhost,example.org' });
     const otherRequest = new Request('http://example.com/api');
     await fetchWithProxy(otherRequest);
     expect(ProxyAgent).toHaveBeenCalledWith(

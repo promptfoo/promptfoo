@@ -85,20 +85,20 @@ describe('AnthropicGenericProvider', () => {
 
     it('should use environment variables if no config key is provided', () => {
       // Mock process.env
-      const originalEnv = process.env;
-      process.env = { ...originalEnv, ANTHROPIC_API_KEY: 'env-test-key' };
+      const originalEnv = { ...process.env };
+      mockProcessEnv({ ...originalEnv, ANTHROPIC_API_KEY: 'env-test-key' }, { clear: true });
 
       const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022');
       expect(provider.getApiKey()).toBe('env-test-key');
 
       // Restore process.env
-      process.env = originalEnv;
+      mockProcessEnv(originalEnv, { clear: true });
     });
 
     it('should prefer config over environment variables', () => {
       // Mock process.env
-      const originalEnv = process.env;
-      process.env = { ...originalEnv, ANTHROPIC_API_KEY: 'env-test-key' };
+      const originalEnv = { ...process.env };
+      mockProcessEnv({ ...originalEnv, ANTHROPIC_API_KEY: 'env-test-key' }, { clear: true });
 
       const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022', {
         config: { apiKey: 'config-test-key' },
@@ -107,7 +107,7 @@ describe('AnthropicGenericProvider', () => {
       expect(provider.getApiKey()).toBe('config-test-key');
 
       // Restore process.env
-      process.env = originalEnv;
+      mockProcessEnv(originalEnv, { clear: true });
     });
   });
 
@@ -122,14 +122,17 @@ describe('AnthropicGenericProvider', () => {
 
     it('should use environment variables if no config URL is provided', () => {
       // Mock process.env
-      const originalEnv = process.env;
-      process.env = { ...originalEnv, ANTHROPIC_BASE_URL: 'https://env.anthropic.api' };
+      const originalEnv = { ...process.env };
+      mockProcessEnv(
+        { ...originalEnv, ANTHROPIC_BASE_URL: 'https://env.anthropic.api' },
+        { clear: true },
+      );
 
       const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022');
       expect(provider.getApiBaseUrl()).toBe('https://env.anthropic.api');
 
       // Restore process.env
-      process.env = originalEnv;
+      mockProcessEnv(originalEnv, { clear: true });
     });
   });
 

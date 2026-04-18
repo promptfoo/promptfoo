@@ -361,7 +361,7 @@ The web UI displays traces as a hierarchical timeline showing:
 - **Status indicators**: Success (green), error (red), or unset (gray)
 - **Hover details**: Span attributes, duration, and timestamps
 - **Relative timing**: See which operations run in parallel vs. sequentially
-- **Expandable details**: Click any span to reveal full attribute information
+- **Expandable details**: Click any span to reveal span attributes and metadata
 - **Export functionality**: Download traces as JSON for external analysis
 
 ### Understanding the Timeline
@@ -388,9 +388,11 @@ Click the expand icon on any span to reveal a detailed attributes panel showing:
 - **Start** and **End** timestamps with precision
 - **Duration** in a human-readable format
 - **Status** (OK, ERROR, or UNSET)
-- **All span attributes** including GenAI attributes, custom attributes, and Promptfoo-specific data
+- **Span attributes** including GenAI attributes, custom attributes, and Promptfoo-specific data
 
 This is useful for inspecting the full request/response bodies (`promptfoo.request.body` and `promptfoo.response.body`) and debugging provider behavior.
+
+Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. GenAI token counters such as `gen_ai.usage.input_tokens` remain visible. Avoid placing secrets in custom span attributes because raw attributes may still be retained in the local trace store for internal evaluation workflows.
 
 ### Exporting Traces
 
@@ -398,7 +400,7 @@ Click the **Export Traces** button to download all traces for the current evalua
 
 - Evaluation ID and test case ID
 - Export timestamp
-- Complete trace data with all spans and attributes
+- Trace data with spans and redacted attributes
 
 The exported JSON can be imported into external tools like Jaeger, Grafana Tempo, or custom analysis scripts.
 

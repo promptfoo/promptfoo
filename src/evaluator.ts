@@ -471,6 +471,48 @@ function shouldDeferGradingForTest(test: AtomicTestCase): boolean {
   return Boolean(test.assert?.some(hasProviderGroupedAssertion));
 }
 
+function logGroupedGradingStatus({
+  concurrency,
+  hasEvalStepTimeout,
+  runEvalOptions,
+  shouldGroupGradingByProvider,
+  usesConversationVar,
+}: {
+  concurrency: number;
+  hasEvalStepTimeout: boolean;
+  runEvalOptions: RunEvalOptions[];
+  shouldGroupGradingByProvider: boolean;
+  usesConversationVar: boolean;
+}) {
+  const hasModelGradedAssertion = runEvalOptions.some(({ test }) =>
+    shouldDeferGradingForTest(test),
+  );
+  if (!hasModelGradedAssertion) {
+    return;
+  }
+  if (shouldGroupGradingByProvider) {
+    logger.info(
+      'Grouping model-graded assertions by provider to minimize local-model reload overhead.',
+    );
+    return;
+  }
+  if (concurrency !== 1) {
+    return;
+  }
+  const reasons: string[] = [];
+  if (hasEvalStepTimeout) {
+    reasons.push('per-eval-step timeout is configured');
+  }
+  if (usesConversationVar) {
+    reasons.push('conversation variables require per-row ordering');
+  }
+  if (reasons.length > 0) {
+    logger.info(
+      `Serial grading grouping disabled because ${reasons.join(' and ')}; model-graded judges may reload between rows.`,
+    );
+  }
+}
+
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!checkResult.pass) {
     row.error = checkResult.reason;
@@ -494,14 +536,38 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   row.gradingResult = checkResult;
 }
 
-function applyGradingError(row: EvaluateResult, error: unknown) {
-  const errorMessage = error instanceof Error ? (error.stack ?? error.message) : String(error);
-  logger.error('Assertion grading failed during eval', {
-    error: errorMessage,
-    promptIdx: row.promptIdx,
-    testIdx: row.testIdx,
-  });
-  row.error = errorMessage;
+const ABORTED_GRADING_PREFIX = 'Aborted: ';
+
+function isAbortShapedError(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException');
+}
+
+function applyGradingError(row: EvaluateResult, error: unknown, abortSignal?: AbortSignal) {
+  const errorAsError = error instanceof Error ? error : undefined;
+  // Require both signals: a third-party SDK that throws `AbortError` during a
+  // non-aborted run is a real bug, and a real SyntaxError caught microseconds
+  // after an unrelated abort is also a real bug.
+  const aborted = Boolean(abortSignal?.aborted) && isAbortShapedError(error);
+
+  if (aborted) {
+    // Skip stack serialization on the abort path — debug logs usually go
+    // unread and a noisy shutdown can fire this per row.
+    const shortMessage = errorAsError?.message ?? String(error);
+    logger.debug('Assertion grading aborted', {
+      error: shortMessage,
+      promptIdx: row.promptIdx,
+      testIdx: row.testIdx,
+    });
+    row.error = `${ABORTED_GRADING_PREFIX}${shortMessage}`;
+  } else {
+    const fullMessage = errorAsError ? (errorAsError.stack ?? errorAsError.message) : String(error);
+    logger.error('Assertion grading failed during eval', {
+      error: fullMessage,
+      promptIdx: row.promptIdx,
+      testIdx: row.testIdx,
+    });
+    row.error = fullMessage;
+  }
   row.failureReason = ResultFailureReason.ERROR;
   row.success = false;
   row.score = 0;
@@ -1091,7 +1157,7 @@ async function gradeRunEvalResponse({
           traceId,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
-      applyGradingError(ret, error);
+      applyGradingError(ret, error, abortSignal);
     });
     deferredGradingPromises.set(ret, gradingPromise);
     return;
@@ -3389,7 +3455,19 @@ class Evaluator {
         }
       }
     } catch (error) {
-      await flushGroupedRows();
+      // Best-effort: flush any rows whose target calls completed but whose
+      // deferred grading hadn't started/completed yet, so a mid-eval interrupt
+      // doesn't lose the already-computed target outputs. Failures here must
+      // not shadow the original error, so we log and rethrow the outer error.
+      const pendingRowCount = groupedRows.reduce((sum, entry) => sum + entry.rows.length, 0);
+      try {
+        await flushGroupedRows();
+      } catch (flushError) {
+        logger.warn('Failed to flush grouped rows after error; target outputs may be lost', {
+          error: flushError instanceof Error ? flushError.message : String(flushError),
+          pendingRowCount,
+        });
+      }
       throw error;
     }
 
@@ -4275,6 +4353,14 @@ class Evaluator {
           `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
         );
       }
+
+      logGroupedGradingStatus({
+        concurrency,
+        hasEvalStepTimeout,
+        runEvalOptions,
+        shouldGroupGradingByProvider,
+        usesConversationVar,
+      });
     }
 
     // Now start the progress bar after info messages
