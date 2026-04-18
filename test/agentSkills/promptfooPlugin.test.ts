@@ -505,13 +505,23 @@ function openApiConjunctiveAuthSpec() {
           in: 'header',
           name: 'X-API-Key',
         },
+        SessionCookie: {
+          type: 'apiKey',
+          in: 'cookie',
+          name: 'session_id',
+        },
+        CsrfCookie: {
+          type: 'apiKey',
+          in: 'cookie',
+          name: 'csrf_token',
+        },
       },
     },
     paths: {
       '/conjunctive-search': {
         get: {
           operationId: 'conjunctiveSearch',
-          security: [{ BearerToken: [], HeaderApiKey: [] }],
+          security: [{ BearerToken: [], HeaderApiKey: [], SessionCookie: [], CsrfCookie: [] }],
           parameters: [{ name: 'q', in: 'query', schema: { type: 'string' } }],
           responses: {
             '200': {
@@ -2998,6 +3008,8 @@ describe('promptfoo-provider-setup skill', () => {
       );
       expect(conjunctiveAuthProvider.config.headers).toEqual({
         Authorization: 'Bearer {{env.CONJUNCTIVE_API_TOKEN}}',
+        Cookie:
+          'session_id={{env.CONJUNCTIVE_API_TOKEN}}; csrf_token={{env.CONJUNCTIVE_API_TOKEN}}',
         'X-API-Key': '{{env.CONJUNCTIVE_API_TOKEN}}',
       });
       expect(conjunctiveAuthProvider.config.queryParams).toEqual({
@@ -4679,6 +4691,8 @@ describe('promptfoo-redteam-setup skill', () => {
       );
       expect(conjunctiveAuthTarget.config.headers).toEqual({
         Authorization: 'Bearer {{env.CONJUNCTIVE_API_TOKEN}}',
+        Cookie:
+          'session_id={{env.CONJUNCTIVE_API_TOKEN}}; csrf_token={{env.CONJUNCTIVE_API_TOKEN}}',
         'X-API-Key': '{{env.CONJUNCTIVE_API_TOKEN}}',
       });
       expect(conjunctiveAuthTarget.config.queryParams).toEqual({

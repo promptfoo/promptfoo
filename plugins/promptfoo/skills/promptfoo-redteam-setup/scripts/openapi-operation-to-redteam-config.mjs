@@ -591,6 +591,11 @@ function authValue(tokenEnv, prefix) {
   return prefix === 'none' ? `{{env.${tokenEnv}}}` : `${prefix} {{env.${tokenEnv}}}`;
 }
 
+function appendCookieHeader(headers, name, value) {
+  const cookie = `${name}=${value}`;
+  headers.Cookie = headers.Cookie ? `${headers.Cookie}; ${cookie}` : cookie;
+}
+
 function authConfigs(args, document, operation) {
   if (args['auth-header']) {
     const prefix = args['auth-prefix'] ?? 'Bearer';
@@ -787,7 +792,7 @@ if (args['token-env']) {
     if (auth.location === 'query') {
       queryParams[auth.name] = value;
     } else if (auth.location === 'cookie') {
-      headers.Cookie = `${auth.name}=${value}`;
+      appendCookieHeader(headers, auth.name, value);
     } else {
       headers[auth.name] = value;
     }
