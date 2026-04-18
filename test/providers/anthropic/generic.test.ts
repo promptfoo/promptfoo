@@ -85,7 +85,7 @@ describe('AnthropicGenericProvider', () => {
 
     it('should use environment variables if no config key is provided', () => {
       // Mock process.env
-      const originalEnv = process.env;
+      const originalEnv = { ...process.env };
       mockProcessEnv({ ...originalEnv, ANTHROPIC_API_KEY: 'env-test-key' }, { clear: true });
 
       const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022');
@@ -97,7 +97,7 @@ describe('AnthropicGenericProvider', () => {
 
     it('should prefer config over environment variables', () => {
       // Mock process.env
-      const originalEnv = process.env;
+      const originalEnv = { ...process.env };
       mockProcessEnv({ ...originalEnv, ANTHROPIC_API_KEY: 'env-test-key' }, { clear: true });
 
       const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022', {
@@ -122,7 +122,7 @@ describe('AnthropicGenericProvider', () => {
 
     it('should use environment variables if no config URL is provided', () => {
       // Mock process.env
-      const originalEnv = process.env;
+      const originalEnv = { ...process.env };
       mockProcessEnv(
         { ...originalEnv, ANTHROPIC_BASE_URL: 'https://env.anthropic.api' },
         { clear: true },
