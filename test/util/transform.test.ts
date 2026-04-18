@@ -324,7 +324,8 @@ describe('util', () => {
         const context = { vars: {}, prompt: {} };
         const transformFunction = `
           // process.env should still work
-          return typeof process.env === 'object' ? 'env-works' : 'env-broken';
+          const env = process.env;
+          return typeof env === 'object' ? 'env-works' : 'env-broken';
         `;
         const result = await transform(transformFunction, output, context);
         expect(result).toBe('env-works');

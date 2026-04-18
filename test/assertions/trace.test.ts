@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { getTraceStore } from '../../src/tracing/store';
+import { mockProcessEnv } from '../util/utils';
 
 import type {
   Assertion,
@@ -71,9 +72,9 @@ describe('trace assertions', () => {
   const restoreTraceFetchEnv = () => {
     for (const [name, value] of Object.entries(originalTraceFetchEnv)) {
       if (value === undefined) {
-        delete process.env[name];
+        mockProcessEnv({ [name]: undefined });
       } else {
-        process.env[name] = value;
+        mockProcessEnv({ [name]: value });
       }
     }
   };
@@ -82,8 +83,8 @@ describe('trace assertions', () => {
     mockTraceStore.getTrace.mockReset();
     vi.clearAllMocks();
     restoreTraceFetchEnv();
-    process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS = '0';
-    process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS = '1';
+    mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: '0' });
+    mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '1' });
     vi.mocked(getTraceStore).mockReturnValue(
       mockTraceStore as unknown as ReturnType<typeof getTraceStore>,
     );
@@ -165,9 +166,9 @@ describe('trace assertions', () => {
     });
 
     it('should retry until trace spans are available', async () => {
-      process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS = '3';
-      process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS = '0';
-      process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS = '1';
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: '3' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: '0' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '1' });
 
       mockTraceStore.getTrace
         .mockResolvedValueOnce({
@@ -193,8 +194,8 @@ describe('trace assertions', () => {
     });
 
     it('should use default retry timing when trace fetch env vars are unset', async () => {
-      delete process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS;
-      delete process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS;
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: undefined });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: undefined });
       vi.useFakeTimers();
 
       mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
@@ -217,9 +218,9 @@ describe('trace assertions', () => {
     });
 
     it('should wait for span count to stabilize', async () => {
-      process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS = '4';
-      process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS = '0';
-      process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS = '2';
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: '4' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: '0' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '2' });
 
       mockTraceStore.getTrace
         .mockResolvedValueOnce({
@@ -264,9 +265,9 @@ describe('trace assertions', () => {
     });
 
     it('should reuse a preloaded missing trace instead of retrying once per assertion', async () => {
-      process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS = '2';
-      process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS = '0';
-      process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS = '1';
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: '2' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: '0' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '1' });
 
       mockTraceStore.getTrace.mockResolvedValue(null);
 
