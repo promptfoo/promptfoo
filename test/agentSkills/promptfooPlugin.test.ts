@@ -105,7 +105,7 @@ type SkillFrontmatter = {
 };
 
 function readText(filePath: string) {
-  return fs.readFileSync(filePath, 'utf8');
+  return fs.readFileSync(filePath, 'utf8').replace(/\r\n?/g, '\n');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
