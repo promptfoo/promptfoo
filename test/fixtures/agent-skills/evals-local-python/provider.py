@@ -7,9 +7,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
     topic = vars.get("topic") or config.get("defaultTopic") or "unknown"
     trace_id = vars.get("trace_id") or config.get("defaultTraceId") or "missing"
     return {
-        "output": (
-            f'PONG python topic={topic} trace id {trace_id} prompt="{prompt}"'
-        ),
+        "output": (f'PONG python topic={topic} trace id {trace_id} prompt="{prompt}"'),
         "metadata": {
             "topic": topic,
             "trace_id": trace_id,

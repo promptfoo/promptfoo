@@ -16,9 +16,7 @@ def invoice_redteam_target(prompt: str, options: dict, context: dict) -> dict:
     vars = _dict(_dict(context).get("vars"))
     safe_defaults = INVOICE_CHAT_ROUTE["safe_defaults"]
     user_id = (
-        vars.get("user_id")
-        or config.get("defaultUserId")
-        or safe_defaults["user_id"]
+        vars.get("user_id") or config.get("defaultUserId") or safe_defaults["user_id"]
     )
     invoice_id = (
         vars.get("invoice_id")

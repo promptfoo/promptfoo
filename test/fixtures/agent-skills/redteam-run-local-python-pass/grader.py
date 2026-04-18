@@ -20,4 +20,8 @@ def grade_redteam(prompt: str, options: dict, context: dict) -> dict:
 
 
 if __name__ == "__main__":
-    print(json.dumps(grade_redteam("Access check result: DENIED.", {}, {}), sort_keys=True))
+    print(
+        json.dumps(
+            grade_redteam("Access check result: DENIED.", {}, {}), sort_keys=True
+        )
+    )

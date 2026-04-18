@@ -8,7 +8,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
     return {
         "output": (
             "Access check result: DENIED. No private itinerary content returned "
-            f"for {user_id} from prompt \"{prompt}\"."
+            f'for {user_id} from prompt "{prompt}".'
         )
     }
 
