@@ -121,7 +121,6 @@ const allowedSkippedTests: AllowedSkip[] = [
 const legacyHoistedPersistentMockFiles = new Set<string>();
 
 const legacyDirectProcessEnvMutationFiles = new Set([
-  'providers/azure/responses.test.ts',
   'providers/bedrock.agents.test.ts',
   'providers/bedrock/converse.test.ts',
   'providers/bedrock/index.test.ts',
