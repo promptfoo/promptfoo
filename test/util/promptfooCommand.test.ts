@@ -10,7 +10,7 @@ describe('nextCommand', () => {
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
-    originalEnv = process.env;
+    originalEnv = { ...process.env };
     mockProcessEnv({ ...originalEnv }, { clear: true });
   });
 
