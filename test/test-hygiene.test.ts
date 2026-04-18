@@ -144,16 +144,7 @@ const persistentMockImplementationPattern = new RegExp(
   `\\.(?:${persistentMockMethods.join('|')})\\s*\\(`,
 );
 const mockImplementationResetPattern = /(?:\.mockReset\s*\(|\bvi\.resetAllMocks\s*\()/;
-const envKeyPattern = String.raw`[A-Za-z_][A-Za-z0-9_]*`;
-const processEnvPropertyAccessPattern = String.raw`\bprocess\.env(?:\.${envKeyPattern}|\[['"]${envKeyPattern}['"]\])`;
-const processEnvObjectAssignmentPattern = String.raw`\bprocess\.env\s*=`;
-const processEnvPropertyAssignmentPattern = String.raw`${processEnvPropertyAccessPattern}\s*=`;
-const processEnvPropertyDeletePattern = String.raw`\bdelete\s+${processEnvPropertyAccessPattern}`;
-const directProcessEnvMutationPattern = new RegExp(
-  `(?:${processEnvObjectAssignmentPattern}|${processEnvPropertyAssignmentPattern}|${processEnvPropertyDeletePattern})`,
-);
-const processEnvReferenceSnapshotPattern =
-  /\b(?:const|let|var)\s+[^=\n]*\boriginal[A-Za-z0-9_]*\s*=\s*process\.env\s*;|\boriginal[A-Za-z0-9_]*\s*=\s*process\.env\s*;/i;
+const processEnvSnapshotIdentifierPattern = /^original[A-Za-z0-9_]*$/i;
 
 function findTestFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -184,24 +175,155 @@ function hasHoistedPersistentMockWithoutReset(source: string) {
   );
 }
 
-function hasDirectProcessEnvMutation(source: string) {
-  return source.split(/\r?\n/).some((line) => {
-    const trimmed = line.trim();
-    return (
-      trimmed.length > 0 && !trimmed.startsWith('//') && directProcessEnvMutationPattern.test(line)
-    );
+function isProcessIdentifier(node: ts.Node): node is ts.Identifier {
+  return ts.isIdentifier(node) && node.text === 'process';
+}
+
+function isEnvStringLiteral(node: ts.Node): boolean {
+  return (
+    (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && node.text === 'env'
+  );
+}
+
+function isProcessEnvExpression(
+  node: ts.Node,
+): node is ts.PropertyAccessExpression | ts.ElementAccessExpression {
+  return (
+    (ts.isPropertyAccessExpression(node) &&
+      node.name.text === 'env' &&
+      isProcessIdentifier(node.expression)) ||
+    (ts.isElementAccessExpression(node) &&
+      isProcessIdentifier(node.expression) &&
+      isEnvStringLiteral(node.argumentExpression))
+  );
+}
+
+function isProcessEnvMemberExpression(
+  node: ts.Node,
+): node is ts.PropertyAccessExpression | ts.ElementAccessExpression {
+  return (
+    (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) &&
+    isProcessEnvExpression(node.expression)
+  );
+}
+
+function containsProcessEnvMutationTarget(node: ts.Node): boolean {
+  if (isProcessEnvExpression(node) || isProcessEnvMemberExpression(node)) {
+    return true;
+  }
+
+  let found = false;
+  ts.forEachChild(node, (child) => {
+    found ||= containsProcessEnvMutationTarget(child);
   });
+  return found;
+}
+
+function isProcessEnvMutationCall(node: ts.CallExpression): boolean {
+  if (!ts.isPropertyAccessExpression(node.expression) || node.arguments.length === 0) {
+    return false;
+  }
+
+  const target = node.arguments[0];
+  const receiver = node.expression.expression;
+  const method = node.expression.name.text;
+
+  return (
+    ts.isIdentifier(receiver) &&
+    isProcessEnvExpression(target) &&
+    ((receiver.text === 'Object' &&
+      ['assign', 'defineProperties', 'defineProperty'].includes(method)) ||
+      (receiver.text === 'Reflect' && ['defineProperty', 'deleteProperty', 'set'].includes(method)))
+  );
+}
+
+function hasDirectProcessEnvMutation(source: string) {
+  const sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
+  let found = false;
+
+  function visit(node: ts.Node) {
+    if (found) {
+      return;
+    }
+
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
+      containsProcessEnvMutationTarget(node.left)
+    ) {
+      found = true;
+      return;
+    }
+
+    if (
+      ts.isDeleteExpression(node) &&
+      (isProcessEnvExpression(node.expression) || isProcessEnvMemberExpression(node.expression))
+    ) {
+      found = true;
+      return;
+    }
+
+    if (
+      (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+      (node.operator === ts.SyntaxKind.PlusPlusToken ||
+        node.operator === ts.SyntaxKind.MinusMinusToken) &&
+      isProcessEnvMemberExpression(node.operand)
+    ) {
+      found = true;
+      return;
+    }
+
+    if (ts.isCallExpression(node) && isProcessEnvMutationCall(node)) {
+      found = true;
+      return;
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return found;
 }
 
 function hasProcessEnvReferenceSnapshot(source: string) {
-  return source.split(/\r?\n/).some((line) => {
-    const trimmed = line.trim();
-    return (
-      trimmed.length > 0 &&
-      !trimmed.startsWith('//') &&
-      processEnvReferenceSnapshotPattern.test(line)
-    );
-  });
+  const sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
+  let found = false;
+
+  function isSnapshotIdentifier(node: ts.Node): boolean {
+    return ts.isIdentifier(node) && processEnvSnapshotIdentifierPattern.test(node.text);
+  }
+
+  function visit(node: ts.Node) {
+    if (found) {
+      return;
+    }
+
+    if (
+      ts.isVariableDeclaration(node) &&
+      isSnapshotIdentifier(node.name) &&
+      node.initializer &&
+      isProcessEnvExpression(node.initializer)
+    ) {
+      found = true;
+      return;
+    }
+
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      isSnapshotIdentifier(node.left) &&
+      isProcessEnvExpression(node.right)
+    ) {
+      found = true;
+      return;
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return found;
 }
 
 function findFilesMatchingPolicy(predicate: (source: string) => boolean): string[] {
@@ -425,10 +547,27 @@ describe('root test hygiene', () => {
 
   it.each([
     'process.env.OPENAI_API_KEY = "test-key";',
+    'process.env.OPENAI_API_KEY += "-suffix";',
+    'process.env.OPENAI_API_KEY ||= "test-key";',
     'process.env["OPENAI_API_KEY"] = "test-key";',
+    'process.env["OPENAI_API_KEY"] ??= "test-key";',
+    'process.env[key] &&= "test-key";',
+    'process["env"].OPENAI_API_KEY = "test-key";',
+    'process["env"]["OPENAI_API_KEY"] = "test-key";',
+    'process.env.OPENAI_API_KEY++;',
+    '++process.env["OPENAI_API_KEY"];',
     'delete process.env.OPENAI_API_KEY;',
     'delete process.env["OPENAI_API_KEY"];',
+    'delete process["env"].OPENAI_API_KEY;',
+    'delete process.env;',
     'process.env = { ...process.env, OPENAI_API_KEY: "test-key" };',
+    'Object.assign(process.env, { OPENAI_API_KEY: "test-key" });',
+    'Object.assign(process["env"], { OPENAI_API_KEY: "test-key" });',
+    'Object.defineProperty(process.env, "OPENAI_API_KEY", { value: "test-key" });',
+    'Object.defineProperties(process.env, { OPENAI_API_KEY: { value: "test-key" } });',
+    'Reflect.defineProperty(process.env, "OPENAI_API_KEY", { value: "test-key" });',
+    'Reflect.deleteProperty(process.env, "OPENAI_API_KEY");',
+    'Reflect.set(process.env, "OPENAI_API_KEY", "test-key");',
   ])('detects direct process.env mutation in %s', (source) => {
     expect(hasDirectProcessEnvMutation(source)).toBe(true);
   });
@@ -437,6 +576,11 @@ describe('root test hygiene', () => {
     'const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: "test-key" });',
     'vi.stubEnv("OPENAI_API_KEY", "test-key");',
     'const env = { ...process.env, NO_COLOR: "1" };',
+    'const current = process.env[key];',
+    'const current = process["env"][key];',
+    'if (process.env.OPENAI_API_KEY === "test-key") {}',
+    'Object.assign(env, { OPENAI_API_KEY: "test-key" });',
+    'Reflect.set(env, "OPENAI_API_KEY", "test-key");',
     '// process.env.OPENAI_API_KEY = "test-key";',
   ])('allows scoped or read-only environment handling in %s', (source) => {
     expect(hasDirectProcessEnvMutation(source)).toBe(false);
@@ -444,6 +588,7 @@ describe('root test hygiene', () => {
 
   it.each([
     'const originalEnv = process.env;',
+    'const originalEnv = process["env"];',
     'originalEnv = process.env;',
     'const ORIGINAL_ENV = process.env;',
   ])('detects process.env reference snapshots in %s', (source) => {
