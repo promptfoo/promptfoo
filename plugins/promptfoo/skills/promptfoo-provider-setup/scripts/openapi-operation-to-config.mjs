@@ -332,6 +332,12 @@ function responseOutputField(document, properties) {
   return Object.keys(responseProperties)[0];
 }
 
+function responseAccessor(base, field) {
+  return /^[A-Za-z_$][0-9A-Za-z_$]*$/.test(field)
+    ? `${base}.${field}`
+    : `${base}[${JSON.stringify(field)}]`;
+}
+
 function successResponse(document, operation) {
   const responses = asRecord(operation.responses || {}, 'responses');
   const status = responses['200']
@@ -765,9 +771,10 @@ if (Object.keys(queryParams).length > 0) {
   providerConfig.queryParams = queryParams;
 }
 if (responseField) {
-  providerConfig.transformResponse = responseIsArray
-    ? `json[0].${responseField}`
-    : `json.${responseField}`;
+  providerConfig.transformResponse = responseAccessor(
+    responseIsArray ? 'json[0]' : 'json',
+    responseField,
+  );
 }
 
 const varNames = [...pathVars, ...queryFields, ...bodyFields]

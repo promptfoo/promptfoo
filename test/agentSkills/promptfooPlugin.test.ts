@@ -1540,6 +1540,85 @@ function openApiExampleOnlyArrayResponseSpec() {
   };
 }
 
+function openApiUnsafeResponseFieldSpec() {
+  return {
+    openapi: '3.1.0',
+    paths: {
+      '/unsafe-response-field': {
+        post: {
+          operationId: 'unsafeResponseField',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['message'],
+                  properties: {
+                    message: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'Response with unsafe object key',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      'api-version': { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/unsafe-array-response-field': {
+        post: {
+          operationId: 'unsafeArrayResponseField',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['message'],
+                  properties: {
+                    message: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'Array response with unsafe object key',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        '200': { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
 describe('promptfoo Codex plugin package', () => {
   it('declares a Codex plugin manifest with a skills directory', () => {
     const manifestPath = path.join(pluginRoot, '.codex-plugin', 'plugin.json');
@@ -3833,6 +3912,46 @@ describe('promptfoo-provider-setup skill', () => {
     }
   });
 
+  it('quotes unsafe OpenAPI response field accessors for provider configs', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-provider-'));
+    const specPath = path.join(tempDir, 'openapi.yaml');
+    try {
+      fs.writeFileSync(specPath, yaml.dump(openApiUnsafeResponseFieldSpec()));
+      const runHelper = (operationId: string) =>
+        yaml.load(
+          execFileSync(
+            'node',
+            [
+              path.join(providerSkillRoot, 'scripts', 'openapi-operation-to-config.mjs'),
+              '--spec',
+              specPath,
+              '--operation-id',
+              operationId,
+              '--base-url-env',
+              'UNSAFE_RESPONSE_API_BASE_URL',
+            ],
+            { cwd: repoRoot, encoding: 'utf8' },
+          ),
+        );
+
+      const objectGenerated = runHelper('unsafeResponseField');
+      expectRecord(objectGenerated, 'Generated unsafe response field provider config');
+      const [objectProvider] = objectGenerated.providers as unknown[];
+      expectRecord(objectProvider, 'Generated unsafe response field provider');
+      expectRecord(objectProvider.config, 'Generated unsafe response field provider config block');
+      expect(objectProvider.config.transformResponse).toBe('json["api-version"]');
+
+      const arrayGenerated = runHelper('unsafeArrayResponseField');
+      expectRecord(arrayGenerated, 'Generated unsafe array response field provider config');
+      const [arrayProvider] = arrayGenerated.providers as unknown[];
+      expectRecord(arrayProvider, 'Generated unsafe array response field provider');
+      expectRecord(arrayProvider.config, 'Generated unsafe array response field provider config');
+      expect(arrayProvider.config.transformResponse).toBe('json[0]["200"]');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('merges OpenAPI allOf request and response schemas for provider configs', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-provider-'));
     const specPath = path.join(tempDir, 'openapi.yaml');
@@ -5611,6 +5730,53 @@ describe('promptfoo-redteam-setup skill', () => {
           user_id: 'example-array-response-user',
         },
       });
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('quotes unsafe OpenAPI response field accessors for redteam configs', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-redteam-'));
+    const specPath = path.join(tempDir, 'openapi.yaml');
+    try {
+      fs.writeFileSync(specPath, yaml.dump(openApiUnsafeResponseFieldSpec()));
+      const runHelper = (operationId: string) =>
+        yaml.load(
+          execFileSync(
+            'node',
+            [
+              path.join(
+                redteamSetupSkillRoot,
+                'scripts',
+                'openapi-operation-to-redteam-config.mjs',
+              ),
+              '--spec',
+              specPath,
+              '--operation-id',
+              operationId,
+              '--base-url-env',
+              'UNSAFE_RESPONSE_API_BASE_URL',
+            ],
+            { cwd: repoRoot, encoding: 'utf8' },
+          ),
+        );
+
+      const objectGenerated = runHelper('unsafeResponseField');
+      expectRecord(objectGenerated, 'Generated unsafe response field redteam config');
+      const [objectTarget] = objectGenerated.targets as unknown[];
+      expectRecord(objectTarget, 'Generated unsafe response field redteam target');
+      expectRecord(objectTarget.config, 'Generated unsafe response field redteam config block');
+      expect(objectTarget.config.transformResponse).toBe('json["api-version"]');
+
+      const arrayGenerated = runHelper('unsafeArrayResponseField');
+      expectRecord(arrayGenerated, 'Generated unsafe array response field redteam config');
+      const [arrayTarget] = arrayGenerated.targets as unknown[];
+      expectRecord(arrayTarget, 'Generated unsafe array response field redteam target');
+      expectRecord(
+        arrayTarget.config,
+        'Generated unsafe array response field redteam config block',
+      );
+      expect(arrayTarget.config.transformResponse).toBe('json[0]["200"]');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
