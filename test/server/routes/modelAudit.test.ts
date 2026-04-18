@@ -24,6 +24,7 @@ import {
   CheckPathResponseSchema,
   DeleteScanResponseSchema,
   GetScanResponseSchema,
+  ListScannersResponseSchema,
   ListScansResponseSchema,
 } from '../../../src/types/api/modelAudit';
 
@@ -40,6 +41,58 @@ describe('Model Audit Routes', () => {
     mockedCheckModelAuditInstalled.mockReset();
     mockedSpawn.mockReset();
     app = createApp();
+  });
+
+  describe('GET /api/model-audit/scanners', () => {
+    it('should return the scanner catalog', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
+      const scannerOutput = JSON.stringify({
+        scanners: [
+          {
+            id: 'pickle',
+            class: 'PickleScanner',
+            description: 'Scans pickle files',
+            extensions: ['.pkl'],
+            dependencies: [],
+          },
+        ],
+      });
+
+      mockedSpawn.mockReturnValue(
+        asMockChildProcess(
+          createMockChildProcess({
+            exitCode: 0,
+            stdoutData: scannerOutput,
+          }),
+        ),
+      );
+
+      const response = await request(app).get('/api/model-audit/scanners');
+
+      expect(response.status).toBe(200);
+      expect(response.body.scanners).toHaveLength(1);
+      expect(response.body.scanners[0].id).toBe('pickle');
+      expect(() => ListScannersResponseSchema.parse(response.body)).not.toThrow();
+      expect(mockedSpawn).toHaveBeenCalledWith(
+        'modelaudit',
+        ['scan', '--format', 'json', '--list-scanners'],
+        expect.objectContaining({
+          env: expect.objectContaining({
+            PROMPTFOO_DELEGATED: 'true',
+          }),
+        }),
+      );
+    });
+
+    it('should return 400 when scanners are requested without modelaudit installed', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: false, version: null });
+
+      const response = await request(app).get('/api/model-audit/scanners');
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('ModelAudit is not installed');
+      expect(mockedSpawn).not.toHaveBeenCalled();
+    });
   });
 
   describe('POST /api/model-audit/scan', () => {
@@ -118,6 +171,81 @@ describe('Model Audit Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('total_checks', 5);
+    });
+
+    it('should pass and persist scanner selection options', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
+
+      const testFilePath = path.join(os.tmpdir(), 'test-model-audit-scanner-selection.pkl');
+      fs.writeFileSync(testFilePath, 'test data');
+      const createSpy = vi.spyOn(ModelAudit, 'create').mockResolvedValue({
+        id: 'scan-scanner-selection',
+      } as Awaited<ReturnType<typeof ModelAudit.create>>);
+
+      const mockScanOutput = JSON.stringify({
+        total_checks: 1,
+        passed_checks: 1,
+        failed_checks: 0,
+        files_scanned: 1,
+        bytes_scanned: 9,
+        has_errors: false,
+        issues: [],
+        checks: [],
+      });
+
+      mockedSpawn.mockReturnValue(
+        asMockChildProcess(
+          createMockChildProcess({
+            exitCode: 0,
+            stdoutData: mockScanOutput,
+          }),
+        ),
+      );
+
+      try {
+        const response = await request(app)
+          .post('/api/model-audit/scan')
+          .send({
+            paths: [testFilePath],
+            options: {
+              scanners: ['pickle,tf_savedmodel'],
+              excludeScanner: ['weight_distribution'],
+            },
+          });
+
+        expect(response.status).toBe(200);
+        expect(response.body.auditId).toBe('scan-scanner-selection');
+        expect(response.body.persisted).toBe(true);
+        expect(mockedSpawn).toHaveBeenCalledWith(
+          'modelaudit',
+          expect.arrayContaining([
+            'scan',
+            testFilePath,
+            '--scanners',
+            'pickle,tf_savedmodel',
+            '--exclude-scanner',
+            'weight_distribution',
+          ]),
+          expect.objectContaining({
+            env: expect.objectContaining({
+              PROMPTFOO_DELEGATED: 'true',
+            }),
+          }),
+        );
+        expect(createSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              options: expect.objectContaining({
+                scanners: ['pickle,tf_savedmodel'],
+                excludeScanner: ['weight_distribution'],
+              }),
+            }),
+          }),
+        );
+      } finally {
+        createSpy.mockRestore();
+        fs.unlinkSync(testFilePath);
+      }
     });
 
     it('should return 400 when no paths provided', async () => {

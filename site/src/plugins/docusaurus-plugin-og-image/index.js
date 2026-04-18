@@ -1337,8 +1337,9 @@ async function generateInsuranceTemplate() {
   return generateSolutionTemplate({
     vertical: 'Insurance',
     headline: 'AI Security for Insurance',
-    subtitle: 'Red team AI for PHI protection, network accuracy, and coverage discrimination',
-    badges: ['PHI', 'MHPAEA', 'CMS', 'State DOI'],
+    subtitle:
+      'Red team AI for policyholder data protection, network accuracy, and coverage discrimination',
+    badges: ['PHI', 'GLBA', 'FCRA', 'State DOI'],
   });
 }
 
