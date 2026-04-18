@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import { OpenRouterProvider } from '../../src/providers/openrouter';
 import * as fetchModule from '../../src/util/fetch/index';
+import { mockProcessEnv } from '../util/utils';
 
 const OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1';
 
@@ -61,11 +62,11 @@ describe('OpenRouter', () => {
 
     describe('Thinking tokens handling', () => {
       beforeEach(() => {
-        process.env.OPENROUTER_API_KEY = 'test-key';
+        mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
       });
 
       afterEach(() => {
-        delete process.env.OPENROUTER_API_KEY;
+        mockProcessEnv({ OPENROUTER_API_KEY: undefined });
       });
 
       it('should handle reasoning field correctly when both reasoning and content are present', async () => {
@@ -806,11 +807,11 @@ describe('OpenRouter', () => {
 
     describe('JSON schema response format handling', () => {
       beforeEach(() => {
-        process.env.OPENROUTER_API_KEY = 'test-key';
+        mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
       });
 
       afterEach(() => {
-        delete process.env.OPENROUTER_API_KEY;
+        mockProcessEnv({ OPENROUTER_API_KEY: undefined });
       });
 
       it('should parse JSON output when response_format.type is json_schema', async () => {
