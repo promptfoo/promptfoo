@@ -45,15 +45,18 @@ jobs:
         with:
           node-version-file: '.nvmrc'
 
-      # Skip full monorepo `npm ci` — prettier is all we need. `--ignore-scripts`
-      # blocks arbitrary postinstall code from running under the app token scope.
-      - run: npm install --no-save --no-audit --no-fund --ignore-scripts prettier@^3.8.1
+      # Skip full monorepo `npm ci` — prettier is all we need. Pin the exact
+      # version (not a range) so a future compromised or malformed 3.x release
+      # can't tamper with CHANGELOG output. `--ignore-scripts` blocks arbitrary
+      # lifecycle code from executing in this job.
+      - run: npm install --no-save --no-audit --no-fund --ignore-scripts prettier@3.8.1
 
-      - name: Format CHANGELOG files
+      # Intentionally split into tokenless format/commit + push-only steps:
+      # prettier (third-party code) never sees GH_TOKEN.
+      - name: Format and commit CHANGELOG files
+        id: format
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
 
@@ -71,6 +74,7 @@ jobs:
 
           if [[ "${#changelog_files[@]}" -eq 0 ]]; then
             echo "No CHANGELOG files changed in release PR"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -78,6 +82,7 @@ jobs:
 
           if git diff --quiet -- "${changelog_files[@]}"; then
             echo "No formatting changes needed"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -85,5 +90,14 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "${changelog_files[@]}"
           git commit -m "chore: format CHANGELOG files with prettier"
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+
+      - name: Push formatted CHANGELOG commit
+        if: steps.format.outputs.has_changes == 'true'
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: bearer ${GH_TOKEN}" \
             push origin "HEAD:${HEAD_REF}"
