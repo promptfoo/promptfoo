@@ -143,6 +143,34 @@ describe('BestOfNProvider - Runtime Behavior', () => {
   });
 
   it.each([
+    42,
+    true,
+    null,
+    { prompt: 'candidate 0' },
+  ])('should skip non-string candidate prompt from remote generation: %j', async (invalidPrompt) => {
+    const provider = new BestOfNProvider({
+      injectVar: 'input',
+    });
+    const context = createMockContext(mockTargetProvider);
+
+    mockFetchWithProxy.mockResolvedValue({
+      json: async () => ({
+        modifiedPrompts: [invalidPrompt, 'candidate 2'],
+      }),
+    });
+
+    await provider.callApi('test prompt', context);
+
+    expect(mockRenderPrompt).toHaveBeenCalledTimes(1);
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
+      'candidate 2',
+      expect.any(Object),
+      undefined,
+    );
+  });
+
+  it.each([
     'file://etc/passwd',
     ' FILE://etc/passwd',
     '\tFiLe://etc/passwd',
