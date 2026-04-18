@@ -296,7 +296,6 @@
         "src/app/src/**/*.spec.tsx",
         // Keep in sync with legacyDirectProcessEnvMutationFiles in test/test-hygiene.test.ts.
         // BEGIN direct process.env mutation legacy allowlist
-        "!!test/providers/azure/completion.test.ts",
         "!!test/providers/azure/responses.test.ts",
         "!!test/providers/bedrock.agents.test.ts",
         "!!test/providers/bedrock/converse.test.ts",
