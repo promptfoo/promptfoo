@@ -199,8 +199,8 @@ function getDisplayValue(result: GradingResult): AssertionDisplayValue {
   }
 
   // Prefer rendered assertion value with substituted variables over raw template
-  if (result.metadata?.renderedAssertionValue !== undefined) {
-    const renderedValue = String(result.metadata.renderedAssertionValue);
+  if (result.metadata?.renderedAssertionValue != null) {
+    const renderedValue = stringifyAssertionValue(result.metadata.renderedAssertionValue);
     const rawAssertionValue =
       result.assertion?.value === undefined
         ? undefined
@@ -209,7 +209,9 @@ function getDisplayValue(result: GradingResult): AssertionDisplayValue {
     return {
       value: renderedValue,
       templateValue:
-        rawAssertionValue && rawAssertionValue !== renderedValue ? rawAssertionValue : undefined,
+        rawAssertionValue !== undefined && rawAssertionValue !== renderedValue
+          ? rawAssertionValue
+          : undefined,
     };
   }
 
