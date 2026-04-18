@@ -30,10 +30,21 @@ const biomeConfigPath = path.join(repoRoot, 'biome.jsonc');
 const thisFile = fileURLToPath(import.meta.url);
 const testFilePattern = /\.(?:test|spec)\.(?:ts|tsx)$/;
 const testApiNames = new Set(['describe', 'it', 'suite', 'test']);
-const biomeDirectProcessEnvMutationAllowlistStart =
-  '// BEGIN direct process.env mutation legacy allowlist';
-const biomeDirectProcessEnvMutationAllowlistEnd =
-  '// END direct process.env mutation legacy allowlist';
+const directProcessEnvMutationPluginPath = './tools/biome/no-direct-process-env-mutation.grit';
+const directProcessEnvMutationPluginIncludes = [
+  '*.js',
+  '*.jsx',
+  '*.ts',
+  '*.tsx',
+  '*.mjs',
+  '*.cjs',
+  '**/*.js',
+  '**/*.jsx',
+  '**/*.ts',
+  '**/*.tsx',
+  '**/*.mjs',
+  '**/*.cjs',
+];
 
 const allowedSkippedTests: AllowedSkip[] = [
   {
@@ -187,19 +198,31 @@ function findFilesMatchingPolicy(predicate: (source: string) => boolean): string
     .sort();
 }
 
-function findBiomeLegacyDirectProcessEnvMutationExclusions(): string[] {
+function findBiomeDirectProcessEnvMutationPluginIncludes(): string[] {
   const source = readFileSync(biomeConfigPath, 'utf8');
-  const start = source.indexOf(biomeDirectProcessEnvMutationAllowlistStart);
-  const end = source.indexOf(biomeDirectProcessEnvMutationAllowlistEnd);
+  const pluginIndex = source.indexOf(`"${directProcessEnvMutationPluginPath}"`);
 
-  if (start === -1 || end === -1 || end < start) {
-    throw new Error('Biome process.env mutation allowlist markers are missing or out of order');
+  if (pluginIndex === -1) {
+    throw new Error('Biome process.env mutation plugin is not configured');
+  }
+
+  const includesKeyStart = source.slice(0, pluginIndex).lastIndexOf('"includes": [');
+  const includesStart = source.indexOf('[', includesKeyStart);
+  const includesEnd = source.indexOf(']', includesStart);
+
+  if (
+    includesKeyStart === -1 ||
+    includesStart === -1 ||
+    includesEnd === -1 ||
+    includesEnd > pluginIndex
+  ) {
+    throw new Error('Biome process.env mutation plugin includes are missing or out of order');
   }
 
   return Array.from(
-    source.slice(start, end).matchAll(/"!!test\/([^"]+)"/g),
-    ([, file]) => file,
-  ).sort();
+    source.slice(includesStart, includesEnd).matchAll(/"([^"]+)"/g),
+    ([, glob]) => glob,
+  );
 }
 
 function isTestControlKind(name: string): name is TestControlKind {
@@ -446,9 +469,9 @@ describe('root test hygiene', () => {
     expect(staleFiles).toEqual([]);
   });
 
-  it('keeps Biome process.env mutation exclusions in sync with the hygiene allowlist', () => {
-    expect(findBiomeLegacyDirectProcessEnvMutationExclusions()).toEqual(
-      Array.from(legacyDirectProcessEnvMutationFiles).sort(),
+  it('applies the Biome process.env mutation rule to repo TypeScript and JavaScript files', () => {
+    expect(findBiomeDirectProcessEnvMutationPluginIncludes()).toEqual(
+      directProcessEnvMutationPluginIncludes,
     );
   });
 });
