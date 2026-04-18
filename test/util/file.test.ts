@@ -1688,7 +1688,8 @@ describe('file utilities', () => {
     it('should handle paths with environment variables', async () => {
       vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       mockProcessEnv({ FILE_PATH: 'file.txt' });
-      expect(parsePathOrGlob('/base', process.env.FILE_PATH)).toEqual({
+      const filePath = process.env.FILE_PATH as string;
+      expect(parsePathOrGlob('/base', filePath)).toEqual({
         extension: '.txt',
         functionName: undefined,
         isPathPattern: false,
