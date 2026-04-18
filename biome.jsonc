@@ -296,7 +296,6 @@
         "src/app/src/**/*.spec.tsx",
         // Keep in sync with legacyDirectProcessEnvMutationFiles in test/test-hygiene.test.ts.
         // BEGIN direct process.env mutation legacy allowlist
-        "!!test/providers/openai/realtime.test.ts",
         "!!test/providers/openclaw.test.ts",
         "!!test/providers/openrouter.test.ts",
         "!!test/providers/replicate.test.ts",

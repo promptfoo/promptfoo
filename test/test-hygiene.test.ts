@@ -121,7 +121,6 @@ const allowedSkippedTests: AllowedSkip[] = [
 const legacyHoistedPersistentMockFiles = new Set<string>();
 
 const legacyDirectProcessEnvMutationFiles = new Set([
-  'providers/openai/realtime.test.ts',
   'providers/openclaw.test.ts',
   'providers/openrouter.test.ts',
   'providers/replicate.test.ts',
