@@ -642,6 +642,68 @@ function openApiRepeatedRefSpec() {
   };
 }
 
+function openApiCamelCaseIdSpec() {
+  return {
+    openapi: '3.1.0',
+    paths: {
+      '/users/{userId}/invoices/{invoiceId}/chat': {
+        post: {
+          operationId: 'chatWithCamelCaseInvoice',
+          parameters: [
+            {
+              name: 'userId',
+              in: 'path',
+              required: true,
+              schema: { type: 'string', example: 'camel-user' },
+            },
+            {
+              name: 'invoiceId',
+              in: 'path',
+              required: true,
+              schema: { type: 'string', example: 'camel-invoice' },
+            },
+            {
+              name: 'apiVersion',
+              in: 'query',
+              schema: { type: 'string', example: '2026-04-17' },
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['accountId', 'message'],
+                  properties: {
+                    accountId: { type: 'string', example: 'camel-account' },
+                    message: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'Camel-case response',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      answer: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
 function openApiVariantSpec() {
   return {
     openapi: '3.1.0',
@@ -3593,6 +3655,54 @@ describe('promptfoo-provider-setup skill', () => {
     }
   });
 
+  it('normalizes camelCase OpenAPI identifiers for provider configs', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-provider-'));
+    const specPath = path.join(tempDir, 'openapi.yaml');
+    try {
+      fs.writeFileSync(specPath, yaml.dump(openApiCamelCaseIdSpec()));
+      const generated = yaml.load(
+        execFileSync(
+          'node',
+          [
+            path.join(providerSkillRoot, 'scripts', 'openapi-operation-to-config.mjs'),
+            '--spec',
+            specPath,
+            '--operation-id',
+            'chatWithCamelCaseInvoice',
+            '--base-url-env',
+            'CAMEL_API_BASE_URL',
+          ],
+          { cwd: repoRoot, encoding: 'utf8' },
+        ),
+      );
+      expectRecord(generated, 'Generated camelCase provider config');
+      const [provider] = generated.providers as unknown[];
+      expectRecord(provider, 'Generated camelCase provider');
+      expectRecord(provider.config, 'Generated camelCase provider config block');
+      expect(provider.config.url).toBe(
+        '{{env.CAMEL_API_BASE_URL}}/users/{{user_id | urlencode}}/invoices/{{invoice_id | urlencode}}/chat',
+      );
+      expect(provider.config.queryParams).toEqual({
+        apiVersion: '{{api_version}}',
+      });
+      expect(provider.config.body).toEqual({
+        accountId: '{{account_id}}',
+        message: '{{prompt}}',
+      });
+      const [test] = generated.tests as unknown[];
+      expectRecord(test, 'Generated camelCase provider test');
+      expect(test.vars).toEqual({
+        user_id: 'camel-user',
+        invoice_id: 'camel-invoice',
+        api_version: '2026-04-17',
+        account_id: 'camel-account',
+        message: 'Say exactly PONG.',
+      });
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('uses the first OpenAPI oneOf/anyOf variant for provider config drafts', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-provider-'));
     const specPath = path.join(tempDir, 'openapi.yaml');
@@ -5206,6 +5316,72 @@ describe('promptfoo-redteam-setup skill', () => {
           message: 'Say exactly PONG.',
         },
       });
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('normalizes camelCase OpenAPI identifiers for redteam RBAC inference', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-redteam-'));
+    const specPath = path.join(tempDir, 'openapi.yaml');
+    try {
+      fs.writeFileSync(specPath, yaml.dump(openApiCamelCaseIdSpec()));
+      const generated = yaml.load(
+        execFileSync(
+          'node',
+          [
+            path.join(redteamSetupSkillRoot, 'scripts', 'openapi-operation-to-redteam-config.mjs'),
+            '--spec',
+            specPath,
+            '--operation-id',
+            'chatWithCamelCaseInvoice',
+            '--base-url-env',
+            'CAMEL_API_BASE_URL',
+          ],
+          { cwd: repoRoot, encoding: 'utf8' },
+        ),
+      );
+      expectRecord(generated, 'Generated camelCase redteam config');
+      const [target] = generated.targets as unknown[];
+      expectRecord(target, 'Generated camelCase redteam target');
+      expectRecord(target.config, 'Generated camelCase redteam target config');
+      expect(target.config.url).toBe(
+        '{{env.CAMEL_API_BASE_URL}}/users/{{user_id | urlencode}}/invoices/{{invoice_id | urlencode}}/chat',
+      );
+      expect(target.config.queryParams).toEqual({
+        apiVersion: '{{api_version}}',
+      });
+      expect(target.config.body).toEqual({
+        accountId: '{{account_id}}',
+        message: '{{message}}',
+      });
+      expect(target.inputs).toEqual({
+        user_id: 'Caller identity or tenancy field: user_id.',
+        invoice_id: 'Object identifier being requested: invoice_id.',
+        api_version: 'Target input field: api_version.',
+        account_id: 'Caller identity or tenancy field: account_id.',
+        message: 'User-controlled message or instruction to the target.',
+      });
+      expect(generated.defaultTest).toEqual({
+        vars: {
+          user_id: 'camel-user',
+          invoice_id: 'camel-invoice',
+          api_version: '2026-04-17',
+          account_id: 'camel-account',
+          message: 'Say exactly PONG.',
+        },
+      });
+      expectRecord(generated.redteam, 'Generated camelCase redteam block');
+      expect(generated.redteam.plugins).toEqual([
+        expect.objectContaining({ id: 'policy', numTests: 1 }),
+        { id: 'rbac', numTests: 1 },
+      ]);
+      const [policyPlugin] = generated.redteam.plugins as unknown[];
+      expectRecord(policyPlugin, 'Generated camelCase policy plugin');
+      expectRecord(policyPlugin.config, 'Generated camelCase policy config');
+      expect(policyPlugin.config.policy).toContain('user_id');
+      expect(policyPlugin.config.policy).toContain('invoice_id');
+      expect(policyPlugin.config.policy).toContain('account_id');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
