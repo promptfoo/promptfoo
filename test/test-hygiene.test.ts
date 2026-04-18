@@ -121,7 +121,6 @@ const allowedSkippedTests: AllowedSkip[] = [
 const legacyHoistedPersistentMockFiles = new Set<string>();
 
 const legacyDirectProcessEnvMutationFiles = new Set([
-  'onboarding.test.ts',
   'prompts/index.test.ts',
   'providers.slack.test.ts',
   'providers.test.ts',
