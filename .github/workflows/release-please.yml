@@ -7,6 +7,10 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release-please:
     runs-on: ubuntu-latest
@@ -34,68 +38,8 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
 
-      # Release-please hardcodes 'v' prefix in release names, so we rename to match tag
-      - name: Rename release to remove v prefix
-        if: ${{ steps.release.outputs.release_created == 'true' }}
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          TAG_NAME="${{ steps.release.outputs.tag_name }}"
-          echo "Renaming release to: $TAG_NAME"
-          gh release edit "$TAG_NAME" --title "$TAG_NAME" --repo ${{ github.repository }}
-
-      # Format CHANGELOG files after release-please creates/updates the PR
-      # This fixes the asterisk bullet markers that release-please generates
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        if: ${{ steps.release.outputs.prs_created == 'true' }}
-        with:
-          fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
-        if: ${{ steps.release.outputs.prs_created == 'true' }}
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-      - name: Install prettier
-        if: ${{ steps.release.outputs.prs_created == 'true' }}
-        run: npm ci --ignore-scripts --prefer-offline
-      - name: Format CHANGELOG files
-        if: ${{ steps.release.outputs.prs_created == 'true' }}
-        env:
-          PR_JSON: ${{ steps.release.outputs.pr }}
-        run: |
-          set -euo pipefail
-
-          PR_BRANCH=$(echo "$PR_JSON" | jq -r '.headBranchName')
-          echo "Formatting CHANGELOG files on branch: $PR_BRANCH"
-          git fetch origin "$PR_BRANCH"
-          git checkout "$PR_BRANCH"
-
-          mapfile -t changelog_files < <(
-            git diff --name-only --diff-filter=ACMRT origin/main...HEAD \
-              | grep -E '(^|/)CHANGELOG\.md$' \
-              || true
-          )
-
-          if [[ "${#changelog_files[@]}" -eq 0 ]]; then
-            echo "No CHANGELOG files changed in release PR"
-            exit 0
-          fi
-
-          npx prettier --write "${changelog_files[@]}"
-
-          if git diff --quiet -- "${changelog_files[@]}"; then
-            echo "No formatting changes needed"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add "${changelog_files[@]}"
-            git commit -m "chore: format CHANGELOG files with prettier"
-            git push origin "$PR_BRANCH"
-          fi
-
   build:
-    if: needs.release-please.outputs.release_created
+    if: needs.release-please.outputs.release_created || needs.release-please.outputs.code_scan_action_release_created
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: release-please
@@ -119,7 +63,6 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      packages: write
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -131,8 +74,11 @@ jobs:
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
       - run: npm install -g npm@11.11.0
       - run: npm ci
+      # Empty NODE_AUTH_TOKEN so npm uses OIDC trusted publishing instead of the
+      # placeholder token actions/setup-node writes into .npmrc (actions/setup-node#1440).
       - run: npm publish --provenance --access public
         env:
+          NODE_AUTH_TOKEN: ''
           PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
 
   docker:
@@ -151,7 +97,9 @@ jobs:
     if: needs.release-please.outputs.code_scan_action_release_created == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: release-please
+    # Gate on `build` so root test failures block the mirror — code-scan-action
+    # imports shared source from ../../src, so broken root code means broken action.
+    needs: [release-please, build]
     permissions:
       contents: read
     steps:
@@ -229,8 +177,11 @@ jobs:
           export_dir="$RUNNER_TEMP/code-scan-action-export"
           mirror_dir="$RUNNER_TEMP/code-scan-action-mirror"
 
+          # Keep the app token out of the remote URL; inject via auth header instead.
           rm -rf "$mirror_dir"
-          git clone "https://x-access-token:${GH_TOKEN}@github.com/promptfoo/code-scan-action.git" "$mirror_dir"
+          git clone "https://github.com/promptfoo/code-scan-action.git" "$mirror_dir"
+          git -C "$mirror_dir" config --local "http.https://github.com/.extraheader" \
+            "AUTHORIZATION: bearer ${GH_TOKEN}"
           cd "$mirror_dir"
 
           git switch -C "$branch" origin/main

@@ -132,7 +132,7 @@ jobs:
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.11.0
 
       - name: run promptfoo eval
         id: eval
@@ -179,6 +179,7 @@ jobs:
             { runner: ubuntu-24.04-arm, platform: linux/arm64, digest-suffix: linux-arm64 },
           ]
     runs-on: ${{ matrix.platforms.runner }}
+    timeout-minutes: 60
     needs: [test]
     steps:
       - name: Checkout repository
@@ -236,6 +237,7 @@ jobs:
 
   merge-docker-digests:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [build-docker-and-push-digests]
     outputs:
       manifest_digest: ${{ steps.inspect.outputs.digest }}
@@ -298,6 +300,7 @@ jobs:
   attest-docker-image:
     name: 'Attest Multi-arch Image'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [merge-docker-digests]
     permissions:
       id-token: write
