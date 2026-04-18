@@ -580,7 +580,7 @@ describe('CloudflareGateway Provider', () => {
   });
 
   describe('Environment Variable Support', () => {
-    const originalEnv = process.env;
+    const originalEnv = { ...process.env };
 
     beforeEach(() => {
       vi.resetModules();
