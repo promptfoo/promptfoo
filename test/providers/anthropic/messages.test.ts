@@ -71,7 +71,7 @@ const mockMaybeLoadResponseFormatFromExternalFile =
   >;
 
 const TEST_API_KEY = 'test-api-key';
-const originalEnv = process.env;
+const originalEnv = { ...process.env };
 let mockMCPClient: Mocked<MCPClient> | undefined;
 
 const createProvider = (
