@@ -36,9 +36,8 @@ jobs:
         with:
           node-version: 'lts/*'
 
-      # Install prettier BEFORE checking out the PR branch, inside an isolated
-      # directory, and with an explicit registry so a PR-controlled .npmrc can
-      # neither redirect the install nor inject a malicious package.
+      # Isolated install before checkout so a PR-controlled .npmrc cannot
+      # redirect the registry or inject a package.
       - name: Install prettier (outside PR checkout)
         run: |
           set -euo pipefail
