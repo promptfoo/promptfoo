@@ -120,7 +120,7 @@ const allowedSkippedTests: AllowedSkip[] = [
 
 const legacyHoistedPersistentMockFiles = new Set<string>();
 
-const legacyDirectProcessEnvMutationFiles = new Set(['util/utils.test.ts']);
+const legacyDirectProcessEnvMutationFiles = new Set<string>();
 
 const hoistedMockPattern = /\bvi\.hoisted\s*\(/;
 const persistentMockMethods = [

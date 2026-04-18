@@ -293,10 +293,9 @@
         "src/app/src/**/*.test.ts",
         "src/app/src/**/*.test.tsx",
         "src/app/src/**/*.spec.ts",
-        "src/app/src/**/*.spec.tsx",
+        "src/app/src/**/*.spec.tsx"
         // Keep in sync with legacyDirectProcessEnvMutationFiles in test/test-hygiene.test.ts.
         // BEGIN direct process.env mutation legacy allowlist
-        "!!test/util/utils.test.ts"
         // END direct process.env mutation legacy allowlist
       ],
       "plugins": ["./tools/biome/no-direct-process-env-mutation.grit"]
