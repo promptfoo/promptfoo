@@ -121,7 +121,6 @@ const allowedSkippedTests: AllowedSkip[] = [
 const legacyHoistedPersistentMockFiles = new Set<string>();
 
 const legacyDirectProcessEnvMutationFiles = new Set([
-  'providers/cloudflare-ai.test.ts',
   'providers/cloudflare-gateway.test.ts',
   'providers/databricks.test.ts',
   'providers/defaults.test.ts',
