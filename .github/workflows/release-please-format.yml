@@ -32,24 +32,28 @@ jobs:
           app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
           private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
 
+      # persist-credentials: false keeps the app token out of .git/config so
+      # it can't be harvested by postinstall scripts during the prettier
+      # install below. Auth is reattached just-in-time to the final `git push`.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
 
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version-file: '.nvmrc'
 
-      # Pinned to the devDep range in package.json; skip `npm ci` on the whole
-      # monorepo since prettier is all we need here.
-      - run: npm install --no-save --no-audit --no-fund prettier@^3.8.1
+      # Skip full monorepo `npm ci` — prettier is all we need. `--ignore-scripts`
+      # blocks arbitrary postinstall code from running under the app token scope.
+      - run: npm install --no-save --no-audit --no-fund --ignore-scripts prettier@^3.8.1
 
       - name: Format CHANGELOG files
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
 
@@ -81,4 +85,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "${changelog_files[@]}"
           git commit -m "chore: format CHANGELOG files with prettier"
-          git push origin "HEAD:${HEAD_REF}"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: bearer ${GH_TOKEN}" \
+            push origin "HEAD:${HEAD_REF}"

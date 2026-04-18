@@ -177,11 +177,13 @@ jobs:
           export_dir="$RUNNER_TEMP/code-scan-action-export"
           mirror_dir="$RUNNER_TEMP/code-scan-action-mirror"
 
-          # Keep the app token out of the remote URL; inject via auth header instead.
+          # Keep the app token out of the remote URL and out of .git/config.
+          # Attach it per-command via `-c http.extraheader=...` so the token is
+          # scoped to the invocations that actually need auth.
+          auth_header="http.https://github.com/.extraheader=AUTHORIZATION: bearer ${GH_TOKEN}"
           rm -rf "$mirror_dir"
-          git clone "https://github.com/promptfoo/code-scan-action.git" "$mirror_dir"
-          git -C "$mirror_dir" config --local "http.https://github.com/.extraheader" \
-            "AUTHORIZATION: bearer ${GH_TOKEN}"
+          git -c "$auth_header" clone \
+            "https://github.com/promptfoo/code-scan-action.git" "$mirror_dir"
           cd "$mirror_dir"
 
           git switch -C "$branch" origin/main
@@ -202,7 +204,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "Release code-scan-action v${CODE_SCAN_ACTION_VERSION}"
-          git push --force-with-lease origin "HEAD:$branch"
+          git -c "$auth_header" push --force-with-lease origin "HEAD:$branch"
 
           pr_body=$(cat <<BODY
           Automated release mirror for \`@promptfoo/code-scan-action\` v${CODE_SCAN_ACTION_VERSION}.
