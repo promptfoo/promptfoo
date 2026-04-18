@@ -121,7 +121,6 @@ const allowedSkippedTests: AllowedSkip[] = [
 const legacyHoistedPersistentMockFiles = new Set<string>();
 
 const legacyDirectProcessEnvMutationFiles = new Set([
-  'sagemaker.test.ts',
   'telemetry.test.ts',
   'tracing/evaluatorTracing.test.ts',
   'util/apiHealth.test.ts',
