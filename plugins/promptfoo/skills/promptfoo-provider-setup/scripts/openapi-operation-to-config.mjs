@@ -524,7 +524,7 @@ function authFromScheme(scheme) {
   return undefined;
 }
 
-function inferAuth(document, operation) {
+function inferAuths(document, operation) {
   const components = asRecord(document.components || {}, 'components');
   const securitySchemes = asRecord(components.securitySchemes || {}, 'components.securitySchemes');
   const securityRequirements = Array.isArray(operation.security)
@@ -535,6 +535,7 @@ function inferAuth(document, operation) {
 
   for (const requirement of securityRequirements) {
     const requirementRecord = asRecord(requirement, 'security requirement');
+    const auths = [];
     for (const name of Object.keys(requirementRecord)) {
       if (!(name in securitySchemes)) {
         continue;
@@ -545,32 +546,38 @@ function inferAuth(document, operation) {
       );
       const auth = authFromScheme(scheme);
       if (auth) {
-        return auth;
+        auths.push(auth);
       }
+    }
+    if (auths.length > 0) {
+      return auths;
     }
   }
 
-  return undefined;
+  return [];
 }
 
 function authValue(tokenEnv, prefix) {
   return prefix === 'none' ? `{{env.${tokenEnv}}}` : `${prefix} {{env.${tokenEnv}}}`;
 }
 
-function authConfig(args, document, operation) {
-  const inferred = inferAuth(document, operation);
-  const prefix = args['auth-prefix'] ?? inferred?.prefix ?? 'Bearer';
+function authConfigs(args, document, operation) {
   if (args['auth-header']) {
+    const prefix = args['auth-prefix'] ?? 'Bearer';
     return {
-      location: 'header',
-      name: args['auth-header'],
-      value: authValue(args['token-env'], prefix),
+      auths: [{ location: 'header', name: args['auth-header'], prefix }],
     };
   }
+  const inferred = inferAuths(document, operation);
+  const auths =
+    inferred.length > 0
+      ? inferred
+      : [{ location: 'header', name: 'Authorization', prefix: 'Bearer' }];
   return {
-    location: inferred?.location || 'header',
-    name: inferred?.name || 'Authorization',
-    value: authValue(args['token-env'], prefix),
+    auths: auths.map((auth) => ({
+      ...auth,
+      prefix: args['auth-prefix'] ?? auth.prefix,
+    })),
   };
 }
 
@@ -694,13 +701,15 @@ for (const name of headerFields) {
 }
 const queryParams = Object.fromEntries(queryFields.map((name) => [name, inputTemplate(name)]));
 if (args['token-env']) {
-  const auth = authConfig(args, document, operation);
-  if (auth.location === 'query') {
-    queryParams[auth.name] = auth.value;
-  } else if (auth.location === 'cookie') {
-    headers.Cookie = `${auth.name}=${auth.value}`;
-  } else {
-    headers[auth.name] = auth.value;
+  for (const auth of authConfigs(args, document, operation).auths) {
+    const value = authValue(args['token-env'], auth.prefix);
+    if (auth.location === 'query') {
+      queryParams[auth.name] = value;
+    } else if (auth.location === 'cookie') {
+      headers.Cookie = `${auth.name}=${value}`;
+    } else {
+      headers[auth.name] = value;
+    }
   }
 }
 

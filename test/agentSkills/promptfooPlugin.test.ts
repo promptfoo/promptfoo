@@ -491,6 +491,49 @@ function openApiOAuthSecuritySpec() {
   };
 }
 
+function openApiConjunctiveAuthSpec() {
+  return {
+    openapi: '3.1.0',
+    components: {
+      securitySchemes: {
+        BearerToken: {
+          type: 'http',
+          scheme: 'bearer',
+        },
+        HeaderApiKey: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-API-Key',
+        },
+      },
+    },
+    paths: {
+      '/conjunctive-search': {
+        get: {
+          operationId: 'conjunctiveSearch',
+          security: [{ BearerToken: [], HeaderApiKey: [] }],
+          parameters: [{ name: 'q', in: 'query', schema: { type: 'string' } }],
+          responses: {
+            '200': {
+              description: 'Conjunctive auth response',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      answer: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
 function openApiAllOfSpec() {
   return {
     openapi: '3.1.0',
@@ -2924,6 +2967,46 @@ describe('promptfoo-provider-setup skill', () => {
       user_id: '{{user_id}}',
     });
 
+    const conjunctiveAuthTempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'promptfoo-openapi-conjunctive-auth-'),
+    );
+    try {
+      const conjunctiveAuthSpecPath = path.join(conjunctiveAuthTempDir, 'openapi.yaml');
+      fs.writeFileSync(conjunctiveAuthSpecPath, yaml.dump(openApiConjunctiveAuthSpec()));
+      const conjunctiveAuthOutput = execFileSync(
+        'node',
+        [
+          path.join(providerSkillRoot, 'scripts', 'openapi-operation-to-config.mjs'),
+          '--spec',
+          conjunctiveAuthSpecPath,
+          '--operation-id',
+          'conjunctiveSearch',
+          '--base-url-env',
+          'CONJUNCTIVE_API_BASE_URL',
+          '--token-env',
+          'CONJUNCTIVE_API_TOKEN',
+        ],
+        { cwd: repoRoot, encoding: 'utf8' },
+      );
+      const conjunctiveAuthGenerated = yaml.load(conjunctiveAuthOutput);
+      expectRecord(conjunctiveAuthGenerated, 'Generated OpenAPI conjunctive auth config');
+      const conjunctiveAuthProvider = (conjunctiveAuthGenerated.providers as unknown[])[0];
+      expectRecord(conjunctiveAuthProvider, 'Generated OpenAPI conjunctive auth provider');
+      expectRecord(
+        conjunctiveAuthProvider.config,
+        'Generated OpenAPI conjunctive auth provider config',
+      );
+      expect(conjunctiveAuthProvider.config.headers).toEqual({
+        Authorization: 'Bearer {{env.CONJUNCTIVE_API_TOKEN}}',
+        'X-API-Key': '{{env.CONJUNCTIVE_API_TOKEN}}',
+      });
+      expect(conjunctiveAuthProvider.config.queryParams).toEqual({
+        q: '{{prompt}}',
+      });
+    } finally {
+      fs.rmSync(conjunctiveAuthTempDir, { recursive: true, force: true });
+    }
+
     const oauthTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-oauth-'));
     try {
       const oauthSpecPath = path.join(oauthTempDir, 'openapi.yaml');
@@ -4561,6 +4644,52 @@ describe('promptfoo-redteam-setup skill', () => {
       q: 'User-controlled message or instruction to the target.',
       user_id: 'Caller identity or tenancy field: user_id.',
     });
+
+    const conjunctiveAuthTempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'promptfoo-openapi-conjunctive-auth-'),
+    );
+    try {
+      const conjunctiveAuthSpecPath = path.join(conjunctiveAuthTempDir, 'openapi.yaml');
+      fs.writeFileSync(conjunctiveAuthSpecPath, yaml.dump(openApiConjunctiveAuthSpec()));
+      const conjunctiveAuthGenerated = yaml.load(
+        execFileSync(
+          'node',
+          [
+            path.join(redteamSetupSkillRoot, 'scripts', 'openapi-operation-to-redteam-config.mjs'),
+            '--spec',
+            conjunctiveAuthSpecPath,
+            '--operation-id',
+            'conjunctiveSearch',
+            '--base-url-env',
+            'CONJUNCTIVE_API_BASE_URL',
+            '--token-env',
+            'CONJUNCTIVE_API_TOKEN',
+            '--generator-provider',
+            'file://test/fixtures/agent-skills/redteam-setup-live-http/openapi-redteam-generator.mjs',
+          ],
+          { cwd: repoRoot, encoding: 'utf8' },
+        ),
+      );
+      expectRecord(conjunctiveAuthGenerated, 'Generated OpenAPI conjunctive auth redteam config');
+      const [conjunctiveAuthTarget] = conjunctiveAuthGenerated.targets as unknown[];
+      expectRecord(conjunctiveAuthTarget, 'Generated OpenAPI conjunctive auth redteam target');
+      expectRecord(
+        conjunctiveAuthTarget.config,
+        'Generated OpenAPI conjunctive auth redteam target config',
+      );
+      expect(conjunctiveAuthTarget.config.headers).toEqual({
+        Authorization: 'Bearer {{env.CONJUNCTIVE_API_TOKEN}}',
+        'X-API-Key': '{{env.CONJUNCTIVE_API_TOKEN}}',
+      });
+      expect(conjunctiveAuthTarget.config.queryParams).toEqual({
+        q: '{{q}}',
+      });
+      expect(conjunctiveAuthTarget.inputs).toEqual({
+        q: 'User-controlled message or instruction to the target.',
+      });
+    } finally {
+      fs.rmSync(conjunctiveAuthTempDir, { recursive: true, force: true });
+    }
 
     const oauthTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-oauth-'));
     try {
