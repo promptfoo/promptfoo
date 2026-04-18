@@ -91,7 +91,7 @@ function getAssertionType(result: GradingResult): string {
   );
 }
 
-function stringifyAssertionValue(value: unknown): string {
+export function stringifyAssertionValue(value: unknown): string {
   return typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
 }
 

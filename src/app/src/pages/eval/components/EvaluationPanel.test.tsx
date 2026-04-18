@@ -70,7 +70,7 @@ describe('EvaluationPanel', () => {
           value: { name: '{{name}}' },
         },
         metadata: {
-          renderedAssertionValue: { name: 'hello world' },
+          renderedAssertionValue: { name: 'hello world' } as unknown as string,
         },
       },
     ];
