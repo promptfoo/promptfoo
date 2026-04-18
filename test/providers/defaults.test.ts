@@ -68,7 +68,7 @@ class MockProvider implements ApiProvider {
 }
 
 describe('Provider override tests', () => {
-  const originalEnv = process.env;
+  const originalEnv = { ...process.env };
 
   beforeEach(() => {
     mockProcessEnv({ ...originalEnv }, { clear: true });
