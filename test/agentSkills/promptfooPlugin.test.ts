@@ -1408,6 +1408,20 @@ function openApiScalarExampleRequestSpec() {
           responses: response,
         },
       },
+      '/json-scalar-schema-chat': {
+        post: {
+          operationId: 'jsonScalarSchemaChat',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { type: 'string' },
+              },
+            },
+          },
+          responses: response,
+        },
+      },
       '/text-scalar-chat': {
         post: {
           operationId: 'textScalarChat',
@@ -3861,6 +3875,7 @@ describe('promptfoo-provider-setup skill', () => {
       fs.writeFileSync(specPath, yaml.dump(openApiScalarExampleRequestSpec()));
       for (const [operationId, contentType] of [
         ['jsonScalarChat', 'application/json'],
+        ['jsonScalarSchemaChat', 'application/json'],
         ['textScalarChat', 'text/plain'],
       ]) {
         const generated = yaml.load(
@@ -5749,6 +5764,7 @@ describe('promptfoo-redteam-setup skill', () => {
       fs.writeFileSync(specPath, yaml.dump(openApiScalarExampleRequestSpec()));
       for (const [operationId, contentType] of [
         ['jsonScalarChat', 'application/json'],
+        ['jsonScalarSchemaChat', 'application/json'],
         ['textScalarChat', 'text/plain'],
       ]) {
         const generated = yaml.load(

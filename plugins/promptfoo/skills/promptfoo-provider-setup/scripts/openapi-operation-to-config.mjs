@@ -214,6 +214,19 @@ function schemaType(schema) {
   return undefined;
 }
 
+function isScalarSchema(document, schema) {
+  if (!schema || typeof schema !== 'object') {
+    return false;
+  }
+  const resolved = asRecord(resolveRef(document, schema), 'schema');
+  const variant = schemaVariant(resolved);
+  if (variant) {
+    return isScalarSchema(document, variant);
+  }
+  const type = schemaType(resolved);
+  return ['boolean', 'integer', 'number', 'string'].includes(type);
+}
+
 function schemaArrayItems(document, schema) {
   if (!schema || typeof schema !== 'object') {
     return undefined;
@@ -671,13 +684,23 @@ const requestBodyArrayItemIsObject = requestArrayItemSchema
   ? requestArrayItemIsObject
   : requestExampleArrayItemIsObject;
 const effectiveRequestSchema = requestArrayItemSchema || requestSchema;
-const requestBodyIsScalar = !effectiveRequestSchema && requestExampleIsScalar;
+const requestBodyIsScalar =
+  (!effectiveRequestSchema && requestExampleIsScalar) ||
+  Boolean(
+    effectiveRequestSchema &&
+      !requestBodyIsArray &&
+      !requestIsFormUrlEncoded &&
+      !requestIsMultipart &&
+      isScalarSchema(document, effectiveRequestSchema),
+  );
 const requestProperties =
   requestArrayItemSchema && !requestArrayItemIsObject
     ? { message: requestArrayItemSchema }
-    : effectiveRequestSchema
-      ? schemaProperties(document, effectiveRequestSchema)
-      : {};
+    : requestBodyIsScalar && effectiveRequestSchema
+      ? { message: effectiveRequestSchema }
+      : effectiveRequestSchema
+        ? schemaProperties(document, effectiveRequestSchema)
+        : {};
 const requestExampleFields = isPlainRecord(requestExample)
   ? requestExample
   : Array.isArray(requestExample) && isPlainRecord(requestExample[0])
@@ -688,7 +711,7 @@ const requestExampleFields = isPlainRecord(requestExample)
         ? { message: requestExample }
         : {};
 const bodyFields = effectiveRequestSchema
-  ? (requestIsText || (requestArrayItemSchema && !requestArrayItemIsObject)
+  ? (requestIsText || requestBodyIsScalar || (requestArrayItemSchema && !requestArrayItemIsObject)
       ? ['message']
       : orderedProperties(document, effectiveRequestSchema)
     ).filter(
