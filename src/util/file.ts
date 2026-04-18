@@ -259,12 +259,18 @@ export function maybeLoadConfigFromExternalFile(
       const isVarsField = key === 'vars';
 
       const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
-      Object.defineProperty(result, key, {
-        value: maybeLoadConfigFromExternalFile(config[key], childContext),
-        enumerable: true,
-        configurable: true,
-        writable: true,
-      });
+      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
+
+      if (key === '__proto__') {
+        Object.defineProperty(result, key, {
+          value,
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
+      } else {
+        result[key] = value;
+      }
     }
     return result;
   }
