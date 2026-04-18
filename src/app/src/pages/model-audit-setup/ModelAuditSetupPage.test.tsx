@@ -266,4 +266,292 @@ describe('ModelAuditSetupPage', () => {
     });
     expect(screen.getByTestId('scanner-error')).toBeEmptyDOMElement();
   });
+
+  describe('loadScannerCatalog', () => {
+    it('should handle API error response with error body', async () => {
+      mockCallApi.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({ error: 'API failure' }),
+      } as Response);
+      mockUseConfigStore.mockReturnValue({
+        ...getDefaultConfigState(),
+        showOptionsDialog: true,
+      } as any);
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scanners');
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('scanner-error')).toHaveTextContent('API failure');
+      });
+      expect(screen.getByTestId('scanner-count')).toHaveTextContent('0');
+    });
+
+    it('should handle API error response without error body', async () => {
+      mockCallApi.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.reject(new Error('Invalid JSON')),
+      } as Response);
+      mockUseConfigStore.mockReturnValue({
+        ...getDefaultConfigState(),
+        showOptionsDialog: true,
+      } as any);
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scanners');
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('scanner-error')).toHaveTextContent(
+          'Unable to load scanner catalog',
+        );
+      });
+      expect(screen.getByTestId('scanner-count')).toHaveTextContent('0');
+    });
+
+    it('should handle network error', async () => {
+      mockCallApi.mockRejectedValueOnce(new Error('Network failure'));
+      mockUseConfigStore.mockReturnValue({
+        ...getDefaultConfigState(),
+        showOptionsDialog: true,
+      } as any);
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scanners');
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('scanner-error')).toHaveTextContent('Network failure');
+      });
+      expect(screen.getByTestId('scanner-count')).toHaveTextContent('0');
+    });
+
+    it('should handle non-Error exceptions', async () => {
+      mockCallApi.mockRejectedValueOnce('String error');
+      mockUseConfigStore.mockReturnValue({
+        ...getDefaultConfigState(),
+        showOptionsDialog: true,
+      } as any);
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scanners');
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('scanner-error')).toHaveTextContent('Unable to load scanners');
+      });
+      expect(screen.getByTestId('scanner-count')).toHaveTextContent('0');
+    });
+
+    it('should handle missing scanners array in response', async () => {
+      mockCallApi.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      } as Response);
+      mockUseConfigStore.mockReturnValue({
+        ...getDefaultConfigState(),
+        showOptionsDialog: true,
+      } as any);
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scanners');
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('scanner-count')).toHaveTextContent('0');
+      });
+      expect(screen.getByTestId('scanner-error')).toBeEmptyDOMElement();
+    });
+
+    it('should handle non-array scanners in response', async () => {
+      mockCallApi.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ scanners: 'not-an-array' }),
+      } as Response);
+      mockUseConfigStore.mockReturnValue({
+        ...getDefaultConfigState(),
+        showOptionsDialog: true,
+      } as any);
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scanners');
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('scanner-count')).toHaveTextContent('0');
+      });
+      expect(screen.getByTestId('scanner-error')).toBeEmptyDOMElement();
+    });
+
+    it('should not load scanners when dialog is closed', async () => {
+      mockUseConfigStore.mockReturnValue({
+        ...getDefaultConfigState(),
+        showOptionsDialog: false,
+      } as any);
+
+      renderComponent();
+
+      // Wait a bit to ensure no API call is made
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockCallApi).not.toHaveBeenCalledWith('/model-audit/scanners');
+    });
+
+    it('should show loading state before scanners load', async () => {
+      // Create a promise that we can control
+      let resolveApi: (value: any) => void;
+      const apiPromise = new Promise((resolve) => {
+        resolveApi = resolve;
+      });
+
+      mockCallApi.mockReturnValue(apiPromise as any);
+      mockUseConfigStore.mockReturnValue({
+        ...getDefaultConfigState(),
+        showOptionsDialog: true,
+      } as any);
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('scanner-loading')).toHaveTextContent('true');
+      });
+
+      // Resolve the API call
+      resolveApi!({
+        ok: true,
+        json: () => Promise.resolve({ scanners: [] }),
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('scanner-loading')).toHaveTextContent('false');
+      });
+    });
+
+    it('should cancel loading if dialog is closed before API response', async () => {
+      // Create a promise that resolves after a delay
+      const delayedResponse = new Promise((resolve) => {
+        setTimeout(() => {
+          resolve({
+            ok: true,
+            json: () => Promise.resolve({ scanners: [{ id: 'test' }] }),
+          });
+        }, 100);
+      });
+
+      mockCallApi.mockReturnValue(delayedResponse as any);
+
+      // Start with dialog open
+      const { rerender } = render(
+        <TooltipProvider delayDuration={0}>
+          <MemoryRouter>
+            <ModelAuditSetupPage />
+          </MemoryRouter>
+        </TooltipProvider>,
+      );
+
+      mockUseConfigStore.mockReturnValue({
+        ...getDefaultConfigState(),
+        showOptionsDialog: true,
+      } as any);
+
+      rerender(
+        <TooltipProvider delayDuration={0}>
+          <MemoryRouter>
+            <ModelAuditSetupPage />
+          </MemoryRouter>
+        </TooltipProvider>,
+      );
+
+      await waitFor(() => {
+        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scanners');
+      });
+
+      // Close the dialog before response arrives
+      mockUseConfigStore.mockReturnValue({
+        ...getDefaultConfigState(),
+        showOptionsDialog: false,
+      } as any);
+
+      rerender(
+        <TooltipProvider delayDuration={0}>
+          <MemoryRouter>
+            <ModelAuditSetupPage />
+          </MemoryRouter>
+        </TooltipProvider>,
+      );
+
+      // Wait for the API response to arrive
+      await delayedResponse;
+
+      // Give it time to potentially update state (which it shouldn't due to cancellation)
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Scanner count should remain at initial value since update was cancelled
+      expect(screen.getByTestId('scanner-count')).toHaveTextContent('0');
+    });
+
+    it('should clear previous error when reloading', async () => {
+      // First load with error
+      mockCallApi.mockRejectedValueOnce(new Error('First error'));
+      mockUseConfigStore.mockReturnValue({
+        ...getDefaultConfigState(),
+        showOptionsDialog: true,
+      } as any);
+
+      const { rerender } = renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('scanner-error')).toHaveTextContent('First error');
+      });
+
+      // Close dialog
+      mockUseConfigStore.mockReturnValue({
+        ...getDefaultConfigState(),
+        showOptionsDialog: false,
+      } as any);
+
+      rerender(
+        <TooltipProvider delayDuration={0}>
+          <MemoryRouter>
+            <ModelAuditSetupPage />
+          </MemoryRouter>
+        </TooltipProvider>,
+      );
+
+      // Reopen dialog with successful load
+      mockCallApi.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ scanners: [] }),
+      } as Response);
+
+      mockUseConfigStore.mockReturnValue({
+        ...getDefaultConfigState(),
+        showOptionsDialog: true,
+      } as any);
+
+      rerender(
+        <TooltipProvider delayDuration={0}>
+          <MemoryRouter>
+            <ModelAuditSetupPage />
+          </MemoryRouter>
+        </TooltipProvider>,
+      );
+
+      // Error should be cleared (loading state clears it)
+      await waitFor(() => {
+        expect(screen.getByTestId('scanner-loading')).toHaveTextContent('true');
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('scanner-error')).toBeEmptyDOMElement();
+      });
+    });
+  });
 });
