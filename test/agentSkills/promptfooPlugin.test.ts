@@ -568,6 +568,72 @@ function openApiConjunctiveAuthSpec() {
           },
         },
       },
+      '/explicit-no-auth-search': {
+        get: {
+          operationId: 'explicitNoAuthSearch',
+          security: [],
+          parameters: [{ name: 'q', in: 'query', schema: { type: 'string' } }],
+          responses: {
+            '200': {
+              description: 'Explicit no auth response',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      answer: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/empty-requirement-search': {
+        get: {
+          operationId: 'emptyRequirementSearch',
+          security: [{}],
+          parameters: [{ name: 'q', in: 'query', schema: { type: 'string' } }],
+          responses: {
+            '200': {
+              description: 'Empty security requirement response',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      answer: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/unsupported-auth-search': {
+        get: {
+          operationId: 'unsupportedAuthSearch',
+          security: [{ UnsupportedMtls: [] }],
+          parameters: [{ name: 'q', in: 'query', schema: { type: 'string' } }],
+          responses: {
+            '200': {
+              description: 'Unsupported auth response',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      answer: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     },
   };
 }
@@ -3079,6 +3145,37 @@ describe('promptfoo-provider-setup skill', () => {
         Authorization: 'Bearer {{env.CONJUNCTIVE_API_TOKEN}}',
         'X-API-Key': '{{env.CONJUNCTIVE_API_TOKEN}}',
       });
+
+      for (const operationId of [
+        'explicitNoAuthSearch',
+        'emptyRequirementSearch',
+        'unsupportedAuthSearch',
+      ]) {
+        const noAuthOutput = execFileSync(
+          'node',
+          [
+            path.join(providerSkillRoot, 'scripts', 'openapi-operation-to-config.mjs'),
+            '--spec',
+            conjunctiveAuthSpecPath,
+            '--operation-id',
+            operationId,
+            '--base-url-env',
+            'CONJUNCTIVE_API_BASE_URL',
+            '--token-env',
+            'CONJUNCTIVE_API_TOKEN',
+          ],
+          { cwd: repoRoot, encoding: 'utf8' },
+        );
+        const noAuthGenerated = yaml.load(noAuthOutput);
+        expectRecord(noAuthGenerated, `Generated OpenAPI ${operationId} config`);
+        const noAuthProvider = (noAuthGenerated.providers as unknown[])[0];
+        expectRecord(noAuthProvider, `Generated OpenAPI ${operationId} provider`);
+        expectRecord(noAuthProvider.config, `Generated OpenAPI ${operationId} provider config`);
+        expect(noAuthProvider.config.headers).toBeUndefined();
+        expect(noAuthProvider.config.queryParams).toEqual({
+          q: '{{prompt}}',
+        });
+      }
     } finally {
       fs.rmSync(conjunctiveAuthTempDir, { recursive: true, force: true });
     }
@@ -4802,6 +4899,47 @@ describe('promptfoo-redteam-setup skill', () => {
         Authorization: 'Bearer {{env.CONJUNCTIVE_API_TOKEN}}',
         'X-API-Key': '{{env.CONJUNCTIVE_API_TOKEN}}',
       });
+
+      for (const operationId of [
+        'explicitNoAuthSearch',
+        'emptyRequirementSearch',
+        'unsupportedAuthSearch',
+      ]) {
+        const noAuthGenerated = yaml.load(
+          execFileSync(
+            'node',
+            [
+              path.join(
+                redteamSetupSkillRoot,
+                'scripts',
+                'openapi-operation-to-redteam-config.mjs',
+              ),
+              '--spec',
+              conjunctiveAuthSpecPath,
+              '--operation-id',
+              operationId,
+              '--base-url-env',
+              'CONJUNCTIVE_API_BASE_URL',
+              '--token-env',
+              'CONJUNCTIVE_API_TOKEN',
+              '--generator-provider',
+              'file://test/fixtures/agent-skills/redteam-setup-live-http/openapi-redteam-generator.mjs',
+            ],
+            { cwd: repoRoot, encoding: 'utf8' },
+          ),
+        );
+        expectRecord(noAuthGenerated, `Generated OpenAPI ${operationId} redteam config`);
+        const [noAuthTarget] = noAuthGenerated.targets as unknown[];
+        expectRecord(noAuthTarget, `Generated OpenAPI ${operationId} redteam target`);
+        expectRecord(noAuthTarget.config, `Generated OpenAPI ${operationId} redteam target config`);
+        expect(noAuthTarget.config.headers).toBeUndefined();
+        expect(noAuthTarget.config.queryParams).toEqual({
+          q: '{{q}}',
+        });
+        expect(noAuthTarget.inputs).toEqual({
+          q: 'User-controlled message or instruction to the target.',
+        });
+      }
     } finally {
       fs.rmSync(conjunctiveAuthTempDir, { recursive: true, force: true });
     }

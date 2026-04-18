@@ -557,15 +557,27 @@ function authFromScheme(scheme) {
 function inferAuths(document, operation) {
   const components = asRecord(document.components || {}, 'components');
   const securitySchemes = asRecord(components.securitySchemes || {}, 'components.securitySchemes');
-  const securityRequirements = Array.isArray(operation.security)
+  const hasOperationSecurity = Array.isArray(operation.security);
+  const hasDocumentSecurity = Array.isArray(document.security);
+  const securityRequirements = hasOperationSecurity
     ? operation.security
-    : Array.isArray(document.security)
+    : hasDocumentSecurity
       ? document.security
-      : [];
+      : undefined;
+
+  if (!securityRequirements) {
+    return undefined;
+  }
+  if (securityRequirements.length === 0) {
+    return [];
+  }
 
   for (const requirement of securityRequirements) {
     const requirementRecord = asRecord(requirement, 'security requirement');
     const requirementNames = Object.keys(requirementRecord);
+    if (requirementNames.length === 0) {
+      return [];
+    }
     const auths = [];
     for (const name of requirementNames) {
       if (!(name in securitySchemes)) {
@@ -583,7 +595,7 @@ function inferAuths(document, operation) {
       }
       auths.push(auth);
     }
-    if (auths.length === requirementNames.length && auths.length > 0) {
+    if (auths.length === requirementNames.length) {
       return auths;
     }
   }
@@ -609,9 +621,9 @@ function authConfigs(args, document, operation) {
   }
   const inferred = inferAuths(document, operation);
   const auths =
-    inferred.length > 0
-      ? inferred
-      : [{ location: 'header', name: 'Authorization', prefix: 'Bearer' }];
+    inferred === undefined
+      ? [{ location: 'header', name: 'Authorization', prefix: 'Bearer' }]
+      : inferred;
   return {
     auths: auths.map((auth) => ({
       ...auth,
