@@ -143,6 +143,7 @@ describe('Provider override tests', () => {
 
   it('should use AzureModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is set', async () => {
     mockProcessEnv({ AZURE_CONTENT_SAFETY_ENDPOINT: 'https://test-endpoint.com' });
+    mockProcessEnv({ AZURE_API_KEY: 'test-api-key' });
 
     const providers = await getDefaultProviders();
 
@@ -161,6 +162,7 @@ describe('Provider override tests', () => {
 
   it('should use AzureModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is provided via env overrides', async () => {
     const envOverrides: EnvOverrides = {
+      AZURE_API_KEY: 'test-api-key',
       AZURE_CONTENT_SAFETY_ENDPOINT: 'https://test-endpoint.com',
     } as EnvOverrides;
 
@@ -174,6 +176,7 @@ describe('Provider override tests', () => {
 
   it('should use Azure moderation provider with custom configuration', async () => {
     const envOverrides: EnvOverrides = {
+      AZURE_API_KEY: 'test-api-key',
       AZURE_CONTENT_SAFETY_ENDPOINT: 'https://test-endpoint.com',
       AZURE_CONTENT_SAFETY_API_KEY: 'test-api-key',
       AZURE_CONTENT_SAFETY_API_VERSION: '2024-01-01',
