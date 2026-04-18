@@ -121,7 +121,6 @@ const allowedSkippedTests: AllowedSkip[] = [
 const legacyHoistedPersistentMockFiles = new Set<string>();
 
 const legacyDirectProcessEnvMutationFiles = new Set([
-  'providers/elevenlabs/tts/index.test.ts',
   'providers/google/ai.studio.test.ts',
   'providers/google/auth.test.ts',
   'providers/google/gemini-image.test.ts',
