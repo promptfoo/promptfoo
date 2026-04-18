@@ -396,7 +396,9 @@ describe('tokenUsageCompat', () => {
 
       const result = await getTokenUsageFromEvaluation('eval-456');
 
-      expect(mockTraceStore.getTracesByEvaluation).toHaveBeenCalledWith('eval-456');
+      expect(mockTraceStore.getTracesByEvaluation).toHaveBeenCalledWith('eval-456', {
+        sanitizeAttributes: false,
+      });
       expect(result.prompt).toBe(300);
       expect(result.completion).toBe(150);
       expect(result.total).toBe(450);
