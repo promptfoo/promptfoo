@@ -173,11 +173,14 @@ describe('Model Audit Routes', () => {
       expect(response.body).toHaveProperty('total_checks', 5);
     });
 
-    it('should pass scanner selection options to modelaudit', async () => {
+    it('should pass and persist scanner selection options', async () => {
       mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
 
       const testFilePath = path.join(os.tmpdir(), 'test-model-audit-scanner-selection.pkl');
       fs.writeFileSync(testFilePath, 'test data');
+      const createSpy = vi.spyOn(ModelAudit, 'create').mockResolvedValue({
+        id: 'scan-scanner-selection',
+      } as Awaited<ReturnType<typeof ModelAudit.create>>);
 
       const mockScanOutput = JSON.stringify({
         total_checks: 1,
@@ -199,31 +202,50 @@ describe('Model Audit Routes', () => {
         ),
       );
 
-      const response = await request(app)
-        .post('/api/model-audit/scan')
-        .send({
-          paths: [testFilePath],
-          options: {
-            scanners: ['pickle,tf_savedmodel'],
-            excludeScanner: ['weight_distribution'],
-            persist: false,
-          },
-        });
+      try {
+        const response = await request(app)
+          .post('/api/model-audit/scan')
+          .send({
+            paths: [testFilePath],
+            options: {
+              scanners: ['pickle,tf_savedmodel'],
+              excludeScanner: ['weight_distribution'],
+            },
+          });
 
-      fs.unlinkSync(testFilePath);
-
-      expect(response.status).toBe(200);
-      expect(mockedSpawn).toHaveBeenCalledWith(
-        'modelaudit',
-        expect.arrayContaining([
-          'scan',
-          testFilePath,
-          '--scanners',
-          'pickle,tf_savedmodel',
-          '--exclude-scanner',
-          'weight_distribution',
-        ]),
-      );
+        expect(response.status).toBe(200);
+        expect(response.body.auditId).toBe('scan-scanner-selection');
+        expect(response.body.persisted).toBe(true);
+        expect(mockedSpawn).toHaveBeenCalledWith(
+          'modelaudit',
+          expect.arrayContaining([
+            'scan',
+            testFilePath,
+            '--scanners',
+            'pickle,tf_savedmodel',
+            '--exclude-scanner',
+            'weight_distribution',
+          ]),
+          expect.objectContaining({
+            env: expect.objectContaining({
+              PROMPTFOO_DELEGATED: 'true',
+            }),
+          }),
+        );
+        expect(createSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              options: expect.objectContaining({
+                scanners: ['pickle,tf_savedmodel'],
+                excludeScanner: ['weight_distribution'],
+              }),
+            }),
+          }),
+        );
+      } finally {
+        createSpy.mockRestore();
+        fs.unlinkSync(testFilePath);
+      }
     });
 
     it('should return 400 when no paths provided', async () => {

@@ -264,6 +264,24 @@ function hasScannerSelectionOptions(options: ScanOptions): boolean {
   return Boolean(options.scanners?.length || options.excludeScanner?.length);
 }
 
+function hasScannerSelectionValue(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function hasPersistedScannerSelection(metadata: ModelAudit['metadata']): boolean {
+  const options = metadata?.options;
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    return false;
+  }
+
+  return (
+    hasScannerSelectionValue(options.scanners) || hasScannerSelectionValue(options.excludeScanner)
+  );
+}
+
 /**
  * Parse CLI options through Zod, logging validation errors to the CLI.
  * Returns null when validation fails (and sets process.exitCode to 1).
@@ -342,7 +360,12 @@ async function checkExistingScan(
 
     if (hasScannerSelectionOptions(options)) {
       logger.debug('Re-scanning with scanner selection options');
-      return { shouldSkip: false, existingAudit: null };
+      return { shouldSkip: false, existingAudit: existing };
+    }
+
+    if (hasPersistedScannerSelection(existing.metadata)) {
+      logger.debug('Re-scanning because cached revision used scanner selection options');
+      return { shouldSkip: false, existingAudit: existing };
     }
 
     // Force flag - re-scan but update existing record

@@ -23,6 +23,13 @@ const LIST_SCANNERS_ARGS = parseModelAuditArgs([], {
   format: 'json',
 }).args;
 
+function getModelAuditDelegationEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    PROMPTFOO_DELEGATED: 'true',
+  };
+}
+
 interface SpawnCaptureOptions {
   /** Abort signal to terminate the child process (e.g. on client disconnect). */
   signal?: AbortSignal;
@@ -38,10 +45,7 @@ function spawnModelAuditCapture(
 }> {
   return new Promise((resolve, reject) => {
     const child = spawn('modelaudit', args, {
-      env: {
-        ...process.env,
-        PROMPTFOO_DELEGATED: 'true',
-      },
+      env: getModelAuditDelegationEnv(),
     });
     let stdout = '';
     let stderr = '';
@@ -261,7 +265,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     });
 
     // Run the scan
-    const modelAudit = spawn('modelaudit', args);
+    const modelAudit = spawn('modelaudit', args, { env: getModelAuditDelegationEnv() });
     let stdout = '';
     let stderr = '';
     let responded = false; // Prevent double-response
@@ -491,9 +495,20 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
                 options: {
                   blacklist: options.blacklist,
                   timeout: options.timeout,
+                  maxSize: options.maxSize,
                   maxFileSize: options.maxFileSize,
                   maxTotalSize: options.maxTotalSize,
                   verbose: options.verbose,
+                  format: options.format,
+                  strict: options.strict,
+                  dryRun: options.dryRun,
+                  cache: options.cache,
+                  quiet: options.quiet,
+                  progress: options.progress,
+                  sbom: options.sbom,
+                  output: options.output,
+                  scanners: options.scanners,
+                  excludeScanner: options.excludeScanner,
                 },
               },
             });
