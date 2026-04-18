@@ -1935,7 +1935,7 @@ describe('promptfoo Codex plugin package', () => {
       [...pythonReferences.values()]
         .map(
           ({ absolutePath, functionName }) =>
-            `${path.relative(fixtureRoot, absolutePath)}:${functionName}`,
+            `${toPosixPath(path.relative(fixtureRoot, absolutePath))}:${functionName}`,
         )
         .sort(),
     ).toEqual([
