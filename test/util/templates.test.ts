@@ -304,7 +304,7 @@ describe('analyzeTemplateReference', () => {
 });
 
 describe('getNunjucksEngine', () => {
-  const originalEnv = process.env;
+  const originalEnv = { ...process.env };
 
   beforeEach(() => {
     vi.resetModules();
