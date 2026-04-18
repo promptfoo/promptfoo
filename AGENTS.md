@@ -10,6 +10,8 @@ Promptfoo is an open-source framework for evaluating and testing LLM application
 
 | Directory        | Purpose                       | Local Docs                |
 | ---------------- | ----------------------------- | ------------------------- |
+| `.agents/`       | Codex marketplace metadata    | `.agents/AGENTS.md`       |
+| `plugins/`       | Agent plugin bundles          | `plugins/AGENTS.md`       |
 | `src/`           | Core library                  | -                         |
 | `src/app/`       | Web UI (React 19/Vite/MUI v7) | `src/app/AGENTS.md`       |
 | `src/commands/`  | CLI commands                  | `src/commands/AGENTS.md`  |
