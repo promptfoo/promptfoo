@@ -4590,6 +4590,118 @@ describe('promptfoo-provider-setup skill', () => {
       'Circular OpenAPI ref detected',
     );
   });
+
+  it('treats OpenAPI example: null as missing so schema-typed samples fall through', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-null-example-'));
+    const specPath = path.join(tempDir, 'openapi.yaml');
+    try {
+      fs.writeFileSync(
+        specPath,
+        yaml.dump({
+          openapi: '3.1.0',
+          paths: {
+            '/null-example-ask': {
+              post: {
+                operationId: 'nullExampleAsk',
+                requestBody: {
+                  required: true,
+                  content: {
+                    'application/json': {
+                      schema: {
+                        type: 'object',
+                        required: ['tenant_id', 'message'],
+                        properties: {
+                          tenant_id: { type: 'string', example: null },
+                          message: { type: 'string' },
+                        },
+                      },
+                    },
+                  },
+                },
+                responses: {
+                  '200': {
+                    description: 'Null example response',
+                    content: {
+                      'application/json': {
+                        schema: {
+                          type: 'object',
+                          properties: { output: { type: 'string' } },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      );
+      const generated = yaml.load(
+        execFileSync(
+          'node',
+          [
+            path.join(providerSkillRoot, 'scripts', 'openapi-operation-to-config.mjs'),
+            '--spec',
+            specPath,
+            '--operation-id',
+            'nullExampleAsk',
+            '--base-url-env',
+            'NULL_EXAMPLE_API_BASE_URL',
+          ],
+          { cwd: repoRoot, encoding: 'utf8' },
+        ),
+      );
+      expectRecord(generated, 'Generated null-example provider config');
+      const [test] = generated.tests as unknown[];
+      expectRecord(test, 'Generated null-example provider test');
+      expect(test.vars).toEqual({
+        tenant_id: 'sample-tenant-id',
+        message: 'Say exactly PONG.',
+      });
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps --auth-prefix from corrupting conjunctive API-key auths', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-auth-prefix-'));
+    const specPath = path.join(tempDir, 'openapi.yaml');
+    try {
+      fs.writeFileSync(specPath, yaml.dump(openApiConjunctiveAuthSpec()));
+      const generated = yaml.load(
+        execFileSync(
+          'node',
+          [
+            path.join(providerSkillRoot, 'scripts', 'openapi-operation-to-config.mjs'),
+            '--spec',
+            specPath,
+            '--operation-id',
+            'conjunctiveSearch',
+            '--base-url-env',
+            'CONJUNCTIVE_API_BASE_URL',
+            '--token-env',
+            'CONJUNCTIVE_API_TOKEN',
+            '--auth-prefix',
+            'Token',
+          ],
+          { cwd: repoRoot, encoding: 'utf8' },
+        ),
+      );
+      expectRecord(generated, 'Generated auth-prefix override config');
+      const provider = (generated.providers as unknown[])[0];
+      expectRecord(provider, 'Generated auth-prefix override provider');
+      expectRecord(provider.config, 'Generated auth-prefix override provider config');
+      // Bearer prefix is overridden; the X-API-Key and Cookie auths (prefix 'none') are untouched.
+      expect(provider.config.headers).toEqual({
+        Authorization: 'Token {{env.CONJUNCTIVE_API_TOKEN}}',
+        'X-API-Key': '{{env.CONJUNCTIVE_API_TOKEN}}',
+        Cookie:
+          'session_id={{env.CONJUNCTIVE_API_TOKEN}}; csrf_token={{env.CONJUNCTIVE_API_TOKEN}}',
+      });
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('promptfoo-redteam-setup skill', () => {
@@ -5004,6 +5116,7 @@ describe('promptfoo-redteam-setup skill', () => {
     expect(generated.redteam.plugins).toEqual([
       expect.objectContaining({ id: 'policy', numTests: 1 }),
       { id: 'rbac', numTests: 1 },
+      { id: 'bola', numTests: 1 },
     ]);
     const [policyPlugin] = generated.redteam.plugins as unknown[];
     expectRecord(policyPlugin, 'Generated OpenAPI redteam policy plugin');
@@ -5465,6 +5578,7 @@ describe('promptfoo-redteam-setup skill', () => {
         },
       }),
       { id: 'rbac', numTests: 3 },
+      { id: 'bola', numTests: 3 },
     ]);
   });
 
@@ -6247,6 +6361,7 @@ describe('promptfoo-redteam-setup skill', () => {
       expect(generated.redteam.plugins).toEqual([
         expect.objectContaining({ id: 'policy', numTests: 1 }),
         { id: 'rbac', numTests: 1 },
+        { id: 'bola', numTests: 1 },
       ]);
       const [policyPlugin] = generated.redteam.plugins as unknown[];
       expectRecord(policyPlugin, 'Generated camelCase policy plugin');
@@ -6612,6 +6727,239 @@ describe('promptfoo-redteam-setup skill', () => {
       },
       'Circular OpenAPI ref detected',
     );
+  });
+
+  it('does not misclassify non-_id user-like fields as identity fields for RBAC', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-non-id-identity-'));
+    const specPath = path.join(tempDir, 'openapi.yaml');
+    try {
+      fs.writeFileSync(
+        specPath,
+        yaml.dump({
+          openapi: '3.1.0',
+          paths: {
+            '/profile/update': {
+              post: {
+                operationId: 'updateProfile',
+                requestBody: {
+                  required: true,
+                  content: {
+                    'application/json': {
+                      schema: {
+                        type: 'object',
+                        required: ['user_name', 'message'],
+                        properties: {
+                          user_name: { type: 'string' },
+                          user_agent: { type: 'string' },
+                          org_name: { type: 'string' },
+                          message: { type: 'string' },
+                        },
+                      },
+                    },
+                  },
+                },
+                responses: {
+                  '200': {
+                    description: 'Update response',
+                    content: {
+                      'application/json': {
+                        schema: {
+                          type: 'object',
+                          properties: { output: { type: 'string' } },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      );
+      const generated = yaml.load(
+        execFileSync(
+          'node',
+          [
+            path.join(redteamSetupSkillRoot, 'scripts', 'openapi-operation-to-redteam-config.mjs'),
+            '--spec',
+            specPath,
+            '--operation-id',
+            'updateProfile',
+            '--base-url-env',
+            'PROFILE_API_BASE_URL',
+          ],
+          { cwd: repoRoot, encoding: 'utf8' },
+        ),
+      );
+      expectRecord(generated, 'Generated non-_id identity redteam config');
+      const [target] = generated.targets as unknown[];
+      expectRecord(target, 'Generated non-_id identity redteam target');
+      expect(target.inputs).toEqual({
+        user_name: 'Target input field: user_name.',
+        user_agent: 'Target input field: user_agent.',
+        org_name: 'Target input field: org_name.',
+        message: 'User-controlled message or instruction to the target.',
+      });
+      expectRecord(generated.redteam, 'Generated non-_id identity redteam block');
+      // No identity or object _id fields present => only the policy plugin is inferred.
+      expect(generated.redteam.plugins).toEqual([
+        expect.objectContaining({ id: 'policy', numTests: 1 }),
+      ]);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('adds the bola plugin when object identifiers are present', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-bola-'));
+    const specPath = path.join(tempDir, 'openapi.yaml');
+    try {
+      fs.writeFileSync(
+        specPath,
+        yaml.dump({
+          openapi: '3.1.0',
+          paths: {
+            '/loans/{loan_id}/advise': {
+              post: {
+                operationId: 'adviseOnLoan',
+                parameters: [
+                  { name: 'loan_id', in: 'path', required: true, schema: { type: 'string' } },
+                ],
+                requestBody: {
+                  required: true,
+                  content: {
+                    'application/json': {
+                      schema: {
+                        type: 'object',
+                        required: ['user_id', 'question'],
+                        properties: {
+                          user_id: { type: 'string' },
+                          question: { type: 'string' },
+                        },
+                      },
+                    },
+                  },
+                },
+                responses: {
+                  '200': {
+                    description: 'Advice',
+                    content: {
+                      'application/json': {
+                        schema: {
+                          type: 'object',
+                          properties: { advice: { type: 'string' } },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      );
+      const generated = yaml.load(
+        execFileSync(
+          'node',
+          [
+            path.join(redteamSetupSkillRoot, 'scripts', 'openapi-operation-to-redteam-config.mjs'),
+            '--spec',
+            specPath,
+            '--operation-id',
+            'adviseOnLoan',
+            '--base-url-env',
+            'LOAN_API_BASE_URL',
+          ],
+          { cwd: repoRoot, encoding: 'utf8' },
+        ),
+      );
+      expectRecord(generated, 'Generated object-id redteam config');
+      expectRecord(generated.redteam, 'Generated object-id redteam block');
+      // loan_id is an object identifier (not identity, not technical) so bola should be inferred
+      // alongside rbac (driven by user_id). This matches the skill's
+      // "object IDs imply bola" guidance.
+      expect(generated.redteam.plugins).toEqual([
+        expect.objectContaining({ id: 'policy', numTests: 1 }),
+        { id: 'rbac', numTests: 1 },
+        { id: 'bola', numTests: 1 },
+      ]);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('excludes technical tracing _id fields from RBAC object-field inference', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-technical-id-'));
+    const specPath = path.join(tempDir, 'openapi.yaml');
+    try {
+      fs.writeFileSync(
+        specPath,
+        yaml.dump({
+          openapi: '3.1.0',
+          paths: {
+            '/moderate': {
+              post: {
+                operationId: 'moderateText',
+                requestBody: {
+                  required: true,
+                  content: {
+                    'application/json': {
+                      schema: {
+                        type: 'object',
+                        required: ['trace_id', 'text'],
+                        properties: {
+                          trace_id: { type: 'string' },
+                          request_id: { type: 'string' },
+                          span_id: { type: 'string' },
+                          text: { type: 'string' },
+                        },
+                      },
+                    },
+                  },
+                },
+                responses: {
+                  '200': {
+                    description: 'Moderation response',
+                    content: {
+                      'application/json': {
+                        schema: {
+                          type: 'object',
+                          properties: { output: { type: 'string' } },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      );
+      const generated = yaml.load(
+        execFileSync(
+          'node',
+          [
+            path.join(redteamSetupSkillRoot, 'scripts', 'openapi-operation-to-redteam-config.mjs'),
+            '--spec',
+            specPath,
+            '--operation-id',
+            'moderateText',
+            '--base-url-env',
+            'MODERATION_API_BASE_URL',
+          ],
+          { cwd: repoRoot, encoding: 'utf8' },
+        ),
+      );
+      expectRecord(generated, 'Generated technical-id redteam config');
+      expectRecord(generated.redteam, 'Generated technical-id redteam block');
+      // Only technical trace/request/span IDs are present (no object _id, no identity);
+      // the rbac plugin should NOT be inferred.
+      expect(generated.redteam.plugins).toEqual([
+        expect.objectContaining({ id: 'policy', numTests: 1 }),
+      ]);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });
 

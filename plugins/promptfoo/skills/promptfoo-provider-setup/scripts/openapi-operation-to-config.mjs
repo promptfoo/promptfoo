@@ -400,7 +400,7 @@ function objectSample(document, object, context) {
     return undefined;
   }
   const resolved = asRecord(resolveRef(document, object), context);
-  if ('example' in resolved) {
+  if ('example' in resolved && resolved.example !== null) {
     return resolved.example;
   }
   return firstExample(document, resolved.examples);
@@ -414,16 +414,20 @@ function schemaSample(document, schema, name, depth = 0) {
     return sampleValue(name);
   }
   const resolved = asRecord(resolveRef(document, schema), `${name} schema`);
-  if ('const' in resolved) {
+  if ('const' in resolved && resolved.const !== null) {
     return resolved.const;
   }
-  if ('example' in resolved) {
+  if ('example' in resolved && resolved.example !== null) {
     return resolved.example;
   }
-  if ('default' in resolved) {
+  if ('default' in resolved && resolved.default !== null) {
     return resolved.default;
   }
-  if (Array.isArray(resolved.examples) && resolved.examples.length > 0) {
+  if (
+    Array.isArray(resolved.examples) &&
+    resolved.examples.length > 0 &&
+    resolved.examples[0] !== null
+  ) {
     return resolved.examples[0];
   }
   if (Array.isArray(resolved.enum) && resolved.enum.length > 0) {
@@ -618,7 +622,9 @@ function authConfigs(args, document, operation) {
   return {
     auths: auths.map((auth) => ({
       ...auth,
-      prefix: args['auth-prefix'] ?? auth.prefix,
+      // --auth-prefix only overrides schemes that already carry a prefix (Bearer/Basic/etc.);
+      // API-key-style auths with prefix 'none' stay untouched so the emitted header value is raw.
+      prefix: args['auth-prefix'] && auth.prefix !== 'none' ? args['auth-prefix'] : auth.prefix,
     })),
   };
 }

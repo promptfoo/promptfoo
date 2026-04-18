@@ -386,17 +386,29 @@ function varName(name) {
 }
 
 function isIdentityField(name) {
-  return (
-    IDENTITY_FIELDS.has(name) ||
-    /(^|_)(user|tenant|account|customer|org|role|permission)(_|$)/.test(name)
-  );
+  if (IDENTITY_FIELDS.has(name)) {
+    return true;
+  }
+  // Identity-bearing _id suffixes: user_id, primary_user_id, owner_account_id, tenant_ids, etc.
+  if (/(^|_)(user|tenant|account|customer|org)_ids?$/.test(name)) {
+    return true;
+  }
+  // Role/permission fields stay identity-like whether plural or not, bare or suffixed.
+  if (/(^|_)(role|roles|permission|permissions)$/.test(name)) {
+    return true;
+  }
+  return false;
+}
+
+function isTechnicalIdField(name) {
+  return TECHNICAL_ID_FIELDS.has(name) || name.endsWith('_trace_id');
 }
 
 function inputDescription(name) {
   if (isIdentityField(name)) {
     return `Caller identity or tenancy field: ${name}.`;
   }
-  if (TECHNICAL_ID_FIELDS.has(name) || name.endsWith('_trace_id')) {
+  if (isTechnicalIdField(name)) {
     return `Target input field: ${name}.`;
   }
   if (name.endsWith('_id')) {
@@ -442,7 +454,7 @@ function objectSample(document, object, context) {
     return undefined;
   }
   const resolved = asRecord(resolveRef(document, object), context);
-  if ('example' in resolved) {
+  if ('example' in resolved && resolved.example !== null) {
     return resolved.example;
   }
   return firstExample(document, resolved.examples);
@@ -456,16 +468,20 @@ function schemaSample(document, schema, name, depth = 0) {
   if (PROMPT_FIELDS.has(name)) {
     return 'Say exactly PONG.';
   }
-  if ('const' in resolved) {
+  if ('const' in resolved && resolved.const !== null) {
     return resolved.const;
   }
-  if ('example' in resolved) {
+  if ('example' in resolved && resolved.example !== null) {
     return resolved.example;
   }
-  if ('default' in resolved) {
+  if ('default' in resolved && resolved.default !== null) {
     return resolved.default;
   }
-  if (Array.isArray(resolved.examples) && resolved.examples.length > 0) {
+  if (
+    Array.isArray(resolved.examples) &&
+    resolved.examples.length > 0 &&
+    resolved.examples[0] !== null
+  ) {
     return resolved.examples[0];
   }
   if (Array.isArray(resolved.enum) && resolved.enum.length > 0) {
@@ -648,7 +664,9 @@ function authConfigs(args, document, operation) {
   return {
     auths: auths.map((auth) => ({
       ...auth,
-      prefix: args['auth-prefix'] ?? auth.prefix,
+      // --auth-prefix only overrides schemes that already carry a prefix (Bearer/Basic/etc.);
+      // API-key-style auths with prefix 'none' stay untouched so the emitted header value is raw.
+      prefix: args['auth-prefix'] && auth.prefix !== 'none' ? args['auth-prefix'] : auth.prefix,
     })),
   };
 }
@@ -666,7 +684,9 @@ function inferPolicy(fields, operationId) {
 }
 
 function inferPlugins(fields, policy, numTests) {
-  const objectFields = fields.filter((field) => field.endsWith('_id') && !isIdentityField(field));
+  const objectFields = fields.filter(
+    (field) => field.endsWith('_id') && !isIdentityField(field) && !isTechnicalIdField(field),
+  );
   const identityFields = fields.filter(isIdentityField);
   const plugins = [
     {
@@ -679,6 +699,10 @@ function inferPlugins(fields, policy, numTests) {
   ];
   if (objectFields.length > 0 || identityFields.length > 0) {
     plugins.push({ id: 'rbac', numTests });
+  }
+  // Object identifiers (non-identity _id fields) imply broken-object-level-authorization risk.
+  if (objectFields.length > 0) {
+    plugins.push({ id: 'bola', numTests });
   }
   return plugins;
 }
