@@ -47,7 +47,7 @@ describe('Entities Extractor', () => {
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeAll(() => {
-    originalEnv = process.env;
+    originalEnv = { ...process.env };
   });
 
   beforeEach(() => {
