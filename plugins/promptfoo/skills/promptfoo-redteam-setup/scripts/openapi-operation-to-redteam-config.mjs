@@ -711,6 +711,10 @@ const headerFields = parameters
   .filter((parameter) => parameter.in === 'header')
   .map((parameter) => parameter.name)
   .filter((name) => typeof name === 'string');
+const cookieFields = parameters
+  .filter((parameter) => parameter.in === 'cookie')
+  .map((parameter) => parameter.name)
+  .filter((name) => typeof name === 'string');
 const requestBody = asRecord(resolveRef(document, operation.requestBody || {}), 'requestBody');
 const requestMediaEntry = getRequestMediaEntry(
   document,
@@ -818,11 +822,13 @@ const fieldSamples = Object.fromEntries([
   ]),
 ]);
 const headerVars = headerFields.map(varName);
+const cookieVars = cookieFields.map(varName);
 const fields = unique([
   ...pathVars.map(varName),
   ...queryFields.map(varName),
   ...bodyFields.map(varName),
   ...headerVars,
+  ...cookieVars,
 ]);
 const numTests = Number.parseInt(args['num-tests'] || '1', 10);
 if (!Number.isInteger(numTests) || numTests < 1) {
@@ -836,6 +842,9 @@ const headers =
     : {};
 for (const name of headerFields) {
   headers[name] = `{{${varName(name)}}}`;
+}
+for (const name of cookieFields) {
+  appendCookieHeader(headers, name, `{{${varName(name)}}}`);
 }
 const queryParams = Object.fromEntries(queryFields.map((name) => [name, `{{${varName(name)}}}`]));
 if (args['token-env']) {

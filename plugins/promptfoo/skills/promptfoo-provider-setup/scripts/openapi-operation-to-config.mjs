@@ -651,6 +651,10 @@ const headerFields = parameters
   .filter((parameter) => parameter.in === 'header')
   .map((parameter) => parameter.name)
   .filter((name) => typeof name === 'string');
+const cookieFields = parameters
+  .filter((parameter) => parameter.in === 'cookie')
+  .map((parameter) => parameter.name)
+  .filter((name) => typeof name === 'string');
 const requestBody = asRecord(resolveRef(document, operation.requestBody || {}), 'requestBody');
 const requestMediaEntry = getRequestMediaEntry(
   document,
@@ -756,6 +760,9 @@ const headers =
 for (const name of headerFields) {
   headers[name] = `{{${varName(name)}}}`;
 }
+for (const name of cookieFields) {
+  appendCookieHeader(headers, name, `{{${varName(name)}}}`);
+}
 const queryParams = Object.fromEntries(queryFields.map((name) => [name, inputTemplate(name)]));
 if (args['token-env']) {
   for (const auth of authConfigs(args, document, operation).auths) {
@@ -810,7 +817,7 @@ if (responseField) {
 const varNames = [...pathVars, ...queryFields, ...bodyFields]
   .filter((name) => inputTemplate(name) !== '{{prompt}}')
   .map(varName);
-varNames.push(...headerFields.map(varName));
+varNames.push(...headerFields.map(varName), ...cookieFields.map(varName));
 if (!varNames.includes('message')) {
   varNames.push('message');
 }

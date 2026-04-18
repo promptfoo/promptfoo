@@ -3470,6 +3470,39 @@ describe('promptfoo-provider-setup skill', () => {
       message: 'Say exactly PONG.',
     });
 
+    const cookieParamOutput = execFileSync(
+      'node',
+      [
+        path.join(providerSkillRoot, 'scripts', 'openapi-operation-to-config.mjs'),
+        '--spec',
+        path.join(fixtureRoot, 'provider-setup-openapi', 'openapi.yaml'),
+        '--operation-id',
+        'cookieParamSearchInvoices',
+        '--base-url-env',
+        'OPENAPI_INVOICE_API_BASE_URL',
+      ],
+      { cwd: repoRoot, encoding: 'utf8' },
+    );
+    const generatedCookieParam = yaml.load(cookieParamOutput);
+    expectRecord(generatedCookieParam, 'Generated OpenAPI cookie parameter config');
+    const cookieParamProvider = (generatedCookieParam.providers as unknown[])[0];
+    expectRecord(cookieParamProvider, 'Generated OpenAPI cookie parameter provider');
+    expectRecord(cookieParamProvider.config, 'Generated OpenAPI cookie parameter provider config');
+    expect(cookieParamProvider.config.headers).toEqual({
+      Cookie: 'invoice-context={{invoice_context}}',
+    });
+    expect(cookieParamProvider.config.queryParams).toEqual({
+      q: '{{prompt}}',
+      user_id: '{{user_id}}',
+    });
+    const cookieParamTest = (generatedCookieParam.tests as unknown[])[0];
+    expectRecord(cookieParamTest, 'Generated OpenAPI cookie parameter test');
+    expect(cookieParamTest.vars).toEqual({
+      user_id: 'sample-user-id',
+      invoice_context: 'context-alpha',
+      message: 'Say exactly PONG.',
+    });
+
     const questionOutput = execFileSync(
       'node',
       [
@@ -5362,6 +5395,35 @@ describe('promptfoo-redteam-setup skill', () => {
       },
     });
     expect(headerGenerated.tests).toBeUndefined();
+
+    const cookieParamGenerated = yaml.load(runHelper('cookieParamSearchInvoices'));
+    expectRecord(cookieParamGenerated, 'Generated OpenAPI redteam cookie parameter config');
+    const [cookieParamTarget] = cookieParamGenerated.targets as unknown[];
+    expectRecord(cookieParamTarget, 'Generated OpenAPI redteam cookie parameter target');
+    expectRecord(
+      cookieParamTarget.config,
+      'Generated OpenAPI redteam cookie parameter target config',
+    );
+    expect(cookieParamTarget.config.headers).toEqual({
+      Cookie: 'invoice-context={{invoice_context}}',
+      Authorization: 'Bearer {{env.OPENAPI_INVOICE_API_TOKEN}}',
+    });
+    expect(cookieParamTarget.config.queryParams).toEqual({
+      q: '{{q}}',
+      user_id: '{{user_id}}',
+    });
+    expect(cookieParamTarget.inputs).toEqual({
+      q: 'User-controlled message or instruction to the target.',
+      user_id: 'Caller identity or tenancy field: user_id.',
+      invoice_context: 'Target input field: invoice_context.',
+    });
+    expect(cookieParamGenerated.defaultTest).toEqual({
+      vars: {
+        q: 'Say exactly PONG.',
+        user_id: 'sample-user-id',
+        invoice_context: 'context-alpha',
+      },
+    });
 
     const headerSmokeGenerated = yaml.load(
       runHelper('headerSearchInvoices', ['--smoke-test', 'true', '--smoke-assert', 'PONG']),

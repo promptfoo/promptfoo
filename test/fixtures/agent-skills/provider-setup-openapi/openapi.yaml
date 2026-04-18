@@ -85,6 +85,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SearchResponse'
+  /v1/invoices/cookie-param-search:
+    get:
+      operationId: cookieParamSearchInvoices
+      summary: Search invoice assistant responses with cookie context.
+      parameters:
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/InvoiceContextCookie'
+      responses:
+        '200':
+          description: Search response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
   /v1/invoices/{invoice_id}/chat:
     post:
       operationId: chatWithInvoice
@@ -184,6 +199,13 @@ components:
         type: string
         enum:
           - '2026-04-01'
+    InvoiceContextCookie:
+      name: invoice-context
+      in: cookie
+      required: true
+      schema:
+        type: string
+        example: context-alpha
   requestBodies:
     InvoiceNoteRequest:
       required: true
