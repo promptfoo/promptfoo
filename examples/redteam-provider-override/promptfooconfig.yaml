@@ -18,7 +18,7 @@ targets:
 redteam:
   # Override the provider for the red team attack generation
   # See https://promptfoo.dev/docs/red-team/configuration/#providers
-  provider: openrouter:anthropic/claude-opus-4.7
+  provider: openrouter:meta-llama/llama-3.3-70b-instruct
 
   # Default number of inputs to generate for each plugin.
   # The total number of tests will be (numTests * plugins.length * (1 + strategies.length))

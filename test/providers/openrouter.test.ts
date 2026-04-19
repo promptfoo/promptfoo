@@ -79,11 +79,98 @@ describe('OpenRouter', () => {
       }
     });
 
+    it('should fall back to the default apiBaseUrl and apiKeyEnvar when none are configured', () => {
+      const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+
+      expect(provider.config.apiBaseUrl).toBe(OPENROUTER_API_BASE);
+      expect(provider.config.apiKeyEnvar).toBe('OPENROUTER_API_KEY');
+    });
+
+    it('should fall back to the default when apiBaseUrl or apiKeyEnvar is an empty string', () => {
+      const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
+        config: {
+          apiBaseUrl: '',
+          apiKeyEnvar: '',
+        },
+      });
+
+      expect(provider.config.apiBaseUrl).toBe(OPENROUTER_API_BASE);
+      expect(provider.config.apiKeyEnvar).toBe('OPENROUTER_API_KEY');
+    });
+
     it('should call the configured apiBaseUrl instead of the default OpenRouter host', async () => {
-      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+      const restoreEnv = mockProcessEnv({ CUSTOM_OPENROUTER_KEY: 'custom-test-key' });
 
       try {
         const customApiBaseUrl = 'https://proxy.example.com/openrouter/api/v1';
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
+          config: {
+            apiBaseUrl: customApiBaseUrl,
+            apiKeyEnvar: 'CUSTOM_OPENROUTER_KEY',
+          },
+        });
+
+        const response = new Response(
+          JSON.stringify({
+            choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        await provider.callApi('Test prompt');
+
+        const [url, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        expect(url).toBe(`${customApiBaseUrl}/chat/completions`);
+        expect((init as RequestInit | undefined)?.headers).toMatchObject({
+          Authorization: 'Bearer custom-test-key',
+        });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should call the default OpenRouter host when no apiBaseUrl override is configured', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'default-test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+
+        const response = new Response(
+          JSON.stringify({
+            choices: [{ message: { content: 'Default host output' }, finish_reason: 'stop' }],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        await provider.callApi('Test prompt');
+
+        const [url, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        expect(url).toBe(`${OPENROUTER_API_BASE}/chat/completions`);
+        expect((init as RequestInit | undefined)?.headers).toMatchObject({
+          Authorization: 'Bearer default-test-key',
+        });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should preserve a trailing slash on the configured apiBaseUrl as-is', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const customApiBaseUrl = 'https://proxy.example.com/openrouter/api/v1/';
         const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
           config: {
             apiBaseUrl: customApiBaseUrl,
@@ -107,6 +194,44 @@ describe('OpenRouter', () => {
 
         const [url] = mockedFetchWithRetries.mock.calls[0] ?? [];
         expect(url).toBe(`${customApiBaseUrl}/chat/completions`);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should combine apiBaseUrl override with passthrough options on the request body', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const customApiBaseUrl = 'https://proxy.example.com/openrouter/api/v1';
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
+          config: {
+            apiBaseUrl: customApiBaseUrl,
+            route: 'fallback',
+            models: ['google/gemini-2.5-pro', 'anthropic/claude-sonnet-4.6'],
+          },
+        });
+
+        const response = new Response(
+          JSON.stringify({
+            choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        await provider.callApi('Test prompt');
+
+        const [url, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        expect(url).toBe(`${customApiBaseUrl}/chat/completions`);
+        const body = JSON.parse((init as RequestInit | undefined)?.body as string);
+        expect(body.route).toBe('fallback');
+        expect(body.models).toEqual(['google/gemini-2.5-pro', 'anthropic/claude-sonnet-4.6']);
       } finally {
         restoreEnv();
       }
