@@ -389,6 +389,36 @@ input[type='search']::-webkit-search-decoration {
 }
 
 @media print {
+  /* Promptfoo brand tokens (mirrors design2/design-system.html).
+   * Scoped to @media print so they only apply to the PDF export. */
+  :root {
+    --pf-red: #e53a3a;
+    --pf-red-dark: #cb3434;
+    --pf-red-darker: #b32e2e;
+    --pf-red-darkest: #991515;
+    --pf-red-tint: #fff6f6;
+    --pf-logo-maroon: #8a0a1c;
+    --pf-ink: #10191c;
+    --pf-ink-soft: #525860;
+    --pf-border: #e3e6eb;
+    --pf-surface-alt: #f6f7f8;
+    --pf-surface-dark: #10191c;
+    --pf-font-base: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --pf-font-mono: 'JetBrains Mono', 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  /* Force all elements to print their backgrounds/colors even when
+   * the user leaves "Background graphics" unchecked in the print dialog.
+   * Without this, brand fills (red-tint callouts, dark code blocks,
+   * zebra table rows, severity card backgrounds) are stripped. */
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   header,
   footer,
   .MuiAppBar-root,
@@ -406,8 +436,30 @@ input[type='search']::-webkit-search-decoration {
   }
 
   @page {
-    size: A4;
-    margin: 0.25in;
+    size: A4 portrait;
+    margin: 22mm 20mm 22mm 20mm;
+    @bottom-right {
+      content: counter(page) ' / ' counter(pages);
+      font-family: var(--pf-font-base);
+      font-size: 8.5pt;
+      color: #8a8f97;
+    }
+    @bottom-left {
+      content: 'promptfoo';
+      font-family: var(--pf-font-base);
+      font-size: 8.5pt;
+      color: #8a8f97;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+  }
+  @page :first {
+    @bottom-left {
+      content: '';
+    }
+    @bottom-right {
+      content: '';
+    }
   }
 
   /* Body and container styles */
@@ -416,8 +468,143 @@ input[type='search']::-webkit-search-decoration {
   #root {
     -webkit-print-color-adjust: exact;
     color-adjust: exact;
+    print-color-adjust: exact;
     background-color: white !important;
     background: white !important;
+    font-family: var(--pf-font-base) !important;
+    color: var(--pf-ink) !important;
+    font-size: 10.5pt;
+    line-height: 1.6;
+  }
+
+  /* Brand typography — mirrors design2/report-template.html */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--pf-font-base) !important;
+    color: var(--pf-ink) !important;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    line-height: 1.2;
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+  h1 {
+    font-size: 26pt;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+  }
+  h2 {
+    font-size: 18pt;
+    padding-bottom: 6pt;
+    border-bottom: 2px solid var(--pf-red);
+    margin-bottom: 14pt;
+  }
+  h3 {
+    font-size: 13pt;
+  }
+  h4 {
+    font-size: 11pt;
+    color: var(--pf-red-darker) !important;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  a {
+    color: var(--pf-red-darker) !important;
+    text-decoration: none;
+  }
+
+  /* Red list markers */
+  ul,
+  ol {
+    margin: 0 0 12pt;
+  }
+  li {
+    margin-bottom: 4pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  li::marker {
+    color: var(--pf-red);
+  }
+
+  /* Blockquote — design2 callout treatment */
+  blockquote {
+    margin: 14pt 0;
+    padding: 12pt 16pt;
+    border-left: 4pt solid var(--pf-red);
+    background: var(--pf-red-tint) !important;
+    border-radius: 2pt;
+    color: var(--pf-ink) !important;
+    font-style: normal;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Inline and block code */
+  code {
+    font-family: var(--pf-font-mono) !important;
+    font-size: 9pt;
+    background: var(--pf-surface-alt) !important;
+    color: var(--pf-red-darkest) !important;
+    padding: 1pt 5pt;
+    border-radius: 3pt;
+  }
+  pre {
+    background: var(--pf-surface-dark) !important;
+    color: #e8eef2 !important;
+    padding: 12pt 14pt;
+    border-radius: 6pt;
+    font-family: var(--pf-font-mono) !important;
+    font-size: 8.5pt;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  pre code {
+    background: transparent !important;
+    padding: 0;
+    color: inherit !important;
+    font-size: inherit;
+  }
+
+  /* Tables — red accent under thead, zebra rows */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10pt 0 14pt;
+    font-size: 9.5pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  thead th {
+    text-align: left;
+    background: var(--pf-surface-alt) !important;
+    color: var(--pf-ink) !important;
+    font-weight: 600;
+    padding: 8pt 10pt;
+    border-bottom: 2px solid var(--pf-red) !important;
+  }
+  tbody td {
+    padding: 7pt 10pt;
+    border-bottom: 1px solid var(--pf-border) !important;
+  }
+  tbody tr:nth-child(even) td {
+    background: #fafbfc !important;
+  }
+
+  /* Horizontal rule — brand gradient */
+  hr {
+    border: none;
+    height: 2px;
+    background: linear-gradient(90deg, var(--pf-red) 0%, transparent 100%) !important;
+    margin: 18pt 0;
   }
 
   .report-header {
@@ -496,6 +683,15 @@ input[type='search']::-webkit-search-decoration {
   [data-theme='dark'] body,
   [data-theme='dark'] #root {
     background-color: #ffffff !important;
-    color: #000000 !important;
+    color: var(--pf-ink) !important;
+  }
+
+  /* Avoid orphans/widows on paragraphs and keep figures together */
+  p,
+  figure {
+    page-break-inside: avoid;
+    break-inside: avoid;
+    orphans: 3;
+    widows: 3;
   }
 }

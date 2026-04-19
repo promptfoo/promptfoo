@@ -546,7 +546,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
 
   const actionButtons = useMemo(
     () => (
-      <div className="flex items-center gap-1">
+      <div className="print-hide flex items-center gap-1">
         {evalId && (
           <Tooltip>
             <TooltipTrigger asChild>

@@ -140,6 +140,42 @@ export function useThemePreference() {
     };
   }, []);
 
+  // Force light mode during print. Tailwind dark: variants compile to
+  // explicit color values that our print CSS can't fully override via
+  // CSS custom properties, so the PDF ends up with dark backgrounds.
+  // Remove the data-theme attribute before print and restore after.
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    let previousTheme: string | null = null;
+
+    const handleBeforePrint = () => {
+      previousTheme = document.documentElement.getAttribute('data-theme');
+      if (previousTheme) {
+        document.documentElement.removeAttribute('data-theme');
+        document.documentElement.style.colorScheme = 'light';
+      }
+    };
+
+    const handleAfterPrint = () => {
+      if (previousTheme) {
+        document.documentElement.setAttribute('data-theme', previousTheme);
+        document.documentElement.style.colorScheme = previousTheme as ResolvedTheme;
+      }
+      previousTheme = null;
+    };
+
+    window.addEventListener('beforeprint', handleBeforePrint);
+    window.addEventListener('afterprint', handleAfterPrint);
+
+    return () => {
+      window.removeEventListener('beforeprint', handleBeforePrint);
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
+  }, []);
+
   const setThemePreference = useCallback((preference: ThemePreference) => {
     persistThemePreference(preference);
     setThemePreferenceState(preference);
