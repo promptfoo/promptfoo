@@ -308,7 +308,11 @@ describe('trajectory utilities', () => {
     expect(steps[0].name).toBe('pwd');
   });
 
-  it('normalizes Vercel AI SDK tool spans that use ai.toolCall attributes', () => {
+  it.each([
+    ['ai.toolCall.args', '{"order_id":"123","include_history":false}'],
+    ['ai.toolCall.arguments', '{"order_id":"123","include_history":false}'],
+    ['ai.toolCall.input', '{"order_id":"123","include_history":false}'],
+  ])('normalizes Vercel AI SDK tool spans with %s', (argKey, argValue) => {
     const steps = extractTrajectorySteps({
       ...mockTraceData,
       spans: [
@@ -319,7 +323,7 @@ describe('trajectory utilities', () => {
           endTime: 1100,
           attributes: {
             'ai.toolCall.name': 'search_orders',
-            'ai.toolCall.args': '{"order_id":"123","include_history":false}',
+            [argKey]: argValue,
             'ai.toolCall.result': '{"status":"ok"}',
           },
         },
@@ -991,6 +995,45 @@ describe('trajectory assertions', () => {
           'Tool "compose_*" matched expected arguments (exact) on tool:compose_reply. Args: {"tone":"friendly","citations":["doc_1","doc_2"]}',
         assertion: params.assertion,
       });
+    });
+
+    it('matches Vercel AI SDK spans end-to-end against expected args', () => {
+      const vercelTrace: TraceData = {
+        ...mockTraceData,
+        spans: [
+          {
+            spanId: 'vercel-span',
+            name: 'ai.toolCall',
+            startTime: 1000,
+            endTime: 1100,
+            attributes: {
+              'ai.toolCall.name': 'lookup_customer',
+              'ai.toolCall.args': '{"customer_id":"cust_1234","include_history":true}',
+              'ai.toolCall.result': '{"plan":"pro"}',
+            },
+          },
+        ],
+      };
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertionValueContext: { ...defaultParams.assertionValueContext, trace: vercelTrace },
+        baseType: 'trajectory:tool-args-match',
+        assertion: {
+          type: 'trajectory:tool-args-match',
+          value: {
+            name: 'lookup_customer',
+            args: { customer_id: 'cust_1234' },
+          },
+        },
+        renderedValue: {
+          name: 'lookup_customer',
+          args: { customer_id: 'cust_1234' },
+        },
+      };
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
     });
 
     it('fails when no matching tool arguments satisfy the expectation', () => {

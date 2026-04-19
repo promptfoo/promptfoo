@@ -55,9 +55,18 @@ describe('getToolNameFromAttributes', () => {
   it('skips non-string values', () => {
     expect(
       getToolNameFromAttributes({
-        'tool.name': 42 as unknown as string,
+        'tool.name': 42,
         'ai.toolCall.name': 'fallback_tool',
       }),
     ).toBe('fallback_tool');
+  });
+
+  it('does not match arbitrary attributes whose keys are not in the allowlist', () => {
+    expect(
+      getToolNameFromAttributes({
+        'workflow.tool': 'should_not_match',
+        'tool.description': 'not a tool name',
+      }),
+    ).toBeUndefined();
   });
 });
