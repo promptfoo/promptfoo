@@ -683,14 +683,14 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProvider with openrouter', async () => {
-    const provider = await loadApiProvider('openrouter:anthropic/claude-sonnet-4.6');
+    const provider = await loadApiProvider('openrouter:anthropic/claude-opus-4.7');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
     // OpenRouter provider now returns id with prefix
-    expect(provider.id()).toBe('openrouter:anthropic/claude-sonnet-4.6');
+    expect(provider.id()).toBe('openrouter:anthropic/claude-opus-4.7');
   });
 
   it('loadApiProvider with openrouter preserves a custom apiBaseUrl override', async () => {
-    const provider = await loadApiProvider('openrouter:anthropic/claude-sonnet-4.6', {
+    const provider = await loadApiProvider('openrouter:anthropic/claude-opus-4.7', {
       options: {
         config: {
           apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1',

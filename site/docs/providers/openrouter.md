@@ -16,18 +16,18 @@ description: "Access 300+ models through OpenRouter's unified API gateway with c
 
 OpenRouter's catalog changes quickly. These are current popular and recent model IDs that work well as starting points:
 
-| Model ID                                                                                                   | Good for                            |
-| ---------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| [openai/gpt-5.4](https://openrouter.ai/openai/gpt-5.4)                                                     | Highest-quality general evaluation  |
-| [openai/gpt-5.4-mini](https://openrouter.ai/openai/gpt-5.4-mini)                                           | Fast, lower-cost GPT-5 workflows    |
-| [anthropic/claude-sonnet-4.6](https://openrouter.ai/anthropic/claude-sonnet-4.6)                           | Strong all-around chat and analysis |
-| [anthropic/claude-haiku-4.5](https://openrouter.ai/anthropic/claude-haiku-4.5)                             | Lower-latency Claude runs           |
-| [google/gemini-2.5-pro](https://openrouter.ai/google/gemini-2.5-pro)                                       | Reasoning-heavy tasks               |
-| [google/gemini-2.5-flash](https://openrouter.ai/google/gemini-2.5-flash)                                   | Fast multimodal and general chat    |
-| [meta-llama/llama-4-maverick](https://openrouter.ai/meta-llama/llama-4-maverick)                           | Popular open-weight frontier model  |
-| [deepseek/deepseek-v3.2](https://openrouter.ai/deepseek/deepseek-v3.2)                                     | Cost-efficient reasoning and tools  |
-| [mistralai/mistral-small-3.2-24b-instruct](https://openrouter.ai/mistralai/mistral-small-3.2-24b-instruct) | Compact Mistral general use         |
-| [qwen/qwen3-32b](https://openrouter.ai/qwen/qwen3-32b)                                                     | Strong open multilingual model      |
+| Model ID                                                                                                   | Good for                           |
+| ---------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| [openai/gpt-5.4](https://openrouter.ai/openai/gpt-5.4)                                                     | Highest-quality general evaluation |
+| [anthropic/claude-opus-4.7](https://openrouter.ai/anthropic/claude-opus-4.7)                               | Long-running agentic workflows     |
+| [openai/gpt-5.4-mini](https://openrouter.ai/openai/gpt-5.4-mini)                                           | Fast, lower-cost GPT-5 workflows   |
+| [anthropic/claude-haiku-4.5](https://openrouter.ai/anthropic/claude-haiku-4.5)                             | Lower-latency Claude runs          |
+| [google/gemini-2.5-pro](https://openrouter.ai/google/gemini-2.5-pro)                                       | Reasoning-heavy tasks              |
+| [google/gemini-2.5-flash](https://openrouter.ai/google/gemini-2.5-flash)                                   | Fast multimodal and general chat   |
+| [meta-llama/llama-4-maverick](https://openrouter.ai/meta-llama/llama-4-maverick)                           | Popular open-weight frontier model |
+| [deepseek/deepseek-v3.2](https://openrouter.ai/deepseek/deepseek-v3.2)                                     | Cost-efficient reasoning and tools |
+| [mistralai/mistral-small-3.2-24b-instruct](https://openrouter.ai/mistralai/mistral-small-3.2-24b-instruct) | Compact Mistral general use        |
+| [qwen/qwen3-32b](https://openrouter.ai/qwen/qwen3-32b)                                                     | Strong open multilingual model     |
 
 For the full catalog and current pricing, visit [OpenRouter Models](https://openrouter.ai/models).
 
@@ -36,14 +36,13 @@ For the full catalog and current pricing, visit [OpenRouter Models](https://open
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: openrouter:anthropic/claude-sonnet-4.6
+  - id: openrouter:openai/gpt-5.4
     config:
       temperature: 0.7
       max_tokens: 1000
 
-  - id: openrouter:openai/gpt-5.4-mini
+  - id: openrouter:anthropic/claude-opus-4.7
     config:
-      temperature: 0.5
       max_tokens: 2000
 
   - id: openrouter:google/gemini-2.5-flash
@@ -56,7 +55,7 @@ If you route OpenRouter traffic through a proxy or OpenRouter-compatible gateway
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openrouter:openai/gpt-5.4-mini
+  - id: openrouter:openai/gpt-5.4
     config:
       apiBaseUrl: https://proxy.example.com/openrouter/api/v1
 ```

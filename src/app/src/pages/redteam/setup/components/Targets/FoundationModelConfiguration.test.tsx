@@ -199,7 +199,7 @@ describe('FoundationModelConfiguration', () => {
     const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openrouter:openai/gpt-5.4, openrouter:anthropic/claude-sonnet-4.6',
+      'openrouter:openai/gpt-5.4, openrouter:anthropic/claude-opus-4.7',
     );
 
     const documentationLink = screen.getByRole('link', { name: /OpenRouter documentation/ });
