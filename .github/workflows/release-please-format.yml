@@ -121,8 +121,10 @@ jobs:
           done
 
       # Create the App token only after untrusted steps so prettier / npm
-      # install never had it in reach. Scope to contents:write — all we need
-      # is to push the formatting commit to the existing release PR branch.
+      # install never had it in reach. Token inherits the App installation's
+      # granted permissions — do NOT add `permission-*` inputs here until the
+      # App installation is confirmed to grant every requested permission;
+      # see the matching note on release-please.yml.
       - name: Create App token for push
         if: steps.format.outputs.has_changes == 'true'
         uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3
@@ -130,7 +132,6 @@ jobs:
         with:
           app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
           private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
-          permission-contents: write
 
       - name: Push formatted CHANGELOG commit
         if: steps.format.outputs.has_changes == 'true'
