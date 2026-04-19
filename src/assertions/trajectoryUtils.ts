@@ -1,4 +1,8 @@
-import { getFirstStringAttribute, getToolNameFromAttributes } from '../tracing/toolAttributes';
+import {
+  getFirstStringAttribute,
+  getToolNameFromAttributes,
+  TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+} from '../tracing/toolAttributes';
 import { matchesPattern } from './traceUtils';
 
 import type { TraceData, TraceSpan } from '../types/tracing';
@@ -25,37 +29,6 @@ export interface TrajectoryStep {
   statusMessage?: string;
   type: TrajectoryStepType;
 }
-
-const TOOL_ARGUMENT_ATTRIBUTE_KEYS = [
-  'agent.tool.args',
-  'agent.tool.arguments',
-  'agent.tool.input',
-  'ai.toolCall.args',
-  'ai.toolCall.arguments',
-  'ai.toolCall.input',
-  'args',
-  'arguments',
-  'codex.mcp.args',
-  'codex.mcp.arguments',
-  'codex.mcp.input',
-  'function.args',
-  'function.arguments',
-  'function.input',
-  'function_args',
-  'function_arguments',
-  'gen_ai.tool.args',
-  'gen_ai.tool.arguments',
-  'gen_ai.tool.call.args',
-  'gen_ai.tool.call.arguments',
-  'gen_ai.tool.input',
-  'input',
-  'tool.args',
-  'tool.arguments',
-  'tool.input',
-  'tool_args',
-  'tool_arguments',
-  'tool_input',
-] as const;
 
 const COMMAND_ATTRIBUTE_KEYS = [
   'codex.command',

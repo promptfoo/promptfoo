@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { getToolNameFromAttributes } from '../../src/tracing/toolAttributes';
+import {
+  getToolNameFromAttributes,
+  TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+  TOOL_NAME_ATTRIBUTE_KEYS,
+} from '../../src/tracing/toolAttributes';
 
 describe('getToolNameFromAttributes', () => {
   it('returns undefined when attributes are missing', () => {
@@ -68,5 +72,61 @@ describe('getToolNameFromAttributes', () => {
         'tool.description': 'not a tool name',
       }),
     ).toBeUndefined();
+  });
+});
+
+describe('tool attribute key tables', () => {
+  it('exposes the expected set of tool-name keys', () => {
+    expect([...TOOL_NAME_ATTRIBUTE_KEYS].sort()).toEqual([
+      'agent.tool',
+      'agent.toolName',
+      'agent.tool_name',
+      'ai.toolCall.name',
+      'codex.mcp.tool',
+      'function.name',
+      'function_name',
+      'gen_ai.tool.name',
+      'tool',
+      'tool.name',
+      'tool_name',
+    ]);
+  });
+
+  it('exposes the expected set of tool-argument keys', () => {
+    expect([...TOOL_ARGUMENT_ATTRIBUTE_KEYS].sort()).toEqual([
+      'agent.tool.args',
+      'agent.tool.arguments',
+      'agent.tool.input',
+      'ai.toolCall.args',
+      'ai.toolCall.arguments',
+      'ai.toolCall.input',
+      'args',
+      'arguments',
+      'codex.mcp.args',
+      'codex.mcp.arguments',
+      'codex.mcp.input',
+      'function.args',
+      'function.arguments',
+      'function.input',
+      'function_args',
+      'function_arguments',
+      'gen_ai.tool.args',
+      'gen_ai.tool.arguments',
+      'gen_ai.tool.call.args',
+      'gen_ai.tool.call.arguments',
+      'gen_ai.tool.input',
+      'input',
+      'tool.args',
+      'tool.arguments',
+      'tool.input',
+      'tool_args',
+      'tool_arguments',
+      'tool_input',
+    ]);
+  });
+
+  it('has no duplicate keys in either table', () => {
+    expect(new Set(TOOL_NAME_ATTRIBUTE_KEYS).size).toBe(TOOL_NAME_ATTRIBUTE_KEYS.length);
+    expect(new Set(TOOL_ARGUMENT_ATTRIBUTE_KEYS).size).toBe(TOOL_ARGUMENT_ATTRIBUTE_KEYS.length);
   });
 });

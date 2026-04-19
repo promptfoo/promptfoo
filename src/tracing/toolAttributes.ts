@@ -1,16 +1,72 @@
-const TOOL_NAME_ATTRIBUTE_KEYS = [
-  'tool.name',
-  'tool_name',
-  'ai.toolCall.name',
-  'tool',
-  'function.name',
-  'function_name',
-  'gen_ai.tool.name',
-  'codex.mcp.tool',
-  'agent.tool',
-  'agent.tool_name',
-  'agent.toolName',
-] as const;
+type ToolAttributeFamily = {
+  prefix: string;
+  nameSuffixes?: readonly string[];
+  argSuffixes?: readonly string[];
+  extraNameKeys?: readonly string[];
+  extraArgKeys?: readonly string[];
+};
+
+const TOOL_ATTRIBUTE_FAMILIES: readonly ToolAttributeFamily[] = [
+  {
+    prefix: 'tool',
+    nameSuffixes: ['.name', '_name'],
+    argSuffixes: ['.args', '.arguments', '.input', '_args', '_arguments', '_input'],
+    extraNameKeys: ['tool'],
+  },
+  {
+    prefix: 'function',
+    nameSuffixes: ['.name', '_name'],
+    argSuffixes: ['.args', '.arguments', '.input', '_args', '_arguments'],
+  },
+  {
+    prefix: 'ai.toolCall',
+    nameSuffixes: ['.name'],
+    argSuffixes: ['.args', '.arguments', '.input'],
+  },
+  {
+    prefix: 'gen_ai.tool',
+    nameSuffixes: ['.name'],
+    argSuffixes: ['.args', '.arguments', '.input'],
+    extraArgKeys: ['gen_ai.tool.call.args', 'gen_ai.tool.call.arguments'],
+  },
+  {
+    prefix: 'agent.tool',
+    nameSuffixes: ['_name'],
+    argSuffixes: ['.args', '.arguments', '.input'],
+    extraNameKeys: ['agent.tool', 'agent.toolName'],
+  },
+  {
+    prefix: 'codex.mcp',
+    argSuffixes: ['.args', '.arguments', '.input'],
+    extraNameKeys: ['codex.mcp.tool'],
+  },
+];
+
+const BARE_ARG_KEYS = ['args', 'arguments', 'input'] as const;
+
+function buildFamilyKeys(kind: 'name' | 'arg'): readonly string[] {
+  const keys: string[] = [];
+  for (const family of TOOL_ATTRIBUTE_FAMILIES) {
+    const suffixes = kind === 'name' ? family.nameSuffixes : family.argSuffixes;
+    if (suffixes) {
+      for (const suffix of suffixes) {
+        keys.push(`${family.prefix}${suffix}`);
+      }
+    }
+    const extras = kind === 'name' ? family.extraNameKeys : family.extraArgKeys;
+    if (extras) {
+      keys.push(...extras);
+    }
+  }
+  return keys;
+}
+
+export const TOOL_NAME_ATTRIBUTE_KEYS: readonly string[] = buildFamilyKeys('name');
+
+export const TOOL_ARGUMENT_ATTRIBUTE_KEYS: readonly string[] = [
+  ...buildFamilyKeys('arg'),
+  ...BARE_ARG_KEYS,
+];
 
 export function getFirstStringAttribute(
   attributes: Record<string, unknown> | undefined,
