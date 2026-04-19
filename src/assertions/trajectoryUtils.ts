@@ -1,3 +1,4 @@
+import { getToolNameFromAttributes } from '../tracing/toolAttributes';
 import { matchesPattern } from './traceUtils';
 
 import type { TraceData, TraceSpan } from '../types/tracing';
@@ -25,20 +26,10 @@ export interface TrajectoryStep {
   type: TrajectoryStepType;
 }
 
-const TOOL_ATTRIBUTE_KEYS = [
-  'tool.name',
-  'tool_name',
-  'tool',
-  'function.name',
-  'function_name',
-  'gen_ai.tool.name',
-  'codex.mcp.tool',
-  'agent.tool',
-  'agent.tool_name',
-  'agent.toolName',
-] as const;
-
 const TOOL_ARGUMENT_ATTRIBUTE_KEYS = [
+  'ai.toolCall.args',
+  'ai.toolCall.arguments',
+  'ai.toolCall.input',
   'tool.arguments',
   'tool.args',
   'tool.input',
@@ -178,23 +169,9 @@ function isCommandToolName(toolName: string | undefined): boolean {
 function extractToolName(span: TraceSpan): string | undefined {
   const attributes = span.attributes || {};
 
-  const directMatch = getStringAttribute(attributes, TOOL_ATTRIBUTE_KEYS);
+  const directMatch = getToolNameFromAttributes(attributes);
   if (directMatch) {
     return directMatch;
-  }
-
-  for (const [key, value] of Object.entries(attributes)) {
-    if (typeof value !== 'string' || !value.trim()) {
-      continue;
-    }
-
-    if (/tool.?name|function.?name/i.test(key)) {
-      return value.trim();
-    }
-
-    if (/(^|[._])tool($|[._])/i.test(key) && !/result|output/i.test(key)) {
-      return value.trim();
-    }
   }
 
   if (span.name.startsWith('mcp ')) {

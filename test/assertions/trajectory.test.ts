@@ -308,6 +308,34 @@ describe('trajectory utilities', () => {
     expect(steps[0].name).toBe('pwd');
   });
 
+  it('normalizes Vercel AI SDK tool spans that use ai.toolCall attributes', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'vercel-tool-call',
+          name: 'ai.toolCall',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'ai.toolCall.name': 'search_orders',
+            'ai.toolCall.args': '{"order_id":"123","include_history":false}',
+            'ai.toolCall.result': '{"status":"ok"}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('tool');
+    expect(steps[0].name).toBe('search_orders');
+    expect(steps[0].aliases).toEqual(expect.arrayContaining(['ai.toolCall', 'search_orders']));
+    expect(steps[0].args).toEqual({
+      order_id: '123',
+      include_history: false,
+    });
+  });
+
   it('preserves original span order when timestamps are tied', () => {
     const steps = extractTrajectorySteps({
       ...mockTraceData,
