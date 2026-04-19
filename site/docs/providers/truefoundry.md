@@ -276,7 +276,7 @@ Here's a comprehensive example demonstrating TrueFoundry's capabilities:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: TrueFoundry LLM Gateway evaluation
+description: TrueFoundry AI Gateway evaluation
 
 providers:
   - id: truefoundry:openai-main/gpt-5
