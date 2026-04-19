@@ -36,6 +36,9 @@ jobs:
           private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
+          # release-please-action applies `autorelease: pending` / `autorelease: tagged`
+          # labels via the issues API (PR labels share that scope).
+          permission-issues: write
 
       - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
         id: release
@@ -43,7 +46,7 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
   build:
-    if: needs.release-please.outputs.release_created || needs.release-please.outputs.code_scan_action_release_created
+    if: needs.release-please.outputs.release_created == 'true' || needs.release-please.outputs.code_scan_action_release_created == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: release-please
@@ -61,7 +64,7 @@ jobs:
       - run: npm test
 
   publish-npm:
-    if: needs.release-please.outputs.release_created
+    if: needs.release-please.outputs.release_created == 'true'
     needs: [build, release-please]
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -86,7 +89,7 @@ jobs:
           PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
 
   docker:
-    if: needs.release-please.outputs.release_created
+    if: needs.release-please.outputs.release_created == 'true'
     needs: [publish-npm, release-please]
     permissions:
       contents: read
