@@ -29,8 +29,8 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       ...providerOptions,
       config: {
         ...providerOptions.config,
-        apiBaseUrl: 'https://openrouter.ai/api/v1',
-        apiKeyEnvar: 'OPENROUTER_API_KEY',
+        apiBaseUrl: providerOptions.config?.apiBaseUrl ?? 'https://openrouter.ai/api/v1',
+        apiKeyEnvar: providerOptions.config?.apiKeyEnvar ?? 'OPENROUTER_API_KEY',
         passthrough: {
           // Pass through OpenRouter-specific options
           // https://openrouter.ai/docs/requests

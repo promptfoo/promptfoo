@@ -99,6 +99,15 @@ providers:
       max_tokens: 4000
 ```
 
+If you route OpenRouter traffic through a proxy or OpenRouter-compatible gateway, set `apiBaseUrl` in the provider config. promptfoo treats this as an override of the default `https://openrouter.ai/api/v1` endpoint.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openrouter:openai/gpt-4o-mini
+    config:
+      apiBaseUrl: https://proxy.example.com/openrouter/api/v1
+```
+
 ## Features
 
 - Access to 300+ models through a single API

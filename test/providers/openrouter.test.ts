@@ -60,6 +60,58 @@ describe('OpenRouter', () => {
       });
     });
 
+    it('should preserve custom apiBaseUrl and apiKeyEnvar overrides', () => {
+      const restoreEnv = mockProcessEnv({ CUSTOM_OPENROUTER_KEY: 'custom-test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
+          config: {
+            apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1',
+            apiKeyEnvar: 'CUSTOM_OPENROUTER_KEY',
+          },
+        });
+
+        expect(provider.config.apiBaseUrl).toBe('https://proxy.example.com/openrouter/api/v1');
+        expect(provider.config.apiKeyEnvar).toBe('CUSTOM_OPENROUTER_KEY');
+        expect(provider.getApiKey()).toBe('custom-test-key');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should call the configured apiBaseUrl instead of the default OpenRouter host', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const customApiBaseUrl = 'https://proxy.example.com/openrouter/api/v1';
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
+          config: {
+            apiBaseUrl: customApiBaseUrl,
+          },
+        });
+
+        const response = new Response(
+          JSON.stringify({
+            choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        await provider.callApi('Test prompt');
+
+        const [url] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        expect(url).toBe(`${customApiBaseUrl}/chat/completions`);
+      } finally {
+        restoreEnv();
+      }
+    });
+
     describe('Thinking tokens handling', () => {
       beforeEach(() => {
         mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });

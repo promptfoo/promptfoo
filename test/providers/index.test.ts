@@ -689,6 +689,19 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('openrouter:mistralai/mistral-medium');
   });
 
+  it('loadApiProvider with openrouter preserves a custom apiBaseUrl override', async () => {
+    const provider = await loadApiProvider('openrouter:mistralai/mistral-medium', {
+      options: {
+        config: {
+          apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1',
+        },
+      },
+    });
+
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.config.apiBaseUrl).toBe('https://proxy.example.com/openrouter/api/v1');
+  });
+
   it('loadApiProvider with github', async () => {
     const provider = await loadApiProvider('github:gpt-4o-mini');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
