@@ -42,30 +42,21 @@ const TOOL_ATTRIBUTE_FAMILIES: readonly ToolAttributeFamily[] = [
   },
 ];
 
-const BARE_ARG_KEYS = ['args', 'arguments', 'input'] as const;
-
-function buildFamilyKeys(kind: 'name' | 'arg'): readonly string[] {
-  const keys: string[] = [];
-  for (const family of TOOL_ATTRIBUTE_FAMILIES) {
-    const suffixes = kind === 'name' ? family.nameSuffixes : family.argSuffixes;
-    if (suffixes) {
-      for (const suffix of suffixes) {
-        keys.push(`${family.prefix}${suffix}`);
-      }
-    }
-    const extras = kind === 'name' ? family.extraNameKeys : family.extraArgKeys;
-    if (extras) {
-      keys.push(...extras);
-    }
-  }
-  return keys;
-}
-
-export const TOOL_NAME_ATTRIBUTE_KEYS: readonly string[] = buildFamilyKeys('name');
+export const TOOL_NAME_ATTRIBUTE_KEYS: readonly string[] = TOOL_ATTRIBUTE_FAMILIES.flatMap(
+  (family) => [
+    ...(family.nameSuffixes ?? []).map((suffix) => `${family.prefix}${suffix}`),
+    ...(family.extraNameKeys ?? []),
+  ],
+);
 
 export const TOOL_ARGUMENT_ATTRIBUTE_KEYS: readonly string[] = [
-  ...buildFamilyKeys('arg'),
-  ...BARE_ARG_KEYS,
+  ...TOOL_ATTRIBUTE_FAMILIES.flatMap((family) => [
+    ...(family.argSuffixes ?? []).map((suffix) => `${family.prefix}${suffix}`),
+    ...(family.extraArgKeys ?? []),
+  ]),
+  'args',
+  'arguments',
+  'input',
 ];
 
 export function getFirstStringAttribute(
