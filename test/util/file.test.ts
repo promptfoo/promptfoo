@@ -543,8 +543,9 @@ describe('file utilities', () => {
     it('should handle objects with prototype pollution attempts safely', () => {
       vi.mocked(fs.readFileSync).mockReturnValueOnce('malicious content');
 
+      const protoKey = '__proto__';
       const config = {
-        __proto__: 'file://malicious.txt',
+        [protoKey]: 'file://malicious.txt',
         constructor: { normal: 'value' },
         prototype: ['safe', 'array'],
         normal: 'safe value',
@@ -553,11 +554,12 @@ describe('file utilities', () => {
       const result = maybeLoadConfigFromExternalFile(config);
 
       expect(result).toEqual({
-        __proto__: 'malicious content',
+        [protoKey]: 'malicious content',
         constructor: { normal: 'value' },
         prototype: ['safe', 'array'],
         normal: 'safe value',
       });
+      expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
     });
 
     it('should handle very large nested structures efficiently', () => {

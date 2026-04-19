@@ -1,3 +1,5 @@
+import { createHmac } from 'crypto';
+
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -14,6 +16,63 @@ type FalProviderOptions = {
 interface FalResult<T = unknown> {
   data: T;
   requestId: string;
+}
+
+const FAL_CACHE_KEY_HMAC_KEY = 'promptfoo:fal:cache-key:v1';
+
+function sortObject(obj: any, seen = new WeakSet<object>()): any {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    if (seen.has(obj)) {
+      return '[Circular]';
+    }
+    seen.add(obj);
+    return obj.map((item) => sortObject(item, seen));
+  }
+
+  if (typeof obj === 'object') {
+    if (seen.has(obj)) {
+      return '[Circular]';
+    }
+    seen.add(obj);
+    return Object.keys(obj)
+      .sort()
+      .reduce((result, key) => {
+        result[key] = sortObject(obj[key], seen);
+        return result;
+      }, {} as any);
+  }
+
+  return obj;
+}
+
+function omitFalSecretConfigFields(config: FalProviderOptions): Record<string, unknown> {
+  const { apiKey, ...rest } = config;
+  return rest;
+}
+
+function generateConfigHash(config: FalProviderOptions): string {
+  const sortedConfig = sortObject(omitFalSecretConfigFields(config));
+  return createHmac('sha256', FAL_CACHE_KEY_HMAC_KEY)
+    .update(JSON.stringify(sortedConfig))
+    .digest('hex');
+}
+
+function getAuthCacheNamespace(apiKey: string | undefined): string {
+  if (!apiKey) {
+    return 'no-api-key';
+  }
+
+  return createHmac('sha256', apiKey).update(`${FAL_CACHE_KEY_HMAC_KEY}:auth`).digest('hex');
+}
+
+function generateInputHash(input: unknown): string {
+  return createHmac('sha256', FAL_CACHE_KEY_HMAC_KEY)
+    .update(JSON.stringify(sortObject(input)))
+    .digest('hex');
 }
 
 class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
@@ -74,8 +133,13 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
       ...this.input,
       ...(context?.prompt?.config ?? {}),
     };
-    const cacheKey = `fal:${this.modelName}:${JSON.stringify(input)}`;
-    if (isCacheEnabled()) {
+
+    const cacheEnabled = isCacheEnabled();
+    let cacheKey: string | undefined;
+    if (cacheEnabled) {
+      cacheKey = `fal:${this.modelName}:${generateConfigHash(this.config)}:${getAuthCacheNamespace(
+        this.apiKey,
+      )}:${generateInputHash(input)}`;
       cache = getCache();
       const cachedResponse = await cache.get<string>(cacheKey);
       response = cachedResponse ? JSON.parse(cachedResponse) : undefined;
@@ -101,7 +165,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
       response = await this.runInference(input);
     }
 
-    if (!cached && isCacheEnabled() && cache) {
+    if (!cached && cacheEnabled && cache && cacheKey) {
       try {
         await cache.set(cacheKey, JSON.stringify(response));
       } catch (err) {

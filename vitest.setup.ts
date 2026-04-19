@@ -8,31 +8,24 @@ import { rmSync } from 'node:fs';
 import path from 'node:path';
 
 import { afterAll, afterEach, vi } from 'vitest';
+import { mockProcessEnv } from './test/util/utils';
 
 const TEST_CONFIG_DIR = path.join('.local', 'vitest', 'config', `worker-${process.pid}`);
 
-// Set up test environment variables
-Object.assign(process.env, {
+mockProcessEnv({
   NODE_ENV: 'test',
   CODEX_HOME: './.local/vitest/codex-home',
   PROMPTFOO_CACHE_TYPE: 'memory',
   IS_TESTING: 'true',
   PROMPTFOO_CONFIG_DIR: TEST_CONFIG_DIR,
-});
-
-// Set mock API keys to prevent authentication errors during tests
-// These are dummy values that allow provider instantiation without real credentials
-Object.assign(process.env, {
   ANTHROPIC_API_KEY: 'test-anthropic-api-key',
   AZURE_OPENAI_API_HOST: 'test.openai.azure.com',
   AZURE_OPENAI_API_KEY: 'test-azure-api-key',
   AZURE_API_KEY: 'test-azure-api-key',
   HF_API_TOKEN: 'test-hf-token',
   OPENAI_API_KEY: 'test-openai-api-key',
+  PROMPTFOO_REMOTE_GENERATION_URL: undefined,
 });
-
-// Clean up any remote generation URL
-Reflect.deleteProperty(process.env, 'PROMPTFOO_REMOTE_GENERATION_URL');
 
 /**
  * Global cleanup after each test to prevent memory leaks.

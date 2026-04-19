@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithCache } from '../../../src/cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../../../src/cache';
 import { getUserEmail, isLoggedIntoCloud } from '../../../src/globalConfig/accounts';
 import logger from '../../../src/logger';
 import {
@@ -10,6 +10,10 @@ import {
 import { addGcgTestCases, CONCURRENCY } from '../../../src/redteam/strategies/gcg';
 
 import type { TestCase } from '../../../src/types/index';
+
+type GcgGenerationResponse = {
+  responses: string[];
+};
 
 vi.mock('../../../src/cache');
 vi.mock('../../../src/globalConfig/accounts');
@@ -325,7 +329,9 @@ describe('gcg strategy', () => {
     let concurrentCalls = 0;
     let maxConcurrentCalls = 0;
 
-    mockFetchWithCache.mockImplementation(async function () {
+    mockFetchWithCache.mockImplementation(async function (): Promise<
+      FetchWithCacheResult<GcgGenerationResponse>
+    > {
       concurrentCalls++;
       maxConcurrentCalls = Math.max(maxConcurrentCalls, concurrentCalls);
       await new Promise((resolve) => setTimeout(resolve, 10));

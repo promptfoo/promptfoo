@@ -17,8 +17,7 @@ vi.mock('../../../src/util/fetch/index', () => ({
 }));
 
 vi.mock('../../../src/evaluatorHelpers', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  renderPrompt: (...args: any[]) => mockRenderPrompt(...args),
+  renderPrompt: (...args: unknown[]) => mockRenderPrompt(...args),
 }));
 
 vi.mock('../../../src/globalConfig/accounts', () => ({
@@ -49,10 +48,16 @@ describe('BestOfNProvider - Runtime Behavior', () => {
     vi.mocked(neverGenerateRemote).mockReset();
     vi.mocked(neverGenerateRemote).mockReturnValue(false);
     mockRenderPrompt.mockReset();
-    mockRenderPrompt.mockImplementation(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (_prompt: any, vars: any) => vars.input || 'rendered prompt',
-    );
+    mockRenderPrompt.mockImplementation((_prompt: unknown, vars: unknown) => {
+      const input =
+        typeof vars === 'object' &&
+        vars !== null &&
+        'input' in vars &&
+        typeof (vars as { input?: unknown }).input === 'string'
+          ? (vars as { input: string }).input
+          : undefined;
+      return input || 'rendered prompt';
+    });
 
     // Dynamic import after mocks are set up
     const module = await import('../../../src/redteam/providers/bestOfN');
