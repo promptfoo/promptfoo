@@ -12,14 +12,15 @@ const TOOL_NAME_ATTRIBUTE_KEYS = [
   'agent.toolName',
 ] as const;
 
-export function getToolNameFromAttributes(
+export function getFirstStringAttribute(
   attributes: Record<string, unknown> | undefined,
+  keys: readonly string[],
 ): string | undefined {
   if (!attributes) {
     return undefined;
   }
 
-  for (const key of TOOL_NAME_ATTRIBUTE_KEYS) {
+  for (const key of keys) {
     const value = attributes[key];
     if (typeof value === 'string' && value.trim()) {
       return value.trim();
@@ -27,4 +28,10 @@ export function getToolNameFromAttributes(
   }
 
   return undefined;
+}
+
+export function getToolNameFromAttributes(
+  attributes: Record<string, unknown> | undefined,
+): string | undefined {
+  return getFirstStringAttribute(attributes, TOOL_NAME_ATTRIBUTE_KEYS);
 }
