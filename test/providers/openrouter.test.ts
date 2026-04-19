@@ -231,7 +231,7 @@ describe('OpenRouter', () => {
       });
 
       it('should handle models with reasoning field', async () => {
-        const nonGeminiProvider = new OpenRouterProvider('anthropic/claude-3.5-sonnet', {});
+        const nonGeminiProvider = new OpenRouterProvider('anthropic/claude-sonnet-4.6', {});
 
         const mockResponse = {
           choices: [
@@ -267,7 +267,7 @@ describe('OpenRouter', () => {
       });
 
       it('should handle models without reasoning field', async () => {
-        const provider = new OpenRouterProvider('anthropic/claude-3.5-sonnet', {});
+        const provider = new OpenRouterProvider('anthropic/claude-sonnet-4.6', {});
 
         const mockResponse = {
           choices: [
@@ -819,7 +819,7 @@ describe('OpenRouter', () => {
         const providerWithOptions = new OpenRouterProvider('google/gemini-2.5-pro', {
           config: {
             transforms: ['strip-xml-tags'],
-            models: ['google/gemini-2.5-pro', 'anthropic/claude-3.5-sonnet'],
+            models: ['google/gemini-2.5-pro', 'anthropic/claude-sonnet-4.6'],
             route: 'fallback',
             provider: {
               order: ['google', 'anthropic'],
@@ -850,7 +850,7 @@ describe('OpenRouter', () => {
         expect(requestBody.transforms).toEqual(['strip-xml-tags']);
         expect(requestBody.models).toEqual([
           'google/gemini-2.5-pro',
-          'anthropic/claude-3.5-sonnet',
+          'anthropic/claude-sonnet-4.6',
         ]);
         expect(requestBody.route).toBe('fallback');
         expect(requestBody.provider).toEqual({ order: ['google', 'anthropic'] });
