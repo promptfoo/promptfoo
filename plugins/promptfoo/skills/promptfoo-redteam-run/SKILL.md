@@ -45,8 +45,11 @@ If a target or generated tests are missing, use `promptfoo-provider-setup` or
   generated probes.
 - Use a configured `redteam.provider` or `--grader` only when the scan needs a
   specific generator/grader or deterministic QA behavior.
-- Use `--no-share` by default for internal targets; remove it only when the user
-  explicitly wants cloud sharing.
+- Disable cloud sharing by default for internal targets. `redteam eval` and
+  `retry` accept `--no-share`; `redteam run` does not currently expose that
+  flag, so export `PROMPTFOO_DISABLE_SHARING=true` for the whole invocation or
+  split into `redteam generate` + `redteam eval --no-share`. Only re-enable
+  sharing when the user explicitly asks for a cloud URL.
 
 ### 2. Preflight
 
@@ -79,10 +82,11 @@ Evaluate generated tests:
 npm run local -- redteam eval -c path/to/redteam.yaml -o /tmp/redteam-results.json --no-cache --no-share --no-progress-bar
 ```
 
-Generate and evaluate in one command only when needed:
+Generate and evaluate in one command only when needed. `redteam run` has no
+`--no-share` flag, so disable sharing via the environment variable:
 
 ```bash
-npm run local -- redteam run -c path/to/promptfooconfig.yaml --force --no-cache --no-progress-bar
+PROMPTFOO_DISABLE_SHARING=true npm run local -- redteam run -c path/to/promptfooconfig.yaml --force --no-cache --no-progress-bar
 ```
 
 For fragile targets, set `-j 1` and add `--delay` rather than allowing broad

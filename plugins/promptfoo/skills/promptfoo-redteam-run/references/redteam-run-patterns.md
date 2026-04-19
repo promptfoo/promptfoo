@@ -13,16 +13,19 @@ Use this for drift checks and repeated scans. It preserves the generated probes.
 
 ## Generate And Evaluate
 
+`redteam run` has no `--no-share` flag (see `src/redteam/commands/run.ts`), so
+set `PROMPTFOO_DISABLE_SHARING=true` when scanning internal targets:
+
 ```bash
 source ~/.nvm/nvm.sh && nvm use
-npm run local -- redteam run -c promptfooconfig.yaml --force --no-cache --no-progress-bar --strict
+PROMPTFOO_DISABLE_SHARING=true npm run local -- redteam run -c promptfooconfig.yaml --force --no-cache --no-progress-bar --strict
 ```
 
 Use this after changing target purpose, plugins, strategies, or generation
 provider. Be careful with `--output` on `redteam run`; it is the generated test
 file path and is also passed through to the eval output path by the current CLI.
-For separate generated YAML and JSON result artifacts, run `redteam generate`
-then `redteam eval`.
+For separate generated YAML and JSON result artifacts, and to use the native
+`--no-share` flag, run `redteam generate` then `redteam eval --no-share`.
 
 ## Deterministic Grader QA
 
