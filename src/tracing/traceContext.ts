@@ -135,8 +135,6 @@ function createTraceSpans(spans: SpanData[]): TraceSpan[] {
   });
 }
 
-export { getToolNameFromAttributes } from './toolAttributes';
-
 function deriveInsights(traceSpans: TraceSpan[]): string[] {
   if (traceSpans.length === 0) {
     return [];

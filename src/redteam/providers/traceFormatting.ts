@@ -1,4 +1,5 @@
-import { getToolNameFromAttributes, TraceContextData, TraceSpan } from '../../tracing/traceContext';
+import { getToolNameFromAttributes } from '../../tracing/toolAttributes';
+import { TraceContextData, TraceSpan } from '../../tracing/traceContext';
 
 const DEFAULT_MAX_SPANS = 10;
 

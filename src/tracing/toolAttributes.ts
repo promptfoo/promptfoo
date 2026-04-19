@@ -26,19 +26,5 @@ export function getToolNameFromAttributes(
     }
   }
 
-  for (const [key, value] of Object.entries(attributes)) {
-    if (typeof value !== 'string' || !value.trim()) {
-      continue;
-    }
-
-    if (/tool.?name|function.?name/i.test(key)) {
-      return value.trim();
-    }
-
-    if (/(^|[._])tool($|[._])/i.test(key) && !/result|output/i.test(key)) {
-      return value.trim();
-    }
-  }
-
   return undefined;
 }

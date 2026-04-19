@@ -27,15 +27,15 @@ export interface TrajectoryStep {
 }
 
 const TOOL_ARGUMENT_ATTRIBUTE_KEYS = [
-  'ai.toolCall.args',
-  'ai.toolCall.arguments',
-  'ai.toolCall.input',
   'tool.arguments',
   'tool.args',
   'tool.input',
   'tool_arguments',
   'tool_args',
   'tool_input',
+  'ai.toolCall.args',
+  'ai.toolCall.arguments',
+  'ai.toolCall.input',
   'function.arguments',
   'function.args',
   'function.input',
@@ -172,6 +172,20 @@ function extractToolName(span: TraceSpan): string | undefined {
   const directMatch = getToolNameFromAttributes(attributes);
   if (directMatch) {
     return directMatch;
+  }
+
+  for (const [key, value] of Object.entries(attributes)) {
+    if (typeof value !== 'string' || !value.trim()) {
+      continue;
+    }
+
+    if (/tool.?name|function.?name/i.test(key)) {
+      return value.trim();
+    }
+
+    if (/(^|[._])tool($|[._])/i.test(key) && !/result|output/i.test(key)) {
+      return value.trim();
+    }
   }
 
   if (span.name.startsWith('mcp ')) {

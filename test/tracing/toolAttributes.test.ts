@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { getToolNameFromAttributes } from '../../src/tracing/traceContext';
+import { getToolNameFromAttributes } from '../../src/tracing/toolAttributes';
 
 describe('getToolNameFromAttributes', () => {
   it('returns undefined when attributes are missing', () => {
     expect(getToolNameFromAttributes(undefined)).toBeUndefined();
+  });
+
+  it('returns undefined when no recognized keys are present', () => {
+    expect(getToolNameFromAttributes({ foo: 'bar' })).toBeUndefined();
   });
 
   it('returns Vercel AI SDK tool span names', () => {
@@ -14,7 +18,7 @@ describe('getToolNameFromAttributes', () => {
     ).toBe('lookup_customer');
   });
 
-  it('prefers generic tool.name when present', () => {
+  it('prefers generic tool.name over vendor-specific keys', () => {
     expect(
       getToolNameFromAttributes({
         'tool.name': 'search_orders',
@@ -23,7 +27,7 @@ describe('getToolNameFromAttributes', () => {
     ).toBe('search_orders');
   });
 
-  it('recognizes other common tool-name attributes', () => {
+  it('recognizes function.name', () => {
     expect(
       getToolNameFromAttributes({
         'function.name': 'compose_reply',
@@ -31,21 +35,29 @@ describe('getToolNameFromAttributes', () => {
     ).toBe('compose_reply');
   });
 
-  it('recognizes dynamic function-name-style keys', () => {
+  it('trims whitespace from values', () => {
     expect(
       getToolNameFromAttributes({
-        customFunctionName: 'draft_reply',
+        'tool.name': '  trimmed_tool  ',
       }),
-    ).toBe('draft_reply');
+    ).toBe('trimmed_tool');
   });
 
-  it('recognizes generic tool-like keys and ignores result-only attributes', () => {
+  it('skips empty string values in favor of later recognized keys', () => {
     expect(
       getToolNameFromAttributes({
-        metadata: 42,
-        'tool.result': '{"status":"ok"}',
-        'workflow.tool': 'search_inventory',
+        'tool.name': '   ',
+        'ai.toolCall.name': 'fallback_tool',
       }),
-    ).toBe('search_inventory');
+    ).toBe('fallback_tool');
+  });
+
+  it('skips non-string values', () => {
+    expect(
+      getToolNameFromAttributes({
+        'tool.name': 42 as unknown as string,
+        'ai.toolCall.name': 'fallback_tool',
+      }),
+    ).toBe('fallback_tool');
   });
 });
