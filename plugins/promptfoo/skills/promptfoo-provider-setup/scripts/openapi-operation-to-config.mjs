@@ -520,6 +520,44 @@ function varName(name) {
     .toLowerCase();
 }
 
+// Parameters with these names (or these suffixes) are treated as credentials
+// even when they are modeled as plain header/query/cookie parameters rather
+// than as OpenAPI securitySchemes. Copying their literal `example` values into
+// the generated config could leak real tokens, so the helper forces
+// `{{env.<UPPER_NAME>}}` placeholders for them instead.
+const CREDENTIAL_PARAM_NAMES = new Set([
+  'authorization',
+  'bearer',
+  'token',
+  'access_token',
+  'auth_token',
+  'api_key',
+  'apikey',
+  'x_api_key',
+  'x_auth_token',
+  'x_access_token',
+  'secret',
+  'password',
+  'csrf_token',
+  'xsrf_token',
+  'session',
+  'sessionid',
+  'session_id',
+  'sid',
+]);
+const CREDENTIAL_SUFFIX_REGEX =
+  /(^|_)(api_key|apikey|auth_token|access_token|bearer|password|secret|token|authorization)$/;
+function isCredentialParamName(name) {
+  const normalized = varName(name);
+  return CREDENTIAL_PARAM_NAMES.has(normalized) || CREDENTIAL_SUFFIX_REGEX.test(normalized);
+}
+function credentialEnvName(paramName) {
+  return varName(paramName).toUpperCase();
+}
+function credentialPlaceholder(paramName) {
+  return `{{env.${credentialEnvName(paramName)}}}`;
+}
+
 function authFromScheme(scheme) {
   if (scheme.type === 'apiKey' && typeof scheme.name === 'string') {
     if (scheme.in === 'header') {
@@ -759,17 +797,36 @@ const responseProperties = responseArrayItemSchema
     : responseExampleFields;
 const responseField = responseOutputField(document, responseProperties);
 
+const credentialHeaderFields = headerFields.filter(isCredentialParamName);
+const credentialQueryFields = queryFields.filter(isCredentialParamName);
+const credentialCookieFields = cookieFields.filter(isCredentialParamName);
+const credentialParamNames = new Set([
+  ...credentialHeaderFields,
+  ...credentialQueryFields,
+  ...credentialCookieFields,
+]);
 const headers =
   requestMediaEntry && !requestIsMultipart
     ? { 'Content-Type': requestMediaEntry?.mediaType || 'application/json' }
     : {};
 for (const name of headerFields) {
-  headers[name] = `{{${varName(name)}}}`;
+  headers[name] = credentialParamNames.has(name)
+    ? credentialPlaceholder(name)
+    : `{{${varName(name)}}}`;
 }
 for (const name of cookieFields) {
-  appendCookieHeader(headers, name, `{{${varName(name)}}}`);
+  appendCookieHeader(
+    headers,
+    name,
+    credentialParamNames.has(name) ? credentialPlaceholder(name) : `{{${varName(name)}}}`,
+  );
 }
-const queryParams = Object.fromEntries(queryFields.map((name) => [name, inputTemplate(name)]));
+const queryParams = Object.fromEntries(
+  queryFields.map((name) => [
+    name,
+    credentialParamNames.has(name) ? credentialPlaceholder(name) : inputTemplate(name),
+  ]),
+);
 if (args['token-env']) {
   for (const auth of authConfigs(args, document, operation).auths) {
     const value = authValue(args['token-env'], auth.prefix);
@@ -820,10 +877,13 @@ if (responseField) {
   );
 }
 
-const varNames = [...pathVars, ...queryFields, ...bodyFields]
+const nonCredentialQueryFields = queryFields.filter((name) => !credentialParamNames.has(name));
+const nonCredentialHeaderFields = headerFields.filter((name) => !credentialParamNames.has(name));
+const nonCredentialCookieFields = cookieFields.filter((name) => !credentialParamNames.has(name));
+const varNames = [...pathVars, ...nonCredentialQueryFields, ...bodyFields]
   .filter((name) => inputTemplate(name) !== '{{prompt}}')
   .map(varName);
-varNames.push(...headerFields.map(varName), ...cookieFields.map(varName));
+varNames.push(...nonCredentialHeaderFields.map(varName), ...nonCredentialCookieFields.map(varName));
 if (!varNames.includes('message')) {
   varNames.push('message');
 }
@@ -841,15 +901,32 @@ for (const name of bodyFields) {
       : (requestExampleFields[name] ?? schemaSample(document, requestProperties[name], name));
   }
 }
+// The canned "Say exactly PONG." prompt is only meaningful when the request
+// carries a prompt field (path/query/body) — otherwise the message never reaches
+// the target and `contains: PONG` fails by construction. Fall back to a safer
+// response-shape assertion.
+const promptReachesTarget =
+  pathVars.some((name) => PROMPT_FIELDS.has(name)) ||
+  queryFields.some((name) => PROMPT_FIELDS.has(name)) ||
+  bodyFields.some((name) => PROMPT_FIELDS.has(name)) ||
+  (bodyFields.length > 0 && (requestIsText || requestBodyIsScalar));
+const responseIsJson = Boolean(responseMediaEntry);
+const smokeAssert = promptReachesTarget
+  ? [{ type: 'contains', value: 'PONG' }]
+  : responseIsJson
+    ? [{ type: 'is-json' }]
+    : [{ type: 'javascript', value: "typeof output === 'string' && output.length > 0" }];
 const config = {
   description: args.description || `Provider setup generated from ${args['operation-id']}`,
   prompts: ['{{message}}'],
   providers: [{ id: 'https', label: args.label || args['operation-id'], config: providerConfig }],
   tests: [
     {
-      description: `${args['operation-id']} returns text`,
+      description: promptReachesTarget
+        ? `${args['operation-id']} returns text`
+        : `${args['operation-id']} responds successfully`,
       vars,
-      assert: [{ type: 'contains', value: 'PONG' }],
+      assert: smokeAssert,
     },
   ],
 };

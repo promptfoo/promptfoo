@@ -385,6 +385,41 @@ function varName(name) {
     .toLowerCase();
 }
 
+// Parameters with these names (or suffixes) are treated as credentials even
+// when the spec models them as plain header/query/cookie parameters rather
+// than as securitySchemes. Their example values are replaced with
+// `{{env.<UPPER_NAME>}}` placeholders so generated configs never embed real
+// tokens.
+const CREDENTIAL_PARAM_NAMES = new Set([
+  'authorization',
+  'bearer',
+  'token',
+  'access_token',
+  'auth_token',
+  'api_key',
+  'apikey',
+  'x_api_key',
+  'x_auth_token',
+  'x_access_token',
+  'secret',
+  'password',
+  'csrf_token',
+  'xsrf_token',
+  'session',
+  'sessionid',
+  'session_id',
+  'sid',
+]);
+const CREDENTIAL_SUFFIX_REGEX =
+  /(^|_)(api_key|apikey|auth_token|access_token|bearer|password|secret|token|authorization)$/;
+function isCredentialParamName(name) {
+  const normalized = varName(name);
+  return CREDENTIAL_PARAM_NAMES.has(normalized) || CREDENTIAL_SUFFIX_REGEX.test(normalized);
+}
+function credentialPlaceholder(paramName) {
+  return `{{env.${varName(paramName).toUpperCase()}}}`;
+}
+
 function isIdentityField(name) {
   if (IDENTITY_FIELDS.has(name)) {
     return true;
@@ -845,11 +880,22 @@ const fieldSamples = Object.fromEntries([
       : (requestExampleFields[name] ?? schemaSample(document, requestProperties[name], name)),
   ]),
 ]);
-const headerVars = headerFields.map(varName);
-const cookieVars = cookieFields.map(varName);
+const credentialHeaderFields = headerFields.filter(isCredentialParamName);
+const credentialQueryFields = queryFields.filter(isCredentialParamName);
+const credentialCookieFields = cookieFields.filter(isCredentialParamName);
+const credentialParamNames = new Set([
+  ...credentialHeaderFields,
+  ...credentialQueryFields,
+  ...credentialCookieFields,
+]);
+const nonCredentialHeaderFields = headerFields.filter((name) => !credentialParamNames.has(name));
+const nonCredentialQueryFields = queryFields.filter((name) => !credentialParamNames.has(name));
+const nonCredentialCookieFields = cookieFields.filter((name) => !credentialParamNames.has(name));
+const headerVars = nonCredentialHeaderFields.map(varName);
+const cookieVars = nonCredentialCookieFields.map(varName);
 const fields = unique([
   ...pathVars.map(varName),
-  ...queryFields.map(varName),
+  ...nonCredentialQueryFields.map(varName),
   ...bodyFields.map(varName),
   ...headerVars,
   ...cookieVars,
@@ -865,12 +911,23 @@ const headers =
     ? { 'Content-Type': requestMediaEntry?.mediaType || 'application/json' }
     : {};
 for (const name of headerFields) {
-  headers[name] = `{{${varName(name)}}}`;
+  headers[name] = credentialParamNames.has(name)
+    ? credentialPlaceholder(name)
+    : `{{${varName(name)}}}`;
 }
 for (const name of cookieFields) {
-  appendCookieHeader(headers, name, `{{${varName(name)}}}`);
+  appendCookieHeader(
+    headers,
+    name,
+    credentialParamNames.has(name) ? credentialPlaceholder(name) : `{{${varName(name)}}}`,
+  );
 }
-const queryParams = Object.fromEntries(queryFields.map((name) => [name, `{{${varName(name)}}}`]));
+const queryParams = Object.fromEntries(
+  queryFields.map((name) => [
+    name,
+    credentialParamNames.has(name) ? credentialPlaceholder(name) : `{{${varName(name)}}}`,
+  ]),
+);
 if (args['token-env']) {
   for (const auth of authConfigs(args, document, operation).auths) {
     const value = authValue(args['token-env'], auth.prefix);

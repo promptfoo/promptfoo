@@ -3666,6 +3666,11 @@ describe('promptfoo-provider-setup skill', () => {
       expect(test.vars).toEqual({
         message: 'Say exactly PONG.',
       });
+      // The "Say exactly PONG." message never reaches the target here, so the
+      // smoke assertion falls back to is-json on the structured response
+      // instead of `contains: PONG` (which would fail by construction).
+      expect(test.assert).toEqual([{ type: 'is-json' }]);
+      expect(test.description).toBe('getHealth responds successfully');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -4698,6 +4703,96 @@ describe('promptfoo-provider-setup skill', () => {
         Cookie:
           'session_id={{env.CONJUNCTIVE_API_TOKEN}}; csrf_token={{env.CONJUNCTIVE_API_TOKEN}}',
       });
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('forces env placeholders for credential-like header, query, and cookie params', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-credential-'));
+    const specPath = path.join(tempDir, 'openapi.yaml');
+    try {
+      fs.writeFileSync(
+        specPath,
+        yaml.dump({
+          openapi: '3.1.0',
+          paths: {
+            '/search': {
+              get: {
+                operationId: 'leakyAuthSearch',
+                parameters: [
+                  {
+                    name: 'Authorization',
+                    in: 'header',
+                    schema: { type: 'string', example: 'Bearer SECRET_TOKEN_123' },
+                  },
+                  {
+                    name: 'api_key',
+                    in: 'query',
+                    schema: { type: 'string', example: 'PROD_API_KEY_456' },
+                  },
+                  {
+                    name: 'session_id',
+                    in: 'cookie',
+                    schema: { type: 'string', example: 'sess_XYZ' },
+                  },
+                  { name: 'q', in: 'query', schema: { type: 'string' } },
+                ],
+                responses: {
+                  '200': {
+                    description: 'ok',
+                    content: {
+                      'application/json': {
+                        schema: {
+                          type: 'object',
+                          properties: { output: { type: 'string' } },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      );
+      const generated = yaml.load(
+        execFileSync(
+          'node',
+          [
+            path.join(providerSkillRoot, 'scripts', 'openapi-operation-to-config.mjs'),
+            '--spec',
+            specPath,
+            '--operation-id',
+            'leakyAuthSearch',
+            '--base-url-env',
+            'LEAKY_API_BASE_URL',
+          ],
+          { cwd: repoRoot, encoding: 'utf8' },
+        ),
+      );
+      expectRecord(generated, 'Generated credential-leak provider config');
+      const provider = (generated.providers as unknown[])[0];
+      expectRecord(provider, 'Generated credential-leak provider');
+      expectRecord(provider.config, 'Generated credential-leak provider config block');
+      // Credential-like header/query/cookie params route through env placeholders,
+      // NOT through vars (which would embed the raw example token into the config).
+      expect(provider.config.headers).toEqual({
+        Authorization: '{{env.AUTHORIZATION}}',
+        Cookie: 'session_id={{env.SESSION_ID}}',
+      });
+      expect(provider.config.queryParams).toEqual({
+        api_key: '{{env.API_KEY}}',
+        q: '{{prompt}}',
+      });
+      const [test] = generated.tests as unknown[];
+      expectRecord(test, 'Generated credential-leak provider test');
+      expect(test.vars).toEqual({ message: 'Say exactly PONG.' });
+      // No literal secrets copied from the OpenAPI example values.
+      const serialized = yaml.dump(generated);
+      expect(serialized).not.toContain('SECRET_TOKEN_123');
+      expect(serialized).not.toContain('PROD_API_KEY_456');
+      expect(serialized).not.toContain('sess_XYZ');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -6888,6 +6983,95 @@ describe('promptfoo-redteam-setup skill', () => {
     }
   });
 
+  it('forces env placeholders for credential-like params in redteam target configs', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-redteam-credential-'));
+    const specPath = path.join(tempDir, 'openapi.yaml');
+    try {
+      fs.writeFileSync(
+        specPath,
+        yaml.dump({
+          openapi: '3.1.0',
+          paths: {
+            '/search': {
+              get: {
+                operationId: 'leakyRedteamSearch',
+                parameters: [
+                  {
+                    name: 'Authorization',
+                    in: 'header',
+                    schema: { type: 'string', example: 'Bearer SECRET_TOKEN_123' },
+                  },
+                  {
+                    name: 'api_key',
+                    in: 'query',
+                    schema: { type: 'string', example: 'PROD_API_KEY_456' },
+                  },
+                  {
+                    name: 'session_id',
+                    in: 'cookie',
+                    schema: { type: 'string', example: 'sess_XYZ' },
+                  },
+                  { name: 'q', in: 'query', schema: { type: 'string' } },
+                ],
+                responses: {
+                  '200': {
+                    description: 'ok',
+                    content: {
+                      'application/json': {
+                        schema: {
+                          type: 'object',
+                          properties: { output: { type: 'string' } },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      );
+      const generated = yaml.load(
+        execFileSync(
+          'node',
+          [
+            path.join(redteamSetupSkillRoot, 'scripts', 'openapi-operation-to-redteam-config.mjs'),
+            '--spec',
+            specPath,
+            '--operation-id',
+            'leakyRedteamSearch',
+            '--base-url-env',
+            'LEAKY_REDTEAM_API_BASE_URL',
+          ],
+          { cwd: repoRoot, encoding: 'utf8' },
+        ),
+      );
+      expectRecord(generated, 'Generated credential-leak redteam config');
+      const [target] = generated.targets as unknown[];
+      expectRecord(target, 'Generated credential-leak redteam target');
+      expectRecord(target.config, 'Generated credential-leak redteam target config');
+      expect(target.config.headers).toEqual({
+        Authorization: '{{env.AUTHORIZATION}}',
+        Cookie: 'session_id={{env.SESSION_ID}}',
+      });
+      expect(target.config.queryParams).toEqual({
+        api_key: '{{env.API_KEY}}',
+        q: '{{q}}',
+      });
+      // Credentials must NOT appear as target inputs or default vars.
+      expect(target.inputs).toEqual({
+        q: 'User-controlled message or instruction to the target.',
+      });
+      expect(generated.defaultTest).toEqual({ vars: { q: 'Say exactly PONG.' } });
+      const serialized = yaml.dump(generated);
+      expect(serialized).not.toContain('SECRET_TOKEN_123');
+      expect(serialized).not.toContain('PROD_API_KEY_456');
+      expect(serialized).not.toContain('sess_XYZ');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('excludes technical tracing _id fields from RBAC object-field inference', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-openapi-technical-id-'));
     const specPath = path.join(tempDir, 'openapi.yaml');
@@ -6991,6 +7175,10 @@ describe('promptfoo-redteam-run skill', () => {
     expect(skill).toContain('ENOENT');
     expect(skill).toContain('Regenerate beside');
     expect(skill).toContain('redteam report');
+    // `redteam run` has no --no-share flag (see src/redteam/commands/run.ts);
+    // the skill must route users to PROMPTFOO_DISABLE_SHARING=true instead.
+    expect(skill).toContain('PROMPTFOO_DISABLE_SHARING=true');
+    expect(skill).not.toMatch(/redteam run[^\n]*--no-share/);
   });
 
   it('ships Codex UI metadata for redteam runs', () => {
