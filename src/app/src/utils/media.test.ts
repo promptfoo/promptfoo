@@ -540,7 +540,7 @@ describe('resolveVideoSource', () => {
     });
   });
 
-  describe('blob reference resolution', () => {
+  describe('blob reference resolution (without format)', () => {
     it('should return an object with resolved blob URL as src and type video/mp4 when given a video object with valid blobRef and no format', () => {
       const videoObject = {
         blobRef: { hash: 'mock-blob-hash' },
@@ -557,7 +557,7 @@ describe('resolveVideoSource', () => {
     });
   });
 
-  describe('format handling', () => {
+  describe('format handling (with blobRef)', () => {
     it('should return an object with the correct type when the video object specifies a format', () => {
       const videoObject = {
         blobRef: { hash: 'mock-blob-hash' },
