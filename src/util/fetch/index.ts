@@ -449,9 +449,6 @@ export interface StreamingMetrics {
   isActuallyStreaming?: boolean;
 }
 
-/** Callback invoked when the first non-whitespace chunk arrives. */
-export type FirstTokenCallback = () => void;
-
 /**
  * Consume a streaming HTTP response and collect TTFT + throughput metrics.
  *
@@ -462,23 +459,20 @@ export type FirstTokenCallback = () => void;
  *
  * @param response - The Response object to process as a stream
  * @param requestStartTime - The timestamp when the request was initiated (ms since epoch)
- * @param onFirstToken - Optional callback triggered when first non-whitespace chunk is detected
  */
 export async function processStreamingResponse(
   response: Response,
   requestStartTime: number,
-  onFirstToken?: FirstTokenCallback,
 ): Promise<{ text: string; streamingMetrics: StreamingMetrics }> {
   const reader = response.body?.getReader();
   if (!reader) {
-    throw new Error('Response body is not readable');
+    throw new Error(`Response has no readable body (status ${response.status})`);
   }
 
   const streamStart = Date.now();
   const decoder = new TextDecoder();
+  const chunks: string[] = [];
   let firstTokenTime: number | undefined;
-  let text = '';
-  let tokenCount = 0;
   let chunkCount = 0;
 
   try {
@@ -489,22 +483,28 @@ export async function processStreamingResponse(
       }
 
       const chunk = decoder.decode(value, { stream: true });
-      text += chunk;
+      chunks.push(chunk);
       chunkCount++;
-      tokenCount += Math.ceil(chunk.length / 4);
 
-      if (firstTokenTime === undefined && chunk.trim().length > 0) {
-        // Measure from request start so network overhead (TCP/TLS/headers) is included.
-        firstTokenTime = Date.now() - requestStartTime;
-        onFirstToken?.();
+      // Scan for the first non-whitespace byte without allocating a trimmed copy.
+      // Measure from request start so network overhead (TCP/TLS/headers) is included.
+      if (firstTokenTime === undefined) {
+        for (let i = 0; i < chunk.length; i++) {
+          if (chunk.charCodeAt(i) > 32) {
+            firstTokenTime = Date.now() - requestStartTime;
+            break;
+          }
+        }
       }
     }
   } finally {
     reader.releaseLock();
   }
 
+  const text = chunks.join('');
   const totalStreamTime = Date.now() - streamStart;
-  const tokensPerSecond = totalStreamTime > 0 ? (tokenCount / totalStreamTime) * 1000 : 0;
+  const tokensPerSecond =
+    totalStreamTime > 0 ? (Math.ceil(text.length / 4) / totalStreamTime) * 1000 : 0;
 
   return {
     text,

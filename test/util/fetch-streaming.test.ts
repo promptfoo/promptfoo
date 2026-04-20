@@ -141,34 +141,6 @@ describe('processStreamingResponse', () => {
       expect(result.text).toBe('   Content More');
     });
 
-    it('should call onFirstToken callback when first content arrives', async () => {
-      const requestStartTime = Date.now();
-      const onFirstToken = vi.fn();
-
-      const chunks = [new TextEncoder().encode('First'), new TextEncoder().encode(' Second')];
-
-      let chunkIndex = 0;
-      const mockReader = {
-        read: vi.fn(async () => {
-          if (chunkIndex < chunks.length) {
-            return { done: false, value: chunks[chunkIndex++] };
-          }
-          return { done: true, value: undefined };
-        }),
-        releaseLock: vi.fn(),
-      };
-
-      const mockResponse = {
-        body: {
-          getReader: () => mockReader,
-        },
-      } as unknown as Response;
-
-      await processStreamingResponse(mockResponse, requestStartTime, onFirstToken);
-
-      expect(onFirstToken).toHaveBeenCalledTimes(1);
-    });
-
     it('should include network overhead in TTFT measurement', async () => {
       // Simulate a request that was sent 500ms ago
       const requestStartTime = Date.now() - 500;
@@ -239,10 +211,11 @@ describe('processStreamingResponse', () => {
 
       const mockResponse = {
         body: null,
+        status: 204,
       } as unknown as Response;
 
       await expect(processStreamingResponse(mockResponse, requestStartTime)).rejects.toThrow(
-        'Response body is not readable',
+        'Response has no readable body (status 204)',
       );
     });
 

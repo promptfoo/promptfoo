@@ -1511,6 +1511,16 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
   });
 }
 
+// Streaming responses are never cached, so the wrapper result's delete hook
+// is a no-op. Hoisted so we don't allocate a fresh closure per request.
+const NOOP_DELETE_FROM_CACHE = async () => {};
+
+function requestsStreamingTransport(body: unknown): boolean {
+  return (
+    typeof body === 'object' && body !== null && (body as Record<string, unknown>).stream === true
+  );
+}
+
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
@@ -1616,7 +1626,7 @@ export class HttpProvider implements ApiProvider {
         statusText: rawResponse.statusText,
         headers: Object.fromEntries(rawResponse.headers.entries()),
         latencyMs: Date.now() - requestStartTime,
-        deleteFromCache: async () => {},
+        deleteFromCache: NOOP_DELETE_FROM_CACHE,
       };
 
       return { response, streamingMetrics };
@@ -2471,10 +2481,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     // Read from rendered body so templated `stream` values are honored.
-    const isStreaming =
-      typeof renderedConfig.body === 'object' &&
-      renderedConfig.body !== null &&
-      (renderedConfig.body as Record<string, any>).stream === true;
+    const isStreaming = requestsStreamingTransport(renderedConfig.body);
 
     const { response, streamingMetrics } = await this.fetchResponse(
       url,

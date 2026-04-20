@@ -241,11 +241,15 @@ export interface ProviderResponse {
     resolution?: string; // '720p' or '1080p' (Veo)
   };
   images?: ImageOutput[];
+  /**
+   * Timing captured while consuming a streaming HTTP response (text modality).
+   * See `StreamingMetrics` in `src/util/fetch/index.ts` for field semantics.
+   */
   streamingMetrics?: {
-    timeToFirstToken?: number; // TTFT in milliseconds (measured from request start, text modality only)
-    tokensPerSecond?: number; // Streaming throughput (tokens per second)
-    totalStreamTime?: number; // End-to-end streaming time in milliseconds
-    isActuallyStreaming?: boolean; // True if response was actually streamed (>1 chunk)
+    timeToFirstToken?: number;
+    tokensPerSecond?: number;
+    totalStreamTime?: number;
+    isActuallyStreaming?: boolean;
   };
 }
 
