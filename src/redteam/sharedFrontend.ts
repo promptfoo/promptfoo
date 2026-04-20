@@ -14,7 +14,7 @@ export function getRiskCategorySeverityMap(
   plugins?: RedteamPluginObject[],
 ): Record<Plugin, Severity> {
   const overrides =
-    plugins?.reduce<Record<Plugin, Severity>>((acc, plugin) => {
+    plugins?.reduce<Partial<Record<Plugin, Severity>>>((acc, plugin) => {
       if (plugin.severity) {
         acc[plugin.id as Plugin] = plugin.severity;
 

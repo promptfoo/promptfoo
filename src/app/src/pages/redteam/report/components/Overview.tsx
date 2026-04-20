@@ -43,7 +43,7 @@ const Overview = ({ categoryStats, plugins, vulnerabilitiesDataGridRef }: Overvi
 
   // Iterate over categoryStats entries (keyed by resolved plugin IDs) rather than
   // the raw plugins array, so custom policies with specific IDs are counted correctly.
-  const severityCounts = Object.values(Severity).reduce<Record<Severity, number>>(
+  const severityCounts = Object.values(Severity).reduce<Partial<Record<Severity, number>>>(
     (acc, severity) => {
       acc[severity] = Object.entries(categoryStats).reduce((count, [pluginId, stats]) => {
         if (stats.total <= 0) {
