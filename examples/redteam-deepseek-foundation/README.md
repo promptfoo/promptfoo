@@ -1,6 +1,6 @@
 # redteam-deepseek-foundation (DeepSeek Red Team Example)
 
-This example demonstrates how to run a red team evaluation against DeepSeek-R1 and GPT-4o-mini models to test their security and safety guardrails.
+This example demonstrates how to run a red team evaluation against DeepSeek R1 0528 and GPT-5.4 models to test their security and safety guardrails.
 
 You can run this example with:
 
@@ -14,7 +14,7 @@ cd redteam-deepseek-foundation
 This example shows how to:
 
 - Set up red team evaluations against multiple AI models
-- Compare security responses between DeepSeek-R1 and GPT-4o-mini
+- Compare security responses between DeepSeek R1 0528 and GPT-5.4
 - Analyze model refusals and potential vulnerabilities
 - Use promptfoo's red team commands for security testing
 
@@ -22,8 +22,8 @@ This example shows how to:
 
 This example requires the following environment variables:
 
-- `OPENROUTER_API_KEY` - Your OpenRouter API key for accessing DeepSeek-R1
-- `OPENAI_API_KEY` - Your OpenAI API key for accessing GPT-4o-mini
+- `OPENROUTER_API_KEY` - Your OpenRouter API key for accessing DeepSeek R1 0528
+- `OPENAI_API_KEY` - Your OpenAI API key for accessing GPT-5.4
 
 You can set these in a `.env` file or directly in your environment.
 
