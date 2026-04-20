@@ -28,7 +28,7 @@ Promptfoo OSS is a local eval runner, not a sandbox for adversarial eval content
 
 **Out of scope for OSS:** adversarial eval content flowing through the configured template engine and eval pipeline; code execution from explicitly configured custom code or templates in fields that execute code; direct local API or browser access to the OSS local server (`promptfoo view`); and issues requiring users to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges.
 
-Secret persistence or display that remains confined to the same local user account is generally treated as a hardening or privacy issue rather than a security-boundary bypass. It becomes in scope when Promptfoo bypasses a documented redaction, disable, or opt-out control, or when Promptfoo uploads, shares, exports, or otherwise exposes that data beyond the same local account.
+Secret persistence or display that remains confined to the same local user account is generally treated as a hardening or privacy issue rather than a security-boundary bypass. It becomes in scope only when Promptfoo bypasses a documented redaction or disable/opt-out control, or uploads, shares, exports, or otherwise exposes that data beyond the same local account.
 
 ### Cloud Services
 
@@ -110,7 +110,7 @@ The following are out-of-scope:
 - Direct local API access or browser access to the OSS local server (`promptfoo view`)
 - Adversarial eval content flowing through the configured template engine and eval pipeline (e.g., model output in grading prompts or reports)
 - Issues requiring users to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges
-- Sensitive data present only in local logs, databases, caches, reports, exports, or UI views under the same local user account, unless Promptfoo uploads, shares, exports, or otherwise exposes that artifact beyond that account or bypasses a documented redaction or opt-out control
+- Sensitive data present only in local logs, databases, caches, reports, exports, or UI views under the same local user account, unless Promptfoo bypasses a documented redaction or disable/opt-out control or uploads, shares, exports, or otherwise exposes that artifact beyond that account
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Social engineering, phishing, or physical attacks
 - Volumetric denial of service
