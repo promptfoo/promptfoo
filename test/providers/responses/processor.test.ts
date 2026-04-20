@@ -122,6 +122,28 @@ describe('ResponsesProcessor', () => {
       expect(result.output).toBe('');
     });
 
+    it('should ignore empty reasoning summary items', async () => {
+      const mockData = {
+        output: [
+          {
+            type: 'reasoning',
+            summary: [{ text: '  ' }, {}, { text: 'Useful summary' }],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 20 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.reasoning).toEqual([
+        {
+          type: 'reasoning',
+          content: 'Useful summary',
+        },
+      ]);
+      expect(result.output).toBe('');
+    });
+
     it('should process web search calls', async () => {
       const mockData = {
         output: [

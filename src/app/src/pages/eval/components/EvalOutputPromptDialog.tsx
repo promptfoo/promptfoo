@@ -18,13 +18,23 @@ import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
-import type { GradingResult } from '@promptfoo/types';
+import type { GradingResult, ReasoningContent, Vars } from '@promptfoo/types';
 
 import type { Trace } from '../../../components/traces/TraceView';
 import type { CloudConfigData } from '../../../hooks/useCloudConfig';
+import type { Citation } from './Citations';
 import type { ResultsFilterOperator, ResultsFilterType } from './store';
 
 const subtitleTypographyClassName = 'mb-2 font-medium text-base';
+
+interface RedteamHistoryEntry {
+  prompt?: string;
+  promptAudio?: { data?: string; format?: string };
+  promptImage?: { data?: string; format?: string };
+  output?: string;
+  outputAudio?: { data?: string; format?: string };
+  outputImage?: { data?: string; format?: string };
+}
 
 interface CodeDisplayProps {
   content: string;
@@ -108,7 +118,7 @@ export interface ReplayEvaluationParams {
   evaluationId: string;
   testIndex?: number;
   prompt: string;
-  variables?: Record<string, any>;
+  variables?: Vars;
 }
 
 /**
@@ -116,7 +126,7 @@ export interface ReplayEvaluationParams {
  */
 export interface ReplayEvaluationResult {
   output?: string;
-  reasoning?: any;
+  reasoning?: ReasoningContent[];
   error?: string;
 }
 
@@ -138,7 +148,7 @@ interface EvalOutputPromptDialogProps {
   output?: string;
   reasoning?: string;
   gradingResults?: GradingResult[];
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   /**
    * The actual prompt sent by the provider (if different from the rendered prompt).
    * Takes priority over metadata.redteamFinalPrompt for display purposes.
@@ -148,7 +158,7 @@ interface EvalOutputPromptDialogProps {
   testCaseId?: string;
   testIndex?: number;
   promptIndex?: number;
-  variables?: Record<string, any>;
+  variables?: Vars;
   onAddFilter?: (filter: FilterConfig) => void;
   onResetFilters?: () => void;
   onReplay?: (params: ReplayEvaluationParams) => Promise<ReplayEvaluationResult>;
@@ -321,47 +331,44 @@ export default function EvalOutputPromptDialog({
   const handleCancel = () => {
     setEditedPrompt(prompt);
     setReplayOutput(null);
+    setReplayReasoning(null);
     setReplayError(null);
   };
 
   let parsedMessages: Message[] = [];
   try {
-    parsedMessages = JSON.parse(metadata?.messages || '[]');
+    const messagesValue = metadata?.messages;
+    parsedMessages = JSON.parse(typeof messagesValue === 'string' ? messagesValue : '[]');
   } catch {}
 
-  const citationsData = metadata?.citations;
+  const citationsData = metadata?.citations as Citation | Citation[] | undefined;
 
   const hasOutputContent = Boolean(
     output || replayOutput || metadata?.redteamFinalPrompt || citationsData || reasoning,
   );
 
-  const redteamHistoryMessages = (metadata?.redteamHistory || metadata?.redteamTreeHistory || [])
-    .filter((entry: any) => entry?.prompt && entry?.output)
-    .flatMap(
-      (entry: {
-        prompt: string;
-        promptAudio?: { data?: string; format?: string };
-        promptImage?: { data?: string; format?: string };
-        output: string;
-        outputAudio?: { data?: string; format?: string };
-        outputImage?: { data?: string; format?: string };
-        score?: number;
-        graderPassed?: boolean;
-      }) => [
-        {
-          role: 'user' as const,
-          content: entry.prompt,
-          audio: entry.promptAudio,
-          image: entry.promptImage,
-        },
-        {
-          role: 'assistant' as const,
-          content: entry.output,
-          audio: entry.outputAudio,
-          image: entry.outputImage,
-        },
-      ],
-    );
+  const redteamHistoryRaw = (metadata?.redteamHistory || metadata?.redteamTreeHistory || []) as
+    | RedteamHistoryEntry[]
+    | unknown[];
+  const redteamHistoryMessages = (Array.isArray(redteamHistoryRaw) ? redteamHistoryRaw : [])
+    .filter((entry): entry is RedteamHistoryEntry => {
+      const e = entry as RedteamHistoryEntry;
+      return Boolean(e?.prompt && e?.output);
+    })
+    .flatMap((entry: RedteamHistoryEntry) => [
+      {
+        role: 'user' as const,
+        content: entry.prompt!,
+        audio: entry.promptAudio,
+        image: entry.promptImage,
+      },
+      {
+        role: 'assistant' as const,
+        content: entry.output!,
+        audio: entry.outputAudio,
+        image: entry.outputImage,
+      },
+    ]);
 
   const hasEvaluationData = gradingResults && gradingResults.length > 0;
   const hasMessagesData = parsedMessages.length > 0 || redteamHistoryMessages.length > 0;
@@ -489,7 +496,11 @@ export default function EvalOutputPromptDialog({
                   output={output}
                   replayOutput={replayOutput}
                   providerPrompt={providerPrompt}
-                  redteamFinalPrompt={metadata?.redteamFinalPrompt}
+                  redteamFinalPrompt={
+                    typeof metadata?.redteamFinalPrompt === 'string'
+                      ? metadata.redteamFinalPrompt
+                      : undefined
+                  }
                   reasoning={replayReasoning || reasoning}
                   copiedFields={copiedFields}
                   hoveredElement={hoveredElement}
@@ -512,10 +523,20 @@ export default function EvalOutputPromptDialog({
             {/* Messages Panel */}
             {hasMessagesData && (
               <TabsContent value="messages" className="mt-0">
-                {parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
+                {parsedMessages.length > 0 && (
+                  <ChatMessages
+                    messages={parsedMessages}
+                    displayTurnCount={parsedMessages.length > 2}
+                    maxTurns={Math.ceil(parsedMessages.length / 2)}
+                  />
+                )}
                 {redteamHistoryMessages.length > 0 && (
                   <div className={parsedMessages.length > 0 ? 'mt-6' : ''}>
-                    <ChatMessages messages={redteamHistoryMessages} />
+                    <ChatMessages
+                      messages={redteamHistoryMessages}
+                      displayTurnCount={redteamHistoryMessages.length > 2}
+                      maxTurns={Math.ceil(redteamHistoryMessages.length / 2)}
+                    />
                   </div>
                 )}
               </TabsContent>

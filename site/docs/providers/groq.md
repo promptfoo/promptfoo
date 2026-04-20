@@ -70,7 +70,7 @@ Key configuration options:
 - `frequency_penalty`: Number between -2.0 and 2.0. Positive values penalize new tokens based on their existing frequency in the text so far
 - `parallel_tool_calls`: Whether to enable parallel function calling during tool use (default: true)
 - `reasoning_format`: For reasoning models, controls how reasoning is presented. Options: `'parsed'` (separate field), `'raw'` (with think tags), `'hidden'` (no reasoning shown). Note: `parsed` or `hidden` required when using JSON mode or tool calls.
-- `include_reasoning`: For GPT-OSS models, set to `false` to hide reasoning output (default: `true`)
+- `include_reasoning`: For GPT-OSS models, set to `false` to omit reasoning content (default: `true`)
 - `reasoning_effort`: For reasoning models, controls the level of reasoning effort. Options: `'low'`, `'medium'`, `'high'` for GPT-OSS models; `'none'`, `'default'` for Qwen models
 - `stop`: Up to 4 sequences where the API will stop generating further tokens
 - `tool_choice`: Controls tool usage ('none', 'auto', 'required', or specific tool)
@@ -212,10 +212,10 @@ tests:
 
 For **GPT-OSS models**, use the `include_reasoning` parameter:
 
-| Parameter Value  | Description                                |
-| ---------------- | ------------------------------------------ |
-| `true` (default) | Shows reasoning/thinking process in output |
-| `false`          | Hides reasoning, returns only final answer |
+| Parameter Value  | Description                                                        |
+| ---------------- | ------------------------------------------------------------------ |
+| `true` (default) | Returns reasoning in `response.reasoning` when the API provides it |
+| `false`          | Omits reasoning and returns only the final answer                  |
 
 Example to hide reasoning:
 

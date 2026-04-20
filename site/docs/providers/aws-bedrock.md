@@ -34,7 +34,7 @@ The `bedrock` provider lets you use Amazon Bedrock in your evals. This is a comm
 
    ```yaml
    providers:
-     - id: bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0
+     - id: bedrock:us.anthropic.claude-opus-4-7-v1:0
    ```
 
    Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
@@ -97,8 +97,8 @@ The `inferenceModelType` config option supports the following values:
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  # Claude Opus 4.5 via global inference profile (required for this model)
-  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-4-5-20251101-v1:0
+  # Claude Opus 4.7 via global inference profile
+  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-4-7
     config:
       inferenceModelType: 'claude'
       region: 'us-east-2'
@@ -562,7 +562,7 @@ providers:
 - `type`: Set to `enabled` to activate extended thinking, or `disabled` for fast responses (default)
 - `maxReasoningEffort`: Controls thinking depth - `low`, `medium`, or `high`
 
-When extended thinking is enabled, the model's reasoning process is captured in the response output with `<thinking>` tags, similar to other reasoning models.
+When extended thinking is enabled, the model's reasoning process is captured in the response's `reasoning` field and displayed in the UI's Reasoning panel.
 
 :::warning
 
@@ -754,9 +754,9 @@ config:
 
 ### Claude Models
 
-For Claude models (e.g., `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
+For Claude models (e.g., `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
-**Note**: Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) requires an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup.
+**Note**: Claude Opus 4.7 (`anthropic.claude-opus-4-7`) is available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and — at launch — through the base foundation model ID in select regions (US East/N. Virginia, Europe/Ireland, Europe/Stockholm, Asia Pacific/Tokyo). Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) still require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup.
 
 ```yaml
 config:
@@ -909,10 +909,10 @@ config:
   showThinking: true # Optional: Control whether thinking content is included in response
 ```
 
-DeepSeek models support an extended thinking capability. The `showThinking` parameter controls whether thinking content is included in the response output:
+DeepSeek models support an extended thinking capability. The `showThinking` parameter controls whether thinking content is included in the response's `reasoning` field:
 
-- When set to `true` (default), thinking content will be included in the output
-- When set to `false`, thinking content will be excluded from the output
+- When set to `true` (default), thinking content is included in the `reasoning` field and displayed in the UI's Reasoning panel
+- When set to `false`, thinking content is not included in the response
 
 This allows you to access the model's reasoning process during generation while having the option to present only the final response to end users.
 
@@ -986,23 +986,23 @@ config:
   frequency_penalty: 0.1 # Reduces repetition of frequent tokens
   presence_penalty: 0.1 # Reduces repetition of any tokens
   stop: ['END', 'STOP'] # Stop sequences
-  showThinking: true # Control whether thinking content is included in output
+  showThinking: true # Control whether thinking content is included in response.reasoning
   tools: [...] # Tool calling configuration (optional)
   tool_choice: 'auto' # Tool selection strategy (optional)
 ```
 
 #### Hybrid Thinking Modes
 
-Qwen models support hybrid thinking modes where the model can apply step-by-step reasoning before delivering the final answer. The `showThinking` parameter controls whether thinking content is included in the response output:
+Qwen models support hybrid thinking modes where the model can apply step-by-step reasoning before delivering the final answer. The `showThinking` parameter controls whether thinking content is included in the response's `reasoning` field:
 
-- When set to `true` (default), thinking content will be included in the output
-- When set to `false`, thinking content will be excluded from the output
+- When set to `true` (default), thinking content is included in the `reasoning` field and displayed in the UI's Reasoning panel
+- When set to `false`, thinking content is not included in the response
 
 This allows you to access the model's reasoning process during generation while having the option to present only the final response to end users.
 
-#### Tool Calling Support
+#### Tool Calling
 
-Qwen models support tool calling with OpenAI-compatible function definitions:
+Qwen models support tool calling with OpenAI-compatible function definitions.
 
 ```yaml
 config:
@@ -1180,7 +1180,7 @@ The prompt file (`nova_multimodal_prompt.json`) should be structured to include 
 ]
 ```
 
-See [Github](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/promptfooconfig.nova.multimodal.yaml) for a runnable example.
+See [Github](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/models/promptfooconfig.nova.multimodal.yaml) for a runnable example.
 
 When loading image files as variables, Promptfoo automatically converts them to the appropriate format for the model. The supported image formats include:
 

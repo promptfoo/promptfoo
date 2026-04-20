@@ -33,9 +33,10 @@ providers:
 
 - `temperature`
 - `max_tokens`
+- `cost`, `inputCost`, `outputCost` - Override promptfoo's pricing estimates (`inputCost` and `outputCost` take precedence over `cost`)
 - `top_p`, `presence_penalty`, `frequency_penalty`
 - `stream`
-- `showThinking` - Control whether reasoning content is included in the output (default: `true`, applies to deepseek-reasoner model)
+- `showThinking` - Control whether reasoning content is included in the response's `reasoning` field (default: `true`, applies to deepseek-reasoner model)
 
 ## Available Models
 
@@ -75,7 +76,7 @@ providers:
   - id: deepseek:deepseek-reasoner
     config:
       max_tokens: 8000
-      showThinking: true # Include reasoning content in output (default)
+      showThinking: true # Include reasoning content in response.reasoning (default)
   - id: openai:o-1
     config:
       temperature: 0.0
@@ -103,7 +104,7 @@ When `showThinking` is set to `true` (default), reasoning content is returned in
 
 When set to `false`, reasoning content is not included in the response. This is useful when you want better reasoning quality but don't want to expose the reasoning process to end users or in your assertions.
 
-See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/deepseek-r1-vs-openai-o1) that benchmarks it against OpenAI's o1 model on the MMLU reasoning tasks.
+See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-deepseek-r1-vs-openai-o1) that benchmarks it against OpenAI's o1 model on the MMLU reasoning tasks.
 
 ## API Details
 
@@ -114,4 +115,4 @@ See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/exam
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai/) - Compatible configuration options
-- [Complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/deepseek-r1-vs-openai-o1) - Benchmark against OpenAI's o1 model
+- [Complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-deepseek-r1-vs-openai-o1) - Benchmark against OpenAI's o1 model

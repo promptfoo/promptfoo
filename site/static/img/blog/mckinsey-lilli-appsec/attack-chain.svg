@@ -1,0 +1,107 @@
+<svg width="720" height="400" viewBox="0 0 720 400" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="ac-title ac-desc">
+  <title id="ac-title">Lilli attack chain</title>
+  <desc id="ac-desc">Three traditional AppSec vulnerabilities—exposed API surface, unauthenticated database write, and SQL injection with broken authorization—converge on shared database write access, which fans out into four AI-layer consequences: prompt rewrite, retrieval poisoning, cross-user data exposure, and output exfiltration.</desc>
+
+  <defs>
+    <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0 0L8 3L0 6Z" fill="#546E7A" />
+    </marker>
+    <marker id="ah-dark" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0 0L8 3L0 6Z" fill="#37474F" />
+    </marker>
+    <marker id="ah-purple" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0 0L8 3L0 6Z" fill="#7E57C2" />
+    </marker>
+    <style>
+      text { font-family: 'IBM Plex Sans', -apple-system, 'Segoe UI', system-ui, sans-serif; }
+      .zone-label { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; }
+      .node-title { font-size: 14px; font-weight: 700; fill: #1A1A1A; }
+      .node-sub { font-size: 11.5px; fill: #6D4C41; }
+      .blast-title { font-size: 13px; font-weight: 700; fill: #4A148C; }
+      .blast-sub { font-size: 11px; fill: #6A1B9A; }
+      .step-num { font-size: 11px; font-weight: 700; fill: #FFF; }
+      .bar-label { font-size: 11.5px; font-weight: 700; fill: #ECEFF1; letter-spacing: 0.06em; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="720" height="400" rx="14" fill="#FAFAF8" />
+
+  <!-- ═══ TOP ZONE: Root Cause ═══ -->
+  <rect x="14" y="10" width="692" height="152" rx="12" fill="#FFF8E1" stroke="#FFE0B2" stroke-width="1" />
+  <text x="38" y="32" class="zone-label" fill="#E65100">ROOT CAUSE</text>
+
+  <!-- Step 1 -->
+  <rect x="38" y="46" width="198" height="92" rx="10" fill="#FFF" stroke="#EF6C00" stroke-width="1.5" />
+  <circle cx="56" cy="66" r="10" fill="#EF6C00" />
+  <text x="56" y="70" text-anchor="middle" class="step-num">1</text>
+  <text x="74" y="70" class="node-title">Exposed API surface</text>
+  <text x="52" y="92" class="node-sub">Public documentation,</text>
+  <text x="52" y="108" class="node-sub">unprotected endpoints</text>
+
+  <!-- Arrow 1→2 -->
+  <line x1="236" y1="92" x2="258" y2="92" stroke="#546E7A" stroke-width="2.5" marker-end="url(#ah)" />
+
+  <!-- Step 2 -->
+  <rect x="260" y="46" width="198" height="92" rx="10" fill="#FFF" stroke="#EF6C00" stroke-width="1.5" />
+  <circle cx="278" cy="66" r="10" fill="#EF6C00" />
+  <text x="278" y="70" text-anchor="middle" class="step-num">2</text>
+  <text x="296" y="70" class="node-title">Unauthenticated write</text>
+  <text x="274" y="92" class="node-sub">Search data written</text>
+  <text x="274" y="108" class="node-sub">directly to the database</text>
+
+  <!-- Arrow 2→3 -->
+  <line x1="458" y1="92" x2="480" y2="92" stroke="#546E7A" stroke-width="2.5" marker-end="url(#ah)" />
+
+  <!-- Step 3 -->
+  <rect x="482" y="46" width="198" height="92" rx="10" fill="#FFF" stroke="#EF6C00" stroke-width="1.5" />
+  <circle cx="500" cy="66" r="10" fill="#EF6C00" />
+  <text x="500" y="70" text-anchor="middle" class="step-num">3</text>
+  <text x="518" y="70" class="node-title">SQLi + BOLA</text>
+  <text x="496" y="92" class="node-sub">JSON key injection,</text>
+  <text x="496" y="108" class="node-sub">cross-user object access</text>
+
+  <!-- Arrow from Step 3 down to bar -->
+  <line x1="581" y1="138" x2="581" y2="172" stroke="#37474F" stroke-width="2.5" marker-end="url(#ah-dark)" />
+
+  <!-- ═══ PIVOT BAR: The architectural insight ═══ -->
+  <rect x="38" y="176" width="644" height="34" rx="6" fill="#37474F" />
+  <text x="360" y="198" text-anchor="middle" class="bar-label">DATABASE WRITE ACCESS  →  AI CONTROL STATE</text>
+
+  <!-- Fan-out origin dot -->
+  <circle cx="360" cy="210" r="4" fill="#37474F" />
+
+  <!-- ═══ BOTTOM ZONE: Blast Radius ═══ -->
+  <rect x="14" y="256" width="692" height="132" rx="12" fill="#EDE7F6" stroke="#CE93D8" stroke-width="1" />
+  <text x="38" y="278" class="zone-label" fill="#4A148C">BLAST RADIUS</text>
+
+  <!-- Fan-out curves from bar center to each consequence -->
+  <path d="M360 210 C360 250 114 252 114 288" stroke="#7E57C2" stroke-width="1.5" fill="none" marker-end="url(#ah-purple)" />
+  <path d="M360 210 C360 250 278 252 278 288" stroke="#7E57C2" stroke-width="1.5" fill="none" marker-end="url(#ah-purple)" />
+  <path d="M360 210 C360 250 442 252 442 288" stroke="#7E57C2" stroke-width="1.5" fill="none" marker-end="url(#ah-purple)" />
+  <path d="M360 210 C360 250 606 252 606 288" stroke="#7E57C2" stroke-width="1.5" fill="none" marker-end="url(#ah-purple)" />
+
+  <!-- Consequence A: Prompt rewrite -->
+  <rect x="38" y="288" width="152" height="76" rx="10" fill="#FFF" stroke="#7B1FA2" stroke-width="1.5" />
+  <text x="114" y="312" text-anchor="middle" class="blast-title">Prompt rewrite</text>
+  <text x="114" y="330" text-anchor="middle" class="blast-sub">DB write changes</text>
+  <text x="114" y="344" text-anchor="middle" class="blast-sub">system instructions</text>
+
+  <!-- Consequence B: Retrieval poisoning -->
+  <rect x="202" y="288" width="152" height="76" rx="10" fill="#FFF" stroke="#7B1FA2" stroke-width="1.5" />
+  <text x="278" y="312" text-anchor="middle" class="blast-title">Retrieval poisoning</text>
+  <text x="278" y="330" text-anchor="middle" class="blast-sub">Metadata edits shift</text>
+  <text x="278" y="344" text-anchor="middle" class="blast-sub">what the model sees</text>
+
+  <!-- Consequence C: Cross-user data -->
+  <rect x="366" y="288" width="152" height="76" rx="10" fill="#FFF" stroke="#7B1FA2" stroke-width="1.5" />
+  <text x="442" y="312" text-anchor="middle" class="blast-title">Cross-user data</text>
+  <text x="442" y="330" text-anchor="middle" class="blast-sub">BOLA exposes other</text>
+  <text x="442" y="344" text-anchor="middle" class="blast-sub">users' query history</text>
+
+  <!-- Consequence D: Output exfiltration -->
+  <rect x="530" y="288" width="152" height="76" rx="10" fill="#FFF" stroke="#7B1FA2" stroke-width="1.5" />
+  <text x="606" y="312" text-anchor="middle" class="blast-title">Output exfiltration</text>
+  <text x="606" y="330" text-anchor="middle" class="blast-sub">Answers become the</text>
+  <text x="606" y="344" text-anchor="middle" class="blast-sub">data exfil channel</text>
+</svg>

@@ -352,8 +352,17 @@ export class ResponsesProcessor {
       return Promise.resolve({});
     }
 
-    // Extract reasoning text and store in dedicated reasoning field
-    const reasoningText = item.summary.map((s: { text: string }) => s.text).join('\n');
+    const reasoningText = item.summary
+      .map((summary: { text?: unknown }) =>
+        typeof summary.text === 'string' ? summary.text.trim() : '',
+      )
+      .filter(Boolean)
+      .join('\n');
+
+    if (!reasoningText) {
+      return Promise.resolve({});
+    }
+
     return Promise.resolve({
       reasoning: [{ type: 'reasoning', content: reasoningText }],
     });
