@@ -221,7 +221,7 @@
     "@aws-sdk/client-s3": "^3.1003.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.1028.0",
     "@aws-sdk/credential-provider-sso": "^3.972.16",
-    "@azure/ai-projects": "^2.0.2",
+    "@azure/ai-projects": "^2.1.0",
     "@azure/identity": "^4.13.0",
     "@azure/msal-node": "^5.1.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
