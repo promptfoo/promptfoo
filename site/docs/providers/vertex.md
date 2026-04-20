@@ -141,9 +141,23 @@ By default, Llama models use Llama Guard for content safety. You can disable it 
 
 Use the `vertex:embedding:` prefix for embedding models:
 
-- `vertex:embedding:gemini-embedding-001` - Recommended default for new configs; best overall performance across English, multilingual, and code tasks (up to 3,072d)
-- `vertex:embedding:text-embedding-005` - Specialized for English and code tasks (up to 768d)
-- `vertex:embedding:text-multilingual-embedding-002` - Specialized for multilingual tasks (up to 768d)
+- `vertex:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
+- `vertex:embedding:text-embedding-005` - English and code, up to 768 dimensions, 2,048 input-token limit
+- `vertex:embedding:text-multilingual-embedding-002` - Multilingual, up to 768 dimensions, 2,048 input-token limit
+
+Pass `autoTruncate: true` in `config` to silently truncate inputs that exceed the token limit instead of erroring:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: vertex:embedding:gemini-embedding-001
+        config:
+          autoTruncate: true
+```
+
+Upgrading between embedding model families changes the vector space, so re-embed any previously indexed content. See Google's [supported embedding models](https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings) reference for the current list.
 
 ### Image Generation Models
 
