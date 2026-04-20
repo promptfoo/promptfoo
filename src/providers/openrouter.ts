@@ -68,7 +68,7 @@ function parseOpenRouterJsonSchemaOutput(message: any, output: string | object):
   try {
     return JSON.parse(jsonCandidate);
   } catch (error) {
-    logger.warn(`Failed to parse JSON output for json_schema: ${String(error)}`);
+    logger.warn('Failed to parse JSON output for json_schema', { error });
     return output;
   }
 }

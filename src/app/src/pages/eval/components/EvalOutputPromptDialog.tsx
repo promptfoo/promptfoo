@@ -284,13 +284,10 @@ export default function EvalOutputPromptDialog({
 
       if (result.error) {
         setReplayError(result.error);
-      } else if (result.output) {
-        setReplayOutput(result.output);
-        if (result.reasoning) {
-          setReplayReasoning(reasoningToString(result.reasoning));
-        }
       } else {
-        setReplayOutput('(No output returned)');
+        const replayReasoningText = reasoningToString(result.reasoning);
+        setReplayReasoning(replayReasoningText || null);
+        setReplayOutput(result.output || '(No output returned)');
       }
     } catch (error) {
       setReplayError(error instanceof Error ? error.message : 'An error occurred');
@@ -343,8 +340,9 @@ export default function EvalOutputPromptDialog({
 
   const citationsData = metadata?.citations as Citation | Citation[] | undefined;
 
+  const displayedReasoning = replayOutput === null ? reasoning : replayReasoning || undefined;
   const hasOutputContent = Boolean(
-    output || replayOutput || metadata?.redteamFinalPrompt || citationsData || reasoning,
+    output || replayOutput || metadata?.redteamFinalPrompt || citationsData || displayedReasoning,
   );
 
   const redteamHistoryRaw = (metadata?.redteamHistory || metadata?.redteamTreeHistory || []) as
@@ -501,7 +499,7 @@ export default function EvalOutputPromptDialog({
                       ? metadata.redteamFinalPrompt
                       : undefined
                   }
-                  reasoning={replayReasoning || reasoning}
+                  reasoning={displayedReasoning}
                   copiedFields={copiedFields}
                   hoveredElement={hoveredElement}
                   onCopy={copyFieldToClipboard}
