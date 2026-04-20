@@ -648,6 +648,115 @@ function parseThinkBlocks(content: string, showThinking: boolean): BedrockModelO
   return { output: content };
 }
 
+function isBedrockModelOutputResult(modelOutput: any): modelOutput is BedrockModelOutputResult {
+  return Boolean(modelOutput && typeof modelOutput === 'object' && 'output' in modelOutput);
+}
+
+function getBedrockStopSequences(): string[] {
+  const stop = getEnvString('AWS_BEDROCK_STOP');
+  if (!stop) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(stop);
+  } catch (err) {
+    throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
+  }
+}
+
+function toBedrockProviderResponse(
+  modelOutput: any,
+  tokenUsage: Partial<TokenUsage>,
+  extra: Omit<ProviderResponse, 'output' | 'reasoning' | 'tokenUsage'> = {},
+): ProviderResponse {
+  if (isBedrockModelOutputResult(modelOutput)) {
+    return {
+      output: modelOutput.output,
+      reasoning: modelOutput.reasoning,
+      tokenUsage,
+      ...extra,
+    };
+  }
+
+  return {
+    output: modelOutput,
+    tokenUsage,
+    ...extra,
+  };
+}
+
+function getBedrockTokenUsage(
+  model: IBedrockModel,
+  output: any,
+  prompt: string,
+  modelName: string,
+): Partial<TokenUsage> {
+  let tokenUsage: Partial<TokenUsage>;
+  if (model.tokenUsage) {
+    tokenUsage = model.tokenUsage(output, prompt);
+    logger.debug(`Token usage from model handler: ${JSON.stringify(tokenUsage)}`);
+  } else {
+    const promptTokens =
+      output.usage?.inputTokens ??
+      output.usage?.input_tokens ??
+      output.usage?.prompt_tokens ??
+      output.prompt_tokens ??
+      output.prompt_token_count;
+    const completionTokens =
+      output.usage?.outputTokens ??
+      output.usage?.output_tokens ??
+      output.usage?.completion_tokens ??
+      output.completion_tokens ??
+      output.generation_token_count;
+
+    const promptTokensNum = coerceStrToNum(promptTokens);
+    const completionTokensNum = coerceStrToNum(completionTokens);
+
+    const totalTokens =
+      coerceStrToNum(
+        output.usage?.totalTokens ?? output.usage?.total_tokens ?? output.total_tokens,
+      ) ??
+      (promptTokensNum !== undefined && completionTokensNum !== undefined
+        ? promptTokensNum + completionTokensNum
+        : undefined);
+
+    tokenUsage = {
+      prompt: promptTokensNum,
+      completion: completionTokensNum,
+      total: totalTokens,
+      numRequests: 1,
+    };
+
+    if (
+      tokenUsage.prompt === undefined &&
+      tokenUsage.completion === undefined &&
+      tokenUsage.total === undefined &&
+      output
+    ) {
+      logger.debug(`No explicit token counts found for ${modelName}, tracking request count only`);
+    } else {
+      logger.debug(`Extracted token usage: ${JSON.stringify(tokenUsage)}`);
+    }
+  }
+
+  if (!tokenUsage.numRequests) {
+    tokenUsage.numRequests = 1;
+  }
+
+  return tokenUsage;
+}
+
+function getBedrockGuardrailsInfo(output: any): Pick<ProviderResponse, 'guardrails'> {
+  return output['amazon-bedrock-guardrailAction']
+    ? {
+        guardrails: {
+          flagged: output['amazon-bedrock-guardrailAction'] === 'INTERVENED',
+        },
+      }
+    : {};
+}
+
 export function addConfigParam(
   params: any,
   key: string,
@@ -2468,13 +2577,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
   static AWS_BEDROCK_COMPLETION_MODELS = Object.keys(AWS_BEDROCK_MODELS);
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    let stop: string[];
-    try {
-      stop = getEnvString('AWS_BEDROCK_STOP') ? JSON.parse(getEnvString('AWS_BEDROCK_STOP')!) : [];
-    } catch (err) {
-      throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
-    }
-
+    const stop = getBedrockStopSequences();
     let model = getHandlerForModel(this.modelName, { ...this.config, ...context?.prompt.config });
     if (!model) {
       logger.warn(
@@ -2501,21 +2604,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         const modelOutput = model.output(this.config, JSON.parse(cachedResponse as string));
-        // Handle both simple output and BedrockModelOutputResult
-        const result: ProviderResponse =
-          modelOutput && typeof modelOutput === 'object' && 'output' in modelOutput
-            ? {
-                output: modelOutput.output,
-                reasoning: modelOutput.reasoning,
-                tokenUsage: createEmptyTokenUsage(),
-                cached: true,
-              }
-            : {
-                output: modelOutput,
-                tokenUsage: createEmptyTokenUsage(),
-                cached: true,
-              };
-        return result;
+        return toBedrockProviderResponse(modelOutput, createEmptyTokenUsage(), { cached: true });
       }
     }
 
@@ -2565,88 +2654,11 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     }
     try {
       const output = JSON.parse(new TextDecoder().decode(response.body));
-
-      let tokenUsage: Partial<TokenUsage> = {};
-      if (model.tokenUsage) {
-        tokenUsage = model.tokenUsage(output, prompt);
-        logger.debug(`Token usage from model handler: ${JSON.stringify(tokenUsage)}`);
-      } else {
-        // Get token counts, converting strings to numbers
-        const promptTokens =
-          output.usage?.inputTokens ??
-          output.usage?.input_tokens ??
-          output.usage?.prompt_tokens ??
-          output.prompt_tokens ??
-          output.prompt_token_count;
-        const completionTokens =
-          output.usage?.outputTokens ??
-          output.usage?.output_tokens ??
-          output.usage?.completion_tokens ??
-          output.completion_tokens ??
-          output.generation_token_count;
-
-        const promptTokensNum = coerceStrToNum(promptTokens);
-        const completionTokensNum = coerceStrToNum(completionTokens);
-
-        // Get total tokens from API or calculate it
-        const totalTokens =
-          coerceStrToNum(
-            output.usage?.totalTokens ?? output.usage?.total_tokens ?? output.total_tokens,
-          ) ??
-          (promptTokensNum !== undefined && completionTokensNum !== undefined
-            ? promptTokensNum + completionTokensNum
-            : undefined);
-
-        tokenUsage = {
-          prompt: promptTokensNum,
-          completion: completionTokensNum,
-          total: totalTokens,
-          numRequests: 1,
-        };
-
-        // If we couldn't extract any token counts but have a response, track usage for metrics
-        if (
-          tokenUsage.prompt === undefined &&
-          tokenUsage.completion === undefined &&
-          tokenUsage.total === undefined &&
-          output
-        ) {
-          logger.debug(
-            `No explicit token counts found for ${this.modelName}, tracking request count only`,
-          );
-        } else {
-          logger.debug(`Extracted token usage: ${JSON.stringify(tokenUsage)}`);
-        }
-      }
-
-      if (!tokenUsage.numRequests) {
-        tokenUsage.numRequests = 1;
-      }
-
+      const tokenUsage = getBedrockTokenUsage(model, output, prompt, this.modelName);
       const modelOutput = model.output(this.config, output);
-      const guardrailsInfo = output['amazon-bedrock-guardrailAction']
-        ? {
-            guardrails: {
-              flagged: output['amazon-bedrock-guardrailAction'] === 'INTERVENED',
-            },
-          }
-        : {};
+      const guardrailsInfo = getBedrockGuardrailsInfo(output);
 
-      // Handle both simple output and BedrockModelOutputResult
-      if (modelOutput && typeof modelOutput === 'object' && 'output' in modelOutput) {
-        return {
-          output: modelOutput.output,
-          reasoning: modelOutput.reasoning,
-          tokenUsage,
-          ...guardrailsInfo,
-        };
-      }
-
-      return {
-        output: modelOutput,
-        tokenUsage,
-        ...guardrailsInfo,
-      };
+      return toBedrockProviderResponse(modelOutput, tokenUsage, guardrailsInfo);
     } catch (err) {
       logger.error('Bedrock API response error', { error: String(err), response });
       return {

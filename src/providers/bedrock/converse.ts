@@ -1202,6 +1202,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         'Model produced a malformed tool use request. Check tool configuration and input schema.';
       metadata.isModelError = true;
     }
+    const reasoning = showThinking ? extractReasoningFromContentBlocks(content) : undefined;
 
     // Handle function tool callbacks if configured
     if (this.config.functionToolCallbacks) {
@@ -1237,8 +1238,6 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         }
 
         if (hasSuccessfulCallback && results.length > 0) {
-          // Only extract reasoning if showThinking is not explicitly false
-          const reasoning = showThinking ? extractReasoningFromContentBlocks(content) : undefined;
           return {
             output: results.join('\n'),
             tokenUsage,
@@ -1254,8 +1253,6 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
     // Default output extraction
     const output = extractTextFromContentBlocks(content, showThinking);
-    // Only extract reasoning if showThinking is not explicitly false
-    const reasoning = showThinking ? extractReasoningFromContentBlocks(content) : undefined;
 
     return {
       output,
