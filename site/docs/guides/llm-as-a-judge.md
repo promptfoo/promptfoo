@@ -50,7 +50,7 @@ providers:
 defaultTest:
   options:
     # Grader (judge)
-    provider: openai:gpt-5.2
+    provider: openai:gpt-5.4
 
 tests:
   - vars:
@@ -286,7 +286,7 @@ providers:
 
 defaultTest:
   options:
-    provider: openai:gpt-5.2
+    provider: openai:gpt-5.4
 
 tests:
   - vars:
@@ -307,7 +307,7 @@ tests:
       - type: answer-relevance
         threshold: 0.7
         provider:
-          text: openai:gpt-5.2
+          text: openai:gpt-5.4
           embedding: openai:embedding:text-embedding-3-small
 ```
 
@@ -330,7 +330,7 @@ providers:
 defaultTest:
   options:
     provider:
-      id: openai:responses:gpt-5.2
+      id: openai:responses:gpt-5.4
       config:
         tools:
           - type: web_search_preview
@@ -348,7 +348,7 @@ tests:
 ```yaml
 providers:
   - openai:gpt-5-mini
-  - openai:gpt-5.2
+  - openai:gpt-5.4
 
 assert:
   - type: select-best
@@ -497,7 +497,7 @@ Reference it in your config:
 defaultTest:
   options:
     rubricPrompt: file://graders/judge-prompt.txt
-    provider: openai:gpt-5.2
+    provider: openai:gpt-5.4
 ```
 
 The `rubricPrompt` supports these variables:
@@ -566,7 +566,7 @@ providers:
 
 defaultTest:
   options:
-    provider: openai:gpt-5.2
+    provider: openai:gpt-5.4
 
 tests:
   - vars:
@@ -654,7 +654,7 @@ providers:
 
 defaultTest:
   options:
-    provider: openai:gpt-5.2
+    provider: openai:gpt-5.4
 
 tests:
   - file://tests/golden.yaml
@@ -741,7 +741,7 @@ tests:
         value: |
           Article: {{article}}
           Summary is accurate. Return pass=true or pass=false.
-        provider: openai:gpt-5.2
+        provider: openai:gpt-5.4
 
       - type: llm-rubric
         metric: judge_gpt5
@@ -777,7 +777,7 @@ tests:
             value: |
               Question: {{question}}
               Explanation is accurate. Return pass=true or pass=false.
-            provider: openai:gpt-5.2
+            provider: openai:gpt-5.4
 
           - type: llm-rubric
             metric: judge_gpt5
@@ -834,7 +834,7 @@ Use structured outputs to eliminate "invalid JSON" failures:
 defaultTest:
   options:
     provider:
-      id: openai:gpt-5.2
+      id: openai:gpt-5.4
       config:
         response_format:
           type: json_schema
@@ -967,7 +967,7 @@ assert:
 ```yaml
 defaultTest:
   options:
-    provider: openai:gpt-5.2
+    provider: openai:gpt-5.4
 ```
 
 Mark high-risk rows with metadata, then run the expensive tier as a filtered eval:
@@ -987,7 +987,7 @@ tests:
 ```
 
 ```bash
-npx promptfoo eval --filter-metadata risk=high --grader openai:gpt-5.2 --no-cache
+npx promptfoo eval --filter-metadata risk=high --grader openai:gpt-5.4 --no-cache
 ```
 
 ## Promptfoo's model-graded assertions
@@ -1044,7 +1044,7 @@ paths, TTLs, and explicit cache clearing.
 
 | Model                        | Reliability | Cost   | Use for                     |
 | ---------------------------- | ----------- | ------ | --------------------------- |
-| `gpt-5.2`                    | High        | Higher | Production, complex rubrics |
+| `gpt-5.4`                    | High        | Higher | Production, complex rubrics |
 | `gpt-5-mini`                 | Medium      | Low    | Development, simple checks  |
 | `claude-sonnet-4-5-20250929` | High        | Medium | Production                  |
 
@@ -1083,7 +1083,7 @@ judge to treat candidate output as untrusted data. See [LLM judge prompt templat
 
 ### What is the best LLM judge model?
 
-`gpt-5.2` and `claude-sonnet-4-5-20250929` are reliable for production. Use `gpt-5-mini` for development. The judge should be at least as capable as the system under test.
+`gpt-5.4` and `claude-sonnet-4-5-20250929` are reliable for production. Use `gpt-5-mini` for development. The judge should be at least as capable as the system under test.
 
 ### How do you do majority vote LLM judging?
 
