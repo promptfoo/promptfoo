@@ -178,6 +178,38 @@ describe('useServerVirtualizedRows', () => {
     expect(result.current.serverVirtualization.getRow(0)).toBeUndefined();
   });
 
+  it('does not clobber fetched rows when initialRows changes after bootstrapping', async () => {
+    const fetchRows = vi.fn().mockResolvedValue({ rows: [{ id: 'loaded-25' }], offset: 25 });
+    const initialRows = createRows(0, 2);
+    const { result, rerender } = renderHook(
+      ({ rows }) =>
+        useServerVirtualizedRows<TestRow>({
+          initialRows: rows,
+          rowCount: 100,
+          pageSize: 25,
+          fetchRows,
+        }),
+      { initialProps: { rows: initialRows } },
+    );
+
+    await act(async () => {
+      await result.current.serverVirtualization.loadRows({
+        startIndex: 25,
+        endIndex: 25,
+        signal: new AbortController().signal,
+      });
+    });
+
+    expect(result.current.serverVirtualization.getRow(25)).toEqual({ id: 'loaded-25' });
+
+    rerender({ rows: createRows(100, 2) });
+
+    expect(result.current.serverVirtualization.getRow(0)).toEqual({ id: 'row-0' });
+    expect(result.current.serverVirtualization.getRow(1)).toEqual({ id: 'row-1' });
+    expect(result.current.serverVirtualization.getRow(25)).toEqual({ id: 'loaded-25' });
+    expect(result.current.loadedRowCount).toBe(3);
+  });
+
   it('prunes rows outside the configured surrounding page window', async () => {
     const fetchRows = vi.fn().mockResolvedValue({ rows: [{ id: 'loaded-75' }], offset: 75 });
     const seededRows = createRows(0, 50);

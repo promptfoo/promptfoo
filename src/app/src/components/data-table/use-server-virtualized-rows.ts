@@ -87,7 +87,13 @@ export function useServerVirtualizedRows<TData>({
   }, [resetKey]);
 
   React.useLayoutEffect(() => {
-    setRowsByIndex((prev) => (indexedRowsEqual(prev, initialRows) ? prev : indexRows(initialRows)));
+    setRowsByIndex((prev) => {
+      if (prev.size > 0) {
+        return prev;
+      }
+
+      return indexedRowsEqual(prev, initialRows) ? prev : indexRows(initialRows);
+    });
   }, [initialRows]);
 
   const loadRows = React.useCallback(

@@ -164,7 +164,6 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
     // Optimistic delete: remove from UI immediately
     const previousScans = get().historicalScans;
     const previousCount = get().totalCount;
-    const scanToDelete = previousScans.find((scan) => scan.id === id);
 
     // Optimistically update UI
     set((state) => ({
@@ -183,12 +182,10 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
       }
     } catch (error) {
       // Revert optimistic update on failure
-      if (scanToDelete) {
-        set({
-          historicalScans: previousScans,
-          totalCount: previousCount,
-        });
-      }
+      set({
+        historicalScans: previousScans,
+        totalCount: previousCount,
+      });
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete scan';
       set({ historyError: errorMessage });
       throw error;
