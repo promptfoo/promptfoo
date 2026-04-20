@@ -172,8 +172,8 @@ describe('getInstallationInfo', () => {
 
   it('should detect Homebrew installation on macOS', () => {
     Object.defineProperty(process, 'platform', { value: 'darwin' });
-    process.argv = ['node', '/usr/local/bin/promptfoo'];
-    mockFs.realpathSync.mockReturnValue('/usr/local/bin/promptfoo');
+    process.argv = ['node', '/opt/homebrew/bin/promptfoo'];
+    mockFs.realpathSync.mockReturnValue('/opt/homebrew/Cellar/promptfoo/0.121.5/bin/promptfoo');
     mockChildProcess.execSync.mockReturnValue(Buffer.from(''));
 
     const result = getInstallationInfo('/project', false);
@@ -188,6 +188,18 @@ describe('getInstallationInfo', () => {
       stdio: 'ignore',
       timeout: 1000,
     });
+  });
+
+  it('should not detect Homebrew for non-Homebrew paths when promptfoo is installed with brew', () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    process.argv = ['node', '/Users/alice/.npm-global/bin/promptfoo'];
+    mockFs.realpathSync.mockReturnValue('/Users/alice/.npm-global/bin/promptfoo');
+    mockChildProcess.execSync.mockReturnValue(Buffer.from(''));
+
+    const result = getInstallationInfo('/project', false);
+
+    expect(mockChildProcess.execSync).not.toHaveBeenCalled();
+    expect(result.packageManager).toBe(PackageManager.NPM);
   });
 
   it('should skip Homebrew detection on non-macOS platforms', () => {

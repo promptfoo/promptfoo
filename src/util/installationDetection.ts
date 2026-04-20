@@ -46,6 +46,10 @@ export function pathStartsWith(haystack: string, prefix: string): boolean {
   return normalizedHaystack.startsWith(`${normalizedPrefix}/`);
 }
 
+function isPotentialHomebrewPath(realPath: string): boolean {
+  return pathContains(realPath, '/Cellar/promptfoo/');
+}
+
 /**
  * Check if running in a git repository
  */
@@ -133,7 +137,7 @@ export function detectPackageManagerFromPath(cliPath: string, projectRoot: strin
     // Check for Homebrew (only on macOS)
     // Note: We use sync here because this is called during initialization
     // The performance impact is minimal as it only runs on macOS during startup
-    if (process.platform === 'darwin') {
+    if (process.platform === 'darwin' && isPotentialHomebrewPath(realPath)) {
       try {
         childProcess.execSync('brew list -1 | grep -q "^promptfoo$"', {
           stdio: 'ignore',
