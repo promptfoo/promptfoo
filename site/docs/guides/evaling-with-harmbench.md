@@ -39,6 +39,23 @@ redteam:
       numTests: 400
 ```
 
+To focus on a smaller slice of the benchmark, filter by category:
+
+```yaml
+redteam:
+  plugins:
+    - id: harmbench
+      numTests: 50
+      config:
+        categories:
+          - cybercrime
+          - misinformation
+        functionalCategories:
+          - contextual
+```
+
+The semantic categories are `chemical_biological`, `copyright`, `cybercrime_intrusion`, `harassment_bullying`, `harmful`, `illegal`, and `misinformation_disinformation`. The functional categories are `standard`, `contextual`, and `copyright`.
+
 ## Run the evaluation
 
 In the same folder where you defined `promptfooconfig.yaml`, execute the HarmBench evaluation.
