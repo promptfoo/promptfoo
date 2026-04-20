@@ -268,4 +268,113 @@ describe('TTFT End-to-End Integration', () => {
 
     console.log('\n✅ Invariant holds for all 5 requests');
   }, 30000);
+
+  it('streamFormat: openai-chat pins TTFT to the content delta, not the role frame', async () => {
+    // The mock server at `beforeAll` sends a role-only delta 100ms after
+    // request start, then a content delta 150ms after (100ms server
+    // processing + 50ms inter-chunk delay). Default TTFT fires on the role
+    // frame; streamFormat: openai-chat fires on the content frame. The gap
+    // between the two measurements proves the preset works end-to-end
+    // through HttpProvider.fetchResponse → processStreamingResponse.
+    const transform = `(json, text) => {
+      let content = '';
+      for (const line of String(text || '').split('\\n')) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data: ') || trimmed === 'data: [DONE]') continue;
+        try {
+          const data = JSON.parse(trimmed.slice(6));
+          if (data.choices?.[0]?.delta?.content) content += data.choices[0].delta.content;
+        } catch {}
+      }
+      return content.trim();
+    }`;
+
+    const defaultProvider = new HttpProvider(`${serverUrl}/v1/chat/completions`, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: '{{prompt}}' }],
+          stream: true,
+        },
+        transformResponse: transform,
+      },
+    });
+
+    const presetProvider = new HttpProvider(`${serverUrl}/v1/chat/completions`, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: '{{prompt}}' }],
+          stream: true,
+        },
+        streamFormat: 'openai-chat',
+        transformResponse: transform,
+      },
+    });
+
+    // Run several samples of each so jitter averages out.
+    const N = 4;
+    const defaultTtfts: number[] = [];
+    const presetTtfts: number[] = [];
+    for (let i = 0; i < N; i++) {
+      const d = await defaultProvider.callApi('Test');
+      const p = await presetProvider.callApi('Test');
+      defaultTtfts.push(d.streamingMetrics!.timeToFirstToken!);
+      presetTtfts.push(p.streamingMetrics!.timeToFirstToken!);
+    }
+
+    const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+    const defaultMean = mean(defaultTtfts);
+    const presetMean = mean(presetTtfts);
+
+    // The mock server's role-frame-to-content-frame gap is 50ms by design.
+    // The preset should stamp TTFT strictly later on average.
+    expect(presetMean).toBeGreaterThan(defaultMean);
+    expect(presetMean - defaultMean).toBeGreaterThan(20); // Well above jitter.
+
+    console.log(
+      `\n✅ streamFormat gap: default mean=${defaultMean.toFixed(0)}ms, preset mean=${presetMean.toFixed(0)}ms, diff=${(presetMean - defaultMean).toFixed(0)}ms`,
+    );
+  }, 30000);
+
+  it('populates completionChars with parsed output length (not raw SSE length)', async () => {
+    // Regression pin: completionChars is the length of the parsed content,
+    // NOT the length of the raw SSE buffer (which includes `data: ...` framing).
+    const provider = new HttpProvider(`${serverUrl}/v1/chat/completions`, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: '{{prompt}}' }],
+          stream: true,
+        },
+        transformResponse: `(json, text) => {
+          let c = '';
+          for (const line of String(text || '').split('\\n')) {
+            const t = line.trim();
+            if (!t.startsWith('data: ') || t === 'data: [DONE]') continue;
+            try {
+              const d = JSON.parse(t.slice(6));
+              if (d.choices?.[0]?.delta?.content) c += d.choices[0].delta.content;
+            } catch {}
+          }
+          return c.trim();
+        }`,
+      },
+    });
+
+    const result = await provider.callApi('Test prompt');
+
+    // Mock server sends 'Code is poetry in motion' across 5 content deltas.
+    // The raw SSE buffer is ~1KB (6 frames * ~150 chars each), the parsed
+    // content is 24 chars. completionChars must equal the parsed length.
+    expect(result.output).toBe('Code is poetry in motion');
+    expect(result.streamingMetrics?.completionChars).toBe(24);
+    expect(result.raw?.length).toBeGreaterThan(500); // Raw SSE is way longer.
+  });
 });

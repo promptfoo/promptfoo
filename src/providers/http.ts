@@ -2624,13 +2624,19 @@ export class HttpProvider implements ApiProvider {
     // streaming rate (the apparent rate is network buffering, not model
     // throughput).
     if (streamingMetrics) {
-      const completionText = this.getCompletionText(parsedOutput, rawText);
-      streamingMetrics.completionChars = completionText.length;
-      if (streamingMetrics.multiChunkDelivery) {
-        streamingMetrics.tokensPerSecond = estimateStreamingTokensPerSecond(
-          completionText.length,
-          streamingMetrics.totalStreamTime,
-        );
+      // Use the strict helper so we don't conflate raw SSE bytes with the
+      // parsed content when transformResponse returns a non-standard shape.
+      // Better to leave completionChars/tps undefined than to report a
+      // misleadingly inflated number.
+      const completionText = this.getDefiniteCompletionText(parsedOutput);
+      if (completionText !== undefined) {
+        streamingMetrics.completionChars = completionText.length;
+        if (streamingMetrics.multiChunkDelivery) {
+          streamingMetrics.tokensPerSecond = estimateStreamingTokensPerSecond(
+            completionText.length,
+            streamingMetrics.totalStreamTime,
+          );
+        }
       }
     }
 
@@ -2900,6 +2906,26 @@ export class HttpProvider implements ApiProvider {
       return parsedOutput.output;
     }
     return rawText;
+  }
+
+  /**
+   * Like getCompletionText but returns undefined when we cannot confidently
+   * identify the parsed content (no string output and no `.output` string
+   * field). Used for metrics that would be misleading if fed raw SSE text,
+   * such as `completionChars` and the `tokensPerSecond` estimate derived
+   * from it.
+   */
+  private getDefiniteCompletionText(parsedOutput: unknown): string | undefined {
+    if (typeof parsedOutput === 'string') {
+      return parsedOutput;
+    }
+    if (parsedOutput !== null && typeof parsedOutput === 'object') {
+      const maybeOutput = (parsedOutput as { output?: unknown }).output;
+      if (typeof maybeOutput === 'string') {
+        return maybeOutput;
+      }
+    }
+    return undefined;
   }
 
   /**

@@ -244,5 +244,87 @@ describe('HttpProvider streaming integration', () => {
       expect(result.latencyMs).toBeGreaterThanOrEqual(90);
       expect(result.latencyMs).toBeLessThan(150);
     });
+
+    it('rejects a malformed streamFirstTokenPattern at construction (fail fast)', () => {
+      // Compile the regex in the constructor so users get a synchronous
+      // error at config load, not a silent failure mid-eval or a crash
+      // on the first request.
+      expect(
+        () =>
+          new HttpProvider('https://api.example.com/chat', {
+            config: {
+              method: 'POST',
+              body: { stream: true },
+              // Unmatched character class: invalid RegExp.
+              streamFirstTokenPattern: '(',
+            },
+          }),
+      ).toThrow(/Invalid regular expression/);
+    });
+
+    it('accepts a valid streamFirstTokenPattern at construction', () => {
+      expect(
+        () =>
+          new HttpProvider('https://api.example.com/chat', {
+            config: {
+              method: 'POST',
+              body: { stream: true },
+              streamFirstTokenPattern: '"delta":\\s*\\{[^}]*"content":"[^"]',
+            },
+          }),
+      ).not.toThrow();
+    });
+
+    it('leaves completionChars undefined when transformResponse returns non-string without .output', async () => {
+      // Regression pin: if a user's transformResponse returns e.g. a tool-call
+      // object with no `.output` key, we should NOT report the raw SSE buffer
+      // length as completionChars — that would be off by 20-60x and mislead
+      // assertions that use the value. Leave it undefined instead.
+      const provider = new HttpProvider('https://api.example.com/chat', {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: {
+            model: 'gpt-4',
+            messages: [{ role: 'user', content: '{{prompt}}' }],
+            stream: true,
+          },
+          transformResponse: `(json, text) => ({ tokenUsage: { total: 10 } })`, // no .output
+        },
+      });
+
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"X"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"Y"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+      let i = 0;
+      const mockReader = {
+        read: vi.fn(async () => {
+          if (i < mockChunks.length) {
+            await new Promise((r) => setTimeout(r, 10));
+            return { done: false, value: new TextEncoder().encode(mockChunks[i++]) };
+          }
+          return { done: true, value: undefined };
+        }),
+        releaseLock: vi.fn(),
+      };
+      const mockResponse = {
+        status: 200,
+        statusText: 'OK',
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: { getReader: () => mockReader },
+      } as unknown as Response;
+
+      vi.spyOn(fetchModule, 'fetchWithRetries').mockResolvedValue(mockResponse);
+
+      const result = await provider.callApi('Test');
+
+      expect(result.streamingMetrics).toBeDefined();
+      expect(result.streamingMetrics?.timeToFirstToken).toBeDefined();
+      // Ambiguous completion text → honest undefined, not raw SSE length.
+      expect(result.streamingMetrics?.completionChars).toBeUndefined();
+      expect(result.streamingMetrics?.tokensPerSecond).toBeUndefined();
+    });
   });
 });

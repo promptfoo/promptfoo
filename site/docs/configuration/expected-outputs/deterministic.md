@@ -879,6 +879,21 @@ OPENAI_API_KEY=... npx tsx scripts/benchmark-ttft.ts 20
 
 to collect 20 samples per endpoint and print p50/p90/max for each metric.
 
+##### Reference data (n=15 per endpoint, 2026-04-20)
+
+Collected on a residential network, single machine. Raw percentiles from one real run of the benchmark script:
+
+| Endpoint                   | wire TTFT p50 | content TTFT p50 | wire→content gap (mean / p50 / p90 / max) | chars/sec p50 |
+| -------------------------- | ------------- | ---------------- | ----------------------------------------- | ------------- |
+| `chat / gpt-4o-mini`       | 313 ms        | 344 ms           | 26 / 23 / 49 / 68 ms                      | 376           |
+| `chat / gpt-4o`            | 501 ms        | 514 ms           | 20 / 3 / 64 / 123 ms                      | 336           |
+| `responses / gpt-5.4-mini` | 299 ms        | 468 ms           | **186** / 166 / 220 / 397 ms              | 484           |
+| `responses / gpt-5.4`      | 315 ms        | 517 ms           | **208** / 193 / 285 / 308 ms              | 238           |
+
+Key observation: the Responses API emits a burst of metadata events (`response.created`, `response.in_progress`, `response.output_item.added`, `response.content_part.added`) before the first `response.output_text.delta`, so the wire-level proxy overshoots canonical TTFT by ~200 ms on that endpoint. Use `streamFormat: openai-responses` there. The Chat Completions API emits a single `role` framing frame, so the gap is an order of magnitude smaller (~20 ms).
+
+Your numbers will differ by network. Rerun the benchmark from your target environment if you want absolute SLA thresholds.
+
 #### Use Cases
 
 - Measuring user-perceived responsiveness in chat applications

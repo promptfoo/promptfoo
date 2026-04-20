@@ -469,10 +469,41 @@ describe('processStreamingResponse', () => {
         expect(detector(buf)).toBe(true);
       });
 
-      it('does not fire on empty content (tool-call framing)', () => {
+      it('does not fire on tool-call framing (no content field)', () => {
         const buf =
           'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"x"}}]}}]}\n\n';
         expect(detector(buf)).toBe(false);
+      });
+
+      it('does not fire on empty content ("content":"")', () => {
+        const buf = 'data: {"choices":[{"delta":{"content":""}}]}\n\n';
+        expect(detector(buf)).toBe(false);
+      });
+
+      it('does not fire on null content ("content":null)', () => {
+        const buf = 'data: {"choices":[{"delta":{"content":null}}]}\n\n';
+        expect(detector(buf)).toBe(false);
+      });
+
+      it('does not fire on sibling fields named similarly (content_filter_results)', () => {
+        // Seen in Azure OpenAI preambles. Our pattern looks for the exact
+        // "content":"X" token, not any key containing "content".
+        const buf =
+          'data: {"choices":[{"delta":{"role":"assistant","content_filter_results":{"hate":{"filtered":false}}}}]}\n\n';
+        expect(detector(buf)).toBe(false);
+      });
+
+      it('fires when a preceding delta carried tool_calls before content arrived', () => {
+        const buf =
+          'data: {"choices":[{"delta":{"tool_calls":[]}}]}\n\n' +
+          'data: {"choices":[{"delta":{"content":"Answer"}}]}\n\n';
+        expect(detector(buf)).toBe(true);
+      });
+
+      it('fires on content that includes escape sequences', () => {
+        // The first content char after `"content":"` is `\` which is non-quote.
+        const buf = 'data: {"choices":[{"delta":{"content":"\\"Hi\\""}}]}\n\n';
+        expect(detector(buf)).toBe(true);
       });
     });
 
@@ -485,11 +516,32 @@ describe('processStreamingResponse', () => {
         );
       });
 
+      it('does not fire on response.in_progress / output_item.added / content_part.added', () => {
+        // Responses API sends a burst of metadata events before the first delta.
+        // These are what cause the 150-200ms framing gap on this endpoint.
+        const preamble =
+          'data: {"type":"response.created","response":{"id":"r_1"}}\n\n' +
+          'data: {"type":"response.in_progress","response":{"id":"r_1"}}\n\n' +
+          'data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message"}}\n\n' +
+          'data: {"type":"response.content_part.added","item_id":"msg_1","part":{"type":"output_text","text":""}}\n\n';
+        expect(detector(preamble)).toBe(false);
+      });
+
       it('fires on the first output_text.delta', () => {
         const buf =
           'data: {"type":"response.created","response":{"id":"r_1"}}\n\n' +
           'data: {"type":"response.output_text.delta","delta":"The"}\n\n';
         expect(detector(buf)).toBe(true);
+      });
+
+      it('does not fire on output_text.done (end-of-stream summary)', () => {
+        const buf = 'data: {"type":"response.output_text.done","text":"The final text"}\n\n';
+        expect(detector(buf)).toBe(false);
+      });
+
+      it('does not fire on empty delta ("delta":"")', () => {
+        const buf = 'data: {"type":"response.output_text.delta","delta":""}\n\n';
+        expect(detector(buf)).toBe(false);
       });
     });
 
@@ -508,6 +560,28 @@ describe('processStreamingResponse', () => {
           'event: content_block_delta\n' +
           'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}\n\n';
         expect(detector(buf)).toBe(true);
+      });
+
+      it('does not fire on input_json_delta (tool-use streaming, not content)', () => {
+        const buf =
+          'event: content_block_delta\n' +
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"x\\":1"}}\n\n';
+        expect(detector(buf)).toBe(false);
+      });
+
+      it('does not fire on empty text_delta', () => {
+        const buf =
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":""}}\n\n';
+        expect(detector(buf)).toBe(false);
+      });
+
+      it('does not fire on thinking_delta (extended thinking, not final content)', () => {
+        // Claude extended thinking emits thinking_delta before text_delta.
+        // Treating thinking as TTFT would inflate the metric with reasoning time
+        // and hide the actual first-output-token latency.
+        const buf =
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Let me think"}}\n\n';
+        expect(detector(buf)).toBe(false);
       });
     });
 
