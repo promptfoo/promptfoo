@@ -21,6 +21,7 @@ import {
 } from '../../../src/redteam/providers/shared';
 import { sleep } from '../../../src/util/time';
 import { createMockProvider } from '../../factories/provider';
+import { mockProcessEnv } from '../../util/utils';
 
 import type {
   ApiProvider,
@@ -991,14 +992,14 @@ describe('shared redteam provider utilities', () => {
 
     afterEach(() => {
       if (originalEnv === undefined) {
-        delete process.env.PROMPTFOO_ENABLE_UNBLOCKING;
+        mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: undefined });
       } else {
-        process.env.PROMPTFOO_ENABLE_UNBLOCKING = originalEnv;
+        mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: originalEnv });
       }
     });
 
     it('short-circuits by default when PROMPTFOO_ENABLE_UNBLOCKING is not set', async () => {
-      delete process.env.PROMPTFOO_ENABLE_UNBLOCKING;
+      mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: undefined });
 
       const result = await tryUnblocking({
         messages: [],
@@ -1013,7 +1014,7 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('checks server support when PROMPTFOO_ENABLE_UNBLOCKING=true', async () => {
-      process.env.PROMPTFOO_ENABLE_UNBLOCKING = 'true';
+      mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: 'true' });
       mockedCheckServerFeatureSupport.mockResolvedValue(false);
 
       const result = await tryUnblocking({

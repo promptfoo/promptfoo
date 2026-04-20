@@ -1,8 +1,8 @@
 {
-  "bootstrap-sha": "779729198d01eacd9d00b0796d62cc5a16f0ccac",
   "include-commit-authors": true,
   "include-component-in-tag": false,
   "include-v-in-tag": false,
+  "include-v-in-release-name": false,
   "packages": {
     ".": {
       "release-type": "node",

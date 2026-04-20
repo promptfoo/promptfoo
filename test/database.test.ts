@@ -4,6 +4,7 @@ import * as path from 'path';
 
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockProcessEnv } from './util/utils';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -12,15 +13,15 @@ describe('database WAL mode', () => {
 
   beforeEach(() => {
     vi.resetModules();
-    process.env = { ...ORIGINAL_ENV };
+    mockProcessEnv({ ...ORIGINAL_ENV }, { clear: true });
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-dbtest-'));
-    process.env.PROMPTFOO_CONFIG_DIR = tempDir;
-    delete process.env.IS_TESTING;
-    delete process.env.PROMPTFOO_DISABLE_WAL_MODE;
+    mockProcessEnv({ PROMPTFOO_CONFIG_DIR: tempDir });
+    mockProcessEnv({ IS_TESTING: undefined });
+    mockProcessEnv({ PROMPTFOO_DISABLE_WAL_MODE: undefined });
   });
 
   afterEach(async () => {
-    process.env = ORIGINAL_ENV;
+    mockProcessEnv(ORIGINAL_ENV, { clear: true });
     // Close the database connection if it exists
     try {
       const database = await import('../src/database');
@@ -73,7 +74,7 @@ describe('database WAL mode', () => {
   });
 
   it('skips WAL mode when PROMPTFOO_DISABLE_WAL_MODE is set', async () => {
-    process.env.PROMPTFOO_DISABLE_WAL_MODE = 'true';
+    mockProcessEnv({ PROMPTFOO_DISABLE_WAL_MODE: 'true' });
 
     const database = await import('../src/database');
     database.getDb();
@@ -92,7 +93,7 @@ describe('database WAL mode', () => {
   });
 
   it('does not enable WAL mode for in-memory databases', async () => {
-    process.env.IS_TESTING = 'true';
+    mockProcessEnv({ IS_TESTING: 'true' });
 
     const database = await import('../src/database');
     const db = database.getDb();

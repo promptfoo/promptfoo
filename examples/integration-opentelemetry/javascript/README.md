@@ -163,6 +163,8 @@ The trajectory-specific config at `promptfooconfig.trajectory.yaml` adds:
 - `trajectory:tool-sequence`
 - `trajectory:step-count`
 
+Promptfoo accepts generic tool span attributes such as `tool.name` and `tool.arguments`, and it also recognizes Vercel AI SDK telemetry attributes such as `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`.
+
 ## Viewing Traces
 
 After running an evaluation, view traces in the web UI:

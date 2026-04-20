@@ -37,11 +37,16 @@ async function generateGcgPrompts(
     }
 
     await async.forEachOfLimit(testCases, CONCURRENCY, async (testCase, index) => {
-      logger.debug(`[GCG] Processing test case: ${JSON.stringify(testCase)}`);
-      invariant(
-        testCase.vars,
-        `GCG: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
-      );
+      const caseNumber = Number(index) + 1;
+      logger.debug('[GCG] Processing test case', {
+        caseNumber,
+        totalCases: testCases.length,
+        hasInjectVar: testCase.vars ? injectVar in testCase.vars : false,
+        varsKeyCount: Object.keys(testCase.vars ?? {}).length,
+        assertionCount: testCase.assert?.length ?? 0,
+        metadataKeyCount: Object.keys(testCase.metadata ?? {}).length,
+      });
+      invariant(testCase.vars, `GCG: testCase.vars is required for case ${caseNumber}`);
 
       const payload = {
         task: 'gcg',
@@ -55,25 +60,37 @@ async function generateGcgPrompts(
         responses?: string[];
       }
 
-      const { data } = await fetchWithCache<GCGGenerationResponse>(
+      const { data, status, statusText } = await fetchWithCache<GCGGenerationResponse>(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'x-promptfoo-silent': 'true',
           },
           body: JSON.stringify(payload),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        true,
       );
 
-      logger.debug(
-        `Got GCG generation result for case ${Number(index) + 1}: ${JSON.stringify(data)}`,
-      );
+      logger.debug('[GCG] Got generation result', {
+        caseNumber,
+        hasError: Boolean(data.error),
+        responseCount: Array.isArray(data.responses) ? data.responses.length : 0,
+      });
 
       if (data.error) {
-        logger.error(`[GCG] Error in GCG generation: ${data.error}`);
-        logger.debug(`[GCG] Response: ${JSON.stringify(data)}`);
+        logger.error('[GCG] Error in GCG generation', {
+          caseNumber,
+          status,
+          statusText,
+        });
+        logger.debug('[GCG] Error response metadata', {
+          caseNumber,
+          hasError: true,
+        });
         return;
       }
 
@@ -103,7 +120,10 @@ async function generateGcgPrompts(
       if (progressBar) {
         progressBar.increment(1);
       } else {
-        logger.debug(`Processed case ${Number(index) + 1} of ${testCases.length}`);
+        logger.debug('[GCG] Processed test case', {
+          caseNumber,
+          totalCases: testCases.length,
+        });
       }
     });
 
@@ -116,7 +136,9 @@ async function generateGcgPrompts(
     if (progressBar) {
       progressBar.stop();
     }
-    logger.error(`Error in GCG generation: ${error}`);
+    logger.error('Error in GCG generation', {
+      errorType: error instanceof Error ? error.constructor.name : typeof error,
+    });
     return [];
   }
 }

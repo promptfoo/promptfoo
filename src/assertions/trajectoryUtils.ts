@@ -1,3 +1,8 @@
+import {
+  getFirstStringAttribute,
+  getToolNameFromAttributes,
+  TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+} from '../tracing/toolAttributes';
 import { matchesPattern } from './traceUtils';
 
 import type { TraceData, TraceSpan } from '../types/tracing';
@@ -24,47 +29,6 @@ export interface TrajectoryStep {
   statusMessage?: string;
   type: TrajectoryStepType;
 }
-
-const TOOL_ATTRIBUTE_KEYS = [
-  'tool.name',
-  'tool_name',
-  'tool',
-  'function.name',
-  'function_name',
-  'gen_ai.tool.name',
-  'codex.mcp.tool',
-  'agent.tool',
-  'agent.tool_name',
-  'agent.toolName',
-] as const;
-
-const TOOL_ARGUMENT_ATTRIBUTE_KEYS = [
-  'tool.arguments',
-  'tool.args',
-  'tool.input',
-  'tool_arguments',
-  'tool_args',
-  'tool_input',
-  'function.arguments',
-  'function.args',
-  'function.input',
-  'function_arguments',
-  'function_args',
-  'gen_ai.tool.arguments',
-  'gen_ai.tool.args',
-  'gen_ai.tool.input',
-  'gen_ai.tool.call.arguments',
-  'gen_ai.tool.call.args',
-  'agent.tool.arguments',
-  'agent.tool.args',
-  'agent.tool.input',
-  'codex.mcp.arguments',
-  'codex.mcp.args',
-  'codex.mcp.input',
-  'arguments',
-  'args',
-  'input',
-] as const;
 
 const COMMAND_ATTRIBUTE_KEYS = [
   'codex.command',
@@ -100,19 +64,6 @@ interface JudgeTrajectoryStep {
 
 interface OmittedJudgeTrajectorySteps {
   omittedCount: number;
-}
-
-function getStringAttribute(
-  attributes: TrajectoryAttributes,
-  keys: readonly string[],
-): string | undefined {
-  for (const key of keys) {
-    const value = attributes[key];
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim();
-    }
-  }
-  return undefined;
 }
 
 function normalizeStructuredAttribute(value: unknown): unknown {
@@ -178,7 +129,7 @@ function isCommandToolName(toolName: string | undefined): boolean {
 function extractToolName(span: TraceSpan): string | undefined {
   const attributes = span.attributes || {};
 
-  const directMatch = getStringAttribute(attributes, TOOL_ATTRIBUTE_KEYS);
+  const directMatch = getToolNameFromAttributes(attributes);
   if (directMatch) {
     return directMatch;
   }
@@ -242,7 +193,7 @@ function extractCommand(
 ): string | undefined {
   const attributes = span.attributes || {};
 
-  const directMatch = getStringAttribute(attributes, COMMAND_ATTRIBUTE_KEYS);
+  const directMatch = getFirstStringAttribute(attributes, COMMAND_ATTRIBUTE_KEYS);
   if (directMatch) {
     return directMatch;
   }
@@ -285,12 +236,12 @@ function extractCommand(
 function extractSearchQuery(span: TraceSpan): string | undefined {
   const attributes = span.attributes || {};
 
-  const directMatch = getStringAttribute(attributes, SEARCH_ATTRIBUTE_KEYS);
+  const directMatch = getFirstStringAttribute(attributes, SEARCH_ATTRIBUTE_KEYS);
   if (directMatch) {
     return directMatch;
   }
 
-  const genericQuery = getStringAttribute(attributes, GENERIC_QUERY_ATTRIBUTE_KEYS);
+  const genericQuery = getFirstStringAttribute(attributes, GENERIC_QUERY_ATTRIBUTE_KEYS);
   if (genericQuery && isSearchLikeSpan(span)) {
     return genericQuery;
   }

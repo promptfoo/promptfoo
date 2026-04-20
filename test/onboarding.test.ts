@@ -127,7 +127,7 @@ describe('reportProviderAPIKeyWarnings', () => {
     );
   });
   it('should produce only warnings for applicable providers if the env keys are not set', () => {
-    process.env.OPENAI_API_KEY = '<my-api-key>';
+    mockProcessEnv({ OPENAI_API_KEY: '<my-api-key>' });
     expect(reportProviderAPIKeyWarnings([openaiID, anthropicID])).toEqual(
       expect.arrayContaining([
         expect.stringContaining('ANTHROPIC_API_KEY environment variable is not set'),

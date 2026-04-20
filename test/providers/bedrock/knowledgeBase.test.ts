@@ -4,6 +4,7 @@ import logger from '../../../src/logger';
 import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
 import { sha256 } from '../../../src/util/createHash';
 import { createEmptyTokenUsage } from '../../../src/util/tokenUsageUtils';
+import { mockProcessEnv } from '../../util/utils';
 
 const mockSend = vi.fn();
 const mockBedrockClient = {
@@ -126,29 +127,29 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     mockGet.mockReset();
     mockSet.mockReset();
     mockIsCacheEnabled.mockReset().mockReturnValue(false);
-    delete process.env.AWS_BEDROCK_MAX_RETRIES;
-    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
-    delete process.env.HTTPS_PROXY;
-    delete process.env.https_proxy;
-    delete process.env.HTTP_PROXY;
-    delete process.env.http_proxy;
-    delete process.env.npm_config_https_proxy;
-    delete process.env.npm_config_http_proxy;
-    delete process.env.npm_config_proxy;
-    delete process.env.all_proxy;
+    mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: undefined });
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+    mockProcessEnv({ HTTPS_PROXY: undefined });
+    mockProcessEnv({ https_proxy: undefined });
+    mockProcessEnv({ HTTP_PROXY: undefined });
+    mockProcessEnv({ http_proxy: undefined });
+    mockProcessEnv({ npm_config_https_proxy: undefined });
+    mockProcessEnv({ npm_config_http_proxy: undefined });
+    mockProcessEnv({ npm_config_proxy: undefined });
+    mockProcessEnv({ all_proxy: undefined });
   });
 
   afterEach(() => {
     vi.clearAllMocks();
-    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
-    delete process.env.HTTPS_PROXY;
-    delete process.env.https_proxy;
-    delete process.env.HTTP_PROXY;
-    delete process.env.http_proxy;
-    delete process.env.npm_config_https_proxy;
-    delete process.env.npm_config_http_proxy;
-    delete process.env.npm_config_proxy;
-    delete process.env.all_proxy;
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+    mockProcessEnv({ HTTPS_PROXY: undefined });
+    mockProcessEnv({ https_proxy: undefined });
+    mockProcessEnv({ HTTP_PROXY: undefined });
+    mockProcessEnv({ http_proxy: undefined });
+    mockProcessEnv({ npm_config_https_proxy: undefined });
+    mockProcessEnv({ npm_config_http_proxy: undefined });
+    mockProcessEnv({ npm_config_proxy: undefined });
+    mockProcessEnv({ all_proxy: undefined });
   });
 
   it('should throw an error if knowledgeBaseId is not provided', () => {
@@ -226,7 +227,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   });
 
   it('should respect AWS_BEDROCK_MAX_RETRIES environment variable', async () => {
-    process.env.AWS_BEDROCK_MAX_RETRIES = '5';
+    mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: '5' });
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
       {
@@ -725,7 +726,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   });
 
   it('should create knowledge base client with API key authentication from environment', async () => {
-    process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-env-api-key' });
 
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
@@ -746,7 +747,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
       requestHandler: expect.any(Object),
     });
 
-    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
   });
 
   it('should prioritize explicit credentials over API key for knowledge base', async () => {

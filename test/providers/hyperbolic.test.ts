@@ -3,6 +3,7 @@ import { HyperbolicAudioProvider } from '../../src/providers/hyperbolic/audio';
 import { calculateHyperbolicCost, HyperbolicProvider } from '../../src/providers/hyperbolic/chat';
 import { HyperbolicImageProvider } from '../../src/providers/hyperbolic/image';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
   default: {
@@ -18,11 +19,11 @@ describe('HyperbolicProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.HYPERBOLIC_API_KEY = mockApiKey;
+    mockProcessEnv({ HYPERBOLIC_API_KEY: mockApiKey });
   });
 
   afterEach(() => {
-    delete process.env.HYPERBOLIC_API_KEY;
+    mockProcessEnv({ HYPERBOLIC_API_KEY: undefined });
   });
 
   describe('constructor', () => {
@@ -159,11 +160,11 @@ describe('HyperbolicImageProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.HYPERBOLIC_API_KEY = mockApiKey;
+    mockProcessEnv({ HYPERBOLIC_API_KEY: mockApiKey });
   });
 
   afterEach(() => {
-    delete process.env.HYPERBOLIC_API_KEY;
+    mockProcessEnv({ HYPERBOLIC_API_KEY: undefined });
   });
 
   describe('constructor', () => {
@@ -211,11 +212,11 @@ describe('HyperbolicAudioProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.HYPERBOLIC_API_KEY = mockApiKey;
+    mockProcessEnv({ HYPERBOLIC_API_KEY: mockApiKey });
   });
 
   afterEach(() => {
-    delete process.env.HYPERBOLIC_API_KEY;
+    mockProcessEnv({ HYPERBOLIC_API_KEY: undefined });
   });
 
   describe('constructor', () => {
