@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import express from 'express';
 import type { Server } from 'http';
+
+import express from 'express';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { HttpProvider } from '../../src/providers/http';
 
 describe('TTFT End-to-End Integration', () => {

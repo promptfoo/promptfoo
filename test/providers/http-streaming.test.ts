@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HttpProvider } from '../../src/providers/http';
 import * as fetchModule from '../../src/util/fetch';
 

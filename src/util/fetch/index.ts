@@ -433,51 +433,50 @@ export async function fetchWithRetries(
 }
 
 /**
- * Streaming metrics to track timing information during streaming responses
+ * Timing metrics captured while consuming a streaming HTTP response.
+ *
+ * Applies to text modalities only. Values are milliseconds except
+ * `tokensPerSecond` (approximate, character-based).
  */
 export interface StreamingMetrics {
+  /** Milliseconds from request start to the first non-whitespace chunk. */
   timeToFirstToken?: number;
+  /** Rough throughput estimate (chars/4 per second). */
   tokensPerSecond?: number;
+  /** Milliseconds from the first byte read to stream close. */
   totalStreamTime?: number;
+  /** True when the transport delivered more than one network chunk. */
   isActuallyStreaming?: boolean;
 }
 
-/**
- * Callback for first token detection during streaming
- */
+/** Callback invoked when the first non-whitespace chunk arrives. */
 export type FirstTokenCallback = () => void;
 
 /**
- * Options for streaming fetch requests
- */
-export interface StreamingFetchOptions {
-  onFirstToken?: FirstTokenCallback;
-  enableMetrics?: boolean;
-}
-
-/**
- * Process a streaming response and extract TTFT metrics
+ * Consume a streaming HTTP response and collect TTFT + throughput metrics.
+ *
+ * `timeToFirstToken` is measured from `requestStartTime` so it captures
+ * connection setup and server processing, not just stream-read latency.
+ * Token counts are estimated as `chars / 4`; integrate a tokenizer upstream
+ * if you need exact throughput numbers.
  *
  * @param response - The Response object to process as a stream
- * @param requestStartTime - The timestamp when the request was initiated (for accurate TTFT)
- * @param onFirstToken - Optional callback triggered when first token is detected
- * @returns Object containing the full response text and streaming metrics
+ * @param requestStartTime - The timestamp when the request was initiated (ms since epoch)
+ * @param onFirstToken - Optional callback triggered when first non-whitespace chunk is detected
  */
 export async function processStreamingResponse(
   response: Response,
   requestStartTime: number,
   onFirstToken?: FirstTokenCallback,
 ): Promise<{ text: string; streamingMetrics: StreamingMetrics }> {
-  const streamStart = Date.now();
-  let firstTokenTime: number | undefined;
-  let hasCalledFirstToken = false;
-
   const reader = response.body?.getReader();
   if (!reader) {
     throw new Error('Response body is not readable');
   }
 
+  const streamStart = Date.now();
   const decoder = new TextDecoder();
+  let firstTokenTime: number | undefined;
   let text = '';
   let tokenCount = 0;
   let chunkCount = 0;
@@ -485,7 +484,6 @@ export async function processStreamingResponse(
   try {
     while (true) {
       const { done, value } = await reader.read();
-
       if (done) {
         break;
       }
@@ -493,26 +491,13 @@ export async function processStreamingResponse(
       const chunk = decoder.decode(value, { stream: true });
       text += chunk;
       chunkCount++;
-
-      // Detect first meaningful token using a simple heuristic
-      // Limitation: This may not be accurate if the stream includes preambles,
-      // comments, or other non-content chunks. More sophisticated detection
-      // should be implemented in the provider's transformResponse function.
-      if (!hasCalledFirstToken && chunk.trim().length > 0) {
-        // CRITICAL: Measure from request start, not stream start
-        // This includes network overhead (TCP handshake, TLS, HTTP headers)
-        firstTokenTime = Date.now() - requestStartTime;
-        hasCalledFirstToken = true;
-        if (onFirstToken) {
-          onFirstToken();
-        }
-      }
-
-      // Approximate token counting using character-based estimation
-      // Note: This is a rough approximation (4 chars ≈ 1 token) and may be
-      // inaccurate for non-English text, code, or tokens with special formatting.
-      // For more accurate token counting, integrate with a proper tokenizer.
       tokenCount += Math.ceil(chunk.length / 4);
+
+      if (firstTokenTime === undefined && chunk.trim().length > 0) {
+        // Measure from request start so network overhead (TCP/TLS/headers) is included.
+        firstTokenTime = Date.now() - requestStartTime;
+        onFirstToken?.();
+      }
     }
   } finally {
     reader.releaseLock();
@@ -520,20 +505,13 @@ export async function processStreamingResponse(
 
   const totalStreamTime = Date.now() - streamStart;
   const tokensPerSecond = totalStreamTime > 0 ? (tokenCount / totalStreamTime) * 1000 : 0;
-
-  // For non-streaming responses (single chunk), TTFT is the time from request start to receiving the chunk
-  if (chunkCount === 1 && !firstTokenTime) {
-    firstTokenTime = Date.now() - requestStartTime;
-  }
-
-  // Ensure we always have a valid TTFT value for streaming metrics
-  // If no first token time was captured, calculate from request start to now
-  const finalTtft = firstTokenTime || Date.now() - requestStartTime;
+  // Fallback: whitespace-only stream never triggered the first-token branch.
+  const timeToFirstToken = firstTokenTime ?? Date.now() - requestStartTime;
 
   return {
     text,
     streamingMetrics: {
-      timeToFirstToken: finalTtft,
+      timeToFirstToken,
       tokensPerSecond,
       totalStreamTime,
       isActuallyStreaming: chunkCount > 1,

@@ -1589,21 +1589,9 @@ export class HttpProvider implements ApiProvider {
   }
 
   /**
-   * Unified response fetching that handles both streaming and non-streaming cases
-   *
-   * When body.stream is true:
-   * - Uses fetchWithRetries to get raw Response object
-   * - Processes the response as a stream to capture TTFT metrics
-   * - Disables caching to ensure live measurements
-   *
-   * When body.stream is false or not set:
-   * - Uses existing fetchWithCache for standard behavior
-   * - Maintains backward compatibility and caching functionality
-   *
-   * @param url - The URL to fetch
-   * @param fetchOptions - Fetch options
-   * @param context - Optional call context for cache control
-   * @returns Object containing response data and optional streaming metrics
+   * Fetch a response, branching on whether the caller requested a streamed
+   * transport. Streaming bypasses the cache so TTFT reflects a live call;
+   * non-streaming reuses the standard cached fetch path.
    */
   private async fetchResponse(
     url: string,
@@ -1613,8 +1601,6 @@ export class HttpProvider implements ApiProvider {
     multipartBody: boolean = false,
   ): Promise<{ response: FetchWithCacheResult<string>; streamingMetrics?: StreamingMetrics }> {
     if (isStreaming) {
-      // Streaming path: Get raw response and process as stream.
-      // Caching is disabled for streaming responses to ensure live TTFT measurement.
       const requestStartTime = Date.now();
       const rawResponse = await fetchWithRetries(
         url,
@@ -1622,26 +1608,25 @@ export class HttpProvider implements ApiProvider {
         REQUEST_TIMEOUT_MS,
         this.config.maxRetries,
       );
-
-      const streamingResponse = await processStreamingResponse(rawResponse, requestStartTime);
-      const latencyMs = Date.now() - requestStartTime;
+      const { text, streamingMetrics } = await processStreamingResponse(
+        rawResponse,
+        requestStartTime,
+      );
 
       const response: FetchWithCacheResult<string> = {
-        data: streamingResponse.text,
+        data: text,
         cached: false,
         status: rawResponse.status,
         statusText: rawResponse.statusText,
         headers: Object.fromEntries(rawResponse.headers.entries()),
-        latencyMs,
-        deleteFromCache: async () => {}, // Streaming responses are not cached
+        latencyMs: Date.now() - requestStartTime,
+        deleteFromCache: async () => {},
       };
 
-      return { response, streamingMetrics: streamingResponse.streamingMetrics };
+      return { response, streamingMetrics };
     }
 
-    // Non-streaming path: Use existing caching mechanism.
-    // Multipart bodies bust the cache (consistent with main's behavior).
-    const response = await fetchWithCache(
+    const response = await fetchWithCache<string>(
       url,
       fetchOptions,
       REQUEST_TIMEOUT_MS,
@@ -1649,7 +1634,6 @@ export class HttpProvider implements ApiProvider {
       multipartBody ? true : (context?.bustCache ?? context?.debug),
       this.config.maxRetries,
     );
-
     return { response };
   }
 
@@ -2501,7 +2485,7 @@ export class HttpProvider implements ApiProvider {
       fetchOptions,
       context,
       isStreaming,
-      multipartBody,
+      Boolean(multipartBody),
     );
 
     const { data, cached, status, statusText, headers: responseHeaders, latencyMs } = response;
