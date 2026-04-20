@@ -8,8 +8,18 @@ import type { ApiProvider } from '../../../types/index';
 export interface SeedPickResult {
   /** Seeds chosen for conditioning, in rank order (best first). */
   seeds: Seed[];
-  /** True when the LLM call failed and we fell back to a deterministic slice. */
+  /**
+   * True when the LLM call failed (error / non-string output / malformed
+   * JSON / no valid ids) and we fell back to a deterministic slice.
+   */
   degraded: boolean;
+  /**
+   * True when the LLM call succeeded but returned fewer valid unique ids
+   * than requested, so we deterministically topped up the remaining
+   * slots. `degraded` stays false (the call worked); this lets consumers
+   * tell "100% LLM-picked" from "partially topped up".
+   */
+  toppedUp: boolean;
 }
 
 const DEFAULT_PICK_COUNT = 5;
@@ -77,13 +87,13 @@ export async function pickSeeds(
 
   if (error || typeof output !== 'string') {
     logger.debug(`[hallucination/seedPicker] degraded: ${error ?? 'non-string output'}`);
-    return { seeds: deterministicFallback(target), degraded: true };
+    return { seeds: deterministicFallback(target), degraded: true, toppedUp: false };
   }
 
   const ids = parseResponse(output);
   if (!ids) {
     logger.debug('[hallucination/seedPicker] degraded: failed to parse picker response');
-    return { seeds: deterministicFallback(target), degraded: true };
+    return { seeds: deterministicFallback(target), degraded: true, toppedUp: false };
   }
 
   const seen = new Set<string>();
@@ -104,10 +114,12 @@ export async function pickSeeds(
 
   if (picked.length === 0) {
     logger.debug('[hallucination/seedPicker] degraded: zero valid seed ids returned');
-    return { seeds: deterministicFallback(target), degraded: true };
+    return { seeds: deterministicFallback(target), degraded: true, toppedUp: false };
   }
 
+  let toppedUp = false;
   if (picked.length < target) {
+    toppedUp = true;
     for (const seed of HALLUCINATION_SEEDS) {
       if (picked.length >= target) {
         break;
@@ -119,5 +131,5 @@ export async function pickSeeds(
     }
   }
 
-  return { seeds: picked, degraded: false };
+  return { seeds: picked, degraded: false, toppedUp };
 }

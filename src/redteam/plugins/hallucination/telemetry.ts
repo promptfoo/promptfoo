@@ -52,6 +52,16 @@ export interface GenerationStats {
   personaIds: string[];
   /** IDs of seeds used to condition this run. */
   seedIds: string[];
+  /**
+   * Per-picker top-up flag. True when the LLM call succeeded but returned
+   * fewer valid IDs than requested, so deterministic ids filled the gap.
+   * `degraded.{personaPicker,seedPicker}` stays false (the call worked);
+   * this flag distinguishes "100% LLM-picked" from "partially topped up".
+   */
+  toppedUp: {
+    personaPicker: boolean;
+    seedPicker: boolean;
+  };
   /** Oversample factor in effect for this run. */
   oversampleFactor: number;
   /**
@@ -90,6 +100,10 @@ export function createInitialStats(oversampleFactor: number, requested: number):
     },
     personaIds: [],
     seedIds: [],
+    toppedUp: {
+      personaPicker: false,
+      seedPicker: false,
+    },
     oversampleFactor,
     mutationApplied: false,
     mutationsRejectedForLength: 0,

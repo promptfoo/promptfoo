@@ -8,7 +8,7 @@ import { dedupByCluster } from '../../../src/redteam/plugins/hallucination/dedup
 import { mutateCandidates } from '../../../src/redteam/plugins/hallucination/mutator';
 import { pickPersonas } from '../../../src/redteam/plugins/hallucination/personaPicker';
 import { HALLUCINATION_PERSONAS } from '../../../src/redteam/plugins/hallucination/personas';
-import { safeJsonForLlm } from '../../../src/redteam/plugins/hallucination/safeJson';
+import { parseLlmJson, safeJsonForLlm } from '../../../src/redteam/plugins/hallucination/safeJson';
 import { pickSeeds } from '../../../src/redteam/plugins/hallucination/seedPicker';
 import { HALLUCINATION_SEEDS } from '../../../src/redteam/plugins/hallucination/seeds';
 import {
@@ -1269,6 +1269,172 @@ describe('HallucinationPlugin v2 — framework field integration', () => {
   });
 });
 
+describe('parseLlmJson — fence + whitespace tolerance', () => {
+  it('parses bare JSON', () => {
+    expect(parseLlmJson('{"a":1}')).toEqual({ a: 1 });
+  });
+
+  it('strips a leading + trailing ```json fence', () => {
+    expect(parseLlmJson('```json\n{"a":1}\n```')).toEqual({ a: 1 });
+  });
+
+  it('tolerates surrounding whitespace around the fence (the bug fix)', () => {
+    // Pre-fix this fell into degraded mode because the regex was anchored
+    // tightly. Common LLM output looks like this.
+    expect(parseLlmJson('\n\n```json\n{"a":1}\n```\n\n')).toEqual({ a: 1 });
+  });
+
+  it('returns null on malformed JSON', () => {
+    expect(parseLlmJson('not json')).toBeNull();
+  });
+});
+
+describe('Mutator — non-integer index protection', () => {
+  it('drops mutations with fractional index instead of throwing in rebuild', async () => {
+    // Pre-fix: chunk[0.5] === undefined → rebuild(undefined, ...) throws.
+    const provider = createMockProvider({
+      response: createProviderResponse({
+        output: JSON.stringify({
+          mutations: [
+            { index: 0.5, text: 'fractional' },
+            { index: 0, text: 'good mutation' },
+          ],
+        }),
+      }),
+    });
+    const candidates = [{ promptText: 'orig-A' }];
+    const result = await mutateCandidates(provider, candidates, {
+      fraction: 1,
+      axes: ['deepen'],
+      rebuild: (orig: { promptText: string }, text: string) => ({ ...orig, promptText: text }),
+    });
+    // Only the integer-indexed mutation survives. No throw.
+    expect(result.acceptedCount).toBe(1);
+    expect(result.combined.slice(1)[0].promptText).toBe('good mutation');
+  });
+
+  it('drops mutations with NaN/Infinity index', async () => {
+    const provider = createMockProvider({
+      response: createProviderResponse({
+        output: JSON.stringify({
+          mutations: [
+            { index: Number.NaN, text: 'nan' },
+            { index: 1e309, text: 'infinity' },
+          ],
+        }),
+      }),
+    });
+    const candidates = [{ promptText: 'orig' }];
+    const result = await mutateCandidates(provider, candidates, {
+      fraction: 1,
+      axes: ['deepen'],
+      rebuild: (orig: { promptText: string }, text: string) => ({ ...orig, promptText: text }),
+    });
+    // Both rejected → no mutations accepted.
+    expect(result.acceptedCount).toBe(0);
+  });
+});
+
+describe('Dedup — cluster ID validation', () => {
+  it('rejects negative cluster ids; degrades to literal-dedup output', async () => {
+    // Pre-fix: {cluster: -1} for every candidate would silently collapse
+    // most of the pool. After fix the malformed entries are rejected and
+    // partial-coverage triggers the degraded fail-open path.
+    const provider = makeRoutedProvider({
+      personaPicker: () =>
+        createProviderResponse({ output: JSON.stringify({ persona_ids: PICKED_PERSONA_IDS }) }),
+      seedPicker: () =>
+        createProviderResponse({ output: JSON.stringify({ seed_ids: PICKED_SEED_IDS }) }),
+      generation: (i) => createProviderResponse({ output: `Prompt: g-${i}-A\nPrompt: g-${i}-B` }),
+      dedup: () =>
+        createProviderResponse({
+          output: JSON.stringify({
+            clusters: [
+              { index: 0, cluster: -1 },
+              { index: 1, cluster: -1 },
+              { index: 2, cluster: -1 },
+              { index: 3, cluster: -1 },
+            ],
+          }),
+        }),
+      critic: () =>
+        createProviderResponse({
+          output: JSON.stringify({
+            scores: Array.from({ length: 4 }, (_, i) => ({
+              index: i,
+              specificity: 2,
+              plausibility: 2,
+              likely_trivial_refusal: false,
+            })),
+          }),
+        }),
+    });
+
+    const plugin = new HallucinationPlugin(provider, 'test purpose', 'test_var');
+    const tests = await plugin.generateTests(2);
+    const stats = (tests[0].metadata as any)?.generationStats;
+    // Malformed → fall open. Stats must reflect the degradation.
+    expect(stats.degraded.llmDedup).toBe(true);
+    // And per the restored contract: collapsed === 0 in degraded mode.
+    expect(stats.llmDuplicatesCollapsed).toBe(0);
+  });
+
+  it('rejects fractional cluster ids', async () => {
+    const provider = createMockProvider({
+      response: createProviderResponse({
+        output: JSON.stringify({
+          clusters: [
+            { index: 0, cluster: 0.5 },
+            { index: 1, cluster: 1.7 },
+          ],
+        }),
+      }),
+    });
+    const result = await dedupByCluster(provider, [{ promptText: 'a' }, { promptText: 'b' }]);
+    // All entries rejected by integer check → parseResponse returns null →
+    // degraded path runs; input returned verbatim with collapsed=0.
+    expect(result.degraded).toBe(true);
+    expect(result.collapsed).toBe(0);
+    expect(result.kept).toHaveLength(2);
+  });
+});
+
+describe('HallucinationPlugin v2 — toppedUp telemetry surface', () => {
+  it('exposes per-picker toppedUp flag in stats', async () => {
+    const provider = makeRoutedProvider({
+      personaPicker: () =>
+        // Return ONE valid id when 2 personas are needed → top-up runs.
+        createProviderResponse({
+          output: JSON.stringify({ persona_ids: [HALLUCINATION_PERSONAS[0].id] }),
+        }),
+      seedPicker: () =>
+        createProviderResponse({ output: JSON.stringify({ seed_ids: PICKED_SEED_IDS }) }),
+      generation: (i) =>
+        createProviderResponse({
+          output: `Prompt: gen-${i}-A\nPrompt: gen-${i}-B\nPrompt: gen-${i}-C\nPrompt: gen-${i}-D`,
+        }),
+      critic: () =>
+        createProviderResponse({
+          output: JSON.stringify({
+            scores: Array.from({ length: 8 }, (_, i) => ({
+              index: i,
+              specificity: 2,
+              plausibility: 2,
+              likely_trivial_refusal: false,
+            })),
+          }),
+        }),
+    });
+
+    const plugin = new HallucinationPlugin(provider, 'test purpose', 'test_var');
+    const tests = await plugin.generateTests(2);
+    const stats = (tests[0].metadata as any)?.generationStats;
+    expect(stats.degraded.personaPicker).toBe(false);
+    expect(stats.toppedUp.personaPicker).toBe(true);
+    expect(stats.toppedUp.seedPicker).toBe(false);
+  });
+});
+
 describe('safeJsonForLlm — scope of the closing-delimiter escape', () => {
   // Anchors the documented scope so the doc and behavior stay in sync.
 
@@ -1449,30 +1615,58 @@ describe('HallucinationGrader', () => {
     expect(grader.id).toBe('promptfoo:redteam:hallucination');
   });
 
-  it('rubric references the purpose template variable', () => {
+  it('default (no graderVersion) renders the legacy 7-criterion rubric', () => {
+    // Rendering with no pluginConfig must produce the legacy rubric so
+    // existing redteam evals see no pass/fail delta from this PR landing.
     const grader = new HallucinationGrader();
-    expect(grader.rubric).toContain('{{purpose}}');
+    const rendered = grader.renderRubric({ purpose: 'test', prompt: 'x' });
+    expect(rendered).toContain('Factual Accuracy');
+    expect(rendered).toContain('Unsupported Claims');
+    expect(rendered).toContain('Fabricated Details');
+    // v2-only markers must NOT be present in the default render.
+    expect(rendered).not.toContain('MET');
+    expect(rendered).not.toContain('no-fabricated-specifics');
+    expect(rendered).not.toContain('<UserQuery>');
   });
 
-  it('uses binary MET/UNMET criteria with anchored examples', () => {
+  it('legacy rubric preserves the hypothetical-framing escape clause', () => {
     const grader = new HallucinationGrader();
-    expect(grader.rubric).toContain('MET');
-    expect(grader.rubric).toContain('UNMET');
-    expect(grader.rubric).toContain('no-fabricated-specifics');
-    expect(grader.rubric).toContain('acknowledges-uncertainty');
-    expect(grader.rubric).toContain('no-confident-fabrication');
-    expect(grader.rubric).toContain('no-false-premise-affirm');
+    const rendered = grader.renderRubric({ purpose: 'test', prompt: 'x' });
+    expect(rendered).toMatch(/hypothetical|fictional/i);
   });
 
-  it('includes the standardized <UserQuery>{{prompt}}</UserQuery> tag', () => {
+  it('opt-in v2 (config.generation.graderVersion="v2") renders the calibrated rubric', () => {
     const grader = new HallucinationGrader();
-    expect(grader.rubric).toContain('<UserQuery>');
-    expect(grader.rubric).toContain('{{prompt}}');
-    expect(grader.rubric).toContain('</UserQuery>');
+    const rendered = grader.renderRubric({
+      purpose: 'test',
+      prompt: 'a real user query',
+      pluginConfig: { generation: { graderVersion: 'v2' } },
+    });
+    // v2-only markers present.
+    expect(rendered).toContain('MET');
+    expect(rendered).toContain('UNMET');
+    expect(rendered).toContain('no-fabricated-specifics');
+    expect(rendered).toContain('acknowledges-uncertainty');
+    expect(rendered).toContain('no-confident-fabrication');
+    expect(rendered).toContain('no-false-premise-affirm');
+    // UserQuery tag and the actual prompt value are interpolated.
+    expect(rendered).toContain('<UserQuery>');
+    expect(rendered).toContain('a real user query');
+    expect(rendered).toContain('</UserQuery>');
+    // v2 also keeps the hypothetical/fictional escape clause.
+    expect(rendered).toMatch(/hypothetical|fictional/i);
+    // Legacy 7-criterion shape is gone.
+    expect(rendered).not.toContain('Factual Accuracy');
   });
 
-  it('preserves the hypothetical-framing escape clause', () => {
+  it('explicit graderVersion="v1" renders the legacy rubric (parity with default)', () => {
     const grader = new HallucinationGrader();
-    expect(grader.rubric).toMatch(/hypothetical|fictional/i);
+    const rendered = grader.renderRubric({
+      purpose: 'test',
+      prompt: 'x',
+      pluginConfig: { generation: { graderVersion: 'v1' } },
+    });
+    expect(rendered).toContain('Factual Accuracy');
+    expect(rendered).not.toContain('MET');
   });
 });

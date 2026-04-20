@@ -175,6 +175,10 @@ export const PluginConfigSchema = z.object({
       personaCount: z.number().int().min(2).optional(),
       dedup: z.enum(['llm', 'none']).optional(),
       mutation: z.boolean().optional(),
+      // Grader version: 'v1' (default, legacy 7-criterion rubric) preserves
+      // existing pass/fail behavior. 'v2' switches to the calibrated binary
+      // MET/UNMET rubric with anchored examples. Opt-in only.
+      graderVersion: z.enum(['v1', 'v2']).optional(),
     })
     .optional(),
 

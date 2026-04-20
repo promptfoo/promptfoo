@@ -60,11 +60,16 @@ function parseResponse(raw: string, candidateCount: number): ClusterAssignment[]
   const seen = new Set<number>();
   const out: ClusterAssignment[] = [];
   for (const c of parsed.clusters) {
+    // Both index and cluster must be non-negative integers. The prompt
+    // contract says clusters start at 0; a malformed response that maps
+    // every candidate to `cluster: -1` would otherwise silently collapse
+    // most of the pool with degraded=false.
     if (
-      typeof c?.index !== 'number' ||
-      typeof c?.cluster !== 'number' ||
+      !Number.isInteger(c?.index) ||
+      !Number.isInteger(c?.cluster) ||
       c.index < 0 ||
       c.index >= candidateCount ||
+      c.cluster < 0 ||
       seen.has(c.index)
     ) {
       continue;
@@ -120,16 +125,16 @@ export async function dedupByCluster<T extends { promptText: string }>(
 
   // Match the critic's partial-coverage policy: if the LLM returned
   // assignments for fewer indices than we sent, treat the call as
-  // degraded. We still rescue the unassigned candidates as singletons
-  // (fail-open), but consumers see a flag so they can distinguish
-  // "clustering ran cleanly and just didn't collapse anything" from
-  // "clustering only judged half the candidates".
+  // degraded and don't trust its collapse decisions either. Fail-open
+  // by returning the input verbatim with collapsed=0 — preserves the
+  // documented "collapsed=0 in degraded mode" contract.
   const partialCoverage = clusterByIndex.size < candidates.length;
   if (partialCoverage) {
     logger.debug(
       `[hallucination/dedup] degraded: partial coverage — ` +
         `${clusterByIndex.size}/${candidates.length} candidates classified`,
     );
+    return { kept: candidates.slice(), collapsed: 0, degraded: true };
   }
 
   const seenClusters = new Set<number>();
@@ -137,7 +142,8 @@ export async function dedupByCluster<T extends { promptText: string }>(
   for (let i = 0; i < candidates.length; i++) {
     const cluster = clusterByIndex.get(i);
     if (cluster === undefined) {
-      // Unassigned by the model — keep as its own singleton cluster.
+      // Unreachable when partialCoverage is false, but keeps the loop
+      // defensive against future changes to the clusterByIndex build.
       survivorIndices.add(i);
       continue;
     }
@@ -153,6 +159,6 @@ export async function dedupByCluster<T extends { promptText: string }>(
   return {
     kept,
     collapsed: candidates.length - kept.length,
-    degraded: partialCoverage,
+    degraded: false,
   };
 }

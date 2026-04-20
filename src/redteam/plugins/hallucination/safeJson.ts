@@ -22,12 +22,17 @@ export function safeJsonForLlm(value: unknown): string {
 
 /**
  * Parses a JSON object out of an LLM response, tolerating an optional
- * leading/trailing ```json fence. Returns `null` on any parse failure
- * so callers can take their fail-open path without a try/catch.
+ * leading/trailing ```json fence with surrounding whitespace. Returns
+ * `null` on any parse failure so callers can take their fail-open path
+ * without a try/catch.
  */
 export function parseLlmJson(raw: string): unknown {
   try {
-    return JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, '').trim());
+    // Trim first so common LLM responses like "\n```json\n{...}\n```\n"
+    // (with leading/trailing whitespace around the fence) parse cleanly
+    // instead of falling into degraded mode.
+    const trimmed = raw.trim();
+    return JSON.parse(trimmed.replace(/^```(?:json)?\s*|\s*```$/g, '').trim());
   } catch {
     return null;
   }

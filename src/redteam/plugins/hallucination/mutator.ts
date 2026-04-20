@@ -97,8 +97,11 @@ function parseResponse(raw: string, expectedCount: number): ParsedMutation[] | n
   const out: ParsedMutation[] = [];
   const seen = new Set<number>();
   for (const m of parsed.mutations) {
+    // Require an integer index. A fractional index (e.g. 0.5) would index
+    // an array as `chunk[0.5]` → undefined, then `rebuild(undefined, ...)`
+    // throws and breaks the fail-open contract.
     if (
-      typeof m?.index !== 'number' ||
+      !Number.isInteger(m?.index) ||
       typeof m?.text !== 'string' ||
       m.index < 0 ||
       m.index >= expectedCount ||
