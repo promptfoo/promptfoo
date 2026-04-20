@@ -3,9 +3,9 @@
  * Combines path-based detection (for updates) and env-based detection (for command generation).
  */
 
+import * as childProcess from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as childProcess from 'node:child_process';
 
 export const PackageManager = {
   NPM: 'npm',
@@ -22,6 +22,11 @@ export const PackageManager = {
 
 export type PackageManager = (typeof PackageManager)[keyof typeof PackageManager];
 
+function normalizePathForComparison(pathValue: string): string {
+  const normalized = pathValue.replace(/\\/g, '/');
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
 /**
  * Helper function to check if a path contains a pattern.
  * Normalizes both paths for cross-platform compatibility:
@@ -29,14 +34,16 @@ export type PackageManager = (typeof PackageManager)[keyof typeof PackageManager
  * - Case-insensitive comparison on Windows
  */
 export function pathContains(haystack: string, needle: string): boolean {
-  // Normalize both paths: replace backslashes with forward slashes
-  const normalizedHaystack = haystack.replace(/\\/g, '/');
-  const normalizedNeedle = needle.replace(/\\/g, '/');
+  return normalizePathForComparison(haystack).includes(normalizePathForComparison(needle));
+}
 
-  if (process.platform === 'win32') {
-    return normalizedHaystack.toLowerCase().includes(normalizedNeedle.toLowerCase());
+export function pathStartsWith(haystack: string, prefix: string): boolean {
+  const normalizedHaystack = normalizePathForComparison(haystack);
+  const normalizedPrefix = normalizePathForComparison(prefix).replace(/\/+$/, '');
+  if (normalizedHaystack === normalizedPrefix) {
+    return true;
   }
-  return normalizedHaystack.includes(normalizedNeedle);
+  return normalizedHaystack.startsWith(`${normalizedPrefix}/`);
 }
 
 /**
@@ -109,7 +116,7 @@ export function detectPackageManagerFromPath(cliPath: string, projectRoot: strin
     if (
       isGit &&
       normalizedProjectRoot &&
-      realPath.startsWith(normalizedProjectRoot) &&
+      pathStartsWith(realPath, normalizedProjectRoot) &&
       !pathContains(realPath, '/node_modules/')
     ) {
       return PackageManager.UNKNOWN; // Git clone, not managed by package manager
@@ -170,7 +177,10 @@ export function detectPackageManagerFromPath(cliPath: string, projectRoot: strin
     }
 
     // Check for local install
-    if (normalizedProjectRoot && realPath.startsWith(`${normalizedProjectRoot}/node_modules`)) {
+    if (
+      normalizedProjectRoot &&
+      pathStartsWith(realPath, `${normalizedProjectRoot}/node_modules`)
+    ) {
       // Detect which package manager based on lock files
       if (fs.existsSync(path.join(projectRoot, 'yarn.lock'))) {
         return PackageManager.YARN;

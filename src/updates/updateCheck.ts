@@ -1,10 +1,10 @@
 import semver from 'semver';
-import { fetchWithTimeout } from '../util/fetch';
-import logger from '../logger';
 // Use require to load package.json - works reliably in both dev and published package
 import packageJson from '../../package.json';
+import logger from '../logger';
+import { fetchWithTimeout } from '../util/fetch';
 
-export const FETCH_TIMEOUT_MS = 2000;
+export const FETCH_TIMEOUT_MS = 10000;
 
 export interface UpdateInfo {
   current: string;
@@ -15,6 +15,10 @@ export interface UpdateInfo {
 export interface UpdateObject {
   message: string;
   update: UpdateInfo;
+}
+
+export interface CheckForUpdatesOptions {
+  throwOnError?: boolean;
 }
 
 /**
@@ -35,7 +39,11 @@ function getPackageJson(): { name: string; version: string } | null {
  * Fetch latest version from custom API
  */
 async function getLatestVersion(): Promise<string> {
-  const response = await fetchWithTimeout(`https://api.promptfoo.dev/api/latestVersion`, {}, 10000);
+  const response = await fetchWithTimeout(
+    `https://api.promptfoo.dev/api/latestVersion`,
+    {},
+    FETCH_TIMEOUT_MS,
+  );
   if (!response.ok) {
     throw new Error(`Failed to fetch package information for promptfoo`);
   }
@@ -43,7 +51,9 @@ async function getLatestVersion(): Promise<string> {
   return data.latestVersion;
 }
 
-export async function checkForUpdates(): Promise<UpdateObject | null> {
+export async function checkForUpdates(
+  options: CheckForUpdatesOptions = {},
+): Promise<UpdateObject | null> {
   try {
     // Skip update check when running from source (development mode)
     if (process.env.NODE_ENV === 'development') {
@@ -74,6 +84,9 @@ export async function checkForUpdates(): Promise<UpdateObject | null> {
 
     return null;
   } catch (err) {
+    if (options.throwOnError) {
+      throw err;
+    }
     // Use debug level to avoid spamming users with network errors
     // Don't expose full error object which might contain sensitive info
     const message = err instanceof Error ? err.message : String(err);

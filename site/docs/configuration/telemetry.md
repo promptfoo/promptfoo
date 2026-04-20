@@ -34,7 +34,7 @@ To disable telemetry, set the following environment variable:
 PROMPTFOO_DISABLE_TELEMETRY=1
 ```
 
-## Update Notifications
+## Updates
 
 The CLI checks for updates when it starts up. If there is a newer version available, it will display a notification message suggesting you run `promptfoo update` to upgrade.
 
@@ -84,17 +84,6 @@ export PROMPTFOO_ENABLE_AUTO_UPDATE=0
 
 ### Supported Installation Methods
 
-Auto-updates work with:
+Auto-updates work with global npm, yarn, pnpm, and bun installations.
 
-- ✅ Global npm (`npm install -g promptfoo`)
-- ✅ Global yarn (`yarn global add promptfoo`)
-- ✅ Global pnpm (`pnpm add -g promptfoo`)
-- ✅ Global bun (`bun add -g promptfoo`)
-
-Auto-updates are **not available** for:
-
-- ❌ Local project installations (update via `package.json`)
-- ❌ Homebrew (use `brew upgrade promptfoo`)
-- ❌ Docker (use `docker pull promptfoo/promptfoo:latest`)
-- ❌ npx/pnpx/bunx (always runs latest by default)
-- ❌ Git clones (use `git pull`)
+Auto-updates are **not available** for local project installations, Homebrew, Docker, npx/pnpx/bunx, or git clones.

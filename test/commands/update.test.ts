@@ -1,44 +1,49 @@
-jest.mock('../updates/updateCheck');
-jest.mock('../updates/installationInfo');
-jest.mock('node:child_process');
+import { beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
 
-import { Command } from 'commander';
-import { updateCommand } from './update';
-import { checkForUpdates } from '../updates/updateCheck';
-import { getInstallationInfo, PackageManager } from '../updates/installationInfo';
+vi.mock('../../src/updates/updateCheck');
+vi.mock('../../src/updates/installationInfo');
+vi.mock('node:child_process');
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
+vi.mock('../../src/telemetry', () => ({
+  default: {
+    record: vi.fn(),
+  },
+}));
+
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 
-const mockCheckForUpdates = checkForUpdates as jest.MockedFunction<typeof checkForUpdates>;
-const mockGetInstallationInfo = getInstallationInfo as jest.MockedFunction<
-  typeof getInstallationInfo
->;
-const mockSpawn = spawn as jest.MockedFunction<typeof spawn>;
+import { Command } from 'commander';
+import { updateCommand } from '../../src/commands/update';
+import { getInstallationInfo, PackageManager } from '../../src/updates/installationInfo';
+import { checkForUpdates } from '../../src/updates/updateCheck';
+
+const mockCheckForUpdates = checkForUpdates as MockedFunction<typeof checkForUpdates>;
+const mockGetInstallationInfo = getInstallationInfo as MockedFunction<typeof getInstallationInfo>;
+const mockSpawn = spawn as MockedFunction<typeof spawn>;
 
 describe('update command', () => {
   let program: Command;
-  let consoleSpy: jest.SpyInstance;
 
   beforeEach(() => {
     program = new Command();
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-    jest.clearAllMocks();
-  });
-
-  afterEach(() => {
-    consoleSpy.mockRestore();
+    vi.clearAllMocks();
   });
 
   it('should show already up to date message when no update available', async () => {
     mockCheckForUpdates.mockResolvedValue(null);
 
     updateCommand(program);
-    program.parse(['node', 'test', 'update']);
+    await program.parseAsync(['node', 'test', 'update']);
 
-    // Wait for async operations
-    await new Promise((resolve) => setTimeout(resolve, 10));
-
-    expect(mockCheckForUpdates).toHaveBeenCalled();
+    expect(mockCheckForUpdates).toHaveBeenCalledWith({ throwOnError: true });
   });
 
   it('should show update info when --check flag is used', async () => {
@@ -52,23 +57,20 @@ describe('update command', () => {
     });
 
     updateCommand(program);
-    program.parse(['node', 'test', 'update', '--check']);
+    await program.parseAsync(['node', 'test', 'update', '--check']);
 
-    // Wait for async operations
-    await new Promise((resolve) => setTimeout(resolve, 10));
-
-    expect(mockCheckForUpdates).toHaveBeenCalled();
+    expect(mockCheckForUpdates).toHaveBeenCalledWith({ throwOnError: true });
   });
 
   it('should handle installation info and run update command', async () => {
     const mockProcess = {
-      on: jest.fn((event: string, callback: Function) => {
+      on: vi.fn((event: string, callback: (code: number) => void) => {
         if (event === 'close') {
           setTimeout(() => callback(0), 10);
         }
         return mockProcess;
       }),
-      removeAllListeners: jest.fn(),
+      removeAllListeners: vi.fn(),
       stdin: null,
       stdout: null,
       stderr: null,
@@ -101,10 +103,7 @@ describe('update command', () => {
     mockSpawn.mockReturnValue(mockProcess);
 
     updateCommand(program);
-    program.parse(['node', 'test', 'update']);
-
-    // Wait for async operations
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await program.parseAsync(['node', 'test', 'update']);
 
     expect(mockGetInstallationInfo).toHaveBeenCalledWith(process.cwd(), true);
     expect(mockSpawn).toHaveBeenCalledWith('npm', ['install', '-g', 'promptfoo@1.1.0'], {
@@ -130,10 +129,7 @@ describe('update command', () => {
     });
 
     updateCommand(program);
-    program.parse(['node', 'test', 'update']);
-
-    // Wait for async operations
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await program.parseAsync(['node', 'test', 'update']);
 
     expect(mockGetInstallationInfo).toHaveBeenCalled();
     expect(mockSpawn).not.toHaveBeenCalled();
@@ -141,13 +137,13 @@ describe('update command', () => {
 
   it('should force update even when on latest version', async () => {
     const mockProcess = {
-      on: jest.fn((event: string, callback: Function) => {
+      on: vi.fn((event: string, callback: (code: number) => void) => {
         if (event === 'close') {
           setTimeout(() => callback(0), 10);
         }
         return mockProcess;
       }),
-      removeAllListeners: jest.fn(),
+      removeAllListeners: vi.fn(),
       stdin: null,
       stdout: null,
       stderr: null,
@@ -173,10 +169,7 @@ describe('update command', () => {
     mockSpawn.mockReturnValue(mockProcess);
 
     updateCommand(program);
-    program.parse(['node', 'test', 'update', '--force']);
-
-    // Wait for async operations
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await program.parseAsync(['node', 'test', 'update', '--force']);
 
     expect(mockSpawn).toHaveBeenCalledWith('npm', ['install', '-g', 'promptfoo@latest'], {
       stdio: 'inherit',

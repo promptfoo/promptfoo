@@ -1,42 +1,60 @@
-jest.mock('./installationInfo');
-jest.mock('./updateEventEmitter');
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type Mock,
+  type Mocked,
+  type MockedFunction,
+  vi,
+} from 'vitest';
 
-import type { ChildProcess } from 'node:child_process';
+vi.mock('../../src/updates/installationInfo');
+vi.mock('../../src/updates/updateEventEmitter');
+
 import { EventEmitter } from 'node:events';
-import { handleAutoUpdate, setUpdateHandler } from './handleAutoUpdate';
-import type { UpdateObject } from './updateCheck';
-import { getInstallationInfo, PackageManager } from './installationInfo';
-import { updateEventEmitter } from './updateEventEmitter';
+import type { ChildProcess } from 'node:child_process';
 
-const mockGetInstallationInfo = getInstallationInfo as jest.MockedFunction<
-  typeof getInstallationInfo
->;
-const mockUpdateEventEmitter = updateEventEmitter as jest.Mocked<typeof updateEventEmitter>;
+import { handleAutoUpdate, setUpdateHandler } from '../../src/updates/handleAutoUpdate';
+import { getInstallationInfo, PackageManager } from '../../src/updates/installationInfo';
+import { updateEventEmitter } from '../../src/updates/updateEventEmitter';
+
+import type { UpdateObject } from '../../src/updates/updateCheck';
+
+const mockGetInstallationInfo = getInstallationInfo as MockedFunction<typeof getInstallationInfo>;
+const mockUpdateEventEmitter = updateEventEmitter as Mocked<typeof updateEventEmitter>;
 
 describe('handleAutoUpdate', () => {
-  let mockSpawn: jest.Mock;
+  let mockSpawn: Mock;
   let mockProcess: Partial<ChildProcess>;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.useFakeTimers();
+    vi.clearAllMocks();
+    vi.useFakeTimers();
 
     mockProcess = {
-      on: jest.fn(),
-      unref: jest.fn(),
+      on: vi.fn(),
+      unref: vi.fn(),
       stderr: {
-        on: jest.fn(),
+        on: vi.fn(),
       } as any,
       pid: 12345,
     };
 
-    mockSpawn = jest.fn(() => mockProcess);
-    mockUpdateEventEmitter.emit = jest.fn();
+    mockSpawn = vi.fn(() => mockProcess);
+    mockUpdateEventEmitter.emit = vi.fn();
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
+
+  function getProcessEventHandler<T extends (...args: any[]) => void>(eventName: string): T {
+    const handler = (mockProcess.on as Mock).mock.calls.find((call) => call[0] === eventName)?.[1];
+    expect(handler).toBeTypeOf('function');
+    return handler as T;
+  }
 
   it('should return early if no update info provided', () => {
     const result = handleAutoUpdate(null, false, false, '/project', mockSpawn);
@@ -144,10 +162,7 @@ describe('handleAutoUpdate', () => {
 
     handleAutoUpdate(info, false, false, '/project', mockSpawn);
 
-    // Simulate successful close
-    const closeHandler = (mockProcess.on as jest.Mock).mock.calls.find(
-      (call) => call[0] === 'close',
-    )[1];
+    const closeHandler = getProcessEventHandler<(code: number) => void>('close');
     closeHandler(0);
 
     expect(mockUpdateEventEmitter.emit).toHaveBeenCalledWith('update-success', {
@@ -169,10 +184,7 @@ describe('handleAutoUpdate', () => {
 
     handleAutoUpdate(info, false, false, '/project', mockSpawn);
 
-    // Simulate failed close
-    const closeHandler = (mockProcess.on as jest.Mock).mock.calls.find(
-      (call) => call[0] === 'close',
-    )[1];
+    const closeHandler = getProcessEventHandler<(code: number) => void>('close');
     closeHandler(1);
 
     expect(mockUpdateEventEmitter.emit).toHaveBeenCalledWith('update-failed', {
@@ -195,10 +207,7 @@ describe('handleAutoUpdate', () => {
 
     handleAutoUpdate(info, false, false, '/project', mockSpawn);
 
-    // Simulate process error
-    const errorHandler = (mockProcess.on as jest.Mock).mock.calls.find(
-      (call) => call[0] === 'error',
-    )[1];
+    const errorHandler = getProcessEventHandler<(error: Error) => void>('error');
     const err = new Error('ENOENT');
     err.name = 'Error';
     errorHandler(err);
@@ -228,13 +237,13 @@ describe('handleAutoUpdate', () => {
 
 describe('setUpdateHandler', () => {
   let realEmitter: EventEmitter;
-  let onUpdateReceived: jest.Mock;
-  let onUpdateSuccess: jest.Mock;
-  let onUpdateFailed: jest.Mock;
+  let onUpdateReceived: Mock;
+  let onUpdateSuccess: Mock;
+  let onUpdateFailed: Mock;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.useFakeTimers();
+    vi.clearAllMocks();
+    vi.useFakeTimers();
 
     // Create a real EventEmitter for testing
     realEmitter = new EventEmitter();
@@ -242,13 +251,13 @@ describe('setUpdateHandler', () => {
     mockUpdateEventEmitter.off = realEmitter.off.bind(realEmitter) as any;
     mockUpdateEventEmitter.emit = realEmitter.emit.bind(realEmitter) as any;
 
-    onUpdateReceived = jest.fn();
-    onUpdateSuccess = jest.fn();
-    onUpdateFailed = jest.fn();
+    onUpdateReceived = vi.fn();
+    onUpdateSuccess = vi.fn();
+    onUpdateFailed = vi.fn();
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it('should call onUpdateReceived when update-received event is emitted', () => {
@@ -282,7 +291,7 @@ describe('setUpdateHandler', () => {
     expect(onUpdateReceived).toHaveBeenCalledTimes(1);
 
     // Fast-forward 60 seconds
-    jest.advanceTimersByTime(60000);
+    vi.advanceTimersByTime(60000);
 
     expect(onUpdateReceived).toHaveBeenCalledTimes(2);
     expect(onUpdateReceived).toHaveBeenLastCalledWith({ message: 'Update available' });
@@ -297,10 +306,25 @@ describe('setUpdateHandler', () => {
     realEmitter.emit('update-success', { message: 'Update complete' });
 
     // Fast-forward 60 seconds
-    jest.advanceTimersByTime(60000);
+    vi.advanceTimersByTime(60000);
 
     // Should not be called again
     expect(onUpdateReceived).toHaveBeenCalledTimes(1);
+  });
+
+  it('should repeat reminders for a later update after an earlier success', () => {
+    setUpdateHandler(onUpdateReceived, onUpdateSuccess, onUpdateFailed);
+
+    realEmitter.emit('update-received', { message: 'First update available' });
+    realEmitter.emit('update-success', { message: 'First update complete' });
+    vi.advanceTimersByTime(60000);
+    expect(onUpdateReceived).toHaveBeenCalledTimes(1);
+
+    realEmitter.emit('update-received', { message: 'Second update available' });
+    vi.advanceTimersByTime(60000);
+
+    expect(onUpdateReceived).toHaveBeenCalledTimes(3);
+    expect(onUpdateReceived).toHaveBeenLastCalledWith({ message: 'Second update available' });
   });
 
   it('should not repeat onUpdateReceived if update fails', () => {
@@ -312,7 +336,7 @@ describe('setUpdateHandler', () => {
     realEmitter.emit('update-failed', { message: 'Update failed' });
 
     // Fast-forward 60 seconds
-    jest.advanceTimersByTime(60000);
+    vi.advanceTimersByTime(60000);
 
     // Should not be called again
     expect(onUpdateReceived).toHaveBeenCalledTimes(1);

@@ -1,28 +1,28 @@
-jest.mock('node:fs');
-jest.mock('node:child_process');
-jest.mock('../logger');
+import { afterEach, beforeEach, describe, expect, it, type Mock, type Mocked, vi } from 'vitest';
 
-import * as fs from 'node:fs';
+vi.mock('node:fs');
+vi.mock('node:child_process');
+vi.mock('../../src/logger');
+
 import * as childProcess from 'node:child_process';
-import { getInstallationInfo, PackageManager } from './installationInfo';
-import logger from '../logger';
+import * as fs from 'node:fs';
 
-const mockFs = fs as jest.Mocked<typeof fs>;
-const mockChildProcess = childProcess as jest.Mocked<typeof childProcess>;
+import logger from '../../src/logger';
+import { getInstallationInfo, PackageManager } from '../../src/updates/installationInfo';
+
+const mockFs = fs as Mocked<typeof fs>;
+const mockChildProcess = childProcess as Mocked<typeof childProcess>;
 
 describe('getInstallationInfo', () => {
   let originalArgv: string[];
   let originalPlatform: string;
-  let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+    vi.unstubAllEnvs();
     originalArgv = process.argv;
     originalPlatform = process.platform;
-    originalEnv = { ...process.env };
 
-    // Reset environment
-    delete process.env.DOCKER;
     Object.defineProperty(process, 'platform', { value: 'linux' });
 
     // Reset mocks
@@ -36,7 +36,7 @@ describe('getInstallationInfo', () => {
   afterEach(() => {
     process.argv = originalArgv;
     Object.defineProperty(process, 'platform', { value: originalPlatform });
-    process.env = originalEnv;
+    vi.unstubAllEnvs();
   });
 
   it('should return UNKNOWN when no CLI path is available', () => {
@@ -50,7 +50,7 @@ describe('getInstallationInfo', () => {
 
   it('should detect Docker environment from DOCKER env var', () => {
     process.argv = ['node', '/usr/local/bin/promptfoo'];
-    process.env.DOCKER = 'true';
+    vi.stubEnv('DOCKER', 'true');
 
     const result = getInstallationInfo('/project', false);
 
@@ -64,7 +64,6 @@ describe('getInstallationInfo', () => {
 
   it('should detect Docker environment from .dockerenv file', () => {
     process.argv = ['node', '/usr/local/bin/promptfoo'];
-    process.env.DOCKER = undefined;
     mockFs.existsSync.mockImplementation((path) => path === '/.dockerenv');
 
     const result = getInstallationInfo('/project', false);
@@ -82,7 +81,7 @@ describe('getInstallationInfo', () => {
     mockFs.realpathSync.mockReturnValue('/project/dist/src/main.js');
 
     // Mock process.cwd to return /project so isGitRepository works correctly
-    jest.spyOn(process, 'cwd').mockReturnValue('/project');
+    vi.spyOn(process, 'cwd').mockReturnValue('/project');
     mockFs.existsSync.mockImplementation((path) => {
       // Allow .git directory detection (handle both Unix and Windows paths)
       if (
@@ -117,7 +116,28 @@ describe('getInstallationInfo', () => {
     });
 
     // Restore original process.cwd
-    (process.cwd as jest.Mock).mockRestore();
+    (process.cwd as Mock).mockRestore();
+  });
+
+  it('should detect local git clone with Windows path casing differences', () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    process.argv = ['node', 'C:\\Users\\Alice\\Project\\dist\\src\\main.js'];
+    mockFs.realpathSync.mockReturnValue('C:\\Users\\Alice\\Project\\dist\\src\\main.js');
+
+    vi.spyOn(process, 'cwd').mockReturnValue('C:\\Users\\Alice\\Project');
+    mockFs.existsSync.mockImplementation((path) => {
+      return typeof path === 'string' && (path.endsWith('/.git') || path.endsWith('\\.git'));
+    });
+
+    const result = getInstallationInfo('c:\\users\\alice\\project', false);
+
+    expect(result).toEqual({
+      packageManager: PackageManager.UNKNOWN,
+      isGlobal: false,
+      updateMessage: 'Running from a local git clone. Please update with "git pull".',
+    });
+
+    (process.cwd as Mock).mockRestore();
   });
 
   it('should detect NPX installation', () => {
@@ -249,7 +269,7 @@ describe('getInstallationInfo', () => {
   });
 
   it('should detect PNPM global installation from PNPM_HOME', () => {
-    process.env.PNPM_HOME = '/usr/local/share/pnpm';
+    vi.stubEnv('PNPM_HOME', '/usr/local/share/pnpm');
     process.argv = [
       'node',
       '/usr/local/share/pnpm/global/5/node_modules/promptfoo/dist/src/main.js',
@@ -266,12 +286,10 @@ describe('getInstallationInfo', () => {
       updateCommand: 'pnpm add -g promptfoo@latest',
       updateMessage: 'Installed with pnpm. Attempting to automatically update now...',
     });
-
-    delete process.env.PNPM_HOME;
   });
 
   it('should detect PNPM global installation from PNPM_HOME on Windows', () => {
-    process.env.PNPM_HOME = 'C:\\pnpm-global';
+    vi.stubEnv('PNPM_HOME', 'C:\\pnpm-global');
     process.argv = [
       'node',
       'C:\\pnpm-global\\global\\5\\node_modules\\promptfoo\\dist\\src\\main.js',
@@ -288,11 +306,10 @@ describe('getInstallationInfo', () => {
       updateCommand: 'pnpm add -g promptfoo@latest',
       updateMessage: 'Installed with pnpm. Attempting to automatically update now...',
     });
-
-    delete process.env.PNPM_HOME;
   });
 
   it('should detect Yarn global installation on Windows', () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' });
     process.argv = [
       'node',
       'C:\\Users\\user\\AppData\\Local\\Yarn\\Data\\global\\node_modules\\promptfoo\\dist\\src\\main.js',
@@ -312,7 +329,7 @@ describe('getInstallationInfo', () => {
   });
 
   it('should detect Yarn global installation from YARN_GLOBAL_FOLDER', () => {
-    process.env.YARN_GLOBAL_FOLDER = '/custom/yarn/path';
+    vi.stubEnv('YARN_GLOBAL_FOLDER', '/custom/yarn/path');
     process.argv = ['node', '/custom/yarn/path/node_modules/promptfoo/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue(
       '/custom/yarn/path/node_modules/promptfoo/dist/src/main.js',
@@ -326,8 +343,6 @@ describe('getInstallationInfo', () => {
       updateCommand: 'yarn global add promptfoo@latest',
       updateMessage: 'Installed with yarn. Attempting to automatically update now...',
     });
-
-    delete process.env.YARN_GLOBAL_FOLDER;
   });
 
   it('should detect BUNX installation', () => {

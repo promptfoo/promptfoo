@@ -21,8 +21,10 @@ import { modelScanCommand } from './commands/modelScan';
 import { setupRetryCommand } from './commands/retry';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
+import { updateCommand } from './commands/update';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
+import { getEnvBool } from './envars';
 import logger, { initializeRunLogging } from './logger';
 import {
   addCommonOptionsRecursively,
@@ -38,8 +40,6 @@ import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plug
 import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
-import { updateCommand } from './commands/update';
-import { getEnvBool } from './envars';
 import { handleAutoUpdate, setUpdateHandler } from './updates/handleAutoUpdate';
 import { checkForUpdates } from './updates/updateCheck';
 import { loadDefaultConfig } from './util/config/default';

@@ -1,8 +1,10 @@
+import { spawn } from 'node:child_process';
+
 import { Command } from 'commander';
 import logger from '../logger';
-import { checkForUpdates } from '../updates/updateCheck';
+import telemetry from '../telemetry';
 import { getInstallationInfo } from '../updates/installationInfo';
-import { spawn } from 'node:child_process';
+import { checkForUpdates } from '../updates/updateCheck';
 
 export function updateCommand(program: Command) {
   const updateCmd = program
@@ -12,9 +14,10 @@ export function updateCommand(program: Command) {
     .option('--force', 'Force update even if already on latest version')
     .action(async (options) => {
       try {
+        telemetry.record('command_used', { name: 'update' });
         logger.info('Checking for updates...');
 
-        const updateInfo = await checkForUpdates();
+        const updateInfo = await checkForUpdates({ throwOnError: true });
 
         if (!updateInfo && !options.force) {
           logger.info('✓ You are already running the latest version of promptfoo');
@@ -94,7 +97,8 @@ export function updateCommand(program: Command) {
         });
       } catch (error) {
         logger.error(`Failed to update: ${error}`);
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
     });
 

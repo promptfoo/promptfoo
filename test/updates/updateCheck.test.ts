@@ -1,32 +1,38 @@
-jest.mock('../util/fetch', () => ({
-  fetchWithTimeout: jest.fn(),
+import { beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
+
+vi.mock('../../src/util/fetch', () => ({
+  fetchWithTimeout: vi.fn(),
 }));
 
-jest.mock('semver', () => ({
-  gt: jest.fn(),
+vi.mock('semver', () => ({
+  default: {
+    gt: vi.fn(),
+  },
 }));
 
 // Mock package.json import
-jest.mock('../../package.json', () => ({
-  name: 'promptfoo',
-  version: '1.0.0',
+vi.mock('../../package.json', () => ({
+  default: {
+    name: 'promptfoo',
+    version: '1.0.0',
+  },
 }));
 
-import { checkForUpdates } from './updateCheck';
-import { fetchWithTimeout } from '../util/fetch';
 import semver from 'semver';
+import { checkForUpdates } from '../../src/updates/updateCheck';
+import { fetchWithTimeout } from '../../src/util/fetch';
 
-const mockFetchWithTimeout = fetchWithTimeout as jest.MockedFunction<typeof fetchWithTimeout>;
-const mockSemverGt = semver.gt as jest.MockedFunction<typeof semver.gt>;
+const mockFetchWithTimeout = fetchWithTimeout as MockedFunction<typeof fetchWithTimeout>;
+const mockSemverGt = semver.gt as MockedFunction<typeof semver.gt>;
 
 describe('checkForUpdates', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    delete process.env.NODE_ENV;
+    vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it('should return null in development mode', async () => {
-    process.env.NODE_ENV = 'development';
+    vi.stubEnv('NODE_ENV', 'development');
     const result = await checkForUpdates();
     expect(result).toBeNull();
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
@@ -75,5 +81,11 @@ describe('checkForUpdates', () => {
 
     const result = await checkForUpdates();
     expect(result).toBeNull();
+  });
+
+  it('should throw on network error when requested', async () => {
+    mockFetchWithTimeout.mockRejectedValue(new Error('Network error'));
+
+    await expect(checkForUpdates({ throwOnError: true })).rejects.toThrow('Network error');
   });
 });

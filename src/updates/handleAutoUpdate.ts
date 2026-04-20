@@ -1,8 +1,10 @@
-import type { spawn } from 'node:child_process';
 import { spawn as nodeSpawn } from 'node:child_process';
-import type { UpdateObject } from './updateCheck';
+import type { spawn } from 'node:child_process';
+
 import { getInstallationInfo } from './installationInfo';
 import { updateEventEmitter } from './updateEventEmitter';
+
+import type { UpdateObject } from './updateCheck';
 
 export function handleAutoUpdate(
   info: UpdateObject | null,
@@ -92,8 +94,12 @@ export function setUpdateHandler(
   let reminderTimer: NodeJS.Timeout | undefined;
 
   const handleUpdateReceived = (info: { message: string }) => {
+    successfullyInstalled = false;
     onUpdateReceived(info);
     const savedMessage = info.message;
+    if (reminderTimer) {
+      clearTimeout(reminderTimer);
+    }
     // Use unref() so timer doesn't keep event loop alive and block CLI exit
     reminderTimer = setTimeout(() => {
       if (!successfullyInstalled) {
@@ -106,6 +112,7 @@ export function setUpdateHandler(
     successfullyInstalled = true; // Don't show reminders if update failed
     if (reminderTimer) {
       clearTimeout(reminderTimer);
+      reminderTimer = undefined;
     }
     onUpdateFailed(info);
   };
@@ -114,6 +121,7 @@ export function setUpdateHandler(
     successfullyInstalled = true;
     if (reminderTimer) {
       clearTimeout(reminderTimer);
+      reminderTimer = undefined;
     }
     onUpdateSuccess(info);
   };
@@ -125,6 +133,7 @@ export function setUpdateHandler(
   return () => {
     if (reminderTimer) {
       clearTimeout(reminderTimer);
+      reminderTimer = undefined;
     }
     updateEventEmitter.off('update-received', handleUpdateReceived);
     updateEventEmitter.off('update-failed', handleUpdateFailed);
