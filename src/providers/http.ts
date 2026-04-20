@@ -2616,28 +2616,8 @@ export class HttpProvider implements ApiProvider {
       response: { data, status, statusText, headers: responseHeaders, cached, latencyMs },
     });
 
-    // Populate raw completion length + approximate throughput now that we
-    // know the parsed completion text. Computing these in
-    // processStreamingResponse would overcount by 20-60x because the stream
-    // buffer includes SSE framing. tokensPerSecond is additionally gated on
-    // multi-chunk delivery since single-chunk responses have no meaningful
-    // streaming rate (the apparent rate is network buffering, not model
-    // throughput).
     if (streamingMetrics) {
-      // Use the strict helper so we don't conflate raw SSE bytes with the
-      // parsed content when transformResponse returns a non-standard shape.
-      // Better to leave completionChars/tps undefined than to report a
-      // misleadingly inflated number.
-      const completionText = this.getDefiniteCompletionText(parsedOutput);
-      if (completionText !== undefined) {
-        streamingMetrics.completionChars = completionText.length;
-        if (streamingMetrics.multiChunkDelivery) {
-          streamingMetrics.tokensPerSecond = estimateStreamingTokensPerSecond(
-            completionText.length,
-            streamingMetrics.totalStreamTime,
-          );
-        }
-      }
+      this.populateStreamingCompletionMetrics(streamingMetrics, parsedOutput);
     }
 
     return this.processResponseWithTokenEstimation(
@@ -2879,11 +2859,7 @@ export class HttpProvider implements ApiProvider {
     });
 
     if (streamingMetrics) {
-      const completionText = this.getCompletionText(parsedOutput, rawText);
-      streamingMetrics.tokensPerSecond = estimateStreamingTokensPerSecond(
-        completionText.length,
-        streamingMetrics.totalStreamTime,
-      );
+      this.populateStreamingCompletionMetrics(streamingMetrics, parsedOutput);
     }
 
     return this.processResponseWithTokenEstimation(
@@ -2906,6 +2882,28 @@ export class HttpProvider implements ApiProvider {
       return parsedOutput.output;
     }
     return rawText;
+  }
+
+  /**
+   * Populate streaming completion metrics only when `transformResponse`
+   * returned a definite completion string. Falling back to raw SSE framing
+   * would overcount by 20-60x for non-string transform outputs.
+   */
+  private populateStreamingCompletionMetrics(
+    streamingMetrics: StreamingMetrics,
+    parsedOutput: unknown,
+  ): void {
+    const completionText = this.getDefiniteCompletionText(parsedOutput);
+    if (completionText === undefined) {
+      return;
+    }
+    streamingMetrics.completionChars = completionText.length;
+    if (streamingMetrics.multiChunkDelivery) {
+      streamingMetrics.tokensPerSecond = estimateStreamingTokensPerSecond(
+        completionText.length,
+        streamingMetrics.totalStreamTime,
+      );
+    }
   }
 
   /**

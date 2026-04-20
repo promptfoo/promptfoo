@@ -819,10 +819,10 @@ The `ttft` assertion measures **Time to First Token** (TTFT) for streaming HTTP 
 
 Two measurement modes are supported. Choose one via the provider's `streamFormat` or `streamFirstTokenPattern` config.
 
-| Mode                                                                        | Start event                                      | End event                                       | Typical delta vs canonical                                               |
-| --------------------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------ |
-| **Canonical TTFT** (opt-in via `streamFormat` or `streamFirstTokenPattern`) | HTTP request dispatch (before `fetch()` returns) | First model-emitted content token in the stream | 0 (definition)                                                           |
-| **Wire-level proxy** (default)                                              | HTTP request dispatch                            | First non-whitespace byte of the response body  | Overshoots canonical by ~20ms on OpenAI Chat, ~150ms on OpenAI Responses |
+| Mode                                                                        | Start event                                      | End event                                       | Typical delta vs canonical                                                         |
+| --------------------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------- | ---------------------------------------------------------------------------------- |
+| **Canonical TTFT** (opt-in via `streamFormat` or `streamFirstTokenPattern`) | HTTP request dispatch (before `fetch()` returns) | First model-emitted content token in the stream | 0 (definition)                                                                     |
+| **Wire-level proxy** (default)                                              | HTTP request dispatch                            | First non-whitespace byte of the response body  | Reports earlier than canonical by ~20ms on OpenAI Chat, ~150ms on OpenAI Responses |
 
 Canonical TTFT matches the definition used in ML benchmarking literature (vLLM, MLPerf, OpenAI perf docs). The wire-level proxy is format-agnostic and slightly earlier because it fires on SSE framing frames (e.g. `{"delta":{"role":"assistant"}}`, `{"type":"response.created"}`) rather than the first content delta.
 
@@ -890,7 +890,7 @@ Collected on a residential network, single machine. Raw percentiles from one rea
 | `responses / gpt-5.4-mini` | 299 ms        | 468 ms           | **186** / 166 / 220 / 397 ms              | 484           |
 | `responses / gpt-5.4`      | 315 ms        | 517 ms           | **208** / 193 / 285 / 308 ms              | 238           |
 
-Key observation: the Responses API emits a burst of metadata events (`response.created`, `response.in_progress`, `response.output_item.added`, `response.content_part.added`) before the first `response.output_text.delta`, so the wire-level proxy overshoots canonical TTFT by ~200 ms on that endpoint. Use `streamFormat: openai-responses` there. The Chat Completions API emits a single `role` framing frame, so the gap is an order of magnitude smaller (~20 ms).
+Key observation: the Responses API emits a burst of metadata events (`response.created`, `response.in_progress`, `response.output_item.added`, `response.content_part.added`) before the first `response.output_text.delta`, so the wire-level proxy reports ~200 ms earlier than canonical TTFT on that endpoint. Use `streamFormat: openai-responses` there. The Chat Completions API emits a single `role` framing frame, so the gap is an order of magnitude smaller (~20 ms).
 
 Your numbers will differ by network. Rerun the benchmark from your target environment if you want absolute SLA thresholds.
 

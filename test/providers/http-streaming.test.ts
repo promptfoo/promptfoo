@@ -326,5 +326,57 @@ describe('HttpProvider streaming integration', () => {
       expect(result.streamingMetrics?.completionChars).toBeUndefined();
       expect(result.streamingMetrics?.tokensPerSecond).toBeUndefined();
     });
+
+    it('leaves raw-request throughput undefined when transformResponse has no definite output', async () => {
+      // Raw request mode should use the same strict parsed-output semantics
+      // as body mode. Falling back to raw SSE text would report throughput
+      // from framing bytes instead of completion content.
+      const provider = new HttpProvider('https://api.example.com', {
+        config: {
+          request: [
+            'POST /chat HTTP/1.1',
+            'Host: api.example.com',
+            'Content-Type: application/json',
+            '',
+            '{"stream":true,"prompt":"{{prompt}}"}',
+          ].join('\n'),
+          transformResponse: `(json, text) => ({ tokenUsage: { total: 10 } })`, // no .output
+        },
+      });
+
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"X"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"Y"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+      let i = 0;
+      const mockReader = {
+        read: vi.fn(async () => {
+          if (i < mockChunks.length) {
+            await new Promise((r) => setTimeout(r, 30));
+            return { done: false, value: new TextEncoder().encode(mockChunks[i++]) };
+          }
+          return { done: true, value: undefined };
+        }),
+        releaseLock: vi.fn(),
+      };
+      const mockResponse = {
+        status: 200,
+        statusText: 'OK',
+        headers: new Map([['content-type', 'text/event-stream']]),
+        body: { getReader: () => mockReader },
+      } as unknown as Response;
+
+      vi.spyOn(fetchModule, 'fetchWithRetries').mockResolvedValue(mockResponse);
+
+      const result = await provider.callApi('Test');
+
+      expect(result.streamingMetrics).toBeDefined();
+      expect(result.streamingMetrics?.timeToFirstToken).toBeDefined();
+      expect(result.streamingMetrics?.multiChunkDelivery).toBe(true);
+      expect(result.streamingMetrics?.totalStreamTime).toBeGreaterThanOrEqual(50);
+      expect(result.streamingMetrics?.completionChars).toBeUndefined();
+      expect(result.streamingMetrics?.tokensPerSecond).toBeUndefined();
+    });
   });
 });
