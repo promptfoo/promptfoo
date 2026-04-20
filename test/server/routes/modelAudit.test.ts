@@ -407,8 +407,15 @@ describe('Model Audit Routes - DB-backed', () => {
     vi.resetAllMocks();
   });
 
-  async function createTestAudit(overrides: Partial<Parameters<typeof ModelAudit.create>[0]> = {}) {
-    return ModelAudit.create({
+  async function createTestAudit(
+    overrides: Partial<Parameters<typeof ModelAudit.create>[0]> & {
+      createdAt?: number;
+      updatedAt?: number;
+      id?: string;
+    } = {},
+  ) {
+    const { createdAt, updatedAt, id, ...createOverrides } = overrides;
+    const baseData = {
       name: 'Test Scan',
       modelPath: '/path/to/model.pkl',
       results: {
@@ -419,8 +426,26 @@ describe('Model Audit Routes - DB-backed', () => {
         issues: [],
         checks: [],
       },
-      ...overrides,
-    });
+      ...createOverrides,
+    };
+
+    if (createdAt !== undefined || updatedAt !== undefined || id !== undefined) {
+      const audit = new ModelAudit({
+        ...baseData,
+        id,
+        createdAt,
+        updatedAt,
+        checks: baseData.results.checks || null,
+        issues: baseData.results.issues || null,
+        totalChecks: baseData.results.total_checks || null,
+        passedChecks: baseData.results.passed_checks || null,
+        failedChecks: baseData.results.failed_checks || null,
+      });
+      await audit.save();
+      return audit;
+    }
+
+    return ModelAudit.create(baseData);
   }
 
   describe('POST /api/model-audit/check-path', () => {
@@ -712,9 +737,17 @@ describe('Model Audit Routes - DB-backed', () => {
     });
 
     it('should return the latest scan', async () => {
-      await createTestAudit({ name: 'Older Scan' });
-      // Small delay to ensure different timestamps
-      const latest = await createTestAudit({ name: 'Newer Scan' });
+      const olderCreatedAt = Date.UTC(2026, 3, 20, 20, 13, 29);
+      await createTestAudit({
+        name: 'Older Scan',
+        createdAt: olderCreatedAt,
+        updatedAt: olderCreatedAt,
+      });
+      const latest = await createTestAudit({
+        name: 'Newer Scan',
+        createdAt: olderCreatedAt + 1000,
+        updatedAt: olderCreatedAt + 1000,
+      });
 
       const response = await request(app).get('/api/model-audit/scans/latest');
 
