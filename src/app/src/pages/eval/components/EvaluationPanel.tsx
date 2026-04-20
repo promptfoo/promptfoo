@@ -323,7 +323,18 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                   onMouseEnter={() => setHoveredAssertion(reasonKey)}
                   onMouseLeave={() => setHoveredAssertion(null)}
                 >
-                  <span className="break-words">{result.reason}</span>
+                  <div className="space-y-2">
+                    <span className="block break-words">{result.reason}</span>
+                    {typeof result.metadata?.judgeResponse === 'string' &&
+                      result.metadata.judgeResponse.trim() && (
+                        <div className="rounded-md border border-border bg-muted/30 p-2 text-xs">
+                          <div className="mb-1 font-medium">Judge reply</div>
+                          <pre className="m-0 whitespace-pre-wrap break-words font-sans">
+                            {result.metadata.judgeResponse}
+                          </pre>
+                        </div>
+                      )}
+                  </div>
                   {result.reason &&
                     (hoveredAssertion === reasonKey || copiedAssertions[reasonKey]) && (
                       <Button

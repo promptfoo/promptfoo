@@ -35,6 +35,7 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
     expect(result.score).toBeCloseTo(0.33, 2);
     expect(result.pass).toBe(true); // 0.33 >= 0.3
     expect(result.reason).toContain('Context relevance');
+    expect(result.metadata?.judgeResponse).toBe('Paris is the capital of France');
     expect(result.metadata?.extractedSentences).toEqual(['Paris is the capital of France']);
     expect(result.metadata?.totalContextUnits).toBe(3);
     expect(result.metadata?.relevantSentenceCount).toBe(1);
@@ -61,6 +62,7 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
     expect(result.score).toBe(0);
     expect(result.pass).toBe(false);
     expect(result.metadata?.insufficientInformation).toBe(true);
+    expect(result.metadata?.judgeResponse).toBe('Insufficient Information');
     expect(result.metadata?.extractedSentences).toEqual([]);
     expect(result.metadata?.relevantSentenceCount).toBe(0);
   });
