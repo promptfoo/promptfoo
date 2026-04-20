@@ -25,11 +25,9 @@ This file provides guidance for writing and maintaining documentation in the sit
 
 ## Source Alignment
 
-When documenting plugin, strategy, generated config, grading, or report behavior,
-check the source guidance in `src/redteam/AGENTS.md` and
-`src/redteam/plugins/AGENTS.md`. Keep plugin pages aligned with
-`src/redteam/plugins/`, strategy pages aligned with `src/redteam/strategies/`, and
-result interpretation aligned with current scoring and report output.
+Keep plugin pages aligned with `src/redteam/plugins/`, strategy pages aligned with
+`src/redteam/strategies/`, and result interpretation aligned with current scoring and
+report output.
 
 ## Technical Writing Tips
 

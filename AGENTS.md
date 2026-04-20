@@ -378,21 +378,14 @@ Read these when relevant to your task:
 
 | Document                               | When to Read                              |
 | -------------------------------------- | ----------------------------------------- |
-| `docs/agents/AGENTS.md`                | Editing agent-facing docs                 |
 | `docs/agents/pr-conventions.md`        | Creating pull requests                    |
 | `docs/agents/git-workflow.md`          | Git operations                            |
 | `docs/agents/dependency-management.md` | Updating packages                         |
 | `docs/agents/logging.md`               | Adding logging to code                    |
 | `docs/agents/python.md`                | Python providers/scripts                  |
 | `docs/agents/database-security.md`     | Writing database queries                  |
-| `code-scan-action/AGENTS.md`           | Code scan GitHub Action wrapper           |
 | `src/app/AGENTS.md`                    | Frontend React development                |
-| `src/assertions/AGENTS.md`             | Assertion handlers and docs               |
-| `src/codeScan/AGENTS.md`               | Code scan scanner and CLI                 |
 | `src/providers/AGENTS.md`              | Adding/modifying LLM providers            |
-| `src/redteam/AGENTS.md`                | Redteam generation and plugins            |
-| `src/ui/AGENTS.md`                     | Terminal UI components                    |
 | `test/AGENTS.md`                       | Writing tests                             |
 | `site/AGENTS.md`                       | Documentation site changes                |
-| `site/docs/red-team/AGENTS.md`         | Redteam documentation                     |
 | `.github/AGENTS.md`                    | GitHub Actions / release workflow changes |

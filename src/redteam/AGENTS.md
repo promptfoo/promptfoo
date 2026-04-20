@@ -50,15 +50,7 @@ Evaluate generated cases for diversity, realism, coverage, and failure modes. Fo
 ## Public Documentation
 
 Redteam behavior is user-facing. When changing plugins, strategies, generated config,
-grading semantics, or report fields, update the matching pages under
-`site/docs/red-team/`.
-
-- Plugin behavior belongs in `site/docs/red-team/plugins/`.
-- Strategy behavior belongs in `site/docs/red-team/strategies/`.
-- Setup/configuration changes usually need `site/docs/red-team/configuration.md` or
-  `site/docs/red-team/quickstart.md`.
-- Result interpretation changes may need `site/docs/red-team/risk-scoring.md` or the
-  troubleshooting pages.
+grading, or reports, update the matching pages under `site/docs/red-team/`.
 
 ## Logging
 

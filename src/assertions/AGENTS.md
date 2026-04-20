@@ -3,7 +3,7 @@
 Assertion handlers turn provider outputs, traces, scripts, and model-graded checks into
 Promptfoo pass/fail scores.
 
-## Behavior Contracts
+## Rules
 
 - Preserve `GradingResult` shape, `pass`, `score`, `reason`, `tokensUsed`,
   `namedScores`, and `namedScoreWeights` semantics unless the PR intentionally updates
@@ -15,9 +15,6 @@ Promptfoo pass/fail scores.
   it. If mutation is required, keep it narrow and covered by tests.
 - Trace-aware assertions must tolerate missing, delayed, or partial trace data. Bound
   polling/retry behavior and keep failures explainable in the assertion reason.
-
-## Security And Side Effects
-
 - JavaScript, Python, Ruby, webhook, and file/package assertion values can execute or
   load user-controlled code. Keep sandboxing, path resolution, and error messages
   explicit.
@@ -26,22 +23,11 @@ Promptfoo pass/fail scores.
 - Redteam guardrail assertions have special aggregation behavior in
   `AssertionsResult`; do not change it without focused redteam tests.
 
-## Public Documentation
+## Docs
 
-Assertion behavior is user-facing. When adding an assertion type or changing accepted
-values, scoring, thresholds, output shape, provider requirements, or examples, update
-the matching docs under `site/docs/configuration/expected-outputs/`.
-
-- Add or update the reference row in `site/docs/configuration/expected-outputs/index.md`.
-- Deterministic assertions usually belong in
-  `site/docs/configuration/expected-outputs/deterministic.md`.
-- Model-graded assertions need
-  `site/docs/configuration/expected-outputs/model-graded/index.md` plus a dedicated
-  page in that directory when the behavior is substantial.
-- Script/custom assertions should stay aligned with `javascript.md`, `python.md`, or
-  `ruby.md`; provider-specific assertions may also need `moderation.md`, `similar.md`,
-  `guardrails.md`, or a provider guide.
-- If trace or trajectory behavior changes, update `site/docs/tracing.md` as well.
+Assertion behavior is user-facing. When adding or changing assertions, update
+`site/docs/configuration/expected-outputs/` and its index. Trace or trajectory changes
+also need `site/docs/tracing.md`.
 
 ## Testing
 

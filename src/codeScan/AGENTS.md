@@ -3,7 +3,7 @@
 Code scan scans pull requests for security issues using Git metadata, repository file
 access through MCP, GitHub PR context, and the hosted scanner service.
 
-## Security Boundaries
+## Rules
 
 - Treat repository contents, branch names, PR metadata, config files, guidance text,
   and scanner responses as untrusted input.
@@ -17,32 +17,21 @@ access through MCP, GitHub PR context, and the hosted scanner service.
   PR-controlled npm config in tests.
 - Do not log or serialize raw API keys, OIDC tokens, GitHub tokens, cookies, or bearer
   headers. If auth context must cross a boundary, pass the minimum typed field needed.
-
-## Git And PR Handling
-
 - Prefer `git diff --raw -z`/NUL-safe parsing for file lists so paths with spaces,
   quotes, or shell metacharacters behave correctly.
 - For GitHub review comments, map findings to changed diff lines before posting.
   Scanner findings outside the patch should not become invalid inline comments.
 - Keep fork-PR behavior explicit. OIDC may be unavailable for forks; do not silently
   fall back to a more privileged credential path.
-
-## Scanner Reliability
-
 - Bound retries for server capacity and MCP timeouts. Do not add unbounded retry loops
   or hide cancellation.
 - Propagate aborts to the scanner client and clean up socket listeners/timers.
 - Preserve JSON output shape for `--json`; downstream action code parses it.
 
-## Public Documentation
+## Docs
 
-Code scan behavior is documented in `site/docs/code-scanning/`.
-
-- CLI flags and config-file behavior belong in `site/docs/code-scanning/cli.md`.
-- GitHub Action inputs, fork-PR behavior, and setup examples belong in
-  `site/docs/code-scanning/github-action.md`.
-- Product positioning and overview changes belong in `site/docs/code-scanning/index.md`
-  and, when action-facing, `code-scan-action/README.md`.
+Keep code scan behavior aligned with `site/docs/code-scanning/`; action-facing setup
+changes also need `code-scan-action/README.md`.
 
 ## Validation
 

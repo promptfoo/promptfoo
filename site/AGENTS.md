@@ -71,21 +71,11 @@ SKIP_OG_GENERATION=true npm run build  # Faster builds
 - Generic examples
 - Bullet overuse where prose is clearer
 
-## Red Team Docs
+## Source Alignment
 
-See `site/docs/red-team/AGENTS.md` for red-team specific documentation guidelines.
-When documenting plugin, strategy, config, or report behavior, keep the public docs
-aligned with `src/redteam/AGENTS.md`.
-
-## Assertion Reference Docs
-
-Assertion reference pages live in `site/docs/configuration/expected-outputs/`. When
-documenting assertion behavior, keep the public reference aligned with
-`src/assertions/AGENTS.md`: update the index table, the relevant deterministic or
-model-graded page, and `site/docs/tracing.md` for trace/trajectory assertions.
-
-## Code Scanning Docs
-
-Code scanning docs live in `site/docs/code-scanning/`. Keep CLI docs aligned with
-`src/codeScan/AGENTS.md`, and keep GitHub Action docs aligned with
-`code-scan-action/AGENTS.md` and `code-scan-action/README.md`.
+- Red team docs: read `site/docs/red-team/AGENTS.md`; keep behavior aligned with
+  `src/redteam/AGENTS.md`.
+- Assertion docs: update `site/docs/configuration/expected-outputs/` and
+  `site/docs/tracing.md` when assertion behavior changes.
+- Code scanning docs: keep `site/docs/code-scanning/` aligned with `src/codeScan/` and
+  `code-scan-action/README.md`.
