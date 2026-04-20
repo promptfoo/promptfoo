@@ -37,6 +37,40 @@ See `docs/agents/logging.md` - use logger with object context (auto-sanitized).
 
 **Config priority:** Explicit options > Environment variables > Provider defaults
 
+## Provider Routing
+
+Prefix dispatch in `src/providers/registry.ts` is case-sensitive and meaningful.
+`openai:`, `azureopenai:`, and `azure:` route to different classes. When you add a new
+sub-type (e.g. `:moderation`, `:embedding`, `:realtime`) to one prefix, do one of:
+
+- Add the sub-type to every prefix it should work under, **or**
+- Explicitly fail-fast (throw with a clear message) for the prefixes that should not
+  support it.
+
+Silently mapping `foo:newtype` to a class that only handles `foo:chat` is a routing
+regression. Add a test in `test/providers/registry.test.ts` that asserts each prefix
+
+- sub-type resolves to the expected class (or throws).
+
+Reference incident: `azureopenai:moderation` was silently routed to
+`AzureModerationProvider` even though `azureopenai:` is supposed to mean "always
+OpenAI".
+
+## Cache Key Hygiene
+
+Promptfoo's cache is disk-backed (`~/.cache/promptfoo`). Anything you put in a cache
+key is persisted to disk in plaintext.
+
+- **Never include secrets in cache keys.** Strip `Authorization`, bearer tokens,
+  tenant tokens, signed metadata, and any custom auth headers before hashing. Hash the
+  remaining headers only if they materially change the response.
+- **Canonicalize before hashing.** `JSON.stringify({a, b})` and `JSON.stringify({b, a})`
+  produce different strings but represent the same config, so naïve stringification
+  causes cache misses for semantically identical requests. Sort keys (or use a
+  canonical-JSON helper) before hashing.
+- Reference implementation: `src/providers/azure/moderation.ts` `getModerationCacheKey`
+  after the post-fix hardening.
+
 ## Caching Best Practices
 
 When implementing caching in your provider, **ALWAYS set the `cached: true` flag** when returning a cached response:

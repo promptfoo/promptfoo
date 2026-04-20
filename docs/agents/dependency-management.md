@@ -58,6 +58,19 @@ The project uses npm workspaces. Updates must be checked in all three locations:
 - Site (`/site`) - Documentation site (Docusaurus)
 - App (`/src/app`) - Web UI (React/Vite)
 
+## Working on Renovate Branches
+
+Renovate force-pushes its branches whenever `main` changes or someone comments
+`@renovate rebase`. Any manual commit you add may be overwritten without warning.
+
+- Push fixes quickly and expect them to survive only until the next Renovate rebase.
+- For non-trivial manual work on a Renovate-managed dependency, create a sibling
+  branch off the Renovate branch and open a separate PR that Renovate will not touch.
+- On a major-version renovate PR, read the upstream changelog, run GAP analysis on
+  our matching provider/integration and its docs, then test end-to-end with real evals
+  (`npm run local -- eval -c <example>.yaml --env-file .env --no-cache -o output.json`)
+  before deciding whether the upgrade needs code changes.
+
 ## Useful Commands
 
 ```bash

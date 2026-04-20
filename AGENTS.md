@@ -118,10 +118,20 @@ npm run local -- eval -c examples/my-example/promptfooconfig.yaml --env-file .en
 **Export and inspect results** to verify pass/fail/errors:
 
 ```bash
-npm run local -- eval -c path/to/config.yaml -o output.json --no-cache
+npm run local -- eval -c path/to/config.yaml -o output.json --no-cache --env-file .env
 ```
 
-Review the output file for `success`, `score`, and `error` fields.
+Review the output file for `success`, `score`, and `error` fields. A zero CLI exit
+code does not mean every test case passed — always inspect the JSON.
+
+**Standard PR-review eval command:** when verifying a PR end-to-end, run:
+
+```bash
+npm run local -- eval -c <example-or-config>.yaml --env-file .env --no-cache -o output.json
+```
+
+Secrets live in the repo's `.env` (and optionally `~/projects/promptfoo/.env`). Never
+echo them into logs or commit messages.
 
 ## Debugging & Troubleshooting
 
@@ -192,6 +202,37 @@ git push -u origin feature/your-branch-name # Push branch
 
 See `docs/agents/git-workflow.md` for full workflow.
 See `docs/agents/pr-conventions.md` for PR title format and scope selection (especially THE REDTEAM RULE).
+
+## Pull Request Creation
+
+- **Default to full (non-draft) PRs.** Omit `--draft` from `gh pr create` unless the
+  user explicitly asks for a draft, or the PR is for an unpublished security advisory
+  (see "Security-Sensitive PRs" below). `docs/agents/pr-conventions.md` lists the full
+  set of draft exceptions.
+- **Never attribute commits or PR bodies to Claude / Claude Code.** No
+  `Co-Authored-By: Claude…` trailers, no "Generated with Claude Code" footers. Use
+  your configured git identity only.
+- **Update the existing PR instead of opening a new one** when iterating on a branch
+  that already has an open PR. Push to the same branch. Only run `gh pr create` if the
+  user explicitly asks for a new PR or the existing PR is closed.
+- **Don't let `npm audit fix` drift ride along with an unrelated change.** If
+  `package-lock.json` changes outside the scope of the PR, revert the drift and ship
+  it separately so reviewers can reason about each change independently.
+- **Verify eval success beyond exit code.** Export results with `-o output.json` and
+  inspect `success`, `score`, and `error` fields. A zero exit code does not mean every
+  test case passed.
+
+## Security-Sensitive PRs
+
+- **Before opening any public PR for a CVE/GHSA:** confirm the advisory has been
+  published and the coordinated-disclosure embargo has lifted. See `SECURITY.md` for
+  the disclosure policy. If the advisory is still private, use the GHSA private
+  collaboration flow (or a temporary private fork) until the release that contains the
+  fix is cut.
+- Do **not** put the CVE/GHSA identifier, exploit description, or vulnerable-version
+  range in a PR title, body, or branch name before disclosure.
+- Every security fix should land with a regression test that exercises the original
+  attack vector.
 
 ## Screenshots for Pull Requests
 
