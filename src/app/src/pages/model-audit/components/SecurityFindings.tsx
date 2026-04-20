@@ -298,17 +298,14 @@ export default function SecurityFindings({
     return mapSeverityForFiltering(selectedSeverity, issue.severity);
   });
 
-  const issuesByFile = filteredIssues.reduce(
-    (acc, issue) => {
-      const file = getIssueFilePath(issue);
-      if (!acc[file]) {
-        acc[file] = [];
-      }
-      acc[file].push(issue);
-      return acc;
-    },
-    {} as Record<string, ScanIssue[]>,
-  );
+  const issuesByFile = filteredIssues.reduce<Record<string, ScanIssue[]>>((acc, issue) => {
+    const file = getIssueFilePath(issue);
+    if (!acc[file]) {
+      acc[file] = [];
+    }
+    acc[file].push(issue);
+    return acc;
+  }, {});
 
   const toggleFileExpansion = (file: string) => {
     const newExpanded = new Set(expandedFiles);

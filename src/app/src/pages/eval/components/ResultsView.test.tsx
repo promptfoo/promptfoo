@@ -793,7 +793,7 @@ describe('ResultsView Plugin Filter - Not Equals', () => {
   });
 });
 
-describe('ResultsView', () => {
+describe('ResultsView Charts', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
   beforeEach(() => {
@@ -1818,7 +1818,7 @@ describe('ResultsView - Size Warning in Copy Dialog', () => {
     expect(screen.getByText('Item Count: 15000')).toBeInTheDocument();
   });
 });
-describe('ResultsView', () => {
+describe('ResultsView Copy Eval handling', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
   beforeEach(() => {
@@ -2157,7 +2157,7 @@ describe('ResultsView User-Rated Badge', () => {
   });
 });
 
-describe('ResultsView', () => {
+describe('ResultsView FilterModeSelector', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
   beforeEach(() => {
@@ -2242,7 +2242,7 @@ describe('ResultsView', () => {
     expect(filterModeSelector).toHaveTextContent('Filter Mode Selector: user-rated');
   });
 });
-describe('ResultsView', () => {
+describe('ResultsView User-Rated Badge display', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
   beforeEach(() => {

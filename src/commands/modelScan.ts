@@ -482,17 +482,14 @@ function displayIssuesBySeverity(issues: ModelAuditIssue[] | undefined): void {
     return;
   }
 
-  const issuesBySeverity = issues.reduce(
-    (acc, issue) => {
-      const severity = issue.severity || 'info';
-      if (!acc[severity]) {
-        acc[severity] = [];
-      }
-      acc[severity].push(issue);
-      return acc;
-    },
-    {} as Record<string, ModelAuditIssue[]>,
-  );
+  const issuesBySeverity = issues.reduce<Record<string, ModelAuditIssue[]>>((acc, issue) => {
+    const severity = issue.severity || 'info';
+    if (!acc[severity]) {
+      acc[severity] = [];
+    }
+    acc[severity].push(issue);
+    return acc;
+  }, {});
 
   const severityOrder = ['critical', 'error', 'warning', 'info'];
   const severityColors: Record<string, typeof chalk.red> = {

@@ -27,18 +27,17 @@ jobs:
     steps:
       # Use GitHub App token so the created PR triggers CI workflows
       # (PRs created with GITHUB_TOKEN don't trigger workflows to prevent loops).
-      # Scope to the minimum release-please-action needs: push release commits
-      # and open/update the release PR.
+      # Token inherits the App installation's granted permissions. Previous
+      # attempt to narrow via `permission-*` inputs failed with 422 because
+      # the PROMPTFOOBOT installation does not grant all of them (release-please
+      # PR #8796 landed green, then main broke on the next release-please run).
+      # If we want to narrow here, first widen the App installation permissions
+      # in the GitHub App settings, then re-add the `permission-*` inputs.
       - uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3
         id: app-token
         with:
           app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
           private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: write
-          # release-please-action applies `autorelease: pending` / `autorelease: tagged`
-          # labels via the issues API (PR labels share that scope).
-          permission-issues: write
 
       - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
         id: release
@@ -110,8 +109,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      # Scope to the minimum the mirror step needs: push the release branch
-      # and open/update the release PR on the foreign repo.
+      # Token is scoped to the foreign repo (code-scan-action) via owner/
+      # repositories. Do NOT add `permission-*` inputs here until the App
+      # installation is confirmed to grant every requested permission — see
+      # the matching note on the release-please job above.
       - name: Create app token for code-scan-action mirror
         uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3
         id: mirror-token
@@ -120,8 +121,6 @@ jobs:
           private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
           owner: promptfoo
           repositories: code-scan-action
-          permission-contents: write
-          permission-pull-requests: write
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
