@@ -121,17 +121,12 @@ npm run local -- eval -c examples/my-example/promptfooconfig.yaml --env-file .en
 npm run local -- eval -c path/to/config.yaml -o output.json --no-cache --env-file .env
 ```
 
-Review the output file for `success`, `score`, and `error` fields. A zero CLI exit
-code does not mean every test case passed — always inspect the JSON.
+Review the output file for `success`, `score`, and `error` fields. **A zero CLI exit
+code does not mean every test case passed — always inspect the JSON.** This is the
+standard command for verifying a PR end-to-end.
 
-**Standard PR-review eval command:** when verifying a PR end-to-end, run:
-
-```bash
-npm run local -- eval -c <example-or-config>.yaml --env-file .env --no-cache -o output.json
-```
-
-Secrets live in the repo's `.env` (and optionally `~/projects/promptfoo/.env`). Never
-echo them into logs or commit messages.
+Keep secrets in the repo's `.env` (or another path the user points at with
+`--env-file`); never echo them into logs or commit messages.
 
 ## Debugging & Troubleshooting
 
@@ -218,9 +213,6 @@ See `docs/agents/pr-conventions.md` for PR title format and scope selection (esp
 - **Don't let `npm audit fix` drift ride along with an unrelated change.** If
   `package-lock.json` changes outside the scope of the PR, revert the drift and ship
   it separately so reviewers can reason about each change independently.
-- **Verify eval success beyond exit code.** Export results with `-o output.json` and
-  inspect `success`, `score`, and `error` fields. A zero exit code does not mean every
-  test case passed.
 
 ## Security-Sensitive PRs
 

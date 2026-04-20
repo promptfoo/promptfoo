@@ -29,7 +29,7 @@ npx check-dependency-version-consistency
 
 2. **Update examples/** - 20+ package.json files in examples/ are user-facing; keep them current when updating dependencies.
 
-3. **Run `npm audit`** - Use `npm audit` or `npm run audit:fix` to check for security vulnerabilities across all workspaces.
+3. **Run `npm audit`** - Use `npm audit` or `npm run audit:fix` to check for security vulnerabilities across all workspaces. Do not let `npm audit fix` lockfile drift ride along with an unrelated change; ship audit-driven updates as their own PR.
 
 4. **If updates fail** - Revert the problematic package and keep the current version. Don't force incompatible updates.
 
