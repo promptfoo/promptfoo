@@ -159,6 +159,25 @@ export const PluginConfigSchema = z.object({
   inputs: InputsSchema.optional(),
   maxCharsPerMessage: z.number().int().positive().optional(),
 
+  /**
+   * EXPERIMENTAL — controls the local hallucination plugin's persona-conditioned
+   * generation pipeline. Currently consumed only by HallucinationPlugin; the
+   * shape and field names may change before stabilizing. Has no effect on
+   * other plugins.
+   */
+  generation: z
+    .object({
+      // Upper bound is a guardrail against silent LLM-spend blowups
+      // (a value of 100 would fan out 100*n generation calls).
+      oversampleFactor: z.number().int().min(1).max(20).optional(),
+      // Floor matches the implementation's MIN_PERSONA_COUNT — single
+      // persona destroys the per-bucket diversity story.
+      personaCount: z.number().int().min(2).optional(),
+      dedup: z.enum(['llm', 'none']).optional(),
+      mutation: z.boolean().optional(),
+    })
+    .optional(),
+
   // Allow for the inclusion of a nonce to prevent caching of test cases.
   __nonce: z.number().optional(),
 });
