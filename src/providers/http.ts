@@ -2616,17 +2616,22 @@ export class HttpProvider implements ApiProvider {
       response: { data, status, statusText, headers: responseHeaders, cached, latencyMs },
     });
 
-    // Populate streaming throughput now that we know the completion text.
-    // Skipped when the response arrived in a single chunk (no meaningful
-    // rate to report — the apparent rate is network buffering, not model
-    // throughput). Computing this in processStreamingResponse would
-    // overcount by 20-60x because the stream buffer includes SSE framing.
-    if (streamingMetrics?.multiChunkDelivery) {
+    // Populate raw completion length + approximate throughput now that we
+    // know the parsed completion text. Computing these in
+    // processStreamingResponse would overcount by 20-60x because the stream
+    // buffer includes SSE framing. tokensPerSecond is additionally gated on
+    // multi-chunk delivery since single-chunk responses have no meaningful
+    // streaming rate (the apparent rate is network buffering, not model
+    // throughput).
+    if (streamingMetrics) {
       const completionText = this.getCompletionText(parsedOutput, rawText);
-      streamingMetrics.tokensPerSecond = estimateStreamingTokensPerSecond(
-        completionText.length,
-        streamingMetrics.totalStreamTime,
-      );
+      streamingMetrics.completionChars = completionText.length;
+      if (streamingMetrics.multiChunkDelivery) {
+        streamingMetrics.tokensPerSecond = estimateStreamingTokensPerSecond(
+          completionText.length,
+          streamingMetrics.totalStreamTime,
+        );
+      }
     }
 
     return this.processResponseWithTokenEstimation(

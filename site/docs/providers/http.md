@@ -1706,14 +1706,24 @@ Promptfoo offers full support for HTTP targets that stream responses in these fo
 
 ### Time to First Token (TTFT) Measurement
 
-When `stream: true` is set in the request body, promptfoo automatically measures **Time to First Token (TTFT)** for performance evaluation:
+When `stream: true` is set in the request body, promptfoo records timing metrics on every streamed response. See [the TTFT assertion docs](/docs/configuration/expected-outputs/deterministic#ttft) for precise definitions of each measured field.
 
-- **TTFT Measurement**: Track how quickly models start responding
-- **User-Perceived Performance**: Measure streaming responsiveness
-- **Model Comparison**: Compare streaming performance across providers
-- **Production Insights**: Test streaming implementations before deployment
+Two measurement modes are supported:
 
-TTFT assertions can be added to your tests:
+**Canonical TTFT (recommended)** — pin TTFT to the first model-emitted content token using `streamFormat`:
+
+```yaml
+providers:
+  - id: https://api.openai.com/v1/chat/completions
+    config:
+      body:
+        stream: true
+      streamFormat: openai-chat # or: openai-responses, anthropic-messages
+```
+
+**Wire-level proxy (default)** — TTFT fires on the first non-whitespace body byte. Format-agnostic, works on any SSE/chunked endpoint without configuration, but overshoots canonical TTFT by ~20ms on OpenAI Chat and ~150ms on OpenAI Responses (the gap is the framing metadata that arrives before the first content token).
+
+Add TTFT assertions to your tests:
 
 ```yaml
 defaultTest:
@@ -1724,7 +1734,14 @@ defaultTest:
       threshold: 10000 # Fail if total response > 10 seconds
 ```
 
-When `stream: true` is enabled, response caching is automatically disabled to ensure live TTFT measurements.
+**Config options**
+
+| Option                    | Type                                                          | Default | Purpose                                                                                 |
+| ------------------------- | ------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------- |
+| `streamFormat`            | `'openai-chat' \| 'openai-responses' \| 'anthropic-messages'` | unset   | Use built-in canonical-TTFT detector for the named protocol                             |
+| `streamFirstTokenPattern` | regex source string                                           | unset   | Custom detector for non-standard endpoints. Overrides `streamFormat` when both are set. |
+
+When `stream: true` is set, response caching is automatically disabled so every TTFT measurement reflects a live call.
 
 ### Parsing Streaming Responses
 

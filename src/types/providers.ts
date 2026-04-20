@@ -247,8 +247,9 @@ export interface ProviderResponse {
    */
   streamingMetrics?: {
     timeToFirstToken?: number;
-    tokensPerSecond?: number;
     totalStreamTime?: number;
+    completionChars?: number;
+    tokensPerSecond?: number;
     multiChunkDelivery?: boolean;
   };
 }

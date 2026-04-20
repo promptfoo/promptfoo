@@ -813,38 +813,79 @@ Note that `latency` requires that the [cache is disabled](/docs/configuration/ca
 
 ### TTFT
 
-The `ttft` assertion measures Time to First Token (TTFT) for streaming responses and fails if it exceeds the specified threshold. Duration is specified in milliseconds.
+The `ttft` assertion measures **Time to First Token** (TTFT) for streaming HTTP responses and fails if the measured value exceeds the specified threshold. Duration is in milliseconds.
 
-TTFT measures how quickly an AI model starts generating a response, which is crucial for user experience in streaming applications.
+#### Precise definition
 
-Example:
+Two measurement modes are supported. Choose one via the provider's `streamFormat` or `streamFirstTokenPattern` config.
+
+| Mode                                                                        | Start event                                      | End event                                       | Typical delta vs canonical                                               |
+| --------------------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------ |
+| **Canonical TTFT** (opt-in via `streamFormat` or `streamFirstTokenPattern`) | HTTP request dispatch (before `fetch()` returns) | First model-emitted content token in the stream | 0 (definition)                                                           |
+| **Wire-level proxy** (default)                                              | HTTP request dispatch                            | First non-whitespace byte of the response body  | Overshoots canonical by ~20ms on OpenAI Chat, ~150ms on OpenAI Responses |
+
+Canonical TTFT matches the definition used in ML benchmarking literature (vLLM, MLPerf, OpenAI perf docs). The wire-level proxy is format-agnostic and slightly earlier because it fires on SSE framing frames (e.g. `{"delta":{"role":"assistant"}}`, `{"type":"response.created"}`) rather than the first content delta.
+
+#### Canonical TTFT (recommended)
+
+Set `streamFormat` on the provider to enable content-token detection for the three common SSE protocols:
 
 ```yaml
 providers:
   - id: https://api.openai.com/v1/chat/completions
     config:
-      # TTFT measurement is automatically enabled when stream: true
-      # ... other config
+      body:
+        model: gpt-4o-mini
+        stream: true
+        messages: [{ role: user, content: '{{prompt}}' }]
+      streamFormat: openai-chat # or: openai-responses, anthropic-messages
 
 assert:
-  # Fail if the model takes longer than 2 seconds to start responding
   - type: ttft
     threshold: 2000
 ```
 
-**Requirements:**
+For endpoints that don't match a built-in preset, provide a regex:
 
-- The provider must have `stream: true` in its request body
-- The API endpoint must support streaming responses
-- Caching is automatically disabled when streaming metrics are enabled
+```yaml
+streamFirstTokenPattern: '"delta":\s*\{[^}]*"content":"[^"]'
+```
 
-**Use Cases:**
+The regex is matched against the accumulated raw stream text; `streamFirstTokenPattern` takes precedence over `streamFormat` when both are set.
+
+#### What the underlying streaming metrics measure
+
+When `stream: true` is set on the provider, the HTTP provider populates `providerResponse.streamingMetrics`:
+
+| Field                | Definition                                                                       | Notes                                                                                                                                                                             |
+| -------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `timeToFirstToken`   | ms from request dispatch to the first event that matches the configured detector | Canonical when a preset/pattern is set; wire-level otherwise                                                                                                                      |
+| `totalStreamTime`    | ms from first response-body chunk arrival to stream close                        | Excludes the TTFT window                                                                                                                                                          |
+| `completionChars`    | UTF-16 code units in the parsed completion (after `transformResponse`)           | Exact, no heuristic. Use for custom throughput calculations with your own tokenizer.                                                                                              |
+| `tokensPerSecond`    | `Math.ceil(completionChars / 4) / totalStreamTime × 1000`                        | Approximate. Populated only when `multiChunkDelivery === true` and `totalStreamTime ≥ 50ms`. Inaccurate for CJK / code / base64 — prefer `completionChars` with a real tokenizer. |
+| `multiChunkDelivery` | `true` iff the stream delivered more than one network read's worth of bytes      | Does not mean the model emitted multiple tokens — only that the transport flushed incrementally.                                                                                  |
+
+#### Caching
+
+Streaming responses are never cached so TTFT always reflects a live network call.
+
+#### Reproducing the framing-gap numbers
+
+`scripts/benchmark-ttft.ts` is a standalone rig that measures both the wire-level proxy and the canonical (content-delta) TTFT on the same stream and reports per-endpoint percentiles. Run:
+
+```bash
+OPENAI_API_KEY=... npx tsx scripts/benchmark-ttft.ts 20
+```
+
+to collect 20 samples per endpoint and print p50/p90/max for each metric.
+
+#### Use Cases
 
 - Measuring user-perceived responsiveness in chat applications
 - Comparing streaming performance across different models
-- Setting performance requirements for production deployments
+- Setting performance SLAs for production deployments
 
-**See Also:**
+#### See Also
 
 - [HTTP Provider Streaming Documentation](/docs/providers/http#streaming-responses)
 

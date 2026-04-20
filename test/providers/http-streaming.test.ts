@@ -80,6 +80,10 @@ describe('HttpProvider streaming integration', () => {
       // TTFT should include network time (at least first chunk delay of 50ms)
       expect(result.streamingMetrics?.timeToFirstToken).toBeGreaterThanOrEqual(40);
 
+      // completionChars is the raw chars measurement (no chars/4 heuristic).
+      // Let callers compute their own rate with their own tokenizer.
+      expect(result.streamingMetrics?.completionChars).toBe((result.output as string).length);
+
       // Response should be cached=false for streaming
       expect(result.cached).toBe(false);
     });

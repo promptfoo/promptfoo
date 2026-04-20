@@ -480,10 +480,31 @@ export interface StreamingMetrics {
    * See interface JSDoc for the precise definition and detector semantics.
    */
   timeToFirstToken?: number;
-  /** Rough throughput estimate (completion chars / 4) per second. See interface doc for caveats. */
-  tokensPerSecond?: number;
-  /** Milliseconds from the first body read to stream close (excludes TTFT window). */
+  /**
+   * Milliseconds from the first body chunk arrival to stream close.
+   * Excludes the TTFT window. Populated by `processStreamingResponse`.
+   */
   totalStreamTime?: number;
+  /**
+   * Number of UTF-16 code units in the final completion text (i.e. after
+   * `transformResponse` has parsed the stream). This is the exact raw
+   * measurement — no heuristic. Divide by `totalStreamTime` and multiply by
+   * 1000 to get chars/second, or pass through your own tokenizer for an
+   * exact tokens-per-second figure that does not depend on the chars/4
+   * approximation used by `tokensPerSecond`.
+   */
+  completionChars?: number;
+  /**
+   * Approximate throughput in "tokens" per second where a "token" is
+   * defined as 4 UTF-16 code units (the OpenAI-documented English-prose
+   * heuristic). Computed as `Math.ceil(completionChars / 4) / totalStreamTime * 1000`.
+   * Only populated when the response delivered multiple network chunks
+   * and the stream window is at least `MIN_MEANINGFUL_STREAM_WINDOW_MS`.
+   *
+   * NOT accurate for CJK text, code, or base64 — prefer `completionChars`
+   * with your own tokenizer when precision matters.
+   */
+  tokensPerSecond?: number;
   /** True when the transport delivered more than one network chunk. */
   multiChunkDelivery?: boolean;
 }
@@ -576,10 +597,11 @@ export async function processStreamingResponse(
   }
 
   const detector = opts?.firstTokenDetector ?? firstNonWhitespaceByteDetector;
-  const streamStart = Date.now();
   const decoder = new TextDecoder();
   const chunks: string[] = [];
   let firstTokenTime: number | undefined;
+  let firstByteTime: number | undefined;
+  let lastByteTime: number | undefined;
   let accumulatedText = '';
   let chunkCount = 0;
 
@@ -590,6 +612,14 @@ export async function processStreamingResponse(
         break;
       }
 
+      const now = Date.now();
+      // Pin totalStreamTime strictly between first and last byte so the
+      // window is "bytes arriving on the wire", not "time in this function."
+      if (firstByteTime === undefined) {
+        firstByteTime = now;
+      }
+      lastByteTime = now;
+
       const chunk = decoder.decode(value, { stream: true });
       chunks.push(chunk);
       accumulatedText += chunk;
@@ -598,28 +628,50 @@ export async function processStreamingResponse(
       // Stamp TTFT on the first chunk whose arrival causes the detector to pass.
       // Measure from requestStartTime so network overhead (TCP/TLS/headers) is included.
       if (firstTokenTime === undefined && detector(accumulatedText)) {
-        firstTokenTime = Date.now() - requestStartTime;
+        firstTokenTime = now - requestStartTime;
       }
     }
   } finally {
     reader.releaseLock();
   }
 
+  const totalStreamTime =
+    firstByteTime !== undefined && lastByteTime !== undefined
+      ? lastByteTime - firstByteTime
+      : undefined;
+
   return {
     text: chunks.join(''),
     streamingMetrics: {
       // Left undefined on all-whitespace streams so the ttft assertion reports "could not measure".
       timeToFirstToken: firstTokenTime,
-      totalStreamTime: Date.now() - streamStart,
+      totalStreamTime,
       multiChunkDelivery: chunkCount > 1,
     },
   };
 }
 
 /**
- * Minimum streamed window, in milliseconds, below which throughput numbers
- * become unstable (single-chunk bursts divide by near-zero). Callers should
- * skip populating `tokensPerSecond` when the window is shorter than this.
+ * Minimum streamed window below which `tokensPerSecond` is suppressed.
+ *
+ * Rationale (why 50ms specifically):
+ *
+ * 1. Cross-region HTTP round-trip times to major LLM endpoints sit in the
+ *    10-40ms range on a typical cloud or residential link, so inter-chunk
+ *    gaps shorter than ~50ms are dominated by network buffering jitter
+ *    rather than model generation cadence.
+ * 2. The rate formula is `chars/4 / streamWindowMs * 1000`. At 50ms the
+ *    denominator is large enough that a +/-5ms clock jitter moves the
+ *    reported rate by at most 10%, which matches the chars/4 heuristic's
+ *    own precision floor for English text.
+ * 3. Below ~50ms, real multi-chunk streams tend to represent a single TCP
+ *    packet arriving in two network-stack reads (kernel -> userspace
+ *    boundary). Reporting throughput for that case misrepresents the
+ *    model's token-generation speed.
+ *
+ * Callers that want the raw rate at any window can compute it from
+ * `completionChars` and `totalStreamTime` directly; this constant only
+ * governs the convenience `tokensPerSecond` field.
  */
 export const MIN_MEANINGFUL_STREAM_WINDOW_MS = 50;
 

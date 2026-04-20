@@ -112,6 +112,36 @@ describe('processStreamingResponse', () => {
       expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThanOrEqual(10);
     });
 
+    it('should pin totalStreamTime to first-byte → last-byte window', async () => {
+      // Two chunks 100ms apart. totalStreamTime should be ~100ms, not
+      // "time spent in the function" (which includes reader initialization).
+      const requestStartTime = Date.now();
+      const chunks = [new TextEncoder().encode('first'), new TextEncoder().encode(' second')];
+
+      let i = 0;
+      const mockReader = {
+        read: vi.fn(async () => {
+          if (i < chunks.length) {
+            // First read resolves after 30ms, second after an additional 100ms.
+            await new Promise((r) => setTimeout(r, i === 0 ? 30 : 100));
+            return { done: false, value: chunks[i++] };
+          }
+          return { done: true, value: undefined };
+        }),
+        releaseLock: vi.fn(),
+      };
+
+      const result = await processStreamingResponse(
+        { body: { getReader: () => mockReader } } as unknown as Response,
+        requestStartTime,
+      );
+
+      // totalStreamTime is from first byte to last byte: ~100ms.
+      // NOT 130ms (which would include the 30ms initial wait).
+      expect(result.streamingMetrics.totalStreamTime).toBeGreaterThanOrEqual(85);
+      expect(result.streamingMetrics.totalStreamTime).toBeLessThan(150);
+    });
+
     it('should trigger TTFT on OpenAI role-prefix SSE frame (documented semantics)', async () => {
       // Pins current behavior: TTFT measures "first non-whitespace wire byte",
       // not "first content token". OpenAI's SSE stream opens with a role frame:
