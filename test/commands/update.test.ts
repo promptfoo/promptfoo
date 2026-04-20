@@ -29,12 +29,41 @@ const mockCheckForUpdates = checkForUpdates as MockedFunction<typeof checkForUpd
 const mockGetInstallationInfo = getInstallationInfo as MockedFunction<typeof getInstallationInfo>;
 const mockSpawn = spawn as MockedFunction<typeof spawn>;
 
+function createMockProcess({ closeCode, error }: { closeCode?: number; error?: Error }) {
+  const mockProcess = {
+    on: vi.fn((event: string, callback: (value: Error | number) => void) => {
+      if (event === 'close' && closeCode !== undefined) {
+        setTimeout(() => callback(closeCode), 10);
+      }
+      if (event === 'error' && error) {
+        setTimeout(() => callback(error), 10);
+      }
+      return mockProcess;
+    }),
+    removeAllListeners: vi.fn(),
+    stdin: null,
+    stdout: null,
+    stderr: null,
+    stdio: null,
+    killed: false,
+    pid: 123,
+    connected: true,
+    exitCode: null,
+    signalCode: null,
+    spawnargs: [],
+    spawnfile: '',
+  } as unknown as ChildProcess;
+
+  return mockProcess;
+}
+
 describe('update command', () => {
   let program: Command;
 
   beforeEach(() => {
     program = new Command();
     vi.clearAllMocks();
+    process.exitCode = undefined;
   });
 
   it('should show already up to date message when no update available', async () => {
@@ -44,6 +73,17 @@ describe('update command', () => {
     await program.parseAsync(['node', 'test', 'update']);
 
     expect(mockCheckForUpdates).toHaveBeenCalledWith({ throwOnError: true });
+  });
+
+  it('should show latest message in check mode when no update is available', async () => {
+    mockCheckForUpdates.mockResolvedValue(null);
+
+    updateCommand(program);
+    await program.parseAsync(['node', 'test', 'update', '--check']);
+
+    expect(mockCheckForUpdates).toHaveBeenCalledWith({ throwOnError: true });
+    expect(mockGetInstallationInfo).not.toHaveBeenCalled();
+    expect(mockSpawn).not.toHaveBeenCalled();
   });
 
   it('should show update info when --check flag is used', async () => {
@@ -63,27 +103,6 @@ describe('update command', () => {
   });
 
   it('should handle installation info and run update command', async () => {
-    const mockProcess = {
-      on: vi.fn((event: string, callback: (code: number) => void) => {
-        if (event === 'close') {
-          setTimeout(() => callback(0), 10);
-        }
-        return mockProcess;
-      }),
-      removeAllListeners: vi.fn(),
-      stdin: null,
-      stdout: null,
-      stderr: null,
-      stdio: null,
-      killed: false,
-      pid: 123,
-      connected: true,
-      exitCode: null,
-      signalCode: null,
-      spawnargs: [],
-      spawnfile: '',
-    } as unknown as ChildProcess;
-
     mockCheckForUpdates.mockResolvedValue({
       message: 'Update available: 1.0.0 → 1.1.0',
       update: {
@@ -100,7 +119,7 @@ describe('update command', () => {
       updateMessage: 'Installed with npm. Attempting to automatically update now...',
     });
 
-    mockSpawn.mockReturnValue(mockProcess);
+    mockSpawn.mockReturnValue(createMockProcess({ closeCode: 0 }));
 
     updateCommand(program);
     await program.parseAsync(['node', 'test', 'update']);
@@ -136,27 +155,6 @@ describe('update command', () => {
   });
 
   it('should force update even when on latest version', async () => {
-    const mockProcess = {
-      on: vi.fn((event: string, callback: (code: number) => void) => {
-        if (event === 'close') {
-          setTimeout(() => callback(0), 10);
-        }
-        return mockProcess;
-      }),
-      removeAllListeners: vi.fn(),
-      stdin: null,
-      stdout: null,
-      stderr: null,
-      stdio: null,
-      killed: false,
-      pid: 123,
-      connected: true,
-      exitCode: null,
-      signalCode: null,
-      spawnargs: [],
-      spawnfile: '',
-    } as unknown as ChildProcess;
-
     mockCheckForUpdates.mockResolvedValue(null);
 
     mockGetInstallationInfo.mockReturnValue({
@@ -166,7 +164,7 @@ describe('update command', () => {
       updateMessage: 'Installed with npm.',
     });
 
-    mockSpawn.mockReturnValue(mockProcess);
+    mockSpawn.mockReturnValue(createMockProcess({ closeCode: 0 }));
 
     updateCommand(program);
     await program.parseAsync(['node', 'test', 'update', '--force']);
@@ -175,5 +173,55 @@ describe('update command', () => {
       stdio: 'inherit',
       shell: false,
     });
+  });
+
+  it('should set exitCode when the update command exits unsuccessfully', async () => {
+    mockCheckForUpdates.mockResolvedValue({
+      message: 'Update available: 1.0.0 → 1.1.0',
+      update: {
+        current: '1.0.0',
+        latest: '1.1.0',
+        name: 'promptfoo',
+      },
+    });
+
+    mockGetInstallationInfo.mockReturnValue({
+      packageManager: PackageManager.NPM,
+      isGlobal: true,
+      updateCommand: 'npm install -g promptfoo@latest',
+      updateMessage: 'Installed with npm.',
+    });
+
+    mockSpawn.mockReturnValue(createMockProcess({ closeCode: 1 }));
+
+    updateCommand(program);
+    await program.parseAsync(['node', 'test', 'update']);
+
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('should set exitCode when spawning the update command fails', async () => {
+    mockCheckForUpdates.mockResolvedValue({
+      message: 'Update available: 1.0.0 → 1.1.0',
+      update: {
+        current: '1.0.0',
+        latest: '1.1.0',
+        name: 'promptfoo',
+      },
+    });
+
+    mockGetInstallationInfo.mockReturnValue({
+      packageManager: PackageManager.NPM,
+      isGlobal: true,
+      updateCommand: 'npm install -g promptfoo@latest',
+      updateMessage: 'Installed with npm.',
+    });
+
+    mockSpawn.mockReturnValue(createMockProcess({ error: new Error('spawn ENOENT') }));
+
+    updateCommand(program);
+    await program.parseAsync(['node', 'test', 'update']);
+
+    expect(process.exitCode).toBe(1);
   });
 });

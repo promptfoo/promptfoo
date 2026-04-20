@@ -19,11 +19,6 @@ export function updateCommand(program: Command) {
 
         const updateInfo = await checkForUpdates({ throwOnError: true });
 
-        if (!updateInfo && !options.force) {
-          logger.info('✓ You are already running the latest version of promptfoo');
-          return;
-        }
-
         if (options.check) {
           if (updateInfo) {
             logger.info(updateInfo.message);
@@ -31,6 +26,11 @@ export function updateCommand(program: Command) {
           } else {
             logger.info('✓ You are running the latest version');
           }
+          return;
+        }
+
+        if (!updateInfo && !options.force) {
+          logger.info('✓ You are already running the latest version of promptfoo');
           return;
         }
 
