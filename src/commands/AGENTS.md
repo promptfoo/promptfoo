@@ -39,6 +39,12 @@ try {
 }
 ```
 
+## Coding-Agent CLI UX
+
+Coding agents interact with the `promptfoo` binary, not the source. CLI changes should be automation-friendly: deterministic exit codes, useful stderr/stdout, no required interactivity, stable `--format json` output for machine consumption, and examples that run through `npm run local --`.
+
+New flags need parser tests and a real command-path test. For `scan-model` and ModelAudit changes, verify CLI args, API behavior, UI persistence, saved metadata, cache reuse behavior, and JSON output shape.
+
 ## Directory Structure
 
 ```

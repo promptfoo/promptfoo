@@ -123,6 +123,20 @@ npm run local -- eval -c path/to/config.yaml -o output.json --no-cache
 
 Review the output file for `success`, `score`, and `error` fields.
 
+## End-to-End Work Expectations
+
+When asked only to review or audit a PR, keep the work read-only: inspect the branch, diff, PR comments, and CI as needed; run non-mutating tests or QA when useful; and report findings without committing, pushing, or changing files unless the user explicitly asks for fixes.
+
+When asked to fix, improve, or land a PR, own the full loop: check out the branch, inspect the diff and PR comments, merge or rebase on current `origin/main` when requested, run focused tests, run the relevant real workflow, commit, push, and watch CI until it is green or the remaining failure is clearly unrelated.
+
+For behavior changes, do not stop at unit tests. Run the actual CLI or example with the local build. For eval and redteam work, prefer:
+
+```bash
+npm run local -- eval -c path/to/promptfooconfig.yaml --env-file .env --no-cache -o output.json
+```
+
+Inspect exported JSON for `success`, `score`, `error`, provider outputs, traces, and redteam findings. If you claim a redteam ran, report the plugins, strategies, interesting failures, and the evidence reviewed.
+
 ## Debugging & Troubleshooting
 
 **Before running tests or review checks, align Node with the repo version first:**
@@ -174,6 +188,7 @@ npm run local -- eval -c config.yaml --no-cache
 - **NEVER** comment on GitHub issues - only create PRs to address them
 - **ALWAYS create new commits** - never amend, squash, or rebase unless explicitly asked
 - All changes go through pull requests
+- Create draft PRs by default, but if the user or automation explicitly says "full PR", "not draft", or "ready for review", open or convert the PR to ready-for-review.
 
 **Standard workflow:**
 
@@ -281,6 +296,12 @@ See `test/AGENTS.md` for testing patterns.
 - **Reuse patterns** from similar files in the codebase
 - **Test both success and error cases** for all functionality
 - **Document provider configurations** following examples in existing code
+
+## Adversarial and Redteam Bias
+
+For security, model scanning, redteam, and coding-agent work, test like an attacker first. Look for false negatives, bypasses, hidden payloads, unsafe tool use, prompt injection, exfiltration, cache misuse, and evidence gaps. When a bypass is found, add a focused regression test before or alongside the fix.
+
+For demo/example apps used to show red teaming, do not harden away all interesting findings unless explicitly asked. A slightly vulnerable sample app is useful when the goal is to demonstrate Promptfoo's ability to find real breaks.
 
 ## Review Guidelines
 
