@@ -8,21 +8,25 @@ Promptfoo is an open-source framework for evaluating and testing LLM application
 
 ## Project Structure
 
-| Directory        | Purpose                       | Local Docs                |
-| ---------------- | ----------------------------- | ------------------------- |
-| `.agents/`       | Codex marketplace metadata    | `.agents/AGENTS.md`       |
-| `plugins/`       | Agent plugin bundles          | `plugins/AGENTS.md`       |
-| `src/`           | Core library                  | -                         |
-| `src/app/`       | Web UI (React 19/Vite/MUI v7) | `src/app/AGENTS.md`       |
-| `src/commands/`  | CLI commands                  | `src/commands/AGENTS.md`  |
-| `src/matchers/`  | Assertion matcher helpers     | `src/matchers/AGENTS.md`  |
-| `src/providers/` | LLM providers                 | `src/providers/AGENTS.md` |
-| `src/redteam/`   | Security testing              | `src/redteam/AGENTS.md`   |
-| `src/server/`    | Backend server                | `src/server/AGENTS.md`    |
-| `test/`          | Tests (Vitest)                | `test/AGENTS.md`          |
-| `site/`          | Docs site (Docusaurus)        | `site/AGENTS.md`          |
-| `examples/`      | Example configs               | `examples/AGENTS.md`      |
-| `drizzle/`       | DB migrations                 | `drizzle/AGENTS.md`       |
+| Directory           | Purpose                         | Local Docs                   |
+| ------------------- | ------------------------------- | ---------------------------- |
+| `.agents/`          | Codex marketplace metadata      | `.agents/AGENTS.md`          |
+| `code-scan-action/` | Code scan GitHub Action wrapper | `code-scan-action/AGENTS.md` |
+| `docs/agents/`      | Reusable coding-agent docs      | `docs/agents/AGENTS.md`      |
+| `plugins/`          | Agent plugin bundles            | `plugins/AGENTS.md`          |
+| `src/`              | Core library                    | -                            |
+| `src/app/`          | Web UI (React 19/Vite/MUI v7)   | `src/app/AGENTS.md`          |
+| `src/assertions/`   | Assertion handlers              | `src/assertions/AGENTS.md`   |
+| `src/codeScan/`     | Code scan scanner               | `src/codeScan/AGENTS.md`     |
+| `src/commands/`     | CLI commands                    | `src/commands/AGENTS.md`     |
+| `src/matchers/`     | Assertion matcher helpers       | `src/matchers/AGENTS.md`     |
+| `src/providers/`    | LLM providers                   | `src/providers/AGENTS.md`    |
+| `src/redteam/`      | Security testing                | `src/redteam/AGENTS.md`      |
+| `src/server/`       | Backend server                  | `src/server/AGENTS.md`       |
+| `test/`             | Tests (Vitest)                  | `test/AGENTS.md`             |
+| `site/`             | Docs site (Docusaurus)          | `site/AGENTS.md`             |
+| `examples/`         | Example configs                 | `examples/AGENTS.md`         |
+| `drizzle/`          | DB migrations                   | `drizzle/AGENTS.md`          |
 
 **Read the relevant AGENTS.md when working in that directory.**
 
