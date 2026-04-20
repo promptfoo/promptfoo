@@ -189,6 +189,13 @@ gh pr create --draft --title "feat(scope): description"
 
 If the user says "full PR", "not draft", or "ready for review", open the PR ready for review or convert an existing draft before finishing.
 
+## Commit & PR Attribution
+
+- **Never attribute commits or PR bodies to Claude / Claude Code.** Do not add
+  `Co-Authored-By: Claude…` trailers, "Generated with Claude Code" footers, or
+  similar markers. Use your configured git identity only.
+- Do not add marketing-style suffixes to commit subjects.
+
 ## GitHub Interaction Rules
 
 - **NEVER comment on GitHub issues** - Only create PRs to address issues
@@ -203,3 +210,4 @@ If the user says "full PR", "not draft", or "ready for review", open the PR read
 4. Breaking change? Add `!` after scope
 5. Run `npm run l && npm run f`
 6. Open the PR in draft mode unless the user or automation explicitly asks for a full, non-draft, or ready-for-review PR
+7. Do **not** add Claude attribution trailers or footers

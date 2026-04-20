@@ -121,7 +121,16 @@ npm run local -- eval -c examples/my-example/promptfooconfig.yaml --env-file .en
 npm run local -- eval -c path/to/config.yaml -o output.json --no-cache
 ```
 
-Review the output file for `success`, `score`, and `error` fields.
+Add `--env-file .env` or another explicit env file only when the eval needs local
+secrets and the file exists.
+
+Review the output file for `success`, `score`, and `error` fields. With the default
+pass-rate threshold, exit code 0 means the eval met the threshold; still inspect the
+JSON for per-test failures, errors, and scores, especially when the threshold has been
+lowered. This is the standard command for verifying a PR end-to-end.
+
+Keep local secrets in the repo's gitignored `.env` (or another path the user points at
+with `--env-file`); never echo them into logs or commit messages.
 
 ## End-to-End Work Expectations
 
@@ -132,8 +141,10 @@ When asked to fix, improve, or land a PR, own the full loop: check out the branc
 For behavior changes, do not stop at unit tests. Run the actual CLI or example with the local build. For eval and redteam work, prefer:
 
 ```bash
-npm run local -- eval -c path/to/promptfooconfig.yaml --env-file .env --no-cache -o output.json
+npm run local -- eval -c path/to/promptfooconfig.yaml --no-cache -o output.json
 ```
+
+Add `--env-file .env` only when the eval needs local credentials and the file exists.
 
 Inspect exported JSON for `success`, `score`, `error`, provider outputs, traces, and redteam findings. If you claim a redteam ran, report the plugins, strategies, interesting failures, and the evidence reviewed.
 
@@ -207,6 +218,33 @@ git push -u origin feature/your-branch-name # Push branch
 
 See `docs/agents/git-workflow.md` for full workflow.
 See `docs/agents/pr-conventions.md` for PR title format and scope selection (especially THE REDTEAM RULE).
+
+## Pull Request Creation
+
+- **Default to draft PRs.** Use `--draft` with `gh pr create` unless the user or
+  automation explicitly asks for a full, non-draft, or ready-for-review PR. Convert an
+  existing draft before finishing when the request calls for a ready PR.
+- **Never attribute commits or PR bodies to Claude / Claude Code.** No
+  `Co-Authored-By: Claude…` trailers, no "Generated with Claude Code" footers. Use
+  your configured git identity only.
+- **Update the existing PR instead of opening a new one** when iterating on a branch
+  that already has an open PR. Push to the same branch. Only run `gh pr create` if the
+  user explicitly asks for a new PR or the existing PR is closed.
+- **Don't let `npm audit fix` drift ride along with an unrelated change.** If
+  `package-lock.json` changes outside the scope of the PR, revert the drift and ship
+  it separately so reviewers can reason about each change independently.
+
+## Security-Sensitive PRs
+
+- **Before opening any public PR for a CVE/GHSA:** confirm the advisory has been
+  published and the coordinated-disclosure embargo has lifted. See `SECURITY.md` for
+  the disclosure policy. If the advisory is still private, use the GHSA private
+  collaboration flow (or a temporary private fork) until the release that contains the
+  fix is cut.
+- Do **not** put the CVE/GHSA identifier, exploit description, or vulnerable-version
+  range in a PR title, body, or branch name before disclosure.
+- Every security fix should land with a regression test that exercises the original
+  attack vector.
 
 ## Screenshots for Pull Requests
 
