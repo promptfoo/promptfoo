@@ -72,12 +72,16 @@ The configuration includes three types of performance tests:
 
 ### Expected Results
 
-- **TTFT**: Typically 200-800ms for current OpenAI models
-- **Total Latency**: Usually 2-8 seconds depending on response length
-- **Streaming Benefits**: Real-time performance insights
+- **TTFT**: Typically 250-600ms for `gpt-4o-mini` over SSE
+- **Total Latency**: 0.5-2 seconds for short prompts
+- **Streaming Efficiency**: TTFT is usually 30-50% of total latency
+
+## Reasoning Models
+
+Reasoning models (OpenAI `gpt-5`/`gpt-5-mini`/`o1`/`o3`, DeepSeek R1, etc.) do not emit output tokens until internal reasoning completes. For these, TTFT ≈ total latency and the metric loses its signal. Prefer non-reasoning models (`gpt-4o-mini`, `gpt-4o`, Claude Haiku/Sonnet) when comparing streaming performance.
 
 ## Caching Behavior
 
-When `stream: true` is set, response caching is disabled to ensure accurate live measurements. This trade-off provides real performance metrics at the cost of caching benefits.
+When `stream: true` is set, response caching is disabled so every TTFT measurement reflects a live call.
 
 For more HTTP provider configuration options, see the docs: `https://promptfoo.dev/docs/providers/http`.

@@ -1,18 +1,10 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: HTTP provider streaming with TTFT measurement
 
-# This example demonstrates streaming response handling with Time to First Token (TTFT) measurement.
-# While promptfoo waits for complete responses, streaming enables important performance metrics:
-#
-# ✅ TTFT Measurement: Track how quickly models start responding
-# ✅ User-Perceived Performance: Measure streaming responsiveness
-# ✅ Model Comparison: Compare streaming performance across providers
-#
-# 💡 Alternative: Use built-in providers when available (openai:chat:gpt-5-mini)
-# However, HTTP provider with streaming is valuable for:
-# - Custom endpoints that support streaming
-# - TTFT performance measurement
-# - APIs not yet supported by built-in providers
+# Demonstrates Time to First Token (TTFT) measurement. Uses gpt-4o-mini
+# rather than a reasoning model (gpt-5, o-series) because reasoning models
+# do not emit tokens until internal reasoning is complete, making TTFT
+# approximately equal to total latency and defeating the comparison.
 
 prompts:
   - 'Write a haiku about {{topic}}'
@@ -26,7 +18,7 @@ providers:
         'Content-Type': 'application/json'
         'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
       body:
-        model: 'gpt-5-mini'
+        model: 'gpt-4o-mini'
         messages:
           - role: 'user'
             content: '{{prompt}}'
